@@ -1,19 +1,12 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
-import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
-import * as React from 'react';
-import { memo } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { memo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type {
-  AgentMessage,
-  PairedToolCall,
-  ToolResultContentValue,
-  ToolSequence,
-} from '@/lib/chat-protocol';
+import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
   extractToolInfo,
   extractToolResultInfo,
@@ -21,14 +14,57 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import { getDisplayToolName } from './tool-display-utils';
+import {
+  getToolActivityKind,
+  getToolActivityLabel,
+  getToolGroupLabel,
+} from './tool-activity-summary';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
 import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-parser';
 
-// =============================================================================
-// Tool Info Renderer
-// =============================================================================
+const triggerClassName =
+  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+function ActivityIcon({
+  name,
+  pending,
+  error,
+}: {
+  name: string;
+  pending?: boolean;
+  error?: boolean;
+}) {
+  const kind = getToolActivityKind(name);
+  const Icon = error
+    ? WarningCircleIcon
+    : pending
+      ? SpinnerGapIcon
+      : kind === 'edit'
+        ? PencilSimpleIcon
+        : kind === 'search' || kind === 'read'
+          ? MagnifyingGlassIcon
+          : TerminalIcon;
+  return (
+    <Icon
+      aria-hidden="true"
+      className={cn(
+        'h-4 w-4 shrink-0',
+        pending && !error && 'animate-spin',
+        error && 'text-destructive'
+      )}
+    />
+  );
+}
+
+function DisclosureCaret() {
+  return (
+    <CaretRightIcon
+      aria-hidden="true"
+      className="h-3.5 w-3.5 shrink-0 opacity-50 transition-transform group-data-[state=open]:rotate-90"
+    />
+  );
+}
 
 export interface ToolInfoRendererProps {
   message: AgentMessage;
@@ -36,131 +72,50 @@ export interface ToolInfoRendererProps {
   isPending?: boolean;
 }
 
-function resolveDisplayInput(
-  name: string,
-  input: Record<string, unknown>,
-  resultContent?: ToolResultContentValue
-): Record<string, unknown> {
-  if (!(isWebSearchToolName(name) && resultContent)) {
-    return input;
-  }
-
-  const payload = parseWebSearchToolResult(resultContent);
-  return payload ? { ...payload } : input;
-}
-
-/**
- * Renders tool use or tool result information.
- */
 export const ToolInfoRenderer = memo(function ToolInfoRenderer({
   message,
   defaultOpen = false,
   isPending = false,
 }: ToolInfoRendererProps) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
-  // Check if this is a tool use message
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   if (isToolUseMessage(message)) {
-    const toolInfo = extractToolInfo(message);
-    if (!toolInfo) {
+    const tool = extractToolInfo(message);
+    if (!tool) {
       return null;
     }
-    const displayName = getDisplayToolName(toolInfo.name, toolInfo.input);
-
     return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded border bg-muted/30 min-w-0">
-          <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-              {isOpen ? (
-                <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              {isPending ? (
-                <SpinnerGapIcon className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-              ) : (
-                <TerminalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              <span className="font-mono text-xs flex-1 min-w-0 truncate" title={toolInfo.name}>
-                {displayName}
-              </span>
-              {isPending ? (
-                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
-                  Running...
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0">
-                  Tool Call
-                </Badge>
-              )}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t px-2 py-1.5 overflow-x-auto">
-              <ToolInputRenderer name={toolInfo.name} input={toolInfo.input} />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
+      <PairedToolCallRenderer
+        call={{ ...tool, status: isPending ? 'pending' : 'success' }}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      />
     );
   }
-
-  // Check if this is a tool result message
-  if (isToolResultMessage(message)) {
-    const resultInfo = extractToolResultInfo(message);
-    if (!resultInfo) {
-      return null;
-    }
-
-    return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div
-          className={cn(
-            'rounded border min-w-0',
-            resultInfo.isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-          )}
+  if (!isToolResultMessage(message)) {
+    return null;
+  }
+  const result = extractToolResultInfo(message);
+  if (!result) {
+    return null;
+  }
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className={cn(triggerClassName, result.isError && 'text-destructive')}
         >
-          <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-              {isOpen ? (
-                <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
-              {resultInfo.isError ? (
-                <WarningCircleIcon className="h-4 w-4 shrink-0 text-destructive" />
-              ) : (
-                <CheckCircleIcon className="h-4 w-4 shrink-0 text-success" />
-              )}
-              <span className="text-xs text-muted-foreground">Tool Result</span>
-              <Badge
-                variant={resultInfo.isError ? 'destructive' : 'success'}
-                className="ml-auto text-[10px] px-1 py-0"
-              >
-                {resultInfo.isError ? 'Error' : 'Success'}
-              </Badge>
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t px-2 py-1.5 overflow-x-auto">
-              <ToolResultContentRenderer
-                content={resultInfo.content}
-                isError={resultInfo.isError}
-              />
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    );
-  }
-
-  return null;
+          <ActivityIcon name="Result" error={result.isError} />
+          <span>{result.isError ? 'Tool failed' : 'Tool output'}</span>
+          <DisclosureCaret />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-6 mt-1 min-w-0 border-l border-border/60 pl-3">
+        <ToolResultContentRenderer content={result.content} isError={result.isError} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
 });
-
-// =============================================================================
-// Tool Sequence Group Renderer
-// =============================================================================
 
 export interface ToolSequenceGroupProps {
   sequence: ToolSequence;
@@ -174,16 +129,10 @@ export interface ToolSequenceGroupProps {
   toolDetailsMaxHeight?: number;
 }
 
-/**
- * Renders a group of adjacent tool calls.
- * Each tool_use is paired with its corresponding tool_result.
- * - Single tool: Shows inline with status, expands to show input + result
- * - Multiple tools: Shows summary "3 tools: Read, Edit, Bash [✓][✓][✓]", expands to show all
- */
+/** Quiet activity summary; details stay chronological and expand only on request. */
 export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   sequence,
   defaultOpen = false,
-  summaryOrder = 'oldest-first',
   open,
   onOpenChange,
   getCallOpen,
@@ -191,50 +140,19 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   toolDetailsClassName,
   toolDetailsMaxHeight,
 }: ToolSequenceGroupProps) {
-  const isControlled = open !== undefined && onOpenChange !== undefined;
-  const [internalOpen, setInternalOpen] = React.useState(open ?? defaultOpen);
-  const isOpen = isControlled ? open : internalOpen;
-  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
-  const previousShouldAutoOpenRef = React.useRef(defaultOpen);
-
-  const { pairedCalls } = sequence;
-  // For the header summary, use the specified order
-  const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
-  // For the expanded view, always show oldest-first (chronological order)
-  const expandedCalls = pairedCalls;
-  const shouldAutoOpen = defaultOpen && pairedCalls.length > 1;
-
-  React.useEffect(() => {
-    const wasAutoOpen = previousShouldAutoOpenRef.current;
-    const transitionedToAutoOpen = shouldAutoOpen && !wasAutoOpen;
-
-    if (transitionedToAutoOpen) {
-      if (isControlled) {
-        if (!isOpen) {
-          onOpenChange?.(true);
-        }
-      } else {
-        setInternalOpen(true);
-      }
-    }
-
-    previousShouldAutoOpenRef.current = shouldAutoOpen;
-  }, [isControlled, isOpen, onOpenChange, shouldAutoOpen]);
-
-  if (pairedCalls.length === 0) {
+  const controlled = open !== undefined && onOpenChange !== undefined;
+  const [internalOpen, setInternalOpen] = useState(open ?? defaultOpen);
+  const isOpen = controlled ? open : internalOpen;
+  const setIsOpen = controlled ? onOpenChange : setInternalOpen;
+  const calls = sequence.pairedCalls;
+  const first = calls[0];
+  if (!first) {
     return null;
   }
-
-  // Single tool call - render inline without grouping wrapper
-  if (pairedCalls.length === 1) {
-    const firstCall = summaryCalls[0];
-    if (!firstCall) {
-      return null;
-    }
+  if (calls.length === 1) {
     return (
       <PairedToolCallRenderer
-        call={firstCall}
-        defaultOpen={isControlled ? undefined : defaultOpen}
+        call={first}
         open={isOpen}
         onOpenChange={setIsOpen}
         detailsClassName={toolDetailsClassName}
@@ -242,246 +160,117 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
       />
     );
   }
-
-  // Multiple tool calls - render as collapsible group
-  // Count statuses for summary display
-  const statusCounts = {
-    success: pairedCalls.filter((c) => c.status === 'success').length,
-    error: pairedCalls.filter((c) => c.status === 'error').length,
-    pending: pairedCalls.filter((c) => c.status === 'pending').length,
-  };
-
-  const renderStatusIndicators = () => {
-    // Show counts instead of individual icons when there are many tool calls
-    const MAX_INDIVIDUAL_ICONS = 8;
-    if (pairedCalls.length > MAX_INDIVIDUAL_ICONS) {
-      return (
-        <>
-          {statusCounts.success > 0 && (
-            <span
-              className="flex items-center gap-0.5"
-              title={`${statusCounts.success} successful`}
-            >
-              <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-success" />
-              <span className="text-[10px] text-success">{statusCounts.success}</span>
-            </span>
-          )}
-          {statusCounts.error > 0 && (
-            <span className="flex items-center gap-0.5" title={`${statusCounts.error} failed`}>
-              <WarningCircleIcon className="h-3.5 w-3.5 shrink-0 text-destructive" />
-              <span className="text-[10px] text-destructive">{statusCounts.error}</span>
-            </span>
-          )}
-          {statusCounts.pending > 0 && (
-            <span className="flex items-center gap-0.5" title={`${statusCounts.pending} pending`}>
-              <SpinnerGapIcon className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">{statusCounts.pending}</span>
-            </span>
-          )}
-        </>
-      );
-    }
-
-    // Show individual icons for small numbers of tool calls
-    return summaryCalls.map((call) => {
-      const key = `${sequence.id}-status-${call.id}`;
-      switch (call.status) {
-        case 'success':
-          return (
-            <span key={key} title="Success">
-              <CheckCircleIcon className="h-3.5 w-3.5 shrink-0 text-success" />
-            </span>
-          );
-        case 'error':
-          return (
-            <span key={key} title="Error">
-              <WarningCircleIcon className="h-3.5 w-3.5 shrink-0 text-destructive" />
-            </span>
-          );
-        case 'pending':
-          return (
-            <span key={key} title="Pending">
-              <SpinnerGapIcon className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-            </span>
-          );
-      }
-    });
-  };
-
-  // Format tool names for display (truncate if too many)
-  // Returns styled elements where error tools show in red
-  const formatToolNames = () => {
-    const displayCalls = summaryCalls.length <= 4 ? summaryCalls : summaryCalls.slice(0, 3);
-    const remaining = summaryCalls.length > 4 ? summaryCalls.length - 3 : 0;
-
-    return (
-      <>
-        {displayCalls.map((call, index) => (
-          <React.Fragment key={call.id}>
-            <span className={call.status === 'error' ? 'text-destructive' : undefined}>
-              {getDisplayToolName(
-                call.name,
-                resolveDisplayInput(call.name, call.input, call.result?.content),
-                { summary: true }
-              )}
-            </span>
-            {index < displayCalls.length - 1 && ', '}
-          </React.Fragment>
-        ))}
-        {remaining > 0 && `, +${remaining} more`}
-      </>
-    );
-  };
-
+  const errors = calls.filter((call) => call.status === 'error').length;
+  const pending = calls.some((call) => call.status === 'pending');
+  const label = getToolGroupLabel(calls);
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded border bg-muted/20 min-w-0">
-        <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors">
-            {isOpen ? (
-              <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-            <TerminalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-xs min-w-0 flex-1 truncate">
-              {pairedCalls.length} tools: {formatToolNames()}
-            </span>
-            <span className="ml-auto flex gap-1 text-xs">{renderStatusIndicators()}</span>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="border-t space-y-1 p-1.5 overflow-x-auto">
-            {expandedCalls.map((call) => {
-              const persistedOpen = getCallOpen?.(call.id, false);
-              const isCallControlled =
-                persistedOpen !== undefined && onCallOpenChange !== undefined;
-              const handleOpenChange = isCallControlled
-                ? (nextOpen: boolean) => onCallOpenChange(call.id, nextOpen)
-                : undefined;
-
-              return (
-                <div key={call.id} className="pl-2">
-                  <PairedToolCallRenderer
-                    call={call}
-                    defaultOpen={false}
-                    open={isCallControlled ? persistedOpen : undefined}
-                    onOpenChange={handleOpenChange}
-                    detailsClassName={toolDetailsClassName}
-                    detailsMaxHeight={toolDetailsMaxHeight}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </CollapsibleContent>
-      </div>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
+      <CollapsibleTrigger asChild>
+        <button type="button" className={triggerClassName}>
+          <ActivityIcon name={first.name} pending={pending} />
+          <span className="min-w-0 truncate" title={label}>
+            {label}
+          </span>
+          {errors > 0 && <span className="shrink-0 text-xs text-destructive">{errors} failed</span>}
+          {pending && <span className="sr-only">Running</span>}
+          <DisclosureCaret />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-1 mt-1 space-y-0.5">
+        {calls.map((call) => {
+          const callOpen = getCallOpen?.(call.id, false);
+          return (
+            <PairedToolCallRenderer
+              key={call.id}
+              call={call}
+              open={callOpen}
+              onOpenChange={
+                callOpen !== undefined && onCallOpenChange
+                  ? (next) => onCallOpenChange(call.id, next)
+                  : undefined
+              }
+              detailsClassName={toolDetailsClassName}
+              detailsMaxHeight={toolDetailsMaxHeight}
+            />
+          );
+        })}
+      </CollapsibleContent>
     </Collapsible>
   );
 });
 
-// =============================================================================
-// Paired Tool Call Renderer
-// =============================================================================
-
 interface PairedToolCallRendererProps {
   call: PairedToolCall;
-  defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   detailsClassName?: string;
   detailsMaxHeight?: number;
 }
 
-/**
- * Renders a single tool call paired with its result.
- * Shows: ToolName [status] - expands to show input and result.
- */
 const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
   call,
-  defaultOpen = false,
   open,
   onOpenChange,
   detailsClassName,
   detailsMaxHeight,
 }: PairedToolCallRendererProps) {
-  const isControlled = open !== undefined && onOpenChange !== undefined;
-  const [internalOpen, setInternalOpen] = React.useState(open ?? defaultOpen);
-  const isOpen = isControlled ? open : internalOpen;
-  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
-
-  const isPending = call.status === 'pending';
-  const isError = call.status === 'error';
-  const displayInput = resolveDisplayInput(call.name, call.input, call.result?.content);
-  const displayName = getDisplayToolName(call.name, displayInput);
-
+  const controlled = open !== undefined && onOpenChange !== undefined;
+  const [internalOpen, setInternalOpen] = useState(open ?? false);
+  const isOpen = controlled ? open : internalOpen;
+  const setIsOpen = controlled ? onOpenChange : setInternalOpen;
+  const payload =
+    isWebSearchToolName(call.name) && call.result?.content
+      ? parseWebSearchToolResult(call.result.content)
+      : null;
+  const label = getToolActivityLabel(payload ? { ...call, input: { ...payload } } : call);
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div
-        className={cn(
-          'rounded border min-w-0',
-          isError ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-        )}
-      >
-        <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
-            {isOpen ? (
-              <CaretDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <CaretRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-            {isPending ? (
-              <SpinnerGapIcon className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-            ) : isError ? (
-              <WarningCircleIcon className="h-4 w-4 shrink-0 text-destructive" />
-            ) : (
-              <CheckCircleIcon className="h-4 w-4 shrink-0 text-success" />
-            )}
-            <span className="font-mono text-xs flex-1 min-w-0 truncate" title={call.name}>
-              {displayName}
-            </span>
-            {isPending ? (
-              <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
-                Running...
-              </Badge>
-            ) : (
-              <Badge
-                variant={isError ? 'destructive' : 'success'}
-                className="ml-auto text-[10px] px-1 py-0"
-              >
-                {isError ? 'Error' : 'Success'}
-              </Badge>
-            )}
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div
-            className={cn('border-t px-2 py-1.5 space-y-2 overflow-x-auto', detailsClassName)}
-            style={detailsMaxHeight ? { maxHeight: `${detailsMaxHeight}px` } : undefined}
-          >
-            {/* Tool Input */}
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className={cn(triggerClassName, call.status === 'error' && 'text-destructive')}
+        >
+          <ActivityIcon
+            name={call.name}
+            pending={call.status === 'pending'}
+            error={call.status === 'error'}
+          />
+          <span className="min-w-0 truncate" title={label}>
+            {label}
+          </span>
+          {call.status === 'pending' && <span className="sr-only">Running</span>}
+          {call.status === 'error' && <span className="sr-only">Error</span>}
+          <DisclosureCaret />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div
+          className={cn(
+            'ml-6 mt-1 space-y-2 overflow-x-auto border-l border-border/60 py-1 pl-3',
+            detailsClassName
+          )}
+          style={detailsMaxHeight ? { maxHeight: `${detailsMaxHeight}px` } : undefined}
+        >
+          <div className="min-w-0">
+            <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Input</div>
+            <ToolInputRenderer
+              name={call.name}
+              input={call.input}
+              resultContent={call.result?.content}
+            />
+          </div>
+          {call.result && (
             <div className="min-w-0">
-              <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>
-              <ToolInputRenderer
-                name={call.name}
-                input={call.input}
-                resultContent={call.result?.content}
+              <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Result</div>
+              <ToolResultContentRenderer
+                content={call.result.content}
+                isError={call.result.isError}
+                toolName={call.name}
               />
             </div>
-            {/* Tool Result */}
-            {call.result && (
-              <div className="min-w-0">
-                <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Result</div>
-                <ToolResultContentRenderer
-                  content={call.result.content}
-                  isError={call.result.isError}
-                  toolName={call.name}
-                />
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      </div>
+          )}
+        </div>
+      </CollapsibleContent>
     </Collapsible>
   );
 });

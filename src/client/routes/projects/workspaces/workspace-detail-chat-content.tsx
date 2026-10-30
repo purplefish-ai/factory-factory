@@ -13,6 +13,7 @@ import {
   useGroupedChatMessages,
   VirtualizedMessageList,
 } from '@/client/features/chat';
+import { useSubagentTimelineMessages } from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
@@ -181,7 +182,13 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
   const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
-  const groupedMessages = useGroupedChatMessages(props.messages, {
+  const timeline = useSubagentTimelineMessages(
+    props.messages,
+    props.sessionId,
+    props.connected,
+    props.sessionStatus.phase === 'loading'
+  );
+  const groupedMessages = useGroupedChatMessages(timeline.messages, {
     filterDuplicateResults: true,
   });
   const queuedMessageIds = useMemo(
@@ -267,6 +274,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         <VirtualizedMessageList
           workspaceId={props.workspaceId}
           messages={groupedMessages}
+          subagentTimelineError={timeline.error}
           acpPlan={props.acpPlan}
           running={running}
           work={props.sessionRuntime.work}

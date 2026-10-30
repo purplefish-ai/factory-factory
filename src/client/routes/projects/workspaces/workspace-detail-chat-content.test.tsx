@@ -189,3 +189,7 @@ describe('ChatContent scroll control', () => {
     }
   });
 });
+
+vi.mock('@/client/features/subagents', () => ({
+  useSubagentTimelineMessages: (messages: unknown[]) => ({ messages, error: null }),
+}));

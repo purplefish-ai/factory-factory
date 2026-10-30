@@ -3,7 +3,7 @@ import { isWebSearchToolName, parseWebSearchToolInput } from './web-search-parse
 
 const SUMMARY_TOOL_NAME_MAX = 24;
 const DETAIL_TOOL_NAME_MAX = 96;
-const RUN_COMMAND_PREVIEW_MAX = 84;
+export const RUN_COMMAND_PREVIEW_MAX = 84;
 const WEB_SEARCH_PREVIEW_MAX = 84;
 const SHELL_EXECUTABLES = new Set(['bash', 'dash', 'ksh', 'mksh', 'sh', 'zsh', 'fish']);
 

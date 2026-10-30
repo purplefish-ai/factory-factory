@@ -745,6 +745,17 @@ child on later pages. Live sub-agent events invalidate list queries by parent
 session, without cursor or page-size fields, so infinite-query caches refresh
 newly spawned and completed children without a page reload.
 
+The chat timeline projects provider creation and completion timestamps into
+separate, muted sub-agent start and finish rows. Failure, cancellation, and
+interruption retain their own labels. In workspace-detail chat, these rows open
+the Sessions panel. Both workspace-detail and Quick Chat reconstruct the rows
+from provider metadata when history reloads; unknown timestamps are not
+invented. If a request fails or the provider repeats a pagination cursor, chat
+keeps known rows visible and offers Retry. Adjacent tool activity stays
+collapsed by default as muted summary rows; expanding a summary shows
+chronological calls with input and output available on demand. Failed calls
+remain visible in the collapsed summary.
+
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering
 Markdown. Tool, reasoning, non-text content, and provider message-ID changes end
