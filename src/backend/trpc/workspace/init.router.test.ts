@@ -164,7 +164,7 @@ describe('workspaceInitRouter', () => {
       });
       mockGetInitMode.mockRejectedValueOnce(new Error('database unavailable'));
 
-      await expect(createCaller().retryInit({ id: 'w1' })).rejects.toThrow();
+      await expect(createCaller().retryInit({ id: 'w1' })).rejects.toThrow('database unavailable');
 
       expect(mockResetToNew).not.toHaveBeenCalled();
       expect(mockStartProvisioningFromReady).not.toHaveBeenCalled();
