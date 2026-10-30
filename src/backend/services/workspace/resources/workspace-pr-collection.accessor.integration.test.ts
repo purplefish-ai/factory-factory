@@ -115,6 +115,18 @@ it('treats owner/repo casing variants of one PR URL as the same association', as
     [pasted.prId, discovered[0]].sort()
   );
 });
+it('finds review-request associations by PR identity regardless of URL casing', async () => {
+  const row = await workspace('review-casing');
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/review/pull/5');
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/review/pull/15');
+  await db.prisma.workspace.update({ where: { id: row.id }, data: { status: 'ARCHIVED' } });
+  expect(
+    await workspacePrAccessor.findReviewRequestAssociations([
+      'https://github.com/Org/Review/pull/5',
+      'https://github.com/org/review/pull/50',
+    ])
+  ).toEqual([{ url: 'https://github.com/Org/Review/pull/5', workspace: { status: 'ARCHIVED' } }]);
+});
 it('reads and writes every cache field on its explicit PR', async () => {
   await workspace('cache');
   const { prId } = await workspacePrAccessor.attach('cache', 'https://github.com/org/repo/pull/7');

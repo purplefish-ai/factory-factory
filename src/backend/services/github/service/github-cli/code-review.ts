@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createLogger } from '@/backend/services/logger.service';
 import { ghExecLimit as execLimit, GH_TIMEOUT_MS } from './constants';
-import { wrapGitHubCLIError } from './errors';
+import { getGitHubCLIDiagnostic, wrapGitHubCLIError } from './errors';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli-code-review');
@@ -187,7 +187,7 @@ export async function getPRHeadCommitSha(repo: string, prNumber: number): Promis
     }
     return sha;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getGitHubCLIDiagnostic(error);
     logger.warn('Failed to fetch PR head commit SHA', { repo, prNumber, error: errorMessage });
     throw wrapGitHubCLIError('Failed to fetch PR head commit SHA', error);
   }
@@ -232,7 +232,7 @@ export async function createReviewComment(
       )
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getGitHubCLIDiagnostic(error);
     logger.warn('Failed to create standalone review comment via gh api', {
       repo,
       prNumber,

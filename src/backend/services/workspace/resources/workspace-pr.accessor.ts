@@ -145,20 +145,34 @@ const reattachmentFields = {
   revision: { increment: 1 },
 } satisfies Prisma.WorkspacePRUpdateInput;
 
+const PR_URL_PATTERN = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/i;
+
 /** GitHub host/owner/repo are case-insensitive, so URL casing variants name one PR. */
 function prUrlKey(url: string): string {
-  const match = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/i.exec(url);
+  const match = PR_URL_PATTERN.exec(url);
   return match ? `${match[1]}/${match[2]}/${match[3]}/pull/${match[4]}`.toLowerCase() : url;
 }
 
-/** Prefer a live association, then the exact URL, over a detached casing variant. */
-async function findEquivalentPR(tx: Prisma.TransactionClient, workspaceId: string, url: string) {
-  const key = prUrlKey(url);
-  const rows = await tx.workspacePR.findMany({
+/** Exact-match prefilter for `prUrlKey`: the PR number suffix has no letters to fold. */
+function prUrlSuffix(url: string): string {
+  const number = PR_URL_PATTERN.exec(url)?.[4];
+  return number ? `/pull/${number}` : url;
+}
+
+type PRUrlRow = { id: string; url: string; detachedAt: Date | null };
+
+/** Load a workspace's associations once so a batch of URLs reuses them. */
+function loadPRUrlRows(tx: Prisma.TransactionClient, workspaceId: string): Promise<PRUrlRow[]> {
+  return tx.workspacePR.findMany({
     where: { workspaceId },
     select: { id: true, url: true, detachedAt: true },
     orderBy: { id: 'asc' },
   });
+}
+
+/** Prefer a live association, then the exact URL, over a detached casing variant. */
+function findEquivalentPR(rows: PRUrlRow[], url: string): PRUrlRow | null {
+  const key = prUrlKey(url);
   const matches = rows.filter((row) => prUrlKey(row.url) === key);
   return (
     matches.find((row) => row.detachedAt === null) ??
@@ -242,10 +256,20 @@ export interface PRAggregateGuard {
 }
 
 class WorkspacePRAccessor {
-  findReviewRequestAssociations(urls: string[]) {
-    return prisma.workspacePR.findMany({
-      where: { url: { in: urls }, detachedAt: null },
+  /** Matches casing variants and reports each association under the requested URL. */
+  async findReviewRequestAssociations(urls: string[]) {
+    const rows = await prisma.workspacePR.findMany({
+      where: {
+        detachedAt: null,
+        OR: [...new Set(urls.map(prUrlSuffix))].map((suffix) => ({ url: { endsWith: suffix } })),
+      },
       select: { url: true, workspace: { select: { status: true } } },
+    });
+    return urls.flatMap((url) => {
+      const key = prUrlKey(url);
+      return rows
+        .filter((row) => prUrlKey(row.url) === key)
+        .map((row) => ({ url, workspace: row.workspace }));
     });
   }
 
@@ -363,7 +387,7 @@ class WorkspacePRAccessor {
   }
   attach(workspaceId: string, url: string) {
     return prisma.$transaction(async (tx) => {
-      const existing = await findEquivalentPR(tx, workspaceId, url);
+      const existing = findEquivalentPR(await loadPRUrlRows(tx, workspaceId), url);
       if (existing) {
         if (existing.detachedAt) {
           await tx.workspacePR.update({
@@ -396,13 +420,15 @@ class WorkspacePRAccessor {
         return [];
       }
       const ids: string[] = [];
+      const rows = await loadPRUrlRows(tx, workspaceId);
       for (const url of urls) {
-        if (await findEquivalentPR(tx, workspaceId, url)) {
+        if (findEquivalentPR(rows, url)) {
           continue;
         }
         const pr = await tx.workspacePR.create({
           data: { workspaceId, url, headRefName: claim.branchName },
         });
+        rows.push({ id: pr.id, url, detachedAt: null });
 
         ids.push(pr.id);
       }

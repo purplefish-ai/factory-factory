@@ -5,6 +5,7 @@ import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import {
   classifyError,
+  getGitHubCLIDiagnostic,
   logGitHubCLIError,
   throwIfGitHubConnectivityError,
   wrapGitHubCLIError,
@@ -387,7 +388,7 @@ class GitHubCLIService {
       logger.info('PR review submitted successfully', { repo, prNumber, action });
     } catch (error) {
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to submit PR review via gh CLI', {
         repo,
@@ -474,7 +475,7 @@ class GitHubCLIService {
     } catch (error) {
       throwIfGitHubConnectivityError(error, { owner, repo });
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to list issues via gh CLI', {
         owner,
@@ -576,7 +577,7 @@ class GitHubCLIService {
       signal?.throwIfAborted();
       throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to fetch PR review comments via gh CLI', {
         repo,
@@ -620,7 +621,7 @@ class GitHubCLIService {
       signal?.throwIfAborted();
       throwIfGitHubConnectivityError(error, { repo, prNumber });
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to fetch resolved review threads via gh CLI', {
         repo,
@@ -832,7 +833,7 @@ class GitHubCLIService {
       logger.info('PR comment added successfully', { repo, prNumber });
     } catch (error) {
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to add PR comment via gh CLI', {
         repo,
@@ -862,7 +863,7 @@ class GitHubCLIService {
       logger.info('Issue comment added successfully', { owner, repo, issueNumber });
     } catch (error) {
       const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getGitHubCLIDiagnostic(error);
 
       logger.error('Failed to add issue comment via gh CLI', {
         owner,

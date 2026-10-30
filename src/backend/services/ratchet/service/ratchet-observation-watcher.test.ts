@@ -66,6 +66,21 @@ it('invalidates an in-flight event wake and drains it before shutdown finishes',
   expect(stopped).toBe(true);
 });
 
+it('keeps a wake from before stop invalidated when monitoring restarts during the drain', async () => {
+  const service = new RatchetService();
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
+  service.configure({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const waking = service.wakePendingEvents('w');
+  const isCurrent = wake.mock.calls[0]?.[1];
+  const stopping = service.stop();
+  await service.start();
+  expect(isCurrent?.()).toBe(false);
+  pending.resolve();
+  await Promise.all([waking, stopping]);
+  expect(isCurrent?.()).toBe(false);
+});
+
 it('observes every association and wakes the main queue once without creating fixer sessions', async () => {
   mocks.listEnabled.mockResolvedValue([
     {

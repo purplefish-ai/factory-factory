@@ -56,13 +56,29 @@ export function throwIfGitHubConnectivityError(
 }
 
 /**
- * Add context to a gh failure without embedding execFile's `Command failed:`
- * line, whose arguments (repo names, comment bodies) would otherwise be
- * classified and shown as if they were gh diagnostics.
+ * gh's own diagnostic for logs and wrapped errors. execFile's message embeds the
+ * whole command line (repo names, multi-line comment bodies), so a failed
+ * process contributes only its stderr; other errors (parsing, validation) carry
+ * no arguments and keep their message.
  */
+export function getGitHubCLIDiagnostic(error: unknown): string {
+  const stderr =
+    typeof error === 'object' &&
+    error !== null &&
+    'stderr' in error &&
+    typeof error.stderr === 'string'
+      ? error.stderr.trim()
+      : '';
+  if (stderr) {
+    return stderr;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /^Command failed:/i.test(message) ? 'gh command failed' : message;
+}
+
+/** Add context to a gh failure without repeating its command line. */
 export function wrapGitHubCLIError(context: string, error: unknown): Error {
-  const detail = getGitHubCLIErrorMessage(error) || 'gh command failed';
-  return new Error(`${context}: ${detail}`, { cause: error });
+  return new Error(`${context}: ${getGitHubCLIDiagnostic(error)}`, { cause: error });
 }
 
 /**

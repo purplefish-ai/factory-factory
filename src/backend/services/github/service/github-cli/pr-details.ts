@@ -1,7 +1,12 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './constants';
-import { classifyError, throwIfGitHubConnectivityError, wrapGitHubCLIError } from './errors';
+import {
+  classifyError,
+  getGitHubCLIDiagnostic,
+  throwIfGitHubConnectivityError,
+  wrapGitHubCLIError,
+} from './errors';
 import { mapComments, mapLabels, mapStatusChecks } from './mappers';
 import { getChronologicalReviews } from './reviews';
 import { fullPRDetailsSchema, prReviewDetailsSchema, prStatusDetailsSchema } from './schemas';
@@ -131,7 +136,7 @@ export async function getPRFullDetails(
     signal?.throwIfAborted();
     throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getGitHubCLIDiagnostic(error);
 
     logger.error('Failed to fetch PR details via gh CLI', {
       repo,
@@ -159,7 +164,7 @@ export async function getPRDiff(
   } catch (error) {
     throwIfGitHubConnectivityError(error, { repo, prNumber });
     const errorType = classifyError(error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getGitHubCLIDiagnostic(error);
 
     logger.error('Failed to fetch PR diff via gh CLI', {
       repo,

@@ -113,9 +113,10 @@ normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
 owns branch lookup scheduling separately. An observation and its
 `WorkspacePREvent` rows are accepted in one transaction, guarded by association
 identity and revision. Attaching or merging one PR preserves sibling
-associations and events. Attachment and discovery match an existing association
-case-insensitively on host, owner and repository, so URL casing variants of one
-PR share a single association.
+associations and events. Attachment, discovery and review-request filtering
+match associations case-insensitively on host, owner and repository, so a URL
+casing variant reuses the existing association instead of creating another.
+Duplicate associations stored before this matching are not merged.
 
 Branch discovery only matches the workspace branch, so PR detection also
 attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR creation.
@@ -203,8 +204,9 @@ not start that cooldown. The GitHub process boundary classifies diagnostic
 output without command arguments and marks connectivity failures, including
 local read timeouts, with a typed error; storage and observation-persistence
 errors keep their error severity. Wrapped CLI failures keep the original error
-as `cause` and repeat only its diagnostic, never the command line, so repository
-names cannot be classified as authentication or network failures. `listIssues`,
+as `cause`; their messages and logs repeat only gh's stderr, never the command
+line, so repository names cannot be classified as authentication or network
+failures and comment bodies stay out of errors. `listIssues`,
 `getReviewComments`, `getResolvedReviewCommentIds`, `getPRFullDetails`, and
 `getPRDiff` warn and preserve typed connectivity errors for callers. Watcher
 concurrency remains bounded at three workspaces, with a 90-second timeout and

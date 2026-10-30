@@ -105,6 +105,8 @@ export class RatchetService extends EventEmitter {
   private checking = new Map<string, Promise<WorkspaceRatchetResult>>();
   private controllers = new Set<AbortController>();
   private pendingWakes = new Set<Promise<void>>();
+  /** Bumped by stop() so a restart cannot revive a wake from an earlier run. */
+  private generation = 0;
   constructor() {
     super();
     jobRunner.register({
@@ -131,6 +133,7 @@ export class RatchetService extends EventEmitter {
   }
   async stop() {
     this.stopped = true;
+    this.generation += 1;
     for (const controller of this.controllers) {
       controller.abort();
     }
@@ -141,15 +144,19 @@ export class RatchetService extends EventEmitter {
     if (this.stopped || !this.bridge) {
       return;
     }
-    await this.trackWake(this.bridge, workspaceId, () => !this.stopped);
+    await this.trackWake(this.bridge, workspaceId);
   }
   /** Shutdown invalidates and drains every delivery wake this service starts. */
   private async trackWake(
     bridge: MonitoringBridge,
     workspaceId: string,
-    isCurrent: () => boolean
+    isCurrent: () => boolean = () => true
   ): Promise<void> {
-    const wake = bridge.wake(workspaceId, isCurrent);
+    const generation = this.generation;
+    const wake = bridge.wake(
+      workspaceId,
+      () => !this.stopped && this.generation === generation && isCurrent()
+    );
     this.pendingWakes.add(wake);
     try {
       await wake;
@@ -220,7 +227,7 @@ export class RatchetService extends EventEmitter {
         signal.throwIfAborted();
         const queued = await workspacePRMonitoringService.listPending(config.workspaceId);
         signal.throwIfAborted();
-        await this.trackWake(bridge, config.workspaceId, () => !(this.stopped || signal.aborted));
+        await this.trackWake(bridge, config.workspaceId, () => !signal.aborted);
         signal.throwIfAborted();
         this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: config.workspaceId });
         signal.throwIfAborted();
