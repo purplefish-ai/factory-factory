@@ -115,6 +115,10 @@ ff db:studio        # Inspect the local database with Prisma Studio
 runs database migrations, finds an available port, and opens the browser when
 the server is ready.
 
+Port selection checks listening processes with `lsof` on Unix. If that check
+fails, including when another user's listener is hidden, it verifies the port
+with a bind attempt before selecting it.
+
 ### Hosting behind your own reverse proxy
 
 To serve Factory Factory from your own domain (e.g. `https://ff.example.com`)

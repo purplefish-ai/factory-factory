@@ -18,7 +18,7 @@ const MAX_PORT = 65_535;
 /**
  * Check if a port is in use by checking actual listening processes.
  * Uses lsof on Unix systems for more reliable detection.
- * Falls back to bind attempt if lsof is unavailable.
+ * Falls back to a bind attempt when lsof fails, including exit code 1.
  */
 async function isPortInUse(port: number): Promise<boolean> {
   // Try lsof first (more reliable, checks actual listening processes)
@@ -32,12 +32,8 @@ async function isPortInUse(port: number): Promise<boolean> {
       // If we get output, port is in use
       return stdout.trim().length > 0;
     } catch (error) {
-      // lsof exits with code 1 if no process found (port is free)
-      // Also catches if lsof is not installed
-      if ((error as { code?: number }).code === 1) {
-        return false;
-      }
-      // lsof not available or error - fall back to bind attempt
+      // Exit 1 can mean another user's listener is invisible, so it is not
+      // evidence that the port is free. All failures need a bind attempt.
       logger.debug('lsof check failed, falling back to bind attempt', { error });
     }
   }
