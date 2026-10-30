@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import type { WebSocketSend } from '@/hooks/use-websocket-transport';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/chat-protocol';
 import {
   clearInputAttachments as clearPersistedInputAttachments,
@@ -50,7 +51,7 @@ export interface UseChatStateOptions {
   /** Database session ID (required for persistence). */
   dbSessionId: string | null;
   /** Send function from WebSocket transport. */
-  send: (message: unknown) => boolean;
+  send: WebSocketSend;
   /** Connection state from WebSocket transport. */
   connected: boolean;
 }

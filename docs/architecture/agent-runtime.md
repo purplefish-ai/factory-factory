@@ -309,11 +309,13 @@ existing card's input, preserving its original order and tool name through live
 updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
-Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review and Claude's AIR `Approve Plan` requests with plan text are
-normalized into the application's plan UI, including pending requests restored
-on reconnect. Approval clears the composer's plan mode. Interactive sessions
-wait for a user response; read-only reviewers automatically reject plan
+Permission requests retain the provider's option IDs and choices. When requests
+overlap, the newest is shown; answering or cancelling it shows the newest
+request still awaiting a response, including on reconnect. Upstream Codex plan
+review and Claude's AIR `Approve Plan` requests with plan text are normalized
+into the application's plan UI, including pending requests restored on
+reconnect. Approval clears the composer's plan mode. Interactive sessions wait
+for a user response; read-only reviewers automatically reject plan
 implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
 form elicitation, with validated answers mapped into the existing question UI.
@@ -390,7 +392,8 @@ or awaiting that turn's approval, question or elicitation. A background shell,
 independently running child or active goal does not block the next parent prompt
 once that RPC completes. The provider remains authoritative: if it reports an
 active turn that the client cannot observe, the existing bounded busy retry
-preserves the queued message.
+preserves the queued message, and the running turn keeps its tool-call tracking
+for interceptors such as PR detection.
 
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control
