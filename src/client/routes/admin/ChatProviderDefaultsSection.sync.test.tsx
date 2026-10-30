@@ -55,13 +55,22 @@ function SettingsHarness() {
   return createElement(ChatProviderDefaultsSection);
 }
 
+// Flush React Query and React updates a bounded number of times instead of
+// polling against wall-clock time, which slow CPUs exhaust under suite load.
 async function waitFor(check: () => void) {
-  await vi.waitFor(async () => {
+  for (let flush = 1; ; flush++) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    check();
-  });
+    try {
+      check();
+      return;
+    } catch (error) {
+      if (flush >= 20) {
+        throw error;
+      }
+    }
+  }
 }
 
 async function select(id: string, label: string) {

@@ -71,9 +71,10 @@ describe('FileLockMutex', () => {
       maxStaleRetries: 0,
       staleThresholdMs: 10_000,
     });
+    // The window only bounds a broken lock; a working one acquires right after release.
     const contender = new FileLockMutex({
       acquireTimeoutMs: 20,
-      postTimeoutWaitMs: 120,
+      postTimeoutWaitMs: 3000,
       initialRetryDelayMs: 5,
       maxRetryDelayMs: 10,
       maxStaleRetries: 0,
@@ -82,11 +83,12 @@ describe('FileLockMutex', () => {
 
     try {
       const releaseHolder = await holder.acquire(lockPath);
-      setTimeout(() => {
-        void releaseHolder();
-      }, 40);
+      const contending = contender.acquire(lockPath);
+      // Release only once the contender is past its acquire timeout.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await releaseHolder();
 
-      const releaseContender = await contender.acquire(lockPath);
+      const releaseContender = await contending;
       await releaseContender();
     } finally {
       await fs.rm(baseDir, { recursive: true, force: true });

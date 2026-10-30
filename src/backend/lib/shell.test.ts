@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { LIB_LIMITS } from './constants';
 import { escapeForOsascript, execCommand } from './shell';
 
@@ -50,23 +54,59 @@ describe('execCommand', () => {
   });
 
   it('does not mark a successful process timed out while waiting for stdio close', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ff-shell-stdio-'));
+    const pidFile = join(directory, 'pids.json');
     const script = `
       const { spawn } = require('node:child_process');
-      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 500);'], {
+      const { writeFileSync } = require('node:fs');
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'], {
         detached: true,
         stdio: ['ignore', 'inherit', 'inherit'],
       });
       child.unref();
+      writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify({ parent: process.pid, child: child.pid }));
       process.exit(0);
     `;
+    const isRunning = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let childPid: number | undefined;
+    // Fake only execCommand's timer: fire it after the real parent has exited
+    // while its detached child still holds stdio, however slowly the parent starts.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const pending = execCommand(process.execPath, ['-e', script], { timeout: 200 });
+      const pids = await vi.waitFor(
+        () => {
+          const ids = z
+            .object({ parent: z.number(), child: z.number() })
+            .parse(JSON.parse(readFileSync(pidFile, 'utf8')));
+          expect(isRunning(ids.parent)).toBe(false);
+          return ids;
+        },
+        { timeout: 4000, interval: 10 }
+      );
+      childPid = pids.child;
+      vi.advanceTimersByTime(200);
+      process.kill(childPid);
 
-    const result = await execCommand(process.execPath, ['-e', script], {
-      timeout: 200,
-    });
+      const result = await pending;
 
-    expect(result.code).toBe(0);
-    expect(result.timedOut).toBe(false);
-    expect(result.stderr).not.toContain('timed out after 200ms');
+      expect(result.code).toBe(0);
+      expect(result.timedOut).toBe(false);
+      expect(result.stderr).not.toContain('timed out after 200ms');
+    } finally {
+      vi.useRealTimers();
+      if (childPid !== undefined && isRunning(childPid)) {
+        process.kill(childPid, 'SIGKILL');
+      }
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('force-kills the process when it ignores the timeout signal', async () => {

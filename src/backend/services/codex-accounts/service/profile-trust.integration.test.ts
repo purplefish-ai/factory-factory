@@ -56,12 +56,18 @@ it('loads linked-worktree local config after inheriting native repository trust'
     getChildProcessEnv: () => ({}),
   };
   const context = await resolveAccountContext(row, config);
+  // Each read starts the real Codex app-server. The default budget leaves only
+  // five seconds for startup, which parallel suite load can exceed.
   const readConfig = () =>
-    withNativeRpc(context, async (rpc) => {
-      return z
-        .object({ config: z.object({ model: z.string().nullish() }) })
-        .parse(await rpc.request('config/read', { includeLayers: true, cwd: worktree })).config;
-    });
+    withNativeRpc(
+      context,
+      async (rpc) => {
+        return z
+          .object({ config: z.object({ model: z.string().nullish() }) })
+          .parse(await rpc.request('config/read', { includeLayers: true, cwd: worktree })).config;
+      },
+      { timeoutMs: 30_000 }
+    );
   expect((await readConfig()).model).not.toBe('ff-project-trust-probe');
   await writeFile(
     join(native, 'config.toml'),
@@ -69,4 +75,4 @@ it('loads linked-worktree local config after inheriting native repository trust'
   );
   await resolveAccountContext(row, config);
   expect((await readConfig()).model).toBe('ff-project-trust-probe');
-}, 20_000);
+}, 60_000);

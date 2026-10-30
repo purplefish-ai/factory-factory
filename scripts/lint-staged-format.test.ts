@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 const directory = mkdtempSync(join(tmpdir(), 'ff-staged-format-'));
 
@@ -58,6 +58,10 @@ function commit(files: Record<string, string>) {
   const result = git('commit', '-m', 'Format staged fixture');
   return { result, git, read: (name: string) => readFileSync(join(root, name), 'utf8') };
 }
+
+// Each case runs a real git commit hook that starts lint-staged and oxfmt, which
+// can take several seconds while the rest of the suite competes for CPU.
+vi.setConfig({ testTimeout: 30_000 });
 
 describe('staged formatter commit path', () => {
   it('commits package and ignored lockfile changes without an empty-target failure', () => {
