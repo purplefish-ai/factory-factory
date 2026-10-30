@@ -688,3 +688,24 @@ export const ToolSequenceGroupWithFileChange: StoryObj<typeof ToolSequenceGroup>
     />
   ),
 };
+
+/** Single calls use the same quiet summary as longer sequences. */
+export const ToolSequenceSingleCommand: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        { name: 'Bash', input: { command: 'pnpm test' }, result: 'Tests passed' },
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceSingleFailure: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        { name: 'exec_command', input: { cmd: 'pnpm test' }, result: 'Test failed', isError: true },
+      ])}
+    />
+  ),
+};

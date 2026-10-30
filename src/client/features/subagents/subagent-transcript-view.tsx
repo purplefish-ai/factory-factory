@@ -3,6 +3,7 @@ import { projectAcpTranscriptUpdates } from '@/client/features/chat';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
+import { getSubagentThreadId } from '@/shared/acp-protocol/subagents';
 import {
   SubagentTranscriptContent,
   type SubagentTranscriptContentProps,
@@ -68,7 +69,7 @@ export function SubagentTranscriptView({
     const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
-        detail.subagentId === selection.subagent.id
+        getSubagentThreadId(detail.subagentId) === getSubagentThreadId(selection.subagent.id)
       ) {
         refreshOnChange.trigger();
       }

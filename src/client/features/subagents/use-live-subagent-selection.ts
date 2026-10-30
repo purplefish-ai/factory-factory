@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
+import { getSubagentThreadId } from '@/shared/acp-protocol/subagents';
 import { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentSelection } from './types';
 
@@ -23,20 +24,43 @@ function validTimestamp(value: string | null): number | null {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
+function hasInvalidTimestamp(value: string | null): boolean {
+  return value !== null && validTimestamp(value) === null;
+}
+
+function isTerminalReopening(
+  stored: SubagentSelection['subagent'],
+  candidate: SubagentSelection['subagent']
+): boolean {
+  return TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status);
+}
+
 function isProvenAtLeastAsFresh(
   stored: SubagentSelection['subagent'],
   candidate: SubagentSelection['subagent'],
   hasSuccessfulPostMountFetch: boolean
 ): boolean {
-  if (TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status)) {
+  if (candidate.generation === undefined && isTerminalReopening(stored, candidate)) {
     return false;
   }
   const storedTimestamp = validTimestamp(stored.updatedAt);
   const candidateTimestamp = validTimestamp(candidate.updatedAt);
+  if (hasInvalidTimestamp(stored.updatedAt) || hasInvalidTimestamp(candidate.updatedAt)) {
+    return false;
+  }
+  // Generations include a runtime-local replay offset. Real observation times
+  // take precedence when a restarted backend reconstructs a lower counter.
   if (
-    (stored.updatedAt !== null && storedTimestamp === null) ||
-    (candidate.updatedAt !== null && candidateTimestamp === null)
+    storedTimestamp !== null &&
+    candidateTimestamp !== null &&
+    storedTimestamp !== candidateTimestamp
   ) {
+    return candidateTimestamp > storedTimestamp;
+  }
+  if ((candidate.generation ?? 1) !== (stored.generation ?? 1)) {
+    return (candidate.generation ?? 1) > (stored.generation ?? 1);
+  }
+  if (isTerminalReopening(stored, candidate)) {
     return false;
   }
   if (storedTimestamp === null || candidateTimestamp === null) {
@@ -66,10 +90,23 @@ export function useLiveSubagent(selection: SubagentSelection): {
 
   const subagents =
     query.data?.pages.filter((page) => page.supported).flatMap((page) => page.subagents) ?? [];
-  const refreshed = subagents.find((candidate) => candidate.id === selection.subagent.id);
+  const candidate = subagents.find(
+    (candidate) =>
+      candidate.id === selection.subagent.id ||
+      (candidate.generation !== undefined &&
+        candidate.id === getSubagentThreadId(selection.subagent.id))
+  );
+  // Keep persisted generation tab identities stable for the panel's tab lookup.
+  const refreshed = useMemo(
+    () =>
+      candidate && candidate.id !== selection.subagent.id
+        ? { ...candidate, id: selection.subagent.id }
+        : candidate,
+    [candidate, selection.subagent.id]
+  );
   const iconIndex =
-    getSubagentIconIndices(refreshed ? subagents : [...subagents, selection.subagent]).get(
-      selection.subagent.id
+    getSubagentIconIndices(candidate ? subagents : [...subagents, selection.subagent]).get(
+      candidate?.id ?? selection.subagent.id
     ) ?? 0;
   const candidateWasCachedAtMount = useRef(refreshed !== undefined);
   const querySnapshot = useRef({
@@ -135,7 +172,7 @@ export function useLiveSubagent(selection: SubagentSelection): {
     const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
-        detail.subagentId === selection.subagent.id
+        getSubagentThreadId(detail.subagentId) === getSubagentThreadId(selection.subagent.id)
       ) {
         refreshOnChange.trigger();
       }
