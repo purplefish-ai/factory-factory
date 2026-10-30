@@ -35,7 +35,14 @@ export class SessionRuntimeMachine {
     ) {
       return () => undefined;
     }
-    const launch = { idle: this.initialLaunches.get(store)?.idle ?? store.runtime };
+    const baseline = this.initialLaunches.get(store)?.idle ?? store.runtime;
+    // Starting hides the load phase, so finishLoad cannot clear it. Never restore
+    // that transient spinner after the load has already completed.
+    const idle: SessionRuntimeState = {
+      ...baseline,
+      phase: baseline.phase === 'loading' ? 'idle' : baseline.phase,
+    };
+    const launch = { idle };
     this.initialLaunches.set(store, launch);
     this.markRuntime(store, {
       phase: 'starting',

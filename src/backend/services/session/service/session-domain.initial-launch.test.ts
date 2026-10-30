@@ -88,3 +88,25 @@ it.each(['running', 'error', 'stopping'] as const)(
     expect(domain.getRuntimeSnapshot('s1').phase).toBe(phase);
   }
 );
+
+it.each(['unknown', 'stopped', 'alive'] as const)(
+  'does not restore loading after a concurrent load finishes (process: %s)',
+  (processState) => {
+    const domain = new SessionDomainService();
+    domain.setRuntimeSnapshot('s1', {
+      phase: 'loading',
+      processState,
+      activity: 'IDLE',
+      updatedAt: 'now',
+    });
+    const release = domain.beginInitialLaunch('s1');
+    domain.finishLoad('s1');
+    expect(domain.getRuntimeSnapshot('s1').phase).toBe('starting');
+    release();
+    expect(domain.getRuntimeSnapshot('s1')).toMatchObject({
+      phase: 'idle',
+      processState,
+      activity: 'IDLE',
+    });
+  }
+);
