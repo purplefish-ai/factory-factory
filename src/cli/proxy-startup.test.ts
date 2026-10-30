@@ -40,7 +40,7 @@ server.listen(0, '127.0.0.1', () => console.log('BACKEND_PORT:' + server.address
       const response = await fetch(`http://127.0.0.1:${backend.port}`);
       expect(await response.text()).toBe('false');
     } finally {
-      if (backend) {
+      if (backend && backend.process.exitCode === null && backend.process.signalCode === null) {
         const exited = once(backend.process, 'exit');
         backend.process.kill();
         await exited;
