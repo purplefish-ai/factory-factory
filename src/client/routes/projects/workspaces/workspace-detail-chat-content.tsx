@@ -181,13 +181,13 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
   const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
-  const timelineMessages = useSubagentTimelineMessages(
+  const timeline = useSubagentTimelineMessages(
     props.messages,
     props.sessionId,
     props.connected,
     props.sessionStatus.phase === 'loading'
   );
-  const groupedMessages = useGroupedChatMessages(timelineMessages, {
+  const groupedMessages = useGroupedChatMessages(timeline.messages, {
     filterDuplicateResults: true,
   });
   const queuedMessageIds = useMemo(
@@ -273,6 +273,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         <VirtualizedMessageList
           workspaceId={props.workspaceId}
           messages={groupedMessages}
+          subagentTimelineError={timeline.error}
           running={running}
           work={props.sessionRuntime.work}
           startingSession={displayStartingState}

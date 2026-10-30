@@ -169,7 +169,7 @@ describe('quiet activity summaries', () => {
     const root = createRoot(container);
     const call = {
       ...createCall('bash', 'Bash'),
-      input: { command: 'pnpm test' },
+      input: { command: 'pnpm test', description: 'Run the full unit suite' },
       result: { content: 'All tests passed', isError: false },
     };
     flushSync(() =>
@@ -182,8 +182,10 @@ describe('quiet activity summaries', () => {
     expect(container.textContent).toContain('Ran pnpm test');
     expect(container.textContent).not.toContain('Success');
     expect(container.textContent).not.toContain('All tests passed');
+    expect(container.textContent).not.toContain('Run the full unit suite');
     flushSync(() => container.querySelector('button')?.click());
     expect(container.textContent).toContain('All tests passed');
+    expect(container.textContent).toContain('Run the full unit suite');
     expect(container.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
     root.unmount();
   });
@@ -214,5 +216,34 @@ describe('quiet activity summaries', () => {
     expect(container.textContent).toContain('Failed pnpm test');
     expect(container.textContent).not.toContain('Success');
     root.unmount();
+  });
+});
+
+describe('bounded command previews', () => {
+  const command = `printf ${'x'.repeat(200)}`;
+  it.each([
+    { name: 'Bash', input: { command } },
+    { name: 'exec_command', input: { cmd: command } },
+    { name: 'Run', input: { command: ['zsh', '-lc', command] } },
+  ])('bounds the $name summary and preserves full input in details', ({ name, input }) => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const call = { ...createCall('command', name), input };
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(ToolSequenceGroup, {
+            sequence: { type: 'tool_sequence', id: 'bounded', pairedCalls: [call] },
+          })
+        )
+      );
+      const trigger = container.querySelector('button');
+      expect(trigger?.textContent?.length).toBeLessThanOrEqual(84);
+      expect(trigger?.textContent).toMatch(/…$/);
+      flushSync(() => trigger?.click());
+      expect(container.textContent).toContain(command);
+    } finally {
+      root.unmount();
+    }
   });
 });

@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/lib/chat-protocol';
-import { getNextSubagentPageParam } from './subagent-pagination';
+import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
 import { createSubagentTimelineEvents, mergeSubagentTimeline } from './subagent-timeline';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
 
@@ -11,7 +11,7 @@ export function useSubagentTimelineMessages(
   sessionId: string | null,
   enabled: boolean,
   loading = false
-): ChatMessage[] {
+) {
   const queryEnabled = useSubagentInvalidation(
     sessionId,
     Boolean(sessionId && enabled && !loading)
@@ -24,12 +24,21 @@ export function useSubagentTimelineMessages(
       getNextPageParam: getNextSubagentPageParam,
     }
   );
-  const { hasNextPage, isFetching, error, fetchNextPage } = query;
+  const { hasNextPage, isFetching, fetchNextPage, refetch } = query;
+  const errorMessage = getSubagentListError(query)?.message;
   useEffect(() => {
-    if (queryEnabled && hasNextPage && !isFetching && !error) {
+    if (queryEnabled && hasNextPage && !isFetching && !errorMessage) {
       void fetchNextPage();
     }
-  }, [queryEnabled, hasNextPage, isFetching, error, fetchNextPage]);
+  }, [queryEnabled, hasNextPage, isFetching, errorMessage, fetchNextPage]);
+  const onRetry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+  const error = useMemo(
+    () =>
+      errorMessage ? { message: 'Some sub-agent activity could not be loaded.', onRetry } : null,
+    [errorMessage, onRetry]
+  );
 
   const pages = query.data?.pages;
   const events = useMemo(() => {
@@ -40,5 +49,9 @@ export function useSubagentTimelineMessages(
       pages?.flatMap((page) => (page.supported ? page.subagents : [])) ?? []
     );
   }, [pages, sessionId]);
-  return useMemo(() => mergeSubagentTimeline(messages, events), [messages, events]);
+  const timelineMessages = useMemo(
+    () => mergeSubagentTimeline(messages, events),
+    [messages, events]
+  );
+  return { messages: timelineMessages, error };
 }

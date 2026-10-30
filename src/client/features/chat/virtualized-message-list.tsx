@@ -27,6 +27,7 @@ interface VirtualizedMessageListProps {
   running: boolean;
   work?: SessionWorkState;
   onOpenAgents?: () => void;
+  subagentTimelineError?: { message: string; onRetry: () => void } | null;
   startingSession: boolean;
   loadingSession: boolean;
   latestThinking?: string | null;
@@ -200,6 +201,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   initBanner,
+  subagentTimelineError,
 }: VirtualizedMessageListProps) {
   const hasBackgroundActivity = Boolean(
     work && (work.backgroundTasks.length > 0 || work.runningSubagents > 0 || work.activeGoals > 0)
@@ -244,7 +246,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     running ||
     hasBackgroundActivity ||
     startingSession ||
-    showingInitSpinner;
+    showingInitSpinner ||
+    Boolean(subagentTimelineError);
   const getToolExpansionState = workspaceId ? getExpansionState : undefined;
   const setToolExpansionState = workspaceId ? setExpansionState : undefined;
   const getToolExpansionToken = useCallback(
@@ -607,6 +610,19 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
             );
           })}
         </div>
+
+        {subagentTimelineError && (
+          <div role="status" className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+            <span className="min-w-0">{subagentTimelineError.message}</span>
+            <button
+              type="button"
+              onClick={subagentTimelineError.onRetry}
+              className="shrink-0 rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />

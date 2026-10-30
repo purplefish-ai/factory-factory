@@ -30,13 +30,15 @@ export function QuickChatContent({
   isNearBottom,
   scrollToBottom,
 }: QuickChatContentProps) {
-  const timelineMessages = useSubagentTimelineMessages(
+  const timeline = useSubagentTimelineMessages(
     chatState.messages,
     chatState.runtimeSessionId,
     chatState.connected,
     chatState.sessionStatus.phase === 'loading'
   );
-  const groupedMessages = useGroupedChatMessages(timelineMessages);
+  const groupedMessages = useGroupedChatMessages(timeline.messages, {
+    filterDuplicateResults: true,
+  });
   const queuedMessageIds = useMemo(
     () => new Set(chatState.queuedMessages.map((message) => message.id)),
     [chatState.queuedMessages]
@@ -64,6 +66,7 @@ export function QuickChatContent({
         <VirtualizedMessageList
           workspaceId={workspaceId}
           messages={groupedMessages}
+          subagentTimelineError={timeline.error}
           running={running}
           work={chatState.sessionRuntime.work}
           startingSession={startingSession}

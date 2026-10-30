@@ -5,6 +5,8 @@ import {
   getDisplayToolName,
   isRunLikeToolName,
   normalizeWhitespace,
+  RUN_COMMAND_PREVIEW_MAX,
+  truncateWithEllipsis,
 } from './tool-display-utils';
 import { isWebSearchToolName } from './web-search-parser';
 
@@ -64,7 +66,10 @@ function filePreview(input: Record<string, unknown>): string {
 export function getToolActivityLabel(call: PairedToolCall): string {
   const kind = getToolActivityKind(call.name);
   if (kind === 'command') {
-    return `${VERBS.command[call.status]} ${commandPreview(call)}`;
+    return truncateWithEllipsis(
+      `${VERBS.command[call.status]} ${commandPreview(call)}`,
+      RUN_COMMAND_PREVIEW_MAX
+    );
   }
   if (kind === 'edit' || kind === 'read') {
     return `${VERBS[kind][call.status]} ${filePreview(call.input)}`;

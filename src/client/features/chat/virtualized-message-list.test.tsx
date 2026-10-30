@@ -188,6 +188,23 @@ function makeToolSequence(id: string): GroupedMessageItem {
   };
 }
 
+it('keeps a sub-agent timeline load error visible and offers retry without messages', () => {
+  const onRetry = vi.fn();
+  const message = 'Some sub-agent activity could not be loaded.';
+  const harness = createHarness({ subagentTimelineError: { message, onRetry } });
+  try {
+    expect(document.body.textContent).toContain(message);
+    const retry = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retry'
+    );
+    expect(retry).toBeDefined();
+    flushSync(() => retry?.click());
+    expect(onRetry).toHaveBeenCalledOnce();
+  } finally {
+    harness.cleanup();
+  }
+});
+
 describe('VirtualizedMessageList auto-scroll behavior', () => {
   it('delegates prepend scroll anchoring to the virtualizer', () => {
     const harness = createHarness({
