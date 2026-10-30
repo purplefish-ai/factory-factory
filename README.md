@@ -109,6 +109,7 @@ Useful commands:
 ```bash
 ff serve --help     # Ports, database path, host, and other options
 ff proxy --private  # Share the app through a password-protected Cloudflare tunnel
+ff tailscale        # Start with private HTTPS access through your Tailscale network
 ff db:studio        # Inspect the local database with Prisma Studio
 ```
 
@@ -124,6 +125,36 @@ forwarded-address headers.
 Port selection checks listening processes with `lsof` on Unix. If that check
 fails, including when another user's listener is hidden, it verifies the port
 with a bind attempt before selecting it.
+
+### Access through Tailscale
+
+Connect the host and your other device to Tailscale, then run:
+
+```bash
+ff tailscale
+# From a source checkout (run pnpm build first):
+pnpm tailscale
+```
+
+The command discovers this machine's Tailscale DNS name, starts its own
+production Factory Factory instance on loopback, and shares the actual server
+port through foreground Tailscale Serve. Open the printed HTTPS URL on your
+other device, or scan the terminal QR code. If Tailscale prints a setup link,
+follow it to enable HTTPS/Serve for your tailnet. The `tailscale` CLI must be
+available on your `PATH`, connected, and permitted to configure Serve.
+
+Access follows your tailnet's access rules, including any node sharing rules;
+there is no additional Factory Factory password. Anyone those rules permit to
+reach this endpoint can manage workspaces and execute commands. This command
+uses Serve, not public Funnel, and configures HTTP and WebSocket origins without
+requiring manual environment changes.
+
+Press Ctrl+C to stop both the owned server and its Tailscale exposure. Existing
+Serve/Funnel listeners are preserved; if HTTPS port 443 is occupied, use
+`ff tailscale --https-port 8443` (or `pnpm tailscale --https-port 8443`).
+`--backend-port` selects the first local port to try (default 3001), and
+`--database-path` selects a database; otherwise the normal Factory Factory
+database is used. Source checkouts require `pnpm build` after code changes.
 
 ### Hosting behind your own reverse proxy
 

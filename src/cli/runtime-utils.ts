@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { dirname } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import treeKill from 'tree-kill';
 
@@ -32,11 +33,13 @@ export async function waitForPort(
   port: number,
   host = 'localhost',
   timeoutMs = 30_000,
-  intervalMs = 500
+  intervalMs = 500,
+  signal?: AbortSignal
 ): Promise<void> {
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
+    signal?.throwIfAborted();
     try {
       await new Promise<void>((resolve, reject) => {
         const socket = createConnection({ port, host }, () => {
@@ -50,21 +53,25 @@ export async function waitForPort(
       });
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await delay(intervalMs, undefined, { signal });
     }
   }
 
   throw new Error(`Timed out waiting for port ${port} after ${timeoutMs}ms`);
 }
 
-async function isPortInUse(port: number): Promise<boolean> {
+async function isPortInUse(port: number, signal?: AbortSignal): Promise<boolean> {
+  signal?.throwIfAborted();
   if (process.platform !== 'win32') {
     try {
       const { stdout } = await execPromise(`lsof -i :${port} -sTCP:LISTEN -t`, {
         timeout: 2000,
+        ...(signal ? { signal } : {}),
       });
+      signal?.throwIfAborted();
       return stdout.trim().length > 0;
     } catch {
+      signal?.throwIfAborted();
       // Even exit 1 can hide another user's listener; verify by binding below.
     }
   }
@@ -84,6 +91,7 @@ async function isPortInUse(port: number): Promise<boolean> {
 export interface FindAvailablePortOptions {
   excludePorts?: number[];
   maxAttempts?: number;
+  signal?: AbortSignal;
 }
 
 export async function findAvailablePort(
@@ -96,8 +104,10 @@ export async function findAvailablePort(
     );
   }
 
-  const { maxAttempts = 10, excludePorts = [] } = options;
+  const { maxAttempts = 10, excludePorts = [], signal } = options;
+  signal?.throwIfAborted();
   for (let i = 0; i < maxAttempts; i += 1) {
+    signal?.throwIfAborted();
     const port = startPort + i;
     if (port > MAX_PORT) {
       break;
@@ -105,7 +115,9 @@ export async function findAvailablePort(
     if (excludePorts.includes(port)) {
       continue;
     }
-    if (!(await isPortInUse(port))) {
+    const inUse = await isPortInUse(port, signal);
+    signal?.throwIfAborted();
+    if (!inUse) {
       return port;
     }
   }

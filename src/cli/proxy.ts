@@ -1,12 +1,10 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { type ChildProcess, execFile } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
-import * as QRCode from 'qrcode';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import {
   type AuthenticationCheck,
@@ -26,7 +24,11 @@ import {
   verifySessionValue,
 } from '@/shared/proxy-utils';
 import { resolveDatabasePath } from './database-path';
-import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
+import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
+import { startFactoryFactoryServer } from './server-startup';
+import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
+
+export { startFactoryFactoryServer } from './server-startup';
 
 const execFileAsync = promisify(execFile);
 
@@ -49,37 +51,6 @@ interface RunProxyCommandParams {
 }
 
 type ProcessRecord = { name: string; proc: ChildProcess };
-
-function supportsTerminalQrRendering(
-  stream: Pick<NodeJS.WriteStream, 'isTTY'> = process.stdout,
-  env: NodeJS.ProcessEnv = process.env
-): boolean {
-  if (!stream.isTTY) {
-    return false;
-  }
-
-  const term = (env.TERM || '').toLowerCase();
-  return term !== '' && term !== 'dumb';
-}
-
-async function tryRenderTerminalQrCode(
-  url: string,
-  renderQrCode: (
-    text: string,
-    options?: QRCode.QRCodeToStringOptionsTerminal
-  ) => Promise<string> = (text, options) => QRCode.toString(text, options)
-): Promise<string | null> {
-  try {
-    const output = await renderQrCode(url, {
-      type: 'terminal',
-      margin: 1,
-      small: true,
-    });
-    return output.trim() ? output : null;
-  } catch {
-    return null;
-  }
-}
 
 async function printDirectLinkQrCode(url: string): Promise<void> {
   if (!supportsTerminalQrRendering()) {
@@ -238,108 +209,6 @@ async function ensureCloudflaredInstalled(): Promise<void> {
     console.error('\nThen re-run this command.');
     process.exit(1);
   }
-}
-
-export async function startFactoryFactoryServer(params: {
-  projectRoot: string;
-  databasePath: string;
-  requestedPort: number;
-}): Promise<{ process: ChildProcess; port: number }> {
-  const frontendDist = join(params.projectRoot, 'dist', 'client');
-  const backendDist = join(params.projectRoot, 'dist', 'src', 'backend', 'index.js');
-
-  if (!(existsSync(frontendDist) && existsSync(backendDist))) {
-    throw new Error('Frontend or backend not built. Run `ff build` or `pnpm build` first.');
-  }
-
-  const backend = spawn('node', [backendDist], {
-    cwd: params.projectRoot,
-    env: {
-      ...process.env,
-      NODE_ENV: 'production',
-      DATABASE_PATH: params.databasePath,
-      BACKEND_PORT: params.requestedPort.toString(),
-      BACKEND_HOST: LOCAL_HOST,
-      // Public tunnel traffic must never inherit a trusted reverse-proxy opt-in.
-      TRUST_PROXY_HEADERS: 'false',
-      DOTENV_CONFIG_OVERRIDE: 'false',
-      DOTENV_OVERRIDE: 'false',
-      FF_RUN_SCRIPT_PROXY_ENABLED: '1',
-      FRONTEND_STATIC_PATH: frontendDist,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  backend.stderr?.on('data', (chunk: Buffer) => {
-    const message = chunk.toString().trim();
-    if (!message) {
-      return;
-    }
-    process.stderr.write(chalk.red(`  [server] ${message}\n`));
-  });
-
-  let startupBuffer = '';
-  let actualPort: number;
-  try {
-    actualPort = await new Promise<number>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Timed out waiting for server startup signal'));
-      }, 30_000);
-      timeout.unref?.();
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        backend.stdout?.off('data', onStdoutData);
-        backend.off('exit', onExit);
-        backend.off('error', onError);
-      };
-
-      const onStdoutData = (chunk: Buffer) => {
-        startupBuffer += chunk.toString();
-        const match = startupBuffer.match(/BACKEND_PORT:(\d+)\r?\n/);
-        if (match?.[1]) {
-          const parsed = Number.parseInt(match[1], 10);
-          if (Number.isNaN(parsed)) {
-            cleanup();
-            reject(new Error('Received invalid backend port from server startup'));
-            return;
-          }
-          cleanup();
-          resolve(parsed);
-          return;
-        }
-
-        if (startupBuffer.length > 4096) {
-          startupBuffer = startupBuffer.slice(-2048);
-        }
-      };
-
-      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-        cleanup();
-        reject(
-          new Error(
-            `Server exited before startup completed (code: ${code ?? 'null'}, signal: ${signal ?? 'null'})`
-          )
-        );
-      };
-
-      const onError = (error: Error) => {
-        cleanup();
-        reject(new Error(`Failed to start backend server: ${error.message}`));
-      };
-
-      backend.stdout?.on('data', onStdoutData);
-      backend.once('exit', onExit);
-      backend.once('error', onError);
-    });
-
-    await waitForPort(actualPort, LOCAL_HOST);
-  } catch (error) {
-    await killProcessTree(backend);
-    throw error;
-  }
-
-  return { process: backend, port: actualPort };
 }
 
 function createLoginPage(errorMessage?: string): string {

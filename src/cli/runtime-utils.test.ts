@@ -63,6 +63,41 @@ describe('findAvailablePort', () => {
     }
   );
 
+  it('stops before probing when already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(findAvailablePort(3000, { signal: controller.signal })).rejects.toThrow(/abort/i);
+    expect(mockExec).not.toHaveBeenCalled();
+    expect(mockServer.listen).not.toHaveBeenCalled();
+  });
+
+  it('cancels an in-flight lsof probe without falling back to a bind', async () => {
+    const controller = new AbortController();
+    mockExec.mockImplementation(
+      (_cmd, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () => reject(controller.signal.reason), {
+            once: true,
+          });
+        })
+    );
+    const finding = findAvailablePort(3000, { signal: controller.signal });
+    const assertion = expect(finding).rejects.toThrow(/abort/i);
+    controller.abort();
+    await assertion;
+    expect(mockServer.listen).not.toHaveBeenCalled();
+  });
+
+  it('does not continue probing after cancellation between occupied ports', async () => {
+    const controller = new AbortController();
+    mockExec.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({ stdout: '12345\n', stderr: '' });
+    });
+    await expect(findAvailablePort(3000, { signal: controller.signal })).rejects.toThrow(/abort/i);
+    expect(mockExec).toHaveBeenCalledOnce();
+  });
+
   it('does not probe ports above the valid TCP range', async () => {
     mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
 
