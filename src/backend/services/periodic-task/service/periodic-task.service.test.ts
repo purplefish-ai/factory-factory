@@ -82,7 +82,8 @@ async function dispatchTask(
     cadence: 'DAILY',
     scheduledTime: string | null,
     timezone: string | null,
-    scheduledDayOfMonth: number | null
+    scheduledDayOfMonth: number | null,
+    dueAt: Date
   ) => Promise<void>;
   await method.call(
     service,
@@ -93,7 +94,8 @@ async function dispatchTask(
     'DAILY',
     '09:00',
     'UTC',
-    null
+    null,
+    now
   );
 }
 
@@ -287,6 +289,7 @@ describe('PeriodicTaskService', () => {
         scheduledTime: '09:00',
         timezone: 'UTC',
         scheduledDayOfMonth: null,
+        dueAt: now,
       }
     );
     expect(dispatchTimerEvent).toHaveBeenCalledExactlyOnceWith({

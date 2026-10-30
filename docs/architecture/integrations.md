@@ -139,7 +139,11 @@ dates in the task timezone, preserving the scheduled day across daylight saving
 changes.
 
 Each execution runs the configured prompt, monitors the workspace until the
-agent finishes, and advances the schedule. Concurrent runs are skipped.
+agent finishes, and advances the schedule. Concurrent runs are skipped. The
+schedule advances from the slot that was due, so a run picked up late (for
+example just past local midnight) keeps the following slot. A task that missed
+more than a full period runs once and resumes one period after that run instead
+of replaying the missed slots.
 
 A run's outcome depends on its PR, workspace setup and Claude/Codex session:
 

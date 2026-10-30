@@ -38,7 +38,10 @@ failures still persist READY with a warning before the agent starts; unexpected
 provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
-setup and startup scripts have been removed, before queued messages dispatch.
+setup and startup scripts have been removed, before queued messages dispatch. A
+ready workspace whose worktree is missing is blocked with a retry action;
+retrying moves it to PROVISIONING and reruns full initialization to recreate the
+worktree.
 
 Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
@@ -152,7 +155,9 @@ freshness; provenance never enters the wire payload.
 Periodic reconciliation still repairs missed events and restart state. Its
 60-second interval is the delay after a completed run, not a hard maximum for
 stale UI: prior Git work, the next database read, and failed sweeps can delay
-repair.
+repair. A pass removes only entries absent from its database read that have no
+observation newer than the pass's start, so a workspace created while the read
+is in flight survives until a later pass can see it.
 
 ## Run script
 

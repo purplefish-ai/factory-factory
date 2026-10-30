@@ -45,6 +45,41 @@ async function retryFailedWorkspaceWithExistingWorktree(
   });
 }
 
+async function retryWorkspaceWithoutWorktree(
+  ctx: Context,
+  workspace: WorkspaceWithProject,
+  useExistingBranch: boolean | undefined,
+  maxRetries: number
+) {
+  const { initializeWorkspaceWorktree, workspaceStateMachine, worktreeLifecycleService } =
+    ctx.appContext.services;
+  const logger = getLogger(ctx);
+  // FAILED resets to NEW so initializeWorkspaceWorktree starts provisioning
+  // itself. READY cannot return to NEW, so it starts provisioning here.
+  const isFailed = workspace.status === 'FAILED';
+  const restartedWorkspace = isFailed
+    ? await workspaceStateMachine.resetToNew(workspace.id, maxRetries)
+    : await workspaceStateMachine.startProvisioningFromReady(workspace.id, maxRetries);
+  if (!restartedWorkspace) {
+    throw maxRetriesExceededError(maxRetries);
+  }
+  const resumeMode =
+    useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
+  if (resumeMode !== undefined) {
+    await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
+  }
+  // Run full initialization (creates worktree + runs startup script)
+  initializeWorkspaceWorktree(workspace.id, {
+    branchName: workspace.branchName ?? undefined,
+    useExistingBranch: resumeMode,
+    ...(!isFailed && { provisioningAlreadyStarted: true }),
+  }).catch((error) => {
+    logger.error('Unexpected error during background workspace initialization', toError(error), {
+      workspaceId: workspace.id,
+    });
+  });
+}
+
 async function retryReadyWorkspaceWithWarning(
   ctx: Context,
   workspace: WorkspaceWithProject,
@@ -122,13 +157,7 @@ export const workspaceInitRouter = router({
   retryInit: trustedLocalProcedure
     .input(z.object({ id: z.string(), useExistingBranch: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const {
-        initializeWorkspaceWorktree,
-        workspaceDataService,
-        workspaceStateMachine,
-        worktreeLifecycleService,
-      } = ctx.appContext.services;
-      const logger = getLogger(ctx);
+      const { workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findByIdWithProject(input.id);
       if (!workspace?.project) {
         throw new TRPCError({
@@ -140,41 +169,29 @@ export const workspaceInitRouter = router({
       const isRetryableFromFailed = workspace.status === 'FAILED';
       const isRetryableFromReadyWarning =
         workspace.status === 'READY' && !!workspace.initErrorMessage;
+      // The init policy blocks a READY workspace whose worktree is missing and
+      // offers retry, which recreates the worktree.
+      const isRetryableFromReadyWithoutWorktree =
+        workspace.status === 'READY' && !workspace.worktreePath;
 
-      if (!(isRetryableFromFailed || isRetryableFromReadyWarning)) {
+      if (
+        !(
+          isRetryableFromFailed ||
+          isRetryableFromReadyWarning ||
+          isRetryableFromReadyWithoutWorktree
+        )
+      ) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Can only retry failed or setup-warning initializations',
+          message: 'Can only retry failed, setup-warning, or missing-worktree initializations',
         });
       }
 
       const maxRetries = 3;
 
-      // If worktree wasn't created (early failure), re-run full initialization
+      // If worktree wasn't created (early failure) or is missing, re-run full initialization
       if (!workspace.worktreePath) {
-        // Reset to NEW state so initializeWorkspaceWorktree can transition properly
-        const resetResult = await workspaceStateMachine.resetToNew(workspace.id, maxRetries);
-        if (!resetResult) {
-          throw maxRetriesExceededError(maxRetries);
-        }
-        const resumeMode =
-          input.useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
-        if (resumeMode !== undefined) {
-          await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
-        }
-        // Run full initialization (creates worktree + runs startup script)
-        initializeWorkspaceWorktree(workspace.id, {
-          branchName: workspace.branchName ?? undefined,
-          useExistingBranch: resumeMode,
-        }).catch((error) => {
-          logger.error(
-            'Unexpected error during background workspace initialization',
-            toError(error),
-            {
-              workspaceId: workspace.id,
-            }
-          );
-        });
+        await retryWorkspaceWithoutWorktree(ctx, workspace, input.useExistingBranch, maxRetries);
         return workspaceDataService.findById(input.id);
       }
 

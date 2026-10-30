@@ -81,4 +81,32 @@ describe('userSettingsAccessor.update', () => {
       expect.objectContaining({ appearanceFontScale: 125 })
     );
   });
+
+  it('keeps notificationSoundPath when the first settings write creates the row', async () => {
+    mockUpsert.mockImplementation(
+      async ({ create }: { create: Record<string, unknown> }) => create
+    );
+
+    const settings = await userSettingsAccessor.update({
+      notificationSoundPath: '/sounds/done.wav',
+    });
+
+    expect(settings.notificationSoundPath).toBe('/sounds/done.wav');
+  });
+
+  it('writes normalized values when the first settings write creates the row', async () => {
+    mockUpsert.mockImplementation(
+      async ({ create }: { create: Record<string, unknown> }) => create
+    );
+
+    const settings = await userSettingsAccessor.update({
+      reviewerClaudeModel: 'OPUS',
+      defaultClaudeReasoningEffort: '  high  ',
+    });
+
+    expect(settings).toMatchObject({
+      reviewerClaudeModel: 'opus',
+      defaultClaudeReasoningEffort: 'high',
+    });
+  });
 });

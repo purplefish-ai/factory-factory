@@ -16,6 +16,8 @@ type PeriodicTaskDispatchSchedule = {
   scheduledTime: string | null;
   timezone: string | null;
   scheduledDayOfMonth: number | null;
+  /** The task's `nextRunAt` when it was found due: the slot being dispatched. */
+  dueAt: Date;
 };
 
 function getTimeZoneDateParts(date: Date, timezone: string): TimeZoneDateParts {
@@ -273,7 +275,7 @@ function computeNextRunAt(
 
 async function buildDispatchedTaskData(
   id: string,
-  { cadence, scheduledTime, timezone, scheduledDayOfMonth }: PeriodicTaskDispatchSchedule
+  { cadence, scheduledTime, timezone, scheduledDayOfMonth, dueAt }: PeriodicTaskDispatchSchedule
 ): Promise<{
   lastRunAt: Date;
   scheduledDayOfMonth: number | null;
@@ -294,16 +296,32 @@ async function buildDispatchedTaskData(
     );
   }
 
+  // Advance from the slot that was due, not from the (possibly late) dispatch
+  // time, so a pickup just past local midnight or the month boundary keeps the
+  // following slot. If that slot has already passed as well (the task missed
+  // more than a full period, e.g. while the machine slept), this single run
+  // covers every missed slot and the schedule resumes one period from now
+  // rather than replaying them back to back.
+  const nextFromDueSlot = computeNextRunAt(
+    cadence,
+    dueAt,
+    scheduledTime,
+    timezone,
+    resolvedScheduledDayOfMonth
+  );
   return {
     lastRunAt: dispatchedAt,
     scheduledDayOfMonth: resolvedScheduledDayOfMonth,
-    nextRunAt: computeNextRunAt(
-      cadence,
-      dispatchedAt,
-      scheduledTime,
-      timezone,
-      resolvedScheduledDayOfMonth
-    ),
+    nextRunAt:
+      nextFromDueSlot > dispatchedAt
+        ? nextFromDueSlot
+        : computeNextRunAt(
+            cadence,
+            dispatchedAt,
+            scheduledTime,
+            timezone,
+            resolvedScheduledDayOfMonth
+          ),
   };
 }
 

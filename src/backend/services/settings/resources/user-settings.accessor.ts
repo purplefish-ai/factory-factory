@@ -241,6 +241,9 @@ function buildAppearanceDefaults(
  * still lands with sensible defaults for everything else rather than
  * relying on Prisma's `@default` — which the `update` branch above bypasses
  * entirely since it spreads `data` directly.
+ *
+ * `data` is spread first so every provided field is written even without a
+ * default builder; the builders then apply defaults and normalized values.
  */
 function buildCreateData(
   userId: string,
@@ -253,6 +256,7 @@ function buildCreateData(
   normalizedReviewerCodexModel: string | null | undefined
 ): Prisma.UserSettingsCreateInput {
   return {
+    ...data,
     userId,
     ...buildGeneralPreferenceDefaults(data),
     ...buildRatchetDefaults(data),
