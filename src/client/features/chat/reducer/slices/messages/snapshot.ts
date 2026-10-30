@@ -29,6 +29,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         {
           ...state,
           messages: [],
+          acpPlan: action.payload.acpPlan ?? null,
           queuedMessages,
           pendingRequest,
           sessionRuntime: action.payload.sessionRuntime,

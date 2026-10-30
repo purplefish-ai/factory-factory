@@ -2,10 +2,6 @@ import { useEffect, useReducer, useRef } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
 
-function listInput(sessionId: string) {
-  return { sessionId, cursor: null, limit: 100 } as const;
-}
-
 export function useSubagentInvalidation(sessionId: string | null, enabled: boolean): boolean {
   const utils = trpc.useUtils();
   const invalidateList = utils.session.listSubagents.invalidate;
@@ -31,7 +27,7 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
       previousStateRef.current = { sessionId, enabled: true };
       finishReconnect();
     };
-    void invalidateList(listInput(sessionId)).then(complete, complete);
+    void invalidateList({ sessionId }).then(complete, complete);
     return () => {
       active = false;
     };
@@ -45,7 +41,7 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
     return subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
         // Reuse an in-flight list fetch instead of cancelling it for every change.
-        void invalidateList(listInput(sessionId), undefined, { cancelRefetch: false });
+        void invalidateList({ sessionId }, undefined, { cancelRefetch: false });
       }
     });
   }, [invalidateList, sessionId]);

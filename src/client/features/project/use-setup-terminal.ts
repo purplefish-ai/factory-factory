@@ -12,6 +12,7 @@ const SetupTerminalMessageSchema = z.object({
   type: z.string(),
   data: z.string().optional(),
   message: z.string().optional(),
+  provider: z.enum(['CLAUDE', 'CODEX']).optional(),
 });
 
 const RECONNECT_NOTE = '\r\n\x1b[33m[Connection lost — starting a new shell]\x1b[0m\r\n';
@@ -36,6 +37,10 @@ export interface UseSetupTerminalResult {
   showTerminal: boolean;
   /** Accumulated terminal output. */
   output: string;
+  /** Provider whose managed login currently owns the terminal. */
+  authenticatingProvider: 'CLAUDE' | 'CODEX' | null;
+  /** Launch the server's managed provider login in the terminal. */
+  authenticate: (provider: 'CLAUDE' | 'CODEX') => void;
   /** Forward keystrokes to the server-side PTY. */
   handleData: (data: string) => void;
   /** Report terminal size; also used for the create request on (re)connect. */
@@ -53,11 +58,34 @@ export interface UseSetupTerminalResult {
 export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
   const [output, setOutput] = useState('');
   const [showTerminal, setShowTerminal] = useState(false);
+  const [terminalExited, setTerminalExited] = useState(false);
+  const [authenticatingProvider, setAuthenticatingProvider] = useState<'CLAUDE' | 'CODEX' | null>(
+    null
+  );
+  const activeLoginRef = useRef<'CLAUDE' | 'CODEX' | null>(null);
   const hasConnectedRef = useRef(false);
   const colsRef = useRef(80);
   const rowsRef = useRef(24);
 
   const handleMessage = useCallback((message: z.infer<typeof SetupTerminalMessageSchema>) => {
+    if (
+      message.type === 'exit' &&
+      message.provider &&
+      activeLoginRef.current === message.provider
+    ) {
+      activeLoginRef.current = null;
+      setAuthenticatingProvider(null);
+      setTerminalExited(true);
+    }
+    if (message.type === 'error') {
+      activeLoginRef.current = null;
+      setAuthenticatingProvider(null);
+      if (message.message) {
+        setOutput((prev) =>
+          appendToRollingOutput(prev, `\r\n${message.message}\r\n`, TERMINAL_ROLLING_OUTPUT_OPTIONS)
+        );
+      }
+    }
     if (message.type === 'output' && message.data) {
       setOutput((prev) =>
         appendToRollingOutput(prev, message.data ?? '', TERMINAL_ROLLING_OUTPUT_OPTIONS)
@@ -74,12 +102,18 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
 
   // Reset when the modal closes so reopening starts a clean session.
   useEffect(() => {
+    if (!(open && connected)) {
+      activeLoginRef.current = null;
+      setAuthenticatingProvider(null);
+      setTerminalExited(false);
+    }
     if (!open) {
       setOutput('');
       setShowTerminal(false);
+      setTerminalExited(false);
       hasConnectedRef.current = false;
     }
-  }, [open]);
+  }, [open, connected]);
 
   // Request a terminal on every (re)connect: the server-side PTY is
   // per-connection, so a reconnect needs a fresh create. The `open` guard
@@ -99,6 +133,24 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
   }, [open, connected, send]);
 
+  useEffect(() => {
+    if (open && connected && terminalExited) {
+      setTerminalExited(false);
+      send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
+    }
+  }, [open, connected, terminalExited, send]);
+
+  const authenticate = useCallback(
+    (provider: 'CLAUDE' | 'CODEX') => {
+      if (open && connected && !activeLoginRef.current) {
+        activeLoginRef.current = provider;
+        setAuthenticatingProvider(provider);
+        send({ type: 'authenticate', provider, cols: colsRef.current, rows: rowsRef.current });
+      }
+    },
+    [open, connected, send]
+  );
+
   const handleData = useCallback(
     (data: string) => {
       send({ type: 'input', data });
@@ -115,5 +167,15 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     [send]
   );
 
-  return { connected, gaveUp, reconnect, showTerminal, output, handleData, handleResize };
+  return {
+    connected,
+    gaveUp,
+    reconnect,
+    showTerminal,
+    output,
+    authenticate,
+    authenticatingProvider,
+    handleData,
+    handleResize,
+  };
 }

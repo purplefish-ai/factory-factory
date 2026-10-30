@@ -45,6 +45,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
     cancelPrompt: vi.fn(),
     isSessionRunning: vi.fn().mockReturnValue(false),
     isSessionWorking: vi.fn().mockReturnValue(false),
+    isSessionPromptInFlight: vi.fn().mockReturnValue(false),
     isAnySessionWorking: vi.fn().mockReturnValue(false),
     isBrowseOnlySession: vi.fn().mockReturnValue(false),
     isStopInProgress: vi.fn().mockReturnValue(false),
@@ -112,7 +113,6 @@ function mockActivePromptClient() {
     unsafeCoerce({ supportsImages: () => true })
   );
 }
-
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
@@ -123,6 +123,7 @@ describe('SessionService', () => {
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
+    acpProcessor.suppressAcpReplayForSession.clear();
     acpProcessor.sessionToWorkspace.clear();
     acpProcessor.sessionToWorkingDir.clear();
     sessionPromptTurnCompletionService.setHandler(null);
@@ -433,7 +434,6 @@ describe('SessionService', () => {
 
     expect(injectUserMessageSpy).not.toHaveBeenCalled();
   });
-
   it('suppresses replayed user_message_chunk when transcript is already hydrated', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>

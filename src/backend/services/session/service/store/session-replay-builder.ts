@@ -74,6 +74,9 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   ];
 
   appendLiveSlashCommands(replayEvents, store);
+  if (store.taskPlan) {
+    replayEvents.push({ type: 'task_notification', message: JSON.stringify(store.taskPlan) });
+  }
   const transcript = selectRendererTranscriptWindow(store);
   appendRecentRejectionEvents(replayEvents, store, transcript);
 

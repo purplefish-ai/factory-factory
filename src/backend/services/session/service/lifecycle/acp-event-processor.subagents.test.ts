@@ -35,6 +35,7 @@ function makeDeps(): AcpEventProcessorDependencies {
     runtimeManager: {
       getClient: vi.fn(),
       isSessionWorking: vi.fn().mockReturnValue(true),
+      isSessionPromptInFlight: vi.fn().mockReturnValue(true),
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
       getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),

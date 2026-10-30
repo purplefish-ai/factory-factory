@@ -158,6 +158,7 @@ export class AcpClientFactory {
         nativeSessionTracker.setRootSessionId(
           toAcpSessionId(options.provider, options.resumeProviderSessionId)
         );
+        nativeSessionTracker.beginHistoryReplay(isCodex);
       }
       const normalizedStream = {
         writable: stream.writable,
@@ -192,7 +193,12 @@ export class AcpClientFactory {
               elicitation: { form: {}, url: {} },
               _meta: {
                 terminal_output_delta: true,
-                jetbrains: { air: { version: 1, capabilities: ['asyncTasks', 'sessionFailure'] } },
+                jetbrains: {
+                  air: {
+                    version: 1,
+                    capabilities: ['asyncTasks', 'sessionFailure', 'loadReplayEnd'],
+                  },
+                },
               },
             },
             clientInfo: {
@@ -240,6 +246,7 @@ export class AcpClientFactory {
       nativeSessionTracker.setRootSessionId(
         toAcpSessionId(options.provider, sessionInfo.providerSessionId)
       );
+      nativeSessionTracker.completeHistoryReplay();
       const handle = new AcpProcessHandle({
         nativeSessionTracker,
         permissionBridge: handlers.permissionBridge,

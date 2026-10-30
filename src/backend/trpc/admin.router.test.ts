@@ -85,20 +85,9 @@ function createCaller(requestTrust?: Context['requestTrust']) {
       forceRefresh,
       allHealthy: true,
     })),
-    upgradeProviderCLI: vi.fn(async (provider: 'CLAUDE' | 'CODEX') => ({
-      provider,
-      packageName: provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex',
-      command: `npm install -g ${
-        provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex'
-      }`,
-      output: 'ok',
-      health: {
-        claude: { isInstalled: true },
-        codex: { isInstalled: true, isAuthenticated: true },
-        github: { isInstalled: true, isAuthenticated: true },
-        allHealthy: true,
-      },
-    })),
+    upgradeProviderCLI: vi.fn((provider: 'CLAUDE' | 'CODEX') =>
+      Promise.reject(new Error(`${provider} is managed by Factory Factory`))
+    ),
   };
 
   const terminalService = {
@@ -284,13 +273,12 @@ describe('adminRouter', () => {
       forceRefresh: true,
       allHealthy: true,
     });
-    await expect(caller.upgradeProviderCLI({ provider: 'CODEX' })).resolves.toEqual(
-      expect.objectContaining({
-        provider: 'CODEX',
-        packageName: '@openai/codex',
-        message: 'Codex CLI upgraded successfully.',
-      })
-    );
+    for (const provider of ['CLAUDE', 'CODEX'] as const) {
+      await expect(caller.upgradeProviderCLI({ provider })).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `${provider} is managed by Factory Factory`,
+      });
+    }
 
     await expect(
       caller.exportDecisionLogs({

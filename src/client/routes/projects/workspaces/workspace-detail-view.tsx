@@ -214,7 +214,6 @@ export function WorkspaceDetailView({
   const rightPanel = (
     <RightPanel
       workspaceId={workspaceState.workspaceId}
-      messages={chat.messages}
       isTakingScreenshots={isTakingScreenshots}
       onTakeScreenshots={handleTakeScreenshots}
       selectedSessionId={sessionTabs.selectedDbSessionId}
@@ -248,7 +247,7 @@ export function WorkspaceDetailView({
               <SheetHeader className="sr-only">
                 <SheetTitle>Workspace Side Panel</SheetTitle>
                 <SheetDescription>
-                  Browse files, diffs, tasks, logs, and terminals for this workspace.
+                  Browse files, diffs, logs, and terminals for this workspace.
                 </SheetDescription>
               </SheetHeader>
               <div className="h-full">{rightPanel}</div>

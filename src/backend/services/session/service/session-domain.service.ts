@@ -7,6 +7,7 @@ import type {
   SessionDeltaEvent,
 } from '@/shared/acp-protocol';
 import { MessageState } from '@/shared/acp-protocol';
+import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { sessionResumeFences } from './session-resume-fence';
@@ -152,6 +153,12 @@ export class SessionDomainService extends EventEmitter {
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
+    if (event.type === 'task_notification') {
+      const plan = parseAcpPlanNotification(event.message);
+      if (plan) {
+        this.registry.getOrCreateActive(sessionId).taskPlan = plan;
+      }
+    }
     if (event.type === 'slash_commands') {
       this.registry.getOrCreateActive(sessionId).liveSlashCommands = structuredClone(
         event.slashCommands ?? []
@@ -633,6 +640,7 @@ export class SessionDomainService extends EventEmitter {
     store.historyProviderSessionId = providerSessionId;
     store.historyReadGeneration = (store.historyReadGeneration ?? 0) + 1;
     store.historySuspended = false;
+    store.taskPlan = undefined;
     store.historyHydrated = false;
     store.historyHydrationSource = undefined;
     store.historyHydratedAt = undefined;

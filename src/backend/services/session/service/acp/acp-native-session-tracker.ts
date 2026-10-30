@@ -90,6 +90,8 @@ export class AcpNativeSessionTracker {
   private rootSessionId?: string;
   private readonly abandonedSessions = new Set<string>();
   private available = false;
+  private replayingHistory = false;
+  private preserveReplayShellTasks = false;
   private readonly children = new Map<string, ChildSession>();
   private readonly activeTasks = new Map<
     string,
@@ -112,6 +114,35 @@ export class AcpNativeSessionTracker {
     this.rootSessionId = sessionId;
   }
 
+  beginHistoryReplay(preserveShellTasks = false): void {
+    this.replayingHistory = true;
+    this.preserveReplayShellTasks = preserveShellTasks;
+  }
+
+  /** Replayed work is historical unless the adapter has independently reconciled it. */
+  completeHistoryReplay(): void {
+    if (!this.replayingHistory) {
+      return;
+    }
+    for (const [id, task] of this.activeTasks) {
+      // Codex only announces shell tasks recovered from its live terminal listing.
+      if (!(this.preserveReplayShellTasks && task.kind === 'shell')) {
+        this.activeTasks.delete(id);
+      }
+    }
+    this.activeGoals.clear();
+    for (const child of this.children.values()) {
+      if (child.summary.status === 'running') {
+        child.summary.status = 'interrupted';
+        child.summary.updatedAt = new Date().toISOString();
+        child.summary.completedAt = child.summary.updatedAt;
+        this.changed(child.summary.id, 'completed');
+      }
+    }
+    this.replayingHistory = false;
+    this.publishActivity();
+  }
+
   /** Discards abandoned load replay before a replacement session starts publishing. */
   resetSession(): void {
     if (this.rootSessionId) {
@@ -121,6 +152,7 @@ export class AcpNativeSessionTracker {
       this.abandonedSessions.add(sessionId);
     }
     this.rootSessionId = undefined;
+    this.replayingHistory = false;
     this.children.clear();
     this.activeTasks.clear();
     this.activeGoals.clear();
@@ -138,6 +170,9 @@ export class AcpNativeSessionTracker {
   }
 
   getBackgroundWork(): AcpBackgroundWork {
+    if (this.replayingHistory) {
+      return { backgroundTasks: [], runningSubagents: 0, activeGoals: 0 };
+    }
     return {
       backgroundTasks: [...this.activeTasks]
         .filter(([, task]) => task.active)
@@ -184,6 +219,13 @@ export class AcpNativeSessionTracker {
       return true;
     }
     if (sessionId === this.rootSessionId) {
+      if (
+        update.sessionUpdate === 'session_info_update' &&
+        airMetadata(update)?.loadReplayEnd === true
+      ) {
+        this.completeHistoryReplay();
+        return false;
+      }
       this.trackGoal(sessionId, update);
       return false;
     }
@@ -338,7 +380,10 @@ export class AcpNativeSessionTracker {
     this.appendTurn(child, value);
     this.updateSummary(child.summary, value);
     this.changed(child.summary.id, 'updated');
-    if (value.sessionUpdate === 'tool_call' || value.sessionUpdate === 'tool_call_update') {
+    if (
+      !this.replayingHistory &&
+      (value.sessionUpdate === 'tool_call' || value.sessionUpdate === 'tool_call_update')
+    ) {
       this.callbacks.onSubagentToolUpdate?.(child.summary.id, value);
     }
   }
@@ -432,6 +477,9 @@ export class AcpNativeSessionTracker {
   }
 
   private publishActivity(): void {
+    if (this.replayingHistory) {
+      return;
+    }
     const work = this.getBackgroundWork();
     const activityKey = JSON.stringify(work);
     // Shells may be permanent preview servers; retain their details without

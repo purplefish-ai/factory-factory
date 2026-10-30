@@ -301,6 +301,7 @@ export type ChatAction =
         messages: ChatMessage[];
         queuedMessages: QueuedMessage[];
         sessionRuntime: SessionRuntimeState;
+        acpPlan?: AcpPlanState | null;
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }
