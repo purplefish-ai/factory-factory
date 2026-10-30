@@ -1,7 +1,7 @@
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { MicrophoneSlashIcon } from '@phosphor-icons/react/dist/csr/MicrophoneSlash';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
@@ -121,7 +121,7 @@ function VoiceStatusBadge({ phase }: { phase: VoiceBadgePhase }) {
  * in-flight turn via soft_stop, and the user starting to talk immediately
  * pauses any in-progress TTS playback (barge-in).
  */
-export function VoiceModeToggle({
+export const VoiceModeToggle = memo(function VoiceModeToggle({
   sessionId,
   onFinalTranscript,
   running,
@@ -267,4 +267,4 @@ export function VoiceModeToggle({
       <VoiceStatusBadge phase={phase} />
     </div>
   );
-}
+});

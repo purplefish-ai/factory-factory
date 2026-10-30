@@ -811,3 +811,55 @@ describe('pending native settings', () => {
     harness.cleanup();
   });
 });
+
+describe('useChatState derived values during streaming', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    sessionStorage.clear();
+  });
+
+  it('keeps queued messages and config options stable while text streams', async () => {
+    let harness: ReturnType<typeof renderChatState>;
+    await act(async () => {
+      harness = renderChatState('session-A');
+      await flushEffects();
+    });
+    try {
+      await act(() => {
+        harness.chatRef.current?.handleMessage({
+          type: 'config_options_update',
+          configOptions: [
+            {
+              id: 'thought_level',
+              name: 'Reasoning',
+              type: 'select',
+              currentValue: 'low',
+              options: [{ value: 'low', name: 'Low' }],
+            },
+          ],
+        });
+      });
+      const before = harness!.chatRef.current;
+      expect(before?.acpConfigOptions).toHaveLength(1);
+
+      await act(() => {
+        harness.chatRef.current?.handleMessage({
+          type: 'assistant_text_delta',
+          messageId: 'assistant-1',
+          order: 1,
+          offset: 0,
+          text: 'Hello',
+        });
+      });
+      const after = harness!.chatRef.current;
+      expect(after?.messages).not.toBe(before?.messages);
+      // Memoized consumers such as the chat input compare these by identity.
+      expect(after?.acpConfigOptions).toBe(before?.acpConfigOptions);
+      expect(after?.queuedMessages).toBe(before?.queuedMessages);
+    } finally {
+      await act(() => {
+        harness!.cleanup();
+      });
+    }
+  });
+});

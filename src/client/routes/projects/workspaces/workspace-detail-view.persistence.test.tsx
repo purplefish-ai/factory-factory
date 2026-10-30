@@ -4,6 +4,8 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { ChatContentPropsProvider } from './workspace-chat-slot';
+import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 
 // Mock workspace content only; exercise the real resizable wrapper and v4 library.
@@ -64,12 +66,18 @@ async function render(workspaceId: string, visible = true) {
     },
     header: { archivePending: false, isCreatingSession: false },
     sessionTabs: { sessions: [], sessionSummariesById: new Map() },
-    chat: { messages: [] },
+    resumeQueuedMessages: vi.fn(),
     rightPanelVisible: visible,
     setRightPanelVisible: vi.fn(),
     archiveDialog: { open: false, activeChildCount: 0 },
   } as unknown as WorkspaceDetailViewProps;
-  await act(() => root.render(<WorkspaceDetailView key={workspaceId} {...props} />));
+  await act(() =>
+    root.render(
+      <ChatContentPropsProvider value={{} as ChatContentProps}>
+        <WorkspaceDetailView key={workspaceId} {...props} />
+      </ChatContentPropsProvider>
+    )
+  );
 }
 
 function sizes() {

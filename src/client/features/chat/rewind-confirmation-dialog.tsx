@@ -2,6 +2,7 @@ import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowC
 import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,7 +30,7 @@ export interface RewindConfirmationDialogProps {
  * Shows a preview of files that will be affected and allows the user
  * to confirm or cancel the rewind operation.
  */
-export function RewindConfirmationDialog({
+export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
   rewindPreview,
   onConfirm,
   onCancel,
@@ -118,4 +119,4 @@ export function RewindConfirmationDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});

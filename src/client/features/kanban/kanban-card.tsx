@@ -7,7 +7,7 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
@@ -35,7 +35,7 @@ import { KanbanStatusChip } from './kanban-card-status-chip';
  */
 export type WorkspaceWithKanban = WorkspaceSummary<Date>;
 
-interface KanbanCardProps {
+export interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
@@ -353,7 +353,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   };
 }
 
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   workspace,
   projectSlug,
   onToggleRatcheting,
@@ -471,4 +471,4 @@ export function KanbanCard({
       </Card>
     </Link>
   );
-}
+});

@@ -2,6 +2,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
+import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +74,16 @@ export function KanbanBoard() {
     openQuickChat,
     closeQuickChat,
   } = useKanban();
+
+  // Context commands are recreated on every render. Stable wrappers let the
+  // memoized cards skip re-rendering when another workspace changes.
+  const handleToggleRatcheting = useStableCallback((workspaceId: string, enabled: boolean) => {
+    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), 'Could not update workspace');
+  });
+  const handleArchiveWorkspace = useStableCallback((workspaceId: string) => {
+    runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
+  });
+  const handleRenameWorkspace = useStableCallback(renameWorkspace);
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
@@ -258,20 +269,13 @@ export function KanbanBoard() {
                 column={activeColumn}
                 workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
                 projectSlug={projectSlug}
-                onToggleRatcheting={(workspaceId, enabled) => {
-                  runInBackground(
-                    toggleWorkspaceRatcheting(workspaceId, enabled),
-                    'Could not update workspace'
-                  );
-                }}
+                onToggleRatcheting={handleToggleRatcheting}
                 togglingWorkspaceId={togglingWorkspaceId}
-                onArchive={(workspaceId) => {
-                  runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
-                }}
+                onArchive={handleArchiveWorkspace}
                 onBulkArchive={() => handleBulkArchive(activeColumn.id)}
                 isBulkArchiving={isBulkArchiving}
                 onOpenQuickChat={openQuickChat}
-                onRename={renameWorkspace}
+                onRename={handleRenameWorkspace}
               />
             )}
           </div>
@@ -312,20 +316,13 @@ export function KanbanBoard() {
               column={column}
               workspaces={columnWorkspaces}
               projectSlug={projectSlug}
-              onToggleRatcheting={(workspaceId, enabled) => {
-                runInBackground(
-                  toggleWorkspaceRatcheting(workspaceId, enabled),
-                  'Could not update workspace'
-                );
-              }}
+              onToggleRatcheting={handleToggleRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
-              onArchive={(workspaceId) => {
-                runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
-              }}
+              onArchive={handleArchiveWorkspace}
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
               onOpenQuickChat={openQuickChat}
-              onRename={renameWorkspace}
+              onRename={handleRenameWorkspace}
             />
           );
         })}

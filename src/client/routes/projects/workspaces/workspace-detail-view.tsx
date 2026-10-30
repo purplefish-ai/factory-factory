@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
+import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
@@ -20,7 +20,8 @@ import {
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
-import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
+import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
+import type { ChatContentProps } from './workspace-detail-chat-content';
 import { getVisibleInitBanner } from './workspace-detail-container.utils';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
@@ -71,7 +72,8 @@ export interface WorkspaceDetailViewProps {
   workspaceState: WorkspaceStateProps;
   header: HeaderProps;
   sessionTabs: SessionTabsProps;
-  chat: ChatContentProps;
+  /** Chat content itself is provided through ChatContentPropsProvider. */
+  resumeQueuedMessages: ChatContentProps['resumeQueuedMessages'];
   rightPanelVisible: boolean;
   setRightPanelVisible: (visible: boolean) => void;
   archiveDialog: ArchiveDialogProps;
@@ -113,11 +115,15 @@ function ScriptBanner({
   return null;
 }
 
-export function WorkspaceDetailView({
+/**
+ * Memoized so streamed chat events, which re-render the container on every token,
+ * skip the layout here. The container passes memoized prop groups.
+ */
+export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   workspaceState,
   header,
   sessionTabs,
-  chat,
+  resumeQueuedMessages,
   rightPanelVisible,
   setRightPanelVisible,
   archiveDialog,
@@ -169,6 +175,14 @@ export function WorkspaceDetailView({
     ]
   );
 
+  const { handleQuickAction: runSessionQuickAction } = sessionTabs;
+  const handleQuickAction = useCallback(
+    (name: string, prompt: string) => {
+      runInBackground(runSessionQuickAction(name, prompt), 'Could not run quick action');
+    },
+    [runSessionQuickAction]
+  );
+
   if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
@@ -197,16 +211,11 @@ export function WorkspaceDetailView({
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
         onRestartSession={sessionTabs.handleRestartSession}
-        onQuickAction={(name, prompt) => {
-          runInBackground(
-            sessionTabs.handleQuickAction(name, prompt),
-            'Could not run quick action'
-          );
-        }}
+        onQuickAction={handleQuickAction}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
       >
-        <ChatContent {...chat} />
+        {CONNECTED_CHAT_CONTENT}
       </WorkspaceContentView>
     </div>
   );
@@ -233,7 +242,7 @@ export function WorkspaceDetailView({
         workspaceInitStatus={workspaceState.workspaceInitStatus}
         setupWarningDismissed={workspaceState.setupWarningDismissed}
         dismissSetupWarning={workspaceState.dismissSetupWarning}
-        resumeQueuedMessages={chat.resumeQueuedMessages}
+        resumeQueuedMessages={resumeQueuedMessages}
       />
 
       {isMobile ? (
@@ -284,4 +293,4 @@ export function WorkspaceDetailView({
       />
     </div>
   );
-}
+});
