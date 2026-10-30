@@ -2,7 +2,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/client/features/chat';
 import {
   ChatInput,
@@ -221,6 +221,11 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     () => new Set(props.queuedMessages.map((msg) => msg.id)),
     [props.queuedMessages]
   );
+  const { sendMessage } = props;
+  const handleCompact = useCallback(
+    () => sendMessage('/compact', { preserveInput: true }),
+    [sendMessage]
+  );
 
   const running = props.sessionStatus.phase === 'running';
   const promptInFlight = props.sessionRuntime.work?.promptInFlight ?? running;
@@ -326,7 +331,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           <ChatInput
             className="flex-1 min-w-0"
             onSend={props.sendMessage}
-            onCompact={() => props.sendMessage('/compact', { preserveInput: true })}
+            onCompact={handleCompact}
             onStop={props.stopChat}
             disabled={!props.connected || loadingSession}
             running={running}

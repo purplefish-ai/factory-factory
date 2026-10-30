@@ -1,5 +1,5 @@
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from '@/client/components/workspace-item-content';
@@ -14,6 +14,44 @@ import {
 } from '@/components/ui/select';
 import { groupWorkspaceSwitcherItems } from './utils';
 
+const workspaceDropdownItemClassName =
+  'h-auto items-start py-1.5 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground [&>span:first-child]:hidden [&>span:last-child]:block [&>span:last-child]:w-full';
+
+function openWorkspacePr(workspace: ServerWorkspace) {
+  const prUrl = workspace.prUrl;
+  if (!prUrl) {
+    return;
+  }
+  window.open(prUrl, '_blank', 'noopener,noreferrer');
+}
+
+function openWorkspaceIssue(workspace: ServerWorkspace) {
+  const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
+  if (!issueUrl) {
+    return;
+  }
+  window.open(issueUrl, '_blank', 'noopener,noreferrer');
+}
+
+// Radix renders closed Select items to collect their text, so every workspace
+// item renders whenever the header does. Memoize so one changed workspace only
+// re-renders its own item.
+const WorkspaceSwitcherItem = memo(function WorkspaceSwitcherItem({
+  workspace,
+}: {
+  workspace: ServerWorkspace;
+}) {
+  return (
+    <SelectItem value={workspace.id} className={workspaceDropdownItemClassName}>
+      <WorkspaceItemContent
+        workspace={workspace}
+        onOpenPr={() => openWorkspacePr(workspace)}
+        onOpenIssue={() => openWorkspaceIssue(workspace)}
+      />
+    </SelectItem>
+  );
+});
+
 export function WorkspaceSwitcherDropdown({
   projectSlug,
   projectId,
@@ -27,9 +65,6 @@ export function WorkspaceSwitcherDropdown({
   currentWorkspaceLabel: string;
   currentWorkspaceName: string;
 }) {
-  const workspaceDropdownItemClassName =
-    'h-auto items-start py-1.5 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground [&>span:first-child]:hidden [&>span:last-child]:block [&>span:last-child]:w-full';
-
   const navigate = useNavigate();
   const { data: projectState } = useProjectWorkspaceQuery(projectId);
 
@@ -44,22 +79,6 @@ export function WorkspaceSwitcherDropdown({
       return;
     }
     void navigate(`/projects/${projectSlug}/workspaces/${workspaceId}`);
-  };
-
-  const handleOpenPr = (workspace: ServerWorkspace) => {
-    const prUrl = workspace.prUrl;
-    if (!prUrl) {
-      return;
-    }
-    window.open(prUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleOpenIssue = (workspace: ServerWorkspace) => {
-    const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
-    if (!issueUrl) {
-      return;
-    }
-    window.open(issueUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -91,17 +110,7 @@ export function WorkspaceSwitcherDropdown({
             Waiting · {grouped.waiting.length}
           </SelectLabel>
           {grouped.waiting.map((workspace) => (
-            <SelectItem
-              key={`waiting-${workspace.id}`}
-              value={workspace.id}
-              className={workspaceDropdownItemClassName}
-            >
-              <WorkspaceItemContent
-                workspace={workspace}
-                onOpenPr={() => handleOpenPr(workspace)}
-                onOpenIssue={() => handleOpenIssue(workspace)}
-              />
-            </SelectItem>
+            <WorkspaceSwitcherItem key={`waiting-${workspace.id}`} workspace={workspace} />
           ))}
         </SelectGroup>
         <SelectGroup>
@@ -109,17 +118,7 @@ export function WorkspaceSwitcherDropdown({
             Working · {grouped.working.length}
           </SelectLabel>
           {grouped.working.map((workspace) => (
-            <SelectItem
-              key={`working-${workspace.id}`}
-              value={workspace.id}
-              className={workspaceDropdownItemClassName}
-            >
-              <WorkspaceItemContent
-                workspace={workspace}
-                onOpenPr={() => handleOpenPr(workspace)}
-                onOpenIssue={() => handleOpenIssue(workspace)}
-              />
-            </SelectItem>
+            <WorkspaceSwitcherItem key={`working-${workspace.id}`} workspace={workspace} />
           ))}
         </SelectGroup>
         <SelectGroup>
@@ -127,17 +126,7 @@ export function WorkspaceSwitcherDropdown({
             Todo · {grouped.todo.length}
           </SelectLabel>
           {grouped.todo.map((workspace) => (
-            <SelectItem
-              key={`todo-${workspace.id}`}
-              value={workspace.id}
-              className={workspaceDropdownItemClassName}
-            >
-              <WorkspaceItemContent
-                workspace={workspace}
-                onOpenPr={() => handleOpenPr(workspace)}
-                onOpenIssue={() => handleOpenIssue(workspace)}
-              />
-            </SelectItem>
+            <WorkspaceSwitcherItem key={`todo-${workspace.id}`} workspace={workspace} />
           ))}
         </SelectGroup>
         <SelectGroup>
@@ -145,17 +134,7 @@ export function WorkspaceSwitcherDropdown({
             Done · {grouped.done.length}
           </SelectLabel>
           {grouped.done.map((workspace) => (
-            <SelectItem
-              key={`done-${workspace.id}`}
-              value={workspace.id}
-              className={workspaceDropdownItemClassName}
-            >
-              <WorkspaceItemContent
-                workspace={workspace}
-                onOpenPr={() => handleOpenPr(workspace)}
-                onOpenIssue={() => handleOpenIssue(workspace)}
-              />
-            </SelectItem>
+            <WorkspaceSwitcherItem key={`done-${workspace.id}`} workspace={workspace} />
           ))}
         </SelectGroup>
       </SelectContent>

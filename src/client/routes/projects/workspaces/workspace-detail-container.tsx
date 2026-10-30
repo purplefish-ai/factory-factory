@@ -21,6 +21,7 @@ import {
   useWorkspaceHasChanges,
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
+import { ChatContentPropsProvider } from './workspace-chat-slot';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
@@ -88,6 +89,7 @@ export function WorkspaceDetailContainer() {
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
+  const openArchiveGitLockDialog = useCallback(() => setArchiveGitLockDialogOpen(true), []);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
 
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
@@ -193,7 +195,7 @@ export function WorkspaceDetailContainer() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
+    onArchiveGitIndexLocked: openArchiveGitLockDialog,
   });
   useArchivedWorkspaceRedirect({
     status: workspace?.status,
@@ -220,10 +222,14 @@ export function WorkspaceDetailContainer() {
     setArchiveDialogOpen(true);
   }, [isDoneOrMergedWorkspace, handleArchive]);
 
-  const handleBackToWorkspaces = useCallback(
-    () => navigate(`/projects/${slug}/workspaces`),
-    [navigate, slug]
-  );
+  const handleBackToWorkspaces = useCallback(() => {
+    runInBackground(
+      Promise.resolve(navigate(`/projects/${slug}/workspaces`)),
+      'Could not open workspace list'
+    );
+  }, [navigate, slug]);
+  const handleConfirmArchive = useCallback(() => handleArchive(), [handleArchive]);
+  const handleRemoveLockAndArchive = useCallback(() => handleArchive(true), [handleArchive]);
 
   const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: selectedDbSessionId });
   const handleCloseChatSession = useCallback(
@@ -263,6 +269,29 @@ export function WorkspaceDetailContainer() {
     setRightPanelVisible(true);
   }, [setActiveTopTab, setRightPanelVisible]);
 
+  const transcriptIdentity = `${workspaceId}/main/${selectedDbSessionId ?? 'none'}`;
+  const transcriptReady =
+    persistence.ready && selectedDbSessionId !== null && runtimeSessionId === selectedDbSessionId;
+  const transcriptScroll = useMemo(
+    () => ({
+      identity: transcriptIdentity,
+      active: chatVisible,
+      ready: transcriptReady,
+      initialIntent: 'following' as const,
+      initialPosition: persistence.initialPosition,
+      onPositionChange: persistence.onPositionChange,
+    }),
+    [
+      transcriptIdentity,
+      chatVisible,
+      transcriptReady,
+      persistence.initialPosition,
+      persistence.onPositionChange,
+    ]
+  );
+
+  // A fresh object per render is fine: ChatContent is memoized on these fields,
+  // and only the context consumer re-renders when it changes.
   const chatViewModel: ChatContentProps = {
     workspaceId,
     sessionId: selectedDbSessionId,
@@ -273,17 +302,7 @@ export function WorkspaceDetailContainer() {
     messages,
     sessionStatus,
     sessionRuntime,
-    transcriptScroll: {
-      identity: `${workspaceId}/main/${selectedDbSessionId ?? 'none'}`,
-      active: chatVisible,
-      ready:
-        persistence.ready &&
-        selectedDbSessionId !== null &&
-        runtimeSessionId === selectedDbSessionId,
-      initialIntent: 'following',
-      initialPosition: persistence.initialPosition,
-      onPositionChange: persistence.onPositionChange,
-    },
+    transcriptScroll,
     pendingRequest,
     approvePermission,
     answerQuestion,
@@ -321,6 +340,79 @@ export function WorkspaceDetailContainer() {
     isScriptFailed,
   };
 
+  const workspaceState = useMemo(
+    () => ({
+      workspaceLoading,
+      workspace,
+      workspaceId,
+      handleBackToWorkspaces,
+      isScriptFailed,
+      workspaceInitStatus,
+      setupWarningDismissed,
+      dismissSetupWarning,
+    }),
+    [
+      workspaceLoading,
+      workspace,
+      workspaceId,
+      handleBackToWorkspaces,
+      isScriptFailed,
+      workspaceInitStatus,
+      setupWarningDismissed,
+      dismissSetupWarning,
+    ]
+  );
+  const header = useMemo(
+    () => ({
+      archivePending: archiveWorkspace.isPending,
+      handleQuickAction,
+      isCreatingSession: createSession.isPending,
+    }),
+    [archiveWorkspace.isPending, handleQuickAction, createSession.isPending]
+  );
+  const hasWorktreePath = !!workspace?.worktreePath;
+  const sessionTabs = useMemo(
+    () => ({
+      sessions,
+      selectedDbSessionId,
+      selectedSessionReady,
+      sessionSummariesById,
+      isDeletingSession: deleteSession.isPending,
+      handleSelectSession,
+      handleNewChat,
+      handleCloseChatSession,
+      handleQuickAction,
+      handleRestartSession: restartSession,
+      handleOpenSubagentTab: openSubagentTab,
+      maxSessions,
+      hasWorktreePath,
+    }),
+    [
+      sessions,
+      selectedDbSessionId,
+      selectedSessionReady,
+      sessionSummariesById,
+      deleteSession.isPending,
+      handleSelectSession,
+      handleNewChat,
+      handleCloseChatSession,
+      handleQuickAction,
+      restartSession,
+      openSubagentTab,
+      maxSessions,
+      hasWorktreePath,
+    ]
+  );
+  const archiveDialog = useMemo(
+    () => ({
+      open: archiveDialogOpen,
+      setOpen: setArchiveDialogOpen,
+      activeChildCount,
+      onConfirm: handleConfirmArchive,
+    }),
+    [archiveDialogOpen, activeChildCount, handleConfirmArchive]
+  );
+
   return (
     <>
       {workspace && (
@@ -338,57 +430,22 @@ export function WorkspaceDetailContainer() {
           hasChanges={hasChanges}
         />
       )}
-      <WorkspaceDetailView
-        workspaceState={{
-          workspaceLoading,
-          workspace,
-          workspaceId,
-          handleBackToWorkspaces: () => {
-            runInBackground(
-              Promise.resolve(handleBackToWorkspaces()),
-              'Could not open workspace list'
-            );
-          },
-          isScriptFailed,
-          workspaceInitStatus,
-          setupWarningDismissed,
-          dismissSetupWarning,
-        }}
-        header={{
-          archivePending: archiveWorkspace.isPending,
-          handleQuickAction,
-          isCreatingSession: createSession.isPending,
-        }}
-        sessionTabs={{
-          sessions,
-          selectedDbSessionId,
-          selectedSessionReady,
-          sessionSummariesById,
-          isDeletingSession: deleteSession.isPending,
-          handleSelectSession,
-          handleNewChat,
-          handleCloseChatSession,
-          handleQuickAction,
-          handleRestartSession: restartSession,
-          handleOpenSubagentTab: openSubagentTab,
-          maxSessions,
-          hasWorktreePath: !!workspace?.worktreePath,
-        }}
-        chat={chatViewModel}
-        rightPanelVisible={rightPanelVisible}
-        setRightPanelVisible={setRightPanelVisible}
-        archiveDialog={{
-          open: archiveDialogOpen,
-          setOpen: setArchiveDialogOpen,
-          activeChildCount,
-          onConfirm: () => handleArchive(),
-        }}
-      />
+      <ChatContentPropsProvider value={chatViewModel}>
+        <WorkspaceDetailView
+          workspaceState={workspaceState}
+          header={header}
+          sessionTabs={sessionTabs}
+          resumeQueuedMessages={resumeQueuedMessages}
+          rightPanelVisible={rightPanelVisible}
+          setRightPanelVisible={setRightPanelVisible}
+          archiveDialog={archiveDialog}
+        />
+      </ChatContentPropsProvider>
       <ArchiveGitLockDialog
         open={archiveGitLockDialogOpen}
         onOpenChange={setArchiveGitLockDialogOpen}
-        onRetry={() => handleArchive()}
-        onRemoveLockAndArchive={() => handleArchive(true)}
+        onRetry={handleConfirmArchive}
+        onRemoveLockAndArchive={handleRemoveLockAndArchive}
         isPending={archiveWorkspace.isPending}
       />
     </>

@@ -6,6 +6,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
+  memo,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useId,
@@ -61,7 +62,9 @@ type NavigationData = ReturnType<typeof useAppNavigationData>;
 // Workspace item component
 // =============================================================================
 
-function SidebarWorkspaceItem({
+// Memoized: a snapshot for one workspace keeps the other rows' objects, so only
+// the changed row re-renders.
+const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
   workspace,
   projectSlug,
   isActive,
@@ -98,7 +101,7 @@ function SidebarWorkspaceItem({
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
-}
+});
 
 // =============================================================================
 // Issue item component

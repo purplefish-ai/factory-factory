@@ -8,6 +8,12 @@ import { KanbanBoard } from './kanban-board';
 const mocks = vi.hoisted(() => ({
   dismissArchiveGitLock: vi.fn(),
   retryGitLockedArchives: vi.fn(),
+  archiveWorkspace: vi.fn(async (_workspaceId: string) => undefined),
+  columnProps: [] as Array<{
+    onArchive: (workspaceId: string) => void;
+    onToggleRatcheting: (workspaceId: string, enabled: boolean) => void;
+    onRename: (workspaceId: string, name: string) => Promise<void>;
+  }>,
 }));
 
 vi.mock('@/hooks/use-mobile', () => ({
@@ -23,7 +29,10 @@ vi.mock('./kanban-column', () => ({
       description: 'Waiting for input',
     },
   ],
-  KanbanColumn: () => <div>Mobile column</div>,
+  KanbanColumn: (props: (typeof mocks.columnProps)[number]) => {
+    mocks.columnProps.push(props);
+    return <div>Mobile column</div>;
+  },
 }));
 
 vi.mock('./quick-chat-sheet', () => ({
@@ -44,7 +53,8 @@ vi.mock('./kanban-context', () => ({
     toggleWorkspaceRatcheting: vi.fn(),
     togglingWorkspaceId: null,
     renameWorkspace: vi.fn(),
-    archiveWorkspace: vi.fn(),
+    // The real context recreates its commands on every render.
+    archiveWorkspace: (workspaceId: string) => mocks.archiveWorkspace(workspaceId),
     bulkArchiveColumn: vi.fn(),
     archiveGitLockWorkspaceIds: ['workspace-1'],
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,
@@ -102,5 +112,24 @@ describe('KanbanBoard', () => {
 
     expect(document.body.textContent).toContain('Git is locked');
     expect(document.body.textContent).toContain('Remove Lock and Archive');
+  });
+
+  it('passes card handlers with stable identities so memoized cards can skip renders', () => {
+    mocks.columnProps.length = 0;
+    void act(() => {
+      root.render(createElement(KanbanBoard));
+    });
+    void act(() => {
+      root.render(createElement(KanbanBoard));
+    });
+
+    const [first, last] = [mocks.columnProps[0], mocks.columnProps.at(-1)];
+    expect(mocks.columnProps.length).toBeGreaterThan(1);
+    expect(last?.onArchive).toBe(first?.onArchive);
+    expect(last?.onToggleRatcheting).toBe(first?.onToggleRatcheting);
+    expect(last?.onRename).toBe(first?.onRename);
+
+    last?.onArchive('workspace-2');
+    expect(mocks.archiveWorkspace).toHaveBeenCalledWith('workspace-2');
   });
 });

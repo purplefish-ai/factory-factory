@@ -4,6 +4,7 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MainViewTab } from '@/client/features/workspace';
+import type { ChatContentProps } from './workspace-detail-chat-content';
 import type { WorkspaceDetailViewProps } from './workspace-detail-view';
 
 const mocks = vi.hoisted(() => ({
@@ -64,8 +65,11 @@ function useMockChatWebSocket({ dbSessionId }: { dbSessionId: string | null }) {
   return mocks.transport;
 }
 
-const captures: { props: WorkspaceDetailViewProps; passiveTransportSessionId: string | null }[] =
-  [];
+// The view receives layout props; chat props reach ChatContent through context.
+// Each capture pairs both from one container render.
+type CapturedProps = WorkspaceDetailViewProps & { chat: ChatContentProps };
+const captures: { props: CapturedProps; passiveTransportSessionId: string | null }[] = [];
+let lastViewProps: WorkspaceDetailViewProps | undefined;
 
 vi.mock('react-router', () => ({
   useParams: () => ({ slug: 'project', id: mocks.workspaceId }),
@@ -132,11 +136,24 @@ vi.mock('./use-workspace-detail-hooks', () => ({
 }));
 vi.mock('./workspace-detail-view', () => ({
   WorkspaceDetailView: (props: WorkspaceDetailViewProps) => {
-    captures.push({ props, passiveTransportSessionId: mocks.passiveTransportSessionId });
+    lastViewProps = props;
+    return CONNECTED_CHAT_CONTENT;
+  },
+}));
+vi.mock('./workspace-detail-chat-content', () => ({
+  ChatContent: (chat: ChatContentProps) => {
+    if (!lastViewProps) {
+      throw new Error('Expected the view to render before its chat content');
+    }
+    captures.push({
+      props: { ...lastViewProps, chat },
+      passiveTransportSessionId: mocks.passiveTransportSessionId,
+    });
     return null;
   },
 }));
 
+import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
 import { WorkspaceDetailContainer } from './workspace-detail-container';
 
 let root: Root;
@@ -156,6 +173,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.clearAllMocks();
   captures.length = 0;
+  lastViewProps = undefined;
   mocks.workspaceId = 'workspace-one';
   mocks.selectedSessionId = 'session-a';
   mocks.passiveTransportSessionId = null;

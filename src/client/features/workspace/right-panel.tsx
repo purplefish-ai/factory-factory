@@ -5,7 +5,7 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { trpc } from '@/client/lib/trpc';
@@ -177,7 +177,7 @@ function TopPanelArea({
   );
 }
 
-export function RightPanel({
+export const RightPanel = memo(function RightPanel({
   workspaceId,
   className,
   isTakingScreenshots = false,
@@ -476,7 +476,7 @@ export function RightPanel({
       </ResizablePanel>
     </ResizablePanelGroup>
   );
-}
+});
 
 // =============================================================================
 // Terminal Components

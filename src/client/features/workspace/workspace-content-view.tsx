@@ -1,4 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
+import { memo } from 'react';
 import type { ReactNode } from 'react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -14,7 +15,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs['session']['listSessions'][number];
 
-interface WorkspaceContentViewProps {
+export interface WorkspaceContentViewProps {
   workspaceId: string;
   sessions: Session[] | undefined;
   selectedSessionId: string | null;
@@ -44,7 +45,7 @@ interface WorkspaceContentViewProps {
  *
  * This extraction reduces cognitive complexity in the main page component.
  */
-export function WorkspaceContentView({
+export const WorkspaceContentView = memo(function WorkspaceContentView({
   workspaceId,
   sessions,
   selectedSessionId,
@@ -117,4 +118,4 @@ export function WorkspaceContentView({
       </MainViewContent>
     </div>
   );
-}
+});

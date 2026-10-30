@@ -306,22 +306,33 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Return Value
   // =============================================================================
 
+  // Derive these only when their sources change. Streamed events replace `state`
+  // on every token, and fresh arrays here would re-render memoized consumers.
+  const acpConfigOptions = useMemo(
+    () =>
+      state.acpConfigOptions?.map((option) => ({
+        ...option,
+        currentValue:
+          option.id === 'model' || option.category === 'model'
+            ? option.currentValue
+            : (state.pendingConfigOptions.get(option.id)?.value ?? option.currentValue),
+      })) ?? null,
+    [state.acpConfigOptions, state.pendingConfigOptions]
+  );
+  // Convert queuedMessages Map to array for UI consumption
+  // (Internal state uses Map for O(1) lookups and automatic de-duplication)
+  const queuedMessages = useMemo(
+    () => Array.from(state.queuedMessages.values()),
+    [state.queuedMessages]
+  );
+
   // Keep return object stable between renders unless relevant state/actions change.
   return useMemo(
     () => ({
       // Spread all state from reducer
       ...state,
-      acpConfigOptions:
-        state.acpConfigOptions?.map((option) => ({
-          ...option,
-          currentValue:
-            option.id === 'model' || option.category === 'model'
-              ? option.currentValue
-              : (state.pendingConfigOptions.get(option.id)?.value ?? option.currentValue),
-        })) ?? null,
-      // Convert queuedMessages Map to array for UI consumption
-      // (Internal state uses Map for O(1) lookups and automatic de-duplication)
-      queuedMessages: Array.from(state.queuedMessages.values()),
+      acpConfigOptions,
+      queuedMessages,
       // Connection state from transport
       connected,
       // Actions from use-chat-actions
@@ -341,6 +352,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     }),
     [
       state,
+      acpConfigOptions,
+      queuedMessages,
       connected,
       actions,
       inputDraft,

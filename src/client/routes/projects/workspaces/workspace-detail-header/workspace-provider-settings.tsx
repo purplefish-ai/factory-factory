@@ -1,5 +1,5 @@
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -31,7 +31,7 @@ import {
 } from '@/lib/session-provider-selection';
 import type { WorkspaceHeaderWorkspace } from './types';
 
-export function WorkspaceProviderSettings({
+export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings({
   workspace,
   workspaceId,
   open,
@@ -158,4 +158,4 @@ export function WorkspaceProviderSettings({
       </DialogContent>
     </Dialog>
   );
-}
+});

@@ -17,6 +17,7 @@ import {
   parseAcpPlanNotification,
 } from '@/shared/acp-protocol/task-plan';
 import { generateMessageId } from './helpers';
+import { runRendererTranscriptBatch } from './renderer-indexes';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
 import { reduceMessageResetSlice } from './slices/messages/reset';
@@ -114,25 +115,32 @@ function createReplayBaseState(state: ChatState): ChatState {
   };
 }
 
+function replaySessionEvents(state: ChatState, replayEvents: WebSocketMessage[]): ChatState {
+  let nextState = createReplayBaseState(state);
+  for (const event of replayEvents) {
+    if (event.type === 'session_replay_batch') {
+      continue;
+    }
+    const replayAction = createActionFromWebSocketMessage(event);
+    if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
+      continue;
+    }
+    nextState = reduceSingleAction(nextState, replayAction);
+  }
+  // Clear loading state after replay completes
+  // Only clear if still in loading phase (runtime updates during replay may have already changed it)
+  if (nextState.sessionStatus.phase === 'loading') {
+    nextState = reduceSingleAction(nextState, { type: 'SESSION_LOADING_END' });
+  }
+  return nextState;
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'SESSION_REPLAY_BATCH') {
-    let nextState = createReplayBaseState(state);
-    for (const event of action.payload.replayEvents) {
-      if (event.type === 'session_replay_batch') {
-        continue;
-      }
-      const replayAction = createActionFromWebSocketMessage(event);
-      if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
-        continue;
-      }
-      nextState = reduceSingleAction(nextState, replayAction);
-    }
-    // Clear loading state after replay completes
-    // Only clear if still in loading phase (runtime updates during replay may have already changed it)
-    if (nextState.sessionStatus.phase === 'loading') {
-      nextState = reduceSingleAction(nextState, { type: 'SESSION_LOADING_END' });
-    }
-    return nextState;
+    const { replayEvents } = action.payload;
+    // One batch, so transcript lookups grow in place across replayed messages
+    // instead of being copied for each one.
+    return runRendererTranscriptBatch(() => replaySessionEvents(state, replayEvents));
   }
 
   return reduceSingleAction(state, action);
