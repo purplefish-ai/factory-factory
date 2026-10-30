@@ -36,19 +36,10 @@ import {
   ADVERSARIAL_REVIEW_WORKFLOW,
   hasAdversarialReviewMarker,
 } from '@/shared/adversarial-review';
-import { PRState, SessionStatus } from '@/shared/core';
+import { isOpenPrState, SessionStatus } from '@/shared/core';
 import { buildDiffLineIndex } from './adversarial-review-diff-line-index';
 
 const logger = createLogger('adversarial-review');
-
-// The enriched PRState values that mean "still an open, live PR" — mirrors
-// the set `deriveRatchetState` uses for the same question.
-const OPEN_PR_STATES = new Set<PRState>([
-  PRState.OPEN,
-  PRState.DRAFT,
-  PRState.CHANGES_REQUESTED,
-  PRState.APPROVED,
-]);
 
 export interface TriggerAdversarialReviewResult {
   status: 'started' | 'already_active';
@@ -91,7 +82,7 @@ async function triggerAdversarialReviewLocked(
   if (!fixerContext.worktreePath) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Workspace is not ready yet (no worktree)');
   }
-  if (!(prState?.prUrl && prState.prNumber && OPEN_PR_STATES.has(prState.prState))) {
+  if (!(prState?.prUrl && prState.prNumber && isOpenPrState(prState.prState))) {
     throw new ApplicationError(
       'PRECONDITION_FAILED',
       'Workspace has no open pull request to review'
