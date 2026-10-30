@@ -17,6 +17,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { AcpThoughtBuffer } from './acp-thought-buffer';
 import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
@@ -81,6 +82,7 @@ export class AcpEventProcessor {
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly subagentToolEvents = new SubagentToolEventCollector();
   private readonly subagentChanges: SubagentChangeCoalescer;
+  private readonly thoughts: AcpThoughtBuffer;
   private readonly onToolCallTimeout: (
     sessionId: string,
     toolUseId: string,
@@ -123,6 +125,10 @@ export class AcpEventProcessor {
     this.onToolCallTimeout = options.onToolCallTimeout;
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
     this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
+    this.thoughts = new AcpThoughtBuffer((sessionId, delta) => {
+      const order = this.sessionDomainService.appendClaudeEvent(sessionId, delta.data);
+      this.sessionDomainService.emitDelta(sessionId, { ...delta, order });
+    }, this.textFlushIntervalMs);
     this.subagentChanges = new SubagentChangeCoalescer(
       (sessionId, subagentId, change) =>
         this.sessionDomainService.emitDelta(sessionId, {
@@ -269,6 +275,7 @@ export class AcpEventProcessor {
   }
 
   clearStreamingState(sessionId: string): void {
+    this.thoughts.flush(sessionId);
     this.finishAcpTextBlock(sessionId);
   }
 
@@ -301,7 +308,7 @@ export class AcpEventProcessor {
   }
 
   beginPromptTurn(sessionId: string): string {
-    this.finishAcpTextBlock(sessionId);
+    this.clearStreamingState(sessionId);
     const existingToolCallIds = this.pendingAcpToolCalls.get(sessionId)?.keys();
     this.toolCallsBeforePromptTurn.set(sessionId, new Set(existingToolCallIds));
     const attemptKey = randomUUID();
@@ -311,7 +318,7 @@ export class AcpEventProcessor {
 
   /** Ends a prompt turn; tool calls that predate it are not reported as its orphans. */
   finishPromptTurn(sessionId: string): void {
-    this.finishAcpTextBlock(sessionId);
+    this.clearStreamingState(sessionId);
     this.activePromptAttemptKeys.delete(sessionId);
     for (const toolUseId of this.toolCallsBeforePromptTurn.get(sessionId) ?? []) {
       this.removePendingToolCall(sessionId, toolUseId);
@@ -363,6 +370,13 @@ export class AcpEventProcessor {
     ) {
       return;
     }
+
+    // Thought chunks merge per interval; anything else flushes them first to keep order.
+    if (this.thoughts.push(sid, delta)) {
+      this.finishAcpTextBlock(sid);
+      return;
+    }
+    this.thoughts.flush(sid);
 
     if (delta.type === 'compact_boundary') {
       // Use the transcript message path so reconnect/replay retains the same ordered marker.

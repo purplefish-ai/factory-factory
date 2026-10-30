@@ -206,11 +206,8 @@ export class TerminalService {
   // Active terminal per workspace (tracks which terminal the user is viewing)
   private activeTerminals = new Map<string, string>();
 
-  // Resource monitoring interval
-  private monitoringInterval: NodeJS.Timeout | null = null;
-  private resourceUpdateInFlightGeneration: number | null = null;
-  private resourceMonitoringGeneration = 0;
-  private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
+  // In-flight on-demand resource sample shared by concurrent callers
+  private resourceRefresh: Promise<void> | null = null;
 
   /**
    * Set the active terminal for a workspace.
@@ -238,69 +235,42 @@ export class TerminalService {
   }
 
   /**
-   * Ensure resource monitoring is running if there are terminals.
-   * Called after creating a terminal.
+   * Refreshes CPU and memory usage for every terminal with one batched
+   * `pidusage` call. Usage is only shown on the admin page, so it is sampled
+   * when that page asks rather than polled for every terminal in the
+   * background. Concurrent callers share the same refresh.
    */
-  private ensureResourceMonitoring(): void {
-    if (this.monitoringInterval || this.getActiveTerminalCount() === 0) {
+  refreshResourceUsage(): Promise<void> {
+    this.resourceRefresh ??= this.sampleResourceUsage().finally(() => {
+      this.resourceRefresh = null;
+    });
+    return this.resourceRefresh;
+  }
+
+  private async sampleResourceUsage(): Promise<void> {
+    const instances = Array.from(this.terminals.values()).flatMap((workspaceTerminals) =>
+      Array.from(workspaceTerminals.values()).filter((instance) => instance.pty.pid)
+    );
+    if (instances.length === 0) {
       return;
     }
-    this.startResourceMonitoring();
-  }
-
-  /**
-   * Start periodic resource monitoring for all terminals.
-   */
-  private startResourceMonitoring(): void {
-    if (this.monitoringInterval) {
-      return; // Already running
-    }
-
-    logger.debug('Starting terminal resource monitoring');
-    const monitoringGeneration = this.resourceMonitoringGeneration + 1;
-    this.resourceMonitoringGeneration = monitoringGeneration;
-    this.resourceUpdateInFlightGeneration = null;
-
-    const updateResources = async (): Promise<void> => {
-      // Stop monitoring if no terminals
-      if (this.getActiveTerminalCount() === 0) {
-        this.stopResourceMonitoring();
-        return;
+    try {
+      const usageByPid = await pidusage(instances.map((instance) => instance.pty.pid));
+      const timestamp = new Date();
+      for (const instance of instances) {
+        const usage = usageByPid[instance.pty.pid];
+        instance.lastResourceUsage = usage
+          ? { cpu: usage.cpu, memory: usage.memory, timestamp }
+          : undefined;
       }
-
-      if (this.resourceUpdateInFlightGeneration === monitoringGeneration) {
-        logger.debug('Skipping terminal resource update; previous update still running');
-        return;
+    } catch (error) {
+      // One exited process can fail the whole batch; sample the rest one by one.
+      logger.debug('Batched terminal resource sampling failed; sampling individually', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      for (const instance of instances) {
+        await this.updateTerminalResource(instance);
       }
-
-      this.resourceUpdateInFlightGeneration = monitoringGeneration;
-      try {
-        await this.updateAllTerminalResources();
-      } catch (error) {
-        logger.error('Failed to update terminal resources', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
-        if (this.resourceUpdateInFlightGeneration === monitoringGeneration) {
-          this.resourceUpdateInFlightGeneration = null;
-        }
-      }
-    };
-    this.monitoringInterval = setInterval(() => {
-      void updateResources();
-    }, TerminalService.MONITORING_INTERVAL_MS);
-  }
-
-  /**
-   * Update resource usage for all terminals.
-   */
-  private async updateAllTerminalResources(): Promise<void> {
-    const terminalInstances = Array.from(this.terminals.values()).flatMap((workspaceTerminals) =>
-      Array.from(workspaceTerminals.values())
-    );
-
-    for (const instance of terminalInstances) {
-      await this.updateTerminalResource(instance);
     }
   }
 
@@ -309,10 +279,6 @@ export class TerminalService {
    */
   private async updateTerminalResource(instance: TerminalInstance): Promise<void> {
     const pid = instance.pty.pid;
-    if (!pid) {
-      return;
-    }
-
     try {
       const usage = await pidusage(pid);
       instance.lastResourceUsage = {
@@ -327,18 +293,6 @@ export class TerminalService {
         error: error instanceof Error ? error.message : String(error),
       });
       instance.lastResourceUsage = undefined;
-    }
-  }
-
-  /**
-   * Stop resource monitoring (for graceful shutdown or when no terminals exist).
-   */
-  private stopResourceMonitoring(): void {
-    if (this.monitoringInterval) {
-      logger.debug('Stopping terminal resource monitoring');
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-      this.resourceUpdateInFlightGeneration = null;
     }
   }
 
@@ -445,9 +399,6 @@ export class TerminalService {
       }
       this.terminals.get(workspaceId)?.set(terminalId, instance);
 
-      // Start resource monitoring if this is the first terminal
-      this.ensureResourceMonitoring();
-
       logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
       return Promise.resolve({ terminalId, pid: pty.pid });
@@ -515,10 +466,6 @@ export class TerminalService {
     // Clear active terminal if this was the active one
     if (this.activeTerminals.get(workspaceId) === terminalId) {
       this.activeTerminals.delete(workspaceId);
-    }
-
-    if (this.getActiveTerminalCount() === 0) {
-      this.stopResourceMonitoring();
     }
 
     // Dispose PTY event listeners before killing
@@ -623,7 +570,6 @@ export class TerminalService {
    * Clean up all terminals (for graceful shutdown)
    */
   cleanup(): void {
-    this.stopResourceMonitoring();
     for (const workspaceId of this.terminals.keys()) {
       this.destroyWorkspaceTerminals(workspaceId);
     }

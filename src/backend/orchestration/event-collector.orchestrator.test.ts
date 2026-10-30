@@ -1403,9 +1403,7 @@ describe('configureEventCollector', () => {
     const handler = onCall![1] as (event: { sessionId: string }) => void;
 
     handler({ sessionId: 's-1' });
-    await Promise.resolve();
-    await Promise.resolve();
-    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(sessionDataService.findAgentSessionById).toHaveBeenCalledWith('s-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
@@ -1454,9 +1452,7 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ sessionId: 's-1', requestId: 'req-1', hasPending: false });
-    await Promise.resolve();
-    await Promise.resolve();
-    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(computePendingRequestType).toHaveBeenCalledWith(['s-1'], expect.any(Map));
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(

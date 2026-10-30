@@ -83,6 +83,9 @@ Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
 
+Terminal CPU and memory usage is sampled only when the admin processes view asks
+for it, with one batched `pidusage` call; there is no background polling.
+
 ## Interactive workspace launch
 
 `workspace.create` keeps trusted-local authorization, input validation, and its
