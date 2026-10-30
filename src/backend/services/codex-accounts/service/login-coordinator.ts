@@ -21,7 +21,7 @@ export class LoginCoordinator {
       probe(context: CodexRuntimeContext, signal: AbortSignal): Promise<AccountIdentity>;
       verify(id: string, identity: AccountIdentity, persist: boolean): Promise<void>;
       login: NativeLogin;
-      invalidate(): void;
+      invalidate(id: string): void;
     }
   ) {}
   isPending(id: string): boolean {
@@ -127,7 +127,7 @@ export class LoginCoordinator {
         if (this.active === entry) {
           this.active = undefined;
         }
-        this.dependencies.invalidate();
+        this.dependencies.invalidate(id);
       });
     return preparation.then(() => this.status(id));
   }

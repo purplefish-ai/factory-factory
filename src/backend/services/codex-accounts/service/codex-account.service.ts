@@ -40,7 +40,11 @@ const unknownUsage = (): ProviderPlanUsage => ({
 export class CodexAccountService {
   private cache = new Map<string, { expires: number; observation: AccountObservation }>();
   private pending = new Map<string, Promise<AccountObservation>>();
+  // Monotonic invalidation counter. A read is stale only when its own account
+  // (or every account) was invalidated after it started.
   private revision = 0;
+  private globalRevision = 0;
+  private accountRevisions = new Map<string, number>();
   private reservations = new Map<string, number>();
   private recency = new Map<string, number>();
   private sequence = 0;
@@ -73,15 +77,27 @@ export class CodexAccountService {
       verify: async (id, identity, persist) =>
         this.verifyIdentity(await this.row(id), identity, persist, true),
       login: dependencies.login,
-      invalidate: () => this.invalidate(),
+      invalidate: (id) => this.invalidate(id),
     });
   }
-  invalidate(): void {
+  invalidate(accountId?: string): void {
     this.revision++;
-    this.cache.clear();
-    this.pending.clear();
-    this.identityCache.clear();
-    this.identityPending.clear();
+    if (accountId === undefined) {
+      this.globalRevision = this.revision;
+      this.cache.clear();
+      this.pending.clear();
+      this.identityCache.clear();
+      this.identityPending.clear();
+      return;
+    }
+    this.accountRevisions.set(accountId, this.revision);
+    this.cache.delete(accountId);
+    this.pending.delete(accountId);
+    this.identityCache.delete(accountId);
+    this.identityPending.delete(accountId);
+  }
+  private revisionOf(id: string): number {
+    return Math.max(this.globalRevision, this.accountRevisions.get(id) ?? 0);
   }
   private getReservationCount(id: string): number {
     return this.reservations.get(id) ?? 0;
@@ -122,13 +138,13 @@ export class CodexAccountService {
     if (pending !== undefined) {
       return pending;
     }
-    const revision = this.revision;
+    const revision = this.revisionOf(row.id);
     const reading = resolveAccountContext(row, this.dependencies.config)
       .then(
         (context) => this.dependencies.probeIdentity?.(context) ?? this.dependencies.probe(context)
       )
       .then((identity) => {
-        if (revision !== this.revision) {
+        if (revision !== this.revisionOf(row.id)) {
           throw new Error('Codex account changed during identity observation');
         }
         this.identityCache.set(row.id, { expires: Date.now() + 30_000, identity });
@@ -151,11 +167,11 @@ export class CodexAccountService {
     if (existing) {
       return existing;
     }
-    const revision = this.revision;
+    const revision = this.revisionOf(row.id);
     const reading = resolveAccountContext(row, this.dependencies.config)
       .then((context) => this.dependencies.probe(context))
       .then(async (observation) => {
-        if (revision !== this.revision) {
+        if (revision !== this.revisionOf(row.id)) {
           throw new Error('Codex account changed during observation');
         }
         await this.verifyIdentity(row, observation);
@@ -180,11 +196,7 @@ export class CodexAccountService {
     if (row.kind === 'MANAGED' && observation.authenticated && !hasVerifiedScope(observation)) {
       throw new Error('Codex managed account identity could not be verified');
     }
-    const upgrading =
-      staged &&
-      row.kind === 'MANAGED' &&
-      hasVerifiedScope(observation) &&
-      matchesNativeEmailFallback(row.identityKey, observation.email);
+    const upgrading = this.upgradesNativeEmailFallback(row, observation, staged);
     if (row.identityKey && observation.identityKey !== row.identityKey && !upgrading) {
       throw this.identityChangedError(row);
     }
@@ -202,6 +214,20 @@ export class CodexAccountService {
         await this.dependencies.store.update(row.id, { identityKey: observation.identityKey });
       }
     }
+  }
+  // A native email fallback (keyring credentials) may upgrade to the verified
+  // scope of the same email: a staged managed login, or native default
+  // credentials moving from the keyring to file storage.
+  private upgradesNativeEmailFallback(
+    row: AccountRow,
+    observation: AccountIdentity,
+    staged: boolean
+  ): boolean {
+    return (
+      (row.kind === 'NATIVE_DEFAULT' || (staged && row.kind === 'MANAGED')) &&
+      hasVerifiedScope(observation) &&
+      matchesNativeEmailFallback(row.identityKey, observation.email)
+    );
   }
   private identityChangedError(row: AccountRow): Error {
     return new Error(

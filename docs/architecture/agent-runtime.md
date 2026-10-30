@@ -509,11 +509,14 @@ account.
 
 Native default pins the provider scope when native file credential metadata is
 available. Keyring-backed setups instead pin an unverified email fallback; that
-fallback does not verify the provider/workspace scope. If a later native CLI
-sign-in changes the pinned identity, run `ff codex login` with the original
-account to restore those conversations; add a managed profile for a different
-account. Stopping a provider process clears its session commands on connected
-clients as well as in the server's replay cache.
+fallback does not verify the provider/workspace scope. When the same email later
+reports verified file-credential scope, the pin upgrades to that scope. Ending a
+browser login refreshes only that account's cached status, so in-flight reads of
+other accounts still complete. If a later native CLI sign-in changes the pinned
+identity, run `ff codex login` with the original account to restore those
+conversations; add a managed profile for a different account. Stopping a
+provider process clears its session commands on connected clients as well as in
+the server's replay cache.
 
 The Add dialog verifies distinct account identity; adding the same login twice
 does not create extra quota. Managed authentication ignores inherited
