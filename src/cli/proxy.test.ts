@@ -1,5 +1,10 @@
-import { createServer, request as httpRequest, type IncomingHttpHeaders } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import {
+  type ClientRequest,
+  createServer,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+} from 'node:http';
+import { describe, expect, it, vi } from 'vitest';
 import { proxyInternals } from './proxy';
 
 interface HttpResponse {
@@ -55,6 +60,37 @@ function getCookieHeaderFromSetCookie(value: string | string[] | undefined): str
 
 async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+}
+
+// Opens a login POST and sends only its headers, so the auth proxy accepts the
+// request before its body arrives. Ending `req` later sends the body.
+function openLoginRequest(
+  port: number,
+  ip: string
+): { req: ClientRequest; statusCode: Promise<number> } {
+  let req!: ClientRequest;
+  const statusCode = new Promise<number>((resolve, reject) => {
+    req = httpRequest(
+      {
+        host: '127.0.0.1',
+        port,
+        method: 'POST',
+        path: '/__proxy_auth/login',
+        agent: false,
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'cf-connecting-ip': ip,
+        },
+      },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      }
+    );
+    req.on('error', reject);
+  });
+  req.flushHeaders();
+  return { req, statusCode };
 }
 
 describe('proxy internals', () => {
@@ -196,6 +232,19 @@ describe('proxy internals', () => {
 
     const unlockedState = guard.isLocked(ip, 5 * 60 * 1000 + 10);
     expect(unlockedState.locked).toBe(false);
+  });
+
+  it('keeps an active lockout when another failure is registered', () => {
+    const guard = new proxyInternals.BruteForceGuard();
+    const ip = '203.0.113.11';
+    for (let i = 0; i < 5; i += 1) {
+      guard.registerFailure(ip, 1000);
+    }
+    expect(guard.isLocked(ip, 1001).locked).toBe(true);
+
+    expect(guard.registerFailure(ip, 1002).ipLocked).toBe(true);
+
+    expect(guard.isLocked(ip, 1003).locked).toBe(true);
   });
 
   it('allows only safe relative redirect paths', () => {
@@ -368,6 +417,66 @@ describe('proxy internals', () => {
     } finally {
       await authProxy.close();
       await closeServer(upstream);
+    }
+  });
+
+  it('rejects in-flight login attempts once the IP is locked out', async () => {
+    // The proxy checks the lock as soon as it receives each request.
+    const isLockedSpy = vi.spyOn(proxyInternals.BruteForceGuard.prototype, 'isLocked');
+    const authProxy = await proxyInternals.createAuthProxy({
+      upstreamPort: 1,
+      password: 'ABC123',
+      magicToken: 'valid-token',
+    });
+    const ip = '198.51.100.77';
+
+    try {
+      // Every request reaches the proxy before any body is sent.
+      const pending = Array.from({ length: 8 }, () => openLoginRequest(authProxy.port, ip));
+      await vi.waitFor(() => expect(isLockedSpy).toHaveBeenCalledTimes(8));
+
+      const statuses: number[] = [];
+      for (const login of pending.slice(0, 7)) {
+        login.req.end('password=BAD000');
+        statuses.push(await login.statusCode);
+      }
+      expect(statuses).toEqual([401, 401, 401, 401, 429, 429, 429]);
+
+      // The correct password must not be accepted from a locked IP.
+      const last = pending[7];
+      if (!last) {
+        throw new Error('Missing pending login');
+      }
+      last.req.end('password=ABC123');
+      expect(await last.statusCode).toBe(429);
+    } finally {
+      isLockedSpy.mockRestore();
+      await authProxy.close();
+    }
+  });
+
+  it('rejects login attempts from a locked IP without waiting for the body', async () => {
+    const authProxy = await proxyInternals.createAuthProxy({
+      upstreamPort: 1,
+      password: 'ABC123',
+      magicToken: 'valid-token',
+    });
+    const ip = '198.51.100.78';
+    let headersOnly: ClientRequest | undefined;
+
+    try {
+      for (let i = 0; i < 5; i += 1) {
+        const login = openLoginRequest(authProxy.port, ip);
+        login.req.end('password=BAD000');
+        await login.statusCode;
+      }
+
+      const login = openLoginRequest(authProxy.port, ip);
+      headersOnly = login.req;
+      expect(await login.statusCode).toBe(429);
+    } finally {
+      headersOnly?.destroy();
+      await authProxy.close();
     }
   });
 });
