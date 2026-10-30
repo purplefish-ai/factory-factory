@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
 import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { combineBatchContents } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
@@ -75,6 +75,51 @@ describe('claudeSessionHistoryLoaderService', () => {
     });
 
     expect(result).toEqual({ status: 'skipped', reason: 'invalid_provider_session_id' });
+  });
+
+  it('parses only lines containing onlyLinesContaining, keeping line-based timestamps', async () => {
+    const providerSessionId = 'session-marker-scan';
+    const marker = '<!-- factory-factory-pr-event:delivery-1 -->';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd: '/work',
+      providerSessionId,
+      entries: [
+        { type: 'user', message: { role: 'user', content: 'unrelated prompt' } },
+        { type: 'assistant', message: { role: 'assistant', content: 'unrelated reply' } },
+        { type: 'user', message: { role: 'user', content: `${marker}\nPR update` } },
+        {
+          type: 'user',
+          isMeta: true,
+          message: { role: 'user', content: marker },
+        },
+      ],
+    });
+
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    let result: Awaited<ReturnType<typeof claudeSessionHistoryLoaderService.loadSessionHistory>>;
+    try {
+      result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: '/work',
+        onlyLinesContaining: marker,
+      });
+    } finally {
+      now.mockRestore();
+    }
+
+    // Matching lines keep their eligibility rules and line-based timestamps.
+    expect(result).toEqual({
+      status: 'loaded',
+      filePath: expect.any(String),
+      history: [
+        {
+          type: 'user',
+          content: `${marker}\nPR update`,
+          timestamp: new Date(1_000_003).toISOString(),
+        },
+      ],
+    });
   });
 
   it('loads and parses history from Claude session JSONL', async () => {

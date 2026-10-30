@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
@@ -6,6 +5,8 @@ import { codexSessionHistoryLoaderService } from '@/backend/services/session/ser
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { prEventMarker } from '@/shared/pr-monitoring';
+import { readClosedSessionTranscriptHeader } from './closed-session-transcript-header';
+
 export async function findPRDeliveryReceipt(
   sessionId: string,
   deliveryId: string
@@ -94,8 +95,9 @@ async function findArchivedReceipt(
         unavailable = true;
         continue;
       }
-      const metadata = z
-        .object({
+      const metadata = await readClosedSessionTranscriptHeader(
+        join(archive.workspace.worktreePath, archive.transcriptPath),
+        z.object({
           sessionId: z.literal(sessionId),
           metadata: z.object({
             provider: z.enum(['CLAUDE', 'CODEX']),
@@ -103,11 +105,7 @@ async function findArchivedReceipt(
             codexAccountId: z.string().nullish(),
           }),
         })
-        .parse(
-          JSON.parse(
-            await readFile(join(archive.workspace.worktreePath, archive.transcriptPath), 'utf-8')
-          )
-        );
+      );
       if (metadata.metadata.provider !== archive.provider) {
         unavailable = true;
         continue;
@@ -137,10 +135,9 @@ async function loadReceipt(
   codexAccountId?: string | null
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
   try {
-    const input = {
-      providerSessionId,
-      workingDir,
-    };
+    const marker = prEventMarker(deliveryId);
+    // Byte-search the transcript for the marker and parse only matching lines.
+    const input = { providerSessionId, workingDir, onlyLinesContaining: marker };
     const result =
       provider === 'CLAUDE'
         ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
@@ -151,7 +148,6 @@ async function loadReceipt(
     if (result.status !== 'loaded') {
       return 'unavailable';
     }
-    const marker = prEventMarker(deliveryId);
     return result.history.some(
       (message) => message.type === 'user' && message.content.split('\n').includes(marker)
     )

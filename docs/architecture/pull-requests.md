@@ -324,25 +324,29 @@ retry.
 A completed provider prompt acknowledges delivery, meaning the facts were
 received, regardless of whether the PR was fixed. After an uncertain exit,
 provider-owned user history must contain the exact delivery marker to prove
-receipt; optimistic UI rows are insufficient. Missing history pauses delivery as
-`RECEIPT_UNAVAILABLE`. Loaded history without the marker allows a bounded retry
-in the same conversation. When that session has a recorded provider identity
-rollover, proven absence permits recovery to re-stamp its frozen claim to the
-current identity. The recovery transaction fences the identity observed before
-receipt lookup and verifies the rollover lineage; unreadable history still
-pauses delivery. Frozen message text and delivery IDs remain unchanged. A
-recipient change first recovers old claims; only proven absence allows
-cancelling an old frozen delivery. It never retargets that frozen message into a
-new conversation. If a PR in a frozen MAIN batch is detached, proven absence
-allows cancelling that batch and queuing fresh facts for its still-attached PRs.
-The original delivery identity and text remain preserved for receipt history.
+receipt; optimistic UI rows are insufficient. The marker must be its own line in
+a user prompt. Lookup byte-searches the provider file for the JSON-encoded
+marker and parses only matching lines, so a check never loads the whole history.
+Missing history pauses delivery as `RECEIPT_UNAVAILABLE`. Loaded history without
+the marker allows a bounded retry in the same conversation. When that session
+has a recorded provider identity rollover, proven absence permits recovery to
+re-stamp its frozen claim to the current identity. The recovery transaction
+fences the identity observed before receipt lookup and verifies the rollover
+lineage; unreadable history still pauses delivery. Frozen message text and
+delivery IDs remain unchanged. A recipient change first recovers old claims;
+only proven absence allows cancelling an old frozen delivery. It never retargets
+that frozen message into a new conversation. If a PR in a frozen MAIN batch is
+detached, proven absence allows cancelling that batch and queuing fresh facts
+for its still-attached PRs. The original delivery identity and text remain
+preserved for receipt history.
 
 Closing a conversation retains its provider session ID in archived transcript
-metadata. Receipt recovery reads that identity and checks provider-owned
-history, including after another conversation is selected. If history is
-unavailable, restore the provider history files and archived identity, then
-explicitly resume the selected conversation. Local transcript messages cannot
-prove receipt.
+metadata. Receipt recovery reads that identity from the archive's header,
+without parsing its archived messages (it parses the whole archive only when the
+header cannot be isolated), and checks provider-owned history, including after
+another conversation is selected. If history is unavailable, restore the
+provider history files and archived identity, then explicitly resume the
+selected conversation. Local transcript messages cannot prove receipt.
 
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation
