@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -20,8 +21,16 @@ interface SetupTerminalModalProps {
 }
 
 export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
-  const { connected, gaveUp, reconnect, showTerminal, output, handleData, handleResize } =
-    useSetupTerminal(open);
+  const {
+    connected,
+    gaveUp,
+    reconnect,
+    showTerminal,
+    output,
+    authenticate,
+    handleData,
+    handleResize,
+  } = useSetupTerminal(open);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -29,10 +38,10 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
         <DialogHeader>
           <DialogTitle>Terminal</DialogTitle>
           <DialogDescription>
-            Run authentication commands for your CLIs, then close this dialog.
+            Use the sign-in buttons for Claude and Codex, or run authentication commands below.
             <span className="mt-1.5 flex flex-col gap-0.5">
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
-                claude login
+                ff claude auth login
               </code>
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
                 ff codex login
@@ -43,6 +52,24 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
             </span>
           </DialogDescription>
         </DialogHeader>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!connected}
+            onClick={() => authenticate('CLAUDE')}
+          >
+            Sign in to Claude
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!connected}
+            onClick={() => authenticate('CODEX')}
+          >
+            Sign in to Codex
+          </Button>
+        </div>
         <div className="relative flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
           {showTerminal && (
             <Suspense fallback={null}>

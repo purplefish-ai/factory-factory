@@ -39,12 +39,16 @@ function buildItems(health: {
 
   // Claude
   if (!health.claude.isInstalled) {
-    items.push({ label: 'Claude', status: 'missing', detail: 'Not installed' });
+    items.push({
+      label: 'Claude',
+      status: 'missing',
+      detail: 'Bundled runtime unavailable — update Factory Factory',
+    });
   } else if (health.claude.isAuthenticated !== true) {
     items.push({
       label: 'Claude',
       status: 'warning',
-      detail: 'Installed — run claude login to authenticate',
+      detail: 'Installed — run ff claude auth login to authenticate',
     });
   } else {
     items.push({ label: 'Claude', status: 'ok', detail: 'Ready' });

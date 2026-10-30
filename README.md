@@ -35,7 +35,7 @@ You will need:
 - macOS 13 (Ventura) or newer for the macOS desktop app
 - A local git repository
 - At least one agent provider:
-  - Claude Code, authenticated with `claude login`
+  - Claude (runtime included), authenticated with `ff claude auth login`
   - A ChatGPT/Codex account configured for Codex sessions
 - The authenticated [GitHub CLI](https://cli.github.com/) for GitHub issues and
   pull requests

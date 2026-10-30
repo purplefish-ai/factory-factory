@@ -39,13 +39,25 @@ client app handlers preserve elicitation and native subagent features;
 `claude-agent-acp` 0.98 and Codex uses the released
 `@agentclientprotocol/codex-acp` 2.3.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
-`ff codex login` authenticates that same runtime.
+`ff codex login` authenticates that same runtime. Claude also ships its native
+runtime through the adapter's matched Agent SDK. `ff claude` delegates to the
+adapter's `--cli` passthrough, and `ff claude auth login` authenticates it.
+Health checks inspect these managed runtimes, never global provider CLIs. Setup
+terminal sign-in actions launch these commands directly in a PTY; they do not
+require `ff` or Node on PATH. Replacing the shell with a login process ignores
+output/exit events from the replaced PTY and restores a shell when login exits.
+Both runtimes update with Factory Factory releases; legacy global-upgrade
+requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an explicit upstream
+override and is inherited by both Claude sessions and managed CLI operations.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node, and are unpacked in desktop packages. Model discovery uses the same
-bundled Codex runtime, without starting an inference turn. Claude model
-discovery uses an ephemeral ACP session with tools disabled. Both catalog
-services coalesce requests and cache successful results for 30 seconds.
+Node, and are unpacked in desktop packages along with their complete production
+dependency trees. The desktop release smoke check runs bundled Claude and its
+actual ACP catalog loader with an empty PATH; CI may require authentication
+before returning model choices. Model discovery uses the same bundled Codex
+runtime, without starting an inference turn. Claude model discovery uses an
+ephemeral ACP session with tools disabled. Both catalog services coalesce
+requests and cache successful results for 30 seconds.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path

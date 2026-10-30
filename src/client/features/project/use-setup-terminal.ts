@@ -36,6 +36,8 @@ export interface UseSetupTerminalResult {
   showTerminal: boolean;
   /** Accumulated terminal output. */
   output: string;
+  /** Launch the server's managed provider login in the terminal. */
+  authenticate: (provider: 'CLAUDE' | 'CODEX') => void;
   /** Forward keystrokes to the server-side PTY. */
   handleData: (data: string) => void;
   /** Report terminal size; also used for the create request on (re)connect. */
@@ -53,11 +55,15 @@ export interface UseSetupTerminalResult {
 export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
   const [output, setOutput] = useState('');
   const [showTerminal, setShowTerminal] = useState(false);
+  const [terminalExited, setTerminalExited] = useState(false);
   const hasConnectedRef = useRef(false);
   const colsRef = useRef(80);
   const rowsRef = useRef(24);
 
   const handleMessage = useCallback((message: z.infer<typeof SetupTerminalMessageSchema>) => {
+    if (message.type === 'exit') {
+      setTerminalExited(true);
+    }
     if (message.type === 'output' && message.data) {
       setOutput((prev) =>
         appendToRollingOutput(prev, message.data ?? '', TERMINAL_ROLLING_OUTPUT_OPTIONS)
@@ -77,6 +83,7 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     if (!open) {
       setOutput('');
       setShowTerminal(false);
+      setTerminalExited(false);
       hasConnectedRef.current = false;
     }
   }, [open]);
@@ -99,6 +106,22 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
   }, [open, connected, send]);
 
+  useEffect(() => {
+    if (open && connected && terminalExited) {
+      setTerminalExited(false);
+      send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
+    }
+  }, [open, connected, terminalExited, send]);
+
+  const authenticate = useCallback(
+    (provider: 'CLAUDE' | 'CODEX') => {
+      if (open && connected) {
+        send({ type: 'authenticate', provider, cols: colsRef.current, rows: rowsRef.current });
+      }
+    },
+    [open, connected, send]
+  );
+
   const handleData = useCallback(
     (data: string) => {
       send({ type: 'input', data });
@@ -115,5 +138,14 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     [send]
   );
 
-  return { connected, gaveUp, reconnect, showTerminal, output, handleData, handleResize };
+  return {
+    connected,
+    gaveUp,
+    reconnect,
+    showTerminal,
+    output,
+    authenticate,
+    handleData,
+    handleResize,
+  };
 }

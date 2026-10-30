@@ -96,6 +96,21 @@ describe('useSetupTerminal', () => {
     expect(send).toHaveBeenCalledWith({ type: 'create', cols: 80, rows: 24 });
   });
 
+  it('requests managed login and restores a shell after the login process exits', () => {
+    render(true);
+    connect();
+    void act(() => resultRef.current?.authenticate('CLAUDE'));
+    expect(send).toHaveBeenCalledWith({
+      type: 'authenticate',
+      provider: 'CLAUDE',
+      cols: 80,
+      rows: 24,
+    });
+    send.mockClear();
+    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0 }));
+    expect(send).toHaveBeenCalledWith({ type: 'create', cols: 80, rows: 24 });
+  });
+
   it('accumulates output messages and ignores invalid ones', () => {
     render(true);
     connect();

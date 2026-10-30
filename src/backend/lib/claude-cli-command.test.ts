@@ -1,34 +1,36 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
-import { expect, it } from 'vitest';
-import { resolveClaudeUpdateCommand } from './claude-cli-command';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { getBundledClaudeCommand } from './claude-cli-command';
 
-it.skipIf(process.platform === 'win32')(
-  'skips a searchable Claude directory before the active executable on PATH',
-  async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'ff-claude-command-')));
-    try {
-      const earlierBin = join(root, 'earlier-bin');
-      const activeBin = join(root, 'bin');
-      const cask = join(root, 'Caskroom', 'claude-code', '2.1.312');
-      await mkdir(join(earlierBin, 'claude'), { recursive: true, mode: 0o755 });
-      await mkdir(activeBin);
-      await mkdir(cask, { recursive: true });
-      const executable = join(cask, 'claude');
-      await writeFile(executable, '#!/bin/sh\n', { mode: 0o755 });
-      await symlink(executable, join(activeBin, 'claude'));
+const resolve = vi.hoisted(() => vi.fn());
+vi.mock('node:module', () => ({ createRequire: () => ({ resolve }) }));
 
-      const command = await resolveClaudeUpdateCommand({
-        PATH: [earlierBin, activeBin].join(delimiter),
-      });
+beforeEach(() => {
+  resolve.mockReset();
+});
 
-      expect(command).toEqual({
-        command: `${activeBin.replaceAll('\\', '/')}/brew`,
-        args: ['upgrade', '--cask', 'claude-code'],
-      });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  }
-);
+it.each([
+  [
+    '/app/app.asar/node_modules/claude/dist/index.js',
+    '/app/app.asar.unpacked/node_modules/claude/dist/index.js',
+  ],
+  [
+    'C:\\app\\app.asar\\node_modules\\claude\\dist\\index.js',
+    'C:\\app\\app.asar.unpacked\\node_modules\\claude\\dist\\index.js',
+  ],
+])('runs the managed CLI outside ASAR: %s', (entrypoint, unpacked) => {
+  resolve.mockReturnValue(entrypoint);
+  const args = ['auth', 'login', '--console'];
+  expect(getBundledClaudeCommand(args)).toEqual({
+    command: process.execPath,
+    args: [unpacked, '--cli', ...args],
+  });
+  expect(resolve).toHaveBeenCalledWith('@agentclientprotocol/claude-agent-acp/dist/index.js');
+  expect(args).toEqual(['auth', 'login', '--console']);
+});
+
+it('reports a missing managed runtime instead of falling back to a global Claude', () => {
+  resolve.mockImplementation(() => {
+    throw new Error('package missing');
+  });
+  expect(() => getBundledClaudeCommand(['--version'])).toThrow('package missing');
+});

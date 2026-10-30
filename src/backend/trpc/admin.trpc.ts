@@ -143,7 +143,7 @@ export const adminRouter = router({
     }),
 
   /**
-   * Update a provider CLI and return refreshed health. Bundled Codex upgrades are rejected.
+   * Reject legacy global upgrades; provider runtimes are managed with the app.
    */
   upgradeProviderCLI: publicProcedure
     .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
