@@ -1,12 +1,19 @@
 import { type ChildProcess, execFile } from 'node:child_process';
 
+/** Returns whether the owned process group still exists. */
 function signalOwnedGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
   try {
     process.kill(-pid, signal);
     return true;
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    if (code === 'ESRCH') {
       return false;
+    }
+    // macOS reports EPERM while the group's exited members are not yet reaped.
+    // Keep polling: reaping turns this into ESRCH, and the deadline still applies.
+    if (code === 'EPERM') {
+      return true;
     }
     throw new Error('Disposable process cleanup failed');
   }
