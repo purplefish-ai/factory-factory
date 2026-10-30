@@ -1,11 +1,13 @@
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
+import type { AcpPlanState } from './reducer';
 
 export interface TranscriptDisplayProps {
   /** Workspace ID (enables persisted tool expansion state per workspace) */
   workspaceId?: string;
   messages: GroupedMessageItem[];
+  acpPlan?: AcpPlanState | null;
   running: boolean;
   work?: SessionWorkState;
   onOpenAgents?: () => void;

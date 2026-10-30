@@ -39,9 +39,14 @@ type PendingAcpToolCall = {
  * translator emits only validated warning notices for `session_info_update`.
  * A `usage_update` becomes a non-rendering occupancy `result`; hydrated history
  * has no result rows, and the provider sends the snapshot at attach.
+ * Plan snapshots restore the current checklist, including explicit empty lists.
  */
 function isReplayExemptSessionUpdate(update: AcpSessionUpdateEvent['update']): boolean {
-  return update.sessionUpdate === 'session_info_update' || update.sessionUpdate === 'usage_update';
+  return (
+    update.sessionUpdate === 'session_info_update' ||
+    update.sessionUpdate === 'usage_update' ||
+    update.sessionUpdate === 'plan'
+  );
 }
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
@@ -880,7 +885,7 @@ export class AcpEventProcessor {
     if (!this.suppressAcpReplayForSession.has(sessionId)) {
       return;
     }
-    if (!this.runtimeManager.isSessionWorking(sessionId)) {
+    if (!this.runtimeManager.isSessionPromptInFlight(sessionId)) {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);

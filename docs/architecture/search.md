@@ -51,6 +51,11 @@ repositories. Identical query results are treated as fresh in the client for 60
 seconds. GitHub loading or partial failures leave local results selectable, and
 failures can be retried.
 
+The server interleaves repository results before applying the shared result
+limit, preserving GitHub's relevance order within each repository. A recent
+project cannot fill the entire budget before older projects contribute matches.
+Empty or failed repositories do not reserve slots.
+
 Selecting **Start issue** opens the existing issue launch sheet with the full
 prompt and provider/mode options. Cmd/Ctrl+K leaves that sheet and edited
 options intact until it is dismissed. A local error boundary contains lazy-load

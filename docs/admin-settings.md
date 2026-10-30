@@ -39,10 +39,14 @@ a reload does not flash the defaults before the saved settings load.
 
 ## CLI notices
 
-The top of the app shows a compact blue **Update Claude** button when a newer
-Claude CLI is available. This is an optional update; hover over the button for
-installed and available versions. During an update the button shows progress and
-prevents duplicate requests. Bundled Codex updates ship with the app.
+Claude and Codex runtimes are bundled with Factory Factory and updated with app
+releases. No separate global installation or provider update action is needed.
+Use `ff claude auth login` and `ff codex login` to authenticate the same
+runtimes used by sessions. The setup terminal also offers **Sign in to Claude**
+and **Sign in to Codex** buttons that launch the app's managed runtimes
+directly, including in desktop installs without a global `ff` or Node
+installation. Missing bundled runtimes require updating or reinstalling Factory
+Factory.
 
 Missing tools and GitHub sign-in problems appear as amber notices with setup
 instructions. **Recheck** refreshes their status. Dismissing the strip keeps it

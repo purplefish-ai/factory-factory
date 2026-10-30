@@ -13,8 +13,8 @@ surface. A small controller owns intent and lifecycle; its React adapter uses
 the installed TanStack virtualizer for measured positioning and anchoring.
 Workspace/quick-chat composition supplies identity and persistence capabilities.
 
-**Tech Stack:** React 19, TypeScript, TanStack React Virtual 3.14.23 / locked
-virtual core 3.19.8, Zod, Vitest, Storybook, Playwright.
+**Tech Stack:** React 19, TypeScript, TanStack React Virtual 3.14.24 / locked
+virtual core 3.19.9, Zod, Vitest, Storybook, Playwright.
 
 **Spec:**
 [Transcript scroll ownership](../specs/2026-10-30-transcript-scroll-design.md)
@@ -495,13 +495,16 @@ cannot occlude the jump overlay. Browser suites use separate output directories;
 cold Storybook graph compilation is warmed before the timed composer interaction
 cases.
 
-Final verification after PR review: `pnpm check:fix`, `pnpm typecheck` and
-`pnpm check` passed. The full Vitest run passed 9,239 tests with 3 skipped and
-no failures. The combined focused review suites passed 69 tests. Browser suites
-passed 36 transcript, 4 Storybook (composer and subagent restoration/width), and
-30 existing mobile cases. Mobile, desktop and wide subagent Storybook
-screenshots were inspected. The header remains measured offscreen;
-frame-scheduled resize batches avoid a reproduced ResizeObserver delivery loop.
+Final verification after PR review and integrating main: `pnpm check:fix`,
+`pnpm typecheck` and `pnpm check` passed. Before integrating main, the full unit
+suite passed 9,239 tests. The merged full run passed 9,345 tests, skipped 3, and
+hit one upstream native Codex RPC timeout; that unchanged integration test
+passed its isolated rerun. Browser suites passed 38 transcript, 4 Storybook
+(composer and subagent restoration/width), and 30 existing mobile cases. Mobile,
+desktop and wide subagent Storybook screenshots were inspected. Main's inline
+task list is preserved in the measured transcript tail, including ACP updates
+and hydration behavior. The engine contract was re-characterized successfully on
+virtual-core 3.19.9.
 
 PR review follow-up restores workspace-owned subagent positions across pane
 unmounts and retains the prior content width. Node-keyed weak measurements
@@ -515,7 +518,6 @@ The final review's gap-position defect was fixed with signed anchors and
 storage/browser regressions. Direct keyboard and scrollbar tests cover the
 review's smaller coverage concern. Physical iOS/Safari momentum remains a
 hardware validation limitation; the synthetic iOS engine branch only proves the
-installed dependency's deferred-write contract. Native end-mode engine
-characterization logs its existing ResizeObserver warning; the application uses
-start mode and its header-resize test asserts no window/page errors. Anchoring
-within a giant tool group remains relative to the grouped row.
+installed dependency's deferred-write contract. The application uses start mode
+and its header-resize test asserts no window/page errors. Anchoring within a
+giant tool group remains relative to the grouped row.

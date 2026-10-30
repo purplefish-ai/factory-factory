@@ -54,6 +54,35 @@ test('same-key tool bursts and activity changes stay attached', async ({ page })
   );
 });
 
+test('inline task updates share the measured tail and preserve scroll intent', async ({ page }) => {
+  await page.goto('/__transcript-scroll');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  const spacer = viewport.locator(':scope > div');
+  const before = await spacer.evaluate((element) => element.getBoundingClientRect().height);
+  await page.getByRole('button', { name: 'Toggle tasks', exact: true }).click();
+  await expect(page.getByRole('list', { name: 'Tasks', exact: true })).toBeVisible();
+  await expect
+    .poll(() => spacer.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeGreaterThan(before);
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Toggle tasks', exact: true }).click();
+  await expect(page.getByRole('list', { name: 'Tasks', exact: true })).toHaveCount(0);
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.hover();
+  await page.mouse.wheel(0, -700);
+  await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
+  const anchor = await readingAnchor(viewport);
+  await page.getByRole('button', { name: 'Toggle tasks', exact: true }).click();
+  await viewport.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  );
+  await expectAnchor(viewport, anchor);
+  await page.getByRole('button', { name: 'Scroll to bottom', exact: true }).click();
+  await expect(page.getByRole('list', { name: 'Tasks', exact: true })).toBeVisible();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+});
+
 test('upward input yields immediately and the jump overlay does not resize the viewport', async ({
   page,
 }) => {

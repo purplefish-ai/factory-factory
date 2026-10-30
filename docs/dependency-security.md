@@ -47,7 +47,7 @@ These commands send dependency names and versions to the npm advisory service.
 Inspect each finding and its dependency path. Do not treat an arbitrary nonzero
 exit as expected or suppress an advisory solely to obtain a passing audit.
 
-The complete registry audit on October 27, 2026 reported no known advisories.
+The complete registry audit on October 30, 2026 reported no known advisories.
 The repository still carries a local development-tooling mitigation for
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
 `tsc-alias` reaches `braces@3.0.3` through both Chokidar and Micromatch. No
@@ -68,6 +68,13 @@ removes the vulnerable code. Re-run the full audit before removing a mitigation;
 check new findings independently of this known, locally patched advisory.
 
 ## Upgrade compatibility
+
+The October 30, 2026 dependency refresh updates direct dependencies to their
+latest stable registry tags, including Linear SDK 100, ACP SDK 2.1, Claude ACP
+0.99.1, Codex ACP 2.5, and Electron 45.1. The Linear major removes Salesforce
+settings fields that this application's team and issue integration does not use.
+The refresh also updates the pinned `qs` override to 6.17.1. Existing
+compatibility pins and the Braces mitigation remain in place.
 
 Keep Prisma, its client, and the SQLite adapter aligned on the latest stable
 Prisma 7 release. The Prisma CLI's `latest` registry tag currently points to an

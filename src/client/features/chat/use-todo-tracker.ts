@@ -1,16 +1,21 @@
-/**
- * Hook to track TodoWrite tool calls across a Claude session.
- * Extracts and maintains the latest todo list state.
- */
-
+/** Tracks the current provider task list, with legacy TodoWrite history support. */
 import { useMemo } from 'react';
-import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
-import { isToolUseMessage } from '@/lib/chat-protocol';
+import { z } from 'zod';
+import type { ChatMessage, GroupedMessageItem, ToolSequence } from '@/lib/chat-protocol';
+import { isToolSequence } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
+import type { AcpPlanState } from './reducer';
+
+const todoSchema = z.object({
+  content: z.string(),
+  activeForm: z.string().optional(),
+  status: z.enum(['pending', 'in_progress', 'completed']),
+});
+const todoInputSchema = z.object({ todos: z.array(todoSchema) });
 
 export interface Todo {
   content: string;
-  activeForm: string;
+  activeForm?: string;
   status: 'pending' | 'in_progress' | 'completed';
 }
 
@@ -22,131 +27,80 @@ export interface TodoState {
   lastUpdated: string | null;
 }
 
-/**
- * Type guard to validate TodoWrite input structure.
- */
-function isTodoWriteInput(input: unknown): input is { todos: Todo[] } {
-  if (typeof input !== 'object' || input === null) {
-    return false;
+function readTodos(name: string, input: unknown): Todo[] | null {
+  if (name !== 'TodoWrite') {
+    return null;
   }
-  const obj = input as { todos?: unknown };
-  return Array.isArray(obj.todos);
+  const parsed = todoInputSchema.safeParse(input);
+  return parsed.success ? parsed.data.todos : null;
 }
 
-/**
- * Helper to calculate todo state from a todo list
- */
-function calculateTodoState(todos: Todo[], timestamp: string): TodoState {
-  const { completedCount, totalCount, progressPercent } = calculateTodoProgress(todos);
-
-  return {
-    todos,
-    completedCount,
-    totalCount,
-    progressPercent,
-    lastUpdated: timestamp,
-  };
-}
-
-/**
- * Helper to extract todos from a TodoWrite tool use in a stream event
- */
-function extractTodosFromStreamEvent(
-  claudeMessage: AgentMessage,
-  timestamp: string
-): TodoState | null {
-  if (claudeMessage.type !== 'stream_event' || !claudeMessage.event) {
+function readMessageTodos(message: ChatMessage): Todo[] | null {
+  if (message.source !== 'agent' || message.message?.parent_tool_use_id) {
     return null;
   }
-
-  if (claudeMessage.event.type !== 'content_block_start') {
-    return null;
+  const event = message.message?.event;
+  if (event?.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+    return readTodos(event.content_block.name, event.content_block.input);
   }
-
-  const block = claudeMessage.event.content_block;
-  if (block.type === 'tool_use' && block.name === 'TodoWrite') {
-    if (isTodoWriteInput(block.input)) {
-      return calculateTodoState(block.input.todos, timestamp);
-    }
-    // Don't return empty state for incomplete input - keep showing previous state
-    return null;
-  }
-
-  return null;
-}
-
-/**
- * Helper to extract todos from a TodoWrite tool use in an assistant message
- */
-function extractTodosFromAssistantMessage(
-  claudeMessage: AgentMessage,
-  timestamp: string
-): TodoState | null {
-  if (!(claudeMessage.message && Array.isArray(claudeMessage.message.content))) {
-    return null;
-  }
-
-  for (const item of claudeMessage.message.content) {
-    if (item.type === 'tool_use' && item.name === 'TodoWrite') {
-      if (isTodoWriteInput(item.input)) {
-        return calculateTodoState(item.input.todos, timestamp);
+  const content = message.message?.message?.content;
+  if (Array.isArray(content)) {
+    for (let index = content.length - 1; index >= 0; index--) {
+      const block = content[index];
+      if (block?.type === 'tool_use') {
+        const todos = readTodos(block.name, block.input);
+        if (todos !== null) {
+          return todos;
+        }
       }
-      // Don't return empty state for incomplete input - keep showing previous state
-      return null;
     }
   }
-
   return null;
 }
 
-/**
- * Helper to extract todos from a TodoWrite tool call
- */
-function extractTodosFromMessage(message: ChatMessage): TodoState | null {
-  if (message.source !== 'agent' || !message.message) {
-    return null;
+function readToolSequenceTodos(sequence: ToolSequence): Todo[] | null {
+  for (let index = sequence.pairedCalls.length - 1; index >= 0; index--) {
+    const call = sequence.pairedCalls[index];
+    if (!call || call.status === 'error') {
+      continue;
+    }
+    const todos = readTodos(call.name, call.input);
+    if (todos !== null) {
+      return todos;
+    }
   }
-
-  const claudeMessage = message.message;
-  if (!isToolUseMessage(claudeMessage)) {
-    return null;
-  }
-
-  // Handle stream_event types - tool info is in event.content_block
-  const streamResult = extractTodosFromStreamEvent(claudeMessage, message.timestamp);
-  if (streamResult) {
-    return streamResult;
-  }
-
-  // Handle assistant messages - tool info is in message.content
-  return extractTodosFromAssistantMessage(claudeMessage, message.timestamp);
+  return null;
 }
 
-/**
- * Extracts the latest todo list from chat messages.
- * Finds the most recent TodoWrite tool call and returns its todos.
- */
-export function useTodoTracker(messages: ChatMessage[]): TodoState {
+export function useTodoTracker(
+  messages: GroupedMessageItem[],
+  acpPlan?: AcpPlanState | null
+): TodoState {
   return useMemo(() => {
-    // Find the most recent TodoWrite tool call by scanning messages in reverse
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (!message) {
-        continue;
-      }
-      const todoState = extractTodosFromMessage(message);
-      if (todoState) {
-        return todoState;
-      }
+    // ACP updates are complete snapshots; an empty list explicitly clears tasks.
+    if (acpPlan) {
+      return calculateState(acpPlan.entries, acpPlan.updatedAt);
     }
+    return readLatestTodos(messages);
+  }, [messages, acpPlan]);
+}
 
-    // No todos found
-    return {
-      todos: [],
-      completedCount: 0,
-      totalCount: 0,
-      progressPercent: 0,
-      lastUpdated: null,
-    };
-  }, [messages]);
+function calculateState(todos: Todo[], lastUpdated: string | null): TodoState {
+  return { todos, ...calculateTodoProgress(todos), lastUpdated };
+}
+
+function readLatestTodos(messages: GroupedMessageItem[]): TodoState {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message) {
+      continue;
+    }
+    const todos = isToolSequence(message)
+      ? readToolSequenceTodos(message)
+      : readMessageTodos(message);
+    if (todos !== null) {
+      return calculateState(todos, isToolSequence(message) ? null : message.timestamp);
+    }
+  }
+  return calculateState([], null);
 }

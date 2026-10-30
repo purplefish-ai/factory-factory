@@ -143,19 +143,13 @@ export const adminRouter = router({
     }),
 
   /**
-   * Upgrade a provider CLI via npm global install and return refreshed health.
+   * Reject legacy global upgrades; provider runtimes are managed with the app.
    */
   upgradeProviderCLI: publicProcedure
     .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
     .mutation(async ({ ctx, input }) => {
       try {
-        const result = await ctx.appContext.services.cliHealthService.upgradeProviderCLI(
-          input.provider
-        );
-        return {
-          ...result,
-          message: `${input.provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI upgraded successfully.`,
-        };
+        return await ctx.appContext.services.cliHealthService.upgradeProviderCLI(input.provider);
       } catch (error) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

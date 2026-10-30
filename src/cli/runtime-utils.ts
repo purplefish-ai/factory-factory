@@ -64,10 +64,8 @@ async function isPortInUse(port: number): Promise<boolean> {
         timeout: 2000,
       });
       return stdout.trim().length > 0;
-    } catch (error) {
-      if ((error as { code?: number }).code === 1) {
-        return false;
-      }
+    } catch {
+      // Even exit 1 can hide another user's listener; verify by binding below.
     }
   }
 

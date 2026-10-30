@@ -22,7 +22,6 @@ export * from './screenshot-viewer-tab';
 export * from './screenshots-panel';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';
-export * from './todo-panel-container';
 export * from './use-chat-transcript-persistence';
 export * from './use-persistent-scroll';
 export * from './use-run-script-launch';

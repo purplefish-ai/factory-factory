@@ -45,6 +45,7 @@ export interface LaunchPlanControl {
   onChange: (value: boolean) => void;
 }
 export interface SessionLaunchControlsProps extends ProviderModelPickerProps {
+  className?: string;
   children?: ReactNode;
   account?: Omit<CodexAccountPickerProps, 'disabled'>;
   reasoning?: LaunchReasoningControl;
@@ -194,32 +195,71 @@ export function PlanningSelector({
   control,
   disabled,
   disabledReason,
+  showLabel = false,
 }: {
   control: LaunchPlanControl;
   disabled?: boolean;
   disabledReason?: string;
+  showLabel?: boolean;
 }) {
   const unavailable =
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
   const description = disabled ? disabledReason : getPlanDescription(control);
+  const stateLabel = control.enabled ? 'On' : 'Off';
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <ComposerMenuTrigger
-            iconOnly
+            iconOnly={!showLabel}
+            indicator={false}
             icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
             className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
             disabled={disabled || unavailable}
-            aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
+            aria-label={`Planning: ${stateLabel}`}
             aria-description={description}
             aria-pressed={control.enabled}
             onClick={() => control.onChange(!control.enabled)}
-          />
+          >
+            {stateLabel}
+          </ComposerMenuTrigger>
         </TooltipTrigger>
         <TooltipContent side="top">{description}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+export function AccessModeSelector({
+  control,
+  disabled,
+  compact = true,
+}: {
+  control: LaunchAccessControl;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <AcpConfigSelector
+      compact={compact}
+      invalid={control.invalid}
+      configOption={{
+        id: 'mode',
+        name: 'Access',
+        description: control.invalid
+          ? 'Selected access mode is unavailable. Choose a supported mode.'
+          : undefined,
+        type: 'select',
+        currentValue: control.value ?? (control.loading ? 'Loading…' : ''),
+        options: control.options.map((option) => ({
+          value: option.value,
+          name: option.label,
+          description: option.description,
+        })),
+      }}
+      disabled={disabled || control.loading || !control.options.length}
+      onSelect={(_id, value) => control.onChange(value)}
+    />
   );
 }
 /** Pure shared launch controls; native discovery and draft ownership live in the caller's hook. */
@@ -229,10 +269,11 @@ export function SessionLaunchControls({
   planMode,
   accessMode,
   children,
+  className,
   ...picker
 }: SessionLaunchControlsProps) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div className={cn('flex min-w-0 flex-wrap items-center gap-1', className)}>
       <ProviderModelPicker {...picker} />
       {picker.provider === 'CODEX' && account && (
         <CodexAccountPicker {...account} disabled={picker.disabled} />
@@ -244,27 +285,7 @@ export function SessionLaunchControls({
           disabledReason={picker.disabledReason}
         />
       )}
-      {accessMode && (
-        <AcpConfigSelector
-          invalid={accessMode.invalid}
-          configOption={{
-            id: 'mode',
-            name: 'Access',
-            description: accessMode.invalid
-              ? 'Selected access mode is unavailable. Choose a supported mode.'
-              : undefined,
-            type: 'select',
-            currentValue: accessMode.value ?? (accessMode.loading ? 'Loading…' : ''),
-            options: accessMode.options.map((option) => ({
-              value: option.value,
-              name: option.label,
-              description: option.description,
-            })),
-          }}
-          disabled={picker.disabled || accessMode.loading || !accessMode.options.length}
-          onSelect={(_id, value) => accessMode.onChange(value)}
-        />
-      )}
+      {accessMode && <AccessModeSelector control={accessMode} disabled={picker.disabled} />}
       {planMode && (
         <PlanningSelector
           control={planMode}

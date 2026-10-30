@@ -133,6 +133,7 @@ export function WorkspaceDetailContainer() {
     cancelRewind,
     getUuidForMessageId,
     acpConfigOptions,
+    acpPlan,
     setConfigOption,
     inputRef,
   } = useChatWebSocket({
@@ -313,6 +314,7 @@ export function WorkspaceDetailContainer() {
     cancelRewind,
     getUuidForMessageId,
     acpConfigOptions,
+    acpPlan,
     setConfigOption,
     autoStartPending: isIssueAutoStartPending,
     initBanner,

@@ -386,7 +386,7 @@ export function InlineWorkspaceForm({
 
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
-      <CardContent className="p-3 space-y-3" onKeyDown={handleKeyDown}>
+      <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
         {mode === 'PERIODIC_TASK' && <Label htmlFor={instructionsId}>Instructions</Label>}
         <div className="relative">
           <SlashCommandPalette
@@ -420,9 +420,9 @@ export function InlineWorkspaceForm({
             onDrop={pasteDropHandler.handleDrop}
             onDragOver={pasteDropHandler.handleDragOver}
             onDragLeave={pasteDropHandler.handleDragLeave}
-            rows={3}
+            rows={2}
             className={cn(
-              'resize-none text-sm',
+              'min-h-16 resize-none text-sm focus-visible:ring-1',
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus

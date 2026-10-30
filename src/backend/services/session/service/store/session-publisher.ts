@@ -30,6 +30,7 @@ export class SessionPublisher {
       queuedMessages: [...store.queue],
       pendingInteractiveRequest: store.pendingInteractiveRequest,
       sessionRuntime: store.runtime,
+      taskPlan: store.taskPlan ? structuredClone(store.taskPlan) : null,
       ...(options?.loadRequestId ? { loadRequestId: options.loadRequestId } : {}),
     };
 

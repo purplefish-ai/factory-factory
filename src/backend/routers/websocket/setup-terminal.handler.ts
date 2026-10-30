@@ -12,6 +12,8 @@ import type { IPty } from 'node-pty';
 import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { getBundledClaudeCommand } from '@/backend/lib/claude-cli-command';
+import { getBundledCodexCommand } from '@/backend/lib/codex-cli-command';
 import { toError } from '@/backend/lib/error-utils';
 import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import {
@@ -36,12 +38,12 @@ type SetupTerminalConfigService = AppContext['services']['configService'];
 
 function handleCreate(
   ws: WebSocket,
-  message: Extract<SetupTerminalMessageInput, { type: 'create' }>,
+  message: Extract<SetupTerminalMessageInput, { type: 'create' | 'authenticate' }>,
   state: SetupTerminalState,
   logger: SetupTerminalLogger,
   configService: SetupTerminalConfigService
 ): void {
-  if (state.pty) {
+  if (state.pty && message.type === 'create') {
     ws.send(JSON.stringify({ type: 'error', message: 'Terminal already exists' }));
     return;
   }
@@ -49,12 +51,18 @@ function handleCreate(
   const cols = message.cols ?? 80;
   const rows = message.rows ?? 24;
   const cwd = homedir() || tmpdir();
-  const shellPath = configService.getShellPath();
+  const command =
+    message.type === 'authenticate'
+      ? message.provider === 'CLAUDE'
+        ? getBundledClaudeCommand(['auth', 'login'])
+        : getBundledCodexCommand(['login'])
+      : { command: configService.getShellPath(), args: [] };
 
-  logger.info('Creating setup terminal', { cwd, shell: shellPath, cols, rows });
+  logger.info('Creating setup terminal', { cwd, command: command.command, cols, rows });
 
   const nodePty = getNodePty();
-  state.pty = nodePty.spawn(shellPath, [], {
+  const previous = state.pty;
+  const pty = nodePty.spawn(command.command, command.args, {
     name: 'xterm-256color',
     cols,
     rows,
@@ -63,10 +71,17 @@ function handleCreate(
       ...configService.getChildProcessEnv(),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
+      ...(message.type === 'authenticate' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     },
   });
 
-  state.pty.onData((output: string) => {
+  state.pty = pty;
+  previous?.kill();
+
+  pty.onData((output: string) => {
+    if (state.pty !== pty) {
+      return;
+    }
     sendStreamOutput(
       ws,
       JSON.stringify({ type: 'output', data: output }),
@@ -75,10 +90,19 @@ function handleCreate(
     );
   });
 
-  state.pty.onExit(({ exitCode }: { exitCode: number }) => {
+  pty.onExit(({ exitCode }: { exitCode: number }) => {
+    if (state.pty !== pty) {
+      return;
+    }
     logger.info('Setup terminal exited', { exitCode });
     if (ws.readyState === WS_READY_STATE.OPEN) {
-      ws.send(JSON.stringify({ type: 'exit', exitCode }));
+      ws.send(
+        JSON.stringify({
+          type: 'exit',
+          exitCode,
+          ...(message.type === 'authenticate' ? { provider: message.provider } : {}),
+        })
+      );
     }
     state.pty = null;
   });
@@ -132,6 +156,7 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
 
           switch (message.type) {
             case 'create':
+            case 'authenticate':
               handleCreate(ws, message, state, logger, configService);
               break;
             case 'input':

@@ -169,6 +169,65 @@ describe('claudeSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it.each([
+    { isMeta: true },
+    { turnCompanion: true },
+    { isMeta: true, turnCompanion: true },
+    { isSidechain: true },
+  ])('omits harness entries flagged with %j from the restored conversation', async (flags) => {
+    const providerSessionId = 'harness-session';
+    const cwd = '/Users/test/project';
+    const timestamp = '2026-10-28T10:03:09.340Z';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp,
+          message: { role: 'user', content: 'My prompt' },
+        },
+        ...['user', 'assistant'].map((role) => ({
+          type: role,
+          sessionId: providerSessionId,
+          timestamp,
+          ...flags,
+          message: {
+            role,
+            content: '<local-command-caveat>Harness metadata</local-command-caveat>',
+          },
+        })),
+        {
+          type: 'assistant',
+          sessionId: providerSessionId,
+          timestamp,
+          isMeta: false,
+          turnCompanion: false,
+          message: { role: 'assistant', content: 'My answer' },
+        },
+      ],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+    expect(result.history).toEqual([
+      { type: 'user', content: 'My prompt', timestamp },
+      { type: 'assistant', content: 'My answer', timestamp },
+    ]);
+    expect(buildTranscriptFromHistory(result.history)).toMatchObject([
+      { source: 'user', text: 'My prompt' },
+      { source: 'agent' },
+    ]);
+  });
+
   it('restores image attachments on the user message and omits image companion metadata', async () => {
     const providerSessionId = 'images-session';
     const cwd = '/Users/test/project';

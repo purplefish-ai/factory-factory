@@ -209,6 +209,7 @@ vi.mock('@/client/features/composer', () => ({
 
 vi.mock('@/client/features/session-selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
+  AccessModeSelector: () => null,
   PlanningSelector: ({
     control,
     showLabel,
@@ -219,10 +220,10 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
     createElement(
       'button',
       {
-        'aria-label': `Planning: ${control.enabled ? 'Plan' : 'Default'}`,
+        'aria-label': `Planning: ${control.enabled ? 'On' : 'Off'}`,
         onClick: () => control.onChange(!control.enabled),
       },
-      control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'
+      showLabel ? (control.enabled ? 'On' : 'Off') : null
     ),
   SessionLaunchControls: ({
     provider,
@@ -361,6 +362,15 @@ vi.mock('@/client/features/workspace', () => ({
   RatchetToggleButton: () => createElement('button', { 'aria-label': 'Toggle ratchet' }),
 }));
 
+vi.mock('@/client/features/codex-accounts', () => ({
+  CodexAccountPicker: ({ onChange }: { onChange: (id: string) => void }) =>
+    createElement(
+      'button',
+      { 'aria-label': 'Choose Work account', onClick: () => onChange('work') },
+      'Work'
+    ),
+}));
+
 function textareaLabel(container: HTMLElement) {
   const textarea = container.querySelector('textarea');
   return container.querySelector(`label[for="${textarea?.id}"]`)?.textContent;
@@ -443,17 +453,22 @@ describe('InlineWorkspaceForm', () => {
     }
   });
 
-  it('shows workspace-only toolbar controls in standard mode', () => {
+  it('keeps model and thinking in the toolbar and groups secondary workspace settings', () => {
     const { container, root } = renderForm();
 
-    expect(container.querySelector('[aria-label="Toggle ratchet"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Toggle ratchet"]')).toBeNull();
     expect(container.textContent).toContain('CLAUDE');
     expect(
       container.querySelector('[aria-label^="New conversation provider and model"]')
     ).not.toBeNull();
     expect(container.querySelector('[aria-label^="Thinking level:"]')).not.toBeNull();
-    expect(container.textContent).toContain('Plan');
+    expect(container.textContent).not.toContain('Plan');
     expect(container.querySelectorAll('[aria-label="Attach files"]')).toHaveLength(2);
+    actFlushSync(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Workspace settings"]')?.click()
+    );
+    expect(document.body.querySelector('[aria-label="Toggle ratchet"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Plan mode');
 
     actFlushSync(() => root.unmount());
     container.remove();
@@ -751,7 +766,10 @@ it('propagates a manual Codex account into the workspace launch request', () => 
       container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
     );
     actFlushSync(() =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Choose Work account"]')?.click()
+      container.querySelector<HTMLButtonElement>('[aria-label="Workspace settings"]')?.click()
+    );
+    actFlushSync(() =>
+      document.body.querySelector<HTMLButtonElement>('[aria-label="Choose Work account"]')?.click()
     );
     const launch = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Launch'

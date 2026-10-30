@@ -40,6 +40,7 @@ export function QuickChatContent({
       <ChatTranscript
         workspaceId={workspaceId}
         messages={groupedMessages}
+        acpPlan={chatState.acpPlan}
         running={running}
         work={chatState.sessionRuntime.work}
         startingSession={startingSession}

@@ -37,6 +37,7 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const [hidden, setHidden] = useState(false);
   const [ready, setReady] = useState(true);
   const [running, setRunning] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const [height, setHeight] = useState(360);
   const [narrow, setNarrow] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(24);
@@ -100,6 +101,9 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         <button type="button" onClick={() => setRunning((value) => !value)}>
           Toggle activity
         </button>
+        <button type="button" onClick={() => setShowTasks((value) => !value)}>
+          Toggle tasks
+        </button>
         <button type="button" onClick={() => setReady((value) => !value)}>
           Toggle hydration
         </button>
@@ -112,6 +116,18 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         <ChatTranscript
           messages={data[session]}
           running={running}
+          acpPlan={
+            showTasks
+              ? {
+                  updatedAt: '2026-10-30T00:00:00Z',
+                  entries: Array.from({ length: 4 }, (_, index) => ({
+                    content: `Task ${index + 1}: Verify the transcript follows measured task-list changes.`,
+                    status: 'pending' as const,
+                    priority: 'medium' as const,
+                  })),
+                }
+              : null
+          }
           latestThinking="Inspecting output"
           startingSession={false}
           loadingSession={false}

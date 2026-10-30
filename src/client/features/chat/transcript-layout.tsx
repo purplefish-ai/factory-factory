@@ -6,7 +6,9 @@ import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import { GroupedMessageItemRenderer } from './agent-activity';
 import { CompactingIndicator } from './compacting-indicator';
 import { SessionActivityIndicator } from './session-activity-indicator';
+import { TodoPanel } from './todo-panel';
 import type { TranscriptDisplayProps } from './transcript-display.types';
+import { useTodoTracker } from './use-todo-tracker';
 
 function lastThinkingId(messages: GroupedMessageItem[]) {
   let lastThinkingMessageId: string | null = null;
@@ -55,6 +57,13 @@ export function useTranscriptLayout(props: TranscriptDisplayProps, hasHeader: bo
   }, [props.messages, props.loadingSession, props.queuedMessageIds, hasHeader]);
 }
 
+function getStartupLabel(props: TranscriptDisplayProps) {
+  if (props.initBanner?.kind === 'info') {
+    return props.initBanner.message;
+  }
+  return props.loadingSession ? 'Loading session...' : (props.startingLabel ?? 'Starting agent...');
+}
+
 export function TranscriptTail({
   props,
   queuedPRUpdate,
@@ -63,12 +72,14 @@ export function TranscriptTail({
   queuedPRUpdate?: GroupedMessageItem;
 }) {
   const { work, running, loadingSession, initBanner } = props;
+  const todoState = useTodoTracker(props.messages, props.acpPlan);
   const background = Boolean(
     work && (work.backgroundTasks.length || work.runningSubagents || work.activeGoals)
   );
   const initializing = initBanner?.kind === 'info';
   const starting = props.startingSession && !running && !loadingSession && !initializing;
   const idleEmpty =
+    todoState.todos.length === 0 &&
     props.messages.length === 0 &&
     !running &&
     !background &&
@@ -83,17 +94,12 @@ export function TranscriptTail({
           <p className="text-sm">Send a message to start the agent and begin your conversation.</p>
         </div>
       )}
+      {!loadingSession && <TodoPanel todoState={todoState} />}
       <CompactingIndicator isCompacting={props.isCompacting ?? false} className="mb-4" />
       {(initializing || loadingSession || starting) && (
         <div className="flex items-center gap-2 text-muted-foreground py-4">
           <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-          <span className="text-sm">
-            {initializing
-              ? initBanner.message
-              : loadingSession
-                ? 'Loading session...'
-                : (props.startingLabel ?? 'Starting agent...')}
-          </span>
+          <span className="text-sm">{getStartupLabel(props)}</span>
         </div>
       )}
       {(running || background) && (

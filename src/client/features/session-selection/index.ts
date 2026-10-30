@@ -4,6 +4,7 @@ export {
   type SessionLaunchSelection,
 } from './use-session-launch-selection';
 export {
+  AccessModeSelector,
   PlanningSelector,
   SessionLaunchControls,
   type SessionLaunchControlsProps,

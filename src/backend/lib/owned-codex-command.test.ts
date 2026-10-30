@@ -57,3 +57,11 @@ it('reports a generic native runtime failure for any account probe', () => {
   mocks.exists.mockReturnValue(false);
   expect(() => getOwnedCodexCommand(['app-server'])).toThrow('Codex native runtime unavailable');
 });
+
+it('preserves an explicit native Windows CLI override for managed CLI calls', () => {
+  expect(getOwnedCodexCommand(['login'], { CODEX_PATH: 'C:/custom/codex.exe' })).toEqual({
+    command: 'C:/custom/codex.exe',
+    args: ['login'],
+  });
+  expect(mocks.resolve).not.toHaveBeenCalled();
+});

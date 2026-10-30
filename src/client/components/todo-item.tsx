@@ -1,6 +1,4 @@
-import { CheckSquareIcon } from '@phosphor-icons/react/dist/csr/CheckSquare';
-import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
-import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
+import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { memo } from 'react';
 import type { Todo } from '@/client/features/chat/use-todo-tracker';
 import { cn } from '@/lib/utils';
@@ -9,38 +7,35 @@ export interface TodoItemProps {
   todo: Todo;
 }
 
-/**
- * Renders a single todo item with status icon and text.
- * Shared component used by both TodoPanel and TodoWriteToolRenderer.
- */
+/** Circular task status indicators shared by inline tasks and legacy tool details. */
 export const TodoItem = memo(function TodoItem({ todo }: TodoItemProps) {
-  const StatusIcon =
-    todo.status === 'completed'
-      ? CheckSquareIcon
-      : todo.status === 'in_progress'
-        ? CircleIcon
-        : SquareIcon;
-
-  const statusColor =
-    todo.status === 'completed'
-      ? 'text-success'
-      : todo.status === 'in_progress'
-        ? 'text-primary'
-        : 'text-muted-foreground';
-
+  const completed = todo.status === 'completed';
+  const active = todo.status === 'in_progress';
+  const label = completed ? 'Completed' : active ? 'In progress' : 'Pending';
   return (
-    <div className="flex items-start gap-1.5">
-      <StatusIcon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', statusColor)} />
-      <div className="flex-1 min-w-0">
-        <div
-          className={cn(
-            'text-xs',
-            todo.status === 'completed' && 'line-through text-muted-foreground'
-          )}
-        >
-          {todo.status === 'in_progress' ? todo.activeForm : todo.content}
-        </div>
-      </div>
+    <div className="flex items-start gap-2.5 text-sm">
+      <span role="img" aria-label={label} className="mt-0.5 shrink-0 text-muted-foreground">
+        {completed ? (
+          <CheckCircleIcon weight="fill" className="h-4 w-4" />
+        ) : (
+          <span
+            className={cn(
+              'block h-4 w-4 rounded-full border-2',
+              active
+                ? 'border-primary/40 border-t-primary animate-spin motion-reduce:animate-none'
+                : 'border-dashed border-muted-foreground/60'
+            )}
+          />
+        )}
+      </span>
+      <span
+        className={cn(
+          'min-w-0 break-words [overflow-wrap:anywhere]',
+          completed && 'text-muted-foreground'
+        )}
+      >
+        {active ? todo.activeForm || todo.content : todo.content}
+      </span>
     </div>
   );
 });

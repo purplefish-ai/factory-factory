@@ -12,6 +12,12 @@ export const SetupTerminalMessageSchema = z.discriminatedUnion('type', [
     rows: z.number().int().positive().optional(),
   }),
   z.object({
+    type: z.literal('authenticate'),
+    provider: z.enum(['CLAUDE', 'CODEX']),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
+  }),
+  z.object({
     type: z.literal('input'),
     data: z.string(),
   }),

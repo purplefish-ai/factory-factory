@@ -6,7 +6,7 @@ type Controller = Pick<
 >;
 
 /**
- * Pinned virtual-core 3.19.8: commands/reconciliation specify behavior, while
+ * Pinned virtual-core 3.19.9: commands/reconciliation specify behavior, while
  * hold flushes and clamp retries omit it (and may also omit adjustments).
  * Keep the engine characterization tests when upgrading this dependency.
  */

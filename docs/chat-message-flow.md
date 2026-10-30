@@ -231,7 +231,7 @@ not persist an intermediate position. Anchoring inside a growing tool group is
 relative to its grouped row, rather than to a particular tool call within it.
 
 The `scrollToFn` provenance adapter is characterized against locked virtual-core
-3.19.8: command/reconciliation writes specify behavior; deferred compensation
+3.19.9: command/reconciliation writes specify behavior; deferred compensation
 flushes and clamp retries can omit both behavior and adjustments. Those writes
 remain allowed after command cancellation. Re-run the engine contract tests when
 upgrading the virtualizer; do not infer write provenance from `isTrusted` or a

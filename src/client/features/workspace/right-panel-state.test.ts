@@ -43,7 +43,7 @@ describe('right panel persisted state', () => {
     expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
   });
 
-  it.each(['unstaged', 'diff-vs-main', 'auto-iteration'])(
+  it.each(['unstaged', 'diff-vs-main', 'auto-iteration', 'tasks'])(
     'keeps the existing %s migration',
     (legacyTab) => {
       const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': legacyTab });

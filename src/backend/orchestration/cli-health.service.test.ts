@@ -41,8 +41,8 @@ describe('cliHealthService', () => {
     vi.clearAllMocks();
     cliHealthService.clearCache();
     vi.stubGlobal('fetch', vi.fn());
-    mockResolve.mockReturnValue(
-      '/app/resources/app.asar/node_modules/@agentclientprotocol/codex-acp/dist/index.js'
+    mockResolve.mockImplementation(
+      (name: string) => `/app/resources/app.asar/node_modules/${name}`
     );
   });
 
@@ -50,66 +50,84 @@ describe('cliHealthService', () => {
     vi.unstubAllGlobals();
   });
 
-  it('checks Claude CLI install/auth state and version freshness', async () => {
+  it('checks bundled Claude health without a global CLI or registry freshness', async () => {
     mockExecFile.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'claude' && args[0] === '--version') {
-        return Promise.resolve({ stdout: 'claude code 1.2.3\n', stderr: '' });
+      if (cmd === process.execPath && args[1] === '--cli' && args[2] === '--version') {
+        return Promise.resolve({ stdout: '2.1.310 (Claude Code)\n', stderr: '' });
       }
-      if (cmd === 'claude' && args[0] === 'auth') {
+      if (cmd === process.execPath && args[1] === '--cli' && args[2] === 'auth') {
         return Promise.resolve({ stdout: '{"loggedIn":true}', stderr: '' });
       }
       throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
     });
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ version: '1.3.0' }),
-    } as never);
-
-    const status = await cliHealthService.checkClaudeCLI();
-
-    expect(status).toEqual(
-      expect.objectContaining({
-        isInstalled: true,
-        isAuthenticated: true,
-        version: '1.2.3',
-        latestVersion: '1.3.0',
-        isOutdated: true,
-      })
+    expect(await cliHealthService.checkClaudeCLI()).toEqual({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '2.1.310 (Claude Code)',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockExecFile).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '/app/resources/app.asar.unpacked/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js',
+        '--cli',
+        'auth',
+        'status',
+        '--json',
+      ],
+      expect.objectContaining({ env: { FACTORY_RUNTIME: 'preserved', ELECTRON_RUN_AS_NODE: '1' } })
     );
   });
 
-  it('treats Claude auth check failures as unauthenticated and handles missing npm freshness', async () => {
-    mockExecFile.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'claude' && args[0] === '--version') {
-        return Promise.resolve({ stdout: 'claude 1.2.3\n', stderr: '' });
-      }
-      if (cmd === 'claude' && args[0] === 'auth') {
-        return Promise.reject(new Error('auth unavailable'));
-      }
-      throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
+  it.each(['{"loggedIn":false}', '{"loggedIn":"true"}', 'null', 'invalid json'])(
+    'reports native login instructions for invalid or signed-out auth: %s',
+    async (stdout) => {
+      mockExecFile.mockImplementation((_cmd: string, args: string[]) =>
+        Promise.resolve({
+          stdout: args[2] === '--version' ? '2.1.310 (Claude Code)' : stdout,
+          stderr: '',
+        })
+      );
+      expect(await cliHealthService.checkClaudeCLI()).toMatchObject({
+        isInstalled: true,
+        isAuthenticated: false,
+        error: expect.stringContaining('ff claude auth login'),
+      });
+    }
+  );
+
+  it('preserves runtime availability when the native auth command fails', async () => {
+    mockExecFile.mockImplementation((_cmd: string, args: string[]) =>
+      args[2] === '--version'
+        ? Promise.resolve({ stdout: '2.1.310 (Claude Code)', stderr: '' })
+        : Promise.reject(new Error('auth unavailable'))
+    );
+    expect(await cliHealthService.checkClaudeCLI()).toMatchObject({
+      isInstalled: true,
+      isAuthenticated: false,
+      error: expect.stringContaining('ff claude auth login'),
     });
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      json: async () => ({}),
-    } as never);
-
-    const status = await cliHealthService.checkClaudeCLI();
-
-    expect(status.isInstalled).toBe(true);
-    expect(status.isAuthenticated).toBe(false);
-    expect(status.latestVersion).toBeUndefined();
   });
 
-  it('returns a not-installed error for missing Claude CLI', async () => {
-    mockExecFile.mockRejectedValue(new Error('spawn claude ENOENT'));
-
-    const status = await cliHealthService.checkClaudeCLI();
-
-    expect(status).toEqual({
+  it('reports app repair when the bundled Claude executable is missing', async () => {
+    mockExecFile.mockRejectedValue(new Error('spawn native Claude ENOENT'));
+    expect(await cliHealthService.checkClaudeCLI()).toMatchObject({
       isInstalled: false,
       isAuthenticated: false,
-      error: 'Claude CLI is not installed. Install from https://claude.ai/download',
+      error: expect.stringContaining('Update or reinstall Factory Factory'),
     });
+  });
+
+  it('reports app repair when the Claude ACP package is missing', async () => {
+    mockResolve.mockImplementation(() => {
+      throw new Error('package not found');
+    });
+    expect(await cliHealthService.checkClaudeCLI()).toMatchObject({
+      isInstalled: false,
+      isAuthenticated: false,
+      error: expect.stringContaining('Update or reinstall Factory Factory'),
+    });
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
   it('checks bundled Codex health without a global CLI or npm freshness check', async () => {
@@ -170,48 +188,11 @@ describe('cliHealthService', () => {
     expect(mockExecFile).not.toHaveBeenCalled();
   });
 
-  it('rejects global Codex upgrades because Factory Factory manages the runtime', async () => {
-    await expect(cliHealthService.upgradeProviderCLI('CODEX')).rejects.toThrow(
+  it.each(['CLAUDE', 'CODEX'] as const)('rejects global %s upgrades', async (provider) => {
+    await expect(cliHealthService.upgradeProviderCLI(provider)).rejects.toThrow(
       'Update Factory Factory'
     );
     expect(mockExecFile).not.toHaveBeenCalled();
-  });
-
-  it('upgrades provider CLI and returns refreshed health', async () => {
-    mockExecFile.mockResolvedValue({ stdout: 'installed\n', stderr: '' });
-    const refreshed = {
-      claude: { isInstalled: true, isAuthenticated: true, version: '1.0.0' },
-      codex: { isInstalled: true, isAuthenticated: true, version: '0.5.0' },
-      github: { isInstalled: true, isAuthenticated: true, version: '2.0.0' },
-      allHealthy: true,
-    };
-    const checkHealthSpy = vi.spyOn(cliHealthService, 'checkHealth').mockResolvedValue(refreshed);
-
-    const result = await cliHealthService.upgradeProviderCLI('CLAUDE');
-
-    expect(result.provider).toBe('CLAUDE');
-    expect(result.packageName).toBe('@anthropic-ai/claude-code');
-    expect(result.command).toBe('npm install -g @anthropic-ai/claude-code');
-    expect(result.output).toContain('installed');
-    expect(result.health).toBe(refreshed);
-    expect(checkHealthSpy).toHaveBeenCalledWith(true);
-    expect(mockExecFile).toHaveBeenCalledWith(
-      'npm',
-      ['install', '-g', '@anthropic-ai/claude-code'],
-      expect.objectContaining({ timeout: expect.any(Number) })
-    );
-  });
-
-  it('includes process stdout/stderr when CLI upgrade fails', async () => {
-    mockExecFile.mockRejectedValue({
-      message: 'npm failed',
-      stderr: 'EACCES',
-      stdout: 'partial output',
-    });
-
-    await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
-      'Failed to upgrade Claude CLI via npm'
-    );
   });
 
   it('uses cached health result unless force refresh is requested', async () => {
@@ -266,7 +247,7 @@ describe('cliHealthService', () => {
     expect((await cliHealthService.checkHealth()).allHealthy).toBe(true);
   });
 
-  it('keeps post-upgrade health when a cleared background refresh finishes later', async () => {
+  it('keeps refreshed health when a cleared background refresh finishes later', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(0);
     const healthy = { isInstalled: true, isAuthenticated: true };
     const checkClaude = vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue(healthy);
@@ -282,8 +263,8 @@ describe('cliHealthService', () => {
     );
     now.mockReturnValue(30_001);
     await cliHealthService.checkHealth();
-    mockExecFile.mockResolvedValue({ stdout: 'upgraded', stderr: '' });
-    expect((await cliHealthService.upgradeProviderCLI('CLAUDE')).health.allHealthy).toBe(true);
+    cliHealthService.clearCache();
+    expect((await cliHealthService.checkHealth(true)).allHealthy).toBe(true);
 
     finishOld({ isInstalled: false, isAuthenticated: false });
     await new Promise<void>((resolve) => setImmediate(resolve));

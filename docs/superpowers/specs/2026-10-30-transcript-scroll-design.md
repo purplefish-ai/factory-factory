@@ -80,9 +80,11 @@ controller and React adapter around the installed TanStack virtualizer. Patching
 the current effects leaves several owners and causal ambiguity. Reimplementing
 virtualized positioning creates unnecessary measurement and browser complexity.
 
-Installed `@tanstack/react-virtual` is 3.14.23 and its locked virtual core is
-3.19.8. The installed source has end anchoring, follow-on-append, end scrolling,
-and cancellation. Do not upgrade packages as part of this work. See the
+The original planning gate used `@tanstack/react-virtual` 3.14.23 and locked
+virtual core 3.19.8. Integrating current main advances these to 3.14.24 and
+3.19.9; the engine characterization suite must pass on that resolved version.
+The installed source has end anchoring, follow-on-append, end scrolling, and
+cancellation. Do not upgrade packages as part of this work. See the
 [official chat guide](https://tanstack.com/virtual/latest/docs/chat) and
 [API reference](https://tanstack.com/virtual/latest/docs/api/virtualizer).
 

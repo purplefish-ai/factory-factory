@@ -34,6 +34,7 @@ function makeDeps(): AcpEventProcessorDependencies {
     runtimeManager: {
       getClient: vi.fn(),
       isSessionWorking: vi.fn().mockReturnValue(true),
+      isSessionPromptInFlight: vi.fn().mockReturnValue(false),
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
       getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
@@ -200,7 +201,7 @@ describe('AcpEventProcessor tool interceptors', () => {
 
   it('does not repeat sub-agent tool side effects during history replay', () => {
     const { deps, processor, onAcpEvent } = makeProcessor();
-    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(false);
+    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(true);
     processor.setReplaySuppression('db-session-1', true);
 
     for (const update of claudeBashUpdates('toolu_old', 'gh pr create --fill', `${PR_URL}\n`)) {
