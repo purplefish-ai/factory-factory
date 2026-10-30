@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
@@ -31,6 +31,20 @@ function previewLaunchOptions(input: unknown) {
       defaultValue: provider === 'CLAUDE' ? 'default' : 'low',
     },
     planMode: { supported: true, selected: false },
+    accessMode: {
+      options:
+        provider === 'CODEX'
+          ? [
+              { value: 'read-only', label: 'Read only' },
+              { value: 'workspace-write', label: 'Workspace write' },
+              { value: 'agent-full-access', label: 'Full access' },
+            ]
+          : [
+              { value: 'default', label: 'Default' },
+              { value: 'acceptEdits', label: 'Accept edits' },
+            ],
+      selected: provider === 'CODEX' ? 'read-only' : 'default',
+    },
   };
 }
 
@@ -39,7 +53,10 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
     return previewLaunchOptions(input);
   }
   const responses: Record<string, unknown> = {
-    'codexAccounts.list': [],
+    'codexAccounts.list': [
+      { id: 'personal', label: 'Personal', authenticated: true, enabled: true },
+      { id: 'work', label: 'Work', authenticated: true, enabled: true },
+    ],
     'userSettings.get': {
       defaultSessionProvider: provider,
       defaultClaudeModel: 'sonnet',
@@ -191,6 +208,25 @@ export const Sidebar: Story = {
   globals: { theme: 'dark' },
 };
 export const SidebarClaude: Story = { ...Sidebar, args: { provider: 'CLAUDE' } };
+export const SidebarSettings: Story = {
+  ...Sidebar,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: 'Thinking level: High' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Workspace settings' }));
+    const settings = within(canvasElement.ownerDocument.body).getByRole('dialog', {
+      name: 'Workspace settings',
+    });
+    await waitFor(() =>
+      expect(within(settings).getByRole('button', { name: 'Codex account: Auto' })).toBeVisible()
+    );
+    await userEvent.click(within(settings).getByRole('button', { name: 'Planning: Default' }));
+    await expect(within(settings).getByRole('button', { name: 'Planning: Plan' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  },
+};
 
 async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string) {
   const canvas = within(canvasElement);

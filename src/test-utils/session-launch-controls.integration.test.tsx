@@ -508,7 +508,12 @@ describe('real launch controls and tRPC payloads', () => {
     await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
     await open('Thinking level: High');
     await choose('Ultra');
+    // Let the dropdown restore focus before opening another dismissible surface.
+    await waitForReact(() => expect(document.activeElement).toBe(button('Thinking level: Ultra')));
+    await act(() => button('Workspace settings')?.click());
+    expect(button('Planning: Default')).toBeDefined();
     await act(() => button('Planning: Default')?.click());
+    await act(() => button('Workspace settings')?.click());
     await act(() => button('Launch')?.click());
     await waitForReact(() =>
       expect(view.requests.some((request) => request.path === 'workspace.create')).toBe(true)
@@ -529,6 +534,7 @@ it('sends a manual account through the real picker, catalog, launch options and 
   const view = renderLaunch(true);
   await view.render();
   await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+  await act(() => button('Workspace settings')?.click());
   await open('Codex account: Auto');
   await choose('Work account');
   await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
@@ -540,6 +546,7 @@ it('sends a manual account through the real picker, catalog, launch options and 
     path: 'session.getLaunchOptions',
     input: { provider: 'CODEX', model: 'sol', codexAccountId: 'work' },
   });
+  await act(() => button('Workspace settings')?.click());
   await act(() => button('Launch')?.click());
   await waitForReact(() =>
     expect(
