@@ -1,7 +1,7 @@
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
-import { ChatTranscript } from '@/client/features/chat';
+import { ChatTranscript, type TranscriptScrollOptions } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
@@ -24,6 +24,7 @@ export interface SubagentTranscriptContentProps {
   workspaceId: string;
   selection: SubagentSelection;
   state: SubagentTranscriptState;
+  scroll?: Pick<TranscriptScrollOptions, 'ready' | 'initialPosition' | 'onPositionChange'>;
 }
 
 function LoadingState() {
@@ -86,10 +87,12 @@ function ReadyState({
   workspaceId,
   state,
   selection,
+  scroll,
 }: {
   workspaceId: string;
   selection: SubagentSelection;
   state: Extract<SubagentTranscriptState, { kind: 'ready' }>;
+  scroll: SubagentTranscriptContentProps['scroll'];
 }) {
   const groupedMessages = groupAdjacentToolCalls(state.messages);
   return (
@@ -100,54 +103,58 @@ function ReadyState({
       running={false}
       startingSession={false}
       loadingSession={false}
+      contentClassName="mx-auto max-w-4xl"
       scroll={{
         identity: `${workspaceId}/subagent/${selection.parentSessionId}/${selection.subagent.id}`,
         active: true,
         ready: true,
         initialIntent: 'reading',
         initialPosition: null,
+        ...scroll,
       }}
       header={
-        <div className="mx-auto w-full max-w-4xl space-y-4 px-3 pt-3 sm:px-4 sm:pt-4">
-          {state.error && (
-            <div
-              role="alert"
-              className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
-            >
-              <div className="flex items-start gap-2">
-                <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Transcript update failed</p>
-                  <p className="mt-1 break-words text-xs text-muted-foreground">
-                    {state.error.message}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={state.error.onRetry}
-                  >
-                    Retry
-                  </Button>
+        state.error || state.hasOlder ? (
+          <div className="space-y-4 pt-3 sm:pt-4">
+            {state.error && (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">Transcript update failed</p>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                      {state.error.message}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={state.error.onRetry}
+                    >
+                      Retry
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {state.hasOlder && !state.error && (
-            <div className="flex justify-center">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={state.loadingOlder}
-                onClick={state.onLoadOlder}
-              >
-                {state.loadingOlder ? 'Loading older…' : 'Load older'}
-              </Button>
-            </div>
-          )}
-        </div>
+            )}
+            {state.hasOlder && !state.error && (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={state.loadingOlder}
+                  onClick={state.onLoadOlder}
+                >
+                  {state.loadingOlder ? 'Loading older…' : 'Load older'}
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : undefined
       }
     />
   );
@@ -157,6 +164,7 @@ export function SubagentTranscriptContent({
   workspaceId,
   selection,
   state,
+  scroll,
 }: SubagentTranscriptContentProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -167,7 +175,12 @@ export function SubagentTranscriptContent({
           <UnavailableState selection={selection} message={state.message} onRetry={state.onRetry} />
         )}
         {state.kind === 'ready' && (
-          <ReadyState workspaceId={workspaceId} state={state} selection={selection} />
+          <ReadyState
+            workspaceId={workspaceId}
+            state={state}
+            selection={selection}
+            scroll={scroll}
+          />
         )}
       </div>
     </div>

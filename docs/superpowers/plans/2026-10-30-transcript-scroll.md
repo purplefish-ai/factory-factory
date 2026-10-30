@@ -379,7 +379,9 @@ message-list fixtures. Modify `chat/index.ts`. Delete
 supplies Task 4 persistence plus workspace/session/main identity. Quick chat
 supplies workspace/session/quick identity and a parent-lifetime Map of committed
 positions. Subagent supplies parent-session/subagent identity and
-`initialIntent: 'reading'`, retaining prepend behavior.
+`initialIntent: 'reading'`, retaining prepend behavior. PR review extends the
+workspace persistence adapter to subagent tab IDs, restoring positions across
+pane unmounts without introducing a cross-feature dependency cycle.
 
 - [x] Add composition tests that assert correct active/ready/identity/options
       across file/diff/subagent pane selection, session replacement, hydration,
@@ -389,11 +391,12 @@ positions. Subagent supplies parent-session/subagent identity and
       `selectedSessionId != null && runtimeSessionId === selectedSessionId && scrollLoadedWorkspaceId === workspaceId`.
       Quick readiness requires non-null workspace/session and the matching
       `runtimeSessionId` without storage readiness; subagent readiness is
-      `state.kind === 'ready'`. Thread the existing public hydration marker
-      through composition; runtime phase alone is not readiness. Add
-      selection-before-passive-effect, timeout-before-hydration,
-      disconnect-before-hydration and early-runtime-event tests. Modal occlusion
-      of main chat on mobile does not itself mean its viewport is hidden.
+      `state.kind === 'ready'` plus workspace storage readiness. Thread the
+      existing public hydration marker through composition; runtime phase alone
+      is not readiness. Add selection-before-passive-effect,
+      timeout-before-hydration, disconnect-before-hydration and
+      early-runtime-event tests. Modal occlusion of main chat on mobile does not
+      itself mean its viewport is hidden.
 - [x] Move viewport/jump ownership into `ChatTranscript`; pass main banners and
       subagent history/error controls as measured headers. Remove caller
       `isNearBottom`, `onScroll`, scroll refs and composer-height scroll writes.
@@ -492,13 +495,21 @@ cannot occlude the jump overlay. Browser suites use separate output directories;
 cold Storybook graph compilation is warmed before the timed composer interaction
 cases.
 
-Final verification: `pnpm check:fix`, `pnpm typecheck` and `pnpm check` passed.
-The full Vitest run passed 9,209 tests and hit two timeouts in untouched admin
-and benchmark tests; both passed focused reruns. The final focused scroll suite
-passed 57 tests. Browser suites passed 36 transcript, 3 Storybook composer and
-30 existing mobile cases. Mobile and desktop Storybook screenshots were
-inspected. The header remains measured offscreen; frame-scheduled resize batches
-avoid a reproduced ResizeObserver delivery loop.
+Final verification after PR review: `pnpm check:fix`, `pnpm typecheck` and
+`pnpm check` passed. The full Vitest run passed 9,239 tests with 3 skipped and
+no failures. The combined focused review suites passed 69 tests. Browser suites
+passed 36 transcript, 4 Storybook (composer and subagent restoration/width), and
+30 existing mobile cases. Mobile, desktop and wide subagent Storybook
+screenshots were inspected. The header remains measured offscreen;
+frame-scheduled resize batches avoid a reproduced ResizeObserver delivery loop.
+
+PR review follow-up restores workspace-owned subagent positions across pane
+unmounts and retains the prior content width. Node-keyed weak measurements
+release detached rows. Failed quick-chat deletion preserves scroll memory while
+revoking stale callbacks; success clears the originating workspace's record.
+Additional test fixes cover delayed scroll stability, user movement after native
+writes, hydration filtering, identity boundaries, deterministic cleanup,
+nonfinite stored anchors, and unique keys for repeated fixture actions.
 
 The final review's gap-position defect was fixed with signed anchors and
 storage/browser regressions. Direct keyboard and scrollbar tests cover the

@@ -7,15 +7,17 @@ interface UseChatTranscriptPersistenceOptions {
   sessionId: string | null;
 }
 
-/** Adapts committed transcript snapshots to workspace-owned v1 scroll storage. */
-export function useChatTranscriptPersistence({
+/** Private workspace adapter for any transcript tab using v1 scroll storage. */
+export function useTranscriptPositionPersistence({
   workspaceId,
-  sessionId,
-}: UseChatTranscriptPersistenceOptions) {
+  tabId,
+}: {
+  workspaceId: string | null;
+  tabId: string | null;
+}) {
   const { scrollLoadedWorkspaceId, getScrollState, createScrollStateWriter, clearScrollState } =
     useWorkspacePanel();
-  const ready =
-    workspaceId !== null && sessionId !== null && scrollLoadedWorkspaceId === workspaceId;
+  const ready = workspaceId !== null && tabId !== null && scrollLoadedWorkspaceId === workspaceId;
   const mountedRef = useRef(false);
   useLayoutEffect(() => {
     mountedRef.current = true;
@@ -24,7 +26,6 @@ export function useChatTranscriptPersistence({
     };
   }, []);
   const scope = useMemo(() => {
-    const tabId = sessionId === null ? null : `chat-${sessionId}`;
     const saved = ready && tabId ? getScrollState(tabId, 'chat') : null;
     const initialPosition: TranscriptPosition | null = saved
       ? (saved.chatPosition ?? {
@@ -38,7 +39,7 @@ export function useChatTranscriptPersistence({
       initialPosition,
       write: ready && tabId ? createScrollStateWriter(tabId, 'chat') : null,
     };
-  }, [sessionId, ready, getScrollState, createScrollStateWriter]);
+  }, [tabId, ready, getScrollState, createScrollStateWriter]);
 
   useLayoutEffect(() => {
     scope.active = true;
@@ -56,14 +57,32 @@ export function useChatTranscriptPersistence({
     [scope]
   );
 
-  const clearSession = useCallback(
-    (closedSessionId: string) => {
+  const clearTab = useCallback(
+    (closedTabId: string) => {
       if (mountedRef.current && workspaceId !== null && scrollLoadedWorkspaceId === workspaceId) {
-        clearScrollState(`chat-${closedSessionId}`);
+        clearScrollState(closedTabId);
       }
     },
     [workspaceId, scrollLoadedWorkspaceId, clearScrollState]
   );
 
-  return { ready, initialPosition: scope.initialPosition, onPositionChange, clearSession };
+  return { ready, initialPosition: scope.initialPosition, onPositionChange, clearTab };
+}
+
+/** Adapts committed chat snapshots while retaining the session-close capability. */
+export function useChatTranscriptPersistence({
+  workspaceId,
+  sessionId,
+}: UseChatTranscriptPersistenceOptions) {
+  const { clearTab, ...persistence } = useTranscriptPositionPersistence({
+    workspaceId,
+    tabId: sessionId === null ? null : `chat-${sessionId}`,
+  });
+  const clearSession = useCallback(
+    (closedSessionId: string) => {
+      clearTab(`chat-${closedSessionId}`);
+    },
+    [clearTab]
+  );
+  return { ...persistence, clearSession };
 }

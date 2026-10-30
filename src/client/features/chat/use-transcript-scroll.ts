@@ -19,7 +19,6 @@ import type {
 } from './transcript-scroll.types';
 
 interface Measurement {
-  node: HTMLDivElement;
   width: number;
   height: number;
 }
@@ -33,7 +32,9 @@ export function useTranscriptScroll(
   latest.current = options;
   const controller = useRef<TranscriptScrollController | null>(null);
   const observer = useRef<ReturnType<typeof observeTranscriptScroll> | null>(null);
-  const measurements = useRef(new Map<string, Measurement>());
+  // Virtual rows are replaced as they leave the window. Keep their measurements
+  // weakly so bookkeeping does not retain detached row DOM for the whole chat.
+  const measurements = useRef(new WeakMap<HTMLDivElement, Measurement>());
   const engineRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null);
   const committedTotal = useRef(-1);
   const livePosition = useRef<TranscriptPosition | null>(null);
@@ -57,13 +58,14 @@ export function useTranscriptScroll(
       return;
     }
     const measured = (key: string) => {
-      const entry = measurements.current.get(key);
+      const node = engine.elementsCache.get(key);
+      const entry = node && measurements.current.get(node);
       return (
+        !!node &&
         !!entry &&
-        entry.node.isConnected &&
-        engine.elementsCache.get(key) === entry.node &&
+        node.isConnected &&
         entry.width === viewport.clientWidth &&
-        Math.abs(entry.height - entry.node.getBoundingClientRect().height) <= 1
+        Math.abs(entry.height - node.getBoundingClientRect().height) <= 1
       );
     };
     const positioner = createTranscriptPositioner(viewport, engine, measured);
@@ -114,7 +116,7 @@ export function useTranscriptScroll(
       resize.disconnect();
       controller.current = null;
       observer.current = null;
-      measurements.current.clear();
+      measurements.current = new WeakMap();
     };
   }, [viewport]);
 
@@ -149,14 +151,10 @@ export function useTranscriptScroll(
     },
     measureElement: (node, entry, instance) => {
       const height = measureElement(node, entry, instance);
-      const key = String(instance.options.getItemKey(instance.indexFromElement(node)));
-      const previous = measurements.current.get(key);
+      const previous = measurements.current.get(node);
       if (height > 0 && node.isConnected && viewport && viewport.clientWidth > 0) {
-        const fresh =
-          previous?.node !== node ||
-          previous.width !== viewport.clientWidth ||
-          previous.height !== height;
-        measurements.current.set(key, { node, width: viewport.clientWidth, height });
+        const fresh = previous?.width !== viewport.clientWidth || previous.height !== height;
+        measurements.current.set(node, { width: viewport.clientWidth, height });
         if (fresh) {
           controller.current?.measurementReady();
         }

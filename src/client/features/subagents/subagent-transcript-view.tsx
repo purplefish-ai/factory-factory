@@ -4,6 +4,7 @@ import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
 import {
   SubagentTranscriptContent,
+  type SubagentTranscriptContentProps,
   type SubagentTranscriptState,
 } from './subagent-transcript-content';
 import type { SubagentSelection } from './types';
@@ -11,9 +12,14 @@ import type { SubagentSelection } from './types';
 export interface SubagentTranscriptViewProps {
   selection: SubagentSelection;
   workspaceId: string;
+  scroll?: SubagentTranscriptContentProps['scroll'];
 }
 
-export function SubagentTranscriptView({ selection, workspaceId }: SubagentTranscriptViewProps) {
+export function SubagentTranscriptView({
+  selection,
+  workspaceId,
+  scroll,
+}: SubagentTranscriptViewProps) {
   const query = trpc.session.readSubagentTranscript.useInfiniteQuery(
     {
       sessionId: selection.parentSessionId,
@@ -104,6 +110,11 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
   }
 
   return (
-    <SubagentTranscriptContent workspaceId={workspaceId} selection={selection} state={state} />
+    <SubagentTranscriptContent
+      workspaceId={workspaceId}
+      selection={selection}
+      state={state}
+      scroll={scroll}
+    />
   );
 }

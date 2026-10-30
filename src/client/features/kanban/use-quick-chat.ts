@@ -67,11 +67,11 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
     dbSessionId: workspaceId ? selectedSessionId : null,
   });
 
-  const { transcriptScroll, clearSession: clearScrollSession } = useQuickChatScroll(
-    workspaceId,
-    selectedSessionId,
-    chatState.runtimeSessionId
-  );
+  const {
+    transcriptScroll,
+    clearSession: clearScrollSession,
+    revokeSession: revokeScrollSession,
+  } = useQuickChatScroll(workspaceId, selectedSessionId, chatState.runtimeSessionId);
 
   const activeWorkspaceRef = useRef(workspaceId);
   useLayoutEffect(() => {
@@ -108,9 +108,13 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
       if (sessionIndex === -1) {
         return;
       }
-      clearScrollSession(dbSessionId);
+      // Revoke outgoing callbacks immediately; retain the position if deletion rolls back.
+      revokeScrollSession(dbSessionId);
       const isSelectedSession = dbSessionId === selectedSessionId;
-      deleteSession.mutate({ id: dbSessionId });
+      deleteSession.mutate(
+        { id: dbSessionId },
+        { onSuccess: () => clearScrollSession(dbSessionId) }
+      );
 
       if (isSelectedSession && sessions.length > 1) {
         const nextSession = sessions[sessionIndex + 1] ?? sessions[sessionIndex - 1];
@@ -119,7 +123,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
         setSelectedSessionId(null);
       }
     },
-    [sessions, selectedSessionId, deleteSession, clearScrollSession]
+    [sessions, selectedSessionId, deleteSession, clearScrollSession, revokeScrollSession]
   );
 
   const selectedSession = sessions?.find((session) => session.id === selectedSessionId);

@@ -216,9 +216,10 @@ offsets are signed: a position in a gap anchors to the next visible row, keeping
 that gap stable across prepends and restores. Main chat stores validated
 optional `chatPosition` fields in the existing v1 workspace scroll records,
 adapting legacy pixel/follow records. Quick chat keeps only sheet-owner memory;
-subagent state lasts for its mounted transcript. Closing a session revokes
-saved-position callbacks before removing its record. Session switching never
-samples the previous session from the next session's DOM.
+subagent tabs use workspace-owned keyed positions that survive pane unmounts.
+Closing a session revokes saved-position callbacks before removing its record.
+Session switching never samples the previous session from the next session's
+DOM.
 
 Main readiness requires both workspace storage readiness and a matching
 `runtimeSessionId`; runtime phase alone can change before history hydration.

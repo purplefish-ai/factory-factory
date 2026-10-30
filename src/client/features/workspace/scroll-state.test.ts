@@ -58,12 +58,7 @@ describe('scroll-state', () => {
     expect(loadScrollStateRecord(storage, 'w')['session:chat']?.chatPosition).toEqual(chatPosition);
   });
 
-  it.each([
-    { key: '', offset: 1 },
-    { key: 'row', offset: 'invalid' },
-    { key: 'row', offset: Infinity },
-    null,
-  ])(
+  it.each([{ key: '', offset: 1 }, { key: 'row', offset: 'invalid' }, null])(
     'preserves valid chat pixels and intent when an optional anchor is malformed: %j',
     (anchor) => {
       const storage = createStorage();
@@ -88,6 +83,19 @@ describe('scroll-state', () => {
       });
     }
   );
+
+  it('drops an overflowing raw numeric anchor while preserving valid chat pixels', () => {
+    const storage = createStorage();
+    storage.setItem(
+      'workspace-panel-scroll-w',
+      `{"v":1,"states":{"session:chat":{"top":10,"left":2,"chatPosition":{"intent":"reading","top":10,"left":2,"anchor":{"key":"row","offset":1e999}}}}}`
+    );
+    expect(loadScrollStateRecord(storage, 'w')['session:chat']?.chatPosition).toEqual({
+      intent: 'reading',
+      top: 10,
+      left: 2,
+    });
+  });
 
   it('drops invalid optional chat positions while preserving viewer pixels and ignores unknown fields', () => {
     const storage = createStorage();

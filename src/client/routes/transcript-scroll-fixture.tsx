@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChatTranscript } from '@/client/features/chat';
 import { WorkspacePanelProvider, useChatTranscriptPersistence } from '@/client/features/workspace';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
@@ -13,10 +13,10 @@ function message(index: number): GroupedMessageItem {
     timestamp: '2026-10-30T00:00:00Z',
   };
 }
-function tools(count: number): GroupedMessageItem {
+function tools(count: number, id: string): GroupedMessageItem {
   return {
     type: 'tool_sequence',
-    id: 'tool-group',
+    id,
     pairedCalls: Array.from({ length: count }, (_, i) => ({
       id: `call-${i}`,
       name: 'Read',
@@ -28,6 +28,7 @@ function tools(count: number): GroupedMessageItem {
 }
 
 function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
+  const nextToolGroup = useRef(0);
   const [session, setSession] = useState<'A' | 'B'>('A');
   const [data, setData] = useState<Record<'A' | 'B', GroupedMessageItem[]>>(() => ({
     A: Array.from({ length: 40 }, (_, i) => message(i)),
@@ -58,14 +59,15 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         </button>
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            const groupId = `tool-group-${nextToolGroup.current++}`;
             update((items) => {
               const last = items.at(-1);
               return last && isToolSequence(last)
-                ? [...items.slice(0, -1), tools(last.pairedCalls.length + 100)]
-                : [...items, tools(2)];
-            })
-          }
+                ? [...items.slice(0, -1), tools(last.pairedCalls.length + 100, last.id)]
+                : [...items, tools(2, groupId)];
+            });
+          }}
         >
           Tool burst
         </button>

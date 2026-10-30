@@ -55,6 +55,7 @@ describe('ChatContent init banner ownership', () => {
       try {
         flushSync(() => root.render(<ChatContent {...props} />));
         expect(container.textContent).not.toContain('Init script failed');
+        expect(transcript.mock.lastCall?.[0].header).toBeUndefined();
         flushSync(() => root.render(<ChatContent {...props} isScriptFailed={false} />));
         expect(container.textContent).toContain('Init script failed');
         expect(container.textContent).toContain('Retry setup');

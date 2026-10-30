@@ -138,4 +138,11 @@ describe('SubagentTranscriptContent row identity', () => {
       })
     );
   });
+
+  it('constrains row contents and omits the header when there is no pagination or error', () => {
+    render([message('newest', 1)]);
+    expect(chatMocks.virtualizedMessageList).toHaveBeenLastCalledWith(
+      expect.objectContaining({ contentClassName: 'mx-auto max-w-4xl', header: undefined })
+    );
+  });
 });

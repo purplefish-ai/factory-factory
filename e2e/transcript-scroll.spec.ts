@@ -40,6 +40,18 @@ test('same-key tool bursts and activity changes stay attached', async ({ page })
   const positions = await sampledPositions;
   expect(positions.length).toBeGreaterThan(0);
   expect(positions.every((top, index) => top >= (positions[index - 1] ?? top) - 1)).toBe(true);
+  const previousGroupKey = await viewport
+    .locator('[data-tool-sequence="true"]')
+    .getAttribute('data-transcript-key');
+  expect(previousGroupKey).not.toBeNull();
+  await page.getByRole('button', { name: 'Append burst', exact: true }).click();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Tool burst', exact: true }).click();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await expect(viewport.locator('[data-tool-sequence="true"]')).not.toHaveAttribute(
+    'data-transcript-key',
+    previousGroupKey ?? 'missing'
+  );
 });
 
 test('upward input yields immediately and the jump overlay does not resize the viewport', async ({
@@ -56,7 +68,10 @@ test('upward input yields immediately and the jump overlay does not resize the v
   expect(await viewport.evaluate((element) => element.clientHeight)).toBe(height);
   const top = await viewport.evaluate((element) => element.scrollTop);
   await page.getByRole('button', { name: 'Append burst', exact: true }).click();
-  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(top);
+  await viewport.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  );
+  expect(await viewport.evaluate((element) => element.scrollTop)).toBe(top);
   await jump.click();
   await expect(jump).toBeHidden();
   await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
@@ -87,27 +102,13 @@ test('reading anchor survives prepend and session switching', async ({ page }) =
   await viewport.hover();
   await page.mouse.wheel(0, -800);
   await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
-  const anchor = await viewport.evaluate((element) => {
-    const top = element.getBoundingClientRect().top;
-    const row = [...element.querySelectorAll<HTMLElement>('[data-transcript-key]')].find(
-      (item) => item.getBoundingClientRect().bottom > top
-    );
-    return { key: row?.dataset.transcriptKey, top: row?.getBoundingClientRect().top };
-  });
+  const anchor = await readingAnchor(viewport);
   await page.getByRole('button', { name: 'Prepend history', exact: true }).click();
-  await expect
-    .poll(
-      async () => (await viewport.locator(`[data-transcript-key="${anchor.key}"]`).boundingBox())?.y
-    )
-    .toBe(anchor.top);
+  await expectAnchor(viewport, anchor);
   await page.getByRole('button', { name: 'Switch session', exact: true }).click();
   await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
   await page.getByRole('button', { name: 'Switch session', exact: true }).click();
-  await expect
-    .poll(
-      async () => (await viewport.locator(`[data-transcript-key="${anchor.key}"]`).boundingBox())?.y
-    )
-    .toBe(anchor.top);
+  await expectAnchor(viewport, anchor);
 });
 
 test('reading inside a row gap survives prepend and a session round trip', async ({ page }) => {
@@ -217,6 +218,15 @@ test('engine measures a newly mounted row taller than the viewport without shift
     )
     .toBe(4400);
   expect(await viewport.evaluate((element) => element.scrollTop)).toBe(0);
+  await page.getByRole('button', { name: 'Prepend giant engine row', exact: true }).click();
+  await expect(viewport.locator('[data-row-key="1000"]')).toHaveAttribute(
+    'data-engine-measured-height',
+    '1200'
+  );
+  const keys = await viewport
+    .locator('[data-row-key]')
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-row-key')));
+  expect(new Set(keys).size).toBe(keys.length);
 });
 
 test('pinned engine clamp retries omit behavior and remain compensation', async ({ page }) => {

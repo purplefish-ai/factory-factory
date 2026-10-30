@@ -98,5 +98,5 @@ implementation begins by proving the installed engine contracts in a real
 browser. Review convergence establishes plan readiness; it does not establish
 runtime correctness.
 
-Only this design, implementation plan and review record were added. No
-application code changed and no implementation task has been executed.
+This record captures the planning-review snapshot. The companion plan records
+the subsequent implementation and verification in the current revision.

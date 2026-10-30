@@ -172,6 +172,36 @@ const InitStatusBanner = memo(function InitStatusBanner({
   );
 });
 
+function getVisibleInitBanner(
+  banner: WorkspaceInitBanner | null | undefined,
+  isScriptFailed: boolean | undefined
+) {
+  return banner && !isScriptFailed && banner.kind !== 'info' ? banner : null;
+}
+
+function createTranscriptHeader(
+  runtimeBanner: WorkspaceInitBanner | null,
+  initBanner: WorkspaceInitBanner | null,
+  actions: Omit<InitStatusBannerProps, 'banner'>
+) {
+  if (!(runtimeBanner || initBanner)) {
+    return undefined;
+  }
+  return (
+    <>
+      {runtimeBanner && (
+        <InitStatusBanner
+          banner={runtimeBanner}
+          retryPending={false}
+          onRetry={() => undefined}
+          onPlay={() => undefined}
+        />
+      )}
+      {initBanner && <InitStatusBanner banner={initBanner} {...actions} />}
+    </>
+  );
+}
+
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
@@ -231,29 +261,16 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         }
       : null;
 
+  const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
-        header={
-          <>
-            {sessionRuntimeBanner && (
-              <InitStatusBanner
-                banner={sessionRuntimeBanner}
-                retryPending={false}
-                onRetry={() => undefined}
-                onPlay={() => undefined}
-              />
-            )}
-            {props.initBanner && !props.isScriptFailed && props.initBanner.kind !== 'info' && (
-              <InitStatusBanner
-                banner={props.initBanner}
-                retryPending={retryInit.isPending}
-                onRetry={retry}
-                onPlay={props.resumeQueuedMessages}
-              />
-            )}
-          </>
-        }
+        header={createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
+          retryPending: retryInit.isPending,
+          onRetry: retry,
+          onPlay: props.resumeQueuedMessages,
+        })}
         workspaceId={props.workspaceId}
         messages={groupedMessages}
         running={running}

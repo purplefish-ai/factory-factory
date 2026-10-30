@@ -33,13 +33,20 @@ export function useQuickChatScroll(
     },
     [identity, revision, scope]
   );
-  const clearSession = useCallback(
+  const revokeSession = useCallback(
     (closedId: string) => {
       const key = `${workspaceId ?? 'none'}/quick/${closedId}`;
       revisions.current.set(key, (revisions.current.get(key) ?? 0) + 1);
-      positions.current.delete(key);
     },
     [workspaceId]
+  );
+  const clearSession = useCallback(
+    (closedId: string) => {
+      const key = `${workspaceId ?? 'none'}/quick/${closedId}`;
+      revokeSession(closedId);
+      positions.current.delete(key);
+    },
+    [workspaceId, revokeSession]
   );
   const transcriptScroll: TranscriptScrollOptions = {
     identity,
@@ -49,5 +56,5 @@ export function useQuickChatScroll(
     initialPosition: positions.current.get(identity) ?? null,
     onPositionChange,
   };
-  return { transcriptScroll, clearSession };
+  return { transcriptScroll, clearSession, revokeSession };
 }

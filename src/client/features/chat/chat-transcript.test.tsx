@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react';
 import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatTranscript } from './chat-transcript';
 import type { TranscriptDisplayProps } from './transcript-display.types';
@@ -21,7 +21,22 @@ vi.stubGlobal(
     }
   }
 );
-afterEach(() => document.body.replaceChildren());
+const roots = new Set<Root>();
+function mountRoot(host: HTMLDivElement) {
+  const root = createRoot(host);
+  roots.add(root);
+  return root;
+}
+function unmount(root: Root) {
+  flushSync(() => root.unmount());
+  roots.delete(root);
+}
+afterEach(() => {
+  for (const root of roots) {
+    unmount(root);
+  }
+  document.body.replaceChildren();
+});
 
 const message = {
   id: 'queue',
@@ -51,13 +66,15 @@ function LayoutCapture({
 it('renders only queued prompts during hydration without persisting in StrictMode', () => {
   const host = document.createElement('div');
   document.body.append(host);
-  const root = createRoot(host);
+  const root = mountRoot(host);
   const save = vi.fn();
   flushSync(() =>
     root.render(
       <StrictMode>
         <ChatTranscript
           {...display}
+          messages={[{ ...message, id: 'history', text: 'Unhydrated history' }, message]}
+          contentClassName="mx-auto max-w-4xl"
           queuedMessageIds={new Set(['queue'])}
           scroll={{
             identity: 'A',
@@ -72,16 +89,18 @@ it('renders only queued prompts during hydration without persisting in StrictMod
     )
   );
   expect(host.textContent).toContain('Queued prompt');
+  expect(host.textContent).not.toContain('Unhydrated history');
+  expect(host.querySelector('.max-w-4xl')?.textContent).toContain('Queued prompt');
   expect(host.textContent).toContain('Loading session...');
   expect(save).not.toHaveBeenCalled();
-  flushSync(() => root.unmount());
+  unmount(root);
   expect(save).not.toHaveBeenCalled();
 });
 
 it('replaces the viewport at a transcript identity boundary', () => {
   const host = document.createElement('div');
   document.body.append(host);
-  const root = createRoot(host);
+  const root = mountRoot(host);
   const render = (identity: string) =>
     flushSync(() =>
       root.render(
@@ -99,14 +118,17 @@ it('replaces the viewport at a transcript identity boundary', () => {
     );
   render('A');
   const a = host.querySelector('[data-testid="transcript-viewport"]');
+  expect(a).not.toBeNull();
   render('B');
-  expect(host.querySelector('[data-testid="transcript-viewport"]')).not.toBe(a);
-  flushSync(() => root.unmount());
+  const b = host.querySelector('[data-testid="transcript-viewport"]');
+  expect(b).not.toBeNull();
+  expect(b).not.toBe(a);
+  unmount(root);
 });
 
 it('models the queued PR notice after rows and keeps header/status keys distinct', () => {
   const host = document.createElement('div');
-  const root = createRoot(host);
+  const root = mountRoot(host);
   let result: TranscriptLayout | undefined;
   const pr = {
     ...message,
@@ -129,5 +151,5 @@ it('models the queued PR notice after rows and keeps header/status keys distinct
   );
   expect(result?.keys).toEqual(['transcript:header', 'queue']);
   expect(result?.queuedPRUpdate?.id).toBe(pr.id);
-  flushSync(() => root.unmount());
+  unmount(root);
 });

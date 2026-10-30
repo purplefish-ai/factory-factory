@@ -119,6 +119,39 @@ const streamedState: SubagentTranscriptState = {
 export const StreamedReplyDesktop = story(selection('running'), streamedState, desktop);
 export const StreamedReplyNarrow = story(selection('running'), streamedState, narrow);
 
+export const RestoredReadingWide: Story = {
+  args: {
+    selection: selection('completed'),
+    state: {
+      ...readyState,
+      hasOlder: false,
+      messages: Array.from({ length: 20 }, (_, index) =>
+        projectAcpTranscriptUpdates([
+          {
+            sessionUpdate: 'agent_message_chunk',
+            content: {
+              type: 'text',
+              text: `Review step ${index + 1}: ${'The workspace permission check is applied before the protected resource is loaded. '.repeat(6)}`,
+            },
+          },
+        ]).map((message) => ({ ...message, id: `review-${index}-${message.id}` }))
+      ).flat(),
+    },
+    scroll: {
+      ready: true,
+      initialPosition: { intent: 'reading', top: 420, left: 0 },
+      onPositionChange: fn(),
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="h-[640px] w-[1400px] max-w-[calc(100vw-2rem)] border">
+        <Story />
+      </div>
+    ),
+  ],
+};
+
 export const RefinedBashInput = story(
   selection('completed'),
   {

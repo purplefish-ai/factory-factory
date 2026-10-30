@@ -11,12 +11,14 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
   scroll: TranscriptScrollOptions;
   header?: ReactNode;
   label?: string;
+  contentClassName?: string;
 }
 
 function TranscriptInstance({
   scroll,
   header,
   label = 'Conversation',
+  contentClassName,
   ...props
 }: ChatTranscriptProps) {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
@@ -43,6 +45,7 @@ function TranscriptInstance({
           engine={engine}
           totalSize={totalSize}
           header={header}
+          contentClassName={contentClassName}
         />
       </div>
       {state.intent === 'reading' && scroll.ready && (

@@ -17,6 +17,7 @@ interface Props {
   engine: Virtualizer<HTMLDivElement, HTMLDivElement>;
   totalSize: number;
   header?: ReactNode;
+  contentClassName?: string;
 }
 
 function TranscriptMessage({
@@ -65,7 +66,14 @@ function TranscriptMessage({
 }
 
 /** Rendering only. The measured row includes its tail, so there is one extent. */
-export function TranscriptRows({ display, layout, engine, totalSize, header }: Props) {
+export function TranscriptRows({
+  display,
+  layout,
+  engine,
+  totalSize,
+  header,
+  contentClassName,
+}: Props) {
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(
     display.workspaceId
   );
@@ -99,7 +107,9 @@ export function TranscriptRows({ display, layout, engine, totalSize, header }: P
       {display.loadingSession ? (
         <div className="px-4 py-4">
           {layout.keys.map((key, index) => (
-            <div key={key}>{content(index)}</div>
+            <div key={key} className={contentClassName}>
+              {content(index)}
+            </div>
           ))}
         </div>
       ) : (
@@ -122,7 +132,7 @@ export function TranscriptRows({ display, layout, engine, totalSize, header }: P
                   transform: `translateY(${row.start}px)`,
                 }}
               >
-                {content(row.index)}
+                <div className={contentClassName}>{content(row.index)}</div>
               </div>
             );
           })}

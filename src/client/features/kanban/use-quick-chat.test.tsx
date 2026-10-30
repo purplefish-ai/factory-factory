@@ -4,10 +4,18 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TranscriptPosition } from '@/client/features/chat';
 import { useQuickChat } from './use-quick-chat';
 
 const launchMocks = vi.hoisted(() => ({
   inputs: [] as unknown[],
+}));
+
+const deleteMocks = vi.hoisted(() => ({
+  calls: [] as Array<{
+    input: { id: string };
+    options?: { onSuccess?: (data: unknown) => void; onError?: (error: unknown) => void };
+  }>,
 }));
 
 const sessionsByWorkspace = vi.hoisted(
@@ -72,7 +80,12 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       deleteSession: {
         useMutation: () => ({
-          mutate: vi.fn(),
+          mutate: vi.fn(
+            (
+              input: { id: string },
+              options?: { onSuccess?: (data: unknown) => void; onError?: (error: unknown) => void }
+            ) => deleteMocks.calls.push({ input, options })
+          ),
         }),
       },
     },
@@ -140,6 +153,7 @@ function renderHook(workspaceId: string | null): RenderedHook {
 beforeEach(() => {
   sessionsByWorkspace.clear();
   launchMocks.inputs.length = 0;
+  deleteMocks.calls.length = 0;
 });
 
 afterEach(() => {
@@ -235,4 +249,115 @@ it('forwards the workspace provider and explicit account when no sessions remain
   expect(launchMocks.inputs).toEqual([
     expect.objectContaining({ provider: 'CODEX', codexAccountId: 'work' }),
   ]);
+});
+
+describe('useQuickChat deletion scroll memory', () => {
+  const reading: TranscriptPosition = {
+    intent: 'reading',
+    top: 140,
+    left: 2,
+    anchor: { key: 'message-a', offset: 12 },
+  };
+  const following: TranscriptPosition = { intent: 'following', top: 700, left: 0 };
+  const late: TranscriptPosition = { intent: 'reading', top: 999, left: 0 };
+  const sessions = [{ id: 'session-a' }, { id: 'session-b' }];
+
+  function writer(rendered: RenderedHook) {
+    const callback = rendered.getResult().transcriptScroll.onPositionChange;
+    if (!callback) {
+      throw new Error('Expected a position callback');
+    }
+    return callback;
+  }
+
+  async function setup(selected: boolean) {
+    sessionsByWorkspace.set('workspace-a', sessions);
+    const rendered = renderHook('workspace-a');
+    await vi.waitFor(() => expect(rendered.getResult().selectedSessionId).toBe('session-a'));
+    const oldA = writer(rendered);
+    oldA(reading);
+    flushSync(() => rendered.getResult().setSelectedSessionId('session-b'));
+    writer(rendered)(following);
+    if (selected) {
+      flushSync(() => rendered.getResult().setSelectedSessionId('session-a'));
+    }
+    const closingWriter = selected ? writer(rendered) : oldA;
+    flushSync(() => {
+      rendered.getResult().handleCloseSession('session-a');
+      closingWriter(late);
+      sessionsByWorkspace.set('workspace-a', [{ id: 'session-b' }]);
+    });
+    rendered.rerender('workspace-a');
+    expect(rendered.getResult().selectedSessionId).toBe('session-b');
+    expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(following);
+    const deletion = deleteMocks.calls[0];
+    expect(deletion?.input).toEqual({ id: 'session-a' });
+    return { rendered, closingWriter, deletion };
+  }
+
+  it.each([true, false])(
+    'retains reading position after a failed delete of a selected=%s session and rejects old writers',
+    async (selected) => {
+      const { rendered, closingWriter, deletion } = await setup(selected);
+      deletion?.options?.onError?.(new Error('Delete failed'));
+      sessionsByWorkspace.set('workspace-a', sessions);
+      rendered.rerender('workspace-a');
+      flushSync(() => rendered.getResult().setSelectedSessionId('session-a'));
+      closingWriter(late);
+      rendered.rerender('workspace-a');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(reading);
+      writer(rendered)(following);
+      rendered.rerender('workspace-a');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(following);
+    }
+  );
+
+  it.each([true, false])(
+    'clears reading position only after a selected=%s session delete succeeds, revoking newer writers',
+    async (selected) => {
+      const { rendered, closingWriter, deletion } = await setup(selected);
+      // A restored/stale list can expose the closing session again before the mutation settles.
+      sessionsByWorkspace.set('workspace-a', sessions);
+      rendered.rerender('workspace-a');
+      flushSync(() => rendered.getResult().setSelectedSessionId('session-a'));
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(reading);
+      const pendingWriter = writer(rendered);
+      pendingWriter(following);
+      deletion?.options?.onSuccess?.(undefined);
+      pendingWriter(late);
+      closingWriter(late);
+      rendered.rerender('workspace-a');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toBeNull();
+    }
+  );
+
+  it.each(['success', 'failure'])(
+    'applies delayed delete %s to the originating workspace after a workspace switch',
+    async (outcome) => {
+      const { rendered, closingWriter, deletion } = await setup(true);
+      sessionsByWorkspace.set('workspace-b', [{ id: 'session-a' }]);
+      rendered.rerender('workspace-b');
+      await vi.waitFor(() => expect(rendered.getResult().selectedSessionId).toBe('session-a'));
+      const workspaceBWriter = writer(rendered);
+      workspaceBWriter(following);
+      if (outcome === 'success') {
+        deletion?.options?.onSuccess?.(undefined);
+      } else {
+        deletion?.options?.onError?.(new Error('Delete failed'));
+      }
+      closingWriter(late);
+      rendered.rerender('workspace-b');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(following);
+      sessionsByWorkspace.set('workspace-a', sessions);
+      rendered.rerender('workspace-a');
+      closingWriter(late);
+      rendered.rerender('workspace-a');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(
+        outcome === 'success' ? null : reading
+      );
+      writer(rendered)(reading);
+      rendered.rerender('workspace-a');
+      expect(rendered.getResult().transcriptScroll.initialPosition).toEqual(reading);
+    }
+  );
 });

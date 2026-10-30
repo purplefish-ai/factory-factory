@@ -4,6 +4,7 @@ import { isNativeCompensation } from '@/client/features/chat/transcript-scroll-e
 
 /** Development-only proof of the installed engine, without application policy. */
 export function TranscriptEngineFixture() {
+  const nextKey = useRef(999);
   const viewport = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState(() =>
     Array.from({ length: 40 }, (_, key) => ({ key, height: 80 }))
@@ -53,7 +54,10 @@ export function TranscriptEngineFixture() {
         </button>
         <button
           type="button"
-          onClick={() => setRows((items) => [{ key: 999, height: 1200 }, ...items])}
+          onClick={() => {
+            const key = nextKey.current++;
+            setRows((items) => [{ key, height: 1200 }, ...items]);
+          }}
         >
           Prepend giant engine row
         </button>
@@ -68,7 +72,10 @@ export function TranscriptEngineFixture() {
         </button>
         <button
           type="button"
-          onClick={() => setRows((items) => [...items, { key: items.length, height: 120 }])}
+          onClick={() => {
+            const key = nextKey.current++;
+            setRows((items) => [...items, { key, height: 120 }]);
+          }}
         >
           Append engine row
         </button>

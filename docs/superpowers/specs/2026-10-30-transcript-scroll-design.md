@@ -198,9 +198,11 @@ selection changes; persist committed snapshots while A is still active.
 
 Quick chat keeps a component-lifetime position map keyed by workspace/session;
 it does not gain localStorage persistence. Subagent panes use the same engine,
-keep their initial reading behavior and keyed prepend anchoring, and retain
-their current lifetime of persistence. Static closed-session viewers, diffs,
-files, terminals, and log streaming do not migrate to this controller.
+keep their initial reading behavior and keyed prepend anchoring. Following PR
+review, workspace-owned tab persistence also restores subagent positions after
+pane unmounts; closing the tab revokes its saved-position callbacks. Static
+closed-session viewers, diffs, files, terminals, and log streaming do not
+migrate to this controller.
 
 Restoration is staged: resolve the key, issue one index command to mount an
 unmeasured target, wait for measurement, then cancel that command and apply the

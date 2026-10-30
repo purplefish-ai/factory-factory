@@ -2,7 +2,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { isNativeCompensation, observeTranscriptScroll } from './transcript-scroll-events';
 
+const observers = new Set<ReturnType<typeof observeTranscriptScroll>>();
 afterEach(() => {
+  for (const observer of observers) {
+    observer.dispose();
+  }
+  observers.clear();
   vi.useRealTimers();
   document.body.replaceChildren();
 });
@@ -17,9 +22,10 @@ function harness() {
   viewport.scrollTop = 500;
   const controller = { beginInteraction: vi.fn(), endInteraction: vi.fn(), userScrolled: vi.fn() };
   const observer = observeTranscriptScroll(viewport, controller);
+  observers.add(observer);
   return { viewport, controller, observer };
 }
-it('recognizes delayed and coalesced native write readbacks', () => {
+it('ignores delayed and coalesced scroll events after native writes', () => {
   const h = harness();
   h.observer.write(() => {
     h.viewport.scrollTop = 200;
@@ -30,7 +36,9 @@ it('recognizes delayed and coalesced native write readbacks', () => {
   h.viewport.dispatchEvent(new Event('scroll'));
   h.viewport.dispatchEvent(new Event('scroll'));
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
-  h.observer.dispose();
+  h.viewport.scrollTop = 250;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 250);
 });
 it('takes over for movement before a queued absolute write, but allows native compensation', () => {
   const h = harness();
@@ -41,7 +49,6 @@ it('takes over for movement before a queued absolute write, but allows native co
   expect(write).not.toHaveBeenCalled();
   h.observer.write(write, true);
   expect(write).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 it('expires boundary wheel input even when no scroll event occurs', () => {
   const h = harness();
@@ -49,7 +56,6 @@ it('expires boundary wheel input even when no scroll event occurs', () => {
   expect(h.controller.beginInteraction).toHaveBeenCalledWith('down');
   vi.advanceTimersByTime(150);
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 it('stationary touch only interrupts and resumes, while actual upward movement reads', () => {
   const h = harness();
@@ -61,7 +67,6 @@ it('stationary touch only interrupts and resumes, while actual upward movement r
   expect(h.controller.userScrolled).toHaveBeenCalledWith('up', 100);
   h.viewport.dispatchEvent(new Event('touchend'));
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 
 it('a queued scrollend cannot release a held touch interaction', () => {
@@ -72,7 +77,6 @@ it('a queued scrollend cannot release a held touch interaction', () => {
   expect(h.controller.endInteraction).not.toHaveBeenCalled();
   h.viewport.dispatchEvent(new Event('touchend'));
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 
 it('preserves native deferred/clamped compensation without adjustments after delayed user movement', () => {
@@ -88,7 +92,6 @@ it('preserves native deferred/clamped compensation without adjustments after del
   expect(isNativeCompensation({ behavior: 'instant' })).toBe(false);
   expect(isNativeCompensation({ behavior: 'auto' })).toBe(false);
   expect(isNativeCompensation({ adjustments: 20, behavior: 'instant' })).toBe(true);
-  h.observer.dispose();
 });
 it('ignores native geometry clamping and composer keys', () => {
   const h = harness();
@@ -100,7 +103,6 @@ it('ignores native geometry clamping and composer keys', () => {
   input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowUp' }));
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
   expect(h.controller.beginInteraction).not.toHaveBeenCalled();
-  h.observer.dispose();
 });
 it('removes listeners and pending interaction timeout on cleanup', () => {
   const h = harness();
@@ -131,7 +133,6 @@ it.each([
   expect(h.controller.endInteraction).not.toHaveBeenCalled();
   vi.advanceTimersByTime(1);
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 
 it('leaves editable keys, shortcuts and unrelated keys to their targets', () => {
@@ -155,7 +156,6 @@ it('leaves editable keys, shortcuts and unrelated keys to their targets', () => 
   expect(h.controller.beginInteraction).not.toHaveBeenCalled();
   expect(h.controller.endInteraction).not.toHaveBeenCalled();
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
-  h.observer.dispose();
 });
 
 it.each([
@@ -183,7 +183,6 @@ it.each([
   expect(queuedWrite).not.toHaveBeenCalled();
   window.dispatchEvent(new Event(release));
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
-  h.observer.dispose();
 });
 
 it('does not begin interaction for ordinary viewport or child content clicks', () => {
@@ -198,5 +197,4 @@ it('does not begin interaction for ordinary viewport or child content clicks', (
   window.dispatchEvent(new Event('pointerup'));
   expect(h.controller.beginInteraction).not.toHaveBeenCalled();
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
-  h.observer.dispose();
 });
