@@ -16,6 +16,7 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { registerTailscaleCommand } from './tailscale';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -680,6 +681,7 @@ program
 // Run native CLI commands using the same provider runtimes bundled with ACP.
 registerClaudeCommand(program);
 registerCodexCommand(program);
+registerTailscaleCommand(program, PROJECT_ROOT);
 
 // ============================================================================
 // Parse and run

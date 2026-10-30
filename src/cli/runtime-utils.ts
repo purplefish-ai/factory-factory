@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { dirname } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import treeKill from 'tree-kill';
 
@@ -32,11 +33,13 @@ export async function waitForPort(
   port: number,
   host = 'localhost',
   timeoutMs = 30_000,
-  intervalMs = 500
+  intervalMs = 500,
+  signal?: AbortSignal
 ): Promise<void> {
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
+    signal?.throwIfAborted();
     try {
       await new Promise<void>((resolve, reject) => {
         const socket = createConnection({ port, host }, () => {
@@ -50,7 +53,7 @@ export async function waitForPort(
       });
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await delay(intervalMs, undefined, { signal });
     }
   }
 
