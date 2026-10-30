@@ -42,6 +42,32 @@ afterEach(() => {
 });
 
 describe('ChangeTreeView', () => {
+  it('exposes folder expansion and preserves file selection through the shared rows', () => {
+    const onFileClick = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => {
+        root.render(
+          createElement(ChangeTreeView, {
+            entries: [{ path: 'src/app.ts', kind: 'modified', statusCode: 'M' }],
+            onFileClick,
+          })
+        );
+      });
+      const folder = container.querySelector<HTMLButtonElement>('button[title="src"]');
+      expect(folder?.getAttribute('aria-expanded')).toBe('true');
+      flushSync(() => folder?.click());
+      expect(folder?.getAttribute('aria-expanded')).toBe('false');
+      expect(container.textContent).not.toContain('app.ts');
+      flushSync(() => folder?.click());
+      container.querySelector<HTMLButtonElement>('button[title="Modified: src/app.ts"]')?.click();
+      expect(onFileClick).toHaveBeenCalledWith('src/app.ts');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('uses inferred children instead of fetching contents for a git-reported directory', () => {
     const entries: ChangeListEntry[] = [
       { path: 'myfolder/', kind: 'untracked', statusCode: '?' },
