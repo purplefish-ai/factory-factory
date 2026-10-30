@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatCpu, formatIdleTime } from './formatters';
+import { formatBytes, formatCpu, formatDateTimeShort, formatIdleTime } from './formatters';
 
 describe('formatBytes', () => {
   it('formats null/undefined as -', () => {
@@ -37,5 +37,16 @@ describe('formatIdleTime', () => {
     expect(formatIdleTime(500)).toBe('500ms');
     expect(formatIdleTime(5000)).toBe('5s');
     expect(formatIdleTime(120_000)).toBe('2.0m');
+  });
+});
+
+describe('formatDateTimeShort', () => {
+  it('formats a valid date string', () => {
+    // ICU versions differ in the space before the day period.
+    expect(formatDateTimeShort('2024-01-15T14:30:00')).toMatch(/^Jan 15, 02:30\sPM$/);
+  });
+
+  it('falls back to the input for an unparseable date', () => {
+    expect(formatDateTimeShort('not-a-date')).toBe('not-a-date');
   });
 });
