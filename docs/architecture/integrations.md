@@ -139,7 +139,11 @@ dates in the task timezone, preserving the scheduled day across daylight saving
 changes.
 
 Each execution runs the configured prompt, monitors the workspace until the
-agent finishes, and advances the schedule. Concurrent runs are skipped.
+agent finishes, and advances the schedule. Concurrent runs are skipped. Archived
+projects are excluded from due-task polling. Their task definitions retain their
+enabled state and schedule, so overdue tasks become eligible again when the
+project is unarchived. The workspace insert also checks project archive state
+atomically if archiving races an admitted run.
 
 A run's outcome depends on its PR, workspace setup and Claude/Codex session:
 

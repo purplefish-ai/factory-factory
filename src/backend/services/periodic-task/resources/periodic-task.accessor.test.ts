@@ -481,7 +481,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
 });
 
 describe('periodicTaskAccessor.findDueTasks', () => {
-  it('selects only enabled tasks whose next run has arrived', async () => {
+  it('selects only enabled tasks in active projects whose next run has arrived', async () => {
     vi.useFakeTimers();
     const now = new Date('2026-05-20T12:00:00Z');
     vi.setSystemTime(now);
@@ -489,7 +489,7 @@ describe('periodicTaskAccessor.findDueTasks', () => {
     try {
       await expect(periodicTaskAccessor.findDueTasks()).resolves.toEqual([]);
       expect(prismaMock.periodicTask.findMany).toHaveBeenCalledExactlyOnceWith({
-        where: { isEnabled: true, nextRunAt: { lte: now } },
+        where: { isEnabled: true, nextRunAt: { lte: now }, project: { isArchived: false } },
       });
     } finally {
       vi.useRealTimers();

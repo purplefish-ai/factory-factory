@@ -463,6 +463,7 @@ export const periodicTaskAccessor = {
       where: {
         isEnabled: true,
         nextRunAt: { lte: new Date() },
+        project: { isArchived: false },
       },
     });
   },
