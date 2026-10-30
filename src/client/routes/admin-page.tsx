@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
@@ -8,7 +7,6 @@ import { runInBackground } from '@/client/lib/background-task';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -75,16 +73,6 @@ export default function AdminDashboardPage() {
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
-          <p className="text-sm text-muted-foreground">Manage scheduled agents and their runs.</p>
-          <Button asChild variant="outline" size="sm">
-            <Link
-              to={projectSlug ? `/projects/${encodeURIComponent(projectSlug)}/agents` : '/agents'}
-            >
-              Agents
-            </Link>
-          </Button>
-        </div>
         <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>
           <TabsList className="w-full sm:w-auto">
             <TabsTrigger value="general" className="flex-1 sm:flex-initial">
