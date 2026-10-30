@@ -4,7 +4,9 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
   workspaceActivityService,
+  workspaceDataService,
   workspaceMaintenanceService,
+  WorkspaceStateMachineError,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -12,6 +14,12 @@ import type { WorkspaceWithProject } from './types';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');
+
+type ArchiveWorkspaceResult =
+  | Awaited<ReturnType<typeof workspaceStateMachine.markArchived>>
+  | WorkspaceWithProject;
+
+const pendingArchives = new Map<string, Promise<ArchiveWorkspaceResult>>();
 
 interface ArchiveWorkspaceOptions {
   removeGitIndexLock?: boolean;
@@ -191,6 +199,38 @@ export async function archiveWorkspace(
   options: ArchiveWorkspaceOptions,
   services: ArchiveWorkspaceDependencies
 ) {
+  // Single and bulk callers share the result, including real cleanup failures.
+  const pending = pendingArchives.get(workspace.id);
+  if (pending) {
+    return await pending;
+  }
+
+  const operation = performArchive(workspace, options, services);
+  pendingArchives.set(workspace.id, operation);
+  try {
+    return await operation;
+  } finally {
+    pendingArchives.delete(workspace.id);
+  }
+}
+
+async function performArchive(
+  requestedWorkspace: WorkspaceWithProject,
+  options: ArchiveWorkspaceOptions,
+  services: ArchiveWorkspaceDependencies
+) {
+  // The previous owner may have rolled back since the router read ARCHIVING.
+  const workspace =
+    requestedWorkspace.status === 'ARCHIVING'
+      ? await workspaceDataService.findByIdWithProject(requestedWorkspace.id)
+      : requestedWorkspace;
+  if (!workspace) {
+    throw new ApplicationError('NOT_FOUND', `Workspace not found: ${requestedWorkspace.id}`);
+  }
+  if (workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED') {
+    return workspace;
+  }
+
   if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
     throw new ApplicationError(
       'INVALID_INPUT',
@@ -199,8 +239,13 @@ export async function archiveWorkspace(
   }
 
   return await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
-    const { previousStatus: statusBeforeArchive } =
-      await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+    let started: Awaited<ReturnType<typeof workspaceStateMachine.startArchivingWithSourceStatus>>;
+    try {
+      started = await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+    } catch (error) {
+      return await resolveArchiveTransitionConflict(workspace.id, error);
+    }
+    const statusBeforeArchive = started.previousStatus;
 
     try {
       return await completeArchive(workspace, options, services);
@@ -217,6 +262,18 @@ export async function archiveWorkspace(
       throw error;
     }
   });
+}
+
+async function resolveArchiveTransitionConflict(workspaceId: string, error: unknown) {
+  // A queued bulk item can become archived after its router read, or lose
+  // the conditional transition to an archive owned by another process.
+  if (error instanceof WorkspaceStateMachineError) {
+    const current = await workspaceDataService.findByIdWithProject(workspaceId);
+    if (current?.status === 'ARCHIVING' || current?.status === 'ARCHIVED') {
+      return current;
+    }
+  }
+  throw error;
 }
 
 /**

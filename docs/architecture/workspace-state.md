@@ -288,6 +288,16 @@ continuation cancels instead of dispatching success over a newer fetch. Scoped
 recovery retries a mounted bootstrap without undefined success or a stuck load.
 Fresh requests started after settlement keep normal membership authority.
 
+The server shares an in-progress archive's result across requests for the same
+workspace, including overlapping single and column archives. Cleanup runs once;
+all waiting requests receive the same success or cleanup failure. Requests for
+an already archiving or archived workspace are accepted without restarting
+cleanup or reporting an invalid-state failure. A stale request that loses the
+conditional state transition also accepts the current archiving/archived row. An
+archiving snapshot with no local pending operation is re-read so a rolled-back
+archive can be retried. Other invalid transitions and cleanup failures remain
+errors, and a failed archive can be retried after rollback.
+
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses
