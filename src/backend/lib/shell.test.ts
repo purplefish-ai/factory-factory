@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { LIB_LIMITS } from './constants';
@@ -75,22 +76,27 @@ describe('execCommand', () => {
         return false;
       }
     };
+    const readPids = () => {
+      try {
+        return z
+          .object({ parent: z.number(), child: z.number() })
+          .parse(JSON.parse(readFileSync(pidFile, 'utf8')));
+      } catch {
+        return undefined;
+      }
+    };
     let childPid: number | undefined;
     // Fake only execCommand's timer: fire it after the real parent has exited
     // while its detached child still holds stdio, however slowly the parent starts.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const pending = execCommand(process.execPath, ['-e', script], { timeout: 200 });
-      const pids = await vi.waitFor(
-        () => {
-          const ids = z
-            .object({ parent: z.number(), child: z.number() })
-            .parse(JSON.parse(readFileSync(pidFile, 'utf8')));
-          expect(isRunning(ids.parent)).toBe(false);
-          return ids;
-        },
-        { timeout: 4000, interval: 10 }
-      );
+      // Poll on a real timer: vi.waitFor would advance the fake clock while waiting.
+      let pids = readPids();
+      while (!pids || isRunning(pids.parent)) {
+        await delay(10);
+        pids = readPids();
+      }
       childPid = pids.child;
       vi.advanceTimersByTime(200);
       process.kill(childPid);
