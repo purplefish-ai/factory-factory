@@ -183,19 +183,17 @@ class BruteForceGuard {
   registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean } {
     this.evictStaleEntries(nowMs);
     const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
-    const normalized =
-      current.lockedUntilMs > 0 && current.lockedUntilMs <= nowMs
-        ? { failures: 0, lockedUntilMs: 0, lastSeenMs: nowMs }
-        : current;
-
-    const nextFailures = normalized.failures + 1;
-    const ipLocked = nextFailures >= LOCKOUT_THRESHOLD_PER_IP;
+    // A failure during an active lockout keeps it. Locked entries store 0 failures,
+    // so an expired lockout starts a fresh count.
+    const activeLockUntilMs = current.lockedUntilMs > nowMs ? current.lockedUntilMs : 0;
+    const nextFailures = current.failures + 1;
+    const ipLocked = activeLockUntilMs > 0 || nextFailures >= LOCKOUT_THRESHOLD_PER_IP;
 
     // Reinsert to keep map order roughly LRU for bounded eviction.
     this.attemptsByIp.delete(ip);
     this.attemptsByIp.set(ip, {
       failures: ipLocked ? 0 : nextFailures,
-      lockedUntilMs: ipLocked ? nowMs + LOCKOUT_WINDOW_MS : 0,
+      lockedUntilMs: activeLockUntilMs || (ipLocked ? nowMs + LOCKOUT_WINDOW_MS : 0),
       lastSeenMs: nowMs,
     });
 
@@ -298,7 +296,7 @@ export async function startFactoryFactoryServer(params: {
 
       const onStdoutData = (chunk: Buffer) => {
         startupBuffer += chunk.toString();
-        const match = startupBuffer.match(/BACKEND_PORT:(\d+)/);
+        const match = startupBuffer.match(/BACKEND_PORT:(\d+)\r?\n/);
         if (match?.[1]) {
           const parsed = Number.parseInt(match[1], 10);
           if (Number.isNaN(parsed)) {
@@ -605,17 +603,11 @@ function registerFailureAndRespond(params: {
 async function handleLoginSubmission(params: {
   req: IncomingMessage;
   res: import('node:http').ServerResponse;
-  lockState: { locked: boolean; retryAfterSeconds: number };
   guard: BruteForceGuard;
   ip: string;
   password: string;
   cookieSecret: Buffer;
 }): Promise<'handled'> {
-  if (params.lockState.locked) {
-    writeRateLimitResponse(params.res, params.lockState.retryAfterSeconds);
-    return 'handled';
-  }
-
   let submittedPassword = '';
   try {
     const body = await readRequestBody(params.req);
@@ -623,6 +615,14 @@ async function handleLoginSubmission(params: {
     submittedPassword = (form.password || '').trim().toUpperCase();
   } catch {
     submittedPassword = '';
+  }
+
+  // Check the lock only after the body is read: concurrent attempts from this IP
+  // may have triggered the lockout while this request was waiting.
+  const lockState = params.guard.isLocked(params.ip);
+  if (lockState.locked) {
+    writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
+    return 'handled';
   }
 
   if (submittedPassword && matchesPassword(submittedPassword, params.password)) {
@@ -670,7 +670,6 @@ async function handleAuthHttpRequest(params: {
     await handleLoginSubmission({
       req: params.req,
       res: params.res,
-      lockState,
       guard: params.guard,
       ip,
       password: params.password,
