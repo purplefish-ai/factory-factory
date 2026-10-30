@@ -61,6 +61,44 @@ describe('new Codex conversation account binding', () => {
       ]);
     }
   );
+  it.each(['ordinary', 'limited'] as const)(
+    'forwards explicit effort into %s Auto allocation before persistence',
+    async (kind) => {
+      const create = vi
+        .spyOn(agentSessionAccessor, 'create')
+        .mockResolvedValue(createLifecycleTestSession());
+      const limited = vi
+        .spyOn(agentSessionAccessor, 'createWithinWorkspaceLimit')
+        .mockResolvedValue({ outcome: 'created', session: createLifecycleTestSession() });
+      const withAccountReservation = vi.fn(async (selection, callback) =>
+        callback(selection.reasoningEffort === 'xhigh' ? 'supports-xhigh' : 'low-only')
+      );
+      const service = createSessionDataService({
+        providerResolver: {
+          resolveSessionDefaults: vi.fn().mockResolvedValue({ provider: 'CODEX', model: 'gpt' }),
+        },
+        accounts: { withAccountReservation },
+      });
+      for (const reasoningEffort of ['xhigh', null] as const) {
+        const input = { workspaceId: 'workspace', workflow: 'followup', reasoningEffort };
+        if (kind === 'ordinary') {
+          await service.createAgentSession(input);
+        } else {
+          await service.createAgentSessionWithinWorkspaceLimit({ ...input, maxSessions: 3 });
+        }
+        expect(withAccountReservation).toHaveBeenLastCalledWith(
+          { accountId: undefined, model: 'gpt', reasoningEffort },
+          expect.any(Function)
+        );
+        expect(kind === 'ordinary' ? create : limited).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            codexAccountId: reasoningEffort === 'xhigh' ? 'supports-xhigh' : 'low-only',
+            providerMetadata: { launchSettings: { reasoningEffort, applied: false } },
+          })
+        );
+      }
+    }
+  );
   it('preserves an existing dedicated conversation without resolving Auto again', async () => {
     const session = createLifecycleTestSession({ provider: 'CODEX', codexAccountId: 'original' });
     vi.spyOn(prDedicatedSessionAccessor, 'findWorkspace').mockResolvedValue(

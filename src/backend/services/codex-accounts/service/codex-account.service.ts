@@ -6,7 +6,12 @@ import {
   type CodexLoginState,
 } from '@/shared/codex-accounts';
 import type { ProviderPlanUsage } from '@/shared/provider-usage';
-import { accountPressure, chooseAccount, type AccountCandidate } from './account-selection';
+import {
+  accountPressure,
+  chooseAccount,
+  supportsReasoningEffort,
+  type AccountCandidate,
+} from './account-selection';
 import { matchesNativeEmailFallback } from './identity';
 import { LoginCoordinator } from './login-coordinator';
 import { resolveAccountContext, resolveHistoryContext } from './profile';
@@ -16,6 +21,7 @@ import type {
   AccountIdentity,
   AccountObservation,
   AccountRow,
+  AccountSelectionOptions,
   AccountStore,
   CodexRuntimeContext,
   NativeLogin,
@@ -218,6 +224,9 @@ export class CodexAccountService {
       }
     }
   }
+  async getEnabledAccountIds(): Promise<string[]> {
+    return (await this.dependencies.store.list()).filter((row) => row.enabled).map((row) => row.id);
+  }
   async getAccounts(): Promise<CodexAccountSummary[]> {
     const rows = await this.dependencies.store.list();
     return Promise.all(
@@ -307,7 +316,8 @@ export class CodexAccountService {
   private async candidate(
     row: AccountRow,
     model?: string,
-    includeExhausted = false
+    includeExhausted = false,
+    reasoningEffort?: string | null
   ): Promise<AccountCandidate | null> {
     if (!row.enabled || this.logins.isPending(row.id)) {
       return null;
@@ -317,7 +327,7 @@ export class CodexAccountService {
       if (!observation.authenticated) {
         return null;
       }
-      const pressure = accountPressure(observation, model);
+      const pressure = accountPressure(observation, model, reasoningEffort);
       return pressure === null || (!includeExhausted && pressure === 100)
         ? null
         : { id: row.id, pressure };
@@ -325,10 +335,14 @@ export class CodexAccountService {
       return null;
     }
   }
-  private async candidates(model?: string, includeExhausted = false): Promise<AccountCandidate[]> {
+  private async candidates(
+    model?: string,
+    includeExhausted = false,
+    reasoningEffort?: string | null
+  ): Promise<AccountCandidate[]> {
     const rows = await this.dependencies.store.list();
     const readings = await Promise.all(
-      rows.map((row) => this.candidate(row, model, includeExhausted))
+      rows.map((row) => this.candidate(row, model, includeExhausted, reasoningEffort))
     );
     const candidates = readings.filter((candidate) => candidate !== null);
     const native = this.identityCache.get(NATIVE_DEFAULT_CODEX_ACCOUNT_ID)?.identity;
@@ -357,10 +371,12 @@ export class CodexAccountService {
     );
   }
   async getPreviewRuntimeContext(
-    options: { accountId?: string; model?: string } = {}
+    options: AccountSelectionOptions = {}
   ): Promise<CodexRuntimeContext> {
     try {
-      const id = options.accountId ?? this.choose(await this.candidates(options.model, true));
+      const id =
+        options.accountId ??
+        this.choose(await this.candidates(options.model, true, options.reasoningEffort));
       const row = await this.row(id);
       this.ensureAdmission(id);
       const observation = await this.observe(row);
@@ -368,7 +384,7 @@ export class CodexAccountService {
         throw new Error('Codex account is not signed in');
       }
       this.ensureAdmission(id);
-      this.verifyModel(observation, options.model);
+      this.verifySelection(observation, options);
       return resolveAccountContext(row, this.dependencies.config);
     } catch (cause) {
       throw new ApplicationError(
@@ -378,16 +394,25 @@ export class CodexAccountService {
       );
     }
   }
-  private verifyModel(observation: AccountObservation, model?: string): void {
+  private verifySelection(
+    observation: AccountObservation,
+    { model, reasoningEffort }: AccountSelectionOptions
+  ): void {
     if (model && model !== 'default' && !observation.models.includes(model)) {
       throw new ApplicationError(
         'PRECONDITION_FAILED',
         'Selected Codex account does not support the requested model'
       );
     }
+    if (!supportsReasoningEffort(observation, model, reasoningEffort)) {
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        'Selected Codex account does not support the requested reasoning effort'
+      );
+    }
   }
   async withAccountReservation<T>(
-    options: { accountId?: string; model?: string },
+    options: AccountSelectionOptions,
     callback: (accountId: string) => Promise<T>
   ): Promise<T> {
     // Native observation is outside the allocation critical section. Explicit B
@@ -396,11 +421,11 @@ export class CodexAccountService {
     try {
       if (options.accountId) {
         await this.getRuntimeContext(options.accountId);
-        if (options.model) {
-          this.verifyModel(await this.observe(await this.row(options.accountId)), options.model);
+        if (options.model || options.reasoningEffort) {
+          this.verifySelection(await this.observe(await this.row(options.accountId)), options);
         }
       } else {
-        candidates = await this.candidates(options.model);
+        candidates = await this.candidates(options.model, false, options.reasoningEffort);
       }
     } catch (cause) {
       throw new ApplicationError(

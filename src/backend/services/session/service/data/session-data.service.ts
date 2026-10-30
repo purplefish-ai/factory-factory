@@ -106,7 +106,7 @@ class SessionDataImplementation {
       explicitModel: data.model,
     });
     const launchMetadata = createSessionLaunchMetadata(data);
-    return this.withAccountBinding(defaults, data.codexAccountId, async (codexAccountId) =>
+    return this.withAccountBinding(defaults, data, async (codexAccountId) =>
       toAgentSessionRecord(
         await agentSessionAccessor.create({
           ...data,
@@ -138,7 +138,7 @@ class SessionDataImplementation {
       explicitModel: data.model,
     });
     const launchMetadata = createSessionLaunchMetadata(data);
-    const result = await this.withAccountBinding(defaults, data.codexAccountId, (codexAccountId) =>
+    const result = await this.withAccountBinding(defaults, data, (codexAccountId) =>
       agentSessionAccessor.createWithinWorkspaceLimit({
         ...data,
         ...defaults,
@@ -182,7 +182,7 @@ class SessionDataImplementation {
         ? { ...reused, session: toAgentSessionRecord(reused.session) }
         : reused;
     }
-    const result = await this.withAccountBinding(defaults, input.codexAccountId, (codexAccountId) =>
+    const result = await this.withAccountBinding(defaults, input, (codexAccountId) =>
       prDedicatedSessionAccessor.acquire({ ...input, ...defaults, codexAccountId })
     );
     if (result.outcome === 'missing') {
@@ -194,15 +194,21 @@ class SessionDataImplementation {
   }
   private withAccountBinding<T>(
     defaults: { provider: SessionProvider; model: string },
-    accountId: string | undefined,
+    selection: { codexAccountId?: string; reasoningEffort?: string | null },
     create: (accountId: string | null) => Promise<T>
   ): Promise<T> {
     return defaults.provider === 'CODEX'
       ? (this.dependencies.accounts ?? codexAccountService).withAccountReservation(
-          { accountId, model: defaults.model },
+          {
+            accountId: selection.codexAccountId,
+            model: defaults.model,
+            ...(selection.reasoningEffort !== undefined
+              ? { reasoningEffort: selection.reasoningEffort }
+              : {}),
+          },
           create
         )
-      : accountId
+      : selection.codexAccountId
         ? Promise.reject(new Error('A Codex account can only be selected for a Codex conversation'))
         : create(null);
   }

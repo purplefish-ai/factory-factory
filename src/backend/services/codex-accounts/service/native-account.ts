@@ -28,6 +28,7 @@ const modelPageSchema = z.object({
       id: z.string(),
       model: z.string().optional(),
       isDefault: z.boolean().default(false),
+      supportedReasoningEfforts: z.array(z.object({ reasoningEffort: z.string() })).default([]),
     })
   ),
   nextCursor: z.string().nullish(),

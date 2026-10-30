@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CodexAccountService } from './codex-account.service';
-import type { NativeLogin } from './types';
+import type { AccountObservation, CodexRuntimeContext, NativeLogin } from './types';
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -42,7 +42,7 @@ async function fixture() {
       return Promise.resolve(row);
     },
   };
-  const observation = (percent?: number) => ({
+  const observation = (percent?: number): AccountObservation => ({
     authenticated: true,
     scopeVerified: true,
     identityKey: null as string | null,
@@ -62,6 +62,15 @@ async function fixture() {
   const unverified = new Set<string>();
   const observations = new Map<string, ReturnType<typeof observation>>();
   const login = vi.fn<NativeLogin>();
+  const probe = vi.fn((context: CodexRuntimeContext) => {
+    const reading = observations.get(context.accountId) ?? observation();
+    return Promise.resolve({
+      ...reading,
+      identityKey: unverified.has(context.accountId)
+        ? null
+        : (reading.identityKey ?? (reading.authenticated ? context.accountId : null)),
+    });
+  });
   const service = new CodexAccountService({
     store,
     config: {
@@ -75,18 +84,10 @@ async function fixture() {
         PATH: '/bin',
       }),
     },
-    probe: vi.fn((context) => {
-      const reading = observations.get(context.accountId) ?? observation();
-      return Promise.resolve({
-        ...reading,
-        identityKey: unverified.has(context.accountId)
-          ? null
-          : (reading.identityKey ?? (reading.authenticated ? context.accountId : null)),
-      });
-    }),
+    probe,
     login,
   });
-  return { service, rows, observations, observation, baseDir, login, unverified };
+  return { service, rows, observations, observation, baseDir, login, unverified, probe };
 }
 it('preserves native environment and isolates managed history and authentication', async () => {
   const { service, baseDir } = await fixture();
@@ -289,4 +290,88 @@ it('keeps native identity pinned and recovers after signing back into the origin
   observations.set(id, { ...observation(), identityKey: 'original' });
   service.invalidate();
   expect((await service.getRuntimeContext(id)).accountId).toBe(id);
+});
+
+it.each(['m', 'default', undefined])(
+  'Auto admits only accounts supporting requested effort for model %s',
+  async (model) => {
+    const { service, observations, observation } = await fixture();
+    const high = await service.createAccount('High effort');
+    for (const [id, efforts, percent] of [
+      ['codex-native-default', ['low'], 10],
+      [high.id, ['low', 'high'], 80],
+    ] as const) {
+      observations.set(id, {
+        ...observation(percent),
+        models: ['m'],
+        modelCatalog: [
+          {
+            id: 'm',
+            model: 'm',
+            isDefault: true,
+            supportedReasoningEfforts: efforts.map((reasoningEffort) => ({ reasoningEffort })),
+          },
+        ],
+      });
+    }
+    expect(
+      await service.withAccountReservation({ model, reasoningEffort: 'high' }, async (id) => id)
+    ).toBe(high.id);
+    expect(
+      (await service.getPreviewRuntimeContext({ model, reasoningEffort: 'high' })).accountId
+    ).toBe(high.id);
+    for (const reasoningEffort of [null, 'default']) {
+      expect(
+        await service.withAccountReservation({ model, reasoningEffort }, async (id) => id)
+      ).toBe('codex-native-default');
+    }
+  }
+);
+it('rejects incompatible explicit effort before persistence and resolves default-model metadata', async () => {
+  const { service, observations, observation } = await fixture();
+  const id = 'codex-native-default';
+  observations.set(id, {
+    ...observation(10),
+    models: ['m', 'other'],
+    modelCatalog: [
+      {
+        id: 'other',
+        model: 'other',
+        isDefault: false,
+        supportedReasoningEfforts: [{ reasoningEffort: 'high' }],
+      },
+      {
+        id: 'm',
+        model: 'm',
+        isDefault: true,
+        supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+      },
+    ],
+  });
+  const persist = vi.fn(async (accountId: string) => accountId);
+  await expect(
+    service.withAccountReservation(
+      { accountId: id, model: 'default', reasoningEffort: 'high' },
+      persist
+    )
+  ).rejects.toThrow('reasoning effort');
+  expect(persist).not.toHaveBeenCalled();
+  await expect(
+    service.getPreviewRuntimeContext({ accountId: id, model: 'm', reasoningEffort: 'high' })
+  ).rejects.toThrow('reasoning effort');
+  for (const reasoningEffort of [undefined, null, 'default', 'low']) {
+    expect(
+      await service.withAccountReservation(
+        { accountId: id, model: 'default', reasoningEffort },
+        persist
+      )
+    ).toBe(id);
+  }
+});
+it('lists enabled account IDs without any native probes', async () => {
+  const { service, rows, probe } = await fixture();
+  const account = await service.createAccount('Managed');
+  rows[0]!.enabled = false;
+  expect(await service.getEnabledAccountIds()).toEqual([account.id]);
+  expect(probe).not.toHaveBeenCalled();
 });

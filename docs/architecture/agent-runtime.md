@@ -406,12 +406,12 @@ Device-code sign-in requires an additional account setting and is not the
 default flow.
 
 New Codex conversations offer Auto or a named account. Auto filters signed-out,
-identity-mismatched, disabled and incompatible-model profiles, excludes known
-exhausted quota windows, and compares relevant usage pressure. Unknown quota is
-not treated as unused quota. Concurrent creation reserves candidates and uses
-recent assignment to spread similar accounts. Reservations are scheduling hints,
-not exact token budgets. Disabling Use for Auto does not stop existing sessions
-or prevent an explicit manual selection.
+identity-mismatched, disabled and incompatible model/effort profiles, excludes
+known exhausted quota windows, and compares relevant usage pressure. Unknown
+quota is not treated as unused quota. Concurrent creation reserves candidates
+and uses recent assignment to spread similar accounts. Reservations are
+scheduling hints, not exact token budgets. Disabling Use for Auto does not stop
+existing sessions or prevent an explicit manual selection.
 
 Auto model discovery combines catalogs from enabled, authenticated accounts so
 models exclusive to one account remain selectable. A failed named-account
@@ -426,8 +426,10 @@ An existing Codex conversation requires exact resume; missing history or a
 changed account identity never silently starts a conversation on a different
 account.
 
-Native default remains bound to its first verified identity. If a later native
-CLI sign-in changes that identity, run `ff codex login` with the original
+Native default pins the provider scope when native file credential metadata is
+available. Keyring-backed setups instead pin an unverified email fallback; that
+fallback does not verify the provider/workspace scope. If a later native CLI
+sign-in changes the pinned identity, run `ff codex login` with the original
 account to restore those conversations; add a managed profile for a different
 account. Stopping a provider process clears its session commands on connected
 clients as well as in the server's replay cache.

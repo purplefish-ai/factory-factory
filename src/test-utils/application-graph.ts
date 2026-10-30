@@ -82,6 +82,7 @@ vi.mock('@/backend/prompts/quick-actions', () => ({
 vi.mock('@/backend/services/codex-accounts', () => ({
   codexAccountService: {
     getAccounts: vi.fn(async () => []),
+    getEnabledAccountIds: vi.fn(async () => []),
     createAccount: vi.fn(),
     updateAccount: vi.fn(),
     getRuntimeContext: vi.fn(async (id = 'codex-native-default') => ({

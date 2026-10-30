@@ -605,3 +605,34 @@ it('maps unavailable account admission to a recoverable precondition before pers
   ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'No signed-in account' });
   expect(ports.createWorkspace).not.toHaveBeenCalled();
 });
+
+it.each(['xhigh', null] as const)(
+  'validates explicit reasoning effort before workspace persistence (%s)',
+  async (reasoningEffort) => {
+    const { ports } = createPorts();
+    const validateCodexAccount = vi
+      .fn()
+      .mockRejectedValue(
+        new ApplicationError('PRECONDITION_FAILED', 'Requested effort unavailable')
+      );
+    await expect(
+      launchWorkspace(
+        {
+          type: 'MANUAL',
+          projectId: 'p1',
+          name: 'Effort',
+          provider: 'CODEX',
+          model: 'gpt',
+          reasoningEffort,
+        },
+        { ...ports, validateCodexAccount }
+      )
+    ).rejects.toThrow('Requested effort unavailable');
+    expect(validateCodexAccount).toHaveBeenCalledWith({
+      accountId: undefined,
+      model: 'gpt',
+      reasoningEffort,
+    });
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+  }
+);

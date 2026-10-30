@@ -22,10 +22,16 @@ export interface AccountStore {
     data: { label?: string; enabled?: boolean; identityKey?: string }
   ): Promise<AccountRow>;
 }
+export interface AccountSelectionOptions {
+  accountId?: string;
+  model?: string;
+  reasoningEffort?: string | null;
+}
 export interface NativeModel {
   id: string;
   model: string;
   isDefault: boolean;
+  supportedReasoningEfforts?: { reasoningEffort: string }[];
 }
 export type AccountIdentity = Pick<
   AccountObservation,

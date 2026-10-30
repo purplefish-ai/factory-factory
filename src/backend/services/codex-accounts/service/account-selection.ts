@@ -1,17 +1,39 @@
 import type { AccountObservation } from './types';
+
+function effectiveModel(observation: AccountObservation, requestedModel?: string) {
+  const catalog = observation.modelCatalog ?? [];
+  return requestedModel && requestedModel !== 'default'
+    ? (catalog.find((model) => model.id === requestedModel) ??
+        catalog.find((model) => model.model === requestedModel))
+    : catalog.find((model) => model.isDefault);
+}
+export function supportsReasoningEffort(
+  observation: AccountObservation,
+  model?: string,
+  effort?: string | null
+): boolean {
+  return (
+    !effort ||
+    effort === 'default' ||
+    (effectiveModel(observation, model)?.supportedReasoningEfforts?.some(
+      (entry) => entry.reasoningEffort === effort
+    ) ??
+      false)
+  );
+}
 export interface AccountCandidate {
   id: string;
   pressure: number;
 }
 export function accountPressure(
   observation: AccountObservation,
-  requestedModel?: string
+  requestedModel?: string,
+  reasoningEffort?: string | null
 ): number | null {
-  const catalog = observation.modelCatalog ?? [];
-  const chosen =
-    requestedModel && requestedModel !== 'default'
-      ? catalog.find((model) => model.id === requestedModel || model.model === requestedModel)
-      : catalog.find((model) => model.isDefault);
+  const chosen = effectiveModel(observation, requestedModel);
+  if (!supportsReasoningEffort(observation, requestedModel, reasoningEffort)) {
+    return null;
+  }
   if (
     requestedModel &&
     requestedModel !== 'default' &&

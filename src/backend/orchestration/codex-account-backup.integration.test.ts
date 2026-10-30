@@ -104,7 +104,7 @@ it('imports published version 6 without account fields as legacy native bindings
   expect(normalized.data.agentSessions.every((row) => row.codexAccountId === null)).toBe(true);
   await clearIntegrationDatabase(db.prisma);
   await dataBackupService.importData(normalized);
-  expect(await db.prisma.agentSession.findMany()).toEqual([
+  expect(await db.prisma.agentSession.findMany({ orderBy: { id: 'asc' } })).toEqual([
     expect.objectContaining({ id: 'managed-chat', codexAccountId: null }),
     expect.objectContaining({ id: 'native-chat', codexAccountId: null }),
   ]);

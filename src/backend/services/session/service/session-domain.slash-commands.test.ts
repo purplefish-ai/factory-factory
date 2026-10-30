@@ -9,6 +9,8 @@ afterEach(() => {
 
 it('publishes empty slash commands to the stopped conversation without clearing another session', () => {
   const publish = vi.spyOn(sessionEventBus, 'publishToSession').mockImplementation(() => undefined);
+  sessionDomainService.markIdle('account-a', 'alive');
+  sessionDomainService.markIdle('account-b', 'alive');
   sessionDomainService.emitDelta('account-a', {
     type: 'slash_commands',
     slashCommands: [{ name: '/a', description: 'A' }],
@@ -24,4 +26,15 @@ it('publishes empty slash commands to the stopped conversation without clearing 
     data: { type: 'slash_commands', slashCommands: [] },
   });
   expect(publish.mock.calls.every(([id]) => id === 'account-a')).toBe(true);
+  expect(
+    sessionDomainService.prepareLoad('account-b', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    }).replayEvents
+  ).toContainEqual({
+    type: 'slash_commands',
+    slashCommands: [{ name: '/b', description: 'B' }],
+  });
 });

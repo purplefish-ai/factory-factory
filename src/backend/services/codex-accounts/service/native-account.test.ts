@@ -60,12 +60,25 @@ it('reads isolated identity, model availability and all quota buckets without ex
         },
       };
     }
-    return { data: [{ id: 'gpt-test' }], nextCursor: null };
+    return {
+      data: [
+        {
+          id: 'gpt-test',
+          isDefault: true,
+          supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }],
+        },
+      ],
+      nextCursor: null,
+    };
   });
   const result = await probeNativeAccount(context);
   expect(result.authenticated).toBe(true);
   expect(result.identityKey).toMatch(/^[a-f0-9]{64}$/);
   expect(result.models).toEqual(['gpt-test']);
+  expect(result.modelCatalog?.[0]).toMatchObject({
+    isDefault: true,
+    supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }],
+  });
   expect(result.usage.windows.map((window) => window.usedPercent)).toEqual([30, 100]);
   expect(JSON.stringify(result)).not.toContain('do-not-expose');
 });

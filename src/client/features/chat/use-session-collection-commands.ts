@@ -40,7 +40,9 @@ function getWorkspaceCreationDefaults(
   if (!provider) {
     return {};
   }
-  return first?.model ? { provider, model: first.model } : { provider };
+  return first?.provider === provider && first.model
+    ? { provider, model: first.model }
+    : { provider };
 }
 
 // Expose the collection capability without leaking tRPC's private inferred result types.

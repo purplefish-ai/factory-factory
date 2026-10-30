@@ -43,7 +43,11 @@ export interface WorkspaceLaunchPorts {
     model?: string;
     codexAccountId?: string;
   }): Promise<SessionLaunchOptions>;
-  validateCodexAccount?(input: { accountId?: string; model?: string }): Promise<unknown>;
+  validateCodexAccount?(input: {
+    accountId?: string;
+    model?: string;
+    reasoningEffort?: string | null;
+  }): Promise<unknown>;
   createWorkspace: WorkspaceCreation;
   createDefaultSession(
     input: Parameters<typeof sessionDataService.createAgentSession>[0]
@@ -139,12 +143,13 @@ async function preflightInteractiveLaunch(
   capacity: number,
   ports: WorkspaceLaunchPorts
 ): Promise<Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined> {
-  const { model, accessMode, codexAccountId } = explicitSessionModel(source);
+  const { model, accessMode, codexAccountId, reasoningEffort } = explicitSessionModel(source);
   if (
     capacity <= 0 &&
     model === undefined &&
     accessMode === undefined &&
-    codexAccountId === undefined
+    codexAccountId === undefined &&
+    reasoningEffort === undefined
   ) {
     return undefined;
   }
@@ -170,20 +175,32 @@ async function preflightInteractiveLaunch(
       );
     }
   }
-  await validateLaunchAccount({ provider, accountId: codexAccountId, model }, ports);
+  await validateLaunchAccount(
+    { provider, accountId: codexAccountId, model, reasoningEffort },
+    ports
+  );
   await validateLaunchAccess({ provider, model, accessMode, codexAccountId }, ports);
   return provider;
 }
 
 async function validateLaunchAccount(
-  input: { provider: 'CLAUDE' | 'CODEX'; accountId?: string; model?: string },
+  input: {
+    provider: 'CLAUDE' | 'CODEX';
+    accountId?: string;
+    model?: string;
+    reasoningEffort?: string | null;
+  },
   ports: Pick<WorkspaceLaunchPorts, 'validateCodexAccount'>
 ): Promise<void> {
   if (input.provider !== 'CODEX') {
     return;
   }
   try {
-    await ports.validateCodexAccount?.({ accountId: input.accountId, model: input.model });
+    await ports.validateCodexAccount?.({
+      accountId: input.accountId,
+      model: input.model,
+      ...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
+    });
   } catch (error) {
     if (error instanceof ApplicationError) {
       throw error;

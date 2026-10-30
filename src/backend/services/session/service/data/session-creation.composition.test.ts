@@ -8,6 +8,7 @@ vi.mock('@/backend/services/codex-accounts', () => ({
   },
 }));
 import { createDefaultApplicationDependencies } from '@/backend/app-context';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { sessionProviderResolverService } from '@/backend/services/session';
 import {
   agentSessionAccessor,
@@ -260,6 +261,18 @@ function launchGraph(provider: SessionProvider, claude: string, codex: string) {
 }
 
 describe('real final creation through application launch', () => {
+  it('forwards explicit effort with the effective model into real graph account preflight', async () => {
+    const { services } = launchGraph('CODEX', 'haiku', 'gpt-saved');
+    const preview = vi.mocked(codexAccountService.getPreviewRuntimeContext);
+    preview.mockClear();
+    await services.launchWorkspace({ ...manual, reasoningEffort: 'xhigh' });
+    expect(preview).toHaveBeenCalledExactlyOnceWith({
+      accountId: undefined,
+      model: 'gpt-saved',
+      reasoningEffort: 'xhigh',
+    });
+  });
+
   it('uses both graphs saved models after explicit-provider interactive preflight', async () => {
     const a = launchGraph('CLAUDE', 'haiku', 'gpt-a');
     guardGlobals();
