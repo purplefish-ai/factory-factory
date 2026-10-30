@@ -69,17 +69,26 @@ describe('SubagentList', () => {
     expect(new Set(icons.map((icon) => icon.innerHTML)).size).toBe(4);
   });
 
-  it('keeps a surviving agent’s icon when an earlier agent completes', () => {
+  it('keeps both agents’ icons when an earlier agent completes', () => {
     const first = subagent({ id: 'a' });
     const second = subagent({ id: 'b' });
     const onSelect = vi.fn();
     render({ state: { kind: 'ready', subagents: [second, first] }, onSelect });
+    const completedIcon = container.querySelectorAll('li svg')[0]?.outerHTML;
     const original = container.querySelectorAll('li svg')[1]?.outerHTML;
+    expect(completedIcon).toBeDefined();
+    expect(original).toBeDefined();
     render({
       state: { kind: 'ready', subagents: [second, { ...first, status: 'completed' }] },
       onSelect,
     });
     expect(container.querySelector('li svg')?.outerHTML).toBe(original);
+    const completedButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Completed · 1'
+    );
+    expect(completedButton).toBeDefined();
+    void act(() => completedButton?.click());
+    expect(container.querySelectorAll('li svg')[1]?.outerHTML).toBe(completedIcon);
   });
 
   it('sorts active sub-agents oldest first and keeps terminal results collapsed', () => {
