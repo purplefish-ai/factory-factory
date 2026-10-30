@@ -139,6 +139,7 @@ export class AcpClientFactory {
       const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
       const stream = ndJsonStream(output, input);
       const nativeSessionTracker = new AcpNativeSessionTracker({
+        groupCodexGenerations: isCodex,
         onSubagentsChanged: (event) =>
           handlers.onAcpEvent?.(sessionId, {
             type: 'acp_subagents_changed',

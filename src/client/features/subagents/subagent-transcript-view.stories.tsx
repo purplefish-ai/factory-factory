@@ -182,6 +182,41 @@ export const RefinedBashInput = story(
   desktop
 );
 
+export const ResumedConversation = story(
+  selection('running', { generation: 2 }),
+  {
+    ...readyState,
+    hasOlder: false,
+    messages: projectAcpTranscriptUpdates([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Initial review: the authorization boundary is protected.' },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'follow-up',
+        title: 'Terminal',
+        rawInput: { command: 'pnpm test' },
+        status: 'pending',
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'follow-up',
+        status: 'completed',
+        rawOutput: 'All regression tests passed.',
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: 'Resumed review: the follow-up regression tests pass. Earlier findings remain available above.',
+        },
+      },
+    ]),
+  },
+  desktop
+);
+
 export const CompletedDesktop = story(selection('completed'), readyState, desktop);
 export const CompletedNarrow = story(selection('completed'), readyState, narrow);
 

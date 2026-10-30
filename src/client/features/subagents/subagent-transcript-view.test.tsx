@@ -240,12 +240,12 @@ describe('SubagentTranscriptView', () => {
     vi.clearAllMocks();
   });
 
-  function render() {
+  function render(selected = selection()) {
     void act(() =>
       root.render(
         createElement(SubagentTranscriptView, {
           workspaceId: 'workspace-1',
-          selection: selection(),
+          selection: selected,
         })
       )
     );
@@ -352,30 +352,34 @@ describe('SubagentTranscriptView', () => {
     expect(mocks.projectAcpTranscriptUpdates).toHaveBeenNthCalledWith(2, olderPage.updates);
   });
 
-  it('refetches only matching live sub-agent transcript changes', () => {
-    mocks.queryResult.data = {
-      pages: [{ projectionBoundary: 'turn', updates: [], nextCursor: null }],
-    };
-    render();
+  it.each(['child-1', 'child-1:generation:2'])(
+    'refetches matching transcript changes for %s',
+    (id) => {
+      mocks.queryResult.data = {
+        pages: [{ projectionBoundary: 'turn', updates: [], nextCursor: null }],
+      };
+      const selected = selection();
+      render({ ...selected, subagent: { ...selected.subagent, id } });
 
-    void act(() => {
-      dispatchSubagentChange({
-        sessionId: 'session-1',
-        subagentId: 'another-child',
-        change: 'updated',
+      void act(() => {
+        dispatchSubagentChange({
+          sessionId: 'session-1',
+          subagentId: 'another-child',
+          change: 'updated',
+        });
       });
-    });
-    expect(mocks.refetch).not.toHaveBeenCalled();
+      expect(mocks.refetch).not.toHaveBeenCalled();
 
-    void act(() => {
-      dispatchSubagentChange({
-        sessionId: 'session-1',
-        subagentId: 'child-1',
-        change: 'completed',
+      void act(() => {
+        dispatchSubagentChange({
+          sessionId: 'session-1',
+          subagentId: 'child-1',
+          change: 'completed',
+        });
       });
-    });
-    expect(mocks.refetch).toHaveBeenCalledOnce();
-  });
+      expect(mocks.refetch).toHaveBeenCalledOnce();
+    }
+  );
 
   it('keeps loaded messages visible and retries the older page after pagination fails', () => {
     mocks.queryResult.data = {

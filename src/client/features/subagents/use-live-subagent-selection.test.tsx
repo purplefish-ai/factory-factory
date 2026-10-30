@@ -217,6 +217,79 @@ describe('useLiveSubagentSelection', () => {
     expect(JSON.parse(container.textContent ?? '')).toEqual(reopened);
   });
 
+  it('refreshes a completed selection when the same Codex thread resumes', () => {
+    const stored = selection({ status: 'completed', generation: 1 });
+    const resumed = { ...stored.subagent, status: 'running' as const, generation: 2 };
+    setPages([{ supported: true, subagents: [resumed], nextCursor: null }]);
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: resumed });
+  });
+
+  it('refreshes a persisted generation tab from canonical child notifications', async () => {
+    const stored = selection({ id: 'child-1:generation:2', status: 'completed' });
+    const resumed = {
+      ...stored.subagent,
+      id: 'child-1',
+      generation: 3,
+      status: 'running' as const,
+    };
+    setPages([{ supported: true, subagents: [resumed], nextCursor: null }]);
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual({
+      ...stored,
+      subagent: { ...resumed, id: stored.subagent.id },
+    });
+    mocks.listRefetch.mockClear();
+    await dispatchMatchingChange();
+    expect(mocks.listRefetch).toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      storedGeneration: 4,
+      candidateGeneration: 3,
+      candidateTime: '2026-08-10T10:01:00.000Z',
+      accepts: true,
+    },
+    {
+      storedGeneration: 3,
+      candidateGeneration: 4,
+      candidateTime: '2026-08-10T09:59:00.000Z',
+      accepts: false,
+    },
+  ])(
+    'uses timestamps across runtime generation resets: $accepts',
+    ({ storedGeneration, candidateGeneration, candidateTime, accepts }) => {
+      const stored = selection({
+        status: 'completed',
+        generation: storedGeneration,
+        updatedAt: '2026-08-10T10:00:00.000Z',
+      });
+      const candidate = {
+        ...stored.subagent,
+        status: 'running' as const,
+        generation: candidateGeneration,
+        updatedAt: candidateTime,
+      };
+      setPages([{ supported: true, subagents: [candidate], nextCursor: null }]);
+      renderHookProbe(stored);
+      expect(JSON.parse(container.textContent ?? '')).toEqual(
+        accepts ? { ...stored, subagent: candidate } : stored
+      );
+    }
+  );
+
+  it('keeps generation-less providers terminal despite a newer running snapshot', () => {
+    const stored = selection({ status: 'completed', updatedAt: '2026-08-10T10:00:00.000Z' });
+    const candidate = selection({
+      status: 'running',
+      updatedAt: '2026-08-10T10:01:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [candidate], nextCursor: null }]);
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+  });
+
   it('does not regress a terminal selection at an equal timestamp', () => {
     const terminal = selection({
       status: 'completed',
