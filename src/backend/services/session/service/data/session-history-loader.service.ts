@@ -386,8 +386,8 @@ function isEntryEligible(entry: ClaudeSessionHistoryEntry, providerSessionId: st
   if (entry.type !== 'user' && entry.type !== 'assistant') {
     return false;
   }
-  // Claude stores image file references as metadata companions to the original prompt.
-  if (entry.isSidechain || (entry.isMeta && entry.turnCompanion)) {
+  // Harness metadata and image companions are not conversation messages.
+  if (entry.isSidechain || entry.isMeta || entry.turnCompanion) {
     return false;
   }
   if (entry.sessionId && entry.sessionId !== providerSessionId) {
