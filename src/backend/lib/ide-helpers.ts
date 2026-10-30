@@ -32,13 +32,13 @@ export const IDE_CONFIGS: Record<
 
 /**
  * Run a command and report whether it exited successfully. execCommand resolves
- * with a non-zero code when the command fails and rejects only when it cannot
- * be spawned, so both outcomes count as failure.
+ * with a non-zero code (or timedOut) when the command fails and rejects only
+ * when it cannot be spawned, so all of these count as failure.
  */
 async function runsSuccessfully(command: string, args: string[]): Promise<boolean> {
   try {
     const result = await execCommand(command, args);
-    return result.code === 0;
+    return result.code === 0 && !result.timedOut;
   } catch {
     return false;
   }

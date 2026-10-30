@@ -197,6 +197,13 @@ describe('ide-helpers', () => {
       expect(result).toBe(false);
     });
 
+    it('should return false when the command times out', async () => {
+      mockExecCommand.mockResolvedValueOnce({ ...exitedWith(0), timedOut: true });
+
+      const result = await openCustomIde('myide {workspace}', '/path/to/workspace');
+      expect(result).toBe(false);
+    });
+
     it('should handle command without workspace placeholder', async () => {
       mockExecCommand.mockResolvedValueOnce({ stdout: '', stderr: '', code: 0 });
 

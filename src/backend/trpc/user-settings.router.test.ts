@@ -427,6 +427,26 @@ describe('userSettingsRouter', () => {
     await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
       'Command failed: exited with code 1'
     );
+
+    mockExecCommand.mockResolvedValueOnce({
+      code: 127,
+      stdout: '',
+      stderr: `  myide: not found\n${'x'.repeat(1000)}`,
+    });
+    // stderr is trimmed and capped at 500 characters ("myide: not found\n" + 483 x's).
+    await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
+      /^Command failed: exited with code 127: myide: not found\nx{483}$/
+    );
+
+    mockExecCommand.mockResolvedValueOnce({
+      code: 0,
+      stdout: '',
+      stderr: 'echo timed out after 300000ms',
+      timedOut: true,
+    });
+    await expect(caller.testCustomCommand({ customCommand: 'echo {workspace}' })).rejects.toThrow(
+      'Command failed: timed out: echo timed out after 300000ms'
+    );
   });
 
   it.each([

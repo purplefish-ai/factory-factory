@@ -143,6 +143,8 @@ function unavailableCodexOptions(error: unknown, codexAccountId?: string): Provi
   };
 }
 
+const MAX_COMMAND_FAILURE_STDERR_CHARS = 500;
+
 export const userSettingsRouter = router({
   /**
    * Get user settings
@@ -266,9 +268,12 @@ export const userSettingsRouter = router({
           `Command failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
-      // execCommand resolves (rather than rejects) when the command exits non-zero.
-      if (result.code !== 0) {
-        throw new Error(`Command failed: exited with code ${result.code}`);
+      // execCommand resolves (rather than rejects) when the command exits
+      // non-zero or times out.
+      if (result.code !== 0 || result.timedOut) {
+        const reason = result.timedOut ? 'timed out' : `exited with code ${result.code}`;
+        const stderr = result.stderr.trim().slice(0, MAX_COMMAND_FAILURE_STDERR_CHARS);
+        throw new Error(`Command failed: ${reason}${stderr ? `: ${stderr}` : ''}`);
       }
       return { success: true, message: 'Command executed successfully' };
     }),
