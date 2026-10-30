@@ -33,6 +33,14 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('concurrent workspace archives', () => {
   let row: WorkspaceWithProject;
   let services: ArchiveWorkspaceDependencies;
@@ -75,8 +83,8 @@ describe('concurrent workspace archives', () => {
   });
 
   it('joins pending cleanup for both fresh and stale duplicate requests', async () => {
-    const enteredCleanup = Promise.withResolvers<void>();
-    const finishCleanup = Promise.withResolvers<void>();
+    const enteredCleanup = deferred();
+    const finishCleanup = deferred();
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementation(async () => {
       enteredCleanup.resolve();
       await finishCleanup.promise;
@@ -112,8 +120,8 @@ describe('concurrent workspace archives', () => {
   });
 
   it('shares a real cleanup failure and allows a later retry after rollback', async () => {
-    const enteredCleanup = Promise.withResolvers<void>();
-    const finishCleanup = Promise.withResolvers<void>();
+    const enteredCleanup = deferred();
+    const finishCleanup = deferred();
     const error = new Error('Worktree cleanup failed');
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementationOnce(
       async () => {
