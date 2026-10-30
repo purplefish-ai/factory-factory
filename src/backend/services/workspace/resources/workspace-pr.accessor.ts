@@ -145,6 +145,29 @@ const reattachmentFields = {
   revision: { increment: 1 },
 } satisfies Prisma.WorkspacePRUpdateInput;
 
+/** GitHub host/owner/repo are case-insensitive, so URL casing variants name one PR. */
+function prUrlKey(url: string): string {
+  const match = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/i.exec(url);
+  return match ? `${match[1]}/${match[2]}/${match[3]}/pull/${match[4]}`.toLowerCase() : url;
+}
+
+/** Prefer a live association, then the exact URL, over a detached casing variant. */
+async function findEquivalentPR(tx: Prisma.TransactionClient, workspaceId: string, url: string) {
+  const key = prUrlKey(url);
+  const rows = await tx.workspacePR.findMany({
+    where: { workspaceId },
+    select: { id: true, url: true, detachedAt: true },
+    orderBy: { id: 'asc' },
+  });
+  const matches = rows.filter((row) => prUrlKey(row.url) === key);
+  return (
+    matches.find((row) => row.detachedAt === null) ??
+    matches.find((row) => row.url === url) ??
+    matches[0] ??
+    null
+  );
+}
+
 /** The subset of the PR cache a caller may write in one unconditional update. */
 export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
 
@@ -340,9 +363,7 @@ class WorkspacePRAccessor {
   }
   attach(workspaceId: string, url: string) {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.workspacePR.findUnique({
-        where: { workspaceId_url: { workspaceId, url } },
-      });
+      const existing = await findEquivalentPR(tx, workspaceId, url);
       if (existing) {
         if (existing.detachedAt) {
           await tx.workspacePR.update({
@@ -376,10 +397,7 @@ class WorkspacePRAccessor {
       }
       const ids: string[] = [];
       for (const url of urls) {
-        const existing = await tx.workspacePR.findUnique({
-          where: { workspaceId_url: { workspaceId, url } },
-        });
-        if (existing) {
+        if (await findEquivalentPR(tx, workspaceId, url)) {
           continue;
         }
         const pr = await tx.workspacePR.create({

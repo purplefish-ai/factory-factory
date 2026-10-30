@@ -56,6 +56,16 @@ export function throwIfGitHubConnectivityError(
 }
 
 /**
+ * Add context to a gh failure without embedding execFile's `Command failed:`
+ * line, whose arguments (repo names, comment bodies) would otherwise be
+ * classified and shown as if they were gh diagnostics.
+ */
+export function wrapGitHubCLIError(context: string, error: unknown): Error {
+  const detail = getGitHubCLIErrorMessage(error) || 'gh command failed';
+  return new Error(`${context}: ${detail}`, { cause: error });
+}
+
+/**
  * Classify an error from gh CLI execution.
  */
 export function classifyError(error: unknown): GitHubCLIErrorType {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExecFile = vi.fn();
 const mockLoggerInfo = vi.fn();
@@ -71,10 +71,6 @@ describe('GitHubCLIService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     githubCLIService.clearCaches();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
   });
 
   describe('getPRStatus', () => {
@@ -1606,10 +1602,14 @@ describe('GitHubCLIService', () => {
         expect.objectContaining({ timeout: expect.any(Number) })
       );
 
-      mockExecFile.mockRejectedValueOnce(new Error('issue list failed'));
-      await expect(githubCLIService.listIssues('o', 'r')).rejects.toThrow(
-        'Failed to list issues: issue list failed'
-      );
+      const failure = Object.assign(new Error('Command failed: gh -R o/authentication'), {
+        stderr: 'HTTP 502: Bad Gateway',
+      });
+      mockExecFile.mockRejectedValueOnce(failure);
+      const error = await githubCLIService.listIssues('o', 'authentication').catch((e) => e);
+      expect(error).toMatchObject({ message: 'Failed to list issues: HTTP 502: Bad Gateway' });
+      expect(error.cause).toBe(failure);
+      expect(classifyError(error)).toBe('unknown');
     });
 
     it('adds PR and issue comments and maps write failures', async () => {

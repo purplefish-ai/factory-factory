@@ -48,6 +48,24 @@ describe('GitHub issue search', () => {
     await expect(searchIssues(exec, 'org', 'repo', '42', 10)).rejects.toThrow('Offline');
   });
 
+  it('treats repositories with Issues disabled as no match', async () => {
+    // REST answers 410 Gone for exact-number lookups on these repositories.
+    const exec = vi.fn().mockRejectedValue(
+      Object.assign(new Error('Command failed: gh api repos/org/repo/issues/42'), {
+        stderr: 'gh: Issues are disabled for this repo (HTTP 410)',
+      })
+    );
+    expect(await searchIssues(exec, 'org', 'repo', '#42', 10)).toEqual([]);
+    exec.mockRejectedValue(
+      Object.assign(new Error('Command failed: gh issue list --repo org/repo'), {
+        stderr: "the 'org/repo' repository has disabled issues",
+      })
+    );
+    expect(await searchIssues(exec, 'org', 'repo', 'search polish', 10)).toEqual([]);
+    exec.mockRejectedValue(new Error('HTTP 502: Bad Gateway'));
+    await expect(searchIssues(exec, 'org', 'repo', 'search polish', 10)).rejects.toThrow('502');
+  });
+
   it('searches open issues without restricting assignment or fetching only the first list page', async () => {
     const exec = vi.fn().mockResolvedValue({ stdout: '[]', stderr: '' });
     expect(await searchIssues(exec, 'org', 'repo', 'search polish', 20)).toEqual([]);

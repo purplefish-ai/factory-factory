@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createLogger } from '@/backend/services/logger.service';
 import { ghExecLimit as execLimit, GH_TIMEOUT_MS } from './constants';
+import { wrapGitHubCLIError } from './errors';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli-code-review');
@@ -188,7 +189,7 @@ export async function getPRHeadCommitSha(repo: string, prNumber: number): Promis
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.warn('Failed to fetch PR head commit SHA', { repo, prNumber, error: errorMessage });
-    throw new Error(`Failed to fetch PR head commit SHA: ${errorMessage}`);
+    throw wrapGitHubCLIError('Failed to fetch PR head commit SHA', error);
   }
 }
 
@@ -239,6 +240,6 @@ export async function createReviewComment(
       line: input.line,
       error: errorMessage,
     });
-    throw new Error(`Failed to create review comment: ${errorMessage}`);
+    throw wrapGitHubCLIError('Failed to create review comment', error);
   }
 }

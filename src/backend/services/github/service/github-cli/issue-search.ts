@@ -17,41 +17,59 @@ const restIssueSchema = z.object({
   pull_request: z.unknown().optional(),
 });
 
-export async function searchIssues(
+// Repositories with Issues disabled have no issues to match: REST answers
+// 410 Gone, while `gh issue list` reports it without an HTTP status.
+const ISSUES_DISABLED = /\bHTTP 410\b|\brepository has disabled issues\b/i;
+const ISSUE_NOT_FOUND = /\bHTTP 404\b/i;
+
+async function orNoMatch(
+  search: () => Promise<GitHubIssue[]>,
+  ...noMatch: RegExp[]
+): Promise<GitHubIssue[]> {
+  try {
+    return await search();
+  } catch (error) {
+    const message = getGitHubCLIErrorMessage(error);
+    if (noMatch.some((pattern) => pattern.test(message))) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function lookupIssueNumber(
+  read: Read,
+  owner: string,
+  repo: string,
+  number: string
+): Promise<GitHubIssue[]> {
+  const { stdout } = await read(['api', `repos/${owner}/${repo}/issues/${number}`], {
+    timeout: GH_TIMEOUT_MS.default,
+  });
+  const issue = parseGhJson(restIssueSchema, stdout, 'searchIssueNumber');
+  // GitHub's REST issues endpoint also returns pull requests.
+  return issue.pull_request !== undefined
+    ? []
+    : [
+        {
+          number: issue.number,
+          title: issue.title,
+          body: issue.body ?? '',
+          url: issue.html_url,
+          state: issue.state === 'open' ? 'OPEN' : 'CLOSED',
+          createdAt: issue.created_at,
+          author: { login: issue.user?.login ?? 'Unknown' },
+        },
+      ];
+}
+
+async function listMatchingIssues(
   read: Read,
   owner: string,
   repo: string,
   query: string,
   limit: number
 ): Promise<GitHubIssue[]> {
-  const number = /^#?(\d+)$/.exec(query)?.[1];
-  if (number) {
-    try {
-      const { stdout } = await read(['api', `repos/${owner}/${repo}/issues/${number}`], {
-        timeout: GH_TIMEOUT_MS.default,
-      });
-      const issue = parseGhJson(restIssueSchema, stdout, 'searchIssueNumber');
-      // GitHub's REST issues endpoint also returns pull requests.
-      return issue.pull_request !== undefined
-        ? []
-        : [
-            {
-              number: issue.number,
-              title: issue.title,
-              body: issue.body ?? '',
-              url: issue.html_url,
-              state: issue.state === 'open' ? 'OPEN' : 'CLOSED',
-              createdAt: issue.created_at,
-              author: { login: issue.user?.login ?? 'Unknown' },
-            },
-          ];
-    } catch (error) {
-      if (/\bHTTP 404\b/i.test(getGitHubCLIErrorMessage(error))) {
-        return [];
-      }
-      throw error;
-    }
-  }
   const { stdout } = await read(
     [
       'issue',
@@ -70,4 +88,21 @@ export async function searchIssues(
     { timeout: GH_TIMEOUT_MS.default }
   );
   return parseGhJson(issueSchema.array(), stdout, 'searchIssues');
+}
+
+export function searchIssues(
+  read: Read,
+  owner: string,
+  repo: string,
+  query: string,
+  limit: number
+): Promise<GitHubIssue[]> {
+  const number = /^#?(\d+)$/.exec(query)?.[1];
+  return number
+    ? orNoMatch(
+        () => lookupIssueNumber(read, owner, repo, number),
+        ISSUE_NOT_FOUND,
+        ISSUES_DISABLED
+      )
+    : orNoMatch(() => listMatchingIssues(read, owner, repo, query, limit), ISSUES_DISABLED);
 }

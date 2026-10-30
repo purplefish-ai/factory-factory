@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './constants';
-import { classifyError, throwIfGitHubConnectivityError } from './errors';
+import { classifyError, throwIfGitHubConnectivityError, wrapGitHubCLIError } from './errors';
 import { mapComments, mapLabels, mapStatusChecks } from './mappers';
 import { getChronologicalReviews } from './reviews';
 import { fullPRDetailsSchema, prReviewDetailsSchema, prStatusDetailsSchema } from './schemas';
@@ -140,7 +140,7 @@ export async function getPRFullDetails(
       error: errorMessage,
     });
 
-    throw new Error(`Failed to fetch PR details: ${errorMessage}`);
+    throw wrapGitHubCLIError('Failed to fetch PR details', error);
   }
 }
 
@@ -168,6 +168,6 @@ export async function getPRDiff(
       error: errorMessage,
     });
 
-    throw new Error(`Failed to fetch PR diff: ${errorMessage}`);
+    throw wrapGitHubCLIError('Failed to fetch PR diff', error);
   }
 }

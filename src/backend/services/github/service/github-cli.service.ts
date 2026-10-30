@@ -7,6 +7,7 @@ import {
   classifyError,
   logGitHubCLIError,
   throwIfGitHubConnectivityError,
+  wrapGitHubCLIError,
 } from './github-cli/errors';
 import { GitHubCLIExecutor } from './github-cli/executor';
 import { searchIssues } from './github-cli/issue-search';
@@ -396,7 +397,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to submit review: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to submit review', error);
     }
   }
 
@@ -482,7 +483,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to list issues: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to list issues', error);
     }
   }
 
@@ -584,7 +585,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to fetch PR review comments: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to fetch PR review comments', error);
     }
   }
 
@@ -628,7 +629,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to fetch resolved review threads: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to fetch resolved review threads', error);
     }
   }
 
@@ -840,7 +841,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to add PR comment: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to add PR comment', error);
     }
   }
 
@@ -871,7 +872,7 @@ class GitHubCLIService {
         error: errorMessage,
       });
 
-      throw new Error(`Failed to add issue comment: ${errorMessage}`);
+      throw wrapGitHubCLIError('Failed to add issue comment', error);
     }
   }
 
