@@ -8,12 +8,24 @@ export interface ServeEnvOptions {
 const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
 
 /**
- * Builds an `http://host:port` origin, bracketing IPv6 literals as RFC 3986
- * requires (and as browsers send them in the `Origin` header).
+ * Builds an `http://host:port` origin, bracketing and compressing IPv6 literals
+ * as browsers send them in the `Origin` header (RFC 3986 / RFC 5952).
  */
 export function buildHttpOrigin(host: string, port: number): string {
-  const urlHost = isIPv6(host) ? `[${host}]` : host;
-  return `http://${urlHost}:${port}`;
+  return `http://${formatUrlHost(host)}:${port}`;
+}
+
+function formatUrlHost(host: string): string {
+  if (!isIPv6(host)) {
+    return host;
+  }
+  try {
+    // The URL parser serializes IPv6 hosts in the compressed form browsers use
+    // in `Origin` (e.g. `0:0:0:0:0:0:0:1` -> `[::1]`).
+    return new URL(`http://[${host}]`).hostname;
+  } catch {
+    return `[${host}]`;
+  }
 }
 
 export function buildServeEnv(

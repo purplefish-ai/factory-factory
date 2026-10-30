@@ -234,6 +234,16 @@ describe('extractTryCloudflareUrl', () => {
 
     expect(extractTryCloudflareUrl(output)).toBe('https://brave-otter-sample.trycloudflare.com');
   });
+
+  it('does not match a trycloudflare.com prefix of a longer hostname', () => {
+    expect(extractTryCloudflareUrl('see https://fake.trycloudflare.com.evil.example')).toBeNull();
+  });
+
+  it('matches a tunnel URL followed by sentence punctuation', () => {
+    expect(extractTryCloudflareUrl('Visit https://brave-otter-sample.trycloudflare.com.')).toBe(
+      'https://brave-otter-sample.trycloudflare.com'
+    );
+  });
 });
 
 describe('removeHopByHopHeaders cookie forwarding', () => {

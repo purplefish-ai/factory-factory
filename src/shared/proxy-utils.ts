@@ -324,7 +324,8 @@ export function appendBoundedOutputBuffer(
  * up (with a path) in error logs when tunnel creation fails, so it is never a
  * public URL; the tunnel URL itself is always printed without a path or port.
  */
-const TRY_CLOUDFLARE_TUNNEL_URL = /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com(?![\w/:-])/i;
+const TRY_CLOUDFLARE_TUNNEL_URL =
+  /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com(?![\w/:-]|\.[a-z0-9])/i;
 
 export function extractTryCloudflareUrl(input: string): string | null {
   return input.match(TRY_CLOUDFLARE_TUNNEL_URL)?.[0] ?? null;

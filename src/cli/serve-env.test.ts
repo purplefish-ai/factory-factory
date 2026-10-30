@@ -88,6 +88,8 @@ describe('buildHttpOrigin', () => {
     ['127.0.0.1', 'http://127.0.0.1:3000'],
     ['::1', 'http://[::1]:3000'],
     ['::', 'http://[::]:3000'],
+    ['0:0:0:0:0:0:0:1', 'http://[::1]:3000'],
+    ['2001:DB8:0:0:0:0:0:1', 'http://[2001:db8::1]:3000'],
   ])('formats host %s as %s', (host, expected) => {
     expect(buildHttpOrigin(host, 3000)).toBe(expected);
   });
