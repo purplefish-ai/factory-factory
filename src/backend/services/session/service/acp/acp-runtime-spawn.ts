@@ -2,6 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { getNodeExecPath } from '@/backend/lib/node-runtime';
 import { createLogger } from '@/backend/services/logger.service';
 import { normalizeUnknownError } from './acp-stream-normalizer';
 
@@ -116,7 +117,7 @@ export function resolveProviderAcpSpawnCommand(provider: 'CLAUDE' | 'CODEX'): Sp
     return { command: binaryName, args: [], commandLabel: binaryName };
   }
   return {
-    command: process.execPath,
+    command: getNodeExecPath(),
     args: [entrypoint],
     commandLabel: `${binaryName} (${entrypoint})`,
   };

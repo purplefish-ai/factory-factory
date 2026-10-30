@@ -1,11 +1,18 @@
 import type {
   BrowserWindowConstructorOptions,
+  MessageBoxOptions,
+  MessageBoxReturnValue,
   OpenDialogOptions,
   OpenDialogReturnValue,
 } from 'electron';
 
+interface PreventableEventLike {
+  preventDefault(): void;
+}
+
 interface AppLike {
   on(event: 'activate' | 'window-all-closed', listener: () => void): void;
+  on(event: 'before-quit', listener: (event: PreventableEventLike) => void): void;
   whenReady(): Promise<void>;
   quit(): void;
 }
@@ -36,6 +43,7 @@ interface BrowserWindowConstructorLike {
 interface DialogLike {
   showErrorBox(title: string, content: string): void;
   showOpenDialog(window: unknown, options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
+  showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnValue>;
 }
 
 interface NativeImageLike {
@@ -70,6 +78,7 @@ interface IpcMainLike {
 interface ServerManagerLike {
   start(): Promise<string>;
   stop(): Promise<void>;
+  onUnexpectedExit(listener: (details: { code: number }) => void): unknown;
 }
 
 interface LoggerLike {
@@ -97,6 +106,8 @@ export interface ElectronLifecycleController {
   createWindow(): Promise<BrowserWindowLike | null>;
   handleActivate(): Promise<void>;
   handleWindowAllClosed(): void;
+  handleBeforeQuit(event: PreventableEventLike): void;
+  handleBackendExit(details: { code: number }): Promise<void>;
 }
 
 // Mirrors MAX_IMAGE_SIZE in src/lib/image-utils.ts (not imported directly —
@@ -153,6 +164,11 @@ export function createElectronLifecycle({
   let mainWindow: BrowserWindowLike | null = null;
   let createWindowPromise: Promise<BrowserWindowLike | null> | null = null;
   let stopServerPromise: Promise<void> | null = null;
+  // Set once quitting starts: the backend is being stopped for good.
+  let quitting = false;
+  // Set after the backend has stopped, so the next quit is allowed through.
+  let readyToQuit = false;
+  let backendExitPromptOpen = false;
 
   const resolveMainWindow = (): BrowserWindowLike | null => {
     if (mainWindow !== null && !mainWindow.isDestroyed()) {
@@ -301,6 +317,68 @@ export function createElectronLifecycle({
     }
   };
 
+  // Stop the backend before quitting so agent and terminal processes it owns
+  // are shut down instead of orphaned.
+  const handleBeforeQuit = (event: PreventableEventLike): void => {
+    if (readyToQuit) {
+      return;
+    }
+    event.preventDefault();
+    if (quitting) {
+      return;
+    }
+    quitting = true;
+    logger.log('[electron] Quit requested, stopping backend first...');
+    void stopServer().finally(() => {
+      readyToQuit = true;
+      app.quit();
+    });
+  };
+
+  const restartBackend = async (): Promise<void> => {
+    const window = resolveMainWindow();
+    if (!window) {
+      await createWindow();
+      return;
+    }
+    try {
+      const url = await serverManager.start();
+      await window.loadURL(url);
+    } catch (error) {
+      handleCreateWindowFailure(window, error);
+    }
+  };
+
+  const handleBackendExit = async ({ code }: { code: number }): Promise<void> => {
+    if (quitting || backendExitPromptOpen) {
+      return;
+    }
+    backendExitPromptOpen = true;
+    try {
+      const { response } = await dialog.showMessageBox({
+        type: 'error',
+        title: 'Backend Stopped',
+        message: 'The Factory Factory backend stopped unexpectedly.',
+        detail: `It exited with code ${code}. Running agents and terminals were stopped. Restart the backend to keep working, or quit.`,
+        buttons: ['Restart', 'Quit'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (quitting) {
+        return;
+      }
+      if (response !== 0) {
+        app.quit();
+        return;
+      }
+      logger.log('[electron] Restarting backend after unexpected exit...');
+      await restartBackend();
+    } finally {
+      backendExitPromptOpen = false;
+    }
+  };
+
   const registerIpcHandlers = (): void => {
     ipcMain.handle('dialog:showOpen', (_event: unknown, options: OpenDialogOptions) => {
       const currentWindow = resolveMainWindow();
@@ -347,6 +425,14 @@ export function createElectronLifecycle({
     app.on('window-all-closed', () => {
       handleWindowAllClosed();
     });
+
+    app.on('before-quit', (event) => {
+      handleBeforeQuit(event);
+    });
+
+    serverManager.onUnexpectedExit((details) => {
+      void handleBackendExit(details);
+    });
   };
 
   const start = (): void => {
@@ -375,6 +461,8 @@ export function createElectronLifecycle({
     createWindow,
     handleActivate,
     handleWindowAllClosed,
+    handleBeforeQuit,
+    handleBackendExit,
   };
 }
 

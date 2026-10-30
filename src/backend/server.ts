@@ -3,7 +3,7 @@
  *
  * Exports server creation and lifecycle functions for use by:
  * - CLI/standalone mode (index.ts)
- * - Electron main process (server-manager.ts)
+ * - Electron utility process (electron-utility-entry.ts)
  *
  * Configuration is passed via environment variables which must be set
  * BEFORE importing this module:

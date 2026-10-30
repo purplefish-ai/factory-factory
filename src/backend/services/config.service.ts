@@ -109,6 +109,7 @@ interface SystemConfig {
   codexSessionsDir: string;
   wsLogsPath: string;
   frontendStaticPath?: string;
+  nodeExecPath: string;
 
   // Server settings
   backendPort: number;
@@ -220,6 +221,15 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
 }
 
 /**
+ * The desktop backend runs in an Electron utility process, whose execPath is
+ * the Electron Helper on macOS. Electron main passes its own executable so
+ * Node entrypoints keep launching with the main app binary.
+ */
+function resolveNodeExecPath(env: ConfigEnv): string {
+  return env.FF_NODE_EXEC_PATH ?? process.execPath;
+}
+
+/**
  * Load system configuration from environment
  */
 function loadSystemConfig(): SystemConfig {
@@ -258,6 +268,7 @@ function loadSystemConfig(): SystemConfig {
       env.CODEX_SESSIONS_DIR ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions'),
     wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
     frontendStaticPath: env.FRONTEND_STATIC_PATH,
+    nodeExecPath: resolveNodeExecPath(env),
 
     // Server settings
     backendPort: env.BACKEND_PORT,
@@ -478,6 +489,14 @@ class ConfigService {
    */
   getMigrationsPath(): string | undefined {
     return this.config.migrationsPath;
+  }
+
+  /**
+   * Get the executable that runs bundled Node entrypoints (with
+   * ELECTRON_RUN_AS_NODE=1 under Electron)
+   */
+  getNodeExecPath(): string {
+    return this.config.nodeExecPath;
   }
 
   /**

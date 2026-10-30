@@ -6,6 +6,7 @@ import { registerClaudeCommand, runClaudeCommand } from './claude';
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
+vi.mock('@/backend/lib/node-runtime', () => ({ getNodeExecPath: () => process.execPath }));
 vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ FACTORY_RUNTIME: 'preserved' }),
 }));

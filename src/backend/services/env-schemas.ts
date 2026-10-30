@@ -102,6 +102,7 @@ export const ConfigEnvSchema = z.object({
   SHELL: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   DATABASE_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   MIGRATIONS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  FF_NODE_EXEC_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   HEALTH_CHECK_INTERVAL_MS: PositiveIntEnvSchema.catch(300_000),
   MAX_SESSIONS_PER_WORKSPACE: PositiveIntEnvSchema.catch(5),
   PR_DISCOVERY_CANDIDATE_LIMIT: PositiveIntEnvSchema.catch(100),

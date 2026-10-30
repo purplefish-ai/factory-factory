@@ -91,6 +91,26 @@ describe('configService environment accessors', () => {
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
   });
 
+  it('reads the Node exec path that Electron main passes to its backend', () => {
+    process.env.FF_NODE_EXEC_PATH =
+      '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory';
+    configService.reload();
+
+    expect(configService.getNodeExecPath()).toBe(
+      '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory'
+    );
+  });
+
+  it('defaults the Node exec path to the current runtime', () => {
+    process.env.FF_NODE_EXEC_PATH = '  ';
+    configService.reload();
+    expect(configService.getNodeExecPath()).toBe(process.execPath);
+
+    Reflect.deleteProperty(process.env, 'FF_NODE_EXEC_PATH');
+    configService.reload();
+    expect(configService.getNodeExecPath()).toBe(process.execPath);
+  });
+
   it('defaults disableCorsChecks to false when DISABLE_CORS_CHECKS is absent', () => {
     Reflect.deleteProperty(process.env, 'DISABLE_CORS_CHECKS');
     configService.reload();

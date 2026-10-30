@@ -66,14 +66,15 @@ behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
 commands require the CLI to be installed.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node, and are unpacked in desktop packages along with their complete production
-dependency trees. The desktop release smoke check runs bundled Claude and its
-actual ACP catalog loader with an empty PATH; CI may require authentication
-before returning model choices. Authentication-only validation requires the
-explicit `--allow-unauthenticated` smoke flag and reports that the catalog was
-not verified when that fallback is used. Model discovery uses the same bundled
-Codex runtime, without starting an inference turn. Claude model discovery uses
-an ephemeral ACP session with tools disabled. Both catalog services coalesce
+Node (see [desktop backend process](#desktop-backend-process)), and are unpacked
+in desktop packages along with their complete production dependency trees. The
+desktop release smoke check runs bundled Claude and its actual ACP catalog
+loader with an empty PATH; CI may require authentication before returning model
+choices. Authentication-only validation requires the explicit
+`--allow-unauthenticated` smoke flag and reports that the catalog was not
+verified when that fallback is used. Model discovery uses the same bundled Codex
+runtime, without starting an inference turn. Claude model discovery uses an
+ephemeral ACP session with tools disabled. Both catalog services coalesce
 requests and cache successful results for 30 seconds.
 
 Session startup validates that the workspace working directory exists and is a
@@ -808,6 +809,27 @@ sessions and auto-send the prompt content once the session is ready.
 
 `prompts/` is copied into `dist/` on build and packaged alongside the unpacked
 Electron backend, so a new prompt file ships without a code change.
+
+## Desktop backend process
+
+The desktop app runs the backend in an Electron utility process, not in Electron
+main, so synchronous SQLite work, agent streams and terminals cannot freeze the
+window or menus. `electron/main/server-manager.ts` forks
+`src/backend/electron-utility-entry.ts` and passes the database, migrations,
+frontend and log paths through the child environment. The child runs migrations,
+starts the server, and posts `ready` with its URL or `error` over
+`process.parentPort`; startup that takes longer than two minutes is killed.
+
+On macOS a utility process runs from the Electron Helper binary, so Electron
+main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
+provider CLIs and the child-workspace MCP server launch with
+`configService.getNodeExecPath()` and `ELECTRON_RUN_AS_NODE=1`; outside Electron
+it is `process.execPath`.
+
+Electron main stops the backend before quitting (`before-quit`) and when the
+last window closes. Stopping sends `shutdown`, waits 25 seconds for a graceful
+exit, then sends `SIGKILL`. If a started backend exits on its own, the app
+offers to restart it, reloading the window at the new URL, or to quit.
 
 Electron fatal-error handlers await backend shutdown before quitting. Concurrent
 fatal errors share one shutdown attempt. Cleanup failures and a 30-second

@@ -2,8 +2,8 @@
  * Backend Server Entry Point (CLI/Standalone Mode)
  *
  * This is the entry point for running the backend as a standalone server
- * (via CLI or direct node execution). For Electron integration, import
- * createServer from './server.ts' instead.
+ * (via CLI or direct node execution). The desktop app forks
+ * './electron-utility-entry.ts' in an Electron utility process instead.
  *
  * Configuration is read from environment variables:
  * - DATABASE_PATH: SQLite database file path

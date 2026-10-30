@@ -62,10 +62,14 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
   }
 }
 
+type ServerManagerDependency = ElectronLifecycleDependencies['serverManager'];
+type TestServerManager = Omit<ServerManagerDependency, 'onUnexpectedExit'> &
+  Partial<Pick<ServerManagerDependency, 'onUnexpectedExit'>>;
+
 function createTestLifecycle(
   overrides: Partial<
-    Pick<ElectronLifecycleDependencies, 'serverManager' | 'platform' | 'clipboard' | 'nativeImage'>
-  > = {}
+    Pick<ElectronLifecycleDependencies, 'platform' | 'clipboard' | 'nativeImage'>
+  > & { serverManager?: TestServerManager } = {}
 ) {
   FakeBrowserWindow.windows = [];
   FakeBrowserWindow.instances = [];
@@ -80,6 +84,7 @@ function createTestLifecycle(
   const dialog: ElectronLifecycleDependencies['dialog'] = {
     showErrorBox: vi.fn(),
     showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/tmp/file'] }),
+    showMessageBox: vi.fn().mockResolvedValue({ response: 0, checkboxChecked: false }),
   };
 
   const ipcMain: ElectronLifecycleDependencies['ipcMain'] = {
@@ -99,12 +104,13 @@ function createTestLifecycle(
     error: vi.fn(),
   };
 
-  const serverManager =
-    overrides.serverManager ??
-    ({
+  const serverManager: ServerManagerDependency = {
+    onUnexpectedExit: vi.fn(),
+    ...(overrides.serverManager ?? {
       start: vi.fn().mockResolvedValue('http://localhost:3001'),
       stop: vi.fn().mockResolvedValue(undefined),
-    } satisfies ElectronLifecycleDependencies['serverManager']);
+    }),
+  };
 
   const lifecycle = createElectronLifecycle({
     app,
@@ -204,6 +210,144 @@ describe('electron lifecycle coordination', () => {
     expect(retryWindow).toBe(FakeBrowserWindow.instances[1]);
     expect(serverManager.start).toHaveBeenCalledTimes(2);
     expect(FakeBrowserWindow.instances).toHaveLength(2);
+  });
+});
+
+describe('electron quit handling', () => {
+  function preventableEvent() {
+    return { preventDefault: vi.fn() };
+  }
+
+  it('stops the backend before letting the app quit', async () => {
+    const stopGate = deferred<void>();
+    const serverManager = {
+      start: vi.fn().mockResolvedValue('http://localhost:3001'),
+      stop: vi.fn(() => stopGate.promise),
+    };
+    const { lifecycle, app } = createTestLifecycle({ serverManager });
+
+    const firstQuit = preventableEvent();
+    lifecycle.handleBeforeQuit(firstQuit);
+    const repeatedQuit = preventableEvent();
+    lifecycle.handleBeforeQuit(repeatedQuit);
+
+    expect(firstQuit.preventDefault).toHaveBeenCalledTimes(1);
+    expect(repeatedQuit.preventDefault).toHaveBeenCalledTimes(1);
+    expect(serverManager.stop).toHaveBeenCalledTimes(1);
+    expect(app.quit).not.toHaveBeenCalled();
+
+    stopGate.resolve();
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+
+    const finalQuit = preventableEvent();
+    lifecycle.handleBeforeQuit(finalQuit);
+    expect(finalQuit.preventDefault).not.toHaveBeenCalled();
+    expect(serverManager.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('still quits when the backend fails to stop', async () => {
+    const serverManager = {
+      start: vi.fn().mockResolvedValue('http://localhost:3001'),
+      stop: vi.fn().mockRejectedValue(new Error('stop failed')),
+    };
+    const { lifecycle, app } = createTestLifecycle({ serverManager });
+
+    lifecycle.handleBeforeQuit(preventableEvent());
+
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+  });
+
+  it('registers before-quit and backend exit handlers', () => {
+    const { lifecycle, app, serverManager } = createTestLifecycle();
+
+    lifecycle.registerAppHandlers();
+
+    expect(app.on).toHaveBeenCalledWith('before-quit', expect.any(Function));
+    expect(serverManager.onUnexpectedExit).toHaveBeenCalledWith(expect.any(Function));
+  });
+});
+
+describe('unexpected backend exit', () => {
+  it('restarts the backend and reloads the window when the user chooses Restart', async () => {
+    const serverManager = {
+      start: vi
+        .fn()
+        .mockResolvedValueOnce('http://localhost:3001')
+        .mockResolvedValueOnce('http://localhost:3002'),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const { lifecycle, dialog, app } = createTestLifecycle({ serverManager });
+    const window = await lifecycle.createWindow();
+
+    await lifecycle.handleBackendExit({ code: 9 });
+
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        buttons: ['Restart', 'Quit'],
+        detail: expect.stringContaining('code 9'),
+      })
+    );
+    expect(serverManager.start).toHaveBeenCalledTimes(2);
+    expect(window?.loadURL).toHaveBeenLastCalledWith('http://localhost:3002');
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
+    expect(app.quit).not.toHaveBeenCalled();
+  });
+
+  it('creates a window after restarting when none is open', async () => {
+    const { lifecycle, serverManager } = createTestLifecycle();
+
+    await lifecycle.handleBackendExit({ code: 1 });
+
+    expect(serverManager.start).toHaveBeenCalledTimes(1);
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
+  });
+
+  it('quits when the user chooses Quit', async () => {
+    const { lifecycle, dialog, app, serverManager } = createTestLifecycle();
+    vi.mocked(dialog.showMessageBox).mockResolvedValue({ response: 1, checkboxChecked: false });
+
+    await lifecycle.handleBackendExit({ code: 1 });
+
+    expect(app.quit).toHaveBeenCalledTimes(1);
+    expect(serverManager.start).not.toHaveBeenCalled();
+  });
+
+  it('shows the startup error and quits when the restart fails', async () => {
+    const serverManager = {
+      start: vi
+        .fn()
+        .mockResolvedValueOnce('http://localhost:3001')
+        .mockRejectedValueOnce(new Error('migration failed')),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const { lifecycle, dialog, app } = createTestLifecycle({ serverManager });
+    await lifecycle.createWindow();
+
+    await lifecycle.handleBackendExit({ code: 1 });
+
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      'Startup Error',
+      expect.stringContaining('migration failed')
+    );
+    expect(app.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows one prompt for overlapping exits and none while quitting', async () => {
+    const prompt = deferred<{ response: number; checkboxChecked: boolean }>();
+    const { lifecycle, dialog, serverManager } = createTestLifecycle();
+    vi.mocked(dialog.showMessageBox).mockReturnValue(prompt.promise);
+
+    const first = lifecycle.handleBackendExit({ code: 1 });
+    await lifecycle.handleBackendExit({ code: 1 });
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+
+    lifecycle.handleBeforeQuit({ preventDefault: vi.fn() });
+    prompt.resolve({ response: 0, checkboxChecked: false });
+    await first;
+
+    expect(serverManager.start).not.toHaveBeenCalled();
+    await lifecycle.handleBackendExit({ code: 1 });
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
   });
 });
 

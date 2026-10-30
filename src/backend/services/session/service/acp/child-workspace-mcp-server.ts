@@ -434,13 +434,15 @@ if (process.env.FF_CHILD_WORKSPACE_MCP === '1') {
  * given workspace, or null if the feature is disabled (no FF_API_BASE_URL set).
  */
 export function getChildWorkspaceMcpServerConfig(opts: {
+  /** Executable that runs this file as a Node script. */
+  nodeExecPath: string;
   workspaceId: string;
   parentWorkspaceId: string | null;
   apiBaseUrl: string;
 }): { name: string; command: string; args: string[]; env: Record<string, string> } {
   return {
     name: 'factory-factory-child-workspace',
-    command: process.execPath, // node
+    command: opts.nodeExecPath,
     args: [fileURLToPath(import.meta.url)],
     env: {
       FF_CHILD_WORKSPACE_MCP: '1',

@@ -1,5 +1,8 @@
+import { EventEmitter } from 'node:events';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { appGetPathMock } = vi.hoisted(() => ({
@@ -10,320 +13,347 @@ vi.mock('electron', () => ({
   app: {
     getPath: appGetPathMock,
   },
+  utilityProcess: {
+    fork: vi.fn(() => {
+      throw new Error('tests must inject a utility process factory');
+    }),
+  },
 }));
 
-import { ServerManager } from './server-manager.js';
-
-type ServerModuleImportShim = {
-  dynamicImport: (moduleSpecifier: string) => Promise<unknown>;
-};
-
-type TestApplication = {
-  services: {
-    serverInstanceService: {
-      setInstance: ReturnType<typeof vi.fn>;
-    };
-  };
-};
+import {
+  type BackendChildProcess,
+  ServerManager,
+  type ServerManagerOptions,
+  type UtilityProcessFactory,
+} from './server-manager.js';
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_RESOURCES_PATH = Object.getOwnPropertyDescriptor(process, 'resourcesPath');
+const RESOURCES_PATH = '/opt/Factory Factory/resources';
 
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
+class FakeChild extends EventEmitter implements BackendChildProcess {
+  static nextPid = 1000;
+  readonly pid: number | undefined = FakeChild.nextPid++;
+  readonly stdout = new PassThrough();
+  readonly stderr = new PassThrough();
+  readonly postMessage = vi.fn();
+  readonly kill = vi.fn(() => true);
 
-  return { promise, resolve };
+  ready(url = 'http://localhost:4311'): void {
+    this.emit('message', { type: 'ready', url });
+  }
+
+  exit(code: number): void {
+    this.emit('exit', code);
+  }
 }
 
-const setResourcesPath = (resourcesPath: string) => {
+function setResourcesPath(resourcesPath: string): void {
   Object.defineProperty(process, 'resourcesPath', {
     configurable: true,
     value: resourcesPath,
     writable: true,
   });
-};
+}
 
-const restoreResourcesPath = () => {
+function restoreResourcesPath(): void {
   if (ORIGINAL_RESOURCES_PATH) {
     Object.defineProperty(process, 'resourcesPath', ORIGINAL_RESOURCES_PATH);
     return;
   }
-
   Reflect.deleteProperty(process, 'resourcesPath');
-};
-
-function mockServerManagerImports(
-  manager: ServerManager,
-  createServer: (application: TestApplication) => {
-    start(): Promise<string>;
-    stop(): Promise<void>;
-  },
-  runMigrations: ReturnType<typeof vi.fn> = vi.fn()
-) {
-  const application: TestApplication = {
-    services: {
-      serverInstanceService: {
-        setInstance: vi.fn(),
-      },
-    },
-  };
-  const createApplication = vi.fn(() => application);
-  const disposeApplication = vi.fn().mockResolvedValue(undefined);
-  const dynamicImportMock = vi.fn((modulePath: string) => {
-    if (modulePath.endsWith('migrate.js')) {
-      return Promise.resolve({ runMigrations });
-    }
-    if (modulePath.endsWith('server.js')) {
-      return Promise.resolve({ createApplication, createServer, disposeApplication });
-    }
-    return Promise.reject(new Error(`Unexpected module path: ${modulePath}`));
-  });
-
-  (
-    manager as unknown as {
-      dynamicImport: <T>(modulePath: string) => Promise<T>;
-      ensureDataDir: (databasePath: string) => void;
-    }
-  ).dynamicImport = dynamicImportMock;
-  (
-    manager as unknown as {
-      dynamicImport: <T>(modulePath: string) => Promise<T>;
-      ensureDataDir: (databasePath: string) => void;
-    }
-  ).ensureDataDir = vi.fn();
-
-  return { application, createApplication, disposeApplication, dynamicImportMock, runMigrations };
 }
 
-describe('ServerManager module import behavior', () => {
-  beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    setResourcesPath('/opt/Factory Factory/resources');
-    appGetPathMock.mockReset();
-    appGetPathMock.mockReturnValue('/tmp');
+function createManager(options: Omit<ServerManagerOptions, 'utilityProcess'> = {}) {
+  const children: FakeChild[] = [];
+  const fork = vi.fn<UtilityProcessFactory['fork']>(() => {
+    const child = new FakeChild();
+    children.push(child);
+    return child;
   });
-
-  afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    restoreResourcesPath();
+  const killProcess = vi.fn<(pid: number, signal: NodeJS.Signals) => void>();
+  const logger = { log: vi.fn(), error: vi.fn() };
+  const manager = new ServerManager({
+    utilityProcess: { fork },
+    killProcess,
+    logger,
+    ...options,
   });
+  // Children only exist after start() reaches fork(), which follows a lock await.
+  const child = async (index = 0): Promise<FakeChild> => {
+    await vi.waitFor(() => expect(children[index]).toBeDefined());
+    return children[index] as FakeChild;
+  };
+  return { manager, fork, killProcess, logger, children, child };
+}
 
-  it('imports backend modules from app.asar.unpacked using file URLs', async () => {
-    const runMigrations = vi.fn();
-    const startServer = vi.fn().mockResolvedValue('http://127.0.0.1:4311');
-    const createServer = vi.fn(() => ({
-      start: startServer,
-      stop: vi.fn().mockResolvedValue(undefined),
-    }));
-    const application: TestApplication = {
-      services: {
-        serverInstanceService: {
-          setInstance: vi.fn(),
-        },
+async function startManager(harness: ReturnType<typeof createManager>, url?: string) {
+  const startPromise = harness.manager.start();
+  const child = await harness.child(harness.children.length);
+  child.ready(url);
+  return { url: await startPromise, child };
+}
+
+let userDataPath: string;
+
+beforeEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+  Reflect.deleteProperty(process.env, 'VITE_DEV_SERVER_URL');
+  setResourcesPath(RESOURCES_PATH);
+  userDataPath = mkdtempSync(join(tmpdir(), 'ff-server-manager-'));
+  appGetPathMock.mockReset();
+  appGetPathMock.mockReturnValue(userDataPath);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  process.env = { ...ORIGINAL_ENV };
+  restoreResourcesPath();
+  rmSync(userDataPath, { recursive: true, force: true });
+});
+
+describe('ServerManager startup', () => {
+  it('forks the unpacked backend entry with its configuration in the child env', async () => {
+    const harness = createManager();
+    const envBefore = { ...process.env };
+
+    const { url } = await startManager(harness, 'http://localhost:4311');
+
+    expect(url).toBe('http://localhost:4311');
+    expect(harness.fork).toHaveBeenCalledTimes(1);
+    const [modulePath, args, options] = harness.fork.mock.calls[0] ?? [];
+    expect(modulePath).toBe(
+      join(
+        RESOURCES_PATH,
+        'app.asar.unpacked',
+        'dist',
+        'src',
+        'backend',
+        'electron-utility-entry.js'
+      )
+    );
+    expect(args).toEqual([]);
+    expect(options).toMatchObject({
+      stdio: 'pipe',
+      serviceName: 'Factory Factory Backend',
+      env: {
+        DATABASE_PATH: join(userDataPath, 'data.db'),
+        MIGRATIONS_PATH: join(RESOURCES_PATH, 'prisma', 'migrations'),
+        FRONTEND_STATIC_PATH: join(RESOURCES_PATH, 'app.asar.unpacked', 'dist', 'client'),
+        WS_LOGS_PATH: join(userDataPath, 'ws-logs'),
+        NODE_ENV: 'production',
+        FF_NODE_EXEC_PATH: process.execPath,
       },
-    };
-    const createApplication = vi.fn(() => application);
-    const disposeApplication = vi.fn().mockResolvedValue(undefined);
-
-    const importSpy = vi.fn((moduleSpecifier: string) => {
-      if (moduleSpecifier.includes('migrate.js')) {
-        return Promise.resolve({ runMigrations });
-      }
-      if (moduleSpecifier.includes('server.js')) {
-        return Promise.resolve({ createApplication, createServer, disposeApplication });
-      }
-      return Promise.reject(new Error(`Unexpected module import: ${moduleSpecifier}`));
     });
-
-    const manager = new ServerManager();
-    (manager as unknown as ServerModuleImportShim).dynamicImport = importSpy;
-
-    const url = await manager.start();
-
-    const backendDistPath = join(
-      process.resourcesPath,
-      'app.asar.unpacked',
-      'dist',
-      'src',
-      'backend'
-    );
-    const expectedMigrateUrl = pathToFileURL(join(backendDistPath, 'migrate.js')).href;
-    const expectedServerUrl = pathToFileURL(join(backendDistPath, 'server.js')).href;
-
-    expect(url).toBe('http://127.0.0.1:4311');
-    expect(importSpy).toHaveBeenNthCalledWith(1, expectedMigrateUrl);
-    expect(importSpy).toHaveBeenNthCalledWith(2, expectedServerUrl);
-    expect(createApplication).toHaveBeenCalledOnce();
-    expect(createServer).toHaveBeenCalledWith(application);
-    expect(application.services.serverInstanceService.setInstance).toHaveBeenCalledWith(
-      expect.objectContaining({ start: startServer })
-    );
-    expect(runMigrations).toHaveBeenCalledWith({
-      databasePath: '/tmp/data.db',
-      migrationsPath: join(process.resourcesPath, 'prisma', 'migrations'),
-      log: expect.any(Function),
-    });
-    expect(process.env.FRONTEND_STATIC_PATH).toBe(
-      join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'client')
-    );
+    // The backend configuration goes to the child only.
+    expect(process.env).toEqual(envBefore);
   });
 
-  it('returns vite dev server URL without importing backend modules', async () => {
+  it('returns the Vite dev server URL without forking a backend', async () => {
     process.env.VITE_DEV_SERVER_URL = 'http://localhost:5173';
-    const manager = new ServerManager();
-    const importSpy = vi.fn();
-    (manager as unknown as ServerModuleImportShim).dynamicImport = importSpy;
+    const harness = createManager();
 
-    const url = await manager.start();
+    await expect(harness.manager.start()).resolves.toBe('http://localhost:5173');
+    expect(harness.fork).not.toHaveBeenCalled();
+  });
 
-    expect(url).toBe('http://localhost:5173');
-    expect(importSpy).not.toHaveBeenCalled();
-    expect(appGetPathMock).not.toHaveBeenCalled();
+  it('rejects with the backend error message and kills the child', async () => {
+    const harness = createManager();
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+
+    child.emit('message', { type: 'error', message: 'Error: migration 42 failed' });
+    child.exit(1);
+
+    await expect(startPromise).rejects.toThrow('migration 42 failed');
+  });
+
+  it('rejects when the backend exits before it is ready', async () => {
+    const harness = createManager();
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+
+    child.exit(3);
+
+    await expect(startPromise).rejects.toThrow('exited with code 3 before it was ready');
+    expect(harness.killProcess).not.toHaveBeenCalled();
+  });
+
+  it('kills a backend that does not become ready in time', async () => {
+    const harness = createManager({ startTimeoutMs: 20 });
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+    harness.killProcess.mockImplementation(() => child.exit(137));
+
+    await expect(startPromise).rejects.toThrow('did not start within 20ms');
+    expect(harness.killProcess).toHaveBeenCalledWith(child.pid, 'SIGKILL');
+  });
+
+  it('ignores malformed messages while waiting for ready', async () => {
+    const harness = createManager();
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+
+    child.emit('message', { type: 'ready' });
+    child.emit('message', 'ready');
+    child.ready('http://localhost:4400');
+
+    await expect(startPromise).resolves.toBe('http://localhost:4400');
+    expect(harness.logger.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('forwards backend stdout and stderr lines to the logger', async () => {
+    const harness = createManager();
+    const { child } = await startManager(harness);
+
+    child.stdout.write('first line\nsecond ');
+    child.stdout.write('line\n');
+    child.stderr.write('warning\n');
+
+    await vi.waitFor(() => {
+      expect(harness.logger.log).toHaveBeenCalledWith('[backend] first line');
+      expect(harness.logger.log).toHaveBeenCalledWith('[backend] second line');
+      expect(harness.logger.error).toHaveBeenCalledWith('[backend] warning');
+    });
+  });
+});
+
+describe('ServerManager shutdown', () => {
+  it('asks the backend to shut down and waits for it to exit', async () => {
+    const harness = createManager();
+    const { child } = await startManager(harness);
+
+    const stopPromise = harness.manager.stop();
+    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalledWith({ type: 'shutdown' }));
+    let stopped = false;
+    void stopPromise.then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+
+    child.exit(0);
+    await stopPromise;
+    expect(harness.killProcess).not.toHaveBeenCalled();
+  });
+
+  it('force-kills a backend that does not exit within the stop timeout', async () => {
+    const harness = createManager({ stopTimeoutMs: 20 });
+    const { child } = await startManager(harness);
+    harness.killProcess.mockImplementation(() => child.exit(137));
+
+    await expect(harness.manager.stop()).rejects.toThrow('did not exit within 20ms');
+    expect(harness.killProcess).toHaveBeenCalledWith(child.pid, 'SIGKILL');
+
+    // The killed backend is forgotten, so the next start forks a new one.
+    await startManager(harness);
+    expect(harness.fork).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a failing exit code but still forgets the backend', async () => {
+    const harness = createManager();
+    const { child } = await startManager(harness);
+
+    const stopPromise = harness.manager.stop();
+    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalled());
+    child.exit(1);
+
+    await expect(stopPromise).rejects.toThrow('exited with code 1 during shutdown');
+    await startManager(harness);
+    expect(harness.fork).toHaveBeenCalledTimes(2);
+  });
+
+  it('does nothing when no backend is running', async () => {
+    const harness = createManager();
+
+    await expect(harness.manager.stop()).resolves.toBeUndefined();
+  });
+});
+
+describe('ServerManager unexpected exits', () => {
+  it('notifies listeners when a started backend exits on its own', async () => {
+    const harness = createManager();
+    const listener = vi.fn();
+    harness.manager.onUnexpectedExit(listener);
+    const { child } = await startManager(harness);
+
+    child.exit(9);
+
+    expect(listener).toHaveBeenCalledWith({ code: 9 });
+    const { url } = await startManager(harness, 'http://localhost:5000');
+    expect(url).toBe('http://localhost:5000');
+    expect(harness.fork).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not notify listeners for a requested stop or a failed start', async () => {
+    const harness = createManager();
+    const listener = vi.fn();
+    harness.manager.onUnexpectedExit(listener);
+
+    const { child } = await startManager(harness);
+    const stopPromise = harness.manager.stop();
+    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalled());
+    child.exit(0);
+    await stopPromise;
+
+    const failedStart = harness.manager.start();
+    (await harness.child(1)).exit(1);
+    await expect(failedStart).rejects.toThrow();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('stops notifying a listener after it unsubscribes', async () => {
+    const harness = createManager();
+    const listener = vi.fn();
+    const unsubscribe = harness.manager.onUnexpectedExit(listener);
+    const { child } = await startManager(harness);
+
+    unsubscribe();
+    child.exit(9);
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 
 describe('ServerManager lifecycle locking', () => {
-  beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    setResourcesPath('/tmp/factory-factory-electron-resources');
-    Reflect.deleteProperty(process.env, 'VITE_DEV_SERVER_URL');
-    appGetPathMock.mockReset();
-    appGetPathMock.mockReturnValue('/tmp/factory-factory-electron-tests');
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    restoreResourcesPath();
-  });
-
   it('reuses a single startup when start is called concurrently', async () => {
-    const manager = new ServerManager();
-    const startGate = deferred<string>();
-    const serverInstance = {
-      start: vi.fn(() => startGate.promise),
-      stop: vi.fn().mockResolvedValue(undefined),
-    };
-    const createServer = vi.fn(() => serverInstance);
-    const { application, createApplication, runMigrations } = mockServerManagerImports(
-      manager,
-      createServer
-    );
+    const harness = createManager();
 
-    const firstStart = manager.start();
-    const secondStart = manager.start();
+    const firstStart = harness.manager.start();
+    const secondStart = harness.manager.start();
+    (await harness.child()).ready('http://localhost:4100');
 
-    await vi.waitFor(() => {
-      expect(serverInstance.start).toHaveBeenCalledTimes(1);
-    });
-    expect(serverInstance.start).toHaveBeenCalledTimes(1);
-    expect(createApplication).toHaveBeenCalledTimes(1);
-    expect(createServer).toHaveBeenCalledTimes(1);
-    expect(createServer).toHaveBeenCalledWith(application);
-    expect(application.services.serverInstanceService.setInstance).toHaveBeenCalledWith(
-      serverInstance
-    );
-    expect(runMigrations).toHaveBeenCalledTimes(1);
-
-    startGate.resolve('http://localhost:4321');
-    const [firstUrl, secondUrl] = await Promise.all([firstStart, secondStart]);
-
-    expect(firstUrl).toBe('http://localhost:4321');
-    expect(secondUrl).toBe('http://localhost:4321');
-    expect(createServer).toHaveBeenCalledTimes(1);
+    await expect(Promise.all([firstStart, secondStart])).resolves.toEqual([
+      'http://localhost:4100',
+      'http://localhost:4100',
+    ]);
+    expect(harness.fork).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes a composed application when server construction fails', async () => {
-    const manager = new ServerManager();
-    const constructionError = new Error('server construction failed');
-    const createServer = vi.fn(() => {
-      throw constructionError;
-    });
-    const { application, disposeApplication } = mockServerManagerImports(manager, createServer);
+  it('returns the cached URL when start is called after already started', async () => {
+    const harness = createManager();
+    await startManager(harness, 'http://localhost:4100');
 
-    await expect(manager.start()).rejects.toThrow(constructionError);
-
-    expect(disposeApplication).toHaveBeenCalledWith(application);
-    expect(application.services.serverInstanceService.setInstance).not.toHaveBeenCalled();
+    await expect(harness.manager.start()).resolves.toBe('http://localhost:4100');
+    expect(harness.fork).toHaveBeenCalledTimes(1);
   });
 
-  it('serializes stop and start so a new server is not clobbered', async () => {
-    const manager = new ServerManager();
-    const stopGate = deferred<void>();
-    const firstServer = {
-      start: vi.fn().mockResolvedValue('http://localhost:5001'),
-      stop: vi.fn(() => stopGate.promise),
-    };
-    const secondServer = {
-      start: vi.fn().mockResolvedValue('http://localhost:5002'),
-      stop: vi.fn().mockResolvedValue(undefined),
-    };
-    const createServer = vi.fn().mockReturnValueOnce(firstServer).mockReturnValueOnce(secondServer);
-    mockServerManagerImports(manager, createServer);
+  it('serializes stop and start so a new backend is not clobbered', async () => {
+    const harness = createManager();
+    const { child: first } = await startManager(harness, 'http://localhost:4100');
 
-    await manager.start();
+    const stopPromise = harness.manager.stop();
+    const restartPromise = harness.manager.start();
+    await vi.waitFor(() => expect(first.postMessage).toHaveBeenCalled());
+    expect(harness.fork).toHaveBeenCalledTimes(1);
 
-    const stopPromise = manager.stop();
-    const restartPromise = manager.start();
-
-    await Promise.resolve();
-    expect(createServer).toHaveBeenCalledTimes(1);
-
-    stopGate.resolve();
+    first.exit(0);
     await stopPromise;
-    const restartUrl = await restartPromise;
+    const second = await harness.child(1);
+    second.ready('http://localhost:4200');
 
-    expect(restartUrl).toBe('http://localhost:5002');
-    expect(createServer).toHaveBeenCalledTimes(2);
-
-    await manager.stop();
-    expect(firstServer.stop).toHaveBeenCalledTimes(1);
-    expect(secondServer.stop).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns cached server URL when start is called after already started', async () => {
-    const manager = new ServerManager();
-    const serverInstance = {
-      start: vi.fn().mockResolvedValue('http://localhost:7001'),
-      stop: vi.fn().mockResolvedValue(undefined),
-    };
-    const createServer = vi.fn(() => serverInstance);
-    const { runMigrations } = mockServerManagerImports(manager, createServer);
-
-    const firstUrl = await manager.start();
-    const secondUrl = await manager.start();
-
-    expect(firstUrl).toBe('http://localhost:7001');
-    expect(secondUrl).toBe('http://localhost:7001');
-    expect(createServer).toHaveBeenCalledTimes(1);
-    expect(runMigrations).toHaveBeenCalledTimes(1);
-  });
-
-  it('clears cached server state when stop fails so the next start creates a new server', async () => {
-    const manager = new ServerManager();
-    const stopError = new Error('cleanup failed after server closed');
-    const firstServer = {
-      start: vi.fn().mockResolvedValue('http://localhost:8001'),
-      stop: vi.fn().mockRejectedValue(stopError),
-    };
-    const secondServer = {
-      start: vi.fn().mockResolvedValue('http://localhost:8002'),
-      stop: vi.fn().mockResolvedValue(undefined),
-    };
-    const createServer = vi.fn().mockReturnValueOnce(firstServer).mockReturnValueOnce(secondServer);
-    mockServerManagerImports(manager, createServer);
-
-    const firstUrl = await manager.start();
-    await expect(manager.stop()).rejects.toThrow(stopError);
-    const secondUrl = await manager.start();
-
-    expect(firstUrl).toBe('http://localhost:8001');
-    expect(secondUrl).toBe('http://localhost:8002');
-    expect(createServer).toHaveBeenCalledTimes(2);
-    expect(firstServer.stop).toHaveBeenCalledTimes(1);
-    expect(secondServer.start).toHaveBeenCalledTimes(1);
+    await expect(restartPromise).resolves.toBe('http://localhost:4200');
+    expect(harness.fork).toHaveBeenCalledTimes(2);
   });
 });
