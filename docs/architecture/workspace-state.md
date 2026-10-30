@@ -288,15 +288,20 @@ continuation cancels instead of dispatching success over a newer fetch. Scoped
 recovery retries a mounted bootstrap without undefined success or a stuck load.
 Fresh requests started after settlement keep normal membership authority.
 
-The server shares an in-progress archive's result across requests for the same
-workspace, including overlapping single and column archives. Cleanup runs once;
-all waiting requests receive the same success or cleanup failure. Requests for
-an already archiving or archived workspace are accepted without restarting
-cleanup or reporting an invalid-state failure. A stale request that loses the
-conditional state transition also accepts the current archiving/archived row. An
-archiving snapshot with no local pending operation is re-read so a rolled-back
-archive can be retried. Other invalid transitions and cleanup failures remain
-errors, and a failed archive can be retried after rollback.
+Within one server process, requests for the same workspace share an in-progress
+archive's result, including overlapping single and column archives. Cleanup runs
+once; waiting requests receive the same success or cleanup failure. An explicit
+Git index-lock removal request waits for an ordinary archive and retries with
+its recovery option only if that archive fails with an index-lock error.
+
+Already archived workspaces are accepted quietly. An archiving snapshot with no
+local pending operation is re-read so a rolled-back archive can be retried. A
+known failed rollback resumes cleanup on the next request; older abandoned rows
+use the same stale threshold as startup recovery. Other archiving rows are
+acknowledged immediately without waiting for another process's cleanup or
+observing its eventual result. Requests that lose the conditional state
+transition re-read the workspace and retry once if it has rolled back to an
+archivable state. Other invalid transitions and cleanup failures remain errors.
 
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and

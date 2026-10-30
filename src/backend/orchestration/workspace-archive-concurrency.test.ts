@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
+import { ApplicationError } from '@/backend/lib/application-error';
+import {
+  workspaceMaintenanceService,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 import {
@@ -65,6 +70,7 @@ describe('concurrent workspace archives', () => {
       return Promise.resolve({ count: 1 });
     });
     vi.spyOn(worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockResolvedValue(undefined);
+    vi.spyOn(workspaceMaintenanceService, 'findStaleArchiving').mockResolvedValue([]);
     services = {
       cleanupWorkspaceScopedCaches: vi.fn(),
       githubCLIService: { addIssueComment: vi.fn() },
@@ -105,7 +111,7 @@ describe('concurrent workspace archives', () => {
       }
     );
     try {
-      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(settled).toBe(false);
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(1);
     } finally {
@@ -132,7 +138,7 @@ describe('concurrent workspace archives', () => {
     );
     const first = archiveWorkspace(row, {}, services);
     await enteredCleanup.promise;
-    const duplicate = archiveWorkspace(row, {}, services);
+    const duplicate = archiveWorkspace(row, { removeGitIndexLock: true }, services);
     const results = Promise.allSettled([first, duplicate]);
     finishCleanup.resolve();
     expect(await results).toEqual([
@@ -160,6 +166,99 @@ describe('concurrent workspace archives', () => {
       status: 'ARCHIVED',
     });
     expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(2);
+  });
+
+  it('serializes explicit lock removal after an in-flight archive hits an index lock', async () => {
+    const enteredCleanup = deferred();
+    const finishCleanup = deferred();
+    const error = new ApplicationError('CONFLICT', 'Git index is locked', {
+      kind: 'GIT_INDEX_LOCKED',
+    });
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementationOnce(
+      async () => {
+        enteredCleanup.resolve();
+        await finishCleanup.promise;
+        throw error;
+      }
+    );
+    const first = archiveWorkspace(row, {}, services);
+    await enteredCleanup.promise;
+    const recovery = archiveWorkspace(row, { removeGitIndexLock: true }, services);
+    const results = Promise.allSettled([first, recovery]);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(1);
+    } finally {
+      finishCleanup.resolve();
+    }
+    expect(await results).toEqual([
+      { status: 'rejected', reason: error },
+      { status: 'fulfilled', value: expect.objectContaining({ status: 'ARCHIVED' }) },
+    ]);
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(2);
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: row.id }),
+      { removeGitIndexLock: true }
+    );
+  });
+
+  it.each(['current', 'stale'] as const)(
+    'resumes cleanup from a %s snapshot when a previous failure could not roll back',
+    async (snapshot) => {
+      const initialRow = row;
+      const error = new Error('Worktree cleanup failed');
+      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValueOnce(error);
+      vi.spyOn(workspaceStateMachine, 'transition').mockRejectedValueOnce(
+        new Error('Database unavailable')
+      );
+      await expect(archiveWorkspace(row, {}, services)).rejects.toBe(error);
+      expect(row.status).toBe('ARCHIVING');
+
+      await expect(
+        archiveWorkspace(snapshot === 'stale' ? initialRow : row, {}, services)
+      ).resolves.toMatchObject({
+        status: 'ARCHIVED',
+      });
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('resumes a stale ARCHIVING row left by a prior process', async () => {
+    row = { ...row, status: 'ARCHIVING' };
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([row]);
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVED',
+    });
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports stale archive recovery failures and leaves the workspace retryable', async () => {
+    row = { ...row, status: 'ARCHIVING' };
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([row]);
+    const error = new Error('Worktree cleanup failed');
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValueOnce(error);
+    await expect(archiveWorkspace(row, {}, services)).rejects.toBe(error);
+    expect(row.status).toBe('FAILED');
+  });
+
+  it('retries a transition lost to an archive that rolled back', async () => {
+    persistence.transitionWithCas.mockImplementationOnce(() => {
+      row = { ...row, status: 'FAILED' };
+      return Promise.resolve({ count: 0 });
+    });
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVED',
+    });
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops retrying when another owner keeps winning the transition', async () => {
+    persistence.transitionWithCas.mockResolvedValue({ count: 0 });
+    await expect(archiveWorkspace(row, {}, services)).rejects.toThrow(
+      'status changed by another process'
+    );
+    expect(persistence.transitionWithCas).toHaveBeenCalledTimes(2);
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
   });
 
   it.each(['ARCHIVING', 'ARCHIVED'] as const)(
