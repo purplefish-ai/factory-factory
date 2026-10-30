@@ -617,8 +617,8 @@ async function handleLoginSubmission(params: {
     submittedPassword = '';
   }
 
-  // Check the lock only after the body is read: concurrent attempts from this IP
-  // may have triggered the lockout while this request was waiting.
+  // Already-locked IPs get 429 before the body is read; check again because concurrent
+  // attempts from this IP may have triggered the lockout while this body was read.
   const lockState = params.guard.isLocked(params.ip);
   if (lockState.locked) {
     writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
@@ -655,7 +655,7 @@ async function handleAuthHttpRequest(params: {
   const isLoginPath = params.req.url?.startsWith(LOGIN_PATH) ?? false;
   const isLoginSubmission = params.req.method === 'POST' && isLoginPath;
 
-  if (lockState.locked && !isLoginSubmission) {
+  if (lockState.locked) {
     writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
     return;
   }

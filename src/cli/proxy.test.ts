@@ -4,7 +4,7 @@ import {
   request as httpRequest,
   type IncomingHttpHeaders,
 } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { proxyInternals } from './proxy';
 
 interface HttpResponse {
@@ -421,6 +421,8 @@ describe('proxy internals', () => {
   });
 
   it('rejects in-flight login attempts once the IP is locked out', async () => {
+    // The proxy checks the lock as soon as it receives each request.
+    const isLockedSpy = vi.spyOn(proxyInternals.BruteForceGuard.prototype, 'isLocked');
     const authProxy = await proxyInternals.createAuthProxy({
       upstreamPort: 1,
       password: 'ABC123',
@@ -429,9 +431,9 @@ describe('proxy internals', () => {
     const ip = '198.51.100.77';
 
     try {
-      // Every request is accepted before any body is sent.
+      // Every request reaches the proxy before any body is sent.
       const pending = Array.from({ length: 8 }, () => openLoginRequest(authProxy.port, ip));
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await vi.waitFor(() => expect(isLockedSpy).toHaveBeenCalledTimes(8));
 
       const statuses: number[] = [];
       for (const login of pending.slice(0, 7)) {
@@ -448,6 +450,32 @@ describe('proxy internals', () => {
       last.req.end('password=ABC123');
       expect(await last.statusCode).toBe(429);
     } finally {
+      isLockedSpy.mockRestore();
+      await authProxy.close();
+    }
+  });
+
+  it('rejects login attempts from a locked IP without waiting for the body', async () => {
+    const authProxy = await proxyInternals.createAuthProxy({
+      upstreamPort: 1,
+      password: 'ABC123',
+      magicToken: 'valid-token',
+    });
+    const ip = '198.51.100.78';
+    let headersOnly: ClientRequest | undefined;
+
+    try {
+      for (let i = 0; i < 5; i += 1) {
+        const login = openLoginRequest(authProxy.port, ip);
+        login.req.end('password=BAD000');
+        await login.statusCode;
+      }
+
+      const login = openLoginRequest(authProxy.port, ip);
+      headersOnly = login.req;
+      expect(await login.statusCode).toBe(429);
+    } finally {
+      headersOnly?.destroy();
       await authProxy.close();
     }
   });
