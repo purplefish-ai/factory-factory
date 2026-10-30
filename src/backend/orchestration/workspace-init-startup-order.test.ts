@@ -41,6 +41,32 @@ describe('workspace initialization startup order', () => {
     ]);
   });
 
+  it.each([false, true])(
+    'reserves initial launch before READY and releases on exit (failure: %s)',
+    async (failReady) => {
+      const release = vi.fn();
+      vi.mocked(sessionDomainService.beginInitialLaunch).mockReturnValueOnce(release);
+      vi.mocked(workspaceStateMachine.markReady).mockImplementationOnce(() => {
+        expect(sessionDomainService.beginInitialLaunch).toHaveBeenCalledWith('session-1');
+        expect(release).not.toHaveBeenCalled();
+        if (failReady) {
+          throw new Error('Readiness failed');
+        }
+        return Promise.resolve(unsafeCoerce({}));
+      });
+      vi.mocked(sessionLifecycleService.startSession).mockImplementationOnce(() => {
+        expect(release).not.toHaveBeenCalled();
+        return Promise.resolve();
+      });
+      vi.mocked(sessionDispatchService.tryDispatchNextMessage).mockImplementation(() => {
+        expect(release).not.toHaveBeenCalled();
+        return Promise.resolve();
+      });
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+      expect(release).toHaveBeenCalledOnce();
+    }
+  );
+
   it('retains one initial prompt when failed provisioning is retried', async () => {
     setupHappyPath({ creationMetadata: { initialPrompt: 'Keep this task queued' } });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([

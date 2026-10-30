@@ -77,6 +77,7 @@ vi.mock('@/backend/services/session', () => ({
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
   sessionDomainService: {
+    beginInitialLaunch: vi.fn(() => vi.fn()),
     enqueue: vi.fn(),
     enqueueInitialMessage: mocks.enqueueInitialMessage,
     emitDelta: mocks.emitDelta,

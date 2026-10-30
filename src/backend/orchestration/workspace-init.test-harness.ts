@@ -45,6 +45,7 @@ vi.mock('@/backend/services/session', () => ({
     findAgentSessionsByWorkspaceId: vi.fn(),
   },
   sessionDomainService: {
+    beginInitialLaunch: vi.fn(() => vi.fn()),
     enqueue: vi.fn(),
     enqueueInitialMessage: vi.fn(),
     emitDelta: vi.fn(),

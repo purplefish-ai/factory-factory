@@ -130,7 +130,9 @@ export class SessionLifecycleService {
       }
       const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       return {
-        phase: isWorking ? 'running' : 'idle',
+        // Installing a live handle precedes startup configuration and persistence.
+        // No prompt in flight during that window does not mean startup is finished.
+        phase: isWorking ? 'running' : base.phase === 'starting' ? 'starting' : 'idle',
         processState: 'alive',
         activity: isWorking ? 'WORKING' : 'IDLE',
         ...getAcpWorkState(acpClient),

@@ -736,6 +736,7 @@ async function runWorkspaceInitialization(
   let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
   let autoCreatedTerminalId: string | undefined;
   const preparationController = new AbortController();
+  let releaseInitialLaunch: (() => void) | undefined;
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
@@ -803,7 +804,10 @@ async function runWorkspaceInitialization(
       worktreePath: worktreeInfo.worktreePath,
       factoryConfig,
       beforeReady: async () => {
-        await preparedSessionPromise;
+        const prepared = await preparedSessionPromise;
+        if (prepared) {
+          releaseInitialLaunch = sessionDomainService.beginInitialLaunch(prepared.sessionId);
+        }
       },
     });
     if (!startupScriptPipelineResult.handled) {
@@ -842,6 +846,7 @@ async function runWorkspaceInitialization(
         : undefined
     );
   } finally {
+    releaseInitialLaunch?.();
     preparationController.abort();
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);
