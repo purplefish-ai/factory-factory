@@ -885,7 +885,7 @@ export class AcpEventProcessor {
     if (!this.suppressAcpReplayForSession.has(sessionId)) {
       return;
     }
-    if (!this.runtimeManager.isSessionWorking(sessionId)) {
+    if (!this.runtimeManager.isSessionPromptInFlight(sessionId)) {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);

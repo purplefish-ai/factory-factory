@@ -280,6 +280,7 @@ export const ChatInput = memo(function ChatInput({
         {/* Text input row */}
         <InputGroupTextarea
           ref={resolvedInputRef}
+          defaultValue={value}
           onKeyDown={actions.handleKeyDown}
           onChange={handleInputChange}
           onPaste={pasteDropHandler.handlePaste}

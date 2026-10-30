@@ -1,17 +1,9 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
-import { CloverIcon } from '@phosphor-icons/react/dist/csr/Clover';
-import { FlowerIcon } from '@phosphor-icons/react/dist/csr/Flower';
-import { FlowerLotusIcon } from '@phosphor-icons/react/dist/csr/FlowerLotus';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { SUBAGENT_ICONS, SubagentIcon } from '@/client/components/subagent-icon';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
-
-const SUBAGENT_ICONS = [
-  { icon: FlowerIcon, color: 'text-amber-600 dark:text-amber-400' },
-  { icon: FlowerLotusIcon, color: 'text-teal-600 dark:text-teal-300' },
-  { icon: CloverIcon, color: 'text-violet-600 dark:text-violet-400' },
-];
 
 export function SessionActivityIndicator({
   work,
@@ -75,8 +67,8 @@ export function SessionActivityIndicator({
             className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
-              {SUBAGENT_ICONS.slice(0, runningSubagents).map(({ icon: Icon, color }) => (
-                <Icon key={color} weight="duotone" className={`h-5 w-5 ${color}`} />
+              {SUBAGENT_ICONS.slice(0, runningSubagents).map(({ color }, index) => (
+                <SubagentIcon key={color} index={index} />
               ))}
             </span>
             <span>{subagentLabel}</span>

@@ -8,6 +8,7 @@ import type { AcpClientOptions } from './types';
 
 type SessionFixture = {
   sessionId: string;
+  replayUpdates?: Array<{ sessionId?: string; update: Record<string, unknown> }>;
   configOptions?: Array<{
     id: string;
     name: string;
@@ -159,6 +160,9 @@ process.stdin.on('data', (chunk) => {
         break;
 
       case 'session/load':
+        for (const entry of sessionFixture.replayUpdates ?? []) {
+          process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: entry.sessionId ?? sessionFixture.sessionId, update: entry.update } }) + '\\n');
+        }
         sendResult(request.id, sessionFixture);
         break;
 
@@ -247,6 +251,153 @@ describe('ACP session negotiation integration', () => {
     await manager.stopAllClients();
     rmSync(tempDir, { recursive: true, force: true });
     vi.restoreAllMocks();
+  });
+
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'does not resurrect replayed work on %s resume',
+    async (provider) => {
+      const fixture = {
+        ...CLAUDE_SESSION_FIXTURE,
+        replayUpdates: [
+          {
+            update: {
+              sessionUpdate: 'subagent_spawned',
+              subagentSessionId: 'old-child',
+              name: 'Historical research',
+            },
+          },
+          {
+            sessionId: 'old-child',
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'Retained child output' },
+            },
+          },
+          {
+            update: {
+              sessionUpdate: 'async_task_spawned',
+              asyncTaskId: 'old-task',
+              taskType: 'task',
+              name: 'Old task',
+            },
+          },
+          {
+            update: {
+              sessionUpdate: 'async_task_spawned',
+              asyncTaskId: 'preview',
+              taskType: 'shell',
+              name: 'Preview server',
+            },
+          },
+          {
+            update: {
+              sessionUpdate: 'session_info_update',
+              _meta: { jetbrains: { air: { goal: { status: 'active' } } } },
+            },
+          },
+        ],
+      };
+      const binaryPath = createFakeAcpBinary(tempDir, 'replaying-acp', fixture);
+      const activity: boolean[] = [];
+      const handle = await manager.getOrCreateClient(
+        'resumed',
+        {
+          provider,
+          sessionId: 'resumed',
+          workingDir: process.cwd(),
+          adapterBinaryPath: binaryPath,
+          resumeProviderSessionId: fixture.sessionId,
+        },
+        {
+          onAcpEvent: (_id, event) => {
+            if (event.type === 'acp_task_status_changed') {
+              activity.push(event.active);
+            }
+          },
+        },
+        defaultContext()
+      );
+
+      expect(activity).not.toContain(true);
+      expect(manager.isSessionWorking('resumed')).toBe(false);
+      expect(handle.nativeSessionTracker?.getBackgroundWork()).toEqual({
+        backgroundTasks:
+          provider === 'CODEX'
+            ? [{ id: '["claude-session-001","preview"]', name: 'Preview server', kind: 'shell' }]
+            : [],
+        runningSubagents: 0,
+        activeGoals: 0,
+      });
+      expect(handle.nativeSessionTracker?.list({ limit: 10 }).subagents).toMatchObject([
+        { id: 'old-child', status: 'interrupted' },
+      ]);
+      expect(
+        handle.nativeSessionTracker?.read({ subagentId: 'old-child', limit: 10 }).updates
+      ).toMatchObject([
+        { sessionUpdate: 'agent_message_chunk', content: { text: 'Retained child output' } },
+      ]);
+    }
+  );
+
+  it('retains live work after Claude explicitly ends history replay before the load response', async () => {
+    const fixture: SessionFixture = {
+      ...CLAUDE_SESSION_FIXTURE,
+      replayUpdates: [
+        {
+          update: {
+            sessionUpdate: 'subagent_spawned',
+            subagentSessionId: 'finished-child',
+            name: 'Finished research',
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'subagent_state_update',
+            subagentSessionId: 'finished-child',
+            state: 'completed',
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'session_info_update',
+            _meta: { jetbrains: { air: { loadReplayEnd: true, goal: { status: 'active' } } } },
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'async_task_spawned',
+            asyncTaskId: 'live-task',
+            taskType: 'task',
+            name: 'New live work',
+          },
+        },
+      ],
+    };
+    const binaryPath = createFakeAcpBinary(tempDir, 'replay-end-acp', fixture);
+    const handle = await manager.getOrCreateClient(
+      'resumed',
+      {
+        provider: 'CLAUDE',
+        sessionId: 'resumed',
+        workingDir: process.cwd(),
+        adapterBinaryPath: binaryPath,
+        resumeProviderSessionId: fixture.sessionId,
+      },
+      {},
+      defaultContext()
+    );
+
+    expect(manager.isSessionWorking('resumed')).toBe(true);
+    expect(handle.nativeSessionTracker?.getBackgroundWork()).toEqual({
+      backgroundTasks: [
+        { id: '["claude-session-001","live-task"]', name: 'New live work', kind: 'task' },
+      ],
+      runningSubagents: 0,
+      activeGoals: 0,
+    });
+    expect(handle.nativeSessionTracker?.list({ limit: 10 }).subagents).toMatchObject([
+      { id: 'finished-child', status: 'completed' },
+    ]);
   });
 
   it('negotiates initial CLAUDE session config options and modes', async () => {

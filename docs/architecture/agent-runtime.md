@@ -4,13 +4,17 @@ Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
+Chat drafts restored before the composer mounts are visible on its first render
+and retained when typing begins after a reload.
+
 Claude session history restores inline image blocks as attachments on the
-original user prompt, including image-only prompts. Image-reference metadata
-companions are omitted from chat replay; their temporary file paths are not
-read. Codex history likewise restores user `input_image` data URLs, and images
-on legacy `user_message` events, onto the prompt; non-user images and
-`local_images` paths are skipped. Restoration rejects malformed base64 and
-images above the shared 10 MiB decoded size limit used for uploads.
+original user prompt, including image-only prompts. Harness metadata, sidechain
+entries, and image-reference companions are omitted from chat replay; their
+temporary file paths are not read. Codex history likewise restores user
+`input_image` data URLs, and images on legacy `user_message` events, onto the
+prompt; non-user images and `local_images` paths are skipped. Restoration
+rejects malformed base64 and images above the shared 10 MiB decoded size limit
+used for uploads.
 
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
@@ -281,7 +285,9 @@ updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review is normalized into the application's plan UI. Interactive sessions
+plan review and Claude's AIR `Approve Plan` requests with plan text are
+normalized into the application's plan UI, including pending requests restored
+on reconnect. Approval clears the composer's plan mode. Interactive sessions
 wait for a user response; read-only reviewers automatically reject plan
 implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
@@ -302,12 +308,20 @@ permissions remain routed through the owning parent. Child tool calls also reach
 interceptors that opt in to sub-agent events, such as PR detection. The client
 negotiates upstream background-task metadata and combines subagent, goal and
 task activity so provider work outside a prompt keeps the session running.
-Native session loading reconstructs child histories; no Factory Factory
-extension is required from either adapter. Each child's in-memory transcript
-retains at most 100 turns and 2 MiB of serialized updates. Oldest whole turns
-are evicted; an oversized active turn is discarded until the next user turn.
-Cursors use monotonic turn offsets, and expired cursors fail explicitly instead
-of returning another turn.
+History replay reconstructs child transcripts without publishing background
+activity or forwarding historical child tool calls to interceptors. Replay
+completion clears unverified tasks and goals and marks unfinished replayed
+children interrupted; recovered terminal child states remain intact. Codex shell
+tasks survive because the adapter verifies them against its live terminal
+listing. Claude's negotiated `loadReplayEnd` marker ends this window before any
+subsequent live updates; providers without that marker use the load response.
+Transcript replay suppression lifts only for an in-flight prompt, never solely
+because background activity exists. Native session loading reconstructs child
+histories; no Factory Factory extension is required from either adapter. Each
+child's in-memory transcript retains at most 100 turns and 2 MiB of serialized
+updates. Oldest whole turns are evicted; an oversized active turn is discarded
+until the next user turn. Cursors use monotonic turn offsets, and expired
+cursors fail explicitly instead of returning another turn.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
@@ -690,7 +704,16 @@ Sessions panel through its session-scoped tracker. Clicking the running
 sub-agent count in chat opens the right panel and selects Sessions. Its stored
 panel key remains `agents`; child-workspace access remains available for parent
 workspaces. The count has a decorative group of up to three colorful botanical
-icons; larger groups keep the full count without adding more icons.
+icons; larger groups keep the full count without adding more icons. The Sessions
+list uses the same botanical icons for sub-agent rows. Its header counts active
+(starting, running, or waiting) sub-agents; terminal agents remain under the
+separate collapsible Completed count. The panel automatically loads all summary
+pages before showing the active count, so children on later provider pages are
+included. A page failure keeps loaded rows visible and offers Retry without
+displaying a partial count. Repeated provider cursors stop automatic pagination
+and offer the same recovery instead of repeatedly fetching the same page.
+Restored transcript selection uses the same cursor guard when looking for a
+child on later pages.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

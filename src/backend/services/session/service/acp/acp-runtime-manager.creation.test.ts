@@ -82,7 +82,12 @@ describe('AcpRuntimeManager', () => {
             elicitation: { form: {}, url: {} },
             _meta: {
               terminal_output_delta: true,
-              jetbrains: { air: { version: 1, capabilities: ['asyncTasks', 'sessionFailure'] } },
+              jetbrains: {
+                air: {
+                  version: 1,
+                  capabilities: ['asyncTasks', 'sessionFailure', 'loadReplayEnd'],
+                },
+              },
             },
           },
           clientInfo: expect.objectContaining({

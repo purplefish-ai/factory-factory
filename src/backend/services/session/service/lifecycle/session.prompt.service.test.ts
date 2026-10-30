@@ -123,6 +123,7 @@ function createLifecyclePromptHarness() {
   const runtimeManager = {
     getClient: vi.fn().mockReturnValue({ supportsImages: () => true }),
     isSessionWorking: vi.fn().mockReturnValue(true),
+    isSessionPromptInFlight: vi.fn().mockReturnValue(true),
     sendPrompt: vi.fn(),
   };
   const sessionDomainService = new SessionDomainService();

@@ -82,6 +82,17 @@ export const Default: Story = {
   },
 };
 
+export const RestoredDraft: Story = {
+  args: {
+    onSend: onSendAction,
+    value: 'Please finish the change I was describing before reloading.',
+  },
+  render: (args) => {
+    const [draft, setDraft] = useState(args.value ?? '');
+    return <ChatInput {...args} value={draft} onChange={setDraft} />;
+  },
+};
+
 export const Disabled: Story = {
   args: {
     onSend: onSendAction,

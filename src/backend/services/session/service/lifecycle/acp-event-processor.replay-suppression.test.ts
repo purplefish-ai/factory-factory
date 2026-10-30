@@ -12,14 +12,16 @@ vi.mock('@/backend/services/session/service/logging/session-file-logger.service'
 
 const SESSION_ID = 'replay-session';
 
-function setup() {
+function setup(working = false) {
+  let promptInFlight = false;
   const domain = new SessionDomainService();
   const emitDelta = vi.spyOn(domain, 'emitDelta');
   const processor = new AcpEventProcessor({
     sessionDomainService: domain,
     runtimeManager: {
       getClient: vi.fn(),
-      isSessionWorking: () => false,
+      isSessionWorking: () => working,
+      isSessionPromptInFlight: () => promptInFlight,
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionPermissionService: {
       createPermissionBridge: vi.fn(),
@@ -31,7 +33,15 @@ function setup() {
   const sendUpdate = (update: SessionUpdate) =>
     handler.onAcpEvent?.(SESSION_ID, { type: 'acp_session_update', update });
   processor.setReplaySuppression(SESSION_ID, true);
-  return { domain, emitDelta, processor, sendUpdate };
+  return {
+    domain,
+    emitDelta,
+    processor,
+    sendUpdate,
+    startPrompt: () => {
+      promptInFlight = true;
+    },
+  };
 }
 
 describe('AcpEventProcessor replay suppression', () => {
@@ -58,6 +68,31 @@ describe('AcpEventProcessor replay suppression', () => {
       { type: 'task_notification', message: JSON.stringify({ type: 'acp_plan', entries: [] }) },
     ]);
     domain.clearAllSessions();
+  });
+
+  it('keeps replay suppressed while background activity exists without a live prompt', () => {
+    const { domain, processor, sendUpdate, startPrompt } = setup(true);
+    sendUpdate({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Old response' },
+    });
+    processor.finishPromptTurn(SESSION_ID);
+    expect(domain.getTranscriptSnapshot(SESSION_ID)).toEqual([]);
+
+    startPrompt();
+    sendUpdate({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Live response' },
+    });
+    processor.finishPromptTurn(SESSION_ID);
+    expect(domain.getTranscriptSnapshot(SESSION_ID)).toMatchObject([
+      {
+        message: {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Live response' }] },
+        },
+      },
+    ]);
   });
 
   it('forwards the attach-time usage snapshot while idle replay stays suppressed', () => {

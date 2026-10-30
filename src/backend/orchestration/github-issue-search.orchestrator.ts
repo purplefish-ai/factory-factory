@@ -56,8 +56,19 @@ export async function searchGitHubIssues(
       }
     })
   );
+  // Preserve each repository's relevance order while sharing the global budget.
+  // Concatenating first would let the most recent project consume every slot.
+  const results: SearchResult[] = [];
+  for (let index = 0; index < input.limit && results.length < input.limit; index += 1) {
+    for (const search of searches) {
+      const result = search.results[index];
+      if (result && results.length < input.limit) {
+        results.push(result);
+      }
+    }
+  }
   return {
-    results: searches.flatMap((search): SearchResult[] => search.results).slice(0, input.limit),
+    results,
     errors: searches.flatMap((search) => search.errors),
   };
 }

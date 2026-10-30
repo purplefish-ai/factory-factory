@@ -38,6 +38,8 @@ function normalizePlanReview(params: RequestPermissionRequest): RequestPermissio
   if (
     !(
       hasPlanReviewMetadata ||
+      // Claude's AIR permission shape omits name and kind, retaining its title and plan.
+      (params.toolCall.title === 'Approve Plan' && typeof input.plan === 'string') ||
       (params.toolCall.title === 'Implement this plan?' &&
         params.toolCall.kind === 'switch_mode' &&
         typeof input.plan === 'string')
