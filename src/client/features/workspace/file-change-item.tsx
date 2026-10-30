@@ -4,6 +4,7 @@ import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
 import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
+import { FileTreeRow } from './file-tree-row';
 
 export type FileChangeKind = 'modified' | 'added' | 'deleted' | 'untracked';
 
@@ -73,6 +74,7 @@ function getStatusLabel(kind: FileChangeKind): string {
 }
 
 interface FileChangeItemProps {
+  depth?: number;
   path: string;
   kind: FileChangeKind;
   onClick: () => void;
@@ -84,6 +86,7 @@ interface FileChangeItemProps {
 }
 
 export const FileChangeItem = memo(function FileChangeItem({
+  depth = 0,
   path,
   kind,
   onClick,
@@ -97,29 +100,26 @@ export const FileChangeItem = memo(function FileChangeItem({
   const dirPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 
   return (
-    <button
-      type="button"
+    <FileTreeRow
       onClick={onClick}
-      className={cn(
-        'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-        'hover:bg-muted/50 rounded-md transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
+      depth={depth}
       title={`${getStatusLabel(kind)}: ${path}${showIndicatorDot ? ` (${indicatorLabel})` : ''}`}
+      icon={<span className={statusColor}>{getStatusIcon(kind)}</span>}
+      label={
+        <>
+          {fileName}
+          {showDirPath && dirPath && (
+            <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>
+          )}
+        </>
+      }
     >
-      <span className={statusColor}>{getStatusIcon(kind)}</span>
-      <span className="flex-1 truncate">
-        <span className="font-medium">{fileName}</span>
-        {showDirPath && dirPath && (
-          <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>
-        )}
-      </span>
       {showIndicatorDot && (
         <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" title={indicatorLabel} />
       )}
       {statusCode && (
         <span className={cn('text-xs font-mono uppercase', statusColor)}>{statusCode}</span>
       )}
-    </button>
+    </FileTreeRow>
   );
 });

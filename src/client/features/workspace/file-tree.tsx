@@ -1,13 +1,11 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { FileIcon } from '@phosphor-icons/react/dist/csr/File';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo, useCallback } from 'react';
 import { trpc } from '@/client/lib/trpc';
-import { cn } from '@/lib/utils';
 import { useFileTreeExpansion } from './file-tree-context';
+import { FileTreeRow } from './file-tree-row';
 
 // =============================================================================
 // Types
@@ -92,24 +90,13 @@ const DirectoryNode = memo(function DirectoryNode({
 
   return (
     <div>
-      <button
-        type="button"
+      <FileTreeRow
         onClick={toggleExpand}
-        className={cn(
-          'w-full flex items-center gap-1 px-2 py-1 text-sm text-left',
-          'hover:bg-muted/50 rounded-sm transition-colors',
-          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-        )}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      >
-        {isExpanded ? (
-          <CaretDownIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        ) : (
-          <CaretRightIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        )}
-        <FolderIcon className="h-4 w-4 text-brand flex-shrink-0" />
-        <span className="truncate">{entry.name}</span>
-      </button>
+        depth={depth}
+        expanded={isExpanded}
+        icon={<FolderIcon className="h-4 w-4 text-brand" />}
+        label={entry.name}
+      />
 
       {isExpanded && (
         <FileTree
@@ -135,19 +122,12 @@ const FileNode = memo(function FileNode({ entry, depth, onFileSelect }: FileNode
   }, [onFileSelect, entry.path, entry.name]);
 
   return (
-    <button
-      type="button"
+    <FileTreeRow
       onClick={handleClick}
-      className={cn(
-        'w-full flex items-center gap-1 px-2 py-1 text-sm text-left',
-        'hover:bg-muted/50 rounded-sm transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-      )}
-      style={{ paddingLeft: `${depth * 12 + 8 + 20}px` }}
-    >
-      <span className="text-muted-foreground flex-shrink-0">{getFileIcon(entry.name)}</span>
-      <span className="truncate">{entry.name}</span>
-    </button>
+      depth={depth}
+      icon={<span className="text-muted-foreground">{getFileIcon(entry.name)}</span>}
+      label={entry.name}
+    />
   );
 });
 

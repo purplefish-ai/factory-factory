@@ -1,5 +1,3 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
@@ -10,6 +8,7 @@ import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { FileChangeItem, type FileChangeKind } from './file-change-item';
+import { FILE_TREE_ROW_HEIGHT, FileTreeRow } from './file-tree-row';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 export interface ChangeListEntry {
@@ -35,7 +34,7 @@ interface ChangeListProps {
 export const ChangeList = memo(function ChangeList({
   entries,
   onFileClick,
-  className = 'space-y-0.5',
+  className = '',
   indicatorLabel,
 }: ChangeListProps) {
   return (
@@ -104,7 +103,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 32,
+    estimateSize: () => FILE_TREE_ROW_HEIGHT,
     overscan: 10,
   });
 
@@ -348,10 +347,10 @@ function UntrackedDirContents({
   if (isLoading) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        className="flex items-center gap-1 px-2 text-sm text-muted-foreground"
+        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
-        <SpinnerGapIcon className="h-3 w-3 animate-spin" />
+        <SpinnerGapIcon className="h-4 w-4 shrink-0 animate-spin" />
         <span>Loading…</span>
       </div>
     );
@@ -360,11 +359,13 @@ function UntrackedDirContents({
   if (isError) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-1 text-xs text-destructive"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        className="flex items-center gap-1 px-2 text-sm text-destructive"
+        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
-        <WarningCircleIcon className="h-3 w-3 shrink-0" />
-        <span>Failed to load directory contents</span>
+        <WarningCircleIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate" title="Failed to load directory contents">
+          Failed to load directory contents
+        </span>
       </div>
     );
   }
@@ -383,15 +384,15 @@ function UntrackedDirContents({
             onFileClick={onFileClick}
           />
         ) : (
-          <div key={entry.path} style={{ paddingLeft: `${depth * 12}px` }}>
-            <FileChangeItem
-              path={entry.path}
-              kind="untracked"
-              statusCode="?"
-              showDirPath={false}
-              onClick={() => onFileClick(entry.path)}
-            />
-          </div>
+          <FileChangeItem
+            key={entry.path}
+            depth={depth}
+            path={entry.path}
+            kind="untracked"
+            statusCode="?"
+            showDirPath={false}
+            onClick={() => onFileClick(entry.path)}
+          />
         )
       )}
     </>
@@ -415,25 +416,14 @@ function UntrackedSubDir({
   const [isExpanded, setIsExpanded] = useState(true);
   return (
     <div>
-      <button
-        type="button"
+      <FileTreeRow
         onClick={() => setIsExpanded((v) => !v)}
-        className={cn(
-          'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-          'hover:bg-muted/50 rounded-md transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-        )}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        depth={depth}
+        expanded={isExpanded}
         title={`Untracked: ${dirPath}`}
-      >
-        {isExpanded ? (
-          <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        ) : (
-          <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        )}
-        <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate font-medium">{name}</span>
-      </button>
+        icon={<FolderIcon className="h-4 w-4 text-muted-foreground" />}
+        label={name}
+      />
       {isExpanded && (
         <UntrackedDirContents
           workspaceId={workspaceId}
@@ -462,30 +452,20 @@ const GitReportedDirRow = memo(function GitReportedDirRow({
 
   return (
     <div>
-      <button
-        type="button"
+      <FileTreeRow
         onClick={() => setIsExpanded((v) => !v)}
-        className={cn(
-          'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-          'hover:bg-muted/50 rounded-md transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-        )}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        depth={depth}
+        expanded={isExpanded}
         title={`Untracked: ${node.path}`}
+        icon={<FolderIcon className="h-4 w-4 text-muted-foreground" />}
+        label={node.name}
       >
-        {isExpanded ? (
-          <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        ) : (
-          <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        )}
-        <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate font-medium">{node.name}</span>
         {node.entry && (
           <span className="text-xs font-mono uppercase text-muted-foreground">
             {node.entry.statusCode ?? '?'}
           </span>
         )}
-      </button>
+      </FileTreeRow>
       {isExpanded && (
         <UntrackedDirContents
           workspaceId={workspaceId}
@@ -519,17 +499,16 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
 }: ChangeTreeItemRowProps) {
   if (node.type === 'file' && node.entry) {
     return (
-      <div style={{ paddingLeft: `${depth * 12}px` }}>
-        <FileChangeItem
-          path={node.path}
-          kind={node.entry.kind}
-          statusCode={node.entry.statusCode}
-          showIndicatorDot={node.entry.showIndicatorDot}
-          indicatorLabel={indicatorLabel}
-          showDirPath={false}
-          onClick={() => onFileClick(node.path)}
-        />
-      </div>
+      <FileChangeItem
+        depth={depth}
+        path={node.path}
+        kind={node.entry.kind}
+        statusCode={node.entry.statusCode}
+        showIndicatorDot={node.entry.showIndicatorDot}
+        indicatorLabel={indicatorLabel}
+        showDirPath={false}
+        onClick={() => onFileClick(node.path)}
+      />
     );
   }
 
@@ -549,32 +528,24 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
 
   // Virtual directory (inferred from file paths) — uses parent's expand/collapse state
   return (
-    <button
-      type="button"
+    <FileTreeRow
       onClick={() => onToggle(node.path)}
-      className={cn(
-        'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-        'hover:bg-muted/50 rounded-md transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
-      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+      depth={depth}
+      expanded={isExpanded}
       title={isGitReported ? `Untracked: ${node.path}` : node.path}
+      icon={
+        <FolderIcon
+          className={cn('h-4 w-4', isGitReported ? 'text-muted-foreground' : 'text-brand')}
+        />
+      }
+      label={node.name}
     >
-      {isExpanded ? (
-        <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      ) : (
-        <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      )}
-      <FolderIcon
-        className={cn('h-4 w-4 shrink-0', isGitReported ? 'text-muted-foreground' : 'text-brand')}
-      />
-      <span className="flex-1 truncate font-medium">{node.name}</span>
       {node.entry && (
         <span className="text-xs font-mono uppercase text-muted-foreground">
           {node.entry.statusCode ?? '?'}
         </span>
       )}
-    </button>
+    </FileTreeRow>
   );
 });
 
@@ -591,7 +562,7 @@ interface ChangeTreeViewProps {
 export const ChangeTreeView = memo(function ChangeTreeView({
   entries,
   onFileClick,
-  className = 'space-y-0.5',
+  className = '',
   indicatorLabel,
   workspaceId,
   virtualized = false,
@@ -618,7 +589,7 @@ export const ChangeTreeView = memo(function ChangeTreeView({
   const virtualizer = useVirtualizer({
     count: flatItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 32,
+    estimateSize: () => FILE_TREE_ROW_HEIGHT,
     overscan: 10,
     enabled: virtualized,
     measureElement: virtualized

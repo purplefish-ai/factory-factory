@@ -211,7 +211,7 @@ function CombinedChangesContent({
         {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
           <div className="p-2 border-b">{decorators}</div>
         )}
-        <div className="flex-1 min-h-0 p-2">
+        <div className="flex-1 min-h-0 p-1">
           <ChangeTreeView
             entries={entries}
             onFileClick={onFileClick}
@@ -226,7 +226,7 @@ function CombinedChangesContent({
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-2 space-y-2">
+      <div className="p-1 space-y-2">
         {decorators}
         <ChangeTreeView
           entries={entries}
