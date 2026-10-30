@@ -21,6 +21,9 @@ and this project adheres to
 - Run the desktop backend in an Electron utility process and reduce event-loop
   stalls during concurrent sub-agent activity and session-history loading
   (#2698, #2703, #2704)
+- Reduce per-event backend work during concurrent sessions by coalescing
+  workspace refreshes and thought chunks, skipping unobserved session snapshots,
+  and sampling terminal resources on demand (#2711)
 - Manage the bundled Claude runtime consistently with Codex, including sign-in,
   terminal resizing, shutdown, and exit-status handling (#2668)
 - Use botanical sub-agent icons and active counts, simplify chat activity, and
@@ -50,6 +53,10 @@ and this project adheres to
 - Reject workspace creation in archived projects, preserve new workspaces during
   reconciliation, recover missing worktrees on retry, and fix late scheduled
   runs and initial settings saves (#2685, #2699)
+- Keep overdue periodic tasks on their original schedule by selecting the next
+  due slot after a catch-up run (#2710)
+- Make Windows workspace file path links clickable in chat Markdown, including
+  paths with encoded backslashes (#2709)
 - Correct pending CI detection, retain in-flight PR fetch claims, notify parent
   workspaces about draft PRs, and decode review-diff paths correctly (#2695)
 - Verify port availability after ambiguous checks, detect loopback listeners
