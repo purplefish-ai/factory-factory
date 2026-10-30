@@ -5,9 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   authenticateRequest,
   createSessionValue,
+  extractTryCloudflareUrl,
   parseCookieHeader,
   proxyAuthenticatedHttpRequest,
   proxyAuthenticatedWebSocketUpgrade,
+  removeHopByHopHeaders,
   sanitizePathWithoutToken,
 } from './proxy-utils';
 
@@ -208,5 +210,71 @@ describe('proxy-utils', () => {
     expect(emptyCookies.constructor).toBeUndefined();
     expect(parsedCookies.session).toBe('abc');
     expect(parsedCookies.theme).toBe('dark');
+  });
+});
+
+describe('extractTryCloudflareUrl', () => {
+  it('ignores the cloudflared quick-tunnel API endpoint named in error logs', () => {
+    // cloudflared requests quick tunnels from https://api.trycloudflare.com/tunnel;
+    // when that request fails (offline, DNS failure) the error it logs names
+    // that endpoint, which must not be mistaken for the public URL.
+    const output = [
+      '2026-10-30T00:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...',
+      '2026-10-30T00:00:01Z ERR failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host',
+    ].join('\n');
+
+    expect(extractTryCloudflareUrl(output)).toBeNull();
+  });
+
+  it('returns the quick tunnel URL when the API endpoint appears earlier in the buffer', () => {
+    const output = [
+      'ERR failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": EOF',
+      'INF |  https://brave-otter-sample.trycloudflare.com  |',
+    ].join('\n');
+
+    expect(extractTryCloudflareUrl(output)).toBe('https://brave-otter-sample.trycloudflare.com');
+  });
+});
+
+describe('removeHopByHopHeaders cookie forwarding', () => {
+  it('forwards cookies whose names are not RFC tokens (e.g. PHP array cookies)', () => {
+    // Only the proxy's own session cookie should be stripped; other cookies
+    // belong to the upstream dev server and must be forwarded.
+    const headers = removeHopByHopHeaders(
+      { cookie: 'cart[item]=42; ff_proxy_session=abc.def' },
+      'ff_proxy_session'
+    );
+
+    expect(headers.cookie).toBe('cart[item]=42');
+  });
+
+  it('forwards duplicate-name cookies in their original order', () => {
+    // Browsers send same-named cookies (different Path/Domain) most-specific
+    // first, and most servers read the first one.
+    const headers = removeHopByHopHeaders(
+      { cookie: 'pref=path-specific; pref=site-wide; ff_proxy_session=abc.def' },
+      'ff_proxy_session'
+    );
+
+    expect(headers.cookie).toBe('pref=path-specific; pref=site-wide');
+  });
+
+  it('strips every copy of the session cookie, including whitespace variants', () => {
+    const headers = removeHopByHopHeaders(
+      { cookie: 'ff_proxy_session=a.b;theme=dark;  ff_proxy_session =c.d ; ff_proxy_session_x=1' },
+      'ff_proxy_session'
+    );
+
+    expect(headers.cookie).toBe('theme=dark; ff_proxy_session_x=1');
+  });
+
+  it('omits the cookie header when only the session cookie was sent', () => {
+    const headers = removeHopByHopHeaders(
+      { cookie: 'ff_proxy_session=abc.def', accept: 'text/html' },
+      'ff_proxy_session'
+    );
+
+    expect(headers).not.toHaveProperty('cookie');
+    expect(headers.accept).toBe('text/html');
   });
 });

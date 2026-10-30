@@ -14,7 +14,7 @@ import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
-import { buildServeEnv } from './serve-env';
+import { buildHttpOrigin, buildServeEnv } from './serve-env';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -313,10 +313,10 @@ function printReadyBanner(opts: {
 }): void {
   console.log(chalk.gray('\n  ─────────────────────────────────────'));
   if (opts.isDev) {
-    console.log(chalk.gray(`  Frontend:  http://${opts.host}:${opts.frontendPort}`));
-    console.log(chalk.gray(`  Backend:   http://${opts.host}:${opts.backendPort}`));
+    console.log(chalk.gray(`  Frontend:  ${buildHttpOrigin(opts.host, opts.frontendPort)}`));
+    console.log(chalk.gray(`  Backend:   ${buildHttpOrigin(opts.host, opts.backendPort)}`));
   } else {
-    console.log(chalk.gray(`  Server:    http://${opts.host}:${opts.backendPort}`));
+    console.log(chalk.gray(`  Server:    ${buildHttpOrigin(opts.host, opts.backendPort)}`));
   }
   console.log(chalk.gray(`  Database:  ${opts.databasePath}`));
   console.log(chalk.gray(`  Mode:      ${opts.isDev ? 'development' : 'production'}`));
@@ -371,9 +371,7 @@ program
     registerShutdownHandlers(shutdown);
 
     const createOnReady = (actualBackendPort: number) => async () => {
-      const url = options.dev
-        ? `http://${options.host}:${frontendPort}`
-        : `http://${options.host}:${actualBackendPort}`;
+      const url = buildHttpOrigin(options.host, options.dev ? frontendPort : actualBackendPort);
 
       printReadyBanner({
         isDev: !!options.dev,
@@ -451,7 +449,7 @@ async function startDevelopmentMode(
   // Update env with backend port for Vite proxy configuration
   const frontendEnv = {
     ...env,
-    BACKEND_URL: `http://${options.host}:${backendPort}`,
+    BACKEND_URL: buildHttpOrigin(options.host, backendPort),
   };
 
   const frontend = spawn(
