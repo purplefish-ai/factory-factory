@@ -5,7 +5,7 @@ import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import { VirtualizedMessageList } from '@/client/features/chat';
+import { ChatTranscript } from '@/client/features/chat';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -133,12 +133,18 @@ function ActivityNavigation() {
   return (
     <div className="flex h-[650px] w-[1000px] border">
       <div className="flex-1 p-4">
-        <VirtualizedMessageList
+        <ChatTranscript
           messages={[]}
           running
           loadingSession={false}
           startingSession={false}
-          scrollContainerRef={{ current: null }}
+          scroll={{
+            identity: 'story',
+            active: true,
+            ready: true,
+            initialIntent: 'following',
+            initialPosition: null,
+          }}
           work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 }}
           onOpenAgents={() => {
             setActiveTopTab('agents');

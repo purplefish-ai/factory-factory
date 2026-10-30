@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import {
   createPlanApprovalRequest,
@@ -33,10 +32,7 @@ const question = createUserQuestion([
 const noop = () => undefined;
 
 function MockConversation({ work }: { work?: SessionWorkState }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const scroll = useAutoScroll(viewportRef);
   const [draft, setDraft] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [pendingRequest, setPendingRequest] = useState<ChatContentProps['pendingRequest']>({
@@ -96,9 +92,13 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
                 }
               : createInitialSessionRuntimeState()
           }
-          messagesEndRef={messagesEndRef}
-          viewportRef={viewportRef}
-          {...scroll}
+          transcriptScroll={{
+            identity: 'main-story',
+            active: true,
+            ready: true,
+            initialIntent: 'following',
+            initialPosition: null,
+          }}
           pendingRequest={pendingRequest}
           approvePermission={noop}
           answerQuestion={noop}

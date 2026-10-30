@@ -104,4 +104,85 @@ describe('buildDiffLineIndex', () => {
     expect(index.has('src/gone.ts', 'LEFT', 1)).toBe(true);
     expect(index.has('src/gone.ts', 'LEFT', 2)).toBe(true);
   });
+
+  describe('quoted paths', () => {
+    // Git C-quotes paths containing non-ASCII bytes (core.quotePath), e.g.
+    // `+++ "b/lib/caf\303\251.ts"`.
+    const diff = String.raw`diff --git a/src/a.ts b/src/a.ts
+index 1111111..2222222 100644
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,1 +1,1 @@
+-old a
++new a
+diff --git "a/lib/caf\303\251.ts" "b/lib/caf\303\251.ts"
+index 3333333..4444444 100644
+--- "a/lib/caf\303\251.ts"
++++ "b/lib/caf\303\251.ts"
+@@ -50,1 +50,2 @@
+ context 50
++added 51`;
+
+    it('does not attribute a quoted-path file’s lines to the previous file', () => {
+      // GitHub 422s the whole review if an inline comment targets a line
+      // outside src/a.ts's hunks.
+      const index = buildDiffLineIndex(diff);
+      expect(index.has('src/a.ts', 'RIGHT', 50)).toBe(false);
+      expect(index.has('src/a.ts', 'RIGHT', 51)).toBe(false);
+    });
+
+    it('indexes a quoted-path file under its decoded path', () => {
+      const index = buildDiffLineIndex(diff);
+      expect(index.has('lib/café.ts', 'RIGHT', 50)).toBe(true);
+      expect(index.has('lib/café.ts', 'RIGHT', 51)).toBe(true);
+    });
+
+    it('indexes a deleted quoted-path file under its decoded old path', () => {
+      const index = buildDiffLineIndex(
+        String.raw`diff --git "a/caf\303\251.ts" "b/caf\303\251.ts"
+deleted file mode 100644
+--- "a/caf\303\251.ts"
++++ /dev/null
+@@ -1,1 +0,0 @@
+-gone`
+      );
+      expect(index.has('café.ts', 'LEFT', 1)).toBe(true);
+    });
+  });
+
+  it('keeps an unquoted path containing spaces when git appends a trailing tab', () => {
+    const diff = [
+      'diff --git a/src/my file.ts b/src/my file.ts',
+      '--- a/src/my file.ts\t',
+      '+++ b/src/my file.ts\t',
+      '@@ -1,1 +1,1 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+
+    const index = buildDiffLineIndex(diff);
+    expect(index.has('src/my file.ts', 'RIGHT', 1)).toBe(true);
+  });
+
+  it('does not index hunks under the previous file when a header is unrecognized', () => {
+    const diff = [
+      'diff --git a/a.ts b/a.ts',
+      '--- a/a.ts',
+      '+++ b/a.ts',
+      '@@ -1,1 +1,1 @@',
+      '-old a',
+      '+new a',
+      'diff --git x/b.ts y/b.ts',
+      '--- x/b.ts',
+      '+++ y/b.ts',
+      '@@ -5,1 +5,1 @@',
+      '-old b',
+      '+new b',
+    ].join('\n');
+
+    const index = buildDiffLineIndex(diff);
+    expect(index.has('a.ts', 'RIGHT', 1)).toBe(true);
+    expect(index.has('a.ts', 'RIGHT', 5)).toBe(false);
+    expect(index.has('a.ts', 'LEFT', 5)).toBe(false);
+  });
 });

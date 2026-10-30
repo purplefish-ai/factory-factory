@@ -80,6 +80,25 @@ export interface MessageItemProps {
   onOpenAgents?: () => void;
 }
 
+function PRUpdateMessageItem({
+  message,
+  isQueued,
+}: Pick<MessageItemProps, 'message' | 'isQueued'>) {
+  if (message.message?.prDeliveryState === 'cancelled') {
+    return null;
+  }
+  return (
+    <MessageWrapper>
+      <PRUpdateRenderer
+        text={message.message?.text ?? message.text ?? 'PR update'}
+        queued={isQueued}
+        deliveryState={message.message?.prDeliveryState}
+        error={message.message?.error}
+      />
+    </MessageWrapper>
+  );
+}
+
 export const MessageItem = memo(function MessageItem({
   message,
   isQueued,
@@ -94,16 +113,7 @@ export const MessageItem = memo(function MessageItem({
     return <SubagentLifecycleRenderer message={message} onOpenAgents={onOpenAgents} />;
   }
   if (isPRUpdateMessage(message)) {
-    return (
-      <MessageWrapper>
-        <PRUpdateRenderer
-          text={message.message?.text ?? message.text ?? 'PR update'}
-          queued={isQueued}
-          deliveryState={message.message?.prDeliveryState}
-          error={message.message?.error}
-        />
-      </MessageWrapper>
-    );
+    return <PRUpdateMessageItem message={message} isQueued={isQueued} />;
   }
   // User messages
   if (message.source === 'user') {

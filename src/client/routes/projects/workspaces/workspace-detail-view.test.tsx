@@ -135,7 +135,11 @@ vi.mock('@/client/features/workspace', () => ({
 
 vi.mock('./workspace-detail-chat-content', () => ({
   ChatContent: (props: ChatContentProps) =>
-    createElement('section', { ref: props.viewportRef, 'data-testid': 'parent-chat' }, 'Chat'),
+    createElement(
+      'section',
+      { 'data-testid': 'parent-chat', 'data-session': props.sessionId },
+      'Chat'
+    ),
 }));
 
 vi.mock('./use-retry-workspace-init', () => ({
@@ -214,7 +218,13 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       hasWorktreePath: true,
     },
     chat: {
-      viewportRef: { current: null },
+      transcriptScroll: {
+        identity: 'main',
+        active: true,
+        ready: true,
+        initialIntent: 'following',
+        initialPosition: null,
+      },
       onScroll: vi.fn(),
     } as unknown as WorkspaceDetailViewProps['chat'],
     rightPanelVisible: false,

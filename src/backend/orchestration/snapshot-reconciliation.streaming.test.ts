@@ -372,6 +372,34 @@ it('retains a newly accepted reset while an older reconciliation read is in flig
     store.clear();
   }
 });
+it('keeps a workspace seeded while the reconciliation read is in flight', async () => {
+  const store = createStore();
+  store.upsert('ws-stale', { projectId: 'project-1', name: 'Stale', status: 'READY' }, 'seed', 100);
+  const removed: string[] = [];
+  store.on('snapshot_removed', (event: { workspaceId: string }) => {
+    removed.push(event.workspaceId);
+  });
+  const pendingRead = deferred<ReturnType<typeof makeWorkspace>[]>();
+  const reconciliation = makeService(pendingRead.promise, () => Promise.resolve(null), store);
+  try {
+    const pending = reconciliation.reconcile();
+    // WORKSPACE_CREATED seeds the store after the read began; the read's result
+    // predates the workspace and so cannot prove it stale.
+    store.seedCreated(
+      'ws-new',
+      { projectId: 'project-1', name: 'New workspace', status: 'NEW' },
+      Date.now() + 1
+    );
+    pendingRead.resolve([]);
+
+    expect((await pending).staleEntriesRemoved).toBe(1);
+    expect(removed).toEqual(['ws-stale']);
+    expect(store.getByWorkspaceId('ws-new')).toBeDefined();
+  } finally {
+    store.clear();
+  }
+});
+
 it.each(['older', 'equal-ms'] as const)(
   'does not count or log a deferred %s name observation rejected after an accepted rename',
   async (provenance) => {

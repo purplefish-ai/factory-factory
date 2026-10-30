@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
+import { eventLoopMonitor } from '@/backend/lib/event-loop-monitor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockQueryRaw = vi.fn();
@@ -150,6 +151,37 @@ describe('healthRouter', () => {
       expect(response.body.checks).toBeDefined();
       expect(response.body.checks.database.status).toBe('ok');
       expect(response.body.checks.rateLimiter.status).toBe('ok');
+    });
+
+    it('includes event-loop lag without affecting the overall status', async () => {
+      mockQueryRaw.mockResolvedValue([{ '1': 1 }]);
+      mockGetApiUsageStats.mockReturnValue({
+        requestsLastMinute: 10,
+        requestsLastHour: 100,
+        totalRequests: 500,
+        queueDepth: 0,
+        isRateLimited: false,
+      });
+      eventLoopMonitor.start();
+
+      try {
+        const response = await request(app).get('/health/all');
+
+        expect(response.status).toBe(200);
+        expect(response.body.status).toBe('ok');
+        expect(response.body.eventLoop).toMatchObject({
+          windowMs: expect.any(Number),
+          utilization: expect.any(Number),
+          delayMs: {
+            mean: expect.any(Number),
+            p50: expect.any(Number),
+            p99: expect.any(Number),
+            max: expect.any(Number),
+          },
+        });
+      } finally {
+        eventLoopMonitor.stop();
+      }
     });
 
     it('returns status degraded when rate limited', async () => {

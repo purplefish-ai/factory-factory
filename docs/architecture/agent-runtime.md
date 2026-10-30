@@ -34,6 +34,19 @@ stale browser selections. Child inserts also connect only to active projects
 inside their nested-write transaction, so concurrent archival cannot bypass the
 preflight check. Existing children of archived projects remain visible.
 
+Closing a provider-backed session requires retained provider messages or a
+confirmed JSONL history load, including a confirmed empty history. Unavailable
+history and hydration cooldowns abort archival and preserve the live session for
+retry; local lifecycle and failed PR status cards do not prove the conversation
+was recovered. A runtime observed creating a new provider conversation may
+archive it before its first prompt even if no JSONL file exists. This proof is
+scoped to the exact provider identity, survives a normal stop, and is revoked
+before any prompt attempt, on conversation activity, identity replacement,
+failed startup, permanent deletion, or shutdown. It is not inferred after a
+backend restart; an unprompted session without a file then remains protected
+until provider history can be confirmed. Empty ACP fallbacks remain eligible for
+a JSONL read.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through
@@ -349,7 +362,11 @@ histories; no Factory Factory extension is required from either adapter. Each
 child's in-memory transcript retains at most 100 turns and 2 MiB of serialized
 updates. Oldest whole turns are evicted; an oversized active turn is discarded
 until the next user turn. Cursors use monotonic turn offsets, and expired
-cursors fail explicitly instead of returning another turn.
+cursors fail explicitly instead of returning another turn. Child `updated`
+notifications are throttled to one per subagent every 250 ms because each one
+makes viewers refetch the list or transcript; `created` and `completed` are sent
+immediately. Viewers run one refetch at a time and queue a single follow-up when
+changes arrive mid-flight, so the final update is never missed.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
@@ -375,17 +392,20 @@ drives runtime activity, the yellow work indicator and the workspace column.
 unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
 
 Runtime snapshots also carry prompt ownership and named background tasks, with
-counts for running subagents and active goals. Chat shows background processes
-separately from the active-turn spinner, with a process-count header that
-expands to show their commands. The command list starts collapsed. Live status
-announcements contain the process count separately from the control and
-commands. A completed turn with a persistent preview server shows the remaining
-process instead of stale reasoning or “Agent is working”. Task-detail changes
-publish even while another task keeps the session busy, and reconnects restore
-current work from the live runtime. Idle and error transitions discard cached
-work unless fresh details are explicitly supplied; stopped transitions always
-clear work. A failed turn retains fresh background details from the live
-runtime, and chat keeps those processes visible alongside the error state.
+counts for running subagents and active goals. A transition that changes only
+the runtime timestamp refreshes the stored state without publishing a delta, so
+repeated task notifications do not trigger workspace summary refreshes. Chat
+shows background processes separately from the active-turn spinner, with a
+process-count header that expands to show their commands. The command list
+starts collapsed. Live status announcements contain the process count separately
+from the control and commands. A completed turn with a persistent preview server
+shows the remaining process instead of stale reasoning or “Agent is working”.
+Task-detail changes publish even while another task keeps the session busy, and
+reconnects restore current work from the live runtime. Idle and error
+transitions discard cached work unless fresh details are explicitly supplied;
+stopped transitions always clear work. A failed turn retains fresh background
+details from the live runtime, and chat keeps those processes visible alongside
+the error state.
 
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools

@@ -38,7 +38,10 @@ failures still persist READY with a warning before the agent starts; unexpected
 provisioning failures do not start an agent or publish a late prompt.
 
 Retrying a ready workspace with a setup warning restores READY even when its
-setup and startup scripts have been removed, before queued messages dispatch.
+setup and startup scripts have been removed, before queued messages dispatch. A
+ready workspace whose worktree is missing is blocked with a retry action;
+retrying moves it to PROVISIONING and reruns full initialization to recreate the
+worktree.
 
 Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
 rejection recovery, and session restoration use the same attachments as the full
@@ -86,7 +89,12 @@ outside the server's bounded buffer cannot be recovered.
 workspace response shape. `workspace-launch.orchestrator.ts` coordinates the
 interactive MANUAL, RESUME_BRANCH, GITHUB_ISSUE, and LINEAR_ISSUE sources
 through narrow capabilities wired by `app-context.ts`; the workspace capsule
-still owns source validation and persistence.
+still owns source validation and persistence. Every creation source requires an
+active project in the atomic workspace insert; archiving a project after a
+preflight read still prevents the workspace and its side tables from being
+created. Creation reports archived-project failures as `PRECONDITION_FAILED` and
+missing projects as `NOT_FOUND`, including when the guarded insert loses a race
+after validation. Other persistence failures retain their existing handling.
 
 For each interactive source, capacity above zero enables effective-provider
 resolution and CLI preflight before persistence, followed by best-effort
@@ -152,7 +160,9 @@ freshness; provenance never enters the wire payload.
 Periodic reconciliation still repairs missed events and restart state. Its
 60-second interval is the delay after a completed run, not a hard maximum for
 stale UI: prior Git work, the next database read, and failed sweeps can delay
-repair.
+repair. A pass removes only entries absent from its database read that have no
+observation at or after the pass's start, so a workspace created while the read
+is in flight survives until a later pass can see it.
 
 ## Run script
 

@@ -155,10 +155,26 @@ export class WorkspaceCreationService {
     );
 
     // Create workspace record
-    const workspace = await workspaceAccessor.create({
-      ...preparedInput,
-      ratchetEnabled,
-    });
+    const workspace = await workspaceAccessor
+      .create({ ...preparedInput, ratchetEnabled })
+      .catch(async (error: unknown) => {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
+          const project = await projectAccessor.findById(source.projectId);
+          if (!project) {
+            throw new ApplicationError('NOT_FOUND', `Project not found: ${source.projectId}`, {
+              cause: error,
+            });
+          }
+          if (project.isArchived) {
+            throw new ApplicationError(
+              'PRECONDITION_FAILED',
+              'Cannot create a workspace in an archived project',
+              { cause: error }
+            );
+          }
+        }
+        throw error;
+      });
 
     workspaceStateMachine.publishCreated(workspace);
 

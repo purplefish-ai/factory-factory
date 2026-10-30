@@ -1,4 +1,4 @@
-import { CIStatus, PRState, RatchetState } from '@/shared/core';
+import { CIStatus, isOpenPrState, PRState, RatchetState } from '@/shared/core';
 import type { WorkspacePRSummary } from './workspace-pr-summary';
 
 export const WORKSPACE_FLOW_PHASES = [
@@ -52,13 +52,6 @@ export interface WorkspaceFlowState {
   hasActivePr: boolean;
 }
 
-const ACTIVE_PR_STATES = new Set<PRState>([
-  PRState.OPEN,
-  PRState.DRAFT,
-  PRState.CHANGES_REQUESTED,
-  PRState.APPROVED,
-]);
-
 const RATCHET_FIXING_STATES = new Set<RatchetState>([
   RatchetState.CI_FAILED,
   RatchetState.REVIEW_PENDING,
@@ -68,7 +61,7 @@ function hasActivePr(prUrl: string | null, prState: PRState): boolean {
   if (!prUrl) {
     return false;
   }
-  return ACTIVE_PR_STATES.has(prState);
+  return isOpenPrState(prState);
 }
 
 function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): WorkspaceCiObservation {

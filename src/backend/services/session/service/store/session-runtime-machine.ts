@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { SessionStore } from './session-store.types';
 
@@ -15,6 +16,12 @@ function selectWork(
     return undefined;
   }
   return previousWork;
+}
+
+function sameRuntimeIgnoringTimestamp(a: SessionRuntimeState, b: SessionRuntimeState): boolean {
+  const { updatedAt: _aUpdatedAt, ...aRest } = a;
+  const { updatedAt: _bUpdatedAt, ...bRest } = b;
+  return isDeepStrictEqual(aRest, bRest);
 }
 
 export class SessionRuntimeMachine {
@@ -46,6 +53,7 @@ export class SessionRuntimeMachine {
       store.liveSlashCommands = undefined;
     }
     const work = selectWork(updates, options?.replace ? undefined : previousWork);
+    const before = store.runtime;
     store.runtime = {
       ...(options?.replace ? {} : previous),
       phase: updates.phase,
@@ -60,6 +68,12 @@ export class SessionRuntimeMachine {
     if (options?.emitDelta !== false) {
       if (clearSlashCommands) {
         this.clearSlashCommands?.(store.sessionId);
+      }
+      // Repeated transitions to the same state (e.g. each background-task status
+      // notification) only refresh the timestamp; skip the delta and its DB-backed
+      // workspace summary refresh.
+      if (sameRuntimeIgnoringTimestamp(before, store.runtime)) {
+        return;
       }
       this.emitRuntimeDelta(store.sessionId, store.runtime);
     }

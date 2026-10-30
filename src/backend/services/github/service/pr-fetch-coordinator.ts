@@ -213,9 +213,16 @@ export class PRFetchCoordinator {
     // un-claim a workspace whose fetch is still running, which is the one thing
     // this map exists to prevent -- a second caller would then start a
     // duplicate GitHub call alongside it. Losing a completed timestamp only
-    // costs a fetch that the cooldown would have skipped.
+    // costs a fetch that the cooldown would have skipped. A workspace being
+    // re-fetched still holds its previous completed timestamp, so skip keys
+    // with a live claim here: dropping only the timestamp would free no slot,
+    // and dropping the claim too would cause exactly that duplicate call.
     const oldestWorkspaceId =
-      this.oldestBy(this.lastFetchedAt, (timestamp) => timestamp) ??
+      this.oldestBy(
+        this.lastFetchedAt,
+        (timestamp) => timestamp,
+        (workspaceId) => !this.inFlightClaims.has(workspaceId)
+      ) ??
       // Every entry is in flight: something has to go, or the map is unbounded.
       this.oldestBy(this.inFlightClaims, (claim) => claim.startedAt);
 
@@ -228,11 +235,15 @@ export class PRFetchCoordinator {
 
   private oldestBy<T>(
     entries: Map<string, T>,
-    startedAt: (value: T) => number
+    startedAt: (value: T) => number,
+    isEligible: (workspaceId: string) => boolean = () => true
   ): string | undefined {
     let oldestWorkspaceId: string | undefined;
     let oldestTimestamp = Number.POSITIVE_INFINITY;
     for (const [workspaceId, value] of entries) {
+      if (!isEligible(workspaceId)) {
+        continue;
+      }
       const timestamp = startedAt(value);
       if (timestamp < oldestTimestamp) {
         oldestWorkspaceId = workspaceId;

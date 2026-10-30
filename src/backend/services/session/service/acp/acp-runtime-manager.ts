@@ -65,6 +65,18 @@ export class AcpRuntimeManager {
     return this.supervisor.getBrowseClient(sessionId);
   }
 
+  hasObservedEmptyProviderSession(
+    sessionId: string,
+    provider: AcpClientOptions['provider'],
+    providerSessionId: string
+  ): boolean {
+    return this.supervisor.hasObservedEmptyProviderSession(sessionId, provider, providerSessionId);
+  }
+
+  forgetObservedEmptyProviderSession(sessionId: string): void {
+    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
+  }
+
   isBrowseOnlySession(sessionId: string): boolean {
     return this.supervisor.isBrowseOnlySession(sessionId);
   }
@@ -143,6 +155,7 @@ export class AcpRuntimeManager {
     ) {
       throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
     }
+    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
   }
 

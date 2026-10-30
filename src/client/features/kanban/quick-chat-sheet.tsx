@@ -42,10 +42,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     selectedCodexAccountId,
     setSelectedSessionId,
     chatState,
-    viewportRef,
-    onScroll,
-    isNearBottom,
-    scrollToBottom,
+    transcriptScroll,
     handleNewChat,
     handleCloseSession,
     handleQuickAction,
@@ -115,10 +112,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               workspaceId={workspaceId}
               codexAccountId={selectedCodexAccountId}
               chatState={chatState}
-              viewportRef={viewportRef}
-              onScroll={onScroll}
-              isNearBottom={isNearBottom}
-              scrollToBottom={scrollToBottom}
+              transcriptScroll={transcriptScroll}
             />
           ) : workspaceId ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">

@@ -91,6 +91,7 @@ export const sessionConfigService = new SessionConfigService({
 
 sessionDomainService.on('session_permanently_deleted', (sessionId: string) => {
   sessionConfigService.releaseSessionConfiguration(sessionId);
+  acpRuntimeManager.forgetObservedEmptyProviderSession(sessionId);
 });
 
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();

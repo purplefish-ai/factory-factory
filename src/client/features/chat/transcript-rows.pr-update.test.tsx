@@ -2,20 +2,9 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import type { ChatMessage } from '@/lib/chat-protocol';
-import { VirtualizedMessageList } from './virtualized-message-list';
-
-// jsdom has no viewport measurements; expose all rows while keeping rendering real.
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * 80 })),
-    getTotalSize: () => count * 80,
-    measureElement: () => undefined,
-    scrollToIndex: () => undefined,
-  }),
-}));
+import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 
 it('keeps a queued PR update below live thinking, then returns it to the transcript on delivery', () => {
   const container = document.createElement('div');
@@ -31,7 +20,7 @@ it('keeps a queued PR update below live thinking, then returns it to the transcr
   const render = (queued: boolean) =>
     flushSync(() =>
       root.render(
-        createElement(VirtualizedMessageList, {
+        createElement(TranscriptRenderingFixture, {
           messages: [
             queued
               ? update
@@ -42,7 +31,6 @@ it('keeps a queued PR update below live thinking, then returns it to the transcr
           startingSession: false,
           loadingSession: false,
           latestThinking: 'Considering the implementation',
-          scrollContainerRef: { current: container },
         })
       )
     );
@@ -105,7 +93,7 @@ it('shows one PR queue status until all updates settle, preserving individual ou
     const states = ['delivered', 'failed', 'cancelled'] as const;
     flushSync(() =>
       root.render(
-        createElement(VirtualizedMessageList, {
+        createElement(TranscriptRenderingFixture, {
           messages: [
             ...updates.map((update, index): ChatMessage =>
               index < settled
@@ -127,7 +115,6 @@ it('shows one PR queue status until all updates settle, preserving individual ou
           startingSession: false,
           loadingSession: false,
           latestThinking: 'Checking the implementation',
-          scrollContainerRef: { current: container },
         })
       )
     );
@@ -139,7 +126,7 @@ it('shows one PR queue status until all updates settle, preserving individual ou
         settled < 3 ? 1 : 0
       );
       expect(container.textContent).toContain(human.text);
-      expect(container.querySelectorAll('details')).toHaveLength(settled);
+      expect(container.querySelectorAll('details')).toHaveLength(Math.min(settled, 2));
       if (settled < 3) {
         expect(container.textContent!.indexOf('Checking the implementation')).toBeLessThan(
           container.textContent!.indexOf('PR update · queued for next turn')
@@ -151,10 +138,64 @@ it('shows one PR queue status until all updates settle, preserving individual ou
       if (settled > 1) {
         expect(container.textContent).toContain('PR update · failed');
       }
-      if (settled > 2) {
-        expect(container.textContent).toContain('PR update · cancelled');
-      }
+      expect(container.textContent).not.toContain('PR update · cancelled');
+      expect(container.textContent).not.toContain('Update 3 details');
     }
+  } finally {
+    flushSync(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('omits cancelled PR rows from replay without leaving virtualized gaps', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const cancelled: ChatMessage[] = ['pr-event-cancelled', 'restored-history-id'].map(
+    (id, order) => ({
+      id,
+      source: 'agent',
+      order,
+      timestamp: '2026-10-28T00:00:00.000Z',
+      message: {
+        type: 'pr_update',
+        text: 'Cancelled PR details',
+        prDeliveryState: 'cancelled',
+        error: 'Session stopped before dispatch',
+      },
+    })
+  );
+  const human: ChatMessage = {
+    id: 'human',
+    source: 'user',
+    order: 2,
+    timestamp: '2026-10-28T00:00:01.000Z',
+    text: 'PR update cancelled',
+  };
+  const render = (messages: ChatMessage[]) =>
+    flushSync(() =>
+      root.render(
+        createElement(TranscriptRenderingFixture, {
+          messages,
+          running: false,
+          startingSession: false,
+          loadingSession: false,
+        })
+      )
+    );
+  try {
+    render([...cancelled, human]);
+    expect(container.textContent).toContain(human.text);
+    expect(container.textContent).not.toContain('Cancelled PR details');
+    expect(container.textContent).not.toContain('Session stopped before dispatch');
+    expect(container.querySelectorAll('[data-index]')).toHaveLength(1);
+    render(cancelled);
+    expect(container.textContent).toContain('Ready to start');
+    expect(
+      [...container.querySelectorAll('[data-transcript-key]')].map((row) =>
+        row.getAttribute('data-transcript-key')
+      )
+    ).toEqual(['transcript:status']);
   } finally {
     flushSync(() => root.unmount());
     container.remove();

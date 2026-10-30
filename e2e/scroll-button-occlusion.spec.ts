@@ -1,5 +1,52 @@
 import { expect, type Locator, test } from '@playwright/test';
 
+test('subagent reading restoration preserves the constrained message width', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(
+    '/iframe.html?id=subagents-subagenttranscriptview--restored-reading-wide&viewMode=story'
+  );
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect(viewport).toBeVisible();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(420);
+  await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
+  await expect(viewport.locator('[data-transcript-key="transcript:header"]')).toHaveCount(0);
+  const content = viewport.locator('[data-transcript-key] > .max-w-4xl').first();
+  await expect(content).toBeAttached();
+  const geometry = await content.evaluate((element) => {
+    const row = element.parentElement;
+    if (!row) {
+      throw new Error('Missing measured row');
+    }
+    const box = element.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    return { width: box.width, centerDelta: box.x + box.width / 2 - rowBox.x - rowBox.width / 2 };
+  });
+  expect(geometry.width).toBe(896);
+  expect(Math.abs(geometry.centerDelta)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath('restored-subagent.png') });
+});
+
+test.beforeAll(async ({ browser, baseURL }, testInfo) => {
+  // The HTTP health check only warms Storybook's shell. Compile the real chat
+  // graph once as server startup, before timing individual interaction cases.
+  testInfo.setTimeout(120_000);
+  const page = await browser.newPage();
+  await page.route('**/api/trpc/**', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([{ result: { data: { json: { enabled: false, hasApiKey: false } } } }]),
+    })
+  );
+  await page.goto(
+    `${baseURL}/iframe.html?id=workspaces-chatcontent--composer-height-changes&viewMode=story`,
+    { waitUntil: 'domcontentloaded' }
+  );
+  await expect(
+    page.getByTestId('mock-conversation').getByPlaceholder('Type a message...')
+  ).toBeVisible({ timeout: 110_000 });
+  await page.close();
+});
+
 async function expectReachableAboveComposer(button: Locator, composer: Locator) {
   await expect(button).toBeVisible();
   await expect

@@ -97,6 +97,7 @@ export type LifecycleHarness = {
     | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
+    | 'hasObservedEmptyProviderSession'
   >;
   sessionDomainService: MockedPick<
     SessionDomainService,
@@ -606,6 +607,7 @@ export function createLifecycleHarness(
     stopAndQuiesce: vi.fn(async () => undefined),
     beginShutdown: vi.fn(() => []),
     stopAllClients: vi.fn(async () => undefined),
+    hasObservedEmptyProviderSession: vi.fn(() => false),
   } satisfies Pick<
     AcpRuntimeManager,
     | 'isStopInProgress'
@@ -624,6 +626,7 @@ export function createLifecycleHarness(
     | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
+    | 'hasObservedEmptyProviderSession'
   >;
   const sessionDomainService = {
     appendClaudeEvent: vi.fn((_sessionId: string, _message: unknown) => 1),

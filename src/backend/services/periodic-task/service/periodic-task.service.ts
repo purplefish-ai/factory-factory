@@ -207,7 +207,8 @@ export class PeriodicTaskService {
           task.cadence as PeriodicTaskCadence,
           task.scheduledTime,
           task.timezone,
-          task.scheduledDayOfMonth
+          task.scheduledDayOfMonth,
+          task.nextRunAt
         );
       } catch (error) {
         this.logger.error('Failed to dispatch periodic task', {
@@ -226,7 +227,8 @@ export class PeriodicTaskService {
     cadence: PeriodicTaskCadence,
     scheduledTime: string | null,
     timezone: string | null,
-    scheduledDayOfMonth: number | null
+    scheduledDayOfMonth: number | null,
+    dueAt: Date
   ): Promise<void> {
     if (!this.timerDispatchBridge) {
       this.logger.warn('Periodic task service not configured — skipping dispatch');
@@ -246,12 +248,16 @@ export class PeriodicTaskService {
         scheduledTime,
         timezone,
         scheduledDayOfMonth,
+        dueAt,
       }
     );
     if (!execution) {
-      this.logger.debug('Skipping periodic task — dispatch reservation was already claimed', {
-        taskId,
-      });
+      this.logger.debug(
+        'Skipping periodic task — dispatch reservation no longer eligible or already claimed',
+        {
+          taskId,
+        }
+      );
       return;
     }
 

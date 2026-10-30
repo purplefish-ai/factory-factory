@@ -89,7 +89,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   dispatch: React.Dispatch<ChatAction>;
   // Refs for UI
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
   // Connection state (passed through from transport)
   connected: boolean;
 }
@@ -123,7 +122,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   // Track dbSessionId in a ref to use without stale closures
   const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
   // Track accumulated tool input JSON per tool_use_id for streaming
@@ -340,7 +338,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       dispatch,
       // Refs for UI
       inputRef,
-      messagesEndRef,
     }),
     [
       state,

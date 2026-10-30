@@ -4,9 +4,9 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
-import { VirtualizedMessageList } from './virtualized-message-list';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 
-describe('VirtualizedMessageList loading status', () => {
+describe('TranscriptRenderingFixture loading status', () => {
   it('identifies background processes after the prompt finishes and removes completed work', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -25,14 +25,13 @@ describe('VirtualizedMessageList loading status', () => {
     ) => {
       flushSync(() => {
         root.render(
-          <VirtualizedMessageList
+          <TranscriptRenderingFixture
             messages={[]}
             running={running}
             work={{ ...work, promptInFlight, backgroundTasks }}
             latestThinking="Old reasoning from the finished turn"
             startingSession={false}
             loadingSession={false}
-            scrollContainerRef={{ current: null }}
           />
         );
       });
@@ -72,12 +71,11 @@ describe('VirtualizedMessageList loading status', () => {
     try {
       flushSync(() =>
         root.render(
-          <VirtualizedMessageList
+          <TranscriptRenderingFixture
             messages={[]}
             running={false}
             startingSession={false}
             loadingSession={false}
-            scrollContainerRef={{ current: null }}
             work={{
               promptInFlight: false,
               backgroundTasks: [{ id: 'preview', name: 'pnpm storybook', kind: 'shell' }],
@@ -105,12 +103,11 @@ describe('VirtualizedMessageList loading status', () => {
     const render = (initBanner: WorkspaceInitBanner | null) => {
       flushSync(() => {
         root.render(
-          <VirtualizedMessageList
+          <TranscriptRenderingFixture
             messages={[]}
             running={false}
             startingSession={false}
             loadingSession
-            scrollContainerRef={{ current: null }}
             initBanner={initBanner}
           />
         );

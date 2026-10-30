@@ -1,17 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { type ComponentProps, useRef } from 'react';
+import { type ComponentProps } from 'react';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   createAssistantMessage,
   createThinkingMessage,
   createUserMessage,
 } from '@/lib/claude-fixtures';
+import { ChatTranscript } from './chat-transcript';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
-import { VirtualizedMessageList } from './virtualized-message-list';
 
-const meta: Meta<typeof VirtualizedMessageList> = {
-  title: 'Chat/VirtualizedMessageList',
-  component: VirtualizedMessageList,
+const meta: Meta<typeof ChatTranscript> = {
+  title: 'Chat/ChatTranscript',
+  component: ChatTranscript,
   decorators: [
     (Story) => (
       <div className="h-96 bg-background text-foreground">
@@ -24,7 +24,13 @@ const meta: Meta<typeof VirtualizedMessageList> = {
     running: false,
     startingSession: false,
     loadingSession: true,
-    scrollContainerRef: { current: null },
+    scroll: {
+      identity: 'story',
+      active: true,
+      ready: true,
+      initialIntent: 'following',
+      initialPosition: null,
+    },
   },
 };
 
@@ -92,11 +98,19 @@ export const LongTaskLabels: Story = {
 
 const startupMessage = createUserMessage('Please fix the failing tests and explain what changed.');
 
-function StartupPreview(props: ComponentProps<typeof VirtualizedMessageList>) {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+function StartupPreview(props: ComponentProps<typeof ChatTranscript>) {
   return (
-    <div ref={scrollContainerRef} className="h-full overflow-auto">
-      <VirtualizedMessageList {...props} scrollContainerRef={scrollContainerRef} />
+    <div className="h-full overflow-auto">
+      <ChatTranscript
+        {...props}
+        scroll={{
+          identity: 'story',
+          active: true,
+          ready: true,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
+      />
     </div>
   );
 }
@@ -211,17 +225,22 @@ const historyMessages: ChatMessage[] = [
 ];
 
 function HistoryPreview({ running = false }: { running?: boolean }) {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messages = useGroupedChatMessages(historyMessages);
   return (
-    <div ref={scrollContainerRef} className="h-full overflow-auto">
-      <VirtualizedMessageList
+    <div className="h-full overflow-auto">
+      <ChatTranscript
         messages={messages}
         running={running}
         startingSession={false}
         loadingSession={false}
         latestThinking="Checking the next step"
-        scrollContainerRef={scrollContainerRef}
+        scroll={{
+          identity: 'story',
+          active: true,
+          ready: true,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
       />
     </div>
   );

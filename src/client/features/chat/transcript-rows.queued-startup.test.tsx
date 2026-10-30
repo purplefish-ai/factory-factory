@@ -3,18 +3,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { createUserMessage } from '@/lib/claude-fixtures';
-import { VirtualizedMessageList } from './virtualized-message-list';
-
-// jsdom has no viewport measurements; expose all rows while keeping rendering real.
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * 80 })),
-    getTotalSize: () => count * 80,
-    measureElement: () => undefined,
-    scrollToIndex: () => undefined,
-  }),
-}));
+import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 
 it.each([null, 'Running init script...'])(
   'keeps queued messages visible and cancellable while loading (%s)',
@@ -27,14 +16,13 @@ it.each([null, 'Running init script...'])(
     const render = (loadingSession: boolean) => {
       flushSync(() =>
         root.render(
-          <VirtualizedMessageList
+          <TranscriptRenderingFixture
             messages={[history, queued]}
             queuedMessageIds={new Set([queued.id])}
             onRemoveQueuedMessage={onRemove}
             running={false}
             startingSession
             loadingSession={loadingSession}
-            scrollContainerRef={{ current: null }}
             initBanner={
               initMessage
                 ? {

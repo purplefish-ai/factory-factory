@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { projectAcpTranscriptUpdates } from '@/client/features/chat';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import {
   SubagentTranscriptContent,
+  type SubagentTranscriptContentProps,
   type SubagentTranscriptState,
 } from './subagent-transcript-content';
 import type { SubagentSelection } from './types';
@@ -11,9 +13,14 @@ import type { SubagentSelection } from './types';
 export interface SubagentTranscriptViewProps {
   selection: SubagentSelection;
   workspaceId: string;
+  scroll?: SubagentTranscriptContentProps['scroll'];
 }
 
-export function SubagentTranscriptView({ selection, workspaceId }: SubagentTranscriptViewProps) {
+export function SubagentTranscriptView({
+  selection,
+  workspaceId,
+  scroll,
+}: SubagentTranscriptViewProps) {
   const query = trpc.session.readSubagentTranscript.useInfiniteQuery(
     {
       sessionId: selection.parentSessionId,
@@ -56,14 +63,20 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
   }, [query.data]);
 
   useEffect(() => {
-    return subscribeToSubagentChanges((detail) => {
+    // Change bursts run one refetch at a time plus one trailing refetch.
+    const refreshOnChange = createTrailingRefresh(() => query.refetch());
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        void query.refetch();
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [query.refetch, selection.parentSessionId, selection.subagent.id]);
 
   const handleLoadOlder = useCallback(() => {
@@ -104,6 +117,11 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
   }
 
   return (
-    <SubagentTranscriptContent workspaceId={workspaceId} selection={selection} state={state} />
+    <SubagentTranscriptContent
+      workspaceId={workspaceId}
+      selection={selection}
+      state={state}
+      scroll={scroll}
+    />
   );
 }

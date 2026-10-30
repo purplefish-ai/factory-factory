@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: 'test-results/chat',
   testMatch: 'scroll-button-occlusion.spec.ts',
   workers: 1,
   timeout: 60_000,

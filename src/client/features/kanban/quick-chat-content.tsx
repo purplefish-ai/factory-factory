@@ -1,34 +1,27 @@
-import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
   type UseChatWebSocketReturn,
   useGroupedChatMessages,
-  VirtualizedMessageList,
+  ChatTranscript,
+  type TranscriptScrollOptions,
 } from '@/client/features/chat';
 import { useSubagentTimelineMessages } from '@/client/features/subagents';
-import { Button } from '@/components/ui/button';
 
 interface QuickChatContentProps {
   workspaceId: string;
   codexAccountId?: string | null;
   chatState: UseChatWebSocketReturn;
-  viewportRef: React.RefObject<HTMLDivElement | null>;
-  onScroll: () => void;
-  isNearBottom: boolean;
-  scrollToBottom: () => void;
+  transcriptScroll: TranscriptScrollOptions;
 }
 
 export function QuickChatContent({
   workspaceId,
   codexAccountId,
   chatState,
-  viewportRef,
-  onScroll,
-  isNearBottom,
-  scrollToBottom,
+  transcriptScroll,
 }: QuickChatContentProps) {
   const timeline = useSubagentTimelineMessages(
     chatState.messages,
@@ -50,54 +43,24 @@ export function QuickChatContent({
   const loadingSession = chatState.sessionStatus.phase === 'loading';
   const startingSession = chatState.sessionStatus.phase === 'starting';
 
-  const handleHeightChange = useCallback(() => {
-    if (isNearBottom && viewportRef.current) {
-      viewportRef.current.scrollTo({
-        top: viewportRef.current.scrollHeight,
-        behavior: 'instant',
-      });
-    }
-  }, [isNearBottom, viewportRef]);
-
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Messages area */}
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        <VirtualizedMessageList
-          workspaceId={workspaceId}
-          messages={groupedMessages}
-          subagentTimelineError={timeline.error}
-          acpPlan={chatState.acpPlan}
-          running={running}
-          work={chatState.sessionRuntime.work}
-          startingSession={startingSession}
-          loadingSession={loadingSession}
-          latestThinking={chatState.latestThinking}
-          scrollContainerRef={viewportRef}
-          onScroll={onScroll}
-          messagesEndRef={chatState.messagesEndRef}
-          isNearBottom={isNearBottom}
-          isCompacting={chatState.isCompacting}
-          queuedMessageIds={queuedMessageIds}
-          onRemoveQueuedMessage={chatState.removeQueuedMessage}
-        />
-      </div>
-
-      {/* Scroll to bottom button */}
-      {!isNearBottom && (
-        <div className="absolute bottom-32 left-1/2 z-10 -translate-x-1/2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={scrollToBottom}
-            className="rounded-full shadow-lg"
-          >
-            <ArrowDownIcon className="h-4 w-4 mr-1" />
-            Scroll to bottom
-          </Button>
-        </div>
-      )}
-
+      <ChatTranscript
+        workspaceId={workspaceId}
+        messages={groupedMessages}
+        subagentTimelineError={timeline.error}
+        acpPlan={chatState.acpPlan}
+        running={running}
+        work={chatState.sessionRuntime.work}
+        startingSession={startingSession}
+        loadingSession={loadingSession}
+        latestThinking={chatState.latestThinking}
+        scroll={transcriptScroll}
+        isCompacting={chatState.isCompacting}
+        queuedMessageIds={queuedMessageIds}
+        onRemoveQueuedMessage={chatState.removeQueuedMessage}
+      />
       {/* Prompts + input area */}
       <div className="z-20 border-t bg-background pb-safe">
         <PermissionPrompt
@@ -131,7 +94,6 @@ export function QuickChatContent({
           onChange={chatState.setInputDraft}
           attachments={chatState.inputAttachments}
           onAttachmentsChange={chatState.setInputAttachments}
-          onHeightChange={handleHeightChange}
           pendingMessageCount={chatState.pendingMessages.size}
           workspaceId={workspaceId}
           codexAccountId={codexAccountId}

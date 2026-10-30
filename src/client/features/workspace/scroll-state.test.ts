@@ -21,6 +21,120 @@ function createStorage() {
 }
 
 describe('scroll-state', () => {
+  it.each(['following', 'reading'] as const)(
+    'round-trips %s chat intent and keyed anchors in v1',
+    (intent) => {
+      const storage = createStorage();
+      const chatPosition = { intent, top: 250, left: 8, anchor: { key: 'message-7', offset: 20 } };
+      const record = upsertScrollState({}, 'chat-session', 'chat', {
+        top: 250,
+        left: 8,
+        chatPosition,
+      });
+      saveScrollStateRecord(storage, 'w', record);
+      expect(loadScrollStateRecord(storage, 'w')['chat-session:chat']).toEqual({
+        top: 250,
+        left: 8,
+        stickToBottom: undefined,
+        chatPosition,
+      });
+      expect(JSON.parse(storage.getItem('workspace-panel-scroll-w') ?? '{}').v).toBe(1);
+    }
+  );
+
+  it('round-trips signed chat gap offsets while retaining nonnegative document coordinates', () => {
+    const storage = createStorage();
+    const chatPosition = {
+      intent: 'reading' as const,
+      top: 120,
+      left: 0,
+      anchor: { key: 'b', offset: -4 },
+    };
+    saveScrollStateRecord(
+      storage,
+      'w',
+      upsertScrollState({}, 'session', 'chat', { top: 120, left: 0, chatPosition })
+    );
+    expect(loadScrollStateRecord(storage, 'w')['session:chat']?.chatPosition).toEqual(chatPosition);
+  });
+
+  it.each([{ key: '', offset: 1 }, { key: 'row', offset: 'invalid' }, null])(
+    'preserves valid chat pixels and intent when an optional anchor is malformed: %j',
+    (anchor) => {
+      const storage = createStorage();
+      storage.setItem(
+        'workspace-panel-scroll-w',
+        JSON.stringify({
+          v: 1,
+          states: {
+            'chat-session:chat': {
+              top: 10,
+              left: 2,
+              chatPosition: { intent: 'reading', top: 10, left: 2, anchor },
+            },
+          },
+        })
+      );
+      const record = loadScrollStateRecord(storage, 'w');
+      expect(record['chat-session:chat']?.chatPosition).toEqual({
+        intent: 'reading',
+        top: 10,
+        left: 2,
+      });
+    }
+  );
+
+  it('drops an overflowing raw numeric anchor while preserving valid chat pixels', () => {
+    const storage = createStorage();
+    storage.setItem(
+      'workspace-panel-scroll-w',
+      `{"v":1,"states":{"session:chat":{"top":10,"left":2,"chatPosition":{"intent":"reading","top":10,"left":2,"anchor":{"key":"row","offset":1e999}}}}}`
+    );
+    expect(loadScrollStateRecord(storage, 'w')['session:chat']?.chatPosition).toEqual({
+      intent: 'reading',
+      top: 10,
+      left: 2,
+    });
+  });
+
+  it('drops invalid optional chat positions while preserving viewer pixels and ignores unknown fields', () => {
+    const storage = createStorage();
+    storage.setItem(
+      'workspace-panel-scroll-w',
+      JSON.stringify({
+        v: 1,
+        ignored: true,
+        states: {
+          invalid: {
+            top: 10,
+            left: 2,
+            extra: true,
+            chatPosition: { intent: 'reading', top: -1, left: 0 },
+          },
+          valid: {
+            top: 5,
+            left: 0,
+            chatPosition: { intent: 'following', top: 5, left: 0, extra: 'unknown' },
+          },
+        },
+      })
+    );
+    expect(loadScrollStateRecord(storage, 'w')).toEqual({
+      invalid: { top: 10, left: 2, stickToBottom: undefined },
+      valid: {
+        top: 5,
+        left: 0,
+        stickToBottom: undefined,
+        chatPosition: { intent: 'following', top: 5, left: 0 },
+      },
+    });
+    storage.setItem(
+      'workspace-panel-scroll-w',
+      JSON.stringify({ v: 2, states: { valid: { top: 1, left: 0 } } })
+    );
+    expect(loadScrollStateRecord(storage, 'w')).toEqual({});
+  });
+
   it('round-trips a wrapped diff row anchor and ignores invalid anchors', () => {
     const storage = createStorage();
     storage.setItem(
