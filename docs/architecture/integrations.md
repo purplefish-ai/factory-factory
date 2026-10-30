@@ -139,7 +139,13 @@ dates in the task timezone, preserving the scheduled day across daylight saving
 changes.
 
 Each execution runs the configured prompt, monitors the workspace until the
-agent finishes, and advances the schedule. Concurrent runs are skipped.
+agent finishes, and advances the schedule. Concurrent runs are skipped. Archived
+projects are excluded from due-task polling. Their task definitions retain their
+enabled state and schedule, so overdue tasks become eligible again when the
+project is unarchived. The atomic dispatch reservation rechecks the project
+state: archiving between the due-task read and reservation creates no execution
+and does not advance the schedule. The workspace insert also checks project
+archive state atomically if archiving races an already admitted run.
 
 A run's outcome depends on its PR, workspace setup and Claude/Codex session:
 
@@ -184,11 +190,14 @@ once in the background. A launched result means workspace and session creation
 returned; worktree initialization continues in the background. It does not mean
 the prompt or periodic execution completed.
 
-Launch failures mark the reserved execution failed. A failed workspace-ID write
-leaves it running without a workspace link until the existing 15-minute timeout
-marks it failed. Restart does not re-emit reserved runs. The launch/link crash
-gap remains; there is no replay or exactly-once guarantee. Timer events use no
-second run store, PR ledger entry, session queue delivery or receipt protocol.
+Launch failures mark the reserved execution failed and retain its advanced
+schedule. This includes archiving after admission but before the guarded
+workspace insert: no workspace is created, and unarchiving does not replay the
+already admitted run. A failed workspace-ID write leaves it running without a
+workspace link until the existing 15-minute timeout marks it failed. Restart
+does not re-emit reserved runs. The launch/link crash gap remains; there is no
+replay or exactly-once guarantee. Timer events use no second run store, PR
+ledger entry, session queue delivery or receipt protocol.
 
 Manage agents at `/projects/:slug/agents` or open an individual definition at
 `/projects/:slug/agents/:id`. The navbar project selector is the shared project

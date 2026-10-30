@@ -68,7 +68,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          projectId: 'project-1',
+          project: { connect: { id: 'project-1', isArchived: false } },
           name: 'Issue workspace',
           githubIssueNumber: 12,
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
@@ -105,7 +105,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          projectId: 'project-1',
+          project: { connect: { id: 'project-1', isArchived: false } },
           name: 'Manual workspace',
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
           prDiscovery: { create: {} },

@@ -394,6 +394,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
         id: 'task-1',
         isEnabled: true,
         nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
       data: expect.objectContaining({
@@ -461,6 +462,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
         id: 'task-1',
         isEnabled: true,
         nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
       data: expect.objectContaining({
@@ -481,7 +483,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
 });
 
 describe('periodicTaskAccessor.findDueTasks', () => {
-  it('selects only enabled tasks whose next run has arrived', async () => {
+  it('selects only enabled tasks in active projects whose next run has arrived', async () => {
     vi.useFakeTimers();
     const now = new Date('2026-05-20T12:00:00Z');
     vi.setSystemTime(now);
@@ -489,7 +491,7 @@ describe('periodicTaskAccessor.findDueTasks', () => {
     try {
       await expect(periodicTaskAccessor.findDueTasks()).resolves.toEqual([]);
       expect(prismaMock.periodicTask.findMany).toHaveBeenCalledExactlyOnceWith({
-        where: { isEnabled: true, nextRunAt: { lte: now } },
+        where: { isEnabled: true, nextRunAt: { lte: now }, project: { isArchived: false } },
       });
     } finally {
       vi.useRealTimers();

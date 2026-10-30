@@ -86,7 +86,12 @@ outside the server's bounded buffer cannot be recovered.
 workspace response shape. `workspace-launch.orchestrator.ts` coordinates the
 interactive MANUAL, RESUME_BRANCH, GITHUB_ISSUE, and LINEAR_ISSUE sources
 through narrow capabilities wired by `app-context.ts`; the workspace capsule
-still owns source validation and persistence.
+still owns source validation and persistence. Every creation source requires an
+active project in the atomic workspace insert; archiving a project after a
+preflight read still prevents the workspace and its side tables from being
+created. Creation reports archived-project failures as `PRECONDITION_FAILED` and
+missing projects as `NOT_FOUND`, including when the guarded insert loses a race
+after validation. Other persistence failures retain their existing handling.
 
 For each interactive source, capacity above zero enables effective-provider
 resolution and CLI preflight before persistence, followed by best-effort
