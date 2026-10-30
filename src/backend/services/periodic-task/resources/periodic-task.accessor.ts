@@ -281,7 +281,6 @@ async function buildDispatchedTaskData(
   scheduledDayOfMonth: number | null;
   nextRunAt: Date;
 }> {
-  const dispatchedAt = new Date();
   let resolvedScheduledDayOfMonth = scheduledDayOfMonth;
   if (cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
     const task = await prisma.periodicTask.findUnique({
@@ -292,9 +291,11 @@ async function buildDispatchedTaskData(
       cadence,
       task?.scheduledDayOfMonth,
       task?.timezone ?? timezone,
-      task?.createdAt ?? dispatchedAt
+      task?.createdAt ?? new Date()
     );
   }
+  // Captured after the awaited lookup so the next run is always after it.
+  const dispatchedAt = new Date();
 
   // Advance from the slot that was due, not from the (possibly late) dispatch
   // time, so a pickup just past local midnight or the month boundary keeps the

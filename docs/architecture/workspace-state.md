@@ -156,7 +156,7 @@ Periodic reconciliation still repairs missed events and restart state. Its
 60-second interval is the delay after a completed run, not a hard maximum for
 stale UI: prior Git work, the next database read, and failed sweeps can delay
 repair. A pass removes only entries absent from its database read that have no
-observation newer than the pass's start, so a workspace created while the read
+observation at or after the pass's start, so a workspace created while the read
 is in flight survives until a later pass can see it.
 
 ## Run script

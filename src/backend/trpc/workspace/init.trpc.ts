@@ -54,6 +54,13 @@ async function retryWorkspaceWithoutWorktree(
   const { initializeWorkspaceWorktree, workspaceStateMachine, worktreeLifecycleService } =
     ctx.appContext.services;
   const logger = getLogger(ctx);
+  // Persist the init mode before transitioning, so a failure here cannot leave
+  // the workspace restarted without an initialization queued.
+  const resumeMode =
+    useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
+  if (resumeMode !== undefined) {
+    await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
+  }
   // FAILED resets to NEW so initializeWorkspaceWorktree starts provisioning
   // itself. READY cannot return to NEW, so it starts provisioning here.
   const isFailed = workspace.status === 'FAILED';
@@ -62,11 +69,6 @@ async function retryWorkspaceWithoutWorktree(
     : await workspaceStateMachine.startProvisioningFromReady(workspace.id, maxRetries);
   if (!restartedWorkspace) {
     throw maxRetriesExceededError(maxRetries);
-  }
-  const resumeMode =
-    useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
-  if (resumeMode !== undefined) {
-    await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
   }
   // Run full initialization (creates worktree + runs startup script)
   initializeWorkspaceWorktree(workspace.id, {

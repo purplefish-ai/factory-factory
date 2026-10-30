@@ -152,6 +152,26 @@ describe('workspaceInitRouter', () => {
     });
   });
 
+  it.each(['FAILED', 'READY'] as const)(
+    'does not restart a %s workspace without a worktree when reading its init mode fails',
+    async (status) => {
+      mockFindByIdWithProject.mockResolvedValue({
+        id: 'w1',
+        status,
+        initErrorMessage: null,
+        worktreePath: null,
+        project: { worktreeBasePath: '/tmp/worktrees' },
+      });
+      mockGetInitMode.mockRejectedValueOnce(new Error('database unavailable'));
+
+      await expect(createCaller().retryInit({ id: 'w1' })).rejects.toThrow();
+
+      expect(mockResetToNew).not.toHaveBeenCalled();
+      expect(mockStartProvisioningFromReady).not.toHaveBeenCalled();
+      expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+    }
+  );
+
   it('throws TOO_MANY_REQUESTS when a missing-worktree READY retry exceeds max retries', async () => {
     mockFindByIdWithProject.mockResolvedValue({
       id: 'w1',
