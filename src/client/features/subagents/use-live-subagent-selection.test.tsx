@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import type { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentListResult, SubagentSelection } from './types';
-import { useLiveSubagentSelection } from './use-live-subagent-selection';
+import { useLiveSubagent, useLiveSubagentSelection } from './use-live-subagent-selection';
 
 const mocks = vi.hoisted(() => ({
   fetchNextPage: vi.fn(() => Promise.resolve()),
@@ -77,6 +77,10 @@ function selection(overrides: Partial<SubagentSelection['subagent']> = {}): Suba
 function LiveSelectionProbe({ selected }: { selected: SubagentSelection }) {
   const current = useLiveSubagentSelection(selected);
   return createElement('output', null, JSON.stringify(current));
+}
+
+function LiveIconProbe({ selected }: { selected: SubagentSelection }) {
+  return createElement('output', null, useLiveSubagent(selected).iconIndex);
 }
 
 describe('useLiveSubagentSelection', () => {
@@ -465,6 +469,51 @@ describe('useLiveSubagentSelection', () => {
     renderHookProbe(stored);
 
     expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: refreshed });
+  });
+
+  it('uses the canonical child icon for a restored generation tab', () => {
+    const selected = selection({ id: 'child-1:generation:2', status: 'completed' });
+    setPages([
+      {
+        supported: true,
+        subagents: [
+          selection({ id: 'earlier-child', createdAt: '2026-08-10T09:00:00.000Z' }).subagent,
+          selection({ generation: 3 }).subagent,
+        ],
+        nextCursor: null,
+      },
+    ]);
+    void act(() => root.render(createElement(LiveIconProbe, { selected })));
+    expect(container.textContent).toBe('1');
+  });
+
+  it('loads remaining summaries after finding the selected agent so earlier agents get their icons', () => {
+    const selected = selection();
+    const firstPage = {
+      supported: true as const,
+      subagents: [selected.subagent],
+      nextCursor: 'page-2',
+    };
+    setPages([firstPage]);
+    void act(() => root.render(createElement(LiveIconProbe, { selected })));
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+
+    setPages([
+      firstPage,
+      {
+        supported: true,
+        subagents: [
+          selection({
+            id: 'earlier-child',
+            createdAt: '2026-08-10T09:00:00.000Z',
+          }).subagent,
+        ],
+        nextCursor: null,
+      },
+    ]);
+    void act(() => root.render(createElement(LiveIconProbe, { selected })));
+    expect(container.textContent).toBe('1');
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
   });
 
   it('fetches successive pages until it refreshes a restored later-page child', () => {

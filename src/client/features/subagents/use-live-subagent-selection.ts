@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { getSubagentThreadId } from '@/shared/acp-protocol/subagents';
@@ -69,6 +70,13 @@ function isProvenAtLeastAsFresh(
 }
 
 export function useLiveSubagentSelection(selection: SubagentSelection): SubagentSelection {
+  return useLiveSubagent(selection).selection;
+}
+
+export function useLiveSubagent(selection: SubagentSelection): {
+  selection: SubagentSelection;
+  iconIndex: number;
+} {
   const query = trpc.session.listSubagents.useInfiniteQuery(
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
     {
@@ -80,15 +88,14 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   const hadCachedDataAtMount = useRef(query.data !== undefined);
   const [successfulRefetchDataUpdatedAt, setSuccessfulRefetchDataUpdatedAt] = useState(0);
 
-  const candidate = query.data?.pages
-    .filter((page) => page.supported)
-    .flatMap((page) => page.subagents)
-    .find(
-      (candidate) =>
-        candidate.id === selection.subagent.id ||
-        (candidate.generation !== undefined &&
-          candidate.id === getSubagentThreadId(selection.subagent.id))
-    );
+  const subagents =
+    query.data?.pages.filter((page) => page.supported).flatMap((page) => page.subagents) ?? [];
+  const candidate = subagents.find(
+    (candidate) =>
+      candidate.id === selection.subagent.id ||
+      (candidate.generation !== undefined &&
+        candidate.id === getSubagentThreadId(selection.subagent.id))
+  );
   // Keep persisted generation tab identities stable for the panel's tab lookup.
   const refreshed = useMemo(
     () =>
@@ -97,6 +104,10 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
         : candidate,
     [candidate, selection.subagent.id]
   );
+  const iconIndex =
+    getSubagentIconIndices(candidate ? subagents : [...subagents, selection.subagent]).get(
+      candidate?.id ?? selection.subagent.id
+    ) ?? 0;
   const candidateWasCachedAtMount = useRef(refreshed !== undefined);
   const querySnapshot = useRef({
     dataUpdatedAt: query.dataUpdatedAt,
@@ -178,9 +189,9 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     : query.isFetchedAfterMount && query.dataUpdatedAt > mountDataUpdatedAt.current;
 
   useEffect(() => {
+    // Icon assignment needs the entire session, even after the selected child is found.
     if (
       loadedPageCount === 0 ||
-      refreshed ||
       !query.hasNextPage ||
       query.isFetching ||
       query.isFetchNextPageError
@@ -194,11 +205,14 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     query.hasNextPage,
     query.isFetchNextPageError,
     query.isFetching,
-    refreshed,
   ]);
 
-  return refreshed &&
-    isProvenAtLeastAsFresh(selection.subagent, refreshed, hasSuccessfulPostMountFetch)
-    ? { ...selection, subagent: refreshed }
-    : selection;
+  return {
+    selection:
+      refreshed &&
+      isProvenAtLeastAsFresh(selection.subagent, refreshed, hasSuccessfulPostMountFetch)
+        ? { ...selection, subagent: refreshed }
+        : selection,
+    iconIndex,
+  };
 }

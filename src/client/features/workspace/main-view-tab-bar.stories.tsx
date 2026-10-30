@@ -62,7 +62,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const RunningSubagent: Story = {};
+export const RunningSubagent: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Sub-agent tabs use the same botanical icon and color as the session sub-agent list.',
+      },
+    },
+  },
+};
 
 export const CompletedSubagent: Story = {
   args: {
