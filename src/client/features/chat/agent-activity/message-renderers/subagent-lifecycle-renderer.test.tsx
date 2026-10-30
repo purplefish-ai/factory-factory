@@ -3,8 +3,10 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { MessageItem } from '../agent-activity';
-import type { MessageItemProps } from '../agent-activity';
+import {
+  MessageItem,
+  type MessageItemProps,
+} from '@/client/features/chat/agent-activity/agent-activity';
 
 it('renders agent lifecycle as its own row and opens Sessions on click', () => {
   const container = document.createElement('div');
