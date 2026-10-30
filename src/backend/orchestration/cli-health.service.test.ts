@@ -1,3 +1,4 @@
+import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -20,7 +21,9 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs/promises', () => ({ access: mockAccess, realpath: mockRealpath, stat: mockStat }));
 
 vi.mock('@/backend/services/config.service', () => ({
-  configService: { getChildProcessEnv: () => ({ PATH: '/runtime/bin:/secondary/bin' }) },
+  configService: {
+    getChildProcessEnv: () => ({ PATH: ['/runtime/bin', '/secondary/bin'].join(delimiter) }),
+  },
 }));
 
 vi.mock('node:module', () => ({ createRequire: () => ({ resolve: mockResolve }) }));
@@ -387,7 +390,7 @@ describe('cliHealthService', () => {
     mockAccess.mockResolvedValue(undefined);
     mockRealpath.mockImplementation((path: string) =>
       Promise.resolve(
-        path.startsWith('/runtime/bin/')
+        path.startsWith(join('/runtime/bin'))
           ? '/home/user/.local/share/claude/versions/2.1.312'
           : '/opt/homebrew/Caskroom/claude-code/2.1.310/claude'
       )
