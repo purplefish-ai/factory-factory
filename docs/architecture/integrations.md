@@ -69,9 +69,6 @@ check through both the aggregate CLI cache and GitHub's own cache. Forced checks
 wait for older refreshes before rechecking so pre-login results cannot overwrite
 the new status displayed in the UI.
 
-Cache clearing also supersedes in-flight checks, so late pre-upgrade results
-cannot replace the post-upgrade status.
-
 ## Issue provider settings
 
 The admin provider selector rolls back failed saves to the latest project query
