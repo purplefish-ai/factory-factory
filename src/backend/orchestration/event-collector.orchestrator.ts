@@ -65,7 +65,7 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import type { PRState } from '@/shared/core';
+import { isOpenPrState, type PRState } from '@/shared/core';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { LinearMergeCompletion } from './linear-merge-completion.orchestrator';
@@ -604,7 +604,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
         });
       });
     }
-    if (event.prId && event.previousPrState === 'NONE' && event.prState === 'OPEN') {
+    // Observed states are enriched, so a PR first seen as a draft or already
+    // reviewed is still a newly opened PR. Only NONE → open notifies; later
+    // transitions between open states (e.g. DRAFT → OPEN) do not repeat it.
+    if (event.prId && event.previousPrState === 'NONE' && isOpenPrState(event.prState)) {
       void dependencies
         .fireLifecycleNotification(event.workspaceId, 'A pull request has been opened.')
         .catch((error) => {

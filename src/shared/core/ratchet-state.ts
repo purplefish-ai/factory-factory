@@ -1,4 +1,5 @@
 import { CIStatus, PRState, RatchetState } from './enums.js';
+import { isOpenPrState } from './pr-state.js';
 
 /**
  * `RatchetState` is a projection of one PR observation, not state of its own.
@@ -30,21 +31,6 @@ export interface RatchetStateInput {
 }
 
 /**
- * PR states the ratchet treats as an open PR worth observing.
- *
- * The ratchet's own fetch reads GitHub's raw `state` (`OPEN`/`CLOSED`/`MERGED`),
- * where a draft or reviewed PR is just `OPEN`. The cached `PRState` folds draft
- * and review decision into the same enum, so recovering "is this PR open" means
- * naming the four values that mean yes.
- */
-const OPEN_PR_STATES: ReadonlySet<PRState> = new Set([
-  PRState.OPEN,
-  PRState.DRAFT,
-  PRState.CHANGES_REQUESTED,
-  PRState.APPROVED,
-]);
-
-/**
  * Derive the ratchet's view of a workspace from its cached PR observation.
  *
  * Ordering is significant and preserved from the persisted implementation:
@@ -60,7 +46,7 @@ export function deriveRatchetState(input: RatchetStateInput): RatchetState {
     return RatchetState.MERGED;
   }
 
-  if (!OPEN_PR_STATES.has(input.prState)) {
+  if (!isOpenPrState(input.prState)) {
     return RatchetState.IDLE;
   }
 

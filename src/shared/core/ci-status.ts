@@ -13,6 +13,22 @@ interface CheckLike {
   completedAt?: string | null;
 }
 
+/**
+ * Non-terminal check states. Includes every non-COMPLETED GitHub
+ * `CheckStatusState` (WAITING is a job gated on an environment approval,
+ * REQUESTED a run that is not queued yet) plus the StatusContext
+ * PENDING/EXPECTED states, so raw rollups classify the same way as the
+ * normalized ones produced by `mapStatusChecks`.
+ */
+const PENDING_CHECK_STATES: ReadonlySet<string> = new Set([
+  'PENDING',
+  'EXPECTED',
+  'QUEUED',
+  'IN_PROGRESS',
+  'WAITING',
+  'REQUESTED',
+]);
+
 function normalizeCheckValue(value: string | null | undefined): string | null {
   if (value === null || value === undefined) {
     return null;
@@ -197,12 +213,9 @@ export function deriveCiStatusFromCheckRollup(
     return CIStatus.FAILURE;
   }
 
-  const hasPending = checksForClassification.some((check) => {
-    const state = getEffectiveState(check);
-    return (
-      state === 'PENDING' || state === 'EXPECTED' || state === 'QUEUED' || state === 'IN_PROGRESS'
-    );
-  });
+  const hasPending = checksForClassification.some((check) =>
+    PENDING_CHECK_STATES.has(getEffectiveState(check))
+  );
   if (hasPending) {
     return CIStatus.PENDING;
   }

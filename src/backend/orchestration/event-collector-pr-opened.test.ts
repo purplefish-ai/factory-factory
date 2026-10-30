@@ -49,6 +49,38 @@ it('notifies for each newly opened PR, without repeating on unchanged observatio
   }
 });
 
+it('notifies once when a PR is first observed as a draft and later marked ready', () => {
+  const { collector, prEvents, notify } = fixture();
+  collector.start();
+  try {
+    const event = { workspaceId: 'child', prId: 'pr-1' };
+    prEvents.emit(PR_SNAPSHOT_UPDATED, { ...event, previousPrState: 'NONE', prState: 'DRAFT' });
+    prEvents.emit(PR_SNAPSHOT_UPDATED, { ...event, previousPrState: 'DRAFT', prState: 'OPEN' });
+    expect(notify.mock.calls).toEqual([['child', 'A pull request has been opened.']]);
+  } finally {
+    collector.stop();
+  }
+});
+
+it.each(['CHANGES_REQUESTED', 'APPROVED'])(
+  'notifies when a PR is first observed already reviewed as %s',
+  (prState) => {
+    const { collector, prEvents, notify } = fixture();
+    collector.start();
+    try {
+      prEvents.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId: 'child',
+        prId: 'pr-1',
+        previousPrState: 'NONE',
+        prState,
+      });
+      expect(notify.mock.calls).toEqual([['child', 'A pull request has been opened.']]);
+    } finally {
+      collector.stop();
+    }
+  }
+);
+
 it('logs failed PR-open notification persistence with its workspace and PR identity', async () => {
   const { collector, prEvents, notify, warn } = fixture();
   const error = new Error('database unavailable');
