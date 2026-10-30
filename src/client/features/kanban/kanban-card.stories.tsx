@@ -390,3 +390,14 @@ export const SlowRename: Story = {
     );
   },
 };
+
+export const AgentWorkspace: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Review dependencies for security updates',
+      creationSource: 'PERIODIC_TASK',
+    },
+    projectSlug: 'my-project',
+  },
+};

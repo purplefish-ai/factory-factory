@@ -119,6 +119,24 @@ afterEach(() => {
 });
 
 describe('KanbanCard', () => {
+  it.each(['PERIODIC_TASK', 'MANUAL', 'CHILD_WORKSPACE'] as const)(
+    'checks agent icon visibility for %s cards',
+    (creationSource) => {
+      const { container, root } = renderCard({ ...baseWorkspace, creationSource });
+      const icon = container.querySelector('[role="img"][aria-label="Agent workspace"]');
+
+      if (creationSource === 'PERIODIC_TASK') {
+        expect(icon).not.toBeNull();
+        expect(icon?.parentElement?.textContent).toContain(baseWorkspace.name);
+      } else {
+        expect(icon).toBeNull();
+      }
+
+      actFlushSync(() => root.unmount());
+      container.remove();
+    }
+  );
+
   it('renders one canonical status chip for an idle workspace', () => {
     const { container, root } = renderCard(baseWorkspace);
     const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');

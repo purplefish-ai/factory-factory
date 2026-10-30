@@ -5,6 +5,7 @@ import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useState } from 'react';
@@ -428,8 +429,15 @@ export function KanbanCard({
                 className="flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
               />
             ) : (
-              <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-                {workspace.name}
+              <CardTitle className="flex items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
+                {workspace.creationSource === 'PERIODIC_TASK' && (
+                  <RobotIcon
+                    role="img"
+                    aria-label="Agent workspace"
+                    className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
+                  />
+                )}
+                <span className="line-clamp-2">{workspace.name}</span>
               </CardTitle>
             )}
             <CardTitleIcons
