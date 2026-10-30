@@ -17,6 +17,7 @@ it('persists a structured resume warning while keeping idle transcript replay su
     runtimeManager: {
       getClient: vi.fn(),
       isSessionWorking: () => false,
+      isSessionPromptInFlight: () => false,
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionPermissionService: {
       createPermissionBridge: vi.fn(),

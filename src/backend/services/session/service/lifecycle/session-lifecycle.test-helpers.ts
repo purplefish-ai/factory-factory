@@ -86,6 +86,7 @@ export type LifecycleHarness = {
     | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
+    | 'isSessionPromptInFlight'
     | 'getClient'
     | 'getBrowseClient'
     | 'getPendingClient'
@@ -580,6 +581,7 @@ export function createLifecycleHarness(
     hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
+    isSessionPromptInFlight: vi.fn(() => false),
     getClient: vi.fn<AcpRuntimeManager['getClient']>(() => undefined),
     getBrowseClient: vi.fn(() => undefined),
     getPendingClient: vi.fn(() => undefined),
@@ -611,6 +613,7 @@ export function createLifecycleHarness(
     | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
+    | 'isSessionPromptInFlight'
     | 'getClient'
     | 'getBrowseClient'
     | 'getPendingClient'

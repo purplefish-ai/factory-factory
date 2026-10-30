@@ -191,6 +191,7 @@ it('accepts live output after suppressing hydrated resume replay', async () => {
   const { h, domain, processor, coordinator } = setup();
   await coordinator.getOrCreateSessionClient('session-1');
   h.runtimeManager.isSessionWorking.mockReturnValue(true);
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
   processor.createRuntimeEventHandler('session-1').onAcpEvent?.('session-1', {
     type: 'acp_session_update',
     update: {
