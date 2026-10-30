@@ -80,6 +80,61 @@ it('keeps same-numbered PRs in different repositories independent and duplicate 
     prUrl: 'https://github.com/org/repo/pull/1',
   });
 });
+it('treats owner/repo casing variants of one PR URL as the same association', async () => {
+  const row = await workspace('casing');
+  const pasted = await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/7');
+  expect(await workspacePrAccessor.attach(row.id, 'https://github.com/Org/Repo/pull/7')).toEqual({
+    ...pasted,
+    created: false,
+  });
+  const checkedAt = new Date();
+  const claim = {
+    githubOwner: 'org',
+    githubRepo: 'repo',
+    branchName: 'feature',
+    checkedAt,
+    retryCount: 0,
+    nextCheckAt: new Date(checkedAt.getTime() + 60_000),
+  };
+  await db.prisma.workspacePRDiscovery.update({
+    where: { workspaceId: row.id },
+    data: { lastCheckedAt: claim.checkedAt, nextCheckAt: claim.nextCheckAt },
+  });
+  const discovered = await workspacePrAccessor.attachDiscoveredPRsIfClaimMatches(row.id, claim, [
+    'https://github.com/ORG/repo/pull/7',
+    'https://github.com/org/repo/pull/70',
+  ]);
+  expect(discovered).toHaveLength(1);
+  await workspacePrAccessor.detach({ workspaceId: row.id, prId: pasted.prId });
+  expect(await workspacePrAccessor.attach(row.id, 'https://GitHub.com/ORG/REPO/pull/7')).toEqual({
+    prId: pasted.prId,
+    created: false,
+    reattached: true,
+  });
+  expect((await workspacePrAccessor.list(row.id)).map((pr) => pr.id).sort()).toEqual(
+    [pasted.prId, discovered[0]].sort()
+  );
+});
+it('finds review-request associations by PR identity regardless of URL casing', async () => {
+  const row = await workspace('review-casing');
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/review/pull/5');
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/review/pull/15');
+  await db.prisma.workspace.update({ where: { id: row.id }, data: { status: 'ARCHIVED' } });
+  expect(
+    await workspacePrAccessor.findReviewRequestAssociations([
+      'https://github.com/Org/Review/pull/5',
+      'https://github.com/org/review/pull/50',
+    ])
+  ).toEqual([{ url: 'https://github.com/Org/Review/pull/5', workspace: { status: 'ARCHIVED' } }]);
+  // A full GitHub search page can list ~1,000 PRs; lookups must stay below SQLite's limits.
+  const urls = Array.from(
+    { length: 1200 },
+    (_, i) => `https://github.com/Org/Review/pull/${i + 1}`
+  );
+  expect((await workspacePrAccessor.findReviewRequestAssociations(urls)).map((a) => a.url)).toEqual(
+    [urls[4], urls[14]]
+  );
+});
 it('reads and writes every cache field on its explicit PR', async () => {
   await workspace('cache');
   const { prId } = await workspacePrAccessor.attach('cache', 'https://github.com/org/repo/pull/7');

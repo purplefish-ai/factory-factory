@@ -44,12 +44,13 @@ otherwise be restored.
 
 A separate GitHub issues group searches active projects' linked repositories,
 including issues not assigned to the current user. Bare numbers and `#123`
-automatically look up an exact issue, including closed issues. Text queries
-require selecting **Search GitHub issues** before any external request; editing
-the text requires submitting it again. This avoids per-keystroke fan-out across
-repositories. Identical query results are treated as fresh in the client for 60
-seconds. GitHub loading or partial failures leave local results selectable, and
-failures can be retried.
+automatically look up an exact issue, including closed issues. A repository with
+GitHub Issues disabled contributes no matches rather than a failure. Text
+queries require selecting **Search GitHub issues** before any external request;
+editing the text requires submitting it again. This avoids per-keystroke fan-out
+across repositories. Identical query results are treated as fresh in the client
+for 60 seconds. GitHub loading or partial failures leave local results
+selectable, and failures can be retried.
 
 The server interleaves repository results before applying the shared result
 limit, preserving GitHub's relevance order within each repository. A recent

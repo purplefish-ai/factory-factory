@@ -12,7 +12,7 @@ import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-ev
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma as PrismaValues } from '@prisma-gen/client';
-import type { Prisma, WorkspacePR } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR, WorkspaceStatus } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
@@ -145,6 +145,45 @@ const reattachmentFields = {
   revision: { increment: 1 },
 } satisfies Prisma.WorkspacePRUpdateInput;
 
+const PR_URL_PATTERN = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/i;
+
+/** GitHub host/owner/repo are case-insensitive, so URL casing variants name one PR. */
+function prUrlKey(url: string): string {
+  const match = PR_URL_PATTERN.exec(url);
+  return match ? `${match[1]}/${match[2]}/${match[3]}/pull/${match[4]}`.toLowerCase() : url;
+}
+
+/** Exact-match prefilter for `prUrlKey`: the PR number suffix has no letters to fold. */
+function prUrlSuffix(url: string): string {
+  const number = PR_URL_PATTERN.exec(url)?.[4];
+  return number ? `/pull/${number}` : url;
+}
+
+const REVIEW_LOOKUP_CHUNK = 200;
+
+type PRUrlRow = { id: string; url: string; detachedAt: Date | null };
+
+/** Load a workspace's associations once so a batch of URLs reuses them. */
+function loadPRUrlRows(tx: Prisma.TransactionClient, workspaceId: string): Promise<PRUrlRow[]> {
+  return tx.workspacePR.findMany({
+    where: { workspaceId },
+    select: { id: true, url: true, detachedAt: true },
+    orderBy: { id: 'asc' },
+  });
+}
+
+/** Prefer a live association, then the exact URL, over a detached casing variant. */
+function findEquivalentPR(rows: PRUrlRow[], url: string): PRUrlRow | null {
+  const key = prUrlKey(url);
+  const matches = rows.filter((row) => prUrlKey(row.url) === key);
+  return (
+    matches.find((row) => row.detachedAt === null) ??
+    matches.find((row) => row.url === url) ??
+    matches[0] ??
+    null
+  );
+}
+
 /** The subset of the PR cache a caller may write in one unconditional update. */
 export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
 
@@ -219,10 +258,25 @@ export interface PRAggregateGuard {
 }
 
 class WorkspacePRAccessor {
-  findReviewRequestAssociations(urls: string[]) {
-    return prisma.workspacePR.findMany({
-      where: { url: { in: urls }, detachedAt: null },
-      select: { url: true, workspace: { select: { status: true } } },
+  /** Matches casing variants and reports each association under the requested URL. */
+  async findReviewRequestAssociations(urls: string[]) {
+    const suffixes = [...new Set(urls.map(prUrlSuffix))];
+    const rows: { url: string; workspace: { status: WorkspaceStatus } }[] = [];
+    // One OR branch per suffix; chunk to stay below SQLite's expression-depth limit.
+    for (let i = 0; i < suffixes.length; i += REVIEW_LOOKUP_CHUNK) {
+      const chunk = suffixes.slice(i, i + REVIEW_LOOKUP_CHUNK);
+      rows.push(
+        ...(await prisma.workspacePR.findMany({
+          where: { detachedAt: null, OR: chunk.map((suffix) => ({ url: { endsWith: suffix } })) },
+          select: { url: true, workspace: { select: { status: true } } },
+        }))
+      );
+    }
+    return urls.flatMap((url) => {
+      const key = prUrlKey(url);
+      return rows
+        .filter((row) => prUrlKey(row.url) === key)
+        .map((row) => ({ url, workspace: row.workspace }));
     });
   }
 
@@ -340,9 +394,7 @@ class WorkspacePRAccessor {
   }
   attach(workspaceId: string, url: string) {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.workspacePR.findUnique({
-        where: { workspaceId_url: { workspaceId, url } },
-      });
+      const existing = findEquivalentPR(await loadPRUrlRows(tx, workspaceId), url);
       if (existing) {
         if (existing.detachedAt) {
           await tx.workspacePR.update({
@@ -375,16 +427,15 @@ class WorkspacePRAccessor {
         return [];
       }
       const ids: string[] = [];
+      const rows = await loadPRUrlRows(tx, workspaceId);
       for (const url of urls) {
-        const existing = await tx.workspacePR.findUnique({
-          where: { workspaceId_url: { workspaceId, url } },
-        });
-        if (existing) {
+        if (findEquivalentPR(rows, url)) {
           continue;
         }
         const pr = await tx.workspacePR.create({
           data: { workspaceId, url, headRefName: claim.branchName },
         });
+        rows.push({ id: pr.id, url, detachedAt: null });
 
         ids.push(pr.id);
       }

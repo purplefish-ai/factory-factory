@@ -66,6 +66,21 @@ it('invalidates an in-flight event wake and drains it before shutdown finishes',
   expect(stopped).toBe(true);
 });
 
+it('keeps a wake from before stop invalidated when monitoring restarts during the drain', async () => {
+  const service = new RatchetService();
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
+  service.configure({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const waking = service.wakePendingEvents('w');
+  const isCurrent = wake.mock.calls[0]?.[1];
+  const stopping = service.stop();
+  await service.start();
+  expect(isCurrent?.()).toBe(false);
+  pending.resolve();
+  await Promise.all([waking, stopping]);
+  expect(isCurrent?.()).toBe(false);
+});
+
 it('observes every association and wakes the main queue once without creating fixer sessions', async () => {
   mocks.listEnabled.mockResolvedValue([
     {
@@ -101,7 +116,7 @@ it('observes every association and wakes the main queue once without creating fi
     { workspaceId: 'w', prId: 'p1' },
     { workspaceId: 'w', prId: 'p2' },
   ]);
-  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
   expect(mocks.register).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'pr-event-poll', intervalMs: 120_000 })
   );
@@ -114,12 +129,12 @@ it('observes every association and wakes the main queue once without creating fi
   wake.mockClear();
   await ratchetService.checkAllWorkspaces();
   expect(observe.mock.calls.map((c) => c[0].prId)).toEqual(['p1', 'p2']);
-  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
   observe.mockClear().mockRejectedValue(new Error('HTTP 429 rate limit'));
   wake.mockClear();
   await ratchetService.checkAllWorkspaces();
   expect(observe).toHaveBeenCalledTimes(1);
-  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
 });
 
 const config = {
@@ -209,6 +224,34 @@ it('preserves the displayed revision rather than substituting the latest one', a
   expect(toggled).not.toHaveBeenCalled();
   expect(changed).not.toHaveBeenCalled();
 });
+
+it('invalidates and drains the delivery wake of an in-flight manual check on stop', async () => {
+  mocks.listEnabled.mockResolvedValue([config]);
+  mocks.listPending.mockResolvedValue([{ id: 'event-1' }]);
+  const entered = deferred<void>();
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => {
+    entered.resolve();
+    return pending.promise;
+  });
+  const service = new RatchetService();
+  service.configure({ observe: vi.fn().mockResolvedValue(true), wake, setMonitoring: vi.fn() });
+  const checking = service.checkWorkspaceById('w');
+  await entered.promise;
+  const isCurrent = wake.mock.calls[0]?.[1];
+  expect(isCurrent?.()).toBe(true);
+  let stopped = false;
+  const stopping = service.stop().then(() => {
+    stopped = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(isCurrent?.()).toBe(false);
+  expect(stopped).toBe(false);
+  pending.resolve();
+  await Promise.all([checking, stopping]);
+  expect(stopped).toBe(true);
+});
+
 it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
   'does not continue delivery or publish state after stopping during %s',
   async (stage) => {
@@ -230,9 +273,10 @@ it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
     service.on(RATCHET_STATE_CHANGED, stateChanged);
     const checking = service.checkAllWorkspaces();
     await entered.promise;
-    await service.stop();
+    // stop() drains an in-flight wake, so release the paused stage before awaiting it.
+    const stopping = service.stop();
     release.resolve([]);
-    await checking;
+    await Promise.all([checking, stopping]);
     if (stage === 'markChecked' || stage === 'listPending') {
       expect(wake).not.toHaveBeenCalled();
     }

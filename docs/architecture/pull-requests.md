@@ -108,14 +108,18 @@ wake runs asynchronously after the transaction commits and does not fetch GitHub
 itself. Unchanged or rejected observations do not request this wake. Existing
 dispatch guards still queue updates until the workspace is idle; a failed wake
 leaves the durable events for the next poll or idle transition. Monitoring
-shutdown invalidates and drains in-flight observation wakes before finishing.
+shutdown invalidates and drains in-flight observation and workspace-check wakes,
+including manual checks, before finishing.
 
 Each `WorkspacePR` association has its own ID, URL, revision, complete
 normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
 owns branch lookup scheduling separately. An observation and its
 `WorkspacePREvent` rows are accepted in one transaction, guarded by association
 identity and revision. Attaching or merging one PR preserves sibling
-associations and events.
+associations and events. Attachment, discovery and review-request filtering
+match associations case-insensitively on host, owner and repository, so a URL
+casing variant reuses the existing association instead of creating another.
+Duplicate associations stored before this matching are not merged.
 
 Branch discovery only matches the workspace branch, so PR detection also
 attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR creation.
@@ -202,7 +206,12 @@ authentication health checks bypass the network read cooldown; their failures do
 not start that cooldown. The GitHub process boundary classifies diagnostic
 output without command arguments and marks connectivity failures, including
 local read timeouts, with a typed error; storage and observation-persistence
-errors keep their error severity. `listIssues`, `getReviewComments`,
+errors keep their error severity. Wrapped CLI failures keep the original error
+as `cause`. Their messages and logs use gh's stderr when present; otherwise a
+failed process reports `gh command failed`, and a non-process error (such as a
+parse failure) keeps its own message. They never repeat the command line, so
+repository names cannot be classified as authentication or network failures and
+comment bodies stay out of errors. `listIssues`, `getReviewComments`,
 `getResolvedReviewCommentIds`, `getPRFullDetails`, and `getPRDiff` warn and
 preserve typed connectivity errors for callers. Watcher concurrency remains
 bounded at three workspaces, with a 90-second timeout and shutdown cancellation.
