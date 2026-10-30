@@ -3,11 +3,11 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
+import { SubagentIcon } from '@/client/components/subagent-icon';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem } from './types';
-
-const ACTIVE_STATUSES = new Set<SubagentListItem['status']>(['starting', 'running', 'waiting']);
 
 export type SubagentListState =
   | { kind: 'loading' }
@@ -42,7 +42,7 @@ function formatElapsed(subagent: SubagentListItem): string | null {
     return null;
   }
 
-  const terminal = !ACTIVE_STATUSES.has(subagent.status);
+  const terminal = !isActiveSubagent(subagent);
   const finishedAt = terminal
     ? (timestamp(subagent.completedAt) ?? timestamp(subagent.updatedAt))
     : Date.now();
@@ -79,36 +79,20 @@ function statusLabel(status: SubagentListItem['status']): string {
   return `${status.slice(0, 1).toUpperCase()}${status.slice(1)}`;
 }
 
-function statusDotClass(status: SubagentListItem['status']): string {
-  switch (status) {
-    case 'starting':
-      return 'bg-yellow-500 animate-pulse';
-    case 'running':
-      return 'bg-blue-500 animate-pulse';
-    case 'waiting':
-      return 'bg-amber-500';
-    case 'completed':
-      return 'bg-green-500';
-    case 'failed':
-      return 'bg-red-500';
-    case 'cancelled':
-    case 'interrupted':
-      return 'bg-muted-foreground';
-  }
-}
-
 function activityPreview(subagent: SubagentListItem): string | null {
-  return ACTIVE_STATUSES.has(subagent.status)
+  return isActiveSubagent(subagent)
     ? (subagent.latestActivity ?? subagent.resultPreview)
     : (subagent.resultPreview ?? subagent.latestActivity);
 }
 
 function SubagentRow({
   subagent,
+  iconIndex,
   selected,
   onSelect,
 }: {
   subagent: SubagentListItem;
+  iconIndex: number;
   selected: boolean;
   onSelect: (subagent: SubagentListItem) => void;
 }) {
@@ -127,9 +111,7 @@ function SubagentRow({
         )}
       >
         <div className="flex min-w-0 items-start gap-2.5">
-          <span
-            className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', statusDotClass(subagent.status))}
-          />
+          <SubagentIcon index={iconIndex} />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="truncate text-sm font-medium">{displayName(subagent)}</p>
             <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -214,12 +196,8 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
       return { active: [], terminal: [] };
     }
     return {
-      active: state.subagents
-        .filter((item) => ACTIVE_STATUSES.has(item.status))
-        .sort(compareActive),
-      terminal: state.subagents
-        .filter((item) => !ACTIVE_STATUSES.has(item.status))
-        .sort(compareTerminal),
+      active: state.subagents.filter(isActiveSubagent).sort(compareActive),
+      terminal: state.subagents.filter((item) => !isActiveSubagent(item)).sort(compareTerminal),
     };
   }, [state]);
 
@@ -268,10 +246,11 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
       {state.error && <PaginationError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
-          {groups.active.map((subagent) => (
+          {groups.active.map((subagent, index) => (
             <SubagentRow
               key={subagent.id}
               subagent={subagent}
+              iconIndex={index}
               selected={selectedSubagentId === subagent.id}
               onSelect={onSelect}
             />
@@ -296,10 +275,11 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
           </button>
           {completedExpanded && (
             <ul className="divide-y divide-border/50 border-t border-border/50">
-              {groups.terminal.map((subagent) => (
+              {groups.terminal.map((subagent, index) => (
                 <SubagentRow
                   key={subagent.id}
                   subagent={subagent}
+                  iconIndex={groups.active.length + index}
                   selected={selectedSubagentId === subagent.id}
                   onSelect={onSelect}
                 />

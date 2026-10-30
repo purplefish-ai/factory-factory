@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
+import { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentSelection } from './types';
 
 type SubagentStatus = SubagentSelection['subagent']['status'];
@@ -47,8 +48,7 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
     {
       refetchOnMount: false,
-      getNextPageParam: (lastPage) =>
-        lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
+      getNextPageParam: getNextSubagentPageParam,
     }
   );
   const mountDataUpdatedAt = useRef(query.dataUpdatedAt);

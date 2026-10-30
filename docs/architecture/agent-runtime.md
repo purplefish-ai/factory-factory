@@ -683,7 +683,16 @@ Sessions panel through its session-scoped tracker. Clicking the running
 sub-agent count in chat opens the right panel and selects Sessions. Its stored
 panel key remains `agents`; child-workspace access remains available for parent
 workspaces. The count has a decorative group of up to three colorful botanical
-icons; larger groups keep the full count without adding more icons.
+icons; larger groups keep the full count without adding more icons. The Sessions
+list uses the same botanical icons for sub-agent rows. Its header counts active
+(starting, running, or waiting) sub-agents; terminal agents remain under the
+separate collapsible Completed count. The panel automatically loads all summary
+pages before showing the active count, so children on later provider pages are
+included. A page failure keeps loaded rows visible and offers Retry without
+displaying a partial count. Repeated provider cursors stop automatic pagination
+and offer the same recovery instead of repeatedly fetching the same page.
+Restored transcript selection uses the same cursor guard when looking for a
+child on later pages.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering
