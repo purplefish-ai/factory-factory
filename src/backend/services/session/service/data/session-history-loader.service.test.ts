@@ -97,12 +97,16 @@ describe('claudeSessionHistoryLoaderService', () => {
     });
 
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
-      providerSessionId,
-      workingDir: '/work',
-      onlyLinesContaining: marker,
-    });
-    now.mockRestore();
+    let result: Awaited<ReturnType<typeof claudeSessionHistoryLoaderService.loadSessionHistory>>;
+    try {
+      result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: '/work',
+        onlyLinesContaining: marker,
+      });
+    } finally {
+      now.mockRestore();
+    }
 
     // Matching lines keep their eligibility rules and line-based timestamps.
     expect(result).toEqual({

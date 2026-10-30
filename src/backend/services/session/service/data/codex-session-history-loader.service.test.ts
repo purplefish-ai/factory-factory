@@ -623,12 +623,16 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
-      providerSessionId,
-      workingDir: '/work',
-      onlyLinesContaining: marker,
-    });
-    now.mockRestore();
+    let result: Awaited<ReturnType<typeof codexSessionHistoryLoaderService.loadSessionHistory>>;
+    try {
+      result = await codexSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: '/work',
+        onlyLinesContaining: marker,
+      });
+    } finally {
+      now.mockRestore();
+    }
 
     // Skipped lines still count toward line-based fallback timestamps.
     expect(result).toMatchObject({
