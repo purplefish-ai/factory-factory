@@ -120,7 +120,7 @@ afterEach(() => {
 
 describe('KanbanCard', () => {
   it.each(['PERIODIC_TASK', 'MANUAL', 'CHILD_WORKSPACE'] as const)(
-    'identifies %s cards with the same agent icon as the sidebar',
+    'checks agent icon visibility for %s cards',
     (creationSource) => {
       const { container, root } = renderCard({ ...baseWorkspace, creationSource });
       const icon = container.querySelector('[role="img"][aria-label="Agent workspace"]');
