@@ -5,12 +5,13 @@ current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
 Claude session history restores inline image blocks as attachments on the
-original user prompt, including image-only prompts. Image-reference metadata
-companions are omitted from chat replay; their temporary file paths are not
-read. Codex history likewise restores user `input_image` data URLs, and images
-on legacy `user_message` events, onto the prompt; non-user images and
-`local_images` paths are skipped. Restoration rejects malformed base64 and
-images above the shared 10 MiB decoded size limit used for uploads.
+original user prompt, including image-only prompts. Harness metadata, sidechain
+entries, and image-reference companions are omitted from chat replay; their
+temporary file paths are not read. Codex history likewise restores user
+`input_image` data URLs, and images on legacy `user_message` events, onto the
+prompt; non-user images and `local_images` paths are skipped. Restoration
+rejects malformed base64 and images above the shared 10 MiB decoded size limit
+used for uploads.
 
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
