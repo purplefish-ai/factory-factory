@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
-import { execCommand } from '@/backend/lib/shell';
+import { type ExecResult, execCommand } from '@/backend/lib/shell';
 import {
   colorSchemeIdSchema,
   fontFamilySchema,
@@ -143,6 +143,8 @@ function unavailableCodexOptions(error: unknown, codexAccountId?: string): Provi
   };
 }
 
+const MAX_COMMAND_FAILURE_STDERR_CHARS = 500;
+
 export const userSettingsRouter = router({
   /**
    * Get user settings
@@ -258,14 +260,22 @@ export const userSettingsRouter = router({
         throw new Error('Invalid command format');
       }
 
+      let result: ExecResult;
       try {
-        await execCommand(cmd, args);
-        return { success: true, message: 'Command executed successfully' };
+        result = await execCommand(cmd, args);
       } catch (error) {
         throw new Error(
           `Command failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
+      // execCommand resolves (rather than rejects) when the command exits
+      // non-zero or times out.
+      if (result.code !== 0 || result.timedOut) {
+        const reason = result.timedOut ? 'timed out' : `exited with code ${result.code}`;
+        const stderr = result.stderr.trim().slice(0, MAX_COMMAND_FAILURE_STDERR_CHARS);
+        throw new Error(`Command failed: ${reason}${stderr ? `: ${stderr}` : ''}`);
+      }
+      return { success: true, message: 'Command executed successfully' };
     }),
 
   /**
