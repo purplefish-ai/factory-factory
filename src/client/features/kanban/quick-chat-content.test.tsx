@@ -130,3 +130,7 @@ describe('QuickChatContent composer and queue controls', () => {
     }
   });
 });
+
+vi.mock('@/client/features/subagents', () => ({
+  useSubagentTimelineMessages: (messages: unknown[]) => messages,
+}));

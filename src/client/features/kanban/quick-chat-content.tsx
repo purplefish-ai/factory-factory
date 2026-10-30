@@ -8,6 +8,7 @@ import {
   useGroupedChatMessages,
   VirtualizedMessageList,
 } from '@/client/features/chat';
+import { useSubagentTimelineMessages } from '@/client/features/subagents';
 import { Button } from '@/components/ui/button';
 
 interface QuickChatContentProps {
@@ -29,7 +30,13 @@ export function QuickChatContent({
   isNearBottom,
   scrollToBottom,
 }: QuickChatContentProps) {
-  const groupedMessages = useGroupedChatMessages(chatState.messages);
+  const timelineMessages = useSubagentTimelineMessages(
+    chatState.messages,
+    chatState.runtimeSessionId,
+    chatState.connected,
+    chatState.sessionStatus.phase === 'loading'
+  );
+  const groupedMessages = useGroupedChatMessages(timelineMessages);
   const queuedMessageIds = useMemo(
     () => new Set(chatState.queuedMessages.map((message) => message.id)),
     [chatState.queuedMessages]

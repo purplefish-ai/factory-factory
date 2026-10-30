@@ -315,7 +315,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
         {
           type: 'button',
           onClick: () =>
-            typed.setToolExpansionState?.(createToolSequenceExpansionKey(typed.item.id), false),
+            typed.setToolExpansionState?.(createToolSequenceExpansionKey(typed.item.id), true),
         },
         'toggle'
       );
