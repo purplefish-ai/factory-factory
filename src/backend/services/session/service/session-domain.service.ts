@@ -72,16 +72,22 @@ export class SessionDomainService extends EventEmitter {
     return null;
   }
 
-  private readonly runtimeMachine = new SessionRuntimeMachine((sessionId, runtime) => {
-    this.publisher.emitDelta(sessionId, {
-      type: 'session_runtime_updated',
-      sessionRuntime: runtime,
-    });
-    this.emit('runtime_changed', {
-      sessionId,
-      runtime,
-    });
-  }, this.nowIso);
+  private readonly runtimeMachine = new SessionRuntimeMachine(
+    (sessionId, runtime) => {
+      this.publisher.emitDelta(sessionId, {
+        type: 'session_runtime_updated',
+        sessionRuntime: runtime,
+      });
+      this.emit('runtime_changed', {
+        sessionId,
+        runtime,
+      });
+    },
+    this.nowIso,
+    (sessionId) => {
+      this.publisher.emitDelta(sessionId, { type: 'slash_commands', slashCommands: [] });
+    }
+  );
 
   private transitionRuntime(
     sessionId: string,

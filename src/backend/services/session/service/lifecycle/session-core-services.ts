@@ -66,6 +66,10 @@ export const sessionPermissionService = new SessionPermissionService({
 });
 
 export const codexModelCatalogService = new CodexModelCatalogService({
+  listAccountIds: async () =>
+    (await codexAccountService.getAccounts())
+      .filter((account) => account.enabled && account.authenticated)
+      .map((account) => account.id),
   resolveAccountId: async (accountId) =>
     (await codexAccountService.getPreviewRuntimeContext({ accountId })).accountId,
   fetchModels: async (accountId) => {

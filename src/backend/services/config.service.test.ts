@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configService } from './config.service';
 
@@ -236,6 +237,17 @@ describe('Codex native profile configuration', () => {
     process.env.CODEX_HOME = '/configured/codex';
     delete process.env.CODEX_SESSIONS_DIR;
     configService.reload();
-    expect(configService.getCodexSessionsDir()).toBe('/configured/codex/sessions');
+    expect(configService.getCodexSessionsDir()).toBe(join('/configured/codex', 'sessions'));
   });
+  it.each(['   ', ' /configured/codex '])(
+    'keeps native Codex child paths consistent with validated configuration: %j',
+    (home) => {
+      process.env.CODEX_HOME = home;
+      process.env.CODEX_SESSIONS_DIR = '   ';
+      configService.reload();
+      const child = configService.getChildProcessEnv();
+      expect(child.CODEX_HOME).toBe(configService.getCodexHome());
+      expect(child.CODEX_SESSIONS_DIR).toBe(configService.getCodexSessionsDir());
+    }
+  );
 });

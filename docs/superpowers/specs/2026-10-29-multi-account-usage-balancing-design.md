@@ -162,7 +162,13 @@ check requires real accounts and must never consume model turns merely to read
 quota. The Codex smoke results above cover the tested macOS file-profile setup;
 the broader compatibility investigation remains incomplete.
 
-## Current implementation seams
+## Historical implementation seams before the Codex MVP
+
+These observations describe the code before implementation. The Codex MVP now
+persists account bindings and scopes runtime, history, discovery and usage to
+the selected account; see
+[agent runtime](../../architecture/agent-runtime.md#codex-accounts) for current
+behavior. The Claude integration remains a future extension.
 
 - `prisma/schema.prisma`: `AgentSession` stores provider and native conversation
   identity but has no account binding. `UserSettings` stores provider/model

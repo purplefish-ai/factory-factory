@@ -19,11 +19,13 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
+  const { codexAccounts: _accounts, ...historicalData } = exported.data;
   return {
     ...exported,
     meta: { ...exported.meta, schemaVersion: 5 },
     data: {
-      ...exported.data,
+      ...historicalData,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
       workspaces: exported.data.workspaces.map((workspace) => {
         const {
           prUrl: _url,
@@ -146,6 +148,31 @@ it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer 
     workspacePrId: 'a',
     status: 'COMPLETED',
   });
+});
+
+it('imports published version 6 PRs and discovery without account metadata', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const historical = {
+    ...exported,
+    meta: { ...exported.meta, schemaVersion: 6 },
+    data: {
+      ...historicalData,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
+    },
+  };
+  const normalized = exportDataSchema.parse(historical);
+  expect(normalized.meta.schemaVersion).toBe(6);
+  expect(normalized.data.codexAccounts).toEqual([]);
+  expect(normalized.data.agentSessions[0]?.codexAccountId).toBeNull();
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(normalized);
+  const restored = await dataBackupService.exportData('test');
+  expect(restored.data.workspaces[0]?.prs).toEqual(exported.data.workspaces[0]?.prs);
+  expect(restored.data.workspaces[0]?.prDiscovery).toEqual(
+    exported.data.workspaces[0]?.prDiscovery
+  );
+  expect(restored.data.agentSessions[0]?.codexAccountId).toBeNull();
 });
 it('rejects duplicate and foreign ownership before any database write', async () => {
   const exported = await dataBackupService.exportData('test');

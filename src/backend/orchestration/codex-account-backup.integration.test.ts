@@ -69,8 +69,49 @@ it('roundtrips managed bindings into a fresh database and isolates imported nati
   ).toMatchObject({ kind: 'MANAGED', identityKey: null });
   expect(await db.prisma.codexAccount.count()).toBe(3);
 });
+it('repeatedly roundtrips an imported native fallback identity with one import suffix', async () => {
+  await db.prisma.codexAccount.update({
+    where: { id: 'codex-native-default' },
+    data: { identityKey: `native-email:${'b'.repeat(64)}` },
+  });
+  let backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  for (let round = 0; round < 3; round += 1) {
+    await clearIntegrationDatabase(db.prisma);
+    await dataBackupService.importData(backup);
+    backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+    const session = backup.data.agentSessions.find((row) => row.id === 'native-chat');
+    const account = backup.data.codexAccounts.find((row) => row.id === session?.codexAccountId);
+    expect(account?.kind).toBe('MANAGED');
+    expect(account?.identityKey).toMatch(/^native-email:b{64}:imported:[A-Za-z0-9_-]+$/);
+    expect(account?.identityKey?.match(/:imported:/g)).toHaveLength(1);
+  }
+});
+
+it('imports published version 6 without account fields as legacy native bindings', async () => {
+  const exported = await dataBackupService.exportData('test');
+  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const historical = {
+    ...exported,
+    meta: { ...exported.meta, schemaVersion: 6 },
+    data: {
+      ...historicalData,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
+    },
+  };
+  const normalized = exportDataSchema.parse(historical);
+  expect(normalized.meta.schemaVersion).toBe(6);
+  expect(normalized.data.codexAccounts).toEqual([]);
+  expect(normalized.data.agentSessions.every((row) => row.codexAccountId === null)).toBe(true);
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(normalized);
+  expect(await db.prisma.agentSession.findMany()).toEqual([
+    expect.objectContaining({ id: 'managed-chat', codexAccountId: null }),
+    expect.objectContaining({ id: 'native-chat', codexAccountId: null }),
+  ]);
+});
+
 it.each([6, 7])(
-  'rejects incomplete account metadata in version %s before import',
+  'rejects missing account metadata even when an account-bearing backup claims version %s',
   async (schemaVersion) => {
     const exported = await dataBackupService.exportData('test');
     const invalid = {

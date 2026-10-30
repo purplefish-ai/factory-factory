@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CodexModelCatalogService, SessionConfigService } from '@/backend/services/session';
+import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { userSettingsRouter } from './user-settings.trpc';
 
 function createConsumers(
   fetchModels: ConstructorParameters<typeof CodexModelCatalogService>[0]['fetchModels']
 ) {
-  const codexModelCatalogService = new CodexModelCatalogService({ fetchModels });
+  const codexModelCatalogService = new CodexModelCatalogService({
+    fetchModels,
+    resolveAccountId: async (id) => id ?? NATIVE_DEFAULT_CODEX_ACCOUNT_ID,
+  });
   const sessionConfig = new SessionConfigService({
     codexModelCatalogService,
     repository: unsafeCoerce({

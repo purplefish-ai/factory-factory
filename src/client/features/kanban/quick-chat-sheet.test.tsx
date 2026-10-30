@@ -10,11 +10,41 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   empty: false,
   loaded: true,
+  workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
+  content: vi.fn(),
 }));
 vi.mock('./kanban-context', () => ({
-  useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
+  useKanban: () => ({
+    workspaces: [
+      {
+        id: 'workspace',
+        name: 'Review workspace',
+        defaultSessionProvider: mocks.workspaceProvider,
+      },
+    ],
+  }),
 }));
-vi.mock('./quick-chat-content', () => ({ QuickChatContent: () => null }));
+vi.mock('./quick-chat-content', () => ({
+  QuickChatContent: (props: unknown) => {
+    mocks.content(props);
+    return null;
+  },
+}));
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CODEX' } }) } },
+    codexAccounts: {
+      list: {
+        useQuery: () => ({
+          data: [
+            { id: 'personal', label: 'Personal', authenticated: true },
+            { id: 'work', label: 'Work', authenticated: true },
+          ],
+        }),
+      },
+    },
+  },
+}));
 vi.mock('@/client/features/workspace', () => ({
   QuickActionsMenu: ({ disabled }: { disabled?: boolean }) =>
     createElement('button', { disabled, 'aria-label': 'Quick actions' }),
@@ -28,6 +58,7 @@ vi.mock('./use-quick-chat', () => ({
           { id: 'second', name: 'Chat 2', status: 'IDLE', createdAt: '2026-10-27T12:01:00Z' },
         ],
     selectedSessionId: mocks.empty ? null : 'first',
+    selectedCodexAccountId: 'work',
     setSelectedSessionId: mocks.select,
     handleCloseSession: mocks.close,
     handleNewChat: mocks.create,
@@ -41,6 +72,7 @@ vi.mock('./use-quick-chat', () => ({
 beforeEach(() => {
   mocks.empty = false;
   mocks.loaded = true;
+  mocks.workspaceProvider = 'CLAUDE';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -110,3 +142,40 @@ it('blocks new chats and quick actions until sessions load', async () => {
     container.remove();
   }
 });
+
+it.each(['CODEX', 'WORKSPACE_DEFAULT'] as const)(
+  'keeps named account creation in an empty %s workspace and forwards the selected binding to the composer',
+  async (provider) => {
+    mocks.empty = true;
+    mocks.workspaceProvider = provider;
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(() =>
+        root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
+      );
+      await act(() =>
+        document.body
+          .querySelector('[aria-label="New session"]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      );
+      const work = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Work'
+      );
+      expect(work).toBeDefined();
+      await act(() => work?.click());
+      expect(mocks.create).toHaveBeenCalledWith('work');
+      mocks.empty = false;
+      await act(() =>
+        root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
+      );
+      expect(mocks.content).toHaveBeenLastCalledWith(
+        expect.objectContaining({ codexAccountId: 'work' })
+      );
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);

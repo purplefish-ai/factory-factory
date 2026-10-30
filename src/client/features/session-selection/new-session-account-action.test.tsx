@@ -34,6 +34,9 @@ it('offers Auto and every authenticated account when launching another Codex cha
         .querySelector('button')
         ?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
     );
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)
+    ).toEqual(['Auto', 'Personal', 'Work']);
     const work = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
       (item) => item.textContent === 'Work'
     );
@@ -45,12 +48,19 @@ it('offers Auto and every authenticated account when launching another Codex cha
     container.remove();
   }
 });
-it('keeps single-account and Claude launches as one click with Auto', () => {
+it('keeps a single-account launch as one click with Auto', () => {
   const container = document.createElement('div');
   const root = createRoot(container);
   const onCreate = vi.fn();
   try {
-    flushSync(() => root.render(createElement(NewSessionAccountActionView, { onCreate })));
+    flushSync(() =>
+      root.render(
+        createElement(NewSessionAccountActionView, {
+          onCreate,
+          accounts: [{ id: 'a', label: 'Personal', authenticated: true }],
+        })
+      )
+    );
     flushSync(() => container.querySelector('button')?.click());
     expect(onCreate).toHaveBeenCalledWith(undefined);
   } finally {
@@ -68,6 +78,22 @@ it('preserves remote new-chat compatibility when local account management is una
     );
     flushSync(() => container.querySelector('button')?.click());
     expect(onCreate).toHaveBeenCalledWith(undefined);
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it('keeps Claude launches as one click with Auto', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const onCreate = vi.fn();
+  try {
+    flushSync(() =>
+      root.render(createElement(NewSessionAccountAction, { provider: 'CLAUDE', onCreate }))
+    );
+    flushSync(() => container.querySelector('button')?.click());
+    expect(onCreate).toHaveBeenCalledWith(undefined);
+    expect(container.querySelector('[aria-haspopup]')).toBeNull();
   } finally {
     flushSync(() => root.unmount());
   }

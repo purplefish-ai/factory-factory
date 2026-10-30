@@ -96,7 +96,7 @@ export type CodexSessionHistoryLoadResult =
   | { status: 'error'; reason: 'read_failed'; filePath: string };
 
 function getOptionalEnvPath(name: 'CODEX_HOME' | 'CODEX_SESSIONS_DIR'): string | undefined {
-  const value = getCurrentProcessEnv()[name];
+  const value = getCurrentProcessEnv()[name]?.trim();
   if (!value || value === 'undefined' || value === 'null') {
     return undefined;
   }

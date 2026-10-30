@@ -29,6 +29,7 @@ export interface SessionData {
 
 interface SessionTabBarProps {
   sessions: SessionData[];
+  workspaceProvider?: 'CLAUDE' | 'CODEX';
   currentSessionId: string | null;
   runningSessionId?: string | null;
   onSelectSession: (sessionId: string) => void;
@@ -196,6 +197,7 @@ function SessionTab({
 export function SessionTabBar({
   sessions,
   currentSessionId,
+  workspaceProvider,
   runningSessionId,
   onSelectSession,
   onCreateSession,
@@ -326,7 +328,7 @@ export function SessionTabBar({
       {/* New session button — hidden in readOnly mode */}
       {!readOnly && (
         <NewSessionAccountAction
-          provider={sessions[0]?.provider}
+          provider={sessions[0]?.provider ?? workspaceProvider}
           onCreate={onCreateSession}
           disabled={disabled}
         />

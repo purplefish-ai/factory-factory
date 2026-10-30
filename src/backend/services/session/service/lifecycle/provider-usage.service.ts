@@ -24,7 +24,7 @@ export class ProviderUsageService {
 
   async getUsage(provider: UsageProvider, codexAccountId?: string): Promise<ProviderPlanUsage> {
     if (provider === 'CODEX' && this.dependencies.accounts) {
-      return this.dependencies.accounts.getUsage(codexAccountId);
+      return structuredClone(await this.dependencies.accounts.getUsage(codexAccountId));
     }
     const cached = this.cache.get(provider);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {

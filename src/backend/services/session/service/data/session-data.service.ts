@@ -170,16 +170,24 @@ class SessionDataImplementation {
     if (input.isCurrent?.() === false) {
       return { outcome: 'unavailable' as const };
     }
-    const existing = await prDedicatedSessionAccessor.find(input);
-    const result = existing
-      ? await prDedicatedSessionAccessor.acquire({
-          ...input,
-          ...defaults,
-          codexAccountId: existing.codexAccountId,
-        })
-      : await this.withAccountBinding(defaults, input.codexAccountId, (codexAccountId) =>
-          prDedicatedSessionAccessor.acquire({ ...input, ...defaults, codexAccountId })
-        );
+    // Reuse is decided under the same acquisition lock/transaction as creation.
+    // A deleted binding must fall through to a newly validated reservation.
+    const reused = await prDedicatedSessionAccessor.acquire({
+      ...input,
+      ...defaults,
+      reuseOnly: true,
+    });
+    if (reused.outcome !== 'missing') {
+      return 'session' in reused
+        ? { ...reused, session: toAgentSessionRecord(reused.session) }
+        : reused;
+    }
+    const result = await this.withAccountBinding(defaults, input.codexAccountId, (codexAccountId) =>
+      prDedicatedSessionAccessor.acquire({ ...input, ...defaults, codexAccountId })
+    );
+    if (result.outcome === 'missing') {
+      throw new Error('Dedicated session acquisition unexpectedly skipped creation');
+    }
     return 'session' in result
       ? { ...result, session: toAgentSessionRecord(result.session) }
       : result;

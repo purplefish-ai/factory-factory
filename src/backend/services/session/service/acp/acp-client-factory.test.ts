@@ -358,10 +358,17 @@ describe('AcpClientFactory', () => {
           options: defaultOptions({
             provider: 'CODEX',
             resumeProviderSessionId: '01900000-1111-7777-8888-111111111111',
+            codexAccountContext: {
+              accountId: 'saved-resume',
+              homeDir: '/saved-resume',
+              sessionsDir: '/saved-resume/sessions',
+              env: { CODEX_HOME: '/saved-resume' },
+            },
           }),
         })
       )
     ).rejects.toThrow('account does not own this rollout');
+    expect(mocks.spawn.mock.calls[0]?.[2].env).toMatchObject({ CODEX_HOME: '/saved-resume' });
     expect(mocks.newSession).not.toHaveBeenCalled();
   });
   it('uses configured environment and orphan-safe stdio spawn options', async () => {

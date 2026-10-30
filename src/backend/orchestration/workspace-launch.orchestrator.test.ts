@@ -547,3 +547,61 @@ it('allows a usable managed account when the global Codex login is absent', asyn
     expect.objectContaining({ codexAccountId: 'account-b' })
   );
 });
+
+it.each(['CLAUDE', undefined] as const)(
+  'rejects a Codex account with effective Claude provider before persistence (explicit=%s)',
+  async (provider) => {
+    const { ports } = createPorts();
+    ports.resolveProvider.mockResolvedValue(unsafeCoerce('CLAUDE'));
+    await expect(
+      launchWorkspace(
+        { type: 'MANUAL', projectId: 'p1', name: 'Invalid', provider, codexAccountId: 'managed' },
+        ports
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(ports.createWorkspace).not.toHaveBeenCalled();
+    expect(ports.createDefaultSession).not.toHaveBeenCalled();
+  }
+);
+
+it('validates an explicit account/model even when workspace session provisioning is disabled', async () => {
+  const { ports } = createPorts();
+  ports.getMaxSessionsPerWorkspace.mockReturnValue(0);
+  const validateCodexAccount = vi
+    .fn()
+    .mockRejectedValue(new ApplicationError('PRECONDITION_FAILED', 'Unsupported account model'));
+  await expect(
+    launchWorkspace(
+      {
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'Invalid',
+        provider: 'CODEX',
+        model: 'gpt-unsupported',
+        codexAccountId: 'managed',
+      },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toThrow('Unsupported account model');
+  expect(validateCodexAccount).toHaveBeenCalledWith({
+    accountId: 'managed',
+    model: 'gpt-unsupported',
+  });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});
+
+it('maps unavailable account admission to a recoverable precondition before persistence', async () => {
+  const { ports } = createPorts();
+  ports.checkCliHealth.mockResolvedValue({
+    claude: { isInstalled: true },
+    codex: { isInstalled: true, isAuthenticated: false },
+  });
+  const validateCodexAccount = vi.fn().mockRejectedValue(new Error('No signed-in account'));
+  await expect(
+    launchWorkspace(
+      { type: 'MANUAL', projectId: 'p1', name: 'Invalid', provider: 'CODEX' },
+      { ...ports, validateCodexAccount }
+    )
+  ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'No signed-in account' });
+  expect(ports.createWorkspace).not.toHaveBeenCalled();
+});

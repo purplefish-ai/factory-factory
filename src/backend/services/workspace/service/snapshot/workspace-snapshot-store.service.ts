@@ -178,6 +178,7 @@ const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['lastActivityAt'] as const;
 const GIT_FIELDS = ['gitStats'] as const;
 const METADATA_FIELDS = [
+  'defaultSessionProvider',
   'worktreePath',
   'initErrorMessage',
   'githubIssueNumber',
@@ -537,7 +538,10 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       hydrated.has('name') &&
       hydrated.has('branchName') &&
       FIELD_GROUP_MAPPINGS.every(
-        ({ group, fields }) => group === 'git' || fields.every((field) => hydrated.has(field))
+        ({ group, fields }) =>
+          group === 'git' ||
+          // Older complete summaries can omit this optional launch hint.
+          fields.every((field) => field === 'defaultSessionProvider' || hydrated.has(field))
       ) &&
       WorkspaceSnapshotEntrySchema.safeParse({ ...entry, summaryVersion: 1 }).success;
     const versionChanged = entry.summaryVersion !== (complete ? 1 : undefined);

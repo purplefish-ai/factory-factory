@@ -100,9 +100,19 @@ describe('AcpEventProcessor slash command caching', () => {
       workingDir: '/work',
       provider: 'CODEX',
     });
+    processor.registerSessionContext('codex-b', {
+      workspaceId: 'w',
+      workingDir: '/work',
+      provider: 'CODEX',
+    });
     const commands = [{ name: '/private-account-skill', description: 'Only account A' }];
     processor.handleAcpDelta('codex-a', { type: 'slash_commands', slashCommands: commands });
     expect(mocks.setCachedCommands).not.toHaveBeenCalled();
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledTimes(1);
+    expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalledWith(
+      'codex-b',
+      expect.anything()
+    );
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('codex-a', {
       type: 'slash_commands',
       slashCommands: commands,

@@ -2,6 +2,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { QuickActionsMenu } from '@/client/features/workspace';
+import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
   SheetContent,
@@ -25,9 +26,20 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     [workspaces, workspaceId]
   );
 
+  const explicitWorkspaceProvider =
+    workspace?.defaultSessionProvider === 'CODEX' || workspace?.defaultSessionProvider === 'CLAUDE'
+      ? workspace.defaultSessionProvider
+      : undefined;
+  const settings = trpc.userSettings.get.useQuery(undefined, {
+    enabled: !!workspaceId && !explicitWorkspaceProvider,
+    staleTime: 30_000,
+  });
+  const workspaceProvider = explicitWorkspaceProvider ?? settings.data?.defaultSessionProvider;
+
   const {
     sessions,
     selectedSessionId,
+    selectedCodexAccountId,
     setSelectedSessionId,
     chatState,
     viewportRef,
@@ -39,7 +51,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     handleQuickAction,
     isCreatingSession,
     sessionsLoaded,
-  } = useQuickChat(workspaceId);
+  } = useQuickChat(workspaceId, workspaceProvider);
 
   const sessionTabData: SessionData[] = useMemo(
     () =>
@@ -77,6 +89,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
           <div className="flex-1 min-w-0">
             <SessionTabBar
               sessions={sessionTabData}
+              workspaceProvider={workspaceProvider}
               currentSessionId={selectedSessionId}
               runningSessionId={runningSessionId}
               onSelectSession={setSelectedSessionId}
@@ -100,9 +113,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
           {workspaceId && selectedSessionId ? (
             <QuickChatContent
               workspaceId={workspaceId}
-              codexAccountId={
-                sessions.find((session) => session.id === selectedSessionId)?.codexAccountId
-              }
+              codexAccountId={selectedCodexAccountId}
               chatState={chatState}
               viewportRef={viewportRef}
               onScroll={onScroll}

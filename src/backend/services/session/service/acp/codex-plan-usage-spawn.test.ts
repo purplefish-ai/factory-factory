@@ -95,7 +95,5 @@ it('supports the legacy vendor layout belonging to the adapter Codex dependency'
 
 it('fails closed when the native executable is missing', () => {
   mocks.exists.mockReturnValue(false);
-  expect(() => resolveCodexPlanUsageSpawnCommand()).toThrow(
-    'Codex plan usage native runtime unavailable'
-  );
+  expect(() => resolveCodexPlanUsageSpawnCommand()).toThrow('Codex native runtime unavailable');
 });

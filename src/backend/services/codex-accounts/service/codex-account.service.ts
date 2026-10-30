@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import {
   NATIVE_DEFAULT_CODEX_ACCOUNT_ID,
   type CodexAccountSummary,
@@ -43,22 +44,24 @@ export class CodexAccountService {
     private readonly dependencies: {
       store: AccountStore;
       config: AccountConfig;
-      probe(context: CodexRuntimeContext): Promise<AccountObservation>;
+      probe(context: CodexRuntimeContext, signal?: AbortSignal): Promise<AccountObservation>;
       login: NativeLogin;
-      probeIdentity?(context: CodexRuntimeContext): Promise<AccountIdentity>;
+      probeIdentity?(context: CodexRuntimeContext, signal?: AbortSignal): Promise<AccountIdentity>;
     }
   ) {
     this.logins = new LoginCoordinator({
-      resolve: async (id) => {
+      resolve: async (id, signal) => {
         const row = await this.row(id);
+        signal.throwIfAborted();
         return { row, context: await resolveAccountContext(row, this.dependencies.config) };
       },
-      prepare: async () => {
+      prepare: async (_id, signal) => {
         const row = await this.row();
-        await this.readIdentity(row, true);
+        await this.readIdentity(row, true, signal);
       },
-      probe: (context) =>
-        this.dependencies.probeIdentity?.(context) ?? this.dependencies.probe(context),
+      probe: (context, signal) =>
+        this.dependencies.probeIdentity?.(context, signal) ??
+        this.dependencies.probe(context, signal),
       verify: async (id, identity, persist) =>
         this.verifyIdentity(await this.row(id), identity, persist, true),
       login: dependencies.login,
@@ -83,7 +86,26 @@ export class CodexAccountService {
     }
     return row;
   }
-  private readIdentity(row: AccountRow, refresh = false): Promise<AccountIdentity> {
+  private readIdentity(
+    row: AccountRow,
+    refresh = false,
+    signal?: AbortSignal
+  ): Promise<AccountIdentity> {
+    if (signal) {
+      return resolveAccountContext(row, this.dependencies.config)
+        .then((context) => {
+          signal.throwIfAborted();
+          return (
+            this.dependencies.probeIdentity?.(context, signal) ??
+            this.dependencies.probe(context, signal)
+          );
+        })
+        .then((identity) => {
+          signal.throwIfAborted();
+          this.identityCache.set(row.id, { expires: Date.now() + 30_000, identity });
+          return identity;
+        });
+    }
     const cached = this.identityCache.get(row.id);
     if (!refresh && cached && cached.expires > Date.now()) {
       return Promise.resolve(cached.identity);
@@ -156,7 +178,7 @@ export class CodexAccountService {
       hasVerifiedScope(observation) &&
       matchesNativeEmailFallback(row.identityKey, observation.email);
     if (row.identityKey && observation.identityKey !== row.identityKey && !upgrading) {
-      throw new Error('Codex account identity changed; sign in to the original account');
+      throw this.identityChangedError(row);
     }
     if (staged && row.kind === 'MANAGED') {
       this.verifyNativeScope(observation);
@@ -172,6 +194,13 @@ export class CodexAccountService {
         await this.dependencies.store.update(row.id, { identityKey: observation.identityKey });
       }
     }
+  }
+  private identityChangedError(row: AccountRow): Error {
+    return new Error(
+      row.kind === 'NATIVE_DEFAULT'
+        ? 'Codex native account identity changed; run ff codex login and sign in to the original account to restore existing conversations'
+        : 'Codex account identity changed; sign in to the original account'
+    );
   }
   private verifyNativeScope(observation: AccountIdentity): void {
     if (observation.email) {
@@ -330,15 +359,32 @@ export class CodexAccountService {
   async getPreviewRuntimeContext(
     options: { accountId?: string; model?: string } = {}
   ): Promise<CodexRuntimeContext> {
-    const id = options.accountId ?? this.choose(await this.candidates(options.model, true));
-    const row = await this.row(id);
-    this.ensureAdmission(id);
-    const observation = await this.observe(row);
-    if (!observation.authenticated) {
-      throw new Error('Codex account is not signed in');
+    try {
+      const id = options.accountId ?? this.choose(await this.candidates(options.model, true));
+      const row = await this.row(id);
+      this.ensureAdmission(id);
+      const observation = await this.observe(row);
+      if (!observation.authenticated) {
+        throw new Error('Codex account is not signed in');
+      }
+      this.ensureAdmission(id);
+      this.verifyModel(observation, options.model);
+      return resolveAccountContext(row, this.dependencies.config);
+    } catch (cause) {
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        cause instanceof Error ? cause.message : 'Codex account unavailable; check sign-in',
+        { cause }
+      );
     }
-    this.ensureAdmission(id);
-    return resolveAccountContext(row, this.dependencies.config);
+  }
+  private verifyModel(observation: AccountObservation, model?: string): void {
+    if (model && model !== 'default' && !observation.models.includes(model)) {
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        'Selected Codex account does not support the requested model'
+      );
+    }
   }
   async withAccountReservation<T>(
     options: { accountId?: string; model?: string },
@@ -347,14 +393,34 @@ export class CodexAccountService {
     // Native observation is outside the allocation critical section. Explicit B
     // must remain usable while an unrelated Auto request waits on slow A.
     let candidates: AccountCandidate[] | undefined;
-    if (options.accountId) {
-      await this.getRuntimeContext(options.accountId);
-    } else {
-      candidates = await this.candidates(options.model);
+    try {
+      if (options.accountId) {
+        await this.getRuntimeContext(options.accountId);
+        if (options.model) {
+          this.verifyModel(await this.observe(await this.row(options.accountId)), options.model);
+        }
+      } else {
+        candidates = await this.candidates(options.model);
+      }
+    } catch (cause) {
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        cause instanceof Error ? cause.message : 'Codex account unavailable; check sign-in',
+        { cause }
+      );
     }
     const allocation = this.allocation.then(() => {
-      const id = options.accountId ?? this.choose(candidates ?? []);
-      this.ensureAdmission(id);
+      let id: string;
+      try {
+        id = options.accountId ?? this.choose(candidates ?? []);
+        this.ensureAdmission(id);
+      } catch (cause) {
+        throw new ApplicationError(
+          'PRECONDITION_FAILED',
+          cause instanceof Error ? cause.message : 'Codex account unavailable; check sign-in',
+          { cause }
+        );
+      }
       this.reservations.set(id, this.getReservationCount(id) + 1);
       this.recency.set(id, ++this.sequence);
       return id;

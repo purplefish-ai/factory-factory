@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 const mocks = vi.hoisted(() => ({
@@ -26,9 +27,30 @@ beforeEach(() => {
   });
 });
 it('resolves normal workspace provider and model defaults before atomic acquisition', async () => {
+  const session = createLifecycleTestSession({
+    workflow: 'pr-monitoring',
+    workspacePrId: 'a',
+    codexAccountId: 'auto-selected',
+  });
+  const events: string[] = [];
+  mocks.acquire.mockResolvedValueOnce({ outcome: 'missing' }).mockImplementationOnce(() => {
+    events.push('persist');
+    return Promise.resolve({ outcome: 'created', session });
+  });
+  vi.mocked(codexAccountService.withAccountReservation).mockImplementationOnce(
+    async (options, create) => {
+      expect(options).toEqual({ accountId: undefined, model: 'configured-model' });
+      events.push('reserved');
+      try {
+        return await create('auto-selected');
+      } finally {
+        events.push('released');
+      }
+    }
+  );
   expect(await sessionDataService.acquirePRDedicatedSession(input)).toMatchObject({
     outcome: 'created',
-    session: { workflow: 'pr-monitoring', workspacePrId: 'a' },
+    session: { workflow: 'pr-monitoring', workspacePrId: 'a', codexAccountId: 'auto-selected' },
   });
   expect(mocks.defaults).toHaveBeenCalledWith({
     workspace,
@@ -36,12 +58,24 @@ it('resolves normal workspace provider and model defaults before atomic acquisit
     explicitProvider: undefined,
     explicitModel: undefined,
   });
-  expect(mocks.acquire).toHaveBeenCalledWith({
+  expect(mocks.acquire).toHaveBeenCalledTimes(2);
+  expect(mocks.acquire).toHaveBeenNthCalledWith(1, {
     ...input,
     provider: 'CODEX',
     model: 'configured-model',
-    codexAccountId: 'codex-native-default',
+    reuseOnly: true,
   });
+  expect(mocks.acquire).toHaveBeenNthCalledWith(2, {
+    ...input,
+    provider: 'CODEX',
+    model: 'configured-model',
+    codexAccountId: 'auto-selected',
+  });
+  expect(codexAccountService.withAccountReservation).toHaveBeenCalledExactlyOnceWith(
+    { accountId: undefined, model: 'configured-model' },
+    expect.any(Function)
+  );
+  expect(events).toEqual(['reserved', 'persist', 'released']);
 });
 it('returns unavailable for a missing target before resolving preferences', async () => {
   mocks.findWorkspace.mockResolvedValue(null);

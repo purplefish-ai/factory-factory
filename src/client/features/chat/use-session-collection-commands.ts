@@ -5,6 +5,11 @@ import { runInBackground } from '@/client/lib/background-task';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 
 type CreateSessionInput = inferRouterInputs<AppRouter>['session']['createAndStartSession'];
+interface CreatedSession {
+  id: string;
+  codexAccountId?: string | null;
+}
+
 type CreationKind = 'chat' | 'quick-action';
 const SESSIONS_LOADING_MESSAGE = 'Sessions are still loading. Try again in a moment.';
 
@@ -18,7 +23,8 @@ interface SessionCollectionCommandsOptions {
   workspaceId: string | null;
   /** Workspace sessions, oldest first. */
   sessions: readonly CollectionSession[] | undefined;
-  onCreated: (session: { id: string }, workspaceId: string, kind: CreationKind) => void;
+  workspaceProvider?: CreateSessionInput['provider'];
+  onCreated: (session: CreatedSession, workspaceId: string, kind: CreationKind) => void;
 }
 
 /**
@@ -26,15 +32,15 @@ interface SessionCollectionCommandsOptions {
  * stay at their defaults; users change them per conversation in the composer.
  */
 function getWorkspaceCreationDefaults(
-  sessions: readonly CollectionSession[]
+  sessions: readonly CollectionSession[],
+  workspaceProvider?: CreateSessionInput['provider']
 ): Pick<CreateSessionInput, 'provider' | 'model'> {
   const first = sessions[0];
-  if (!first?.provider) {
+  const provider = first?.provider ?? workspaceProvider;
+  if (!provider) {
     return {};
   }
-  return first.model
-    ? { provider: first.provider, model: first.model }
-    : { provider: first.provider };
+  return first?.model ? { provider, model: first.model } : { provider };
 }
 
 // Expose the collection capability without leaking tRPC's private inferred result types.
@@ -47,7 +53,7 @@ interface CollectionMutation<TInput, TOutput = unknown> {
 }
 
 interface SessionCollectionCommands {
-  createSession: CollectionMutation<CreateSessionInput, { id: string }>;
+  createSession: CollectionMutation<CreateSessionInput, CreatedSession>;
   deleteSession: CollectionMutation<{ id: string }>;
   createChat: (codexAccountId?: string) => void;
   createQuickAction: (name: string, prompt: string) => void;
@@ -58,6 +64,7 @@ interface SessionCollectionCommands {
 export function useSessionCollectionCommands({
   workspaceId,
   sessions,
+  workspaceProvider,
   onCreated,
 }: SessionCollectionCommandsOptions): SessionCollectionCommands {
   const utils = trpc.useUtils();
@@ -121,15 +128,17 @@ export function useSessionCollectionCommands({
         {
           workspaceId,
           workflow: 'followup',
-          ...getWorkspaceCreationDefaults(sessions),
-          ...(sessions[0]?.provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
+          ...getWorkspaceCreationDefaults(sessions, workspaceProvider),
+          ...((sessions[0]?.provider ?? workspaceProvider) === 'CODEX' && codexAccountId
+            ? { codexAccountId }
+            : {}),
           name: `Chat ${nextNumber}`,
           initialPrompt: '',
         },
         { onSuccess: (session) => onCreated(session, workspaceId, 'chat') }
       );
     },
-    [workspaceId, sessions, createSession, onCreated]
+    [workspaceId, sessions, workspaceProvider, createSession, onCreated]
   );
 
   const quickActionInput = useCallback(
@@ -144,13 +153,13 @@ export function useSessionCollectionCommands({
       return {
         workspaceId,
         workflow: 'followup',
-        ...getWorkspaceCreationDefaults(sessions),
+        ...getWorkspaceCreationDefaults(sessions, workspaceProvider),
         name,
         initialMessage: prompt,
         initialPrompt: '',
       };
     },
-    [workspaceId, sessions]
+    [workspaceId, sessions, workspaceProvider]
   );
   const createQuickAction = useCallback(
     (name: string, prompt: string) => {

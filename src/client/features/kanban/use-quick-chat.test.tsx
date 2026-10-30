@@ -14,7 +14,13 @@ const sessionsByWorkspace = vi.hoisted(
   () =>
     new Map<
       string,
-      Array<{ id: string; provider?: 'CLAUDE' | 'CODEX'; model?: string }> | undefined
+      | Array<{
+          id: string;
+          provider?: 'CLAUDE' | 'CODEX';
+          model?: string;
+          codexAccountId?: string | null;
+        }>
+      | undefined
     >()
 );
 
@@ -51,11 +57,14 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({
           mutate: vi.fn(
             (
-              input: { workspaceId: string },
-              options?: { onSuccess?: (session: { id: string }) => void }
+              input: { workspaceId: string; codexAccountId?: string },
+              options?: { onSuccess?: (session: { id: string; codexAccountId?: string }) => void }
             ) => {
               launchMocks.inputs.push(input);
-              options?.onSuccess?.({ id: `created-for-${input.workspaceId}` });
+              options?.onSuccess?.({
+                id: `created-for-${input.workspaceId}`,
+                codexAccountId: input.codexAccountId,
+              });
             }
           ),
           isPending: false,
@@ -88,7 +97,7 @@ interface HarnessProps {
 
 function Harness({ workspaceId, revision, onResult }: HarnessProps) {
   void revision;
-  onResult(useQuickChat(workspaceId));
+  onResult(useQuickChat(workspaceId, 'CODEX'));
   return null;
 }
 
@@ -207,3 +216,31 @@ it.each(['chat', 'quick action'])(
     expect(launchMocks.inputs[0]).not.toHaveProperty('planModeEnabled');
   }
 );
+
+it('retains a created account binding while the list is stale, then follows selection and refreshed data', () => {
+  sessionsByWorkspace.set('workspace-a', [
+    { id: 'old', provider: 'CODEX', codexAccountId: 'personal' },
+  ]);
+  const mounted = renderHook('workspace-a');
+  flushSync(() => mounted.getResult().handleNewChat('work'));
+  expect(mounted.getResult().selectedCodexAccountId).toBe('work');
+  mounted.rerender('workspace-a');
+  expect(mounted.getResult().selectedCodexAccountId).toBe('work');
+  flushSync(() => mounted.getResult().setSelectedSessionId('old'));
+  expect(mounted.getResult().selectedCodexAccountId).toBe('personal');
+  sessionsByWorkspace.set('workspace-a', [
+    { id: 'created-for-workspace-a', codexAccountId: 'work' },
+  ]);
+  flushSync(() => mounted.getResult().setSelectedSessionId('created-for-workspace-a'));
+  mounted.rerender('workspace-a');
+  expect(mounted.getResult().selectedCodexAccountId).toBe('work');
+});
+
+it('forwards the workspace provider and explicit account when no sessions remain', () => {
+  sessionsByWorkspace.set('workspace-a', []);
+  const mounted = renderHook('workspace-a');
+  flushSync(() => mounted.getResult().handleNewChat('work'));
+  expect(launchMocks.inputs).toEqual([
+    expect.objectContaining({ provider: 'CODEX', codexAccountId: 'work' }),
+  ]);
+});

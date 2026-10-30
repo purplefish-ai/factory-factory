@@ -10,6 +10,7 @@ import {
   WORKSPACE_SIDEBAR_ACTIVITY_STATES,
   WORKSPACE_SIDEBAR_CI_STATES,
   WorkspaceCreationSource,
+  WorkspaceProviderSelection,
   WorkspaceStatus,
 } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/schemas/pr-event.schema';
@@ -74,6 +75,7 @@ export const WorkspaceSummarySchema = z.object({
   projectId: z.string(),
   name: z.string(),
   status: z.nativeEnum(WorkspaceStatus),
+  defaultSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
   createdAt: z.string().datetime({ offset: true }),
   branchName: z.string().nullable(),
   worktreePath: z.string().nullable(),

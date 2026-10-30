@@ -484,7 +484,11 @@ class ConfigService {
    * Get a copy of the current process environment for child process spawning
    */
   getChildProcessEnv(): NodeJS.ProcessEnv {
-    return { ...process.env };
+    return {
+      ...process.env,
+      CODEX_HOME: this.config.codexHome,
+      CODEX_SESSIONS_DIR: this.config.codexSessionsDir,
+    };
   }
 
   /**
@@ -563,16 +567,18 @@ class ConfigService {
   }
 
   /**
-   * Get Claude config directory path
+   * Get the native-default Codex profile directory.
    */
   getCodexHome(): string {
     return this.config.codexHome;
   }
 
+  /** Get native-default history, including the legacy sessions-directory override. */
   getCodexSessionsDir(): string {
     return this.config.codexSessionsDir;
   }
 
+  /** Get the Claude config directory path. */
   getClaudeConfigDir(): string {
     return this.config.claudeConfigDir;
   }

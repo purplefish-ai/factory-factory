@@ -200,7 +200,16 @@ it('rejects a pending read when the native process exits', async () => {
 it('terminates descendants when the launcher has exited but inherited pipes remain open', async () => {
   vi.useFakeTimers();
   stopAt = 'initialize';
-  const groupKill = vi.spyOn(process, 'kill').mockReturnValue(true);
+  let alive = true;
+  const groupKill = vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+    if (!alive) {
+      throw Object.assign(new Error('No process'), { code: 'ESRCH' });
+    }
+    if (signal === 'SIGKILL') {
+      alive = false;
+    }
+    return true;
+  });
   try {
     const reading = fetchCodexPlanUsage();
     const rejected = expect(reading).rejects.toThrow('Codex plan usage process exited');
@@ -244,7 +253,16 @@ it('finishes graceful process-group cleanup when no descendants remain', async (
 it('bounds stalled quota reads including process-group force termination', async () => {
   vi.useFakeTimers();
   stopAt = 'initialize';
-  const groupKill = vi.spyOn(process, 'kill').mockReturnValue(true);
+  let alive = true;
+  const groupKill = vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+    if (!alive) {
+      throw Object.assign(new Error('No process'), { code: 'ESRCH' });
+    }
+    if (signal === 'SIGKILL') {
+      alive = false;
+    }
+    return true;
+  });
   try {
     const reading = fetchCodexPlanUsage();
     const rejected = expect(reading).rejects.toThrow('timed out');

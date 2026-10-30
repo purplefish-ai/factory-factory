@@ -28,7 +28,7 @@ export async function withNativeRpc<T>(
   try {
     return await runNativeRpc(context, operation, {
       ...options,
-      timeoutMs: Math.max(1, timeoutMs - (Date.now() - startedAt)),
+      deadline: startedAt + timeoutMs,
     });
   } finally {
     release();
@@ -37,7 +37,7 @@ export async function withNativeRpc<T>(
 async function runNativeRpc<T>(
   context: CodexRuntimeContext,
   operation: (rpc: NativeRpc) => Promise<T>,
-  options: { timeoutMs: number; signal?: AbortSignal }
+  options: { deadline: number; signal?: AbortSignal }
 ): Promise<T> {
   const command = getOwnedCodexCommand(['app-server']);
   const child = spawn(command.command, command.args, {
@@ -127,7 +127,10 @@ async function runNativeRpc<T>(
       notifications.set(method, listener);
     },
   };
-  const timer = setTimeout(fail, options.timeoutMs ?? 10_000);
+  // Reserve part of the caller's total deadline for owned-process cleanup.
+  const remaining = Math.max(0, options.deadline - Date.now());
+  const cleanupGraceMs = Math.min(5000, remaining / 2);
+  const timer = setTimeout(fail, Math.max(0, remaining - cleanupGraceMs));
   timer.unref?.();
   options.signal?.addEventListener('abort', fail, { once: true });
   try {
@@ -151,7 +154,9 @@ async function runNativeRpc<T>(
     reader.close();
     child.stdin.end();
     try {
-      await terminateDisposableProcessTree(child);
+      await terminateDisposableProcessTree(child, {
+        timeoutMs: Math.max(0, options.deadline - Date.now()),
+      });
     } finally {
       child.stdin.destroy();
       child.stdout.destroy();

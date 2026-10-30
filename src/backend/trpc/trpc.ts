@@ -104,13 +104,16 @@ function isTrustedLocalContext(ctx: Context): boolean {
  * or trigger local command execution. HTTP callers must be local and use an
  * allowed browser origin when an Origin header is present.
  */
-export const trustedLocalProcedure = publicProcedure.use(({ ctx, next }) => {
+export function assertTrustedLocalContext(ctx: Context): void {
   if (!isTrustedLocalContext(ctx)) {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'This action is only available from a trusted local Factory Factory client.',
     });
   }
+}
 
+export const trustedLocalProcedure = publicProcedure.use(({ ctx, next }) => {
+  assertTrustedLocalContext(ctx);
   return next();
 });

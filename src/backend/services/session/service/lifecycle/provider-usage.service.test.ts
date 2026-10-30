@@ -22,6 +22,21 @@ describe('ProviderUsageService', () => {
     expect(accounts.getUsage.mock.calls).toEqual([['saved'], ['other']]);
     expect(fetchUsage).not.toHaveBeenCalled();
   });
+  it('isolates delegated account snapshots from consumer mutation', async () => {
+    const snapshot = {
+      ...available,
+      provider: 'CODEX' as const,
+      updatedAt: new Date().toISOString(),
+    };
+    const service = new ProviderUsageService({
+      fetchUsage: vi.fn(),
+      accounts: { getUsage: vi.fn().mockResolvedValue(snapshot) },
+    });
+    const first = await service.getUsage('CODEX', 'saved');
+    first.windows[0]!.usedPercent = 99;
+    first.windows.push({ ...first.windows[0]! });
+    expect((await service.getUsage('CODEX', 'saved')).windows).toEqual(available.windows);
+  });
   it('coalesces concurrent reads and caches successful snapshots for 30 seconds', async () => {
     vi.useFakeTimers();
     const fetchUsage = vi.fn(async () => available);

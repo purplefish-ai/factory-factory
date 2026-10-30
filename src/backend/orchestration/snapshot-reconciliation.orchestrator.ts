@@ -130,6 +130,7 @@ type DriftComparableField =
   | 'pendingRequestType'
   | 'sessionSummaries'
   | 'worktreePath'
+  | 'defaultSessionProvider'
   | 'initErrorMessage'
   | 'githubIssueNumber'
   | 'githubIssueUrl'
@@ -142,6 +143,7 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = 
   {
     group: 'metadata',
     fields: [
+      'defaultSessionProvider',
       'worktreePath',
       'initErrorMessage',
       'githubIssueNumber',

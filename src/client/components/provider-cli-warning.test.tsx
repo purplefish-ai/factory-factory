@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderCliWarning } from './provider-cli-warning';
 
 const state = vi.hoisted(() => ({
-  accounts: [] as Array<{ id: string; enabled: boolean; authenticated: boolean }>,
+  accounts: [] as Array<{
+    id: string;
+    enabled: boolean;
+    authenticated: boolean;
+    kind?: 'MANAGED' | 'NATIVE_DEFAULT';
+  }>,
+  accountQuery: vi.fn(),
   health: {
     claude: { isInstalled: true, isOutdated: false },
     codex: { isInstalled: true, isAuthenticated: true, isOutdated: true },
@@ -12,7 +18,14 @@ const state = vi.hoisted(() => ({
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({ admin: { checkCLIHealth: { invalidate: vi.fn(), setData: vi.fn() } } }),
-    codexAccounts: { list: { useQuery: () => ({ data: state.accounts }) } },
+    codexAccounts: {
+      list: {
+        useQuery: (_input: unknown, options: { enabled: boolean }) => {
+          state.accountQuery(options);
+          return { data: options.enabled ? state.accounts : undefined };
+        },
+      },
+    },
     admin: {
       upgradeProviderCLI: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       checkCLIHealth: { useQuery: () => ({ data: state.health, isRefetching: false }) },
@@ -97,4 +110,13 @@ it('does not use another account to clear the warning for an unauthenticated man
   expect(
     renderToStaticMarkup(<ProviderCliWarning provider="CODEX" codexAccountId="work" />)
   ).toContain('ff codex login');
+});
+
+it('warns for a signed-out managed selection even when the native profile is authenticated', () => {
+  state.accounts = [{ id: 'work', enabled: true, authenticated: false, kind: 'MANAGED' }];
+  const markup = renderToStaticMarkup(
+    <ProviderCliWarning provider="CODEX" codexAccountId="work" />
+  );
+  expect(state.accountQuery).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true }));
+  expect(markup).toContain('Sign in to this account from Settings');
 });

@@ -10,7 +10,7 @@ export function getOwnedCodexCommand(args: string[]): { command: string; args: s
     return getBundledCodexCommand(args);
   }
   // Windows cannot kill a launcher's descendants after that launcher exits. Own
-  // the native app-server directly; this quota-only probe starts no model turns.
+  // the native app-server directly; these native probes start no model turns.
   // Resolve through the adapter so pnpm/versioned dependencies stay aligned.
   try {
     const target =
@@ -50,6 +50,6 @@ export function getOwnedCodexCommand(args: string[]): { command: string; args: s
     return { command: executable, args };
   } catch {
     // Never fall back to an unowned launcher or an unrelated CLI from PATH.
-    throw new Error('Codex plan usage native runtime unavailable');
+    throw new Error('Codex native runtime unavailable');
   }
 }

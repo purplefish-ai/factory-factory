@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { CodexAccountKind } from './core/enums';
 
 /** Profile metadata only. Native credential files are never part of an export. */
 export const codexAccountMetadataSchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9_-]+$/),
   label: z.string().trim().min(1).max(100),
-  kind: z.enum(['NATIVE_DEFAULT', 'MANAGED']),
+  kind: z.nativeEnum(CodexAccountKind),
   enabled: z.boolean(),
   identityKey: z
     .string()

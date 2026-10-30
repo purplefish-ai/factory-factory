@@ -65,6 +65,10 @@ Shared `src/shared/codex-accounts.ts` exports Zod DTOs/types:
 - `startLogin(id)`, `getLoginStatus(id)`, `cancelLogin(id)`.
 - `getUsage(id?)` and `getRuntimeContext(id?)`; context has accountId, homeDir,
   sessionsDir, env (server only).
+- `getHistoryContext(id?)` resolves the saved profile for offline local history
+  without authentication, model or quota probes.
+- `getPreviewRuntimeContext({accountId?, model?})` selects the profile for
+  launch and model discovery without reserving it or consuming a model turn.
 - `withAccountReservation({accountId?, model?}, async accountId => result)`
   serializes allocation and releases its reservation on every callback
   completion.

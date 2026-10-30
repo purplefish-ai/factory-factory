@@ -448,7 +448,7 @@ describe('DataBackupService', () => {
       expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
     });
 
-    it('exports v4 format with all fields', async () => {
+    it('exports version 7 with account bindings and all settings fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -464,8 +464,18 @@ describe('DataBackupService', () => {
           id: 'session-1',
           provider: SessionProvider.CODEX,
           providerSessionId: 'thread-123',
+          codexAccountId: 'account-b',
         })
       );
+      expect(result.data.codexAccounts).toEqual([
+        {
+          id: 'account-b',
+          label: 'Work',
+          kind: 'MANAGED',
+          enabled: true,
+          identityKey: 'a'.repeat(64),
+        },
+      ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
           ratchetEnabled: true,

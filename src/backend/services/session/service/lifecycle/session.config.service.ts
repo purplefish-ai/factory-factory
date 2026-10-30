@@ -15,6 +15,7 @@ import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent, QueuedMessage } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
@@ -498,7 +499,7 @@ export class SessionConfigService {
     let modelCatalog = null;
     if (session?.provider === 'CODEX') {
       context.catalog ??= this.codexModelCatalogService
-        .getModels(session.codexAccountId ?? undefined)
+        .getModels(session.codexAccountId ?? NATIVE_DEFAULT_CODEX_ACCOUNT_ID)
         .catch((error: unknown) => {
           logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
             error: error instanceof Error ? error.message : String(error),

@@ -10,10 +10,12 @@ export interface AcquirePRDedicatedSessionInput extends PRTarget {
   maxSessions: number;
   expectedBindingRevision?: number;
   isCurrent?: () => boolean;
+  reuseOnly?: boolean;
 }
 export type PRDedicatedSessionAcquisition =
   | { outcome: 'created' | 'reused'; session: AgentSession }
-  | { outcome: 'limit_reached' | 'unavailable' };
+  | { outcome: 'limit_reached' | 'unavailable' }
+  | { outcome: 'missing' };
 
 class AcquisitionCancelled extends Error {}
 
@@ -118,6 +120,9 @@ class PRDedicatedSessionAccessor {
       return this.owns(input, session)
         ? { outcome: 'reused', session }
         : { outcome: 'unavailable' };
+    }
+    if (input.reuseOnly) {
+      return { outcome: 'missing' };
     }
     const count = await tx.agentSession.count({
       where: { workspaceId: input.workspaceId, status: { in: ['RUNNING', 'IDLE'] } },

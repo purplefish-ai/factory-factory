@@ -101,7 +101,9 @@ it('preserves native environment and isolates managed history and authentication
   expect(managed.env.OPENAI_API_KEY).toBeUndefined();
   expect(managed.env.CODEX_SESSIONS_DIR).toBeUndefined();
   expect(managed.env.CODEX_HOME).toBe(managed.homeDir);
-  expect((await stat(managed.homeDir)).mode & 0o777).toBe(0o700);
+  if (process.platform !== 'win32') {
+    expect((await stat(managed.homeDir)).mode & 0o777).toBe(0o700);
+  }
 });
 it('prefers known remaining quota over unknown and excludes exhausted accounts', async () => {
   const { service, observations, observation } = await fixture();
@@ -120,11 +122,16 @@ it('spreads concurrent reservations and releases failed reservations', async () 
   const gate = new Promise<void>((resolve) => {
     finish = resolve;
   });
+  let acquired!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    acquired = resolve;
+  });
   const first = service.withAccountReservation({}, async (id) => {
+    acquired();
     await gate;
     return id;
   });
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await ready;
   expect(await service.withAccountReservation({}, async (id) => id)).toBe(managed.id);
   finish();
   expect(await first).toBe('codex-native-default');
@@ -253,4 +260,33 @@ it('creates file credentials and rejects a managed keyring credential store', as
   expect(await readFile(path, 'utf8')).toContain('cli_auth_credentials_store = "file"');
   await writeFile(path, 'cli_auth_credentials_store = "keyring"\n');
   await expect(service.getRuntimeContext(account.id)).rejects.toThrow('credential store');
+});
+
+it('rejects unsupported explicit models before preview or session reservation', async () => {
+  const { service } = await fixture();
+  const account = await service.createAccount('Selected');
+  const persist = vi.fn(async (id: string) => id);
+  await expect(
+    service.withAccountReservation({ accountId: account.id, model: 'unsupported' }, persist)
+  ).rejects.toThrow('model');
+  expect(persist).not.toHaveBeenCalled();
+  await expect(
+    service.getPreviewRuntimeContext({ accountId: account.id, model: 'unsupported' })
+  ).rejects.toThrow('model');
+  expect(
+    await service.withAccountReservation({ accountId: account.id, model: 'gpt-test' }, persist)
+  ).toBe(account.id);
+});
+it('keeps native identity pinned and recovers after signing back into the original account', async () => {
+  const { service, observations, observation, rows } = await fixture();
+  const id = 'codex-native-default';
+  observations.set(id, { ...observation(), identityKey: 'original' });
+  await service.getRuntimeContext(id);
+  observations.set(id, { ...observation(), identityKey: 'replacement' });
+  service.invalidate();
+  await expect(service.getRuntimeContext(id)).rejects.toThrow('ff codex login');
+  expect(rows[0]?.identityKey).toBe('original');
+  observations.set(id, { ...observation(), identityKey: 'original' });
+  service.invalidate();
+  expect((await service.getRuntimeContext(id)).accountId).toBe(id);
 });

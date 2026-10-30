@@ -101,6 +101,20 @@ function completeEntry() {
 }
 
 describe('accepted summary hydration', () => {
+  it('keeps an older summary complete when its optional launch provider arrives later', () => {
+    const value = store();
+    value.upsert('ws', seed(), 'legacy complete summary', 100);
+    expect(value.getByWorkspaceId('ws')?.summaryVersion).toBe(1);
+    expect(value.getByWorkspaceId('ws')?.defaultSessionProvider).toBeUndefined();
+    expect(value.upsert('ws', { defaultSessionProvider: 'CODEX' }, 'launch provider', 200)).toEqual(
+      { accepted: true, changed: true, emitted: true }
+    );
+    expect(value.getByWorkspaceId('ws')).toMatchObject({
+      summaryVersion: 1,
+      defaultSessionProvider: 'CODEX',
+    });
+  });
+
   it('hydrates older metadata without replacing a newer lifecycle or claiming rejected seed inputs', () => {
     const value = store();
     value.upsert('ws', { projectId: 'project-1', status: 'PROVISIONING' }, 'lifecycle', 500);

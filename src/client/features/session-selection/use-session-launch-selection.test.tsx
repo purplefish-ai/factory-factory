@@ -23,12 +23,13 @@ const mocks = vi.hoisted(() => ({
   refetchLaunch: vi.fn().mockResolvedValue({}),
   settingsError: null as Error | null,
   refetchSettings: vi.fn().mockResolvedValue({}),
-  catalog: undefined as
-    | {
-        CLAUDE: { models: { value: string; label: string }[] };
-        CODEX: { models: { value: string; label: string }[] };
-      }
-    | undefined,
+  catalogs: new Map<
+    string,
+    {
+      CLAUDE: { models: { value: string; label: string }[] };
+      CODEX: { models: { value: string; label: string }[] };
+    }
+  >(),
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -41,7 +42,7 @@ vi.mock('@/client/lib/trpc', () => ({
           codexAccountId?: string;
         }) => {
           mocks.launchQuery(input);
-          const key = `${input.provider}:${input.model}`;
+          const key = `${input.provider}:${input.model}:${input.codexAccountId ?? 'auto'}`;
           return {
             data: mocks.launches.has(key)
               ? mocks.launches.get(key)
@@ -66,9 +67,10 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       getProviderOptions: {
-        useQuery: (input: unknown) => {
+        useQuery: (input?: { codexAccountId?: string }) => {
           mocks.catalogQuery(input);
-          return { data: mocks.catalog, isLoading: !mocks.catalog };
+          const catalog = mocks.catalogs.get(input?.codexAccountId ?? 'auto');
+          return { data: catalog, isLoading: !catalog };
         },
       },
     },
@@ -79,6 +81,7 @@ afterEach(() => {
   roots.splice(0).forEach((root) => flushSync(() => root.unmount()));
   mocks.launches.clear();
   mocks.launchErrors.clear();
+  mocks.catalogs.clear();
 });
 const defaults: SessionLaunchDefaults = {
   defaultSessionProvider: 'CODEX',
@@ -210,7 +213,7 @@ describe('launch selection ownership', () => {
 describe('connected launch options', () => {
   it('keeps the saved provider default alias visible while its catalog loads', () => {
     mocks.settings = { ...defaults, defaultCodexModel: 'default' };
-    mocks.catalog = undefined;
+    mocks.catalogs.clear();
     let result: ReturnType<typeof useSessionLaunchSelection> | undefined;
     const root = createRoot(document.createElement('div'));
     roots.push(root);
@@ -325,8 +328,8 @@ const solNative: SessionLaunchOptions = {
 
 it('freezes the effective saved level and preserves an unsupported explicit draft until Default and Plan off', () => {
   mocks.settings = { ...defaults, defaultCodexReasoningEffort: 'high' };
-  mocks.launches.set('CODEX:saved-sol', solNative);
-  mocks.launches.set('CODEX:luna', {
+  mocks.launches.set('CODEX:saved-sol:auto', solNative);
+  mocks.launches.set('CODEX:luna:auto', {
     ...solNative,
     model: 'native-luna',
     reasoning: {
@@ -369,18 +372,18 @@ it('freezes the effective saved level and preserves an unsupported explicit draf
 
 it('distinguishes pending discovery and failure from known unsupported capabilities, with retry', () => {
   mocks.settings = defaults;
-  mocks.launches.set('CODEX:saved-sol', undefined);
+  mocks.launches.set('CODEX:saved-sol:auto', undefined);
   const mounted = mountConnected();
   expect(mounted.current.ready).toBe(false);
   expect(mounted.current.controlsProps.reasoning?.loading).toBe(true);
-  mocks.launchErrors.set('CODEX:saved-sol', new Error('Probe failed'));
+  mocks.launchErrors.set('CODEX:saved-sol:auto', new Error('Probe failed'));
   mounted.render();
   expect(mounted.current.controlsProps.reasoning?.loading).toBe(false);
   expect(mounted.current.controlsProps.reasoning?.error).toContain('Could not load');
   mounted.current.controlsProps.reasoning?.onRetry();
   expect(mocks.refetchLaunch).toHaveBeenCalled();
-  mocks.launchErrors.delete('CODEX:saved-sol');
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launchErrors.delete('CODEX:saved-sol:auto');
+  mocks.launches.set('CODEX:saved-sol:auto', {
     ...solNative,
     reasoning: { options: [] },
     planMode: { supported: false, selected: false },
@@ -394,12 +397,12 @@ it('distinguishes pending discovery and failure from known unsupported capabilit
 // Saved Default is intent, even when the native default is a concrete advertised level.
 it('keeps saved native Default visible and in the outbound payload across native refetch', () => {
   mocks.settings = { ...defaults, defaultCodexReasoningEffort: null };
-  mocks.launches.set('CODEX:saved-sol', solNative);
+  mocks.launches.set('CODEX:saved-sol:auto', solNative);
   const mounted = mountConnected();
   expect(mounted.current.ready).toBe(true);
   expect(mounted.current.controlsProps.reasoning?.value).toBeNull();
   expect(mounted.current.creationDefaults.reasoningEffort).toBeNull();
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launches.set('CODEX:saved-sol:auto', {
     ...solNative,
     reasoning: { ...solNative.reasoning, defaultValue: 'high', selected: 'high' },
   });
@@ -410,7 +413,7 @@ it('keeps saved native Default visible and in the outbound payload across native
 
 it('submits the displayed permission default and preserves explicit access per provider until reset', () => {
   mocks.settings = { ...defaults, defaultWorkspacePermissions: 'RELAXED' };
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launches.set('CODEX:saved-sol:auto', {
     ...solNative,
     accessMode: {
       options: [
@@ -436,7 +439,7 @@ it('submits the displayed permission default and preserves explicit access per p
 
 it('blocks launch when explicit access becomes unavailable after a model switch', () => {
   mocks.settings = defaults;
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launches.set('CODEX:saved-sol:auto', {
     ...solNative,
     accessMode: { options: [{ value: 'agent', label: 'Auto' }] },
   });
@@ -449,7 +452,7 @@ it('blocks launch when explicit access becomes unavailable after a model switch'
 
 it('requires an explicit permission choice when a saved strict preset is unavailable, even if native defaults grant full access', () => {
   mocks.settings = { ...defaults, defaultWorkspacePermissions: 'STRICT' };
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launches.set('CODEX:saved-sol:auto', {
     ...solNative,
     accessMode: {
       options: [{ value: 'agent-full-access', label: 'Full access' }],
@@ -480,14 +483,38 @@ it('keeps a manual Codex account choice through provider switches and resets it 
 
 it('uses the manual account for creation, launch options and model discovery, and clears it in Claude mode', () => {
   mocks.settings = defaults;
-  mocks.launches.set('CODEX:saved-sol', {
+  mocks.launches.set('CODEX:saved-sol:auto', solNative);
+  mocks.catalogs.set('auto', {
+    CLAUDE: { models: [] },
+    CODEX: { models: [{ value: 'native-only', label: 'Native only' }] },
+  });
+  mocks.catalogs.set('work', {
+    CLAUDE: { models: [] },
+    CODEX: { models: [{ value: 'work-only', label: 'Work only' }] },
+  });
+  mocks.launches.set('CODEX:saved-sol:work', {
     ...solNative,
+    planMode: { supported: false, selected: false },
     accessMode: { options: [{ value: 'read-only', label: 'Read only' }] },
   });
   const mounted = mountConnected();
   expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
+  expect(mounted.current.pickerProps.models).toContainEqual({
+    value: 'native-only',
+    label: 'Native only',
+  });
+  expect(mounted.current.controlsProps.planMode?.supported).toBe(true);
   expect(mounted.current.controlsProps.account?.value).toBeUndefined();
   flushSync(() => mounted.current.controlsProps.account?.onChange('work'));
+  expect(mounted.current.pickerProps.models).toContainEqual({
+    value: 'work-only',
+    label: 'Work only',
+  });
+  expect(mounted.current.pickerProps.models).not.toContainEqual({
+    value: 'native-only',
+    label: 'Native only',
+  });
+  expect(mounted.current.controlsProps.planMode?.supported).toBe(false);
   flushSync(() => mounted.current.controlsProps.accessMode?.onChange('read-only'));
   expect(mounted.current.creationDefaults).toMatchObject({
     provider: 'CODEX',
@@ -498,6 +525,11 @@ it('uses the manual account for creation, launch options and model discovery, an
     expect.objectContaining({ provider: 'CODEX', codexAccountId: 'work' })
   );
   expect(mocks.catalogQuery).toHaveBeenLastCalledWith({ codexAccountId: 'work' });
+  mocks.launches.set('CODEX:saved-sol:work', undefined);
+  mocks.launchErrors.set('CODEX:saved-sol:work', new Error('Work probe failed'));
+  mounted.render();
+  expect(mounted.current.ready).toBe(false);
+  expect(mounted.current.controlsProps.reasoning?.error).toContain('Could not load');
   flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
   expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
   expect(mounted.current.controlsProps.account).toBeUndefined();

@@ -115,20 +115,32 @@ async function getCodexProviderOptions(
       })),
     };
   } catch (error) {
+    return unavailableCodexOptions(error, codexAccountId);
+  }
+}
+
+function unavailableCodexOptions(error: unknown, codexAccountId?: string): ProviderOptions {
+  if (codexAccountId !== undefined) {
     return {
       source: 'fallback',
       error: error instanceof Error ? error.message : String(error),
-      models: [
-        { value: 'default', label: 'Default' },
-        { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
-      ],
-      efforts: [
-        { value: 'low', label: 'Low' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'high', label: 'High' },
-      ],
+      models: [],
+      efforts: [],
     };
   }
+  return {
+    source: 'fallback',
+    error: error instanceof Error ? error.message : String(error),
+    models: [
+      { value: 'default', label: 'Default' },
+      { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+    ],
+    efforts: [
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ],
+  };
 }
 
 export const userSettingsRouter = router({

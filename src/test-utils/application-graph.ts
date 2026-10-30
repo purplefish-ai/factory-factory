@@ -90,8 +90,8 @@ vi.mock('@/backend/services/codex-accounts', () => ({
       sessionsDir: '/tmp/.codex/sessions',
       env: {},
     })),
-    getPreviewRuntimeContext: vi.fn(async () => ({
-      accountId: 'codex-native-default',
+    getPreviewRuntimeContext: vi.fn(async (options: { accountId?: string } = {}) => ({
+      accountId: options.accountId ?? 'codex-native-default',
       homeDir: '/tmp/.codex',
       sessionsDir: '/tmp/.codex/sessions',
       env: {},

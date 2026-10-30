@@ -21,9 +21,46 @@ describe('CodexModelCatalogService', () => {
     const fetchModels = vi.fn(async () => catalog());
     const service = new CodexModelCatalogService({ fetchModels });
     await Promise.all([service.getModels('a'), service.getModels('b'), service.getModels('a')]);
+    await service.getModels('a');
+    await service.getModels('b');
     expect(fetchModels).toHaveBeenCalledTimes(2);
     expect(fetchModels).toHaveBeenCalledWith('a');
     expect(fetchModels).toHaveBeenCalledWith('b');
+  });
+  it('discovers Auto models across accounts and reuses their isolated caches', async () => {
+    const fetchModels = vi.fn(async (id?: string) => [{ ...catalog()[0]!, id: `model-${id}` }]);
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      listAccountIds: async () => ['a', 'b'],
+    });
+    await expect(service.getModels()).resolves.toMatchObject([
+      { id: 'model-a' },
+      { id: 'model-b' },
+    ]);
+    await service.getModels();
+    await service.getModels('b');
+    expect(fetchModels.mock.calls).toEqual([['a'], ['b']]);
+  });
+  it('keeps available Auto catalogs when another account probe fails', async () => {
+    const fetchModels = vi.fn((id?: string) => {
+      if (id === 'broken') {
+        return Promise.reject(new Error('Account unavailable'));
+      }
+      return Promise.resolve(catalog());
+    });
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      listAccountIds: async () => ['broken', 'a'],
+    });
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await expect(service.getModels('broken')).rejects.toThrow('Account unavailable');
+  });
+  it('fails Auto discovery when no account catalog is available', async () => {
+    const service = new CodexModelCatalogService({
+      fetchModels: vi.fn(),
+      listAccountIds: async () => [],
+    });
+    await expect(service.getModels()).rejects.toThrow('No enabled Codex account');
   });
   afterEach(() => vi.useRealTimers());
 

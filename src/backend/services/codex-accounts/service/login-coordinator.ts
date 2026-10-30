@@ -13,9 +13,12 @@ export class LoginCoordinator {
   private active?: LoginEntry;
   constructor(
     private readonly dependencies: {
-      resolve(id: string): Promise<{ row: AccountRow; context: CodexRuntimeContext }>;
-      prepare(id: string): Promise<void>;
-      probe(context: CodexRuntimeContext): Promise<AccountIdentity>;
+      resolve(
+        id: string,
+        signal: AbortSignal
+      ): Promise<{ row: AccountRow; context: CodexRuntimeContext }>;
+      prepare(id: string, signal: AbortSignal): Promise<void>;
+      probe(context: CodexRuntimeContext, signal: AbortSignal): Promise<AccountIdentity>;
       verify(id: string, identity: AccountIdentity, persist: boolean): Promise<void>;
       login: NativeLogin;
       invalidate(): void;
@@ -27,6 +30,22 @@ export class LoginCoordinator {
   private ensureActive(entry: LoginEntry): void {
     if (entry.abort.signal.aborted || this.active !== entry) {
       throw new Error('Codex login cancelled');
+    }
+  }
+  private async cancellable<T>(entry: LoginEntry, work: Promise<T>): Promise<T> {
+    const signal = entry.abort.signal;
+    let aborted!: () => void;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      aborted = () => reject(new Error('Codex login cancelled'));
+      signal.addEventListener('abort', aborted, { once: true });
+      if (signal.aborted) {
+        aborted();
+      }
+    });
+    try {
+      return await Promise.race([work, cancelled]);
+    } finally {
+      signal.removeEventListener('abort', aborted);
     }
   }
   start(id: string): Promise<CodexLoginState> {
@@ -47,14 +66,17 @@ export class LoginCoordinator {
     const timer = setTimeout(() => entry.abort.abort(), 5 * 60_000);
     timer.unref?.();
     const preparation = (async () => {
-      const resolved = await this.dependencies.resolve(id);
+      const resolved = await this.cancellable(
+        entry,
+        this.dependencies.resolve(id, entry.abort.signal)
+      );
       this.ensureActive(entry);
       if (resolved.row.kind === 'NATIVE_DEFAULT') {
         throw new Error(
           'Reconnect the native default account through the native Codex CLI; browser re-login is supported for managed accounts only'
         );
       }
-      await this.dependencies.prepare(id);
+      await this.cancellable(entry, this.dependencies.prepare(id, entry.abort.signal));
       this.ensureActive(entry);
       entry.stage = await createLoginStage(resolved.context);
       this.ensureActive(entry);
@@ -73,7 +95,7 @@ export class LoginCoordinator {
         });
         this.ensureActive(entry);
         // Native login and identity probe both close their owned process before adoption.
-        const identity = await this.dependencies.probe(stage);
+        const identity = await this.dependencies.probe(stage, entry.abort.signal);
         this.ensureActive(entry);
         if (!(identity.authenticated && hasVerifiedScope(identity))) {
           throw new Error('Codex staged account identity unavailable');

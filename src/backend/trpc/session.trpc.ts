@@ -10,7 +10,13 @@ import { SessionStatus } from '@/shared/core';
 import { providerPlanUsageSchema, usageProviderSchema } from '@/shared/provider-usage';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { SessionProvider } from '@prisma-gen/client';
-import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
+import {
+  assertTrustedLocalContext,
+  type Context,
+  publicProcedure,
+  router,
+  trustedLocalProcedure,
+} from './trpc';
 
 const createSessionInputSchema = sessionLaunchSettingsSchema.extend({
   workspaceId: z.string(),
@@ -52,6 +58,9 @@ async function createAgentSessionFromInput(
   ctx: Context,
   input: z.infer<typeof createSessionInputSchema>
 ) {
+  if (input.codexAccountId !== undefined) {
+    assertTrustedLocalContext(ctx);
+  }
   const {
     configService,
     sessionDataService,

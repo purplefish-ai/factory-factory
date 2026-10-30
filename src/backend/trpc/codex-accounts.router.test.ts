@@ -75,7 +75,11 @@ describe('Codex account transport', () => {
     }
   });
   it('returns account metadata without server environment or profile paths', async () => {
-    const { caller } = setup();
+    const { caller } = setup({
+      isLocal: true,
+      remoteAddress: '127.0.0.1',
+      origin: 'http://localhost:3000',
+    });
     await expect(caller.list()).resolves.toEqual([account]);
   });
   it('validates and trims names before creating an account', async () => {

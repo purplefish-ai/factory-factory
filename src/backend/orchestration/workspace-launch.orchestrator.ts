@@ -140,17 +140,28 @@ async function preflightInteractiveLaunch(
   ports: WorkspaceLaunchPorts
 ): Promise<Awaited<ReturnType<WorkspaceLaunchPorts['resolveProvider']>> | undefined> {
   const { model, accessMode, codexAccountId } = explicitSessionModel(source);
-  if (capacity <= 0 && model === undefined && accessMode === undefined) {
+  if (
+    capacity <= 0 &&
+    model === undefined &&
+    accessMode === undefined &&
+    codexAccountId === undefined
+  ) {
     return undefined;
   }
   const provider = await ports.resolveProvider(
     source.type === 'RESUME_BRANCH' ? undefined : source.provider,
     ...(model === undefined ? ([] as const) : ([model] as const))
   );
+  if (codexAccountId !== undefined && provider !== 'CODEX') {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      'A Codex account can only be selected for a Codex conversation'
+    );
+  }
   if (capacity > 0) {
     const health = await ports.checkCliHealth();
     const unavailableMessage = getProviderUnavailableMessage(provider, health, {
-      accountScopedCodex: true,
+      accountScopedCodex: ports.validateCodexAccount !== undefined,
     });
     if (unavailableMessage) {
       throw new ApplicationError(
@@ -158,15 +169,31 @@ async function preflightInteractiveLaunch(
         `Cannot create workspace: ${unavailableMessage}`
       );
     }
-    if (provider === 'CODEX') {
-      await ports.validateCodexAccount?.({
-        accountId: source.type === 'MANUAL' ? source.codexAccountId : undefined,
-        model,
-      });
-    }
   }
+  await validateLaunchAccount({ provider, accountId: codexAccountId, model }, ports);
   await validateLaunchAccess({ provider, model, accessMode, codexAccountId }, ports);
   return provider;
+}
+
+async function validateLaunchAccount(
+  input: { provider: 'CLAUDE' | 'CODEX'; accountId?: string; model?: string },
+  ports: Pick<WorkspaceLaunchPorts, 'validateCodexAccount'>
+): Promise<void> {
+  if (input.provider !== 'CODEX') {
+    return;
+  }
+  try {
+    await ports.validateCodexAccount?.({ accountId: input.accountId, model: input.model });
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      throw error;
+    }
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      error instanceof Error ? error.message : 'Codex account is unavailable',
+      { cause: error }
+    );
+  }
 }
 
 async function validateLaunchAccess(

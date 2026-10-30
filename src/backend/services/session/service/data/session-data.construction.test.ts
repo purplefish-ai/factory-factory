@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { codexAccountService } from '@/backend/services/codex-accounts';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
@@ -149,6 +150,7 @@ describe('constructed session data service', () => {
 
   it('preserves reused session identity and stored choices despite newly resolved defaults', async () => {
     const { service } = dataService();
+    vi.mocked(codexAccountService.withAccountReservation).mockClear();
     vi.mocked(prDedicatedSessionAccessor.acquire).mockResolvedValue({
       outcome: 'reused',
       session: createLifecycleTestSession({ id: 'existing', provider: 'CLAUDE', model: 'opus' }),
@@ -157,11 +159,12 @@ describe('constructed session data service', () => {
       outcome: 'reused',
       session: { id: 'existing', provider: 'CLAUDE', model: 'opus' },
     });
-    expect(prDedicatedSessionAccessor.acquire).toHaveBeenCalledWith({
+    expect(codexAccountService.withAccountReservation).not.toHaveBeenCalled();
+    expect(prDedicatedSessionAccessor.acquire).toHaveBeenCalledExactlyOnceWith({
       ...dedicated,
       provider: 'CODEX',
       model: 'gpt-configured',
-      codexAccountId: 'codex-native-default',
+      reuseOnly: true,
     });
   });
 });

@@ -52,3 +52,8 @@ it('prefers the pinned distribution bin executable when both layouts exist', () 
     join('/native', 'vendor', 'x86_64-pc-windows-msvc', 'bin', 'codex.exe')
   );
 });
+
+it('reports a generic native runtime failure for any account probe', () => {
+  mocks.exists.mockReturnValue(false);
+  expect(() => getOwnedCodexCommand(['app-server'])).toThrow('Codex native runtime unavailable');
+});

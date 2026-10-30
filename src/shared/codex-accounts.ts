@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { CodexAccountKind } from './core/enums';
 import { providerPlanUsageSchema } from './provider-usage';
 export const NATIVE_DEFAULT_CODEX_ACCOUNT_ID = 'codex-native-default';
 export const codexAccountSummarySchema = z.object({
   id: z.string(),
   label: z.string(),
-  kind: z.enum(['NATIVE_DEFAULT', 'MANAGED']),
+  kind: z.nativeEnum(CodexAccountKind),
   enabled: z.boolean(),
   authenticated: z.boolean(),
   email: z.string().nullable(),

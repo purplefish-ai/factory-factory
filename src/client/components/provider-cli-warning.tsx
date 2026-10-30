@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 const PROVIDER_INFO = {
   CLAUDE: {
@@ -77,6 +78,22 @@ function getWarning(
   return null;
 }
 
+function getAccountWarning(
+  provider: 'CLAUDE' | 'CODEX',
+  account?: Pick<CodexAccountSummary, 'kind' | 'authenticated'>
+): ReturnType<typeof getWarning> {
+  if (provider !== 'CODEX' || account?.authenticated !== false) {
+    return null;
+  }
+  return {
+    title: 'Codex account is not authenticated',
+    description:
+      account.kind === 'MANAGED'
+        ? 'Sign in to this account from Settings.'
+        : 'Run `ff codex login` in your terminal to authenticate.',
+  };
+}
+
 /**
  * Inline warning shown below a provider select when the selected provider's CLI
  * is not installed or not authenticated.
@@ -110,7 +127,7 @@ export function ProviderCliWarning({
   );
 
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
-    enabled: provider === 'CODEX' && health?.codex.isAuthenticated === false,
+    enabled: provider === 'CODEX' && (!!codexAccountId || health?.codex.isAuthenticated === false),
     staleTime: 30_000,
     retry: false,
   });
@@ -123,7 +140,13 @@ export function ProviderCliWarning({
     return null;
   }
 
-  const warning = getWarning(provider, health, hasUsableCodexAccount);
+  const selectedAccount = codexAccountId
+    ? accounts?.find((account) => account.id === codexAccountId)
+    : undefined;
+  const warning =
+    getWarning(provider, health, hasUsableCodexAccount || !!selectedAccount) ??
+    getAccountWarning(provider, selectedAccount);
+
   if (!warning) {
     return null;
   }

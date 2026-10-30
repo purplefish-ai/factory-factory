@@ -355,16 +355,16 @@ describe('real final creation through application launch', () => {
   });
 
   it.each([manual, child, periodic])(
-    'retains $type settings failure policy at the final creation boundary',
+    'applies $type settings failure policy at the account validation boundary',
     async (source) => {
       const { services, events, logger } = launchGraph('CLAUDE', 'haiku', 'gpt-saved');
       vi.mocked(services.userSettingsQueryService.get).mockRejectedValue(
         new Error('settings unavailable')
       );
       guardGlobals();
-      if (source.type === 'PERIODIC_TASK') {
+      if (source.type === 'PERIODIC_TASK' || source.type === 'MANUAL') {
         await expect(services.launchWorkspace(source)).rejects.toThrow('settings unavailable');
-        expect(events).toEqual(['workspace']);
+        expect(events).toEqual(source.type === 'MANUAL' ? ['provider', 'health'] : ['workspace']);
       } else {
         expect(await services.launchWorkspace(source)).toMatchObject({ defaultSessionId: null });
         expect(logger.warn).toHaveBeenCalledOnce();

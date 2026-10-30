@@ -436,8 +436,13 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
           services.sessionProviderResolverService.resolveProviderForWorkspaceCreation(...args),
         checkCliHealth: () => services.cliHealthService.checkHealth(),
         getLaunchOptions: (input) => services.sessionConfigService.getLaunchOptions(input),
-        validateCodexAccount: (input) =>
-          services.codexAccountService.getPreviewRuntimeContext(input),
+        validateCodexAccount: async (input) => {
+          const settings = await services.userSettingsQueryService.get();
+          return services.codexAccountService.getPreviewRuntimeContext({
+            ...input,
+            model: input.model ?? settings.defaultCodexModel,
+          });
+        },
         createWorkspace: (input) =>
           source.type === 'PERIODIC_TASK'
             ? services.workspaceCreationService.create(input)

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import type { CodexAccountSummary } from '@/shared/codex-accounts';
+import type { CodexAccountSummary, CodexLoginState } from '@/shared/codex-accounts';
 import { CodexAccountLoginDialog } from './codex-account-login-dialog';
 import { CodexAccountsView } from './codex-accounts-settings';
 
@@ -59,6 +59,7 @@ function Preview({
           ]
   );
   const [open, setOpen] = useState(false);
+  const [login, setLogin] = useState<CodexLoginState>();
   return (
     <div className="w-full max-w-2xl">
       <CodexAccountsView
@@ -68,8 +69,18 @@ function Preview({
             ? 'Account management is available only from a trusted local connection.'
             : undefined
         }
-        onAdd={() => setOpen(true)}
-        onLogin={() => setOpen(true)}
+        onAdd={() => {
+          setLogin(undefined);
+          setOpen(true);
+        }}
+        onLogin={(accountId) => {
+          setLogin({
+            accountId,
+            status: 'pending',
+            authorizationUrl: 'https://auth.openai.com/example',
+          });
+          setOpen(true);
+        }}
         onUpdate={(id, enabled) =>
           setAccounts((accounts) =>
             accounts.map((account) => (account.id === id ? { ...account, enabled } : account))
@@ -78,6 +89,7 @@ function Preview({
       />
       <CodexAccountLoginDialog
         open={open}
+        login={login}
         onClose={() => setOpen(false)}
         onCancel={() => setOpen(false)}
         onSubmit={() => setOpen(false)}

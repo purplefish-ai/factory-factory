@@ -114,42 +114,52 @@ async function readIdentity(
     planType: account?.planType ?? null,
   };
 }
-export function probeNativeIdentity(context: CodexRuntimeContext): Promise<AccountIdentity> {
-  return withNativeRpc(context, (rpc) => readIdentity(rpc, context));
+export function probeNativeIdentity(
+  context: CodexRuntimeContext,
+  signal?: AbortSignal
+): Promise<AccountIdentity> {
+  return withNativeRpc(context, (rpc) => readIdentity(rpc, context), { signal });
 }
-export function probeNativeAccount(context: CodexRuntimeContext): Promise<AccountObservation> {
-  return withNativeRpc(context, async (rpc) => {
-    const identity = await readIdentity(rpc, context);
-    let usage: AccountObservation['usage'] = {
-      provider: 'CODEX',
-      status: 'unavailable',
-      windows: [],
-      updatedAt: new Date().toISOString(),
-    };
-    if (!identity.authenticated) {
-      return { ...identity, usage, models: [] };
-    }
-    let usageModelScopes: Record<string, string | null> = {};
-    try {
-      const response = await rpc.request('account/rateLimits/read');
-      usage = {
-        ...normalizeCodexPlanUsage(response),
+export function probeNativeAccount(
+  context: CodexRuntimeContext,
+  signal?: AbortSignal
+): Promise<AccountObservation> {
+  return withNativeRpc(
+    context,
+    async (rpc) => {
+      const identity = await readIdentity(rpc, context);
+      let usage: AccountObservation['usage'] = {
         provider: 'CODEX',
+        status: 'unavailable',
+        windows: [],
         updatedAt: new Date().toISOString(),
       };
-      usageModelScopes = codexQuotaModelScopes(response);
-    } catch {
-      /* Quota can be unavailable while authentication remains usable. */
-    }
-    const modelCatalog = await readModels(rpc);
-    return {
-      ...identity,
-      usage,
-      usageModelScopes,
-      modelCatalog,
-      models: [...new Set(modelCatalog.flatMap((model) => [model.id, model.model]))],
-    };
-  });
+      if (!identity.authenticated) {
+        return { ...identity, usage, models: [] };
+      }
+      let usageModelScopes: Record<string, string | null> = {};
+      try {
+        const response = await rpc.request('account/rateLimits/read');
+        usage = {
+          ...normalizeCodexPlanUsage(response),
+          provider: 'CODEX',
+          updatedAt: new Date().toISOString(),
+        };
+        usageModelScopes = codexQuotaModelScopes(response);
+      } catch {
+        /* Quota can be unavailable while authentication remains usable. */
+      }
+      const modelCatalog = await readModels(rpc);
+      return {
+        ...identity,
+        usage,
+        usageModelScopes,
+        modelCatalog,
+        models: [...new Set(modelCatalog.flatMap((model) => [model.id, model.model]))],
+      };
+    },
+    { signal }
+  );
 }
 const loginResponse = z.object({
   type: z.literal('chatgpt'),

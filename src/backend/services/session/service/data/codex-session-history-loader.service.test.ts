@@ -55,6 +55,26 @@ describe('codexSessionHistoryLoaderService', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('normalizes environment paths consistently with native Codex configuration', async () => {
+    const providerSessionId = 'trimmed-native-history';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/10/29',
+      fileName: `rollout-${providerSessionId}.jsonl`,
+      entries: [
+        { type: 'session_meta', payload: { id: providerSessionId, cwd: '/work' } },
+        { type: 'event_msg', payload: { type: 'user_message', message: 'Trimmed profile' } },
+      ],
+    });
+    process.env.CODEX_HOME = `  ${tempDir}  `;
+    process.env.CODEX_SESSIONS_DIR = '   ';
+    await expect(
+      codexSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: '/work',
+      })
+    ).resolves.toMatchObject({ status: 'loaded', history: [{ content: 'Trimmed profile' }] });
+  });
   it('skips loading when providerSessionId is missing', async () => {
     const result = await codexSessionHistoryLoaderService.loadSessionHistory({
       providerSessionId: null,

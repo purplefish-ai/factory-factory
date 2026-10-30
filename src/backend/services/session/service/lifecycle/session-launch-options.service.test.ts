@@ -33,6 +33,11 @@ describe('selected-model launch discovery', () => {
     expect(fetchOptions).toHaveBeenCalledWith({
       provider: 'CODEX',
       model: 'model',
+      codexAccountId: 'a',
+    });
+    expect(fetchOptions).toHaveBeenCalledWith({
+      provider: 'CODEX',
+      model: 'model',
       codexAccountId: 'b',
     });
   });

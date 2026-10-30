@@ -11,7 +11,8 @@ import {
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 export interface CodexAccountPickerProps {
-  accounts: readonly Pick<CodexAccountSummary, 'id' | 'label' | 'authenticated' | 'enabled'>[];
+  accounts: readonly (Pick<CodexAccountSummary, 'id' | 'label' | 'authenticated' | 'enabled'> &
+    Partial<Pick<CodexAccountSummary, 'kind'>>)[];
   value?: string;
   disabled?: boolean;
   onChange: (id: string | undefined) => void;
@@ -58,7 +59,9 @@ export function CodexAccountPicker({
                   ? account.enabled
                     ? 'Included in Auto'
                     : 'Manual selection only'
-                  : 'Sign in from Settings'
+                  : account.kind === 'NATIVE_DEFAULT'
+                    ? 'Run ff codex login in your terminal'
+                    : 'Sign in from Settings'
               }
             >
               {account.label}

@@ -1,10 +1,26 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { loginNativeAccount, probeNativeAccount, validateAuthorizationUrl } from './native-account';
-const mocks = vi.hoisted(() => ({ request: vi.fn(), notification: vi.fn(), readFile: vi.fn() }));
+import {
+  loginNativeAccount,
+  probeNativeAccount,
+  probeNativeIdentity,
+  validateAuthorizationUrl,
+} from './native-account';
+const mocks = vi.hoisted(() => ({
+  request: vi.fn(),
+  notification: vi.fn(),
+  readFile: vi.fn(),
+  options: vi.fn(),
+}));
 vi.mock('node:fs/promises', () => ({ readFile: mocks.readFile }));
 vi.mock('./native-rpc', () => ({
-  withNativeRpc: async (_context: unknown, operation: (rpc: typeof mocks) => Promise<unknown>) =>
-    operation(mocks),
+  withNativeRpc: (
+    _context: unknown,
+    operation: (rpc: typeof mocks) => Promise<unknown>,
+    options?: { signal?: AbortSignal }
+  ) => {
+    mocks.options(options);
+    return operation(mocks);
+  },
 }));
 const context = {
   accountId: 'test',
@@ -158,4 +174,34 @@ it('verifies native-default file scope only when native effective configuration 
   const result = await probeNativeAccount({ ...context, accountId: 'codex-native-default' });
   expect(result.scopeVerified).toBe(true);
   expect(mocks.readFile).toHaveBeenCalled();
+});
+
+it.each([
+  { loginId: 'different', success: true },
+  { loginId: 'login', success: false },
+])('rejects native login completion %j', async (outcome) => {
+  let complete!: (value: unknown) => void;
+  mocks.notification.mockImplementation((_method: string, listener: typeof complete) => {
+    complete = listener;
+  });
+  mocks.request.mockImplementation(() => {
+    queueMicrotask(() => complete(outcome));
+    return {
+      type: 'chatgpt',
+      loginId: 'login',
+      authUrl: 'https://auth.openai.com/oauth/authorize',
+    };
+  });
+  await expect(
+    loginNativeAccount(context, new AbortController().signal, () => undefined)
+  ).rejects.toThrow('not completed');
+});
+
+it('propagates login preparation and staged identity cancellation to native RPC', async () => {
+  const controller = new AbortController();
+  mocks.request.mockResolvedValue({ account: null });
+  await probeNativeIdentity(context, controller.signal);
+  expect(mocks.options).toHaveBeenLastCalledWith({ signal: controller.signal });
+  await probeNativeAccount(context, controller.signal);
+  expect(mocks.options).toHaveBeenLastCalledWith({ signal: controller.signal });
 });

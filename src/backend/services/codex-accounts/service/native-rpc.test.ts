@@ -45,7 +45,7 @@ beforeEach(() => {
 it('passes the exact profile environment and always cleans up the owned native process', async () => {
   expect(await withNativeRpc(context, (rpc) => rpc.request('account/read'))).toEqual({ ok: true });
   expect(mocks.spawn.mock.calls[0]?.[2].env.CODEX_HOME).toBe('/one');
-  expect(mocks.cleanup).toHaveBeenCalledWith(child);
+  expect(mocks.cleanup).toHaveBeenCalledWith(child, { timeoutMs: expect.any(Number) });
   expect(child.stdout.destroyed).toBe(true);
 });
 it('sanitizes native process errors and cleans up cancellation', async () => {
@@ -55,15 +55,43 @@ it('sanitizes native process errors and cleans up cancellation', async () => {
     signal: controller.signal,
   });
   const rejected = expect(result).rejects.toThrow('Codex native account operation failed');
+  await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+  expect(child.stderr.listenerCount('error')).toBeGreaterThan(0);
   child.stderr.write('private credential');
   controller.abort();
   await rejected;
-  expect(mocks.cleanup).toHaveBeenCalledWith(child);
+  expect(mocks.cleanup).toHaveBeenCalledWith(child, { timeoutMs: expect.any(Number) });
   expect(child.stderr.destroyed).toBe(true);
 });
 it('bounds stalled native operations and never returns native error text', async () => {
   respond = false;
   const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 10 });
   await expect(result).rejects.toThrow('Codex native account operation failed');
-  expect(mocks.cleanup).toHaveBeenCalledWith(child);
+  expect(mocks.cleanup).toHaveBeenCalledWith(child, { timeoutMs: expect.any(Number) });
+});
+
+it('includes slow cleanup within the configured operation deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    respond = false;
+    mocks.cleanup.mockImplementation(
+      (_child, options?: { timeoutMs: number }) =>
+        new Promise((resolve) => setTimeout(resolve, options?.timeoutMs ?? 5000))
+    );
+    const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 100 });
+    const rejected = expect(result).rejects.toThrow('Codex native account operation failed');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(child.stderr.destroyed).toBe(true);
+    await rejected;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('propagates owned cleanup failure without returning process diagnostics', async () => {
+  mocks.cleanup.mockRejectedValue(new Error('Disposable process cleanup failed'));
+  await expect(withNativeRpc(context, (rpc) => rpc.request('account/read'))).rejects.toThrow(
+    'Disposable process cleanup failed'
+  );
+  expect(child.stderr.destroyed).toBe(true);
 });

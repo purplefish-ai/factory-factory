@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -136,8 +136,22 @@ export function CodexAccountsSettings() {
   const create = trpc.codexAccounts.create.useMutation();
   const start = trpc.codexAccounts.startLogin.useMutation();
   const cancel = trpc.codexAccounts.cancelLogin.useMutation();
+  const mounted = useRef(true);
+  const activeLoginId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (activeLoginId.current) {
+        void cancel.mutateAsync({ id: activeLoginId.current }).catch(() => undefined);
+      }
+    };
+  }, [cancel.mutateAsync]);
   const update = trpc.codexAccounts.update.useMutation({
-    onSuccess: () => utils.codexAccounts.list.invalidate(),
+    onSuccess: () => {
+      setError(undefined);
+      return utils.codexAccounts.list.invalidate();
+    },
     onError: (error) => setError(error.message),
   });
   const status = trpc.codexAccounts.loginStatus.useQuery(
@@ -153,20 +167,39 @@ export function CodexAccountsSettings() {
     if (status.data && status.data.accountId === login?.accountId && login.status === 'pending') {
       setLogin(status.data);
       if (status.data.status !== 'pending') {
+        activeLoginId.current = undefined;
         void utils.codexAccounts.list.invalidate();
       }
     }
   }, [status.data, login?.accountId, login?.status, utils]);
+  const cancelPendingLogin = async (state: CodexLoginState) => {
+    if (state.status === 'pending') {
+      await cancel.mutateAsync({ id: state.accountId });
+    }
+  };
   const busy = create.isPending || start.isPending || cancel.isPending;
   const begin = async (id: string) => {
     setError(undefined);
     setOpen(true);
     try {
       await utils.codexAccounts.loginStatus.cancel({ id });
+      if (!mounted.current) {
+        return;
+      }
+      activeLoginId.current = id;
       const state = await start.mutateAsync({ id });
+      if (!mounted.current) {
+        await cancelPendingLogin(state);
+        return;
+      }
+      activeLoginId.current = state.status === 'pending' ? id : undefined;
       utils.codexAccounts.loginStatus.setData({ id }, state);
       setLogin(state);
     } catch (error) {
+      activeLoginId.current = undefined;
+      if (!mounted.current) {
+        return;
+      }
       setLogin({
         accountId: id,
         status: 'failed',
@@ -213,7 +246,9 @@ export function CodexAccountsSettings() {
             try {
               const account = await create.mutateAsync({ label });
               await utils.codexAccounts.list.invalidate();
-              await begin(account.id);
+              if (mounted.current) {
+                await begin(account.id);
+              }
             } catch (error) {
               setError(error instanceof Error ? error.message : 'Could not add account');
             }
@@ -224,6 +259,8 @@ export function CodexAccountsSettings() {
             void cancel
               .mutateAsync({ id: login.accountId })
               .then((state) => {
+                activeLoginId.current = undefined;
+                setError(undefined);
                 setLogin(state);
                 void utils.codexAccounts.list.invalidate();
               })

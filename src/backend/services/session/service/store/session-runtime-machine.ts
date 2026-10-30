@@ -20,7 +20,8 @@ function selectWork(
 export class SessionRuntimeMachine {
   constructor(
     private readonly emitRuntimeDelta: (sessionId: string, runtime: SessionRuntimeState) => void,
-    private readonly nowIso: () => string
+    private readonly nowIso: () => string,
+    private readonly clearSlashCommands?: (sessionId: string) => void
   ) {}
 
   markRuntime(
@@ -39,6 +40,8 @@ export class SessionRuntimeMachine {
       work: previousWork,
       ...previous
     } = store.runtime;
+    const clearSlashCommands =
+      updates.processState === 'stopped' && store.liveSlashCommands !== undefined;
     if (updates.processState === 'stopped') {
       store.liveSlashCommands = undefined;
     }
@@ -55,6 +58,9 @@ export class SessionRuntimeMachine {
     };
 
     if (options?.emitDelta !== false) {
+      if (clearSlashCommands) {
+        this.clearSlashCommands?.(store.sessionId);
+      }
       this.emitRuntimeDelta(store.sessionId, store.runtime);
     }
   }

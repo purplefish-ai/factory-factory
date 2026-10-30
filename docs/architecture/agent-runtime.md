@@ -413,6 +413,10 @@ recent assignment to spread similar accounts. Reservations are scheduling hints,
 not exact token budgets. Disabling Use for Auto does not stop existing sessions
 or prevent an explicit manual selection.
 
+Auto model discovery combines catalogs from enabled, authenticated accounts so
+models exclusive to one account remain selectable. A failed named-account
+catalog read advertises no fallback models from other accounts.
+
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data
 binding policy. Existing sessions retain their original account for runtime,
@@ -421,6 +425,12 @@ backfilled to Native default; null legacy bindings resolve only to that profile.
 An existing Codex conversation requires exact resume; missing history or a
 changed account identity never silently starts a conversation on a different
 account.
+
+Native default remains bound to its first verified identity. If a later native
+CLI sign-in changes that identity, run `ff codex login` with the original
+account to restore those conversations; add a managed profile for a different
+account. Stopping a provider process clears its session commands on connected
+clients as well as in the server's replay cache.
 
 The Add dialog verifies distinct account identity; adding the same login twice
 does not create extra quota. Managed authentication ignores inherited

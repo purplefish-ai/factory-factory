@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodexAccountSummary, CodexLoginState } from '@/shared/codex-accounts';
 import { CodexAccountLoginDialog } from './codex-account-login-dialog';
 import { CodexAccountsSettings, CodexAccountsView } from './codex-accounts-settings';
@@ -10,6 +10,11 @@ import { CodexAccountsSettings, CodexAccountsView } from './codex-accounts-setti
 const api = vi.hoisted(() => ({
   status: undefined as CodexLoginState | undefined,
   query: vi.fn(),
+  accounts: [] as CodexAccountSummary[],
+  update: vi.fn(),
+  updateCallbacks: undefined as
+    | { onSuccess: () => unknown; onError: (error: Error) => void }
+    | undefined,
   create: vi.fn(async (_input: unknown) => ({ id: 'new-account' })),
   start: vi.fn(async (_input: unknown): Promise<CodexLoginState> => ({
     accountId: 'new-account',
@@ -38,11 +43,16 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => utils,
     codexAccounts: {
-      list: { useQuery: () => ({ data: [], isLoading: false }) },
+      list: { useQuery: () => ({ data: api.accounts, isLoading: false }) },
       create: { useMutation: () => ({ mutateAsync: api.create, isPending: false }) },
       startLogin: { useMutation: () => ({ mutateAsync: api.start, isPending: false }) },
       cancelLogin: { useMutation: () => ({ mutateAsync: api.cancel, isPending: false }) },
-      update: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      update: {
+        useMutation: (callbacks: typeof api.updateCallbacks) => {
+          api.updateCallbacks = callbacks;
+          return { mutate: api.update, isPending: false };
+        },
+      },
       loginStatus: {
         useQuery: (input: unknown, options: unknown) => {
           api.query(input, options);
@@ -53,6 +63,12 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 const roots: Root[] = [];
+beforeEach(() => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  api.status = undefined;
+  api.accounts = [];
+  vi.clearAllMocks();
+});
 afterEach(() => {
   roots.splice(0).forEach((root) => flushSync(() => root.unmount()));
   document.body.innerHTML = '';
@@ -63,6 +79,7 @@ function render(element: React.ReactNode) {
   const root = createRoot(container);
   roots.push(root);
   flushSync(() => root.render(element));
+  return root;
 }
 const account = (id: string): CodexAccountSummary => ({
   id,
@@ -244,4 +261,56 @@ it('instructs native-default users to reconnect in the terminal instead of start
     [...document.querySelectorAll('button')].some((button) => button.textContent === 'Sign in')
   ).toBe(false);
   expect(onLogin).not.toHaveBeenCalled();
+});
+
+async function startManagedLogin() {
+  api.accounts = [account('new-account')];
+  const root = render(createElement(CodexAccountsSettings));
+  await act(async () => button('Sign in again').click());
+  expect(document.body.textContent).toContain('Waiting for browser login');
+  return root;
+}
+
+it('clears a cancellation error after a successful retry', async () => {
+  api.cancel.mockRejectedValueOnce(new Error('Cancellation failed'));
+  await startManagedLogin();
+  await act(async () => button('Cancel login').click());
+  expect(document.body.textContent).toContain('Cancellation failed');
+  await act(async () => button('Cancel login').click());
+  expect(document.body.textContent).toContain('Login cancelled');
+  expect(document.body.textContent).not.toContain('Cancellation failed');
+});
+
+it('clears an update error after a successful retry', async () => {
+  api.accounts = [account('new-account')];
+  render(createElement(CodexAccountsSettings));
+  await act(async () => api.updateCallbacks?.onError(new Error('Update failed')));
+  expect(document.body.textContent).toContain('Update failed');
+  await act(async () => api.updateCallbacks?.onSuccess());
+  expect(document.body.textContent).not.toContain('Update failed');
+  expect(api.invalidate).toHaveBeenCalled();
+});
+
+it('cancels pending login when leaving account settings', async () => {
+  const root = await startManagedLogin();
+  await act(async () => root.unmount());
+  roots.splice(roots.indexOf(root), 1);
+  expect(api.cancel).toHaveBeenCalledExactlyOnceWith({ id: 'new-account' });
+});
+
+it('cancels a login that finishes starting after settings unmounts', async () => {
+  let resolveStart: (state: CodexLoginState) => void = () => undefined;
+  api.start.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      })
+  );
+  api.accounts = [account('new-account')];
+  const root = render(createElement(CodexAccountsSettings));
+  await act(async () => button('Sign in again').click());
+  await act(async () => root.unmount());
+  roots.splice(roots.indexOf(root), 1);
+  await act(async () => resolveStart({ accountId: 'new-account', status: 'pending' }));
+  expect(api.cancel).toHaveBeenCalledWith({ id: 'new-account' });
 });

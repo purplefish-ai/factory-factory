@@ -11,7 +11,7 @@ function isPendingCreatedSelection(
   return pendingSession?.workspaceId === workspaceId && pendingSession.id === selectedSessionId;
 }
 
-export function useQuickChat(workspaceId: string | null) {
+export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CLAUDE' | 'CODEX') {
   const viewportRef = useRef<HTMLDivElement>(null);
   const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
 
@@ -21,7 +21,11 @@ export function useQuickChat(workspaceId: string | null) {
   );
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const pendingCreatedSessionRef = useRef<{ id: string; workspaceId: string } | null>(null);
+  const pendingCreatedSessionRef = useRef<{
+    id: string;
+    workspaceId: string;
+    codexAccountId?: string | null;
+  } | null>(null);
 
   // Auto-select first session; reset when workspace changes
   useEffect(() => {
@@ -77,12 +81,17 @@ export function useQuickChat(workspaceId: string | null) {
     createQuickAction: handleQuickAction,
   } = useSessionCollectionCommands({
     workspaceId,
+    workspaceProvider,
     sessions,
     onCreated: (session, originatingWorkspaceId) => {
       if (activeWorkspaceRef.current !== originatingWorkspaceId) {
         return;
       }
-      pendingCreatedSessionRef.current = { id: session.id, workspaceId: originatingWorkspaceId };
+      pendingCreatedSessionRef.current = {
+        id: session.id,
+        workspaceId: originatingWorkspaceId,
+        codexAccountId: session.codexAccountId,
+      };
       setSelectedSessionId(session.id);
     },
   });
@@ -109,10 +118,21 @@ export function useQuickChat(workspaceId: string | null) {
     [sessions, selectedSessionId, deleteSession]
   );
 
+  const selectedSession = sessions?.find((session) => session.id === selectedSessionId);
   return {
     sessions: sessions ?? [],
     sessionsLoaded: sessions !== undefined,
     selectedSessionId,
+    selectedCodexAccountId: selectedSession
+      ? selectedSession.codexAccountId
+      : workspaceId &&
+          isPendingCreatedSelection(
+            pendingCreatedSessionRef.current,
+            workspaceId,
+            selectedSessionId
+          )
+        ? pendingCreatedSessionRef.current?.codexAccountId
+        : undefined,
     setSelectedSessionId,
     chatState,
     viewportRef,

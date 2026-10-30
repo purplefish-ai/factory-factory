@@ -70,7 +70,14 @@ export async function resolveAccountContext(
     }
   }
   env.CODEX_HOME = homeDir;
-  return { accountId: row.id, homeDir, sessionsDir: join(homeDir, 'sessions'), env };
+  const sessionsDir = join(homeDir, 'sessions');
+  await mkdir(sessionsDir, { recursive: true, mode: 0o700 });
+  const sessionsInfo = await lstat(sessionsDir);
+  if (!sessionsInfo.isDirectory() || sessionsInfo.isSymbolicLink()) {
+    throw new Error('Managed Codex sessions directory cannot be a symlink');
+  }
+  await chmod(sessionsDir, 0o700);
+  return { accountId: row.id, homeDir, sessionsDir, env };
 }
 
 export async function resolveHistoryContext(
@@ -89,7 +96,7 @@ export async function resolveHistoryContext(
     throw new Error('Invalid Codex profile identifier');
   }
   const homeDir = join(config.getBaseDir(), 'codex-accounts', row.id);
-  for (const path of [dirname(homeDir), homeDir]) {
+  for (const path of [dirname(homeDir), homeDir, join(homeDir, 'sessions')]) {
     const info = await lstat(path);
     if (!info.isDirectory() || info.isSymbolicLink()) {
       throw new Error('Codex account history profile is unavailable');
