@@ -126,6 +126,14 @@ it('finds review-request associations by PR identity regardless of URL casing', 
       'https://github.com/org/review/pull/50',
     ])
   ).toEqual([{ url: 'https://github.com/Org/Review/pull/5', workspace: { status: 'ARCHIVED' } }]);
+  // A full GitHub search page can list ~1,000 PRs; lookups must stay below SQLite's limits.
+  const urls = Array.from(
+    { length: 1200 },
+    (_, i) => `https://github.com/Org/Review/pull/${i + 1}`
+  );
+  expect((await workspacePrAccessor.findReviewRequestAssociations(urls)).map((a) => a.url)).toEqual(
+    [urls[4], urls[14]]
+  );
 });
 it('reads and writes every cache field on its explicit PR', async () => {
   await workspace('cache');

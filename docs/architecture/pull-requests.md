@@ -204,13 +204,14 @@ not start that cooldown. The GitHub process boundary classifies diagnostic
 output without command arguments and marks connectivity failures, including
 local read timeouts, with a typed error; storage and observation-persistence
 errors keep their error severity. Wrapped CLI failures keep the original error
-as `cause`; their messages and logs repeat only gh's stderr, never the command
-line, so repository names cannot be classified as authentication or network
-failures and comment bodies stay out of errors. `listIssues`,
-`getReviewComments`, `getResolvedReviewCommentIds`, `getPRFullDetails`, and
-`getPRDiff` warn and preserve typed connectivity errors for callers. Watcher
-concurrency remains bounded at three workspaces, with a 90-second timeout and
-shutdown cancellation.
+as `cause`. Their messages and logs use gh's stderr when present; otherwise a
+failed process reports `gh command failed`, and a non-process error (such as a
+parse failure) keeps its own message. They never repeat the command line, so
+repository names cannot be classified as authentication or network failures and
+comment bodies stay out of errors. `listIssues`, `getReviewComments`,
+`getResolvedReviewCommentIds`, `getPRFullDetails`, and `getPRDiff` warn and
+preserve typed connectivity errors for callers. Watcher concurrency remains
+bounded at three workspaces, with a 90-second timeout and shutdown cancellation.
 
 PR attachment and discovery refreshes require that same normalized observer. The
 snapshot service owns association lifecycle operations and reads the committed

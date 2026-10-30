@@ -12,7 +12,7 @@ import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-ev
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma as PrismaValues } from '@prisma-gen/client';
-import type { Prisma, WorkspacePR } from '@prisma-gen/client';
+import type { Prisma, WorkspacePR, WorkspaceStatus } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
@@ -159,6 +159,8 @@ function prUrlSuffix(url: string): string {
   return number ? `/pull/${number}` : url;
 }
 
+const REVIEW_LOOKUP_CHUNK = 200;
+
 type PRUrlRow = { id: string; url: string; detachedAt: Date | null };
 
 /** Load a workspace's associations once so a batch of URLs reuses them. */
@@ -258,13 +260,18 @@ export interface PRAggregateGuard {
 class WorkspacePRAccessor {
   /** Matches casing variants and reports each association under the requested URL. */
   async findReviewRequestAssociations(urls: string[]) {
-    const rows = await prisma.workspacePR.findMany({
-      where: {
-        detachedAt: null,
-        OR: [...new Set(urls.map(prUrlSuffix))].map((suffix) => ({ url: { endsWith: suffix } })),
-      },
-      select: { url: true, workspace: { select: { status: true } } },
-    });
+    const suffixes = [...new Set(urls.map(prUrlSuffix))];
+    const rows: { url: string; workspace: { status: WorkspaceStatus } }[] = [];
+    // One OR branch per suffix; chunk to stay below SQLite's expression-depth limit.
+    for (let i = 0; i < suffixes.length; i += REVIEW_LOOKUP_CHUNK) {
+      const chunk = suffixes.slice(i, i + REVIEW_LOOKUP_CHUNK);
+      rows.push(
+        ...(await prisma.workspacePR.findMany({
+          where: { detachedAt: null, OR: chunk.map((suffix) => ({ url: { endsWith: suffix } })) },
+          select: { url: true, workspace: { select: { status: true } } },
+        }))
+      );
+    }
     return urls.flatMap((url) => {
       const key = prUrlKey(url);
       return rows
