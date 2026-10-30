@@ -84,7 +84,9 @@ rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
 
 Terminal CPU and memory usage is sampled only when the admin processes view asks
-for it, with one batched `pidusage` call; there is no background polling.
+for it, with one batched `pidusage` call; there is no background polling. If the
+batch fails (for example because a process exited), each terminal is sampled
+separately and in parallel, and terminals that cannot be read show no usage.
 
 ## Interactive workspace launch
 

@@ -21,12 +21,14 @@ export class KeyedTrailingRunner {
     void this.drain(key, entry);
   }
 
-  /** Drops queued reruns; tasks already running finish on their own. */
+  /**
+   * Drops queued reruns. Running tasks finish and keep their key until done, so
+   * work requested after a clear still never overlaps an older task.
+   */
   clear(): void {
     for (const entry of this.runs.values()) {
       entry.rerun = false;
     }
-    this.runs.clear();
   }
 
   private async drain(
@@ -41,11 +43,9 @@ export class KeyedTrailingRunner {
         } catch {
           // Tasks report their own failures; a failed run must not block the key.
         }
-      } while (entry.rerun && this.runs.get(key) === entry);
+      } while (entry.rerun);
     } finally {
-      if (this.runs.get(key) === entry) {
-        this.runs.delete(key);
-      }
+      this.runs.delete(key);
     }
   }
 }

@@ -333,6 +333,14 @@ describe('AcpEventProcessor assistant text streaming', () => {
     expect(appended[1]?.[1]).toMatchObject({
       event: { type: 'content_block_start', content_block: { type: 'tool_use' } },
     });
+    // Live emission keeps the same order.
+    const emitted = vi.mocked(deps.sessionDomainService.emitDelta).mock.calls;
+    expect(emitted[0]?.[1]).toMatchObject({
+      data: { event: { delta: { type: 'thinking_delta', thinking: 'Let me check' } } },
+    });
+    expect(emitted[1]?.[1]).toMatchObject({
+      data: { event: { type: 'content_block_start', content_block: { type: 'tool_use' } } },
+    });
   });
 
   it('flushes a pending thought when the prompt turn finishes', () => {

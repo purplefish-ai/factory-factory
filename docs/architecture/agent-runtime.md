@@ -395,21 +395,22 @@ Runtime snapshots also carry prompt ownership and named background tasks, with
 counts for running subagents and active goals. A transition that changes only
 the runtime timestamp refreshes the stored state without publishing a delta, so
 repeated task notifications do not trigger workspace summary refreshes. The
-event collector remembers each session's workspace and runs at most one summary
-or pending-request query per workspace at a time, plus one trailing rerun, so a
-burst of subagent transitions costs two queries instead of one per event.
-Thought chunks are merged per 25 ms window like assistant text, and are flushed
-before any other update so ordering is unchanged. Chat shows background
-processes separately from the active-turn spinner, with a process-count header
-that expands to show their commands. The command list starts collapsed. Live
-status announcements contain the process count separately from the control and
-commands. A completed turn with a persistent preview server shows the remaining
-process instead of stale reasoning or “Agent is working”. Task-detail changes
-publish even while another task keeps the session busy, and reconnects restore
-current work from the live runtime. Idle and error transitions discard cached
-work unless fresh details are explicitly supplied; stopped transitions always
-clear work. A failed turn retains fresh background details from the live
-runtime, and chat keeps those processes visible alongside the error state.
+event collector remembers each session's workspace (sharing one lookup while it
+is first resolved). Session-summary and pending-request refreshes each run at
+most one query per workspace at a time plus one trailing rerun, so a burst of
+one kind of event costs two queries instead of one per event. Thought chunks are
+merged per 25 ms window like assistant text, and are flushed before any other
+update so ordering is unchanged. Chat shows background processes separately from
+the active-turn spinner, with a process-count header that expands to show their
+commands. The command list starts collapsed. Live status announcements contain
+the process count separately from the control and commands. A completed turn
+with a persistent preview server shows the remaining process instead of stale
+reasoning or “Agent is working”. Task-detail changes publish even while another
+task keeps the session busy, and reconnects restore current work from the live
+runtime. Idle and error transitions discard cached work unless fresh details are
+explicitly supplied; stopped transitions always clear work. A failed turn
+retains fresh background details from the live runtime, and chat keeps those
+processes visible alongside the error state.
 
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools

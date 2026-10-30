@@ -50,9 +50,11 @@ describe('AcpThoughtBuffer', () => {
 
     buffer.push('s1', thought('a'));
     buffer.flush('s1');
-    vi.advanceTimersByTime(25);
-
     expect(emittedText(emit)).toEqual(['a']);
+
+    buffer.push('s1', thought('b'));
+    vi.advanceTimersByTime(25);
+    expect(emittedText(emit)).toEqual(['a', 'b']);
   });
 
   it('starts a new delta when the content block index changes', () => {

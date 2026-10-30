@@ -88,6 +88,19 @@ describe('event collector session refreshes', () => {
     collector.stop();
   });
 
+  it('shares one session lookup between events that arrive before it resolves', async () => {
+    const { collector, sessionDomainService, findAgentSessionById } = createCollector();
+    collector.start();
+
+    for (let index = 0; index < 5; index++) {
+      sessionDomainService.emit('runtime_changed', { sessionId: 's-1' });
+    }
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(findAgentSessionById).toHaveBeenCalledOnce();
+    collector.stop();
+  });
+
   it('forgets cached session workspaces when stopped', async () => {
     const { collector, sessionDomainService, findAgentSessionById } = createCollector();
     collector.start();

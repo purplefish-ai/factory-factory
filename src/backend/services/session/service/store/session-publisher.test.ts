@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const buildSnapshotMessages = vi.hoisted(() => vi.fn(() => []));
+vi.mock('./session-replay-builder', () => ({ buildSnapshotMessages }));
+
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
@@ -13,6 +17,7 @@ describe('SessionPublisher.forwardSnapshot', () => {
     sessionEventBus.off(SESSION_OUTBOUND_EVENT, listener);
     sessionEventBus.registerViewerCountProvider(null);
     listener.mockReset();
+    buildSnapshotMessages.mockClear();
   });
 
   function publishSnapshot(options?: { loadRequestId?: string }): void {
@@ -24,6 +29,7 @@ describe('SessionPublisher.forwardSnapshot', () => {
   it('skips building a snapshot when the transport reports no viewers', () => {
     sessionEventBus.registerViewerCountProvider(() => 0);
     publishSnapshot();
+    expect(buildSnapshotMessages).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -41,7 +47,11 @@ describe('SessionPublisher.forwardSnapshot', () => {
   it('always publishes load replies', () => {
     sessionEventBus.registerViewerCountProvider(() => 0);
     publishSnapshot({ loadRequestId: 'load-1' });
-    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ type: 'session_snapshot', loadRequestId: 'load-1' }),
+      })
+    );
   });
 
   it('publishes when no transport is attached', () => {

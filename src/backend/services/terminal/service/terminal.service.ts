@@ -268,9 +268,7 @@ export class TerminalService {
       logger.debug('Batched terminal resource sampling failed; sampling individually', {
         error: error instanceof Error ? error.message : String(error),
       });
-      for (const instance of instances) {
-        await this.updateTerminalResource(instance);
-      }
+      await Promise.all(instances.map((instance) => this.updateTerminalResource(instance)));
     }
   }
 

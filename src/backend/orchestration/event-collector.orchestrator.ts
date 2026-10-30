@@ -292,6 +292,7 @@ class EventCollectorState {
   ratchetProjection: RatchetProjectionWorker | null = null;
   readonly sessionRefreshes = new KeyedTrailingRunner();
   readonly sessionWorkspaceIds = new Map<string, string>();
+  readonly sessionWorkspaceLookups = new Map<string, Promise<string | null>>();
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -328,6 +329,21 @@ async function resolveSessionWorkspaceId(
   if (cached) {
     return cached;
   }
+  // Share one lookup between events that arrive before the first one resolves.
+  let lookup = state.sessionWorkspaceLookups.get(sessionId);
+  if (!lookup) {
+    lookup = lookUpSessionWorkspaceId(state, sessionId).finally(() => {
+      state.sessionWorkspaceLookups.delete(sessionId);
+    });
+    state.sessionWorkspaceLookups.set(sessionId, lookup);
+  }
+  return await lookup;
+}
+
+async function lookUpSessionWorkspaceId(
+  state: EventCollectorState,
+  sessionId: string
+): Promise<string | null> {
   const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
   if (!session) {
     return null;
@@ -921,6 +937,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.lastIdlePrRefreshByWorkspace.clear();
     state.sessionRefreshes.clear();
     state.sessionWorkspaceIds.clear();
+    state.sessionWorkspaceLookups.clear();
     state.linearMergeCompletion?.stop();
     state.linearMergeCompletion = null;
     state.logger.info('Event collector stopped');

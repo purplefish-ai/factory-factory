@@ -431,17 +431,42 @@ describe('TerminalService', () => {
       expect(mockPidusage).not.toHaveBeenCalled();
     });
 
-    it('samples all terminals with one batched call on demand', async () => {
-      mockPidusage.mockResolvedValueOnce({ [TERMINAL_PID]: createPidUsageStat(7.25, 4096) });
+    const SECOND_PID = 22_222;
 
+    async function createTwoTerminals(): Promise<void> {
       await service.createTerminal(defaultOpts);
+      mockPtySpawn.mockImplementationOnce(() => ({
+        pid: SECOND_PID,
+        onData: mockPtyOnData,
+        onExit: mockPtyOnExit,
+        write: mockPtyWrite,
+        resize: mockPtyResize,
+        kill: mockPtyKill,
+      }));
+      await service.createTerminal({ ...defaultOpts, workspaceId: 'ws-2' });
+    }
+
+    function usageByPid(): Record<number, unknown> {
+      return Object.fromEntries(
+        service.getAllTerminals().map((terminal) => [terminal.pid, terminal.resourceUsage])
+      );
+    }
+
+    it('samples all terminals with one batched call on demand', async () => {
+      mockPidusage.mockResolvedValueOnce({
+        [TERMINAL_PID]: createPidUsageStat(7.25, 4096),
+        [SECOND_PID]: createPidUsageStat(1.5, 2048),
+      });
+
+      await createTwoTerminals();
       await service.refreshResourceUsage();
 
       expect(mockPidusage).toHaveBeenCalledOnce();
-      expect(mockPidusage).toHaveBeenCalledWith([TERMINAL_PID]);
-      expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
-        expect.objectContaining({ cpu: 7.25, memory: 4096, timestamp: expect.any(Date) })
-      );
+      expect(mockPidusage).toHaveBeenCalledWith([TERMINAL_PID, SECOND_PID]);
+      expect(usageByPid()).toEqual({
+        [TERMINAL_PID]: expect.objectContaining({ cpu: 7.25, memory: 4096 }),
+        [SECOND_PID]: expect.objectContaining({ cpu: 1.5, memory: 2048 }),
+      });
     });
 
     it('shares one sample between concurrent callers', async () => {
@@ -458,17 +483,26 @@ describe('TerminalService', () => {
     });
 
     it('falls back to sampling each terminal when the batch fails', async () => {
-      mockPidusage
-        .mockRejectedValueOnce(new Error('No matching pid found'))
-        .mockResolvedValueOnce(createPidUsageStat(3.5, 2048));
+      mockPidusage.mockImplementation((pid) => {
+        if (Array.isArray(pid)) {
+          return Promise.reject(new Error('No matching pid found'));
+        }
+        return pid === SECOND_PID
+          ? Promise.reject(new Error('No matching pid found'))
+          : Promise.resolve(createPidUsageStat(3.5, 2048));
+      });
 
-      await service.createTerminal(defaultOpts);
+      await createTwoTerminals();
       await service.refreshResourceUsage();
 
-      expect(mockPidusage).toHaveBeenLastCalledWith(TERMINAL_PID);
-      expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
-        expect.objectContaining({ cpu: 3.5, memory: 2048 })
-      );
+      // One batch attempt, then one call per terminal.
+      expect(mockPidusage).toHaveBeenCalledTimes(3);
+      expect(mockPidusage).toHaveBeenCalledWith(TERMINAL_PID);
+      expect(mockPidusage).toHaveBeenCalledWith(SECOND_PID);
+      expect(usageByPid()).toEqual({
+        [TERMINAL_PID]: expect.objectContaining({ cpu: 3.5, memory: 2048 }),
+        [SECOND_PID]: undefined,
+      });
     });
   });
 

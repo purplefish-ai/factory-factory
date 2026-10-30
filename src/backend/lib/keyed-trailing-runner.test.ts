@@ -65,7 +65,7 @@ describe('KeyedTrailingRunner', () => {
     expect(later).toHaveBeenCalledOnce();
   });
 
-  it('drops queued reruns on clear and accepts new work afterwards', async () => {
+  it('drops queued reruns on clear without overlapping the running task', async () => {
     const runner = new KeyedTrailingRunner();
     const first = deferred();
     const rerun = vi.fn().mockResolvedValue(undefined);
@@ -75,10 +75,30 @@ describe('KeyedTrailingRunner', () => {
     runner.clear();
     const fresh = vi.fn().mockResolvedValue(undefined);
     runner.run('a', fresh);
+    // New work waits for the task that was already running.
+    expect(fresh).not.toHaveBeenCalled();
+
     first.resolve();
     await settle();
 
     expect(rerun).not.toHaveBeenCalled();
     expect(fresh).toHaveBeenCalledOnce();
+  });
+
+  it('does not run a queued rerun once cleared', async () => {
+    const runner = new KeyedTrailingRunner();
+    const first = deferred();
+    const rerun = vi.fn().mockResolvedValue(undefined);
+
+    runner.run('a', () => first.promise);
+    runner.run('a', rerun);
+    runner.clear();
+    first.resolve();
+    await settle();
+
+    expect(rerun).not.toHaveBeenCalled();
+    const later = vi.fn().mockResolvedValue(undefined);
+    runner.run('a', later);
+    expect(later).toHaveBeenCalledOnce();
   });
 });

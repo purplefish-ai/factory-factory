@@ -199,6 +199,7 @@ export class AcpEventProcessor {
     sid: string,
     event: Exclude<AcpRuntimeEvent, { type: 'acp_session_update' }>
   ): void {
+    this.thoughts.flush(sid);
     if (event.type === 'acp_task_status_changed') {
       // Keep terminal prompt errors visible until an explicit retry starts.
       const runtime = this.sessionDomainService.getRuntimeSnapshot(sid);
