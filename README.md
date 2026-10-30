@@ -115,7 +115,10 @@ ff db:studio        # Inspect the local database with Prisma Studio
 runs database migrations, finds an available port, and opens the browser when
 the server is ready. Use `--private` for remote workspace management and command
 execution. Public tunnels cannot invoke privileged operations; their forwarded
-requests are rejected even when they omit the `Origin` header.
+requests are rejected even when they omit the `Origin` header. Both tunnel modes
+disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
+launching the backend; private mode authenticates clients before stripping
+forwarded-address headers.
 
 ### Hosting behind your own reverse proxy
 

@@ -5,6 +5,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
 import { proxyInternals } from '@/cli/proxy';
+import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createContext, router, trustedLocalProcedure } from './trpc';
 
@@ -36,17 +37,8 @@ function createApp(options: { trustProxyHeaders?: boolean; disableCorsChecks?: b
   return { app, state };
 }
 
-const forwardedHeaders = [
-  'forwarded',
-  'x-forwarded-for',
-  'x-real-ip',
-  'x-client-ip',
-  'cf-connecting-ip',
-  'true-client-ip',
-];
-
 describe('privileged HTTP request trust', () => {
-  it.each(forwardedHeaders)(
+  it.each(FORWARDED_CLIENT_ADDRESS_HEADERS)(
     'rejects tunneled requests carrying %s without an Origin',
     async (header) => {
       const { app, state } = createApp();
