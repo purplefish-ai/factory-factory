@@ -55,6 +55,9 @@ it.skipIf(process.platform === 'win32')(
         { timeout: 2000 }
       );
     } finally {
+      if (wrapperPid !== undefined) {
+        killFixtureProcess(-wrapperPid);
+      }
       for (const pid of [nativePid, wrapperPid]) {
         if (pid === undefined) {
           continue;

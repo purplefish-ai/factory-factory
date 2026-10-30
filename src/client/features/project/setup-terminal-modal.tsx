@@ -39,7 +39,8 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
         <DialogHeader>
           <DialogTitle>Terminal</DialogTitle>
           <DialogDescription>
-            Use the sign-in buttons for Claude and Codex, or run authentication commands below.
+            Use the sign-in buttons for Claude and Codex. The ff commands below require the ff CLI
+            to be installed.
             <span className="mt-1.5 flex flex-col gap-0.5">
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
                 ff claude auth login

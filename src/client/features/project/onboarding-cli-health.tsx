@@ -48,7 +48,7 @@ function buildItems(health: {
     items.push({
       label: 'Claude',
       status: 'warning',
-      detail: 'Installed — run ff claude auth login to authenticate',
+      detail: 'Installed — use Sign in to Claude in the setup terminal',
     });
   } else {
     items.push({ label: 'Claude', status: 'ok', detail: 'Ready' });
@@ -65,7 +65,7 @@ function buildItems(health: {
     items.push({
       label: 'Codex',
       status: 'warning',
-      detail: 'Run ff codex login to authenticate',
+      detail: 'Use Sign in to Codex in the setup terminal',
     });
   } else {
     items.push({ label: 'Codex', status: 'ok', detail: 'Ready' });

@@ -90,6 +90,10 @@ export async function runProviderCommand(command: {
       reject(error);
     });
     child.once('exit', (code, signal) => {
+      // Successful native commands can intentionally leave background jobs running.
+      if (termination === undefined && (code !== 0 || signal)) {
+        termination = terminateDisposableProcessTree(child);
+      }
       const status = code ?? (signal ? (SIGNAL_EXIT_CODES[signal] ?? 1) : 1);
       const finish = () => {
         cleanup();

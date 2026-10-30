@@ -63,6 +63,8 @@ describe('collectIssues', () => {
       codex: { isInstalled: true },
       github: { isInstalled: true, isAuthenticated: true },
     };
+    expect(collectIssues(health)[0]?.description).toContain('setup terminal in Settings');
+    expect(collectIssues(health)[0]?.description).toContain('If ff is installed');
     expect(collectIssues(health)).toContainEqual(
       expect.objectContaining({ description: expect.stringContaining('ff claude auth login') })
     );

@@ -38,7 +38,8 @@ function getWarning(
     if (health.claude.isAuthenticated === false) {
       return {
         title: 'Claude is not authenticated',
-        description: 'Run `ff claude auth login` in your terminal to authenticate.',
+        description:
+          'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run `ff claude auth login`.',
       };
     }
     return null;
@@ -53,7 +54,8 @@ function getWarning(
   if (health.codex.isAuthenticated === false && !hasUsableCodexAccount) {
     return {
       title: 'Codex is not authenticated',
-      description: 'Run `ff codex login` in your terminal to authenticate.',
+      description:
+        'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run `ff codex login`.',
     };
   }
   return null;
@@ -71,7 +73,7 @@ function getAccountWarning(
     description:
       account.kind === 'MANAGED'
         ? 'Sign in to this account from Settings.'
-        : 'Run `ff codex login` in your terminal to authenticate.',
+        : 'Open the setup terminal in Settings and choose Sign in to Codex. If ff is installed, run `ff codex login`.',
   };
 }
 

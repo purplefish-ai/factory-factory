@@ -102,3 +102,15 @@ Delivery: commit, push the task branch, and create the requested PR.
   smoke returned five models. A real process-tree regression and Storybook login
   busy/error/stale-exit scenarios passed. The earlier unrelated benchmark
   startup timeout did not recur in the final two-worker suite.
+
+- Follow-up review fixes forward terminal resizes, clean abnormal launcher
+  exits, and kill the fixture process group if startup fails. Successful native
+  commands retain their background-job semantics rather than applying
+  disposable-probe cleanup to successful interactive CLI invocations.
+- Desktop sign-in copy now leads with the setup terminal buttons and labels
+  typed `ff` commands as requiring an installed CLI.
+- A later local full-suite rerun hit multiple subprocess startup timeouts under
+  machine load. Focused follow-up tests and the real shutdown regression passed;
+  the pushed resize revision passed both CI shards, coverage, builds, repository
+  checks, CodeQL, and Docker validation. Fixture startup now has its own
+  allowance while shutdown still asserts completion within six seconds.

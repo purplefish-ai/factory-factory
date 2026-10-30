@@ -110,3 +110,40 @@ it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand]
     expect(process.listenerCount('SIGWINCH')).toBe(before);
   }
 );
+
+it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand])(
+  'cleans surviving descendants after abnormal launcher exit',
+  async (run) => {
+    let alive = true;
+    const kill = vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+      if (!alive) {
+        throw Object.assign(new Error('gone'), { code: 'ESRCH' });
+      }
+      if (signal === 'SIGKILL') {
+        alive = false;
+      }
+      return true;
+    });
+    const child = Object.assign(new EventEmitter(), { pid: 424_242, kill: vi.fn() });
+    spawn.mockReturnValue(child);
+    const pending = run(['--help']);
+    child.emit('exit', 1, null);
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(pending).resolves.toBe(1);
+    expect(kill).toHaveBeenCalledWith(-424_242, 'SIGTERM');
+    expect(kill).toHaveBeenCalledWith(-424_242, 'SIGKILL');
+  }
+);
+
+it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand])(
+  'preserves native background-job semantics after successful completion',
+  async (run) => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true);
+    const child = Object.assign(new EventEmitter(), { pid: 424_242, kill: vi.fn() });
+    spawn.mockReturnValue(child);
+    const pending = run(['--help']);
+    child.emit('exit', 0, null);
+    await expect(pending).resolves.toBe(0);
+    expect(kill).not.toHaveBeenCalled();
+  }
+);

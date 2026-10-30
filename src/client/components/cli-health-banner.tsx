@@ -45,7 +45,8 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   } else if (health.claude.isAuthenticated === false) {
     issues.push({
       title: 'Claude sign-in required',
-      description: 'Run "ff claude auth login" in your terminal to authenticate.',
+      description:
+        'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run "ff claude auth login".',
     });
   }
 

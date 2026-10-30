@@ -29,7 +29,8 @@ type Story = StoryObj<typeof meta>;
 export const ClaudeSignInRequired: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('alert')).toHaveTextContent('ff claude auth login');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('setup terminal in Settings');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('If ff is installed');
     await expect(canvas.queryByRole('link')).not.toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Update Claude' })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));

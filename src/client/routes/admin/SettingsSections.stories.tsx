@@ -579,8 +579,8 @@ export const RefreshCLIAuthentication: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByText(/run ff claude auth login/);
-    await expect(canvas.getByText(/ff codex login/)).toBeVisible();
+    await canvas.findByText(/use Sign in to Claude/);
+    await expect(canvas.getByText(/Sign in to Codex/)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
     await expect(

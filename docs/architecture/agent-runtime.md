@@ -54,6 +54,12 @@ global-upgrade requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an
 explicit upstream override and is inherited by both Claude sessions and managed
 CLI operations.
 
+The `ff claude` and `ff codex` passthroughs forward terminal resizes and bound
+process-tree shutdown after interrupts or abnormal launcher exits. Successful
+commands retain the native CLI's background-job behavior. Desktop sign-in
+guidance uses the setup terminal buttons; typed `ff` commands require the CLI to
+be installed.
+
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
 Node, and are unpacked in desktop packages along with their complete production
 dependency trees. The desktop release smoke check runs bundled Claude and its

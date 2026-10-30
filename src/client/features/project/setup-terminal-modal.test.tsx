@@ -68,6 +68,7 @@ describe('SetupTerminalModal', () => {
     await render();
     expect(document.body.textContent).toContain('ff codex login');
     expect(document.body.textContent).toContain('ff claude auth login');
+    expect(document.body.textContent).toContain('require the ff CLI to be installed');
   });
 
   it('launches managed Claude login from a desktop-safe button', async () => {

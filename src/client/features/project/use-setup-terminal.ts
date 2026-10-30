@@ -37,8 +37,9 @@ export interface UseSetupTerminalResult {
   showTerminal: boolean;
   /** Accumulated terminal output. */
   output: string;
-  /** Launch the server's managed provider login in the terminal. */
+  /** Provider whose managed login currently owns the terminal. */
   authenticatingProvider: 'CLAUDE' | 'CODEX' | null;
+  /** Launch the server's managed provider login in the terminal. */
   authenticate: (provider: 'CLAUDE' | 'CODEX') => void;
   /** Forward keystrokes to the server-side PTY. */
   handleData: (data: string) => void;
