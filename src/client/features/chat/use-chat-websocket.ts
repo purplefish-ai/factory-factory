@@ -123,7 +123,6 @@ export interface UseChatWebSocketReturn {
   getUuidForMessageId: (messageId: string) => string | undefined;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
 // =============================================================================
@@ -373,6 +372,5 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     getUuidForMessageId: chat.getUuidForMessageId,
     // Refs from chat
     inputRef: chat.inputRef,
-    messagesEndRef: chat.messagesEndRef,
   };
 }

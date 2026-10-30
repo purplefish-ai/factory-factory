@@ -4,6 +4,7 @@ export interface TranscriptPosition {
   intent: TranscriptIntent;
   top: number;
   left: number;
+  /** Viewport top relative to row start; negative in leading padding or a gap. */
   anchor?: { key: string; offset: number };
 }
 

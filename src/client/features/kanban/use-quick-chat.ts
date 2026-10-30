@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChatWebSocket, useSessionCollectionCommands } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
-import { useAutoScroll } from '@/hooks/use-auto-scroll';
+import { useQuickChatScroll } from './use-quick-chat-scroll';
 
 function isPendingCreatedSelection(
   pendingSession: { id: string; workspaceId: string } | null,
@@ -12,9 +12,6 @@ function isPendingCreatedSelection(
 }
 
 export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CLAUDE' | 'CODEX') {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
-
   const { data: sessions } = trpc.session.listSessions.useQuery(
     { workspaceId: workspaceId ?? '' },
     { enabled: !!workspaceId, staleTime: 0, refetchOnWindowFocus: false }
@@ -70,6 +67,12 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
     dbSessionId: workspaceId ? selectedSessionId : null,
   });
 
+  const { transcriptScroll, clearSession: clearScrollSession } = useQuickChatScroll(
+    workspaceId,
+    selectedSessionId,
+    chatState.runtimeSessionId
+  );
+
   const activeWorkspaceRef = useRef(workspaceId);
   useLayoutEffect(() => {
     activeWorkspaceRef.current = workspaceId;
@@ -105,6 +108,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
       if (sessionIndex === -1) {
         return;
       }
+      clearScrollSession(dbSessionId);
       const isSelectedSession = dbSessionId === selectedSessionId;
       deleteSession.mutate({ id: dbSessionId });
 
@@ -115,7 +119,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
         setSelectedSessionId(null);
       }
     },
-    [sessions, selectedSessionId, deleteSession]
+    [sessions, selectedSessionId, deleteSession, clearScrollSession]
   );
 
   const selectedSession = sessions?.find((session) => session.id === selectedSessionId);
@@ -135,10 +139,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
         : undefined,
     setSelectedSessionId,
     chatState,
-    viewportRef,
-    onScroll,
-    isNearBottom,
-    scrollToBottom,
+    transcriptScroll,
     handleNewChat,
     handleCloseSession,
     handleQuickAction,

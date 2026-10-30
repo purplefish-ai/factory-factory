@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useRef } from 'react';
-import { VirtualizedMessageList } from '@/client/features/chat/virtualized-message-list';
+import { ChatTranscript } from '@/client/features/chat';
 import { PRUpdateRenderer } from './pr-update-renderer';
 
 const meta = { title: 'Chat/PR update', component: PRUpdateRenderer } satisfies Meta<
@@ -18,7 +17,6 @@ export const Queued: Story = {
 };
 
 function ConversationPreview({ updateCount = 1 }: { updateCount?: number }) {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const updates = Array.from({ length: updateCount }, (_, index) => ({
     id: `pr-event-queued-story-${index}`,
     source: 'user' as const,
@@ -27,15 +25,21 @@ function ConversationPreview({ updateCount = 1 }: { updateCount?: number }) {
     text: 'PR update queued for the next turn',
   }));
   return (
-    <div ref={scrollContainerRef} className="h-80 w-full max-w-3xl overflow-auto border rounded-md">
-      <VirtualizedMessageList
+    <div className="h-80 w-full max-w-3xl overflow-auto border rounded-md">
+      <ChatTranscript
         messages={updates}
         queuedMessageIds={new Set(updates.map(({ id }) => id))}
         running
         startingSession={false}
         loadingSession={false}
         latestThinking="Considering the implementation and checking the existing components."
-        scrollContainerRef={scrollContainerRef}
+        scroll={{
+          identity: 'story',
+          active: true,
+          ready: true,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
       />
     </div>
   );

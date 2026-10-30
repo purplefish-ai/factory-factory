@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: 'test-results/transcript-scroll',
   testMatch: 'transcript-scroll.spec.ts',
   workers: 1,
   timeout: 30_000,

@@ -1,5 +1,6 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { elementScroll, measureElement, useVirtualizer } from '@tanstack/react-virtual';
 import { useRef, useState } from 'react';
+import { isNativeCompensation } from '@/client/features/chat/transcript-scroll-events';
 
 /** Development-only proof of the installed engine, without application policy. */
 export function TranscriptEngineFixture() {
@@ -16,6 +17,19 @@ export function TranscriptEngineFixture() {
     anchorTo: nativeFollow ? 'end' : 'start',
     followOnAppend: nativeFollow,
     overscan: 5,
+    scrollToFn: (offset, options, instance) => {
+      const node = viewport.current;
+      if (node && options.behavior === undefined && options.adjustments === undefined) {
+        node.dataset.deferredWrites = String(Number(node.dataset.deferredWrites ?? 0) + 1);
+        node.dataset.deferredAllowed = String(isNativeCompensation(options));
+      }
+      elementScroll(offset, options, instance);
+    },
+    measureElement: (node, entry, instance) => {
+      const height = measureElement(node, entry, instance);
+      node.setAttribute('data-engine-measured-height', String(height));
+      return height;
+    },
   });
   engine.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
     item.end <= (instance.scrollOffset ?? 0) + 1;

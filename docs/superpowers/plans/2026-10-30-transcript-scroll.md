@@ -2,8 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development or superpowers:executing-plans to
-> implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for
-> tracking. This task prepares and critiques the plan; it does not execute it.
+> implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for
+> tracking. Implementation was authorized after planning review.
 
 **Goal:** Make live transcript scrolling predictable across output bursts,
 reader input, layout changes, hydration, and pane/session switches.
@@ -162,19 +162,19 @@ provenance live behind the port; command cancellation resets their generation.
 switches to `ChatTranscript` in Task 3. It imports real application components
 and the actual installed virtualizer, with deterministic messages and controls.
 
-- [ ] Add an explicit Playwright config restricted to
+- [x] Add an explicit Playwright config restricted to
       `transcript-scroll.spec.ts`, frontend-only Vite server, Chromium desktop
       and mobile-sized Chromium projects, traces on failure, and no snapshot
       dependence. Use the existing development route gating pattern; never
       expose fixture controls in a production build. Add script
       `test:e2e:scroll` invoking that config. Avoid environment policy changes;
       use the existing development-mode route gate.
-- [ ] Provide controls for batched appends, a growing tool sequence without
+- [x] Provide controls for batched appends, a growing tool sequence without
       row-count increase, delayed image sizing, status-only changes, viewport
       width and height, hide/show, hydration, prepend, rewind, and A/B identity
       switching. Render controls outside the scroll surface and expose stable
       accessible labels.
-- [ ] Add a minimal direct-engine case in that fixture proving end anchoring,
+- [x] Add a minimal direct-engine case in that fixture proving end anchoring,
       same-key last-row growth, `followOnAppend`, `scrollToEnd`, and
       `cancelScroll`. Characterize native end-pinning in reading near/clamped to
       the bottom and cancellation during delayed measurement. Then prove the
@@ -187,14 +187,14 @@ and the actual installed virtualizer, with deterministic messages and controls.
       before choosing adapter details. If an installed engine contract fails,
       narrow the adapter solution and revise this plan; do not silently add a
       competing scroll loop or upgrade.
-- [ ] Add product regression assertions: after a burst the bottom gap is <=1px;
+- [x] Add product regression assertions: after a burst the bottom gap is <=1px;
       after upward takeover the keyed visible row remains within 1px once queued
       layout settles; a same-group tool burst follows. Confirm current behavior
       fails for the reproduced race(s), preserving traces. Product regressions
       may remain red until Task 3; commit them with explicit expected-failure
       annotations that Task 3 must remove. Direct-engine contract cases stay
       passing.
-- [ ] Document the fixture command and commit
+- [x] Document the fixture command and commit
       `test: capture transcript scroll races`.
 
 ## Task 2: Implement intent, lifecycle and keyed-position policy
@@ -210,12 +210,12 @@ and
 `restoreTranscriptPosition(viewport, virtualizer, position): { measured: boolean; reached: boolean }`,
 using typed TanStack instances.
 
-- [ ] Write deterministic tests using a fake frame queue and port. Assert that
+- [x] Write deterministic tests using a fake frame queue and port. Assert that
       `layoutChanged()` never changes intent; many invalidations leave at most
       one pending app frame; upward takeover cancels frames/native commands;
       downward movement within 24px resumes; ordinary layout or clamping cannot
       resume.
-- [ ] Test activation into following/reading, suspension with queued work,
+- [x] Test activation into following/reading, suspension with queued work,
       disposal, user takeover during restore, and delayed callbacks after
       disposal. No position emissions while suspended or restoring. Test two
       measured frames within 1px to settle, a 12-attempt stall that cancels the
@@ -226,22 +226,22 @@ using typed TanStack instances.
       output must not bypass inhibition. A zero delta is not user movement.
       Duplicate geometry notifications while already at end must not keep
       scheduling app frames or commands.
-- [ ] Test anchor resolution by stable key after prepend and remeasurement,
-      vanished-key pixel fallback, negative/oversized offsets clamped to real
-      bounds, and initial reading/following positions when no saved state
-      exists. Test a row taller than the viewport and retained row-relative
-      reading offset. Define staged restore: resolve key, issue one mount-index
-      command, await its measurement, cancel that command, then issue/refine
-      offset commands only when measured target changes. Assert there is never a
-      competing index and offset target, and the 12-attempt stall cancels native
-      reconciliation. Structural reading corrections use the live committed
-      anchor and current input epoch, never restart identity/activation restore
-      from persisted state.
-- [ ] Run
+- [x] Test anchor resolution by stable key after prepend and remeasurement,
+      vanished-key pixel fallback, signed gap offsets and oversized offsets
+      clamped to real bounds, and initial reading/following positions when no
+      saved state exists. Test a row taller than the viewport and retained
+      row-relative reading offset. Define staged restore: resolve key, issue one
+      mount-index command, await its measurement, cancel that command, then
+      issue/refine offset commands only when measured target changes. Assert
+      there is never a competing index and offset target, and the 12-attempt
+      stall cancels native reconciliation. Structural reading corrections use
+      the live committed anchor and current input epoch, never restart
+      identity/activation restore from persisted state.
+- [x] Run
       `pnpm test src/client/features/chat/transcript-scroll-controller.test.ts src/client/features/chat/transcript-scroll-position.test.ts`;
       verify the new assertions fail before implementing the declared functions,
       then pass.
-- [ ] Implement one generation-scoped app frame, explicit restore state and
+- [x] Implement one generation-scoped app frame, explicit restore state and
       snapshots. Use native scroll commands and measured keyed rows; do not
       reconstruct previous bottom proximity by subtracting resize deltas. Commit
       `refactor: model transcript scroll intent and restoration`.
@@ -259,11 +259,11 @@ consumers until Task 5; it must not be used inside the new component.
 Private renderer receives the virtualizer and display model; it owns no
 listeners, proximity refs, restore effects or scroll commands.
 
-- [ ] Add adapter tests for actual viewport-node attachment, StrictMode
+- [x] Add adapter tests for actual viewport-node attachment, StrictMode
       mount/cleanup/remount, visibility/readiness changes, viewport replacement,
       and cancellation of old-identity frames. Register listeners before
       positioning; remove every listener, observer and frame on cleanup.
-- [ ] Distinguish native/user movement from programmatic scroll events by
+- [x] Distinguish native/user movement from programmatic scroll events by
       wrapping public `scrollToFn`: delegate each write to `elementScroll`,
       record its actual clamped top/left and identity/input generation, and
       recognize delayed/coalesced read-backs. Track browser clamping caused by
@@ -271,7 +271,7 @@ listeners, proximity refs, restore effects or scroll commands.
       sufficient. Do not reject native adjustment writes while the engine
       advances its logical offset. `cancelScroll()` cancels end/restore targets;
       legitimate native above-anchor compensation can continue.
-- [ ] Wire input episodes through `beginInteraction`/`endInteraction`. Upward
+- [x] Wire input episodes through `beginInteraction`/`endInteraction`. Upward
       wheel/scroll keys cancel and establish reading before native movement.
       Touch start or scrollbar pointerdown cancels/inhibits without changing
       intent; actual movement changes it. Ignore editable targets/modified
@@ -283,7 +283,7 @@ listeners, proximity refs, restore effects or scroll commands.
       subsequent append. Explicit jump ends inhibition. Test a stationary tap,
       delayed scroll delivery, repeat keys, scrollbar drag, composer typing and
       tool expansion.
-- [ ] Configure stable keys, `anchorTo: 'start'` and `followOnAppend: false` in
+- [x] Configure stable keys, `anchorTo: 'start'` and `followOnAppend: false` in
       both intent modes. Controller invalidations from measured content size,
       structural keys and viewport dimensions schedule end positioning only
       while following/ready and not interacting. Publish invalidation after the
@@ -301,30 +301,30 @@ listeners, proximity refs, restore effects or scroll commands.
       target, not every callback. Test zero-delta target measurement after a
       12-frame stall, old-width/replaced-node invalidation, and delayed sizer
       commits.
-- [ ] Compare committed structural keys and use the last committed live reading
+- [x] Compare committed structural keys and use the last committed live reading
       anchor before prepend/trim/reorder affecting preceding rows. Ask the
       controller for staged keyed correction, scoped to its input/identity
       generation. Pure appends and same-key growth never restart saved-position
       restoration. Do not update the cached anchor from transitional DOM before
       correction settles. Remove separate message-count/reasoning pin effects;
       native positioning and this one controller replace them.
-- [ ] Implement measured leading header, final-row tail and status-only row.
+- [x] Implement measured leading header, final-row tail and status-only row.
       Ensure tail moves between rows without remounting existing message
       renderers; preserve PR queue filtering and startup loading output. Test
       footer-only growth, tail removal/shrinkage, header-size changes and
       empty-to-first-message transitions. Keep the tail in the same measured
       extent; native append detection is disabled.
-- [ ] Render an overlay jump button inside a relative viewport wrapper,
+- [x] Render an overlay jump button inside a relative viewport wrapper,
       accessible by its existing label. Compare `clientHeight` before/after the
       button appears; it must be unchanged. Give the controlled viewport
       `overflow-anchor: none`.
-- [ ] Switch the browser fixture to the real `ChatTranscript`. Remove expected
+- [x] Switch the browser fixture to the real `ChatTranscript`. Remove expected
       failure annotations; run the focused new Vitest tests and
       `pnpm test:e2e:scroll`. Require passing burst, same-key growth,
       user-interruption, image-size, footer-only, resize, hide/show and prepend
       cases. Add following, reading, hydration and rapid-tool-output stories;
       inspect them in Storybook.
-- [ ] Commit `refactor: give chat transcripts one scroll owner`.
+- [x] Commit `refactor: give chat transcripts one scroll owner`.
 
 ## Task 4: Persist intent and anchors without changing other viewers
 
@@ -339,11 +339,12 @@ internals. The hook consumes workspace/session identity and returns
 `{ ready: boolean; initialPosition: TranscriptPosition | null; onPositionChange: (position: TranscriptPosition) => void; clearSession: (sessionId: string) => void }`.
 It adapts `chat-<session>:chat` entries and has no DOM access.
 
-- [ ] Add storage tests for following/reading round trips, malformed optional
-      anchors, nonfinite/negative offsets, legacy true/false/missing
-      `stickToBottom`, unknown fields and unsupported versions. Existing valid
-      code/markdown/diff records and their serialization must remain compatible.
-- [ ] Add provider/hook tests for delayed storage readiness, A/B session
+- [x] Add storage tests for following/reading round trips, malformed optional
+      anchors, nonfinite offsets, valid signed chat offsets, legacy
+      true/false/missing `stickToBottom`, unknown fields and unsupported
+      versions. Existing valid code/markdown/diff records and their
+      serialization must remain compatible.
+- [x] Add provider/hook tests for delayed storage readiness, A/B session
       changes, A/B workspace changes with a pending debounce, stale A callbacks
       after B loads, final flush on unmount, storage exceptions and
       close-session clearing. Assert exact storage keys and that no A snapshot
@@ -353,15 +354,15 @@ It adapts `chat-<session>:chat` entries and has no DOM access.
       Close inactive B while A remains selected: revoke/remove B only, and
       reject a late B callback. Quick-chat map clearing also uses the actual
       closed session ID.
-- [ ] Expose workspace-scoped loaded identity as reactive state. Guard saved
+- [x] Expose workspace-scoped loaded identity as reactive state. Guard saved
       callbacks with the captured workspace/session; flush old workspace pending
       snapshots before replacing its record. Main callbacks use committed
       snapshots, never a shared viewport sampled after identity changed.
-- [ ] Prefer valid `chatPosition`; otherwise adapt legacy pixels/intent per the
+- [x] Prefer valid `chatPosition`; otherwise adapt legacy pixels/intent per the
       spec. Keep the storage envelope version 1 with optional new fields; do not
       rewrite unrelated viewer entries. Preserve valid pixels when an anchor is
       bad.
-- [ ] Run the new storage/provider/hook tests and existing diff/file viewer
+- [x] Run the new storage/provider/hook tests and existing diff/file viewer
       tests. Commit `refactor: persist transcript intent and keyed anchors`.
 
 ## Task 5: Migrate every live renderer consumer and remove duplicate owners
@@ -380,7 +381,7 @@ supplies workspace/session/quick identity and a parent-lifetime Map of committed
 positions. Subagent supplies parent-session/subagent identity and
 `initialIntent: 'reading'`, retaining prepend behavior.
 
-- [ ] Add composition tests that assert correct active/ready/identity/options
+- [x] Add composition tests that assert correct active/ready/identity/options
       across file/diff/subagent pane selection, session replacement, hydration,
       quick-sheet close/reopen and workspace switching. Use the actual
       `showChat` visibility predicate, including fallback to chat when no active
@@ -393,26 +394,26 @@ positions. Subagent supplies parent-session/subagent identity and
       selection-before-passive-effect, timeout-before-hydration,
       disconnect-before-hydration and early-runtime-event tests. Modal occlusion
       of main chat on mobile does not itself mean its viewport is hidden.
-- [ ] Move viewport/jump ownership into `ChatTranscript`; pass main banners and
+- [x] Move viewport/jump ownership into `ChatTranscript`; pass main banners and
       subagent history/error controls as measured headers. Remove caller
       `isNearBottom`, `onScroll`, scroll refs and composer-height scroll writes.
       Viewport resize observation replaces composer callbacks used solely for
       scrolling.
-- [ ] Delete main chat's `usePersistentScroll` invocation, raw-message restore
+- [x] Delete main chat's `usePersistentScroll` invocation, raw-message restore
       dependencies, previous-session DOM sampling, and every legacy message-list
       append/reasoning/resize pin. Keep `usePersistentScroll` for file/markdown
       viewers.
-- [ ] Migrate quick chat without introducing durable storage. Its session map
+- [x] Migrate quick chat without introducing durable storage. Its session map
       survives content unmount while the sheet owner stays mounted; a new owner
       starts fresh. Clear/revoke its map entry on session close. Preserve
       subagent history pagination and initial reading behavior. Remove the old
       public message-list wrapper after the last consumer migrates.
-- [ ] Remove the unused end-marker ref from `use-chat-state.ts`,
+- [x] Remove the unused end-marker ref from `use-chat-state.ts`,
       `use-chat-websocket.ts`, route view models and affected tests/stories if
       the repository-wide search still confirms no non-scroll use. Keep
       unrelated log end markers unchanged. Audit barrel consumers with `rg` and
       `pnpm deps:check`.
-- [ ] Run focused route/kanban/subagent/message-renderer suites, inspect main
+- [x] Run focused route/kanban/subagent/message-renderer suites, inspect main
       and quick-chat stories, update the existing composer-height-change story
       and `e2e/scroll-button-occlusion.spec.ts` locators for the new viewport
       owner while retaining its reachability/attachment/prompt assertions, then
@@ -431,42 +432,42 @@ intentionally changed.
 real persistence adapters through a fixture provider, not a duplicate
 simulation.
 
-- [ ] Assert following remains <=1px from the bottom after a 100-update burst, a
+- [x] Assert following remains <=1px from the bottom after a 100-update burst, a
       100-call same-group burst, late image growth and footer-only changes. Test
       both tall/short messages and growth/shrinkage at desktop/mobile widths.
-- [ ] Assert wheel, keyboard, scrollbar and touch takeover prevents later
+- [x] Assert wheel, keyboard, scrollbar and touch takeover prevents later
       correction, while tool expansion, text selection and composer typing
       preserve following. Use browser input APIs where available, with
       deterministic adapter tests for event types a desktop browser cannot
       authentically reproduce.
-- [ ] Record keyed row coordinates while reading; prepend/remeasure/wrap/resize,
+- [x] Record keyed row coordinates while reading; prepend/remeasure/wrap/resize,
       then assert preserved offset within 1px after settling. Separately test
       the declared row-relative limitation for edits inside a huge grouped row.
-- [ ] Hide a following pane, append output, then show it: latest output is
+- [x] Hide a following pane, append output, then show it: latest output is
       visible. Repeat while reading: the saved key/offset is restored. Rapid
       A/B/A sessions and workspaces with delayed hydration cannot leak position
       or follow intent. Test hidden/zero-size activation, unmount with pending
       work, rewind deleting the saved key, reload of legacy/new storage, storage
       failure and queued startup.
-- [ ] Check jump-button appearance does not alter viewport height; explicit jump
+- [x] Check jump-button appearance does not alter viewport height; explicit jump
       attaches through subsequent measurements. Observe scroll
       writes/coordinates in the fixture per animation frame to detect
       alternating corrections, rather than asserting only the eventual final
       offset. No hardcoded settling sleeps.
-- [ ] Run the repository-required commands in order: `pnpm check:fix`,
+- [x] Run the repository-required commands in order: `pnpm check:fix`,
       `pnpm typecheck`, `pnpm test`, `pnpm check`; inspect formatter changes and
       remove unrelated edits. Also run `pnpm test:e2e:scroll`,
       `pnpm test:e2e:mobile`,
       `pnpm exec playwright test --config=playwright.chat.config.ts`, and
       inspect changed states in `pnpm storybook`. No blanket assertion weakening
       or guardrail changes to make the refactor pass.
-- [ ] Check `rg` finds no old scroll owner in live consumers, validate
+- [x] Check `rg` finds no old scroll owner in live consumers, validate
       documented links/scripts, inspect the final diff, and commit
       `test: verify transcript scroll lifecycle in the browser`. Report
       commands, failures/unavailable checks, and residual platform limitations
       at handoff.
 
-## Execution order and review gate
+## Execution notes and review gate
 
 Execute 1 → 2 → 3 → 4 → 5 → 6. Task 4 can be developed after Task 2 if interface
 types are fixed, but do not integrate consumers until both engine and storage
@@ -478,4 +479,32 @@ Planning review completed in three rounds across engine/UX races,
 storage/lifecycle integration, and implementability/test coverage. All three
 reviewers reported no remaining HIGH or MEDIUM concerns in the final round; see
 the [review record](./2026-10-30-transcript-scroll-review.md). Implementation
-and its runtime verification remain separate work.
+was subsequently authorized and completed. Whole-branch review and local
+verification are complete; results and limitations are recorded below.
+
+Execution decisions: Tasks 3–5 are delivered together so the public API
+migration is coherent. Renderer content/queue/history assertions remain in the
+renamed `transcript-rows` suites; controller/event/browser tests replace
+effect-call-count assertions. Browser restores assert keyed viewport coordinates
+across remounts, because offscreen size estimates can legitimately change
+absolute pixels. The viewport reserves 48px consistently so expanded prompts
+cannot occlude the jump overlay. Browser suites use separate output directories;
+cold Storybook graph compilation is warmed before the timed composer interaction
+cases.
+
+Final verification: `pnpm check:fix`, `pnpm typecheck` and `pnpm check` passed.
+The full Vitest run passed 9,209 tests and hit two timeouts in untouched admin
+and benchmark tests; both passed focused reruns. The final focused scroll suite
+passed 57 tests. Browser suites passed 36 transcript, 3 Storybook composer and
+30 existing mobile cases. Mobile and desktop Storybook screenshots were
+inspected. The header remains measured offscreen; frame-scheduled resize batches
+avoid a reproduced ResizeObserver delivery loop.
+
+The final review's gap-position defect was fixed with signed anchors and
+storage/browser regressions. Direct keyboard and scrollbar tests cover the
+review's smaller coverage concern. Physical iOS/Safari momentum remains a
+hardware validation limitation; the synthetic iOS engine branch only proves the
+installed dependency's deferred-write contract. Native end-mode engine
+characterization logs its existing ResizeObserver warning; the application uses
+start mode and its header-resize test asserts no window/page errors. Anchoring
+within a giant tool group remains relative to the grouped row.

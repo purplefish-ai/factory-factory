@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TranscriptPosition } from '@/client/features/chat';
 
 export type ScrollMode = 'code' | 'markdown' | 'chat';
 
@@ -7,6 +8,7 @@ export interface ScrollState {
   left: number;
   stickToBottom?: boolean;
   diffAnchor?: { index: number; offset: number };
+  chatPosition?: TranscriptPosition;
 }
 
 export interface StorageLike {
@@ -27,11 +29,25 @@ const DiffAnchorSchema = z.object({
   offset: z.number().finite().nonnegative(),
 });
 
+const ChatPositionSchema = z.object({
+  intent: z.enum(['following', 'reading']),
+  top: z.number().finite().nonnegative(),
+  left: z.number().finite().nonnegative(),
+  anchor: z
+    .object({
+      key: z.string().min(1),
+      offset: z.number().finite(),
+    })
+    .optional()
+    .catch(undefined),
+});
+
 const ScrollStateSchema = z.object({
   top: z.number().finite().min(0),
   left: z.number().finite().min(0),
   stickToBottom: z.boolean().optional(),
   diffAnchor: DiffAnchorSchema.optional().catch(undefined),
+  chatPosition: ChatPositionSchema.optional().catch(undefined),
 });
 
 const ScrollStoragePayloadSchema = z.object({
@@ -49,11 +65,13 @@ export function makeScrollStateKey(tabId: string, mode: ScrollMode): string {
 
 function sanitizeScrollState(state: ScrollState): ScrollState {
   const anchor = DiffAnchorSchema.safeParse(state.diffAnchor);
+  const chatPosition = ChatPositionSchema.safeParse(state.chatPosition);
   return {
     top: Math.max(0, Number.isFinite(state.top) ? state.top : 0),
     left: Math.max(0, Number.isFinite(state.left) ? state.left : 0),
     stickToBottom: state.stickToBottom === true ? true : undefined,
     ...(anchor.success ? { diffAnchor: anchor.data } : {}),
+    ...(chatPosition.success ? { chatPosition: chatPosition.data } : {}),
   };
 }
 

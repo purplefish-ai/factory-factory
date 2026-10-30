@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -56,6 +57,8 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
   setRightPanelVisible: (visible: boolean) => void;
   setActiveBottomTab: (tab: BottomPanelTab) => void;
   setActiveTopTab: (tab: TopPanelTab) => void;
+  scrollLoadedWorkspaceId: string | null;
+  createScrollStateWriter: (tabId: string, mode: ScrollMode) => (state: ScrollState) => void;
   getScrollState: (tabId: string, mode: ScrollMode) => ScrollState | null;
   setScrollState: (tabId: string, mode: ScrollMode, state: ScrollState) => void;
   clearScrollState: (tabId: string) => void;
@@ -270,18 +273,49 @@ export function WorkspacePanelProvider({
     workspaceId: string;
     record: Record<string, ScrollState>;
   } | null>(null);
-  const previousWorkspaceIdRef = useRef(workspaceId);
+  const [scrollLoadedWorkspaceId, setScrollLoadedWorkspaceId] = useState<string | null>(null);
+  const scrollScopeRef = useRef<{ workspaceId: string; revisions: Map<string, number> } | null>(
+    null
+  );
+  const mountedRef = useRef(false);
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
   const [rightPanelVisible, setRightPanelVisibleState] = useState<boolean>(false);
   const [activeBottomTab, setActiveBottomTabState] = useState<BottomPanelTab>('terminal');
 
+  const flushPendingScrollPersist = useCallback(() => {
+    const pending = pendingScrollPersistRef.current;
+    if (!(typeof window !== 'undefined' && pending)) {
+      return;
+    }
+    try {
+      saveScrollStateRecord(window.localStorage, pending.workspaceId, pending.record);
+    } catch {
+      // Ignore storage errors
+    }
+    pendingScrollPersistRef.current = null;
+  }, []);
+
   // Load persisted state from localStorage on mount or workspaceId change
   useEffect(() => {
     if (loadedForWorkspaceRef.current === workspaceId) {
       return;
     }
+
+    // Finish the previous workspace before replacing its in-memory record.
+    if (scrollPersistTimeoutRef.current !== null) {
+      clearTimeout(scrollPersistTimeoutRef.current);
+      scrollPersistTimeoutRef.current = null;
+    }
+    flushPendingScrollPersist();
+    scrollScopeRef.current = { workspaceId, revisions: new Map() };
 
     // Load tabs and active tab (workspace-scoped)
     const storedTabs = loadTabsFromStorage(workspaceId);
@@ -299,16 +333,20 @@ export function WorkspacePanelProvider({
     setRightPanelVisibleState(isMobileViewport() ? false : loadRightPanelVisibility(workspaceId));
 
     // Load scroll states (workspace-scoped)
-    if (typeof window !== 'undefined') {
-      scrollStatesRef.current = loadScrollStateRecord(window.localStorage, workspaceId);
-    } else {
+    try {
+      scrollStatesRef.current =
+        typeof window === 'undefined'
+          ? {}
+          : loadScrollStateRecord(window.localStorage, workspaceId);
+    } catch {
       scrollStatesRef.current = {};
     }
 
     // Mark as loaded at the end of this effect, so persist effect skips the
     // re-render triggered by the setState calls above
     loadedForWorkspaceRef.current = workspaceId;
-  }, [workspaceId, initialActiveTabId]);
+    setScrollLoadedWorkspaceId(workspaceId);
+  }, [workspaceId, initialActiveTabId, flushPendingScrollPersist]);
 
   // Persist tabs and active tab when they change (skip until load is complete)
   useEffect(() => {
@@ -367,19 +405,6 @@ export function WorkspacePanelProvider({
     prevIsMobileRef.current = isMobile;
   }, [isMobile, rightPanelVisible, workspaceId]);
 
-  const flushPendingScrollPersist = useCallback(() => {
-    const pending = pendingScrollPersistRef.current;
-    if (!(typeof window !== 'undefined' && pending)) {
-      return;
-    }
-    try {
-      saveScrollStateRecord(window.localStorage, pending.workspaceId, pending.record);
-    } catch {
-      // Ignore storage errors
-    }
-    pendingScrollPersistRef.current = null;
-  }, []);
-
   const scheduleScrollPersist = useCallback(
     (record: Record<string, ScrollState>) => {
       if (typeof window === 'undefined') {
@@ -400,18 +425,6 @@ export function WorkspacePanelProvider({
     [flushPendingScrollPersist, workspaceId]
   );
 
-  useEffect(() => {
-    if (previousWorkspaceIdRef.current === workspaceId) {
-      return;
-    }
-    previousWorkspaceIdRef.current = workspaceId;
-    if (scrollPersistTimeoutRef.current !== null) {
-      clearTimeout(scrollPersistTimeoutRef.current);
-      scrollPersistTimeoutRef.current = null;
-    }
-    flushPendingScrollPersist();
-  }, [flushPendingScrollPersist, workspaceId]);
-
   useEffect(
     () => () => {
       if (scrollPersistTimeoutRef.current !== null) {
@@ -423,32 +436,59 @@ export function WorkspacePanelProvider({
     [flushPendingScrollPersist]
   );
 
+  // Capture the loaded record itself, so A callbacks also stay revoked after A/B/A.
+  const scrollScope = scrollScopeRef.current;
+  const isCurrentScrollScope = useCallback(
+    () =>
+      mountedRef.current &&
+      scrollScope !== null &&
+      scrollScope.workspaceId === workspaceId &&
+      scrollScopeRef.current === scrollScope,
+    [scrollScope, workspaceId]
+  );
+
   const getScrollState = useCallback(
     (tabId: string, mode: ScrollMode) =>
-      getScrollStateFromRecord(scrollStatesRef.current, tabId, mode),
-    []
+      isCurrentScrollScope()
+        ? getScrollStateFromRecord(scrollStatesRef.current, tabId, mode)
+        : null,
+    [isCurrentScrollScope]
   );
 
   const setScrollState = useCallback(
     (tabId: string, mode: ScrollMode, state: ScrollState) => {
-      if (typeof window === 'undefined') {
+      if (typeof window === 'undefined' || !isCurrentScrollScope()) {
         return;
       }
       scrollStatesRef.current = upsertScrollState(scrollStatesRef.current, tabId, mode, state);
       scheduleScrollPersist(scrollStatesRef.current);
     },
-    [scheduleScrollPersist]
+    [isCurrentScrollScope, scheduleScrollPersist]
+  );
+
+  const createScrollStateWriter = useCallback(
+    (tabId: string, mode: ScrollMode) => {
+      const revision = scrollScope?.revisions.get(tabId) ?? 0;
+      return (state: ScrollState) => {
+        if (revision !== (scrollScope?.revisions.get(tabId) ?? 0)) {
+          return;
+        }
+        setScrollState(tabId, mode, state);
+      };
+    },
+    [scrollScope, setScrollState]
   );
 
   const clearScrollState = useCallback(
     (tabId: string) => {
-      if (typeof window === 'undefined') {
+      if (typeof window === 'undefined' || !isCurrentScrollScope()) {
         return;
       }
+      scrollScope?.revisions.set(tabId, (scrollScope.revisions.get(tabId) ?? 0) + 1);
       scrollStatesRef.current = removeScrollStatesForTab(scrollStatesRef.current, tabId);
       scheduleScrollPersist(scrollStatesRef.current);
     },
-    [scheduleScrollPersist]
+    [isCurrentScrollScope, scheduleScrollPersist, scrollScope]
   );
 
   const openTab = useCallback(
@@ -571,6 +611,8 @@ export function WorkspacePanelProvider({
       setRightPanelVisible,
       setActiveBottomTab,
       setActiveTopTab,
+      scrollLoadedWorkspaceId,
+      createScrollStateWriter,
       getScrollState,
       setScrollState,
       clearScrollState,
@@ -590,6 +632,8 @@ export function WorkspacePanelProvider({
       setRightPanelVisible,
       setActiveBottomTab,
       setActiveTopTab,
+      scrollLoadedWorkspaceId,
+      createScrollStateWriter,
       getScrollState,
       setScrollState,
       clearScrollState,

@@ -7,11 +7,15 @@ import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 
+const transcript = vi.hoisted(() => vi.fn());
 const input = vi.hoisted(() => vi.fn((_props: { placeholder: string }) => null));
 
 vi.mock('@/client/features/chat', () => ({
   useGroupedChatMessages: () => [],
-  VirtualizedMessageList: () => null,
+  ChatTranscript: (props: { header?: React.ReactNode }) => {
+    transcript(props);
+    return props.header;
+  },
   ChatInput: input,
   PermissionPrompt: () => null,
   QuestionPrompt: () => null,
@@ -37,7 +41,6 @@ describe('ChatContent init banner ownership', () => {
         pendingRequest: { type: 'none' },
         pendingMessages: new Map(),
         inputRef: createRef(),
-        viewportRef: createRef(),
         initBanner: {
           kind,
           message: 'Init script failed',
@@ -86,7 +89,6 @@ describe('ChatContent runtime error placeholder', () => {
       pendingRequest: { type: 'none' },
       pendingMessages: new Map(),
       inputRef: createRef(),
-      viewportRef: createRef(),
     } as unknown as ChatContentProps;
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -137,7 +139,6 @@ describe('ChatContent message queue wording', () => {
         pendingRequest: { type: 'none' },
         pendingMessages: new Map(),
         inputRef: createRef(),
-        viewportRef: createRef(),
       } as unknown as ChatContentProps;
       const root = createRoot(document.createElement('div'));
       try {
@@ -154,9 +155,15 @@ describe('ChatContent message queue wording', () => {
   );
 });
 
-describe('ChatContent scroll control', () => {
-  it('jumps to the latest messages and hides when the viewport reaches the bottom', () => {
-    const scrollToBottom = vi.fn();
+describe('ChatContent transcript ownership', () => {
+  it('delegates its scroll lifecycle to the shared transcript', () => {
+    const transcriptScroll = {
+      identity: 'workspace-1/main/session-1',
+      active: true,
+      ready: true,
+      initialIntent: 'following',
+      initialPosition: null,
+    };
     const props = {
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
@@ -168,22 +175,14 @@ describe('ChatContent scroll control', () => {
       pendingRequest: { type: 'none' },
       pendingMessages: new Map(),
       inputRef: createRef(),
-      viewportRef: createRef(),
-      isNearBottom: false,
-      scrollToBottom,
+      transcriptScroll,
     } as unknown as ChatContentProps;
-    const container = document.createElement('div');
-    const root = createRoot(container);
+    const root = createRoot(document.createElement('div'));
     try {
       flushSync(() => root.render(<ChatContent {...props} />));
-      const button = Array.from(container.querySelectorAll('button')).find((element) =>
-        element.textContent?.includes('Scroll to bottom')
+      expect(transcript).toHaveBeenLastCalledWith(
+        expect.objectContaining({ scroll: transcriptScroll })
       );
-      expect(button).toBeDefined();
-      button?.click();
-      expect(scrollToBottom).toHaveBeenCalledOnce();
-      flushSync(() => root.render(<ChatContent {...props} isNearBottom />));
-      expect(container.textContent).not.toContain('Scroll to bottom');
     } finally {
       flushSync(() => root.unmount());
     }

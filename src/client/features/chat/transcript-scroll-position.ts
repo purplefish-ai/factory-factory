@@ -2,7 +2,7 @@ import type { VirtualItem } from '@tanstack/react-virtual';
 import type { TranscriptIntent, TranscriptPosition } from './transcript-scroll.types';
 
 interface PositionEngine {
-  options: { count: number; getItemKey: (index: number) => string | number | bigint };
+  options: { count: number; gap?: number; getItemKey: (index: number) => string | number | bigint };
   getVirtualItems(): VirtualItem[];
   getVirtualItemForOffset(offset: number): VirtualItem | undefined;
   scrollToIndex(index: number, options: { align: 'start'; behavior: 'instant' }): void;
@@ -17,12 +17,18 @@ export function captureTranscriptPosition(
   intent: TranscriptIntent
 ): TranscriptPosition {
   const top = Math.max(0, viewport.scrollTop);
-  const row = engine.getVirtualItemForOffset(top);
+  let row = engine.getVirtualItemForOffset(top);
+  if (row && row.end <= top) {
+    const next = engine.getVirtualItemForOffset(row.end + (engine.options.gap ?? 0));
+    if (next && next.index !== row.index) {
+      row = next;
+    }
+  }
   return {
     intent,
     top,
     left: Math.max(0, viewport.scrollLeft),
-    ...(row ? { anchor: { key: String(row.key), offset: Math.max(0, top - row.start) } } : {}),
+    ...(row && row.end > top ? { anchor: { key: String(row.key), offset: top - row.start } } : {}),
   };
 }
 
@@ -64,7 +70,7 @@ export function createTranscriptPositioner(
         }
         return null;
       }
-      top = row.start + Math.min(Math.max(0, anchor.offset), Math.max(0, row.size - 1));
+      top = row.start + Math.min(anchor.offset, Math.max(0, row.size - 1));
     }
     return top;
   };

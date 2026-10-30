@@ -79,14 +79,6 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 
-vi.mock('@/hooks/use-auto-scroll', () => ({
-  useAutoScroll: () => ({
-    onScroll: vi.fn(),
-    isNearBottom: true,
-    scrollToBottom: vi.fn(),
-  }),
-}));
-
 type QuickChatResult = ReturnType<typeof useQuickChat>;
 
 interface HarnessProps {

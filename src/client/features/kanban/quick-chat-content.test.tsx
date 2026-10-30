@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { type ComponentProps, createRef } from 'react';
+import { type ComponentProps } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,7 @@ import { QuickChatContent } from './quick-chat-content';
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
 const list = vi.hoisted(() => vi.fn((_props: { queuedMessageIds?: Set<string> }) => null));
 vi.mock('@/client/features/chat', () => ({
-  VirtualizedMessageList: list,
+  ChatTranscript: list,
   useGroupedChatMessages: (messages: unknown[]) => messages,
   ChatInput: input,
   PermissionPrompt: () => null,
@@ -54,10 +54,13 @@ describe('QuickChatContent composer and queue controls', () => {
             <QuickChatContent
               workspaceId="workspace-1"
               chatState={chatState}
-              viewportRef={createRef()}
-              onScroll={vi.fn()}
-              isNearBottom
-              scrollToBottom={vi.fn()}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
             />
           )
         );
@@ -104,10 +107,13 @@ describe('QuickChatContent composer and queue controls', () => {
           <QuickChatContent
             workspaceId="workspace-1"
             chatState={chatState}
-            viewportRef={createRef()}
-            onScroll={vi.fn()}
-            isNearBottom
-            scrollToBottom={vi.fn()}
+            transcriptScroll={{
+              identity: 'quick-story',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
           />
         )
       );

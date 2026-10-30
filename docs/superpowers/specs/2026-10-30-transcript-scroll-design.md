@@ -1,9 +1,9 @@
 # Transcript scroll ownership
 
-Status: proposed; implementation is a separate task. The user approved planning
-a full refactor after the initial investigation. This record and its companion
-plan converged after three rounds of independent review, with no remaining HIGH
-or MEDIUM concerns. Implementation has not started.
+Status: implemented, independently reviewed and locally verified. See the plan
+for verification results and platform limitations. This record and its companion
+plan converged after three rounds of independent review. The user subsequently
+authorized implementation and PR delivery.
 
 ## Intent
 
@@ -164,19 +164,23 @@ tail must not remount existing message-renderer children. The layout choice does
 not depend on native append detection, which this design disables.
 
 Place transcript header content in a measured leading row, including banner and
-subagent history/error controls. Use virtualizer padding for transcript spacing,
-so DOM extent and virtual extent describe the same content. Disable native CSS
-scroll anchoring on the controlled viewport to avoid double compensation.
-Observe viewport dimensions; composer/prompt/sidebar changes are thereby layout
-invalidations rather than special scroll writers.
+subagent history/error controls. Keep that single leading row mounted for late
+offscreen size changes, and use the virtualizer's animation-frame ResizeObserver
+delivery to avoid compensation/render measurement loops. Use virtualizer padding
+for transcript spacing, so DOM extent and virtual extent describe the same
+content. Disable native CSS scroll anchoring on the controlled viewport to avoid
+double compensation. Observe viewport dimensions; composer/prompt/sidebar
+changes are thereby layout invalidations rather than special scroll writers.
 
 ## Persistence and restoration
 
 `TranscriptPosition` stores intent, a nonnegative pixel fallback, and an
-optional `{ key, offset }` visible-row anchor. Restore by key, mount/measure the
-target through the virtualizer, and refine to its row-relative offset. If the
-anchor has disappeared after rewind/trimming, clamp the pixel fallback and
-remain in reading mode. Do not convert clamping into new follow intent.
+optional `{ key, offset }` visible-row anchor. The offset is signed, so leading
+padding and inter-row gaps anchor to the next visible row. Restore by key,
+mount/measure the target through the virtualizer, and refine to its row-relative
+offset. If the anchor has disappeared after rewind/trimming, clamp the pixel
+fallback and remain in reading mode. Do not convert clamping into new follow
+intent.
 
 Main chat adapts the workspace panel's existing scroll storage. Add an optional
 validated chat-position field to existing v1 entries; preserve code/markdown and
@@ -247,4 +251,5 @@ counts.
 The implementation plan identifies exact files, task boundaries, browser
 fixture/configuration, commands, and assertions. Delivery requires the
 repository verification policy, updated stories, and documentation of the
-durable scroll contract. This planning task does not implement the refactor.
+durable scroll contract. The implementation plan records execution and
+verification.

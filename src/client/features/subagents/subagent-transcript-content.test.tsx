@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '@/lib/chat-protocol';
@@ -22,9 +22,9 @@ vi.mock('@/client/features/chat', async () => {
     );
   return {
     GroupedMessageItemRenderer: ({ item }: { item: { id: string } }) => renderItem(item),
-    VirtualizedMessageList: (props: { messages: Array<{ id: string }> }) => {
+    ChatTranscript: (props: { messages: Array<{ id: string }>; header?: ReactNode }) => {
       chatMocks.virtualizedMessageList(props);
-      return createMockElement('div', null, props.messages.map(renderItem));
+      return createMockElement('div', null, props.header, props.messages.map(renderItem));
     },
   };
 });
@@ -120,34 +120,22 @@ describe('SubagentTranscriptContent row identity', () => {
         running: false,
         startingSession: false,
         loadingSession: false,
-        preserveScrollAnchorOnPrepend: true,
+        scroll: expect.objectContaining({ initialIntent: 'reading', ready: true }),
       })
     );
   });
 
-  it('reports the actual bottom proximity for live transcript updates', () => {
+  it('delegates the reading intent and transcript identity to the shared owner', () => {
     render([message('newest', 1)]);
-    const viewport = container.querySelector<HTMLElement>('[role="log"]');
-    if (!viewport) {
-      throw new Error('Expected transcript viewport');
-    }
-    Object.defineProperty(viewport, 'scrollHeight', {
-      configurable: true,
-      value: 1000,
-    });
-    Object.defineProperty(viewport, 'clientHeight', {
-      configurable: true,
-      value: 500,
-    });
-    viewport.scrollTop = 500;
-
-    const props = chatMocks.virtualizedMessageList.mock.lastCall?.[0] as
-      | { onScroll?: () => void }
-      | undefined;
-    void act(() => props?.onScroll?.());
-
     expect(chatMocks.virtualizedMessageList).toHaveBeenLastCalledWith(
-      expect.objectContaining({ isNearBottom: true })
+      expect.objectContaining({
+        scroll: expect.objectContaining({
+          identity: 'workspace-1/subagent/session-1/child-1',
+          initialIntent: 'reading',
+          active: true,
+          ready: true,
+        }),
+      })
     );
   });
 });

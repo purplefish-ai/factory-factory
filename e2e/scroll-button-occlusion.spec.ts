@@ -1,5 +1,26 @@
 import { expect, type Locator, test } from '@playwright/test';
 
+test.beforeAll(async ({ browser, baseURL }, testInfo) => {
+  // The HTTP health check only warms Storybook's shell. Compile the real chat
+  // graph once as server startup, before timing individual interaction cases.
+  testInfo.setTimeout(120_000);
+  const page = await browser.newPage();
+  await page.route('**/api/trpc/**', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify([{ result: { data: { json: { enabled: false, hasApiKey: false } } } }]),
+    })
+  );
+  await page.goto(
+    `${baseURL}/iframe.html?id=workspaces-chatcontent--composer-height-changes&viewMode=story`,
+    { waitUntil: 'domcontentloaded' }
+  );
+  await expect(
+    page.getByTestId('mock-conversation').getByPlaceholder('Type a message...')
+  ).toBeVisible({ timeout: 110_000 });
+  await page.close();
+});
+
 async function expectReachableAboveComposer(button: Locator, composer: Locator) {
   await expect(button).toBeVisible();
   await expect

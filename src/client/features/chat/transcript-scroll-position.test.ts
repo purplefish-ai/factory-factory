@@ -20,9 +20,10 @@ function harness() {
   ];
   let measured = false;
   const engine = {
-    options: { count: 2, getItemKey: (index: number) => rows[index]?.key ?? '' },
+    options: { count: 2, gap: 8, getItemKey: (index: number) => rows[index]?.key ?? '' },
     getVirtualItems: () => rows,
-    getVirtualItemForOffset: (top: number) => rows.find((row) => row.end > top),
+    getVirtualItemForOffset: (top: number) =>
+      [...rows].reverse().find((row) => row.start <= top) ?? rows[0],
     scrollToIndex: vi.fn(),
     cancelScroll: vi.fn(),
     scrollToOffset: vi.fn((top: number) => {
@@ -58,6 +59,34 @@ it('captures the visible keyed row and offset inside a giant group', () => {
     ...h.position,
     top: 137,
   });
+});
+
+it('anchors leading padding with a signed offset without shifting into the first row', () => {
+  const h = harness();
+  h.rows[0] = { ...h.rows[0]!, start: 16, end: 116 };
+  const position = captureTranscriptPosition(h.viewport, h.engine, 'reading');
+  expect(position).toEqual({
+    intent: 'reading',
+    top: 0,
+    left: 0,
+    anchor: { key: 'a', offset: -16 },
+  });
+  h.measure();
+  h.positioner.restore(position);
+  expect(h.viewport.scrollTop).toBe(0);
+});
+it('anchors the next visible row through gaps, prepends and row wrapping', () => {
+  const h = harness();
+  h.rows[0] = { ...h.rows[0]!, start: 16, end: 116, size: 100 };
+  h.rows[1] = { ...h.rows[1]!, start: 124, end: 224, size: 100 };
+  h.viewport.scrollTop = 120;
+  const position = captureTranscriptPosition(h.viewport, h.engine, 'reading');
+  expect(position.anchor).toEqual({ key: 'b', offset: -4 });
+  h.rows[0] = { ...h.rows[0]!, start: 124, end: 224 };
+  h.rows[1] = { ...h.rows[1]!, start: 232, end: 632, size: 400 };
+  h.measure();
+  h.positioner.restore(position);
+  expect(h.viewport.scrollTop).toBe(228);
 });
 it('mounts once, awaits valid measurement, then replaces the index command with row offset', () => {
   const h = harness();

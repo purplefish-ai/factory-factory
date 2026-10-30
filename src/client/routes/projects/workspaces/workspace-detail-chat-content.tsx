@@ -1,9 +1,8 @@
-import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/client/features/chat';
 import {
   ChatInput,
@@ -11,7 +10,8 @@ import {
   QuestionPrompt,
   RewindConfirmationDialog,
   useGroupedChatMessages,
-  VirtualizedMessageList,
+  ChatTranscript,
+  type TranscriptScrollOptions,
 } from '@/client/features/chat';
 import { VoiceModeToggle } from '@/client/features/voice';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
@@ -31,11 +31,7 @@ export interface ChatContentProps {
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   sessionRuntime: SessionRuntimeState;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  viewportRef: React.RefObject<HTMLDivElement | null>;
-  isNearBottom: boolean;
-  scrollToBottom: () => void;
-  onScroll: () => void;
+  transcriptScroll: TranscriptScrollOptions;
   pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
   answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
@@ -188,15 +184,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     [props.queuedMessages]
   );
 
-  const handleHeightChange = useCallback(() => {
-    if (props.isNearBottom && props.viewportRef.current) {
-      props.viewportRef.current.scrollTo({
-        top: props.viewportRef.current.scrollHeight,
-        behavior: 'instant',
-      });
-    }
-  }, [props.isNearBottom, props.viewportRef]);
-
   const running = props.sessionStatus.phase === 'running';
   const promptInFlight = props.sessionRuntime.work?.promptInFlight ?? running;
   const stopping = props.sessionStatus.phase === 'stopping';
@@ -246,61 +233,45 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div ref={props.viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        {sessionRuntimeBanner && (
-          <InitStatusBanner
-            banner={sessionRuntimeBanner}
-            retryPending={false}
-            onRetry={() => undefined}
-            onPlay={() => undefined}
-          />
-        )}
-        {props.initBanner && !props.isScriptFailed && props.initBanner.kind !== 'info' && (
-          <InitStatusBanner
-            banner={props.initBanner}
-            retryPending={retryInit.isPending}
-            onRetry={retry}
-            onPlay={props.resumeQueuedMessages}
-          />
-        )}
-        <VirtualizedMessageList
-          workspaceId={props.workspaceId}
-          messages={groupedMessages}
-          running={running}
-          work={props.sessionRuntime.work}
-          startingSession={displayStartingState}
-          loadingSession={loadingSession}
-          latestThinking={props.latestThinking ?? null}
-          scrollContainerRef={props.viewportRef}
-          onScroll={props.onScroll}
-          messagesEndRef={props.messagesEndRef}
-          isNearBottom={props.isNearBottom}
-          queuedMessageIds={queuedMessageIds}
-          onRemoveQueuedMessage={props.removeQueuedMessage}
-          isCompacting={props.isCompacting}
-          getUuidForMessageId={props.getUuidForMessageId}
-          onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
-          resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
-          onWorkspaceFileLink={props.onWorkspaceFileLink}
-          onOpenAgents={props.onOpenAgents}
-          initBanner={props.initBanner}
-        />
-      </div>
-
-      {!props.isNearBottom && (
-        <div className="flex shrink-0 justify-center py-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={props.scrollToBottom}
-            className="rounded-full shadow-lg"
-          >
-            <ArrowDownIcon className="h-4 w-4 mr-1" />
-            Scroll to bottom
-          </Button>
-        </div>
-      )}
-
+      <ChatTranscript
+        header={
+          <>
+            {sessionRuntimeBanner && (
+              <InitStatusBanner
+                banner={sessionRuntimeBanner}
+                retryPending={false}
+                onRetry={() => undefined}
+                onPlay={() => undefined}
+              />
+            )}
+            {props.initBanner && !props.isScriptFailed && props.initBanner.kind !== 'info' && (
+              <InitStatusBanner
+                banner={props.initBanner}
+                retryPending={retryInit.isPending}
+                onRetry={retry}
+                onPlay={props.resumeQueuedMessages}
+              />
+            )}
+          </>
+        }
+        workspaceId={props.workspaceId}
+        messages={groupedMessages}
+        running={running}
+        work={props.sessionRuntime.work}
+        startingSession={displayStartingState}
+        loadingSession={loadingSession}
+        latestThinking={props.latestThinking ?? null}
+        scroll={props.transcriptScroll}
+        queuedMessageIds={queuedMessageIds}
+        onRemoveQueuedMessage={props.removeQueuedMessage}
+        isCompacting={props.isCompacting}
+        getUuidForMessageId={props.getUuidForMessageId}
+        onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
+        resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
+        onWorkspaceFileLink={props.onWorkspaceFileLink}
+        onOpenAgents={props.onOpenAgents}
+        initBanner={props.initBanner}
+      />
       <div className="z-20 flex max-h-full min-h-0 flex-col border-t bg-background pb-safe">
         <PermissionPrompt
           permission={
@@ -345,7 +316,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             onChange={props.setInputDraft}
             attachments={props.inputAttachments}
             onAttachmentsChange={props.setInputAttachments}
-            onHeightChange={handleHeightChange}
             pendingMessageCount={props.pendingMessages.size}
             slashCommands={props.slashCommands}
             slashCommandsLoaded={props.slashCommandsLoaded}
