@@ -226,8 +226,8 @@ export function authenticateRequest(params: {
 /**
  * Headers that claim to carry the original client address. The authenticated
  * proxy is the trust boundary for remote clients, so these must not reach the
- * upstream server: the backend rejects WebSocket upgrades that carry them
- * (see validateTrustedLocalWebSocketRequest), and tunnels like cloudflared
+ * upstream server: the backend rejects privileged HTTP requests and WebSocket
+ * upgrades that carry them, and tunnels like cloudflared
  * add them to every request.
  */
 export const FORWARDED_CLIENT_ADDRESS_HEADERS = [

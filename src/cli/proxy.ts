@@ -242,7 +242,7 @@ async function ensureCloudflaredInstalled(): Promise<void> {
   }
 }
 
-async function startFactoryFactoryServer(params: {
+export async function startFactoryFactoryServer(params: {
   projectRoot: string;
   databasePath: string;
   requestedPort: number;
@@ -250,12 +250,8 @@ async function startFactoryFactoryServer(params: {
   const frontendDist = join(params.projectRoot, 'dist', 'client');
   const backendDist = join(params.projectRoot, 'dist', 'src', 'backend', 'index.js');
 
-  if (!existsSync(frontendDist)) {
-    throw new Error('Frontend not built. Run `ff build` or `pnpm build` first.');
-  }
-
-  if (!existsSync(backendDist)) {
-    throw new Error('Backend not built. Run `ff build` or `pnpm build` first.');
+  if (!(existsSync(frontendDist) && existsSync(backendDist))) {
+    throw new Error('Frontend or backend not built. Run `ff build` or `pnpm build` first.');
   }
 
   const backend = spawn('node', [backendDist], {
@@ -266,6 +262,10 @@ async function startFactoryFactoryServer(params: {
       DATABASE_PATH: params.databasePath,
       BACKEND_PORT: params.requestedPort.toString(),
       BACKEND_HOST: LOCAL_HOST,
+      // Public tunnel traffic must never inherit a trusted reverse-proxy opt-in.
+      TRUST_PROXY_HEADERS: 'false',
+      DOTENV_CONFIG_OVERRIDE: 'false',
+      DOTENV_OVERRIDE: 'false',
       FF_RUN_SCRIPT_PROXY_ENABLED: '1',
       FRONTEND_STATIC_PATH: frontendDist,
     },
