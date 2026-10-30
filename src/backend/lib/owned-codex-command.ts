@@ -5,9 +5,15 @@ import { getBundledCodexCommand } from './codex-cli-command';
 
 const requireFromCurrentModule = createRequire(import.meta.url);
 
-export function getOwnedCodexCommand(args: string[]): { command: string; args: string[] } {
+export function getOwnedCodexCommand(
+  args: string[],
+  env?: NodeJS.ProcessEnv
+): { command: string; args: string[] } {
   if (process.platform !== 'win32') {
     return getBundledCodexCommand(args);
+  }
+  if (env?.CODEX_PATH) {
+    return { command: env.CODEX_PATH, args };
   }
   // Windows cannot kill a launcher's descendants after that launcher exits. Own
   // the native app-server directly; these native probes start no model turns.

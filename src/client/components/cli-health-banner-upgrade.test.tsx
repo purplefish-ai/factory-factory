@@ -10,12 +10,13 @@ import { trpc } from '@/client/lib/trpc';
 import { CLIHealthBanner } from './cli-health-banner';
 
 it.each([false, true])(
-  'removes the update button after upgrading (older health request in flight: %s)',
-  async (withStaleRequest) => {
+  'keeps global update controls absent when a health refetch is stale: %s',
+  async (staleRefetch) => {
     localStorage.clear();
     const oldHealth = {
       claude: {
         isInstalled: true,
+        isAuthenticated: true,
         version: '2.1.310',
         latestVersion: '2.1.312',
         isOutdated: true,
@@ -24,37 +25,24 @@ it.each([false, true])(
       github: { isInstalled: true, isAuthenticated: false },
       allHealthy: false,
     };
-    const newHealth = {
+    const currentHealth = {
       ...oldHealth,
       claude: { ...oldHealth.claude, version: '2.1.312', isOutdated: false },
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    let healthRequests = 0;
-    let finishUpgrade = () => undefined;
-    let finishOldHealth = () => undefined;
+    const operations: string[] = [];
     const client = trpc.createClient({
       links: [
         () =>
           ({ op }) =>
             observable((observer) => {
-              if (op.path === 'admin.upgradeProviderCLI') {
-                finishUpgrade = () => {
-                  observer.next({
-                    result: {
-                      data: { health: newHealth, message: 'Claude CLI upgraded successfully.' },
-                    },
-                  });
-                  observer.complete();
-                };
-              } else if (++healthRequests === 1) {
-                observer.next({ result: { data: oldHealth } });
-                observer.complete();
-              } else {
-                finishOldHealth = () => {
-                  observer.next({ result: { data: oldHealth } });
-                  observer.complete();
-                };
-              }
+              operations.push(op.path);
+              observer.next({
+                result: {
+                  data: operations.length === 1 || staleRefetch ? oldHealth : currentHealth,
+                },
+              });
+              observer.complete();
             }),
       ],
     });
@@ -71,28 +59,21 @@ it.each([false, true])(
           </trpc.Provider>
         )
       );
-      await vi.waitFor(() => {
-        expect(container.querySelector('button[aria-label="Update Claude"]')).not.toBeNull();
-      });
-      flushSync(() =>
-        container.querySelector<HTMLButtonElement>('[aria-label="Update Claude"]')?.click()
+      await vi.waitFor(() => expect(container.textContent).toContain('GitHub sign-in required'));
+      expect(container.textContent).not.toContain('Update Claude');
+      const recheck = [...container.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Recheck')
       );
-      await vi.waitFor(() => expect(container.textContent).toContain('Updating Claude'));
-      if (withStaleRequest) {
-        void queryClient.refetchQueries({ queryKey });
-        await vi.waitFor(() => expect(healthRequests).toBe(2));
-      }
-      finishUpgrade();
-      await vi.waitFor(() => {
-        expect(container.querySelector('[aria-label="Update Claude"]')).toBeNull();
-        expect(container.querySelector('[aria-label="Updating Claude"]')).toBeNull();
-        expect(queryClient.getQueryData(queryKey)).toEqual(newHealth);
-      });
-      finishOldHealth();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(queryClient.getQueryData(queryKey)).toEqual(newHealth);
+      expect(recheck).toBeDefined();
+      flushSync(() => recheck?.click());
+      await vi.waitFor(() => expect(operations).toHaveLength(2));
+      await vi.waitFor(() =>
+        expect(queryClient.getQueryData(queryKey)).toEqual(staleRefetch ? oldHealth : currentHealth)
+      );
+      expect(container.querySelector('[aria-label="Update Claude"]')).toBeNull();
+      expect(container.querySelector('[aria-label="Updating Claude"]')).toBeNull();
       expect(container.textContent).toContain('GitHub sign-in required');
-      expect(healthRequests).toBe(withStaleRequest ? 2 : 1);
+      expect(operations).toEqual(['admin.checkCLIHealth', 'admin.checkCLIHealth']);
     } finally {
       flushSync(() => root.unmount());
       queryClient.clear();

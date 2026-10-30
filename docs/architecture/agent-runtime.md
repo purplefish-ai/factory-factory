@@ -43,13 +43,38 @@ client app handlers preserve elicitation and native subagent features;
 `claude-agent-acp` 0.99.1 and Codex uses the released
 `@agentclientprotocol/codex-acp` 2.5.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
-`ff codex login` authenticates that same runtime.
+`ff codex login` authenticates that same runtime. Claude also ships its native
+runtime through the adapter's matched Agent SDK. `ff claude` delegates to the
+adapter's `--cli` passthrough, and `ff claude auth login` authenticates it.
+Health checks inspect these managed runtimes, never global provider CLIs. Setup
+terminal sign-in actions launch these commands directly in a PTY; they do not
+require `ff` or Node on PATH. Replacing the shell with a login process ignores
+output/exit events from the replaced PTY and tags login exits with their
+provider so an earlier shell exit cannot finish a pending login. It restores a
+shell when login exits. Login actions stay disabled while authentication is
+active, and server errors are shown in terminal output; ordinary shell exits
+stay stopped. Both runtimes update with Factory Factory releases; legacy
+global-upgrade requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an
+explicit upstream override and is inherited by both Claude sessions and managed
+CLI operations.
+
+On Unix, the `ff claude` and `ff codex` passthroughs forward terminal resizes.
+Both passthroughs bound process-tree shutdown after interrupts or abnormal
+provider CLI exits. Cleanup failures are logged without replacing the provider's
+exit status. Successful commands retain the native CLI's background-job
+behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
+commands require the CLI to be installed.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node, and are unpacked in desktop packages. Model discovery uses the same
-bundled Codex runtime, without starting an inference turn. Claude model
-discovery uses an ephemeral ACP session with tools disabled. Both catalog
-services coalesce requests and cache successful results for 30 seconds.
+Node, and are unpacked in desktop packages along with their complete production
+dependency trees. The desktop release smoke check runs bundled Claude and its
+actual ACP catalog loader with an empty PATH; CI may require authentication
+before returning model choices. Authentication-only validation requires the
+explicit `--allow-unauthenticated` smoke flag and reports that the catalog was
+not verified when that fallback is used. Model discovery uses the same bundled
+Codex runtime, without starting an inference turn. Claude model discovery uses
+an ephemeral ACP session with tools disabled. Both catalog services coalesce
+requests and cache successful results for 30 seconds.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path
