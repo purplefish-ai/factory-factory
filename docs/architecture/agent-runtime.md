@@ -716,7 +716,9 @@ included. A page failure keeps loaded rows visible and offers Retry without
 displaying a partial count. Repeated provider cursors stop automatic pagination
 and offer the same recovery instead of repeatedly fetching the same page.
 Restored transcript selection uses the same cursor guard when looking for a
-child on later pages.
+child on later pages. Live sub-agent events invalidate list queries by parent
+session, without cursor or page-size fields, so infinite-query caches refresh
+newly spawned and completed children without a page reload.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering
