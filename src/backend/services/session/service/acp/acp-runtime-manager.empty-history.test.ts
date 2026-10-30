@@ -1,12 +1,16 @@
+import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcpClientHandler } from './acp-client-handler';
 import {
   createManagerTestHarness,
   mockAcpClients,
+  mockLoadSession,
+  mockNewSession,
   mockPrompt,
   setupSuccessfulSpawn,
 } from './acp-runtime-manager.test-harness';
 import {
+  defaultConfigOptions,
   defaultContext,
   defaultHandlers,
   defaultOptions,
@@ -58,7 +62,7 @@ describe('observed empty provider conversations', () => {
       defaultHandlers(),
       defaultContext()
     );
-    mockPrompt.mockImplementation(() => {
+    mockPrompt.mockImplementationOnce(() => {
       expect(
         manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
       ).toBe(false);
@@ -73,28 +77,37 @@ describe('observed empty provider conversations', () => {
     ).toBe(false);
   });
 
-  it('revokes proof on observed provider conversation activity without a local prompt', async () => {
-    const { manager } = createManagerTestHarness();
-    const child = setupSuccessfulSpawn();
-    exitChildAfterSigterm(child);
-    const handle = await manager.getOrCreateClient(
-      'session-1',
-      defaultOptions(),
-      defaultHandlers(),
-      defaultContext()
-    );
-    await (mockAcpClients[0] as AcpClientHandler).sessionUpdate({
-      sessionId: handle.providerSessionId,
-      update: {
-        sessionUpdate: 'agent_message_chunk',
-        content: { type: 'text', text: 'Autonomous response' },
-      },
-    });
-    await manager.stopClient('session-1');
-    expect(
-      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
-    ).toBe(false);
-  });
+  it.each([
+    {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Autonomous response' },
+    },
+    {
+      sessionUpdate: 'plan',
+      entries: [{ content: 'Review implementation', priority: 'medium', status: 'pending' }],
+    },
+  ] satisfies SessionUpdate[])(
+    'revokes proof on $sessionUpdate activity without a local prompt',
+    async (update) => {
+      const { manager } = createManagerTestHarness();
+      const child = setupSuccessfulSpawn();
+      exitChildAfterSigterm(child);
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      await (mockAcpClients[0] as AcpClientHandler).sessionUpdate({
+        sessionId: handle.providerSessionId,
+        update,
+      });
+      await manager.stopClient('session-1');
+      expect(
+        manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
+      ).toBe(false);
+    }
+  );
 
   it('forgets empty proof when installed candidate startup fails before event dispatch', async () => {
     const { manager } = createManagerTestHarness();
@@ -116,31 +129,42 @@ describe('observed empty provider conversations', () => {
     ).toBe(false);
   });
 
-  it('never infers an empty conversation from a resumed identity', async () => {
-    const { manager } = createManagerTestHarness();
-    const firstChild = setupSuccessfulSpawn();
-    exitChildAfterSigterm(firstChild);
-    await manager.getOrCreateClient(
-      'session-1',
-      defaultOptions(),
-      defaultHandlers(),
-      defaultContext()
-    );
-    await manager.stopClient('session-1');
-    expect(
-      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', 'provider-session-123')
-    ).toBe(true);
-    const child = setupSuccessfulSpawn({ loadSession: true });
-    exitChildAfterSigterm(child);
-    const handle = await manager.getOrCreateClient(
-      'session-1',
-      { ...defaultOptions(), resumeProviderSessionId: 'provider-session-123' },
-      defaultHandlers(),
-      defaultContext()
-    );
-    await manager.stopClient('session-1');
-    expect(
-      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
-    ).toBe(false);
-  });
+  it.each(['resumed', 'resume_fallback'] as const)(
+    'never infers an empty conversation from %s',
+    async (outcome) => {
+      const { manager } = createManagerTestHarness();
+      const firstChild = setupSuccessfulSpawn();
+      exitChildAfterSigterm(firstChild);
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      await manager.stopClient('session-1');
+      expect(
+        manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', 'provider-session-123')
+      ).toBe(true);
+      const child = setupSuccessfulSpawn({ loadSession: true });
+      exitChildAfterSigterm(child);
+      if (outcome === 'resume_fallback') {
+        mockLoadSession.mockRejectedValueOnce(new Error('history unavailable'));
+        mockNewSession.mockResolvedValueOnce({
+          sessionId: 'replacement-session',
+          configOptions: defaultConfigOptions(),
+        });
+      }
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        { ...defaultOptions(), resumeProviderSessionId: 'provider-session-123' },
+        { ...defaultHandlers(), onProviderIdentityRollover: () => Promise.resolve() },
+        defaultContext()
+      );
+      expect(handle.sessionCreationOutcome.kind).toBe(outcome);
+      await manager.stopClient('session-1');
+      expect(
+        manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
+      ).toBe(false);
+    }
+  );
 });

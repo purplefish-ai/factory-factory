@@ -549,7 +549,7 @@ export class AcpRuntimeSupervisor {
 
       this.runtimeMetadata.set(handle.child, metadata);
       this.sessions.set(sessionId, handle);
-      if (handle.sessionCreationOutcome.kind !== 'resumed') {
+      if (handle.sessionCreationOutcome.kind === 'new') {
         this.observedEmptyProviderSessions.set(sessionId, {
           provider: handle.provider,
           providerSessionId: handle.providerSessionId,
@@ -948,6 +948,7 @@ function isConversationActivity(event: AcpRuntimeEvent): boolean {
       'agent_thought_chunk',
       'tool_call',
       'tool_call_update',
+      'plan',
     ].includes(event.update.sessionUpdate);
   }
   return (
