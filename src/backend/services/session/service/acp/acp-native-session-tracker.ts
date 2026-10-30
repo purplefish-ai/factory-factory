@@ -134,8 +134,8 @@ export class AcpNativeSessionTracker {
     for (const child of this.children.values()) {
       if (child.summary.status === 'running') {
         child.summary.status = 'interrupted';
-        child.summary.updatedAt = new Date().toISOString();
-        child.summary.completedAt = child.summary.updatedAt;
+        // Replay completion proves interruption, not when the historical work ended.
+        child.summary.completedAt = null;
         this.changed(child.summary.id, 'completed');
       }
     }
@@ -323,7 +323,7 @@ export class AcpNativeSessionTracker {
     if (id === this.rootSessionId || id === parentSessionId || this.children.has(id)) {
       return;
     }
-    const now = new Date().toISOString();
+    const now = this.observationTimestamp();
     const child: ChildSession = {
       parentSessionId,
       turns: [],
@@ -364,7 +364,7 @@ export class AcpNativeSessionTracker {
       return;
     }
     child.summary.status = parsed.data.state === 'disconnected' ? 'interrupted' : parsed.data.state;
-    child.summary.updatedAt = new Date().toISOString();
+    child.summary.updatedAt = this.observationTimestamp();
     child.summary.completedAt = child.summary.updatedAt;
     this.activeGoals.delete(child.summary.id);
     this.changed(child.summary.id, 'completed');
@@ -439,7 +439,7 @@ export class AcpNativeSessionTracker {
   }
 
   private updateSummary(summary: SubagentSummary, value: SubagentTranscriptUpdate): void {
-    summary.updatedAt = new Date().toISOString();
+    summary.updatedAt = this.observationTimestamp();
     if ('content' in value && record(value.content)?.type === 'text') {
       const text = record(value.content)?.text;
       if (typeof text === 'string') {
@@ -453,6 +453,12 @@ export class AcpNativeSessionTracker {
     } else if ('title' in value && typeof value.title === 'string') {
       summary.latestActivity = value.title.slice(-500);
     }
+  }
+
+  private observationTimestamp(): string | null {
+    // Native lifecycle updates omit provider timestamps. Replaying them must not
+    // manufacture fresh timeline activity at the time the workspace is opened.
+    return this.replayingHistory ? null : new Date().toISOString();
   }
 
   private trackTask(sessionId: string, update: Record<string, unknown>): void {
