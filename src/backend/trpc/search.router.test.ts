@@ -77,4 +77,52 @@ describe('GitHub issue search', () => {
     expect(list).toHaveBeenCalledWith({ isArchived: false });
     expect(searchIssues).toHaveBeenCalledWith('org', 'one', '#42', 30);
   });
+
+  it('shares a bounded result budget across repositories in relevance order', async () => {
+    list.mockResolvedValue([
+      { id: 'new', slug: 'new', name: 'New', githubOwner: 'org', githubRepo: 'new' },
+      { id: 'old', slug: 'old', name: 'Old', githubOwner: 'org', githubRepo: 'old' },
+    ]);
+    searchIssues.mockImplementation((_owner, repo) =>
+      [1, 2, 3].map((number) => ({
+        number,
+        title: `Search result ${number}`,
+        body: 'Matching issue',
+        url: `https://github.com/org/${repo}/issues/${number}`,
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'martin' },
+      }))
+    );
+
+    const result = await caller.githubIssues({ query: 'search', limit: 3 });
+    expect(result.results.map((issue) => issue.id)).toEqual(['new:1', 'old:1', 'new:2']);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('fills remaining slots from successful repositories with more results', async () => {
+    list.mockResolvedValue([
+      { id: 'p1', slug: 'one', name: 'One', githubOwner: 'org', githubRepo: 'one' },
+      { id: 'p2', slug: 'two', name: 'Two', githubOwner: 'org', githubRepo: 'two' },
+      { id: 'p3', slug: 'three', name: 'Three', githubOwner: 'org', githubRepo: 'three' },
+    ]);
+    searchIssues.mockImplementation((_owner, repo) => {
+      if (repo === 'two') {
+        throw new Error('Offline');
+      }
+      return (repo === 'one' ? [] : [1, 2, 3]).map((number) => ({
+        number,
+        title: `Search result ${number}`,
+        body: 'Matching issue',
+        url: `https://github.com/org/${repo}/issues/${number}`,
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'martin' },
+      }));
+    });
+
+    const result = await caller.githubIssues({ query: 'search', limit: 3 });
+    expect(result.results.map((issue) => issue.id)).toEqual(['p3:1', 'p3:2', 'p3:3']);
+    expect(result.errors).toEqual(['Two: Offline']);
+  });
 });
