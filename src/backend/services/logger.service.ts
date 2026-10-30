@@ -55,8 +55,8 @@ function getLogLevelPriority(level: LogLevel): number {
 /**
  * Safely stringify an object, handling circular references.
  * Pre-processes with ancestor tracking to replace circular references,
- * invokes toJSON() on objects that define it, then uses JSON.stringify
- * on the safe result.
+ * invokes toJSON() on objects that define it, expands Errors and converts
+ * BigInts to strings, then uses JSON.stringify on the safe result.
  */
 function safeStringify(obj: unknown): string {
   const ancestors = new WeakSet<object>();
@@ -80,7 +80,35 @@ function safeStringify(obj: unknown): string {
     return result;
   }
 
+  // Error name, message, stack and cause are not enumerable, so traversing
+  // own entries alone would serialize an Error as {}.
+  function serializeError(error: Error): Record<string, unknown> {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(error.cause === undefined ? {} : { cause: preprocessValue(error.cause) }),
+      ...traverseObject(error),
+    };
+  }
+
+  function preprocessObject(value: object): unknown {
+    const toJson = tryToJSON(value);
+    if (toJson.ok) {
+      return preprocessValue(toJson.result);
+    }
+    if (value instanceof Error) {
+      return serializeError(value);
+    }
+    return Array.isArray(value)
+      ? value.map((item) => preprocessValue(item))
+      : traverseObject(value);
+  }
+
   function preprocessValue(value: unknown): unknown {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
     if (typeof value === 'function' || typeof value !== 'object' || value === null) {
       return typeof value === 'function' ? undefined : value;
     }
@@ -90,13 +118,7 @@ function safeStringify(obj: unknown): string {
 
     ancestors.add(value);
     try {
-      const toJson = tryToJSON(value);
-      if (toJson.ok) {
-        return preprocessValue(toJson.result);
-      }
-      return Array.isArray(value)
-        ? value.map((item) => preprocessValue(item))
-        : traverseObject(value);
+      return preprocessObject(value);
     } finally {
       ancestors.delete(value);
     }

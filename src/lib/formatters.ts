@@ -48,14 +48,15 @@ export function formatIdleTime(ms: number | null | undefined): string {
  * Used for comment timestamps and detailed views.
  */
 export function formatDateTimeShort(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
+  const date = new Date(dateStr);
+  // Formatting an invalid Date returns "Invalid Date" rather than throwing.
+  if (Number.isNaN(date.getTime())) {
     return dateStr;
   }
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

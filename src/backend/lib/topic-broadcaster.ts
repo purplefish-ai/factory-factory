@@ -45,7 +45,14 @@ export class TopicBroadcaster<TKey = string> {
     }
     sockets.add(ws);
 
+    // Without this flag, a stale disposer would remove a later subscription
+    // of the same socket to the same topic.
+    let disposed = false;
     return () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       const current = this.topics.get(topic);
       if (!current?.delete(ws)) {
         return;

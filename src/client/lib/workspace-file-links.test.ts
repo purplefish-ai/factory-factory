@@ -41,6 +41,19 @@ describe('resolveWorkspaceFileLink', () => {
     ).toBe('src/client/App Shell.md');
   });
 
+  it.each([
+    ['forward slashes', 'C:/Users/martin/factory-factory/workspace-demo/src/app.ts:12'],
+    ['backslashes', String.raw`C:\Users\martin\factory-factory\workspace-demo\src\app.ts:12`],
+  ])('resolves a bare Windows absolute path with %s', (_label, href) => {
+    expect(
+      resolveWorkspaceFileLink(
+        href,
+        String.raw`C:\Users\martin\factory-factory\workspace-demo`,
+        ORIGIN
+      )
+    ).toBe('src/app.ts');
+  });
+
   it('preserves backslashes as literal characters in POSIX paths', () => {
     expect(
       resolveWorkspaceFileLink(

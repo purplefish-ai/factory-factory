@@ -43,10 +43,24 @@ function normalizePathForComparison(pathname: string, usesWindowsPathSemantics: 
   return hasLeadingSlash ? '/' : '.';
 }
 
+function decodeRawPath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
 function getPathnameFromHref(href: string, origin?: string): string | null {
   const trimmed = href.trim();
   if (!trimmed) {
     return null;
+  }
+
+  // `new URL` would parse a bare Windows path such as `C:/repo` as a URL with
+  // protocol `c:`, so treat drive-letter paths as raw paths.
+  if (/^[A-Za-z]:[\\/]/.test(trimmed)) {
+    return decodeRawPath(trimmed);
   }
 
   try {
@@ -60,11 +74,7 @@ function getPathnameFromHref(href: string, origin?: string): string | null {
     }
     return decodeURIComponent(url.pathname);
   } catch {
-    try {
-      return decodeURIComponent(trimmed);
-    } catch {
-      return trimmed;
-    }
+    return decodeRawPath(trimmed);
   }
 }
 
