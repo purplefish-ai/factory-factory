@@ -86,7 +86,6 @@ export type LifecycleHarness = {
     | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
-    | 'hasObservedEmptyProviderSession'
     | 'getClient'
     | 'getBrowseClient'
     | 'getPendingClient'
@@ -97,6 +96,7 @@ export type LifecycleHarness = {
     | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
+    | 'hasObservedEmptyProviderSession'
   >;
   sessionDomainService: MockedPick<
     SessionDomainService,
@@ -581,7 +581,6 @@ export function createLifecycleHarness(
     hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
-    hasObservedEmptyProviderSession: vi.fn(() => false),
     getClient: vi.fn<AcpRuntimeManager['getClient']>(() => undefined),
     getBrowseClient: vi.fn(() => undefined),
     getPendingClient: vi.fn(() => undefined),
@@ -606,6 +605,7 @@ export function createLifecycleHarness(
     stopAndQuiesce: vi.fn(async () => undefined),
     beginShutdown: vi.fn(() => []),
     stopAllClients: vi.fn(async () => undefined),
+    hasObservedEmptyProviderSession: vi.fn(() => false),
   } satisfies Pick<
     AcpRuntimeManager,
     | 'isStopInProgress'
@@ -613,7 +613,6 @@ export function createLifecycleHarness(
     | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
-    | 'hasObservedEmptyProviderSession'
     | 'getClient'
     | 'getBrowseClient'
     | 'getPendingClient'
@@ -624,6 +623,7 @@ export function createLifecycleHarness(
     | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
+    | 'hasObservedEmptyProviderSession'
   >;
   const sessionDomainService = {
     appendClaudeEvent: vi.fn((_sessionId: string, _message: unknown) => 1),
