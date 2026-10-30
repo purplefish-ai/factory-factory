@@ -285,23 +285,24 @@ updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
 Permission requests retain the provider's option IDs and choices. When requests
-overlap, the newest is shown; answering it restores the next unanswered one,
-including on reconnect. Upstream Codex plan review and Claude's AIR
-`Approve Plan` requests with plan text are normalized into the application's
-plan UI, including pending requests restored on reconnect. Approval clears the
-composer's plan mode. Interactive sessions wait for a user response; read-only
-reviewers automatically reject plan implementation. Both adapters own their plan
-implementation continuation; the client does not enqueue a second approval turn.
-Structured questions use ACP form elicitation, with validated answers mapped
-into the existing question UI. Numeric fields display validation errors before
-submission, and blank enum choices retain their exact provider values behind
-visible labels. String patterns use bounded RE2 compilation and linear-time
-matching in the browser and backend; unsupported expressions fail closed. Run
-`pnpm test:acp:manual` for the live handshake or `pnpm test:acp:manual:prompt`
-to explicitly enable a read-only model round trip. URL elicitation exposes the
-destination and message and requires explicit consent; it never opens a URL
-automatically. Cancellation resolves pending permissions and elicitations as
-cancelled and dismisses their prompts.
+overlap, the newest is shown; answering or cancelling it shows the newest
+request still awaiting a response, including on reconnect. Upstream Codex plan
+review and Claude's AIR `Approve Plan` requests with plan text are normalized
+into the application's plan UI, including pending requests restored on
+reconnect. Approval clears the composer's plan mode. Interactive sessions wait
+for a user response; read-only reviewers automatically reject plan
+implementation. Both adapters own their plan implementation continuation; the
+client does not enqueue a second approval turn. Structured questions use ACP
+form elicitation, with validated answers mapped into the existing question UI.
+Numeric fields display validation errors before submission, and blank enum
+choices retain their exact provider values behind visible labels. String
+patterns use bounded RE2 compilation and linear-time matching in the browser and
+backend; unsupported expressions fail closed. Run `pnpm test:acp:manual` for the
+live handshake or `pnpm test:acp:manual:prompt` to explicitly enable a read-only
+model round trip. URL elicitation exposes the destination and message and
+requires explicit consent; it never opens a URL automatically. Cancellation
+resolves pending permissions and elicitations as cancelled and dismisses their
+prompts.
 
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and

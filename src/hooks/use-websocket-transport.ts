@@ -21,10 +21,11 @@ export type WebSocketQueuePolicy = 'replay' | 'drop';
 
 export interface WebSocketSendOptions {
   /**
-   * Overrides the transport's queue policy for this message. Use 'drop' when the caller
-   * treats a `false` return as "never sent" (for example to roll back optimistic state).
+   * Drops this message instead of queuing it for replay when it cannot be sent now. Use it
+   * when the caller treats a `false` return as "never sent" (for example to roll back
+   * optimistic state). A drop transport never replays, so there is no 'replay' override.
    */
-  queuePolicy?: WebSocketQueuePolicy;
+  queuePolicy?: 'drop';
 }
 
 export type WebSocketSend = (message: unknown, options?: WebSocketSendOptions) => boolean;
@@ -416,7 +417,7 @@ export function useWebSocketTransport(
         return true;
       }
 
-      if ((sendOptions?.queuePolicy ?? queuePolicy) !== 'replay') {
+      if (queuePolicy !== 'replay' || sendOptions?.queuePolicy === 'drop') {
         return false;
       }
 
