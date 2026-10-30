@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 
 export function useSubagentInvalidation(sessionId: string | null, enabled: boolean): boolean {
@@ -38,10 +39,11 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
       return;
     }
 
+    // Change bursts run one invalidation at a time plus one trailing invalidation.
+    const refreshOnChange = createTrailingRefresh(() => invalidateList({ sessionId }));
     return subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
-        // Reuse an in-flight list fetch instead of cancelling it for every change.
-        void invalidateList({ sessionId }, undefined, { cancelRefetch: false });
+        refreshOnChange();
       }
     });
   }, [invalidateList, sessionId]);

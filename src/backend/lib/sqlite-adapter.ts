@@ -21,7 +21,12 @@ export const SQLITE_CONNECTION_PRAGMAS = [
 export class TunedPrismaBetterSqlite3 extends PrismaBetterSqlite3 {
   override async connect(): ReturnType<PrismaBetterSqlite3['connect']> {
     const adapter = await super.connect();
-    await adapter.executeScript(SQLITE_CONNECTION_PRAGMAS);
+    try {
+      await adapter.executeScript(SQLITE_CONNECTION_PRAGMAS);
+    } catch (error) {
+      await adapter.dispose();
+      throw error;
+    }
     return adapter;
   }
 }

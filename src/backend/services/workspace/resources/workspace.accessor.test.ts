@@ -147,8 +147,8 @@ describe('workspaceAccessor', () => {
     await workspaceAccessor.findIssueLinksByProjectId('project-1');
 
     expect(mockFindMany).toHaveBeenCalledWith({
-      where: { projectId: 'project-1' },
-      select: { id: true, status: true, githubIssueNumber: true, linearIssueId: true },
+      where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+      select: { status: true, githubIssueNumber: true, linearIssueId: true },
     });
   });
 

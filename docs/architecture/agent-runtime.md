@@ -349,8 +349,8 @@ until the next user turn. Cursors use monotonic turn offsets, and expired
 cursors fail explicitly instead of returning another turn. Child `updated`
 notifications are throttled to one per subagent every 250 ms because each one
 makes viewers refetch the list or transcript; `created` and `completed` are sent
-immediately. Those refetches reuse an in-flight request instead of restarting
-it.
+immediately. Viewers run one refetch at a time and queue a single follow-up when
+changes arrive mid-flight, so the final update is never missed.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal

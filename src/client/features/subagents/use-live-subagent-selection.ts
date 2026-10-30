@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentSelection } from './types';
@@ -73,23 +74,20 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     loadedPageCount: query.data?.pages.length ?? 0,
   };
 
-  const refetch = useCallback(
-    async (options?: { cancelRefetch?: boolean }) => {
-      const before = querySnapshot.current;
-      const result = await query.refetch(options);
-      const resultPageCount = result.data?.pages.length ?? 0;
-      // The query cache is shared, so a next-page fetch can advance dataUpdatedAt
-      // without refreshing a candidate that was already cached.
-      if (
-        result.isSuccess &&
-        result.dataUpdatedAt > before.dataUpdatedAt &&
-        resultPageCount === before.loadedPageCount
-      ) {
-        setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
-      }
-    },
-    [query.refetch]
-  );
+  const refetch = useCallback(async () => {
+    const before = querySnapshot.current;
+    const result = await query.refetch();
+    const resultPageCount = result.data?.pages.length ?? 0;
+    // The query cache is shared, so a next-page fetch can advance dataUpdatedAt
+    // without refreshing a candidate that was already cached.
+    if (
+      result.isSuccess &&
+      result.dataUpdatedAt > before.dataUpdatedAt &&
+      resultPageCount === before.loadedPageCount
+    ) {
+      setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
+    }
+  }, [query.refetch]);
 
   useEffect(() => {
     if (query.isRefetching) {
@@ -120,19 +118,18 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     void refetch();
   }, [refetch]);
 
-  useEffect(
-    () =>
-      subscribeToSubagentChanges((detail) => {
-        if (
-          detail.sessionId === selection.parentSessionId &&
-          detail.subagentId === selection.subagent.id
-        ) {
-          // Reuse an in-flight transcript fetch instead of restarting it per change.
-          void refetch({ cancelRefetch: false });
-        }
-      }),
-    [refetch, selection.parentSessionId, selection.subagent.id]
-  );
+  useEffect(() => {
+    // Change bursts run one refetch at a time plus one trailing refetch.
+    const refreshOnChange = createTrailingRefresh(refetch);
+    return subscribeToSubagentChanges((detail) => {
+      if (
+        detail.sessionId === selection.parentSessionId &&
+        detail.subagentId === selection.subagent.id
+      ) {
+        refreshOnChange();
+      }
+    });
+  }, [refetch, selection.parentSessionId, selection.subagent.id]);
 
   const loadedPageCount = query.data?.pages.length ?? 0;
   const hasSuccessfulPostMountFetch = candidateWasCachedAtMount.current

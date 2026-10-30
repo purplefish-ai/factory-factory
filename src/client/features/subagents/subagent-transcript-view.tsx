@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { projectAcpTranscriptUpdates } from '@/client/features/chat';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import {
   SubagentTranscriptContent,
@@ -56,13 +57,14 @@ export function SubagentTranscriptView({ selection, workspaceId }: SubagentTrans
   }, [query.data]);
 
   useEffect(() => {
+    // Change bursts run one refetch at a time plus one trailing refetch.
+    const refreshOnChange = createTrailingRefresh(() => query.refetch());
     return subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        // Reuse an in-flight transcript fetch instead of restarting it per change.
-        void query.refetch({ cancelRefetch: false });
+        refreshOnChange();
       }
     });
   }, [query.refetch, selection.parentSessionId, selection.subagent.id]);

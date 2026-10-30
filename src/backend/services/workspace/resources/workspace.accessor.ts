@@ -378,16 +378,19 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Issue links for a project's workspaces. Selects only the columns issue
-   * filtering needs: whole rows carry large init output/metadata blobs, and
-   * archived rows dominate long-lived projects.
+   * Issue links for a project's live workspaces. Selects only the columns issue
+   * filtering needs and skips archived rows: whole rows carry large init
+   * output/metadata blobs, and archived rows dominate long-lived projects.
    */
   findIssueLinksByProjectId(
     projectId: string
-  ): Promise<Pick<Workspace, 'id' | 'status' | 'githubIssueNumber' | 'linearIssueId'>[]> {
+  ): Promise<Pick<Workspace, 'status' | 'githubIssueNumber' | 'linearIssueId'>[]> {
     return prisma.workspace.findMany({
-      where: { projectId },
-      select: { id: true, status: true, githubIssueNumber: true, linearIssueId: true },
+      where: {
+        projectId,
+        status: { notIn: ['ARCHIVING', 'ARCHIVED'] },
+      },
+      select: { status: true, githubIssueNumber: true, linearIssueId: true },
     });
   }
 

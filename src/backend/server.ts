@@ -91,6 +91,7 @@ export function createServer(application: Application, requestedPort?: number): 
   let explicitStartupStarted = false;
   let startupComplete = false;
   let cleanupStarted = false;
+  let eventLoopMonitorStarted = false;
   let cleanupPromise: Promise<void> | null = null;
 
   const app = express();
@@ -417,6 +418,11 @@ export function createServer(application: Application, requestedPort?: number): 
     }
 
     cleanupStarted = true;
+    // Release the shared monitor first so a failing cleanup step cannot leak it.
+    if (eventLoopMonitorStarted) {
+      eventLoopMonitorStarted = false;
+      eventLoopMonitor.stop();
+    }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
 
@@ -448,7 +454,6 @@ export function createServer(application: Application, requestedPort?: number): 
       await ratchetService.stop();
       await periodicTaskService.stop();
       await reconciliationService.stopPeriodicCleanup();
-      eventLoopMonitor.stop();
       await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
@@ -515,6 +520,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
       try {
         eventLoopMonitor.start();
+        eventLoopMonitorStarted = true;
         await bindServerWithPortFallback();
         await runStartupReconciliation();
 

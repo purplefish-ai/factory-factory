@@ -13,17 +13,20 @@ function nextTimer(ms: number): Promise<void> {
 }
 
 describe('EventLoopMonitor', () => {
-  const monitor = new EventLoopMonitor();
+  let monitor = new EventLoopMonitor();
 
   afterEach(() => {
-    monitor.stop();
+    while (monitor.read()) {
+      monitor.stop();
+    }
+    monitor = new EventLoopMonitor();
   });
 
   it('returns null until started', () => {
     expect(monitor.read()).toBeNull();
   });
 
-  it('reports a blocked loop and resets the window after each read', async () => {
+  it('reports lag beyond the sampling interval and resets the window after each read', async () => {
     monitor.start(10);
     await nextTimer(30);
     blockFor(120);
@@ -35,7 +38,25 @@ describe('EventLoopMonitor', () => {
     expect(blocked?.utilization).toBeLessThanOrEqual(1);
 
     await nextTimer(60);
-    const next = monitor.read();
-    expect(next?.delayMs.max).toBeLessThan(blocked?.delayMs.max ?? 0);
+    const idle = monitor.read();
+    // An idle loop samples at roughly the resolution, which is not lag.
+    expect(idle?.delayMs.p50).toBeLessThan(10);
+    expect(idle?.delayMs.max).toBeLessThan(blocked?.delayMs.max ?? 0);
+  });
+
+  it('keeps running until every owner has stopped it', () => {
+    monitor.start();
+    monitor.start();
+
+    monitor.stop();
+    expect(monitor.read()).not.toBeNull();
+
+    monitor.stop();
+    expect(monitor.read()).toBeNull();
+
+    // Extra stops are ignored rather than going negative.
+    monitor.stop();
+    monitor.start();
+    expect(monitor.read()).not.toBeNull();
   });
 });
