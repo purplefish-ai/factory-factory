@@ -187,6 +187,10 @@ grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the
 agent is running.
 
+`pnpm test:e2e:scroll` runs the live transcript/installed virtualizer browser
+checks against the development-only `/__transcript-scroll` fixture. It uses
+local deterministic data and needs no running agent or backend.
+
 ## Sources of truth
 
 | Concern                                               | Source                                                                                                                                                                                                             |
