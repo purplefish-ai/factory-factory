@@ -143,7 +143,7 @@ export const adminRouter = router({
     }),
 
   /**
-   * Update the active Claude CLI installation and return refreshed health.
+   * Update a provider CLI and return refreshed health. Bundled Codex upgrades are rejected.
    */
   upgradeProviderCLI: publicProcedure
     .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
