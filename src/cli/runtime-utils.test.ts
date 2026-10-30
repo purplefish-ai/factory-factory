@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExec = vi.fn();
+const mockServer = { once: vi.fn(), listen: vi.fn(), close: vi.fn() };
+
+vi.mock('node:net', () => ({ createServer: () => mockServer }));
 
 vi.mock('node:child_process', () => ({
   exec: (...args: unknown[]) => mockExec(...args),
@@ -17,7 +20,30 @@ describe('findAvailablePort', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExec.mockReset();
+    mockServer.once.mockReset();
+    mockServer.listen.mockReset();
+    mockServer.close.mockReset();
     Object.defineProperty(process, 'platform', { value: 'darwin' });
+  });
+
+  it('skips a hidden listener when lsof exits 1', async () => {
+    mockExec.mockRejectedValue(Object.assign(new Error('No visible listeners'), { code: 1 }));
+    let attempt = 0;
+    mockServer.once.mockImplementation((event: string, callback: () => void) => {
+      if ((attempt === 0 && event === 'error') || (attempt === 1 && event === 'listening')) {
+        queueMicrotask(callback);
+      }
+      return mockServer;
+    });
+    mockServer.listen.mockImplementation(() => {
+      attempt += 1;
+    });
+    mockServer.close.mockImplementation((callback: () => void) => callback());
+
+    await expect(findAvailablePort(3000)).resolves.toBe(3001);
+    expect(mockServer.listen.mock.calls).toEqual([[3000], [3001]]);
+    expect(mockServer.close).toHaveBeenCalledOnce();
   });
 
   afterEach(() => {

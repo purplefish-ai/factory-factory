@@ -102,6 +102,25 @@ describe('port.service', () => {
       expect(mockServer.listen).toHaveBeenCalledWith(3000);
     });
 
+    it.each(['error', 'listening'])(
+      'uses the bind result (%s) when lsof exits 1 without seeing another user’s listener',
+      async (bindEvent) => {
+        Object.defineProperty(process, 'platform', { value: 'darwin' });
+        mockExec.mockRejectedValue(Object.assign(new Error('No visible listeners'), { code: 1 }));
+        mockServer.once.mockImplementation((event: string, callback: () => void) => {
+          if (event === bindEvent) {
+            queueMicrotask(callback);
+          }
+          return mockServer;
+        });
+        mockServer.close.mockImplementation((callback: () => void) => callback());
+
+        await expect(isPortAvailable(3000)).resolves.toBe(bindEvent === 'listening');
+        expect(mockServer.listen).toHaveBeenCalledWith(3000);
+        expect(mockServer.close).toHaveBeenCalledTimes(bindEvent === 'listening' ? 1 : 0);
+      }
+    );
+
     it('should use bind test on Windows', async () => {
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
