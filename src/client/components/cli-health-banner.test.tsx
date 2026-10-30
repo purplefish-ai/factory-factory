@@ -33,7 +33,7 @@ const mockLocalStorage = {
 };
 
 describe('collectIssues', () => {
-  it('reports Claude freshness while leaving bundled Codex upgrades to the app', () => {
+  it('leaves both bundled runtime upgrades to the app', () => {
     const issues = collectIssues({
       claude: {
         isInstalled: true,
@@ -54,10 +54,27 @@ describe('collectIssues', () => {
       },
     });
 
-    expect(issues).toHaveLength(2);
-    expect(issues.map((issue) => issue.title)).toEqual([
-      'Claude update available',
-      'GitHub CLI not installed',
+    expect(issues.map((issue) => issue.title)).toEqual(['GitHub CLI not installed']);
+  });
+
+  it('shows managed Claude sign-in and runtime repair instructions', () => {
+    const health = {
+      claude: { isInstalled: true, isAuthenticated: false },
+      codex: { isInstalled: true },
+      github: { isInstalled: true, isAuthenticated: true },
+    };
+    expect(collectIssues(health)[0]?.description).toContain('setup terminal in Settings');
+    expect(collectIssues(health)[0]?.description).toContain('If ff is installed');
+    expect(collectIssues(health)).toContainEqual(
+      expect.objectContaining({ description: expect.stringContaining('ff claude auth login') })
+    );
+    expect(
+      collectIssues({ ...health, claude: { isInstalled: false, isAuthenticated: false } })
+    ).toEqual([
+      expect.objectContaining({
+        title: 'Claude runtime unavailable',
+        description: expect.stringContaining('Update or reinstall Factory Factory'),
+      }),
     ]);
   });
 
@@ -130,53 +147,18 @@ describe('CLI health warning dismissal storage', () => {
     expect(isCLIHealthWarningDismissed(fingerprint)).toBe(true);
   });
 
-  it('does not reuse dismissal when the latest version changes', () => {
-    const dismissedIssues = collectIssues({
-      claude: {
-        isInstalled: true,
-        isOutdated: true,
-        version: '0.1.0',
-        latestVersion: '0.2.0',
-      },
-      codex: { isInstalled: true, isAuthenticated: true },
-      github: { isInstalled: true, isAuthenticated: true },
-    });
-    const updatedIssues = collectIssues({
-      claude: {
-        isInstalled: true,
-        isOutdated: true,
-        version: '0.1.0',
-        latestVersion: '0.3.0',
-      },
-      codex: { isInstalled: true, isAuthenticated: true },
-      github: { isInstalled: true, isAuthenticated: true },
-    });
-
-    rememberDismissedCLIHealthWarning(getCLIHealthWarningFingerprint(dismissedIssues));
-
-    expect(isCLIHealthWarningDismissed(getCLIHealthWarningFingerprint(updatedIssues))).toBe(false);
-  });
-
-  it('does not reuse dismissal when the issue set changes', () => {
-    const dismissedIssues = collectIssues({
-      claude: { isInstalled: true },
+  it('does not reuse dismissal when the runtime issue changes', () => {
+    const health = {
+      claude: { isInstalled: true, isAuthenticated: false },
       codex: { isInstalled: true, isAuthenticated: true },
       github: { isInstalled: false, isAuthenticated: false },
+    };
+    rememberDismissedCLIHealthWarning(getCLIHealthWarningFingerprint(collectIssues(health)));
+    const changed = collectIssues({
+      ...health,
+      claude: { isInstalled: false, isAuthenticated: false },
     });
-    const updatedIssues = collectIssues({
-      claude: {
-        isInstalled: true,
-        isOutdated: true,
-        version: '0.1.0',
-        latestVersion: '0.2.0',
-      },
-      codex: { isInstalled: true, isAuthenticated: true },
-      github: { isInstalled: false, isAuthenticated: false },
-    });
-
-    rememberDismissedCLIHealthWarning(getCLIHealthWarningFingerprint(dismissedIssues));
-
-    expect(isCLIHealthWarningDismissed(getCLIHealthWarningFingerprint(updatedIssues))).toBe(false);
+    expect(isCLIHealthWarningDismissed(getCLIHealthWarningFingerprint(changed))).toBe(false);
   });
 
   it('forgets a dismissed warning after warnings clear', () => {
@@ -215,59 +197,29 @@ describe('CLI health warning dismissal storage', () => {
 });
 
 describe('CLIHealthBannerContent', () => {
-  const callbacks = {
-    isRefetching: false,
-    isUpgrading: false,
-    onRecheck: vi.fn(),
-    onDismiss: vi.fn(),
-    onUpgrade: vi.fn(),
-  };
-  const update = {
-    title: 'Claude update available',
-    description: 'Installed 1.0.0; latest is 1.1.0.',
-    upgradeProvider: 'CLAUDE' as const,
-  };
+  const callbacks = { isRefetching: false, onRecheck: vi.fn(), onDismiss: vi.fn() };
   const warning = {
-    title: 'GitHub sign-in required',
-    description: 'Run "gh auth login" in your terminal to enable PR management.',
+    title: 'Claude sign-in required',
+    description: 'Run "ff claude auth login" in your terminal to authenticate.',
   };
 
-  it('offers one update action without presenting optional updates as warnings', () => {
+  it('shows managed login instructions with recheck and dismiss actions', () => {
     const markup = renderToStaticMarkup(
-      <CLIHealthBannerContent {...callbacks} issues={[update]} />
+      <CLIHealthBannerContent {...callbacks} issues={[warning]} />
     );
-
-    expect(markup).toContain('Update Claude');
-    expect(markup.match(/<button[^>]*aria-label="Update Claude"/g)).toHaveLength(1);
-    expect(markup).not.toContain('role="alert"');
-    expect(markup).not.toContain('bg-warning');
-    expect(markup).not.toContain('Some features require additional setup');
-    expect(markup).not.toContain('<a');
-    expect(markup).toContain('Dismiss');
-  });
-
-  it('keeps a sign-in warning separate from the optional update action', () => {
-    const markup = renderToStaticMarkup(
-      <CLIHealthBannerContent {...callbacks} issues={[update, warning]} />
-    );
-
-    expect(markup.match(/role="alert"/g)).toHaveLength(1);
-    const alert = markup.slice(markup.indexOf('role="alert"'), markup.indexOf('</li>'));
-    expect(alert).toContain('GitHub sign-in required');
-    expect(alert).toContain('gh auth login');
-    expect(alert).not.toContain('Update Claude');
-    expect(markup).toContain('Update Claude');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('ff claude auth login');
     expect(markup).toContain('Recheck');
+    expect(markup).toContain('Dismiss');
+    expect(markup).not.toContain('Update Claude');
+    expect(markup).not.toContain('<a');
   });
 
-  it('disables updates and rechecks while an update is running', () => {
+  it('disables recheck while a refresh is running', () => {
     const markup = renderToStaticMarkup(
-      <CLIHealthBannerContent {...callbacks} issues={[update, warning]} isUpgrading />
+      <CLIHealthBannerContent {...callbacks} issues={[warning]} isRefetching />
     );
-
-    expect(markup).toContain('Updating Claude');
-    expect(markup.match(/disabled=""/g)).toHaveLength(2);
-    expect(markup).toContain('aria-busy="true"');
+    expect(markup.match(/disabled=""/g)).toHaveLength(1);
   });
 
   it('renders nothing when all issues have cleared', () => {

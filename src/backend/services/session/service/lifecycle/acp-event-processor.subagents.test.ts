@@ -239,4 +239,40 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
     expect(deps.sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(deps.sessionDomainService.upsertClaudeEvent).not.toHaveBeenCalled();
   });
+
+  it('throttles per-token subagent updates and flushes them on session teardown', () => {
+    vi.useFakeTimers();
+    try {
+      const deps = makeDeps();
+      const processor = new AcpEventProcessor({ ...deps, subagentUpdateIntervalMs: 250 });
+      const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
+      if (!onAcpEvent) {
+        throw new Error('Expected an ACP runtime event handler');
+      }
+      const update = {
+        type: 'acp_subagents_changed',
+        subagentId: 'child-1',
+        change: 'updated',
+      } as const;
+
+      for (let i = 0; i < 20; i++) {
+        onAcpEvent('db-session-1', update);
+      }
+      expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(250);
+      expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
+
+      onAcpEvent('db-session-1', update);
+      processor.clearSessionState('db-session-1');
+      expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledTimes(2);
+      expect(deps.sessionDomainService.emitDelta).toHaveBeenLastCalledWith('db-session-1', {
+        type: 'subagents_changed',
+        sessionId: 'db-session-1',
+        subagentId: 'child-1',
+        change: 'updated',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { AppContext } from '@/backend/app-context';
 import { HTTP_STATUS } from '@/backend/constants/http';
 import { toError } from '@/backend/lib/error-utils';
+import { eventLoopMonitor } from '@/backend/lib/event-loop-monitor';
 
 // ============================================================================
 // Health Check Routes
@@ -51,7 +52,8 @@ export function createHealthRouter(appContext: AppContext): Router {
 
   /**
    * GET /health/all
-   * Comprehensive health check - database + rate limiter status
+   * Comprehensive health check - database + rate limiter status, plus
+   * event-loop lag since the previous call
    */
   router.get('/all', async (_req, res) => {
     const checks: Record<string, { status: string; details?: unknown }> = {};
@@ -76,6 +78,9 @@ export function createHealthRouter(appContext: AppContext): Router {
     };
 
     const statuses = Object.values(checks).map((c) => c.status);
+
+    // Informational only: lag does not change the overall status.
+    const eventLoop = eventLoopMonitor.read();
     let overallStatus = 'ok';
     if (statuses.includes('error')) {
       overallStatus = 'error';
@@ -87,6 +92,7 @@ export function createHealthRouter(appContext: AppContext): Router {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       checks,
+      ...(eventLoop ? { eventLoop } : {}),
     });
   });
 

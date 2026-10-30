@@ -19,6 +19,12 @@ vi.mock('node:fs', () => {
 // Helper type for testing circular references - allows dynamic property assignment
 type CircularTestObject = Record<string, unknown>;
 
+function lastLogEntry() {
+  const calls = mockWriteStream.write.mock.calls;
+  const lastCall = calls[calls.length - 1] as [string];
+  return JSON.parse(lastCall[0].toString().trim());
+}
+
 describe('LoggerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -245,10 +251,16 @@ describe('LoggerService', () => {
 
     it('should emit valid JSON even when serialization fails unexpectedly', () => {
       const logger = createLogger('test');
-      // BigInt cannot be serialized by JSON.stringify
-      const obj = { value: BigInt(123) };
+      // A nested throwing getter aborts serialization of the whole context
+      const obj = {
+        nested: {
+          get value(): never {
+            throw new Error('getter failed');
+          },
+        },
+      };
 
-      logger.info('Test serialization error', obj as unknown as Record<string, unknown>);
+      logger.info('Test serialization error', obj);
 
       expect(mockWriteStream.write).toHaveBeenCalled();
       const calls = mockWriteStream.write.mock.calls;
@@ -256,7 +268,89 @@ describe('LoggerService', () => {
       const raw = lastCall[0].toString().trim();
 
       // Fallback should still be valid JSON, not [object Object]
-      expect(() => JSON.parse(raw)).not.toThrow();
+      expect(JSON.parse(raw)).toEqual({ __serializationError: 'getter failed' });
+    });
+
+    it('should serialize BigInt values as strings', () => {
+      const logger = createLogger('test');
+
+      logger.info('Test BigInt', { value: BigInt(123), nested: { size: 2n ** 64n } });
+
+      const logEntry = lastLogEntry();
+      expect(logEntry.context.value).toBe('123');
+      expect(logEntry.context.nested.size).toBe('18446744073709551616');
+    });
+  });
+
+  describe('error serialization', () => {
+    it('should preserve the message and stack of an Error in the context', () => {
+      const logger = createLogger('test');
+      const error = new Error('EPIPE: broken pipe');
+
+      logger.info('Something failed', { error });
+
+      const logEntry = lastLogEntry();
+      expect(logEntry.context.error).toEqual({
+        name: 'Error',
+        message: 'EPIPE: broken pipe',
+        stack: error.stack,
+      });
+    });
+
+    it('should include own enumerable properties and the cause chain', () => {
+      const logger = createLogger('test');
+      const cause = Object.assign(new TypeError('socket closed'), { code: 'ECONNRESET' });
+      const error = new Error('request failed', { cause });
+
+      logger.info('Request failed', { error });
+
+      const logEntry = lastLogEntry();
+      expect(logEntry.context.error.message).toBe('request failed');
+      expect(logEntry.context.error.cause).toMatchObject({
+        name: 'TypeError',
+        message: 'socket closed',
+        code: 'ECONNRESET',
+      });
+    });
+
+    it('should include the errors of an AggregateError', () => {
+      const logger = createLogger('test');
+      const error = new AggregateError([new Error('first'), new Error('second')], 'all failed');
+
+      logger.info('Aggregate failure', { error });
+
+      const logged = lastLogEntry().context.error;
+      expect(logged.message).toBe('all failed');
+      expect(logged.errors.map((item: { message: string }) => item.message)).toEqual([
+        'first',
+        'second',
+      ]);
+    });
+
+    it('should keep the cause and own fields of an Error passed to error()', () => {
+      const logger = createLogger('test');
+      const cause = new Error('socket closed');
+      const error = Object.assign(new Error('request failed', { cause }), { code: 'E_REQ' });
+
+      logger.error('Request failed', error);
+
+      expect(lastLogEntry().error).toMatchObject({
+        name: 'Error',
+        message: 'request failed',
+        stack: error.stack,
+        code: 'E_REQ',
+        cause: { message: 'socket closed' },
+      });
+    });
+
+    it('should replace a self-referencing cause with a circular marker', () => {
+      const logger = createLogger('test');
+      const error = new Error('loop');
+      error.cause = error;
+
+      logger.info('Circular cause', { error });
+
+      expect(lastLogEntry().context.error.cause).toBe('[Circular]');
     });
   });
 });

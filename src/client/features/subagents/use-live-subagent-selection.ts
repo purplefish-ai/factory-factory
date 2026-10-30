@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentSelection } from './types';
@@ -117,18 +118,22 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     void refetch();
   }, [refetch]);
 
-  useEffect(
-    () =>
-      subscribeToSubagentChanges((detail) => {
-        if (
-          detail.sessionId === selection.parentSessionId &&
-          detail.subagentId === selection.subagent.id
-        ) {
-          void refetch();
-        }
-      }),
-    [refetch, selection.parentSessionId, selection.subagent.id]
-  );
+  useEffect(() => {
+    // Change bursts run one refetch at a time plus one trailing refetch.
+    const refreshOnChange = createTrailingRefresh(refetch);
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
+      if (
+        detail.sessionId === selection.parentSessionId &&
+        detail.subagentId === selection.subagent.id
+      ) {
+        refreshOnChange.trigger();
+      }
+    });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
+  }, [refetch, selection.parentSessionId, selection.subagent.id]);
 
   const loadedPageCount = query.data?.pages.length ?? 0;
   const hasSuccessfulPostMountFetch = candidateWasCachedAtMount.current

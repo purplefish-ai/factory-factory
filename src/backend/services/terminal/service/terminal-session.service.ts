@@ -46,7 +46,7 @@ class TerminalSessionService {
     let recovered = 0;
 
     for (const session of sessions) {
-      if (!session.pid || isProcessRunning(session.pid)) {
+      if (!session.pid || (await isProcessRunning(session.pid))) {
         continue;
       }
 

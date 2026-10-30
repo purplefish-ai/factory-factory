@@ -579,13 +579,28 @@ export const RefreshCLIAuthentication: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByText(/run claude login/);
-    await expect(canvas.getByText(/ff codex login/)).toBeVisible();
+    await canvas.findByText(/use Sign in to Claude/);
+    await expect(canvas.getByText(/Sign in to Codex/)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
     await expect(
       canvas.queryByRole('button', { name: 'Open Terminal to Log In' })
     ).not.toBeInTheDocument();
+  },
+};
+
+export const ManagedProviderLoginActions: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <CliAuthSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Open Terminal to Log In' }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: 'Terminal' }));
+    await expect(dialog.getByRole('button', { name: 'Sign in to Claude' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Sign in to Codex' })).toBeVisible();
   },
 };
 

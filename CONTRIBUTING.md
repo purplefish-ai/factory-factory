@@ -10,7 +10,8 @@ provides guidelines and information for contributors.
 - Node.js 26.12.1+ (pinned in `.node-version`)
 - pnpm
 - GitHub CLI (`gh`) - authenticated
-- Claude Code - authenticated via `claude login`
+- Claude authentication via `pnpm exec tsx src/cli/index.ts claude auth login`
+  (the runtime is included; a global Claude installation is not required)
 
 ### Development Setup
 

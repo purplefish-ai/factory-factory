@@ -27,6 +27,7 @@ export {
   WorkspaceStatus,
 } from './enums.js';
 
+export { isOpenPrState } from './pr-state.js';
 export { deriveRatchetState, type RatchetStateInput } from './ratchet-state.js';
 
 export {

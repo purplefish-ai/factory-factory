@@ -252,9 +252,12 @@ export class PeriodicTaskService {
       }
     );
     if (!execution) {
-      this.logger.debug('Skipping periodic task — dispatch reservation was already claimed', {
-        taskId,
-      });
+      this.logger.debug(
+        'Skipping periodic task — dispatch reservation no longer eligible or already claimed',
+        {
+          taskId,
+        }
+      );
       return;
     }
 

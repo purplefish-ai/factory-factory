@@ -143,9 +143,11 @@ included in pending counts; they remain available for receipt recovery.
 Collection projections report MERGED only when every attached PR is merged; an
 open sibling remains visible.
 
-Accepted per-PR `NONE` → `OPEN` observations notify the parent workspace once
-for each newly opened association, including attachment and discovery refreshes.
-Rejected or unchanged observations do not repeat the notification.
+Accepted per-PR observations from `NONE` to any open state (`OPEN`, `DRAFT`,
+`CHANGES_REQUESTED`, or `APPROVED`) notify the parent workspace once for each
+newly opened association, including attachment and discovery refreshes. Rejected
+or unchanged observations and later moves between open states (such as `DRAFT` →
+`OPEN`) do not repeat the notification.
 
 Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
 arrays are compared by identity and content, so database row order does not
@@ -349,14 +351,15 @@ preserving the original frozen delivery ID and text. The PR menu also offers
 explicit **Resume PR updates** for recoverable pauses, including when no
 dedicated conversation exists yet. Changing destinations alone preserves a
 pause; resuming uses the binding revision and retains frozen recipients. The
-chat renders PR updates as compact, noneditable rows with queued, delivered,
-failed, or cancelled delivery states. Queued updates appear below current agent
-activity as one shared status line, regardless of how many updates are queued;
-delivered update contents can be expanded in the transcript. Failed and
-cancelled queue outcomes remain in session snapshots and replay; background
-prompt text never enters composer recovery. Snapshots expose enablement,
-delivery mode, recipient, pause reason and pending count. Queued updates, paused
-delivery, and idle red CI do not imply live agent work.
+chat renders PR updates as compact, noneditable rows with queued, delivered, or
+failed delivery states. Cancelled updates are hidden from the conversation,
+including after history replay, without leaving empty rows. Queued updates
+appear below current agent activity as one shared status line, regardless of how
+many updates are queued; delivered update contents can be expanded in the
+transcript. Failed and cancelled queue outcomes remain in session snapshots and
+replay; background prompt text never enters composer recovery. Snapshots expose
+enablement, delivery mode, recipient, pause reason and pending count. Queued
+updates, paused delivery, and idle red CI do not imply live agent work.
 
 ### Migration and backups
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildServeEnv } from './serve-env';
+import { buildHttpOrigin, buildServeEnv } from './serve-env';
 
 describe('buildServeEnv', () => {
   it('passes the requested CLI host to the backend bind host', () => {
@@ -63,11 +63,34 @@ describe('buildServeEnv', () => {
     expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:5173');
   });
 
+  it('brackets an IPv6 loopback host in the default CORS origin', () => {
+    const env = buildServeEnv({ host: '::1' }, '/tmp/factory.db', 3000, 7001, {});
+
+    // Browsers send IPv6 literal origins bracketed (RFC 3986), e.g. `http://[::1]:7001`.
+    // The CORS middleware compares origins by exact string, so the default must match that.
+    expect(env.BACKEND_HOST).toBe('::1');
+    expect(env.CORS_ALLOWED_ORIGINS).toBe('http://[::1]:7001');
+    expect(new URL(env.CORS_ALLOWED_ORIGINS as string).origin).toBe('http://[::1]:7001');
+  });
+
   it('respects CORS_ALLOWED_ORIGINS from the base environment', () => {
     const env = buildServeEnv({ host: '0.0.0.0' }, '/tmp/factory.db', 3000, 3001, {
       CORS_ALLOWED_ORIGINS: 'https://home.adeesha.dev',
     });
 
     expect(env.CORS_ALLOWED_ORIGINS).toBe('https://home.adeesha.dev');
+  });
+});
+
+describe('buildHttpOrigin', () => {
+  it.each([
+    ['localhost', 'http://localhost:3000'],
+    ['127.0.0.1', 'http://127.0.0.1:3000'],
+    ['::1', 'http://[::1]:3000'],
+    ['::', 'http://[::]:3000'],
+    ['0:0:0:0:0:0:0:1', 'http://[::1]:3000'],
+    ['2001:DB8:0:0:0:0:0:1', 'http://[2001:db8::1]:3000'],
+  ])('formats host %s as %s', (host, expected) => {
+    expect(buildHttpOrigin(host, 3000)).toBe(expected);
   });
 });

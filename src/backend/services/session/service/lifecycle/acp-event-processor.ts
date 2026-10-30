@@ -21,6 +21,7 @@ import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
 import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
+import { SubagentChangeCoalescer } from './subagent-change-coalescer';
 import { SubagentToolEventCollector } from './subagent-tool-events';
 
 const logger = createLogger('session');
@@ -39,9 +40,14 @@ type PendingAcpToolCall = {
  * translator emits only validated warning notices for `session_info_update`.
  * A `usage_update` becomes a non-rendering occupancy `result`; hydrated history
  * has no result rows, and the provider sends the snapshot at attach.
+ * Plan snapshots restore the current checklist, including explicit empty lists.
  */
 function isReplayExemptSessionUpdate(update: AcpSessionUpdateEvent['update']): boolean {
-  return update.sessionUpdate === 'session_info_update' || update.sessionUpdate === 'usage_update';
+  return (
+    update.sessionUpdate === 'session_info_update' ||
+    update.sessionUpdate === 'usage_update' ||
+    update.sessionUpdate === 'plan'
+  );
 }
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
@@ -64,6 +70,7 @@ export type AcpEventProcessorDependencies = {
   onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
   toolCallTimeoutMs?: number;
   textFlushIntervalMs?: number;
+  subagentUpdateIntervalMs?: number;
 };
 
 export class AcpEventProcessor {
@@ -73,6 +80,7 @@ export class AcpEventProcessor {
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly subagentToolEvents = new SubagentToolEventCollector();
+  private readonly subagentChanges: SubagentChangeCoalescer;
   private readonly onToolCallTimeout: (
     sessionId: string,
     toolUseId: string,
@@ -101,6 +109,11 @@ export class AcpEventProcessor {
   private readonly sessionToWorkflow = new Map<string, string>();
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
+  /**
+   * Tool calls already tracked when the current prompt began, e.g. from a provider turn
+   * this process did not start. They stay tracked until the prompt is accepted and ends.
+   */
+  private readonly toolCallsBeforePromptTurn = new Map<string, Set<string>>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -110,6 +123,16 @@ export class AcpEventProcessor {
     this.onToolCallTimeout = options.onToolCallTimeout;
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
     this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
+    this.subagentChanges = new SubagentChangeCoalescer(
+      (sessionId, subagentId, change) =>
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'subagents_changed',
+          sessionId,
+          subagentId,
+          change,
+        }),
+      options.subagentUpdateIntervalMs
+    );
   }
 
   createRuntimeEventHandler(
@@ -208,12 +231,7 @@ export class AcpEventProcessor {
     }
 
     if (event.type === 'acp_subagents_changed') {
-      this.sessionDomainService.emitDelta(sid, {
-        type: 'subagents_changed',
-        sessionId: sid,
-        subagentId: event.subagentId,
-        change: event.change,
-      });
+      this.subagentChanges.push(sid, event.subagentId, event.change);
       return;
     }
 
@@ -269,10 +287,12 @@ export class AcpEventProcessor {
     this.acpEventTranslator.clearTerminalOutput(sessionId);
     this.subagentToolEvents.clearSession(sessionId);
     this.pendingAcpToolCalls.delete(sessionId);
+    this.toolCallsBeforePromptTurn.delete(sessionId);
     this.clearAllToolCallTimers(sessionId);
   }
 
   clearSessionState(sessionId: string): void {
+    this.subagentChanges.flushSession(sessionId);
     this.clearStreamingState(sessionId);
     this.clearPendingToolCalls(sessionId);
     this.clearReplaySuppression(sessionId);
@@ -282,15 +302,33 @@ export class AcpEventProcessor {
 
   beginPromptTurn(sessionId: string): string {
     this.finishAcpTextBlock(sessionId);
-    this.pendingAcpToolCalls.set(sessionId, new Map());
+    const existingToolCallIds = this.pendingAcpToolCalls.get(sessionId)?.keys();
+    this.toolCallsBeforePromptTurn.set(sessionId, new Set(existingToolCallIds));
     const attemptKey = randomUUID();
     this.activePromptAttemptKeys.set(sessionId, attemptKey);
     return attemptKey;
   }
 
+  /** Ends a prompt turn; tool calls that predate it are not reported as its orphans. */
   finishPromptTurn(sessionId: string): void {
     this.finishAcpTextBlock(sessionId);
     this.activePromptAttemptKeys.delete(sessionId);
+    for (const toolUseId of this.toolCallsBeforePromptTurn.get(sessionId) ?? []) {
+      this.removePendingToolCall(sessionId, toolUseId);
+    }
+    this.toolCallsBeforePromptTurn.delete(sessionId);
+  }
+
+  /**
+   * Discards a prompt the provider rejected without starting a turn (for example because
+   * another turn is in progress). The running turn keeps its tool-call tracking.
+   */
+  abandonPromptTurn(sessionId: string, attemptKey: string): void {
+    if (this.activePromptAttemptKeys.get(sessionId) !== attemptKey) {
+      return;
+    }
+    this.activePromptAttemptKeys.delete(sessionId);
+    this.toolCallsBeforePromptTurn.delete(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {

@@ -1,5 +1,3 @@
-import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
-import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
@@ -9,53 +7,18 @@ export interface TodoPanelProps {
   todoState: TodoState;
 }
 
-/**
- * Displays a compact todo panel showing the current task list state.
- * Can be placed in the chat sidebar or as a floating panel.
- */
+/** The latest task snapshot, displayed inline at the end of the conversation. */
 export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) {
-  const { todos, completedCount, totalCount, progressPercent } = todoState;
-
-  // Don't render if there are no todos
-  if (todos.length === 0) {
+  if (todoState.todos.length === 0) {
     return null;
   }
-
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-      <div className="p-3 space-y-2">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ListChecksIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Tasks</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {completedCount}/{totalCount}
-            </span>
-            <div className="flex items-center gap-0.5">
-              <CheckCircleIcon className="h-3 w-3 text-success" />
-              <span className="text-xs font-medium">{progressPercent}%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-
-        {/* Todo List */}
-        <div className="space-y-1.5 overflow-y-auto">
-          {withOccurrenceKeys(todos, (todo) => todo.content).map(({ item: todo, key }) => (
-            <TodoItem key={key} todo={todo} />
-          ))}
-        </div>
-      </div>
-    </div>
+    <ul aria-label="Tasks" className="my-4 space-y-2 rounded-xl border border-border/60 p-4">
+      {withOccurrenceKeys(todoState.todos, (todo) => todo.content).map(({ item: todo, key }) => (
+        <li key={key}>
+          <TodoItem todo={todo} />
+        </li>
+      ))}
+    </ul>
   );
 });

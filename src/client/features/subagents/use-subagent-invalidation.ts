@@ -1,10 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
-
-function listInput(sessionId: string) {
-  return { sessionId, cursor: null, limit: 100 } as const;
-}
 
 export function useSubagentInvalidation(sessionId: string | null, enabled: boolean): boolean {
   const utils = trpc.useUtils();
@@ -31,7 +28,7 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
       previousStateRef.current = { sessionId, enabled: true };
       finishReconnect();
     };
-    void invalidateList(listInput(sessionId)).then(complete, complete);
+    void invalidateList({ sessionId }).then(complete, complete);
     return () => {
       active = false;
     };
@@ -42,11 +39,17 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
       return;
     }
 
-    return subscribeToSubagentChanges((detail) => {
+    // Change bursts run one invalidation at a time plus one trailing invalidation.
+    const refreshOnChange = createTrailingRefresh(() => invalidateList({ sessionId }));
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
-        void invalidateList(listInput(sessionId));
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [invalidateList, sessionId]);
 
   return enabled && !reconnecting;

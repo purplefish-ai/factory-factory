@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveCiStatusFromCheckRollup } from './ci-status';
+import { deriveCiStatusFromCheckRollup, deriveCiVisualStateFromChecks } from './ci-status';
 import { CIStatus } from './enums';
 
 describe('deriveCiStatusFromCheckRollup', () => {
@@ -98,5 +98,25 @@ describe('deriveCiStatusFromCheckRollup', () => {
     ]);
 
     expect(result).toBe(CIStatus.FAILURE);
+  });
+
+  // GitHub's CheckStatusState also reports WAITING (a job gated on an
+  // environment approval) and REQUESTED (requested but not yet queued). The
+  // prCiStatus path passes raw CheckRun statuses straight through.
+  it.each(['WAITING', 'REQUESTED'])('treats a non-terminal %s check run as PENDING', (status) => {
+    expect(
+      deriveCiStatusFromCheckRollup([
+        { status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { status, conclusion: null },
+      ])
+    ).toBe(CIStatus.PENDING);
+  });
+});
+
+describe('deriveCiVisualStateFromChecks', () => {
+  it('shows a check waiting on environment approval as running', () => {
+    expect(deriveCiVisualStateFromChecks([{ status: 'WAITING', conclusion: null }])).toBe(
+      'RUNNING'
+    );
   });
 });

@@ -45,6 +45,31 @@ function setup(working = false) {
 }
 
 describe('AcpEventProcessor replay suppression', () => {
+  it('restores task snapshots sent while attaching provider history', () => {
+    const { domain, sendUpdate } = setup();
+    const entries = [
+      { content: 'Resume work', status: 'in_progress' as const, priority: 'high' as const },
+    ];
+    sendUpdate({ sessionUpdate: 'plan', entries });
+    const replay = () =>
+      domain
+        .prepareLoad(SESSION_ID, {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-10-30T00:00:00Z',
+        })
+        .replayEvents.filter((event) => event.type === 'task_notification');
+    expect(replay()).toEqual([
+      { type: 'task_notification', message: JSON.stringify({ type: 'acp_plan', entries }) },
+    ]);
+    sendUpdate({ sessionUpdate: 'plan', entries: [] });
+    expect(replay()).toEqual([
+      { type: 'task_notification', message: JSON.stringify({ type: 'acp_plan', entries: [] }) },
+    ]);
+    domain.clearAllSessions();
+  });
+
   it('keeps replay suppressed while background activity exists without a live prompt', () => {
     const { domain, processor, sendUpdate, startPrompt } = setup(true);
     sendUpdate({

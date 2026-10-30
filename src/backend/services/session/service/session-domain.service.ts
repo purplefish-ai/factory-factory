@@ -7,6 +7,7 @@ import type {
   SessionDeltaEvent,
 } from '@/shared/acp-protocol';
 import { MessageState } from '@/shared/acp-protocol';
+import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { sessionResumeFences } from './session-resume-fence';
@@ -152,6 +153,12 @@ export class SessionDomainService extends EventEmitter {
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
+    if (event.type === 'task_notification') {
+      const plan = parseAcpPlanNotification(event.message);
+      if (plan) {
+        this.registry.getOrCreateActive(sessionId).taskPlan = plan;
+      }
+    }
     if (event.type === 'slash_commands') {
       this.registry.getOrCreateActive(sessionId).liveSlashCommands = structuredClone(
         event.slashCommands ?? []
@@ -415,13 +422,15 @@ export class SessionDomainService extends EventEmitter {
     });
   }
 
-  clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
+  /** Returns whether `requestId` was the pending request and has been cleared. */
+  clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
     if (!clearPendingInteractiveRequestIfMatches(store, requestId)) {
-      return;
+      return false;
     }
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
     this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
+    return true;
   }
 
   markProcessExit(sessionId: string, code: number | null): void {
@@ -633,6 +642,7 @@ export class SessionDomainService extends EventEmitter {
     store.historyProviderSessionId = providerSessionId;
     store.historyReadGeneration = (store.historyReadGeneration ?? 0) + 1;
     store.historySuspended = false;
+    store.taskPlan = undefined;
     store.historyHydrated = false;
     store.historyHydrationSource = undefined;
     store.historyHydratedAt = undefined;

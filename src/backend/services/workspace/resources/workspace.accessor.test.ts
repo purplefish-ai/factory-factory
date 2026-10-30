@@ -68,7 +68,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          projectId: 'project-1',
+          project: { connect: { id: 'project-1', isArchived: false } },
           name: 'Issue workspace',
           githubIssueNumber: 12,
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
@@ -105,7 +105,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          projectId: 'project-1',
+          project: { connect: { id: 'project-1', isArchived: false } },
           name: 'Manual workspace',
           prMonitoring: { create: { enabled: false, eventEpoch: 0 } },
           prDiscovery: { create: {} },
@@ -138,6 +138,17 @@ describe('workspaceAccessor', () => {
 
       const [{ data }] = mockCreate.mock.calls[0] as [{ data: { prMonitoring?: unknown } }];
       expect(data.prMonitoring).toBeDefined();
+    });
+  });
+
+  it('selects only issue-link columns in findIssueLinksByProjectId', async () => {
+    mockFindMany.mockResolvedValueOnce([]);
+
+    await workspaceAccessor.findIssueLinksByProjectId('project-1');
+
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+      select: { status: true, githubIssueNumber: true, linearIssueId: true },
     });
   });
 

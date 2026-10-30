@@ -1,12 +1,6 @@
 export const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 
-export type TopPanelTab =
-  | 'changes'
-  | 'files'
-  | 'tasks'
-  | 'screenshots'
-  | 'periodic-task'
-  | 'agents';
+export type TopPanelTab = 'changes' | 'files' | 'screenshots' | 'periodic-task' | 'agents';
 
 export interface PersistedTopPanelState {
   topTab: TopPanelTab;
@@ -16,7 +10,6 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
   if (
     value === 'changes' ||
     value === 'files' ||
-    value === 'tasks' ||
     value === 'screenshots' ||
     value === 'periodic-task' ||
     value === 'agents'
@@ -26,7 +19,12 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
   if (value === 'child-workspaces') {
     return 'agents';
   }
-  if (value === 'unstaged' || value === 'diff-vs-main' || value === 'auto-iteration') {
+  if (
+    value === 'tasks' ||
+    value === 'unstaged' ||
+    value === 'diff-vs-main' ||
+    value === 'auto-iteration'
+  ) {
     return 'changes';
   }
   return null;

@@ -34,6 +34,19 @@ stale browser selections. Child inserts also connect only to active projects
 inside their nested-write transaction, so concurrent archival cannot bypass the
 preflight check. Existing children of archived projects remain visible.
 
+Closing a provider-backed session requires retained provider messages or a
+confirmed JSONL history load, including a confirmed empty history. Unavailable
+history and hydration cooldowns abort archival and preserve the live session for
+retry; local lifecycle and failed PR status cards do not prove the conversation
+was recovered. A runtime observed creating a new provider conversation may
+archive it before its first prompt even if no JSONL file exists. This proof is
+scoped to the exact provider identity, survives a normal stop, and is revoked
+before any prompt attempt, on conversation activity, identity replacement,
+failed startup, permanent deletion, or shutdown. It is not inferred after a
+backend restart; an unprompted session without a file then remains protected
+until provider history can be confirmed. Empty ACP fallbacks remain eligible for
+a JSONL read.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through
@@ -43,13 +56,38 @@ client app handlers preserve elicitation and native subagent features;
 `claude-agent-acp` 0.99.1 and Codex uses the released
 `@agentclientprotocol/codex-acp` 2.5.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
-`ff codex login` authenticates that same runtime.
+`ff codex login` authenticates that same runtime. Claude also ships its native
+runtime through the adapter's matched Agent SDK. `ff claude` delegates to the
+adapter's `--cli` passthrough, and `ff claude auth login` authenticates it.
+Health checks inspect these managed runtimes, never global provider CLIs. Setup
+terminal sign-in actions launch these commands directly in a PTY; they do not
+require `ff` or Node on PATH. Replacing the shell with a login process ignores
+output/exit events from the replaced PTY and tags login exits with their
+provider so an earlier shell exit cannot finish a pending login. It restores a
+shell when login exits. Login actions stay disabled while authentication is
+active, and server errors are shown in terminal output; ordinary shell exits
+stay stopped. Both runtimes update with Factory Factory releases; legacy
+global-upgrade requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an
+explicit upstream override and is inherited by both Claude sessions and managed
+CLI operations.
+
+On Unix, the `ff claude` and `ff codex` passthroughs forward terminal resizes.
+Both passthroughs bound process-tree shutdown after interrupts or abnormal
+provider CLI exits. Cleanup failures are logged without replacing the provider's
+exit status. Successful commands retain the native CLI's background-job
+behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
+commands require the CLI to be installed.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node, and are unpacked in desktop packages. Model discovery uses the same
-bundled Codex runtime, without starting an inference turn. Claude model
-discovery uses an ephemeral ACP session with tools disabled. Both catalog
-services coalesce requests and cache successful results for 30 seconds.
+Node, and are unpacked in desktop packages along with their complete production
+dependency trees. The desktop release smoke check runs bundled Claude and its
+actual ACP catalog loader with an empty PATH; CI may require authentication
+before returning model choices. Authentication-only validation requires the
+explicit `--allow-unauthenticated` smoke flag and reports that the catalog was
+not verified when that fallback is used. Model discovery uses the same bundled
+Codex runtime, without starting an inference turn. Claude model discovery uses
+an ephemeral ACP session with tools disabled. Both catalog services coalesce
+requests and cache successful results for 30 seconds.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path
@@ -284,11 +322,13 @@ existing card's input, preserving its original order and tool name through live
 updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
-Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review and Claude's AIR `Approve Plan` requests with plan text are
-normalized into the application's plan UI, including pending requests restored
-on reconnect. Approval clears the composer's plan mode. Interactive sessions
-wait for a user response; read-only reviewers automatically reject plan
+Permission requests retain the provider's option IDs and choices. When requests
+overlap, the newest is shown; answering or cancelling it shows the newest
+request still awaiting a response, including on reconnect. Upstream Codex plan
+review and Claude's AIR `Approve Plan` requests with plan text are normalized
+into the application's plan UI, including pending requests restored on
+reconnect. Approval clears the composer's plan mode. Interactive sessions wait
+for a user response; read-only reviewers automatically reject plan
 implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
 form elicitation, with validated answers mapped into the existing question UI.
@@ -321,7 +361,11 @@ histories; no Factory Factory extension is required from either adapter. Each
 child's in-memory transcript retains at most 100 turns and 2 MiB of serialized
 updates. Oldest whole turns are evicted; an oversized active turn is discarded
 until the next user turn. Cursors use monotonic turn offsets, and expired
-cursors fail explicitly instead of returning another turn.
+cursors fail explicitly instead of returning another turn. Child `updated`
+notifications are throttled to one per subagent every 250 ms because each one
+makes viewers refetch the list or transcript; `created` and `completed` are sent
+immediately. Viewers run one refetch at a time and queue a single follow-up when
+changes arrive mid-flight, so the final update is never missed.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal
@@ -347,17 +391,20 @@ drives runtime activity, the yellow work indicator and the workspace column.
 unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
 
 Runtime snapshots also carry prompt ownership and named background tasks, with
-counts for running subagents and active goals. Chat shows background processes
-separately from the active-turn spinner, with a process-count header that
-expands to show their commands. The command list starts collapsed. Live status
-announcements contain the process count separately from the control and
-commands. A completed turn with a persistent preview server shows the remaining
-process instead of stale reasoning or “Agent is working”. Task-detail changes
-publish even while another task keeps the session busy, and reconnects restore
-current work from the live runtime. Idle and error transitions discard cached
-work unless fresh details are explicitly supplied; stopped transitions always
-clear work. A failed turn retains fresh background details from the live
-runtime, and chat keeps those processes visible alongside the error state.
+counts for running subagents and active goals. A transition that changes only
+the runtime timestamp refreshes the stored state without publishing a delta, so
+repeated task notifications do not trigger workspace summary refreshes. Chat
+shows background processes separately from the active-turn spinner, with a
+process-count header that expands to show their commands. The command list
+starts collapsed. Live status announcements contain the process count separately
+from the control and commands. A completed turn with a persistent preview server
+shows the remaining process instead of stale reasoning or “Agent is working”.
+Task-detail changes publish even while another task keeps the session busy, and
+reconnects restore current work from the live runtime. Idle and error
+transitions discard cached work unless fresh details are explicitly supplied;
+stopped transitions always clear work. A failed turn retains fresh background
+details from the live runtime, and chat keeps those processes visible alongside
+the error state.
 
 Ordinary chat messages may be composed and queued during any turn. Dispatch
 waits for the preceding prompt to complete, including time spent executing tools
@@ -365,7 +412,8 @@ or awaiting that turn's approval, question or elicitation. A background shell,
 independently running child or active goal does not block the next parent prompt
 once that RPC completes. The provider remains authoritative: if it reports an
 active turn that the client cannot observe, the existing bounded busy retry
-preserves the queued message.
+preserves the queued message, and the running turn keeps its tool-call tracking
+for interceptors such as PR detection.
 
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control
@@ -683,6 +731,22 @@ services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
 
+## Task lists
+
+The current task list appears inline beneath the conversation in workspace chat
+and quick chat for both Claude and Codex. The UI uses the latest ACP plan
+snapshot, including empty snapshots that clear the checklist. Older Claude
+TodoWrite calls provide a fallback when no ACP plan has arrived. Completed tasks
+remain visible and muted. Task lists stay hidden during session history loading;
+session switches reset their ACP state. The former Tasks sidebar tab is removed,
+and saved selections of that tab migrate to Changes. The session store retains
+the latest validated ACP task snapshot for reconnect replay, including empty
+lists. Plan snapshots emitted during provider history attachment pass replay
+suppression so restored conversations can recover tasks. Authoritative session
+snapshots include the current task list, so queue updates preserve valid tasks
+and hydration clears stale client state when no list exists. Replacing a
+provider's archived history also clears its task snapshot.
+
 ## Provider sub-agents
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
@@ -700,7 +764,20 @@ included. A page failure keeps loaded rows visible and offers Retry without
 displaying a partial count. Repeated provider cursors stop automatic pagination
 and offer the same recovery instead of repeatedly fetching the same page.
 Restored transcript selection uses the same cursor guard when looking for a
-child on later pages.
+child on later pages. Live sub-agent events invalidate list queries by parent
+session, without cursor or page-size fields, so infinite-query caches refresh
+newly spawned and completed children without a page reload.
+
+The chat timeline projects provider creation and completion timestamps into
+separate, muted sub-agent start and finish rows. Failure, cancellation, and
+interruption retain their own labels. In workspace-detail chat, these rows open
+the Sessions panel. Both workspace-detail and Quick Chat reconstruct the rows
+from provider metadata when history reloads; unknown timestamps are not
+invented. If a request fails or the provider repeats a pagination cursor, chat
+keeps known rows visible and offers Retry. Adjacent tool activity stays
+collapsed by default as muted summary rows; expanding a summary shows
+chronological calls with input and output available on demand. Failed calls
+remain visible in the collapsed summary.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

@@ -63,7 +63,18 @@ const resolveSymlinkTargetPath = async (candidatePath: string): Promise<string |
   }
 
   const linkTarget = await readlink(candidatePath);
-  return path.resolve(path.dirname(candidatePath), linkTarget);
+  if (path.isAbsolute(linkTarget)) {
+    return linkTarget;
+  }
+
+  // The kernel resolves a relative target from the link's physical parent, and
+  // `..` after a symlinked component climbs from that component's target.
+  // Resolve against the parent's real path and keep the target unnormalized so
+  // later realpath/lstat calls apply `..` physically instead of lexically.
+  const realParentPath = await realpath(path.dirname(candidatePath));
+  return realParentPath.endsWith(path.sep)
+    ? `${realParentPath}${linkTarget}`
+    : `${realParentPath}${path.sep}${linkTarget}`;
 };
 
 const resolveParentPath = (candidatePath: string, error: unknown): string => {

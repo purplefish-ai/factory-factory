@@ -4,13 +4,20 @@ import {
 } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import {
   getAskUserQuestions,
   isExitPlanModeRequest,
   isUserQuestionRequest,
+  type PendingInteractiveRequest,
 } from '@/shared/pending-request-types';
+
+type InteractiveRequest = {
+  delta: SessionDeltaEvent;
+  pending: PendingInteractiveRequest;
+};
 
 export type SessionPermissionServiceDependencies = {
   sessionDomainService?: SessionDomainService;
@@ -19,6 +26,11 @@ export type SessionPermissionServiceDependencies = {
 export class SessionPermissionService {
   private readonly sessionDomainService: SessionDomainService;
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
+  /**
+   * Outstanding user-facing requests per session, oldest first. Only the newest is the
+   * session's pending interactive request; resolving it promotes the next one.
+   */
+  private readonly interactiveRequests = new Map<string, Map<string, InteractiveRequest>>();
 
   constructor(options?: SessionPermissionServiceDependencies) {
     this.sessionDomainService = options?.sessionDomainService ?? sessionDomainService;
@@ -32,8 +44,11 @@ export class SessionPermissionService {
 
     const bridge = new AcpPermissionBridge(
       (requestId) => {
-        this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+        const wasShown = this.forgetInteractiveRequest(sessionId, requestId);
         this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
+        if (wasShown) {
+          this.showNextInteractiveRequest(sessionId);
+        }
       },
       workflow === ADVERSARIAL_REVIEW_WORKFLOW
         ? (params) => {
@@ -56,6 +71,7 @@ export class SessionPermissionService {
       return;
     }
 
+    this.interactiveRequests.delete(sessionId);
     bridge.cancelAll();
     this.acpPermissionBridges.delete(sessionId);
   }
@@ -72,8 +88,8 @@ export class SessionPermissionService {
     }
 
     const resolved = bridge.resolvePermission(requestId, optionId, answers);
-    if (resolved) {
-      this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+    if (resolved && this.forgetInteractiveRequest(sessionId, requestId)) {
+      this.showNextInteractiveRequest(sessionId);
     }
     return resolved;
   }
@@ -101,38 +117,72 @@ export class SessionPermissionService {
     const questions = isUserQuestion ? getAskUserQuestions(toolInput) : [];
     const pendingInput = isUserQuestion ? { ...toolInput, questions } : toolInput;
 
-    if (isUserQuestion) {
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'user_question',
-        requestId,
-        toolName,
-        questions,
-        acpOptions,
-      });
-    } else {
-      this.sessionDomainService.emitDelta(sessionId, {
-        type: 'permission_request',
+    const delta: SessionDeltaEvent = isUserQuestion
+      ? { type: 'user_question', requestId, toolName, questions, acpOptions }
+      : {
+          type: 'permission_request',
+          requestId,
+          toolName,
+          toolUseId: params.toolCall.toolCallId,
+          toolInput,
+          ...(event.elicitation ? { elicitation: event.elicitation } : {}),
+          planContent,
+          acpOptions,
+        };
+    const request: InteractiveRequest = {
+      delta,
+      pending: {
         requestId,
         toolName,
         toolUseId: params.toolCall.toolCallId,
-        toolInput,
+        ...(rawToolName ? { rawToolName } : {}),
+        input: pendingInput,
         ...(event.elicitation ? { elicitation: event.elicitation } : {}),
         planContent,
         acpOptions,
-      });
-    }
+        timestamp: new Date().toISOString(),
+      },
+    };
 
-    this.sessionDomainService.setPendingInteractiveRequest(sessionId, {
-      requestId,
-      toolName,
-      toolUseId: params.toolCall.toolCallId,
-      ...(rawToolName ? { rawToolName } : {}),
-      input: pendingInput,
-      ...(event.elicitation ? { elicitation: event.elicitation } : {}),
-      planContent,
-      acpOptions,
-      timestamp: new Date().toISOString(),
-    });
+    let requests = this.interactiveRequests.get(sessionId);
+    if (!requests) {
+      requests = new Map();
+      this.interactiveRequests.set(sessionId, requests);
+    }
+    requests.delete(requestId);
+    requests.set(requestId, request);
+    this.showInteractiveRequest(sessionId, request);
+  }
+
+  private showInteractiveRequest(sessionId: string, request: InteractiveRequest): void {
+    this.sessionDomainService.emitDelta(sessionId, request.delta);
+    this.sessionDomainService.setPendingInteractiveRequest(sessionId, request.pending);
+  }
+
+  /**
+   * Forget a resolved or cancelled request. Returns whether it was the request shown to
+   * the user, in which case the caller shows the next one.
+   */
+  private forgetInteractiveRequest(sessionId: string, requestId: string): boolean {
+    this.interactiveRequests.get(sessionId)?.delete(requestId);
+    return this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+  }
+
+  /** Show the newest request still awaiting a response so it is not stranded without UI. */
+  private showNextInteractiveRequest(sessionId: string): void {
+    const requests = this.interactiveRequests.get(sessionId);
+    if (!requests) {
+      return;
+    }
+    const bridge = this.acpPermissionBridges.get(sessionId);
+    for (const [requestId, request] of [...requests].reverse()) {
+      if (bridge?.hasPending(requestId)) {
+        this.showInteractiveRequest(sessionId, request);
+        return;
+      }
+      requests.delete(requestId);
+    }
+    this.interactiveRequests.delete(sessionId);
   }
 
   private extractPlanContent(toolName: string, input: Record<string, unknown>): string | null {

@@ -1,13 +1,11 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
-import { ListChecksIcon } from '@phosphor-icons/react/dist/csr/ListChecks';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessage } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { trpc } from '@/client/lib/trpc';
@@ -25,7 +23,6 @@ import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
-import { TodoPanelContainer } from './todo-panel-container';
 import { useLogStream } from './use-log-stream';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
@@ -46,7 +43,6 @@ function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
 interface RightPanelProps {
   workspaceId: string;
   className?: string;
-  messages?: ChatMessage[];
   isTakingScreenshots?: boolean;
   onTakeScreenshots?: () => Promise<void>;
   selectedSessionId?: string | null;
@@ -58,7 +54,6 @@ interface RightPanelProps {
 interface TopPanelAreaProps {
   workspaceId: string;
   projectId?: string;
-  messages: ChatMessage[];
   activeTopTab: TopPanelTab;
   onTopTabChange: (tab: TopPanelTab) => void;
   isTakingScreenshots: boolean;
@@ -74,7 +69,6 @@ interface TopPanelAreaProps {
 function TopPanelArea({
   workspaceId,
   projectId,
-  messages,
   activeTopTab,
   onTopTabChange,
   isTakingScreenshots,
@@ -88,7 +82,6 @@ function TopPanelArea({
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
-  const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
   const showAgents = activeTopTab === 'agents';
@@ -118,12 +111,6 @@ function TopPanelArea({
           icon={<FilesIcon className="h-3.5 w-3.5" />}
           isActive={showFiles}
           onSelect={() => onTopTabChange('files')}
-        />
-        <TabButton
-          label="Tasks"
-          icon={<ListChecksIcon className="h-3.5 w-3.5" />}
-          isActive={showTasks}
-          onSelect={() => onTopTabChange('tasks')}
         />
         {periodicTaskId && (
           <TabButton
@@ -165,7 +152,6 @@ function TopPanelArea({
       <div className="flex-1 overflow-hidden">
         {showChanges && <CombinedChangesPanel workspaceId={workspaceId} />}
         {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
-        {showTasks && <TodoPanelContainer messages={messages} />}
         {showScreenshots && (
           <ScreenshotsPanel
             workspaceId={workspaceId}
@@ -194,7 +180,6 @@ function TopPanelArea({
 export function RightPanel({
   workspaceId,
   className,
-  messages = [],
   isTakingScreenshots = false,
   onTakeScreenshots,
   selectedSessionId = null,
@@ -369,7 +354,6 @@ export function RightPanel({
         <TopPanelArea
           projectId={workspace?.projectId}
           workspaceId={workspaceId}
-          messages={messages}
           activeTopTab={activeTopTab}
           onTopTabChange={handleTopTabChange}
           isTakingScreenshots={isTakingScreenshots}

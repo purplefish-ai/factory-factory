@@ -196,8 +196,6 @@ describe('ProviderSubagentsSection', () => {
     expect(mocks.invalidate).toHaveBeenCalledOnce();
     expect(mocks.invalidate).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      cursor: null,
-      limit: 100,
     });
     expect(mocks.useQuery).toHaveBeenLastCalledWith(
       { sessionId: 'session-1', cursor: null, limit: 100 },
@@ -239,8 +237,6 @@ describe('ProviderSubagentsSection', () => {
     expect(mocks.invalidate).toHaveBeenCalledOnce();
     expect(mocks.invalidate).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      cursor: null,
-      limit: 100,
     });
   });
 

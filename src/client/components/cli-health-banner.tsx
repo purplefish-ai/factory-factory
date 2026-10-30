@@ -1,10 +1,8 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
-import { ArrowUpIcon } from '@phosphor-icons/react/dist/csr/ArrowUp';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -16,11 +14,16 @@ export interface HealthIssue {
   description: string;
   link?: string;
   linkLabel?: string;
-  upgradeProvider?: 'CLAUDE' | 'CODEX';
 }
 
 interface CliHealthForBanner {
-  claude: { isInstalled: boolean; isOutdated?: boolean; version?: string; latestVersion?: string };
+  claude: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    isOutdated?: boolean;
+    version?: string;
+    latestVersion?: string;
+  };
   codex: {
     isInstalled: boolean;
     isAuthenticated?: boolean;
@@ -36,16 +39,14 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
 
   if (!health.claude.isInstalled) {
     issues.push({
-      title: 'Claude CLI not installed',
-      description: 'Install the Claude CLI to enable AI-powered coding sessions.',
-      link: 'https://claude.ai/download',
-      linkLabel: 'Install',
+      title: 'Claude runtime unavailable',
+      description: 'Update or reinstall Factory Factory to restore its bundled Claude runtime.',
     });
-  } else if (health.claude.isOutdated) {
+  } else if (health.claude.isAuthenticated === false) {
     issues.push({
-      title: 'Claude update available',
-      description: `Installed ${health.claude.version ?? 'unknown'}; latest is ${health.claude.latestVersion ?? 'latest'}.`,
-      upgradeProvider: 'CLAUDE',
+      title: 'Claude sign-in required',
+      description:
+        'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run "ff claude auth login".',
     });
   }
 
@@ -86,7 +87,6 @@ export function getCLIHealthWarningFingerprint(issues: HealthIssue[]): string {
       description: issue.description,
       link: issue.link ?? null,
       linkLabel: issue.linkLabel ?? null,
-      upgradeProvider: issue.upgradeProvider ?? null,
     }))
   );
 }
@@ -122,25 +122,20 @@ export function forgetDismissedCLIHealthWarning() {
 export function CLIHealthBannerContent({
   issues,
   isRefetching,
-  isUpgrading,
   onRecheck,
   onDismiss,
-  onUpgrade,
 }: {
   issues: HealthIssue[];
   isRefetching: boolean;
-  isUpgrading: boolean;
   onRecheck: () => void;
   onDismiss: () => void;
-  onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void;
 }) {
   if (issues.length === 0) {
     return null;
   }
 
-  const warnings = issues.filter((issue) => !issue.upgradeProvider);
-  const updates = issues.filter((issue) => issue.upgradeProvider);
-  const isBusy = isRefetching || isUpgrading;
+  const warnings = issues;
+  const isBusy = isRefetching;
 
   return (
     <div className="shrink-0 border-b border-border bg-muted/30 px-3 py-2 sm:px-4">
@@ -172,33 +167,6 @@ export function CLIHealthBannerContent({
           </ul>
         )}
         <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          {updates.map((issue) => {
-            const provider = issue.upgradeProvider;
-            if (!provider) {
-              return null;
-            }
-            const providerName = provider === 'CLAUDE' ? 'Claude' : 'Codex';
-            const label = isUpgrading ? `Updating ${providerName}` : `Update ${providerName}`;
-            return (
-              <Button
-                key={issue.title}
-                size="sm"
-                className="bg-blue-600 text-white hover:bg-blue-700 focus-visible:border-blue-500 focus-visible:ring-blue-500/50"
-                aria-label={label}
-                aria-busy={isUpgrading}
-                title={issue.description}
-                disabled={isBusy}
-                onClick={() => onUpgrade(provider)}
-              >
-                {isUpgrading ? (
-                  <ArrowsClockwiseIcon className="size-3.5 animate-spin" />
-                ) : (
-                  <ArrowUpIcon className="size-3.5" />
-                )}
-                {label}
-              </Button>
-            );
-          })}
           {warnings.length > 0 && (
             <Button
               variant="ghost"
@@ -227,26 +195,13 @@ export function CLIHealthBannerContent({
 }
 
 /**
- * Compact update actions and setup warnings for CLI dependencies.
+ * Compact setup warnings for managed runtimes and CLI dependencies.
  * Shows on app launch and can be dismissed until the warning content changes.
  */
 export function CLIHealthBanner() {
   const [dismissedFingerprint, setDismissedFingerprint] = useState(() =>
     readDismissedCLIHealthWarningFingerprint()
   );
-  const utils = trpc.useUtils();
-  const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
-    onSuccess: async (result) => {
-      // A health request started before the update must not restore old versions.
-      await utils.admin.checkCLIHealth.cancel();
-      utils.admin.checkCLIHealth.setData({ forceRefresh: false }, result.health);
-      toast.success(result.message);
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
   const {
     data: health,
     isLoading,
@@ -290,7 +245,6 @@ export function CLIHealthBanner() {
     <CLIHealthBannerContent
       issues={issues}
       isRefetching={isRefetching}
-      isUpgrading={upgradeProviderCli.isPending}
       onRecheck={() => {
         runInBackground(refetch({ throwOnError: true }), 'Could not check provider status');
       }}
@@ -298,7 +252,6 @@ export function CLIHealthBanner() {
         rememberDismissedCLIHealthWarning(warningFingerprint);
         setDismissedFingerprint(warningFingerprint);
       }}
-      onUpgrade={(provider) => upgradeProviderCli.mutate({ provider })}
     />
   );
 }

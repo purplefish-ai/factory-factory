@@ -1,18 +1,29 @@
 import { type ChildProcess, execFile } from 'node:child_process';
 
+/** Returns whether the owned process group still exists. */
 function signalOwnedGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
   try {
     process.kill(-pid, signal);
     return true;
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    if (code === 'ESRCH') {
       return false;
+    }
+    // macOS reports EPERM while the group's exited members are not yet reaped.
+    // Keep polling: reaping turns this into ESRCH, and the deadline still applies.
+    if (code === 'EPERM') {
+      return true;
     }
     throw new Error('Disposable process cleanup failed');
   }
 }
 
-async function terminateDirectProcess(child: ChildProcess, timeoutMs: number): Promise<void> {
+async function terminateDirectProcess(
+  child: ChildProcess,
+  timeoutMs: number,
+  initialSignal: 'SIGINT' | 'SIGTERM'
+): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return;
   }
@@ -24,7 +35,7 @@ async function terminateDirectProcess(child: ChildProcess, timeoutMs: number): P
     child.once('close', onExit);
   });
   try {
-    child.kill('SIGTERM');
+    child.kill(initialSignal);
     if (
       !(await Promise.race([
         exited,
@@ -44,13 +55,14 @@ async function terminateDirectProcess(child: ChildProcess, timeoutMs: number): P
 
 export async function terminateDisposableProcessTree(
   child: ChildProcess,
-  options: { timeoutMs?: number } = {}
+  options: { timeoutMs?: number; initialSignal?: 'SIGINT' | 'SIGTERM' } = {}
 ): Promise<void> {
   const timeoutMs = Math.max(0, Math.min(5000, options.timeoutMs ?? 5000));
+  const { initialSignal = 'SIGTERM' } = options;
   const startedAt = Date.now();
   const pid = child.pid;
   if (pid === undefined || !Number.isInteger(pid) || pid <= 1 || pid === process.pid) {
-    await terminateDirectProcess(child, timeoutMs);
+    await terminateDirectProcess(child, timeoutMs, initialSignal);
     return;
   }
   if (process.platform === 'win32') {
@@ -97,7 +109,7 @@ export async function terminateDisposableProcessTree(
   // The launcher may exit before its native app-server descendants or inherited pipes.
   // Its detached process group remains ours until every descendant has exited.
   const deadline = startedAt + timeoutMs * 0.8;
-  if (!signalOwnedGroup(pid, 'SIGTERM')) {
+  if (!signalOwnedGroup(pid, initialSignal)) {
     return;
   }
   while (signalOwnedGroup(pid, 0)) {

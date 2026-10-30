@@ -66,47 +66,6 @@ describe('CLI health recheck', () => {
   });
 });
 
-describe('CLI notice actions', () => {
-  it('updates the selected provider and dismisses from the compact strip', () => {
-    const onUpgrade = vi.fn();
-    const onDismiss = vi.fn();
-    const container = document.createElement('div');
-    const root = createRoot(container);
-    try {
-      flushSync(() =>
-        root.render(
-          createElement(CLIHealthBannerContent, {
-            issues: collectIssues({
-              claude: { isInstalled: true, isOutdated: true },
-              codex: { isInstalled: true, isAuthenticated: true },
-              github: { isInstalled: true, isAuthenticated: true },
-            }),
-            isRefetching: false,
-            isUpgrading: false,
-            onRecheck: vi.fn(),
-            onUpgrade,
-            onDismiss,
-          })
-        )
-      );
-      const update = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Update Claude"]'
-      );
-      expect(update).not.toBeNull();
-      flushSync(() => update?.click());
-      expect(onUpgrade).toHaveBeenCalledExactlyOnceWith('CLAUDE');
-      const dismiss = [...container.querySelectorAll('button')].find(
-        (button) => button.textContent === 'Dismiss'
-      );
-      expect(dismiss).toBeDefined();
-      flushSync(() => dismiss?.click());
-      expect(onDismiss).toHaveBeenCalledOnce();
-    } finally {
-      flushSync(() => root.unmount());
-    }
-  });
-});
-
 describe('CLI warning accessibility', () => {
   it('preserves list-item semantics while announcing warning contents', () => {
     const container = document.createElement('div');
@@ -121,9 +80,7 @@ describe('CLI warning accessibility', () => {
               github: { isInstalled: true, isAuthenticated: false },
             }),
             isRefetching: false,
-            isUpgrading: false,
             onRecheck: vi.fn(),
-            onUpgrade: vi.fn(),
             onDismiss: vi.fn(),
           })
         )

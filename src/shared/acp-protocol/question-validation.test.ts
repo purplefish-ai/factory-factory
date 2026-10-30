@@ -48,4 +48,11 @@ describe('string question validation', () => {
   ] as const)('uses friendly copy for %o', (rules, answer, error) => {
     expect(getStringAnswerError({ type: 'string', ...rules }, answer)).toBe(error);
   });
+
+  it('counts string length in Unicode code points', () => {
+    expect(getStringAnswerError({ type: 'string', maxLength: 1 }, '👍')).toBeNull();
+    expect(getStringAnswerError({ type: 'string', minLength: 2 }, '𝔸')).toBe(
+      'Enter at least 2 characters.'
+    );
+  });
 });

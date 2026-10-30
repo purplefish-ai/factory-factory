@@ -226,8 +226,8 @@ export function authenticateRequest(params: {
 /**
  * Headers that claim to carry the original client address. The authenticated
  * proxy is the trust boundary for remote clients, so these must not reach the
- * upstream server: the backend rejects WebSocket upgrades that carry them
- * (see validateTrustedLocalWebSocketRequest), and tunnels like cloudflared
+ * upstream server: the backend rejects privileged HTTP requests and WebSocket
+ * upgrades that carry them, and tunnels like cloudflared
  * add them to every request.
  */
 export const FORWARDED_CLIENT_ADDRESS_HEADERS = [
@@ -261,6 +261,28 @@ export function buildAuthenticatedProxyHeaders(
   return cleaned;
 }
 
+/**
+ * Removes every `name=value` pair for `cookieName` from a raw Cookie header,
+ * forwarding all other pairs untouched and in their original order. Cookies
+ * meant for the upstream server may use names outside the RFC 6265 token set
+ * or repeat a name (browsers send the most specific path first), so the header
+ * must not be round-tripped through a parsed name -> value map.
+ */
+function stripCookieFromHeader(cookieHeader: string, cookieName: string): string {
+  return cookieHeader
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter((pair) => {
+      if (!pair) {
+        return false;
+      }
+      const separator = pair.indexOf('=');
+      const name = separator === -1 ? pair : pair.slice(0, separator).trim();
+      return name !== cookieName;
+    })
+    .join('; ');
+}
+
 export function removeHopByHopHeaders(
   headers: IncomingHttpHeaders,
   sessionCookieName?: string
@@ -272,11 +294,7 @@ export function removeHopByHopHeaders(
     }
 
     if (key.toLowerCase() === 'cookie' && typeof value === 'string' && sessionCookieName) {
-      const cookies = parseCookieHeader(value);
-      delete cookies[sessionCookieName];
-      const cookieValue = Object.entries(cookies)
-        .map(([cookieKey, cookieVal]) => `${cookieKey}=${cookieVal}`)
-        .join('; ');
+      const cookieValue = stripCookieFromHeader(value, sessionCookieName);
       if (cookieValue) {
         cleaned[key] = cookieValue;
       }
@@ -300,12 +318,17 @@ export function appendBoundedOutputBuffer(
   return combined.slice(-maxChars);
 }
 
+/**
+ * Matches the quick tunnel URL cloudflared prints once a tunnel is ready. The
+ * `api` host is cloudflared's quick-tunnel provisioning endpoint, which shows
+ * up (with a path) in error logs when tunnel creation fails, so it is never a
+ * public URL; the tunnel URL itself is always printed without a path or port.
+ */
+const TRY_CLOUDFLARE_TUNNEL_URL =
+  /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com(?![\w/:-]|\.[a-z0-9])/i;
+
 export function extractTryCloudflareUrl(input: string): string | null {
-  const match = input.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/gi);
-  if (!match || match.length === 0) {
-    return null;
-  }
-  return match[0] ?? null;
+  return input.match(TRY_CLOUDFLARE_TUNNEL_URL)?.[0] ?? null;
 }
 
 export function proxyAuthenticatedHttpRequest(params: {

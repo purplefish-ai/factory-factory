@@ -11,7 +11,7 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { createAcpConnection, type AcpClientCallbacks } from './acp-connection';
 import {
   createAcpSpawnError,
-  resolveAcpBinary,
+  resolveProviderAcpSpawnCommand,
   terminateCatalogProcess,
   withTimeout,
 } from './acp-runtime-spawn';
@@ -24,8 +24,6 @@ export type ClaudeModelCatalogEntry = {
 };
 
 const CATALOG_OPERATION_TIMEOUT_MS = 30_000;
-const CLAUDE_ACP_PACKAGE = '@agentclientprotocol/claude-agent-acp';
-const CLAUDE_ACP_BINARY = 'claude-agent-acp';
 const appLogger = createLogger('claude-model-catalog-loader');
 
 const unexpectedCallback = (): Promise<never> =>
@@ -41,20 +39,22 @@ function createCatalogClient(): AcpClientCallbacks {
 
 export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]> {
   const cwd = tmpdir();
-  const command = resolveAcpBinary(CLAUDE_ACP_PACKAGE, CLAUDE_ACP_BINARY);
-  const child = spawn(command, [], {
+  const command = resolveProviderAcpSpawnCommand('CLAUDE');
+  const child = spawn(command.command, command.args, {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...getCurrentProcessEnv(),
       BROWSER: 'none',
+      ELECTRON_RUN_AS_NODE: '1',
     },
     detached: false,
   });
   let providerSessionId: string | null = null;
   let spawnErrorListener: ((error: unknown) => void) | null = null;
   const spawnError = new Promise<never>((_resolve, reject) => {
-    spawnErrorListener = (error: unknown) => reject(createAcpSpawnError(command, error));
+    spawnErrorListener = (error: unknown) =>
+      reject(createAcpSpawnError(command.commandLabel, error));
     child.once('error', spawnErrorListener);
   });
 

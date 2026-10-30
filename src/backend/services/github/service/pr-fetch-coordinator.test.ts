@@ -286,6 +286,30 @@ describe('PRFetchCoordinator', () => {
       await inFlight;
     });
 
+    it('does not evict a re-fetch whose previous completed timestamp is the oldest', async () => {
+      await coordinator.coordinate('refetching', () => Promise.resolve('first'));
+
+      // After the cooldown the same key is fetched again and stays in flight,
+      // while its old completed timestamp is still the oldest one retained.
+      vi.advanceTimersByTime(COOLDOWN_MS + 1);
+      const held = deferredFetch();
+      const inFlight = coordinator.coordinate('refetching', held.fetch);
+
+      for (let index = 0; index < MAX_ENTRIES; index += 1) {
+        vi.advanceTimersByTime(1);
+        await coordinator.coordinate(`completed-${index}`, () => Promise.resolve('done'));
+      }
+
+      const duplicate = vi.fn(() => Promise.resolve('duplicate'));
+      await expect(
+        coordinator.coordinate('refetching', duplicate, { ignoreCooldown: true })
+      ).resolves.toMatchObject({ status: 'skipped' });
+      expect(duplicate).not.toHaveBeenCalled();
+
+      held.resolve();
+      await inFlight;
+    });
+
     it('evicts the oldest workspace when capacity is reached', async () => {
       await coordinator.coordinate('oldest-completed', () => Promise.resolve('done'));
 
