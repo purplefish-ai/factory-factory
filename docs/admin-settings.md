@@ -44,6 +44,11 @@ Claude CLI is available. This is an optional update; hover over the button for
 installed and available versions. During an update the button shows progress and
 prevents duplicate requests. Bundled Codex updates ship with the app.
 
+The button runs `claude update` for the Claude installation on the app's PATH
+and checks its version again before reporting success. If it remains outdated,
+the error includes the updater's output, including any package manager
+instructions. A successful update refreshes the strip immediately.
+
 Missing tools and GitHub sign-in problems appear as amber notices with setup
 instructions. **Recheck** refreshes their status. Dismissing the strip keeps it
 hidden across reloads until the issue details change; resolved notices

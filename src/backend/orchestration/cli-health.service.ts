@@ -118,22 +118,30 @@ class CLIHealthService {
       );
     }
     const packageName = CLAUDE_CLI_NPM_PACKAGE;
-    const args = ['install', '-g', packageName];
+    const args = ['update'];
 
     try {
-      const { stdout, stderr } = await execFileAsync('npm', args, {
+      // Use the same executable as the health check; a global npm install may
+      // update a different installation from the Claude resolved on PATH.
+      const { stdout, stderr } = await execFileAsync('claude', args, {
         timeout: SERVICE_TIMEOUT_MS.cliUpgrade,
       });
+      const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
 
       // Invalidate cache and return refreshed health so callers can update UI immediately.
       this.clearCache();
       const health = await this.checkHealth(true);
+      if (health.claude.isOutdated) {
+        throw new Error(
+          `Claude CLI is still outdated (installed ${health.claude.version}; latest ${health.claude.latestVersion}).\n${output}`
+        );
+      }
 
       return {
         provider,
         packageName,
-        command: `npm ${args.join(' ')}`,
-        output: [stdout.trim(), stderr.trim()].filter(Boolean).join('\n'),
+        command: `claude ${args.join(' ')}`,
+        output,
         health,
       };
     } catch (error) {
@@ -145,7 +153,7 @@ class CLIHealthService {
       const stderr = typeof output.stderr === 'string' ? output.stderr : undefined;
       const stdout = typeof output.stdout === 'string' ? output.stdout : undefined;
       const details = [normalizedError.message, stderr, stdout].filter(Boolean).join('\n');
-      throw new Error(`Failed to upgrade Claude CLI via npm: ${details}`);
+      throw new Error(`Failed to upgrade Claude CLI via claude update: ${details}`);
     }
   }
 
