@@ -1,6 +1,6 @@
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   HeaderLeftExtraSlot,
@@ -37,7 +37,7 @@ import {
  * Component that injects workspace header content into the app-level header
  * via portal slots. Rendered inside WorkspaceDetailContainer.
  */
-export function WorkspaceDetailHeaderSlot({
+export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot({
   workspace,
   workspaceId,
   availableIdes,
@@ -244,7 +244,7 @@ export function WorkspaceDetailHeaderSlot({
       />
     </>
   );
-}
+});
 
 function WorkspaceDetailsDialog({
   open,

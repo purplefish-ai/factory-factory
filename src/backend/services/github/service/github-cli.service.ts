@@ -1,5 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
+import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
@@ -327,6 +328,21 @@ class GitHubCLIService {
       fields,
     ]);
     return parseGhJson(githubPRPreviewSchema, stdout, 'getPRPreview');
+  }
+
+  /** Small, on-demand issue preview without bodies or comments. */
+  async getIssuePreview(repo: string, issueNumber: number) {
+    const fields = Object.keys(githubIssuePreviewSchema.shape).join(',');
+    const { stdout } = await this.exec([
+      'issue',
+      'view',
+      String(issueNumber),
+      '--repo',
+      repo,
+      '--json',
+      fields,
+    ]);
+    return parseGhJson(githubIssuePreviewSchema, stdout, 'getIssuePreview');
   }
 
   /** Mandatory monitoring facts, independent of review enrichment. */

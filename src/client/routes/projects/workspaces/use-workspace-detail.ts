@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
 import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
+import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -165,24 +166,24 @@ export function useSessionManagement({
   useLayoutEffect(() => {
     activeWorkspaceRef.current = workspaceId;
   }, [workspaceId]);
-  const {
-    createSession,
-    deleteSession,
-    createChat: handleNewChat,
-    createQuickActionAsync: handleQuickAction,
-  } = useSessionCollectionCommands({
-    workspaceId,
-    sessions,
-    onCreated: (session, originatingWorkspaceId, kind) => {
-      if (activeWorkspaceRef.current !== originatingWorkspaceId) {
-        return;
-      }
-      setSelectedDbSessionId(session.id);
-      if (kind === 'chat') {
-        setTimeout(() => inputRef.current?.focus(), 0);
-      }
-    },
-  });
+  const { createSession, deleteSession, createChat, createQuickActionAsync } =
+    useSessionCollectionCommands({
+      workspaceId,
+      sessions,
+      onCreated: (session, originatingWorkspaceId, kind) => {
+        if (activeWorkspaceRef.current !== originatingWorkspaceId) {
+          return;
+        }
+        setSelectedDbSessionId(session.id);
+        if (kind === 'chat') {
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }
+      },
+    });
+  // The commands close over per-render mutation results; keep their identity
+  // stable so memoized tab bars and headers do not re-render on every chat event.
+  const handleNewChat = useStableCallback(createChat);
+  const handleQuickAction = useStableCallback(createQuickActionAsync);
 
   const archiveLifetime = useRef<symbol | null>(null);
   useLayoutEffect(() => {
@@ -202,29 +203,33 @@ export function useSessionManagement({
     }
   };
   const archiveCommand = useWorkspaceArchiveCommand();
-  const archiveWorkspace: UseSessionManagementReturn['archiveWorkspace'] = {
-    isPending: archiveCommand.isArchiving,
-    mutate: (input, options) => {
-      const originatingLifetime = archiveLifetime.current;
-      const projectId = utils.workspace.get.getData({ id: input.id })?.projectId;
-      void archiveCommand.archiveWorkspace({ ...input, projectId }).then((outcomes) => {
-        const outcome = outcomes[0];
-        if (!outcome) {
+  const archiveMutate = useStableCallback<
+    Parameters<UseSessionManagementReturn['archiveWorkspace']['mutate']>,
+    void
+  >((input, options) => {
+    const originatingLifetime = archiveLifetime.current;
+    const projectId = utils.workspace.get.getData({ id: input.id })?.projectId;
+    void archiveCommand.archiveWorkspace({ ...input, projectId }).then((outcomes) => {
+      const outcome = outcomes[0];
+      if (!outcome) {
+        return;
+      }
+      const isCurrent = archiveLifetime.current === originatingLifetime;
+      if (outcome.success) {
+        if (!isCurrent) {
           return;
         }
-        const isCurrent = archiveLifetime.current === originatingLifetime;
-        if (outcome.success) {
-          if (!isCurrent) {
-            return;
-          }
-          void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });
-          options?.onSuccess?.(undefined);
-          return;
-        }
-        handleArchiveFailure(outcome.error, isCurrent, options?.onError);
-      });
-    },
-  };
+        void navigate(slug ? `/projects/${slug}/workspaces` : '/projects', { replace: true });
+        options?.onSuccess?.(undefined);
+        return;
+      }
+      handleArchiveFailure(outcome.error, isCurrent, options?.onError);
+    });
+  });
+  const archiveWorkspace = useMemo<UseSessionManagementReturn['archiveWorkspace']>(
+    () => ({ isPending: archiveCommand.isArchiving, mutate: archiveMutate }),
+    [archiveCommand.isArchiving, archiveMutate]
+  );
   const { openInIde, availableIdes, preferredIde } = useWorkspaceIdeActions();
 
   const handleSelectSession = useCallback(
@@ -238,32 +243,29 @@ export function useSessionManagement({
     [inputRef, setSelectedDbSessionId]
   );
 
-  const handleCloseSession = useCallback(
-    (dbSessionId: string) => {
-      if (!sessions || sessions.length === 0) {
-        return;
-      }
+  const handleCloseSession = useStableCallback((dbSessionId: string) => {
+    if (!sessions || sessions.length === 0) {
+      return;
+    }
 
-      const sessionIndex = sessions.findIndex((s) => s.id === dbSessionId);
-      if (sessionIndex === -1) {
-        return;
-      }
+    const sessionIndex = sessions.findIndex((s) => s.id === dbSessionId);
+    if (sessionIndex === -1) {
+      return;
+    }
 
-      const isSelectedSession = dbSessionId === selectedDbSessionId;
-      deleteSession.mutate({ id: dbSessionId });
+    const isSelectedSession = dbSessionId === selectedDbSessionId;
+    deleteSession.mutate({ id: dbSessionId });
 
-      if (isSelectedSession && sessions.length > 1) {
-        // Select the next or previous session
-        // The WebSocket will automatically reconnect and load the new session
-        const nextSession = sessions[sessionIndex + 1] ?? sessions[sessionIndex - 1];
-        setSelectedDbSessionId(nextSession?.id ?? null);
-      } else if (sessions.length === 1) {
-        // No more sessions - clear selection
-        setSelectedDbSessionId(null);
-      }
-    },
-    [sessions, selectedDbSessionId, deleteSession, setSelectedDbSessionId]
-  );
+    if (isSelectedSession && sessions.length > 1) {
+      // Select the next or previous session
+      // The WebSocket will automatically reconnect and load the new session
+      const nextSession = sessions[sessionIndex + 1] ?? sessions[sessionIndex - 1];
+      setSelectedDbSessionId(nextSession?.id ?? null);
+    } else if (sessions.length === 1) {
+      // No more sessions - clear selection
+      setSelectedDbSessionId(null);
+    }
+  });
 
   return {
     createSession,

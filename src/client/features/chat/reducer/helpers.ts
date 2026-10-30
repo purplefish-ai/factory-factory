@@ -7,7 +7,6 @@ import type {
 import {
   compareTranscriptMessageOrder,
   DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
-  getToolUseIdFromEvent,
   isReasoningToolCall,
   isStreamEventMessage,
   shouldPersistAgentMessage,
@@ -17,6 +16,7 @@ import {
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
+import { getRendererTranscriptIds, resolveRendererTranscript } from './renderer-indexes';
 import type { ChatAction, ChatState, PendingRequest } from './types';
 
 // Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
@@ -127,34 +127,14 @@ export function trimMessagesForRenderer(
   return trimTranscriptForRenderer(messages, limit);
 }
 
-function buildToolUseIdToIndex(messages: ChatMessage[]): Map<string, number> {
-  const toolUseIdToIndex = new Map<string, number>();
-  messages.forEach((message, index) => {
-    if (!message.message) {
-      return;
-    }
-    const toolUseId = getToolUseIdFromMessage(message.message);
-    if (toolUseId) {
-      toolUseIdToIndex.set(toolUseId, index);
-    }
-  });
-  return toolUseIdToIndex;
-}
-
-function buildAgentMessageOrderToIndex(messages: ChatMessage[]): Map<number, number> {
-  const orderToIndex = new Map<number, number>();
-  messages.forEach((message, index) => {
-    if (message.source === 'agent' && message.order >= 0) {
-      orderToIndex.set(message.order, index);
-    }
-  });
-  return orderToIndex;
-}
-
 function filterMapByIds<Value>(
   map: Map<string, Value>,
-  retainedIds: Set<string>
+  getRetainedIds: () => Set<string>
 ): Map<string, Value> {
+  if (map.size === 0) {
+    return map;
+  }
+  const retainedIds = getRetainedIds();
   const filtered = new Map<string, Value>();
   for (const [id, value] of map) {
     if (retainedIds.has(id)) {
@@ -164,7 +144,11 @@ function filterMapByIds<Value>(
   return filtered;
 }
 
-function filterSetByIds(set: Set<string>, retainedIds: Set<string>): Set<string> {
+function filterSetByIds(set: Set<string>, getRetainedIds: () => Set<string>): Set<string> {
+  if (set.size === 0) {
+    return set;
+  }
+  const retainedIds = getRetainedIds();
   const filtered = new Set<string>();
   for (const id of set) {
     if (retainedIds.has(id)) {
@@ -175,25 +159,30 @@ function filterSetByIds(set: Set<string>, retainedIds: Set<string>): Set<string>
 }
 
 export function applyRendererMessages(state: ChatState, messages: ChatMessage[]): ChatState {
-  const retainedMessages =
-    state.rendererTranscriptLimit === null
-      ? messages
-      : trimMessagesForRenderer(messages, state.rendererTranscriptLimit);
-  const retainedIds = new Set(retainedMessages.map((message) => message.id));
-  const hasUnmappedLocalUserMessage = retainedMessages.some(
-    (message) =>
-      message.source === 'user' &&
-      state.localUserMessageIds.has(message.id) &&
-      !state.messageIdToUuid.has(message.id)
+  const { retained: retainedMessages, indexes } = resolveRendererTranscript(
+    state.messages,
+    messages,
+    state.rendererTranscriptLimit === undefined
+      ? DEFAULT_RENDERER_TRANSCRIPT_LIMIT
+      : state.rendererTranscriptLimit
   );
+  const getRetainedIds = () => getRendererTranscriptIds(retainedMessages, indexes);
+  const hasUnmappedLocalUserMessage =
+    state.localUserMessageIds.size > 0 &&
+    retainedMessages.some(
+      (message) =>
+        message.source === 'user' &&
+        state.localUserMessageIds.has(message.id) &&
+        !state.messageIdToUuid.has(message.id)
+    );
 
   return {
     ...state,
     messages: retainedMessages,
-    toolUseIdToIndex: buildToolUseIdToIndex(retainedMessages),
-    agentMessageOrderToIndex: buildAgentMessageOrderToIndex(retainedMessages),
-    messageIdToUuid: filterMapByIds(state.messageIdToUuid, retainedIds),
-    localUserMessageIds: filterSetByIds(state.localUserMessageIds, retainedIds),
+    toolUseIdToIndex: indexes.toolUseIdToIndex,
+    agentMessageOrderToIndex: indexes.agentMessageOrderToIndex,
+    messageIdToUuid: filterMapByIds(state.messageIdToUuid, getRetainedIds),
+    localUserMessageIds: filterSetByIds(state.localUserMessageIds, getRetainedIds),
     pendingUserMessageUuids:
       hasUnmappedLocalUserMessage || state.pendingMessages.size > 0
         ? state.pendingUserMessageUuids
@@ -233,16 +222,6 @@ function isReasoningToolStartMessage(claudeMsg: AgentMessage): boolean {
 
 function hasExistingAgentMessageAtOrder(state: ChatState, order: number): boolean {
   return state.messages.some((msg) => msg.source === 'agent' && msg.order === order);
-}
-
-/**
- * Gets the tool use ID from a Claude message if it's a tool_use start event.
- */
-function getToolUseIdFromMessage(claudeMsg: AgentMessage): string | null {
-  if (!isStreamEventMessage(claudeMsg)) {
-    return null;
-  }
-  return getToolUseIdFromEvent(claudeMsg.event);
 }
 
 /**

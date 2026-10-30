@@ -48,7 +48,7 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
-  it('uses the colorful botanical icons for rows and repeats the palette for larger groups', () => {
+  it('uses distinct botanical icons for simultaneous sub-agents', () => {
     render({
       state: {
         kind: 'ready',
@@ -66,7 +66,29 @@ describe('SubagentList', () => {
     expect(icons[0]?.classList.contains('text-amber-600')).toBe(true);
     expect(icons[1]?.classList.contains('text-teal-600')).toBe(true);
     expect(icons[2]?.classList.contains('text-violet-600')).toBe(true);
-    expect(icons[3]?.innerHTML).toBe(icons[0]?.innerHTML);
+    expect(new Set(icons.map((icon) => icon.innerHTML)).size).toBe(4);
+  });
+
+  it('keeps both agents’ icons when an earlier agent completes', () => {
+    const first = subagent({ id: 'a' });
+    const second = subagent({ id: 'b' });
+    const onSelect = vi.fn();
+    render({ state: { kind: 'ready', subagents: [second, first] }, onSelect });
+    const completedIcon = container.querySelectorAll('li svg')[0]?.outerHTML;
+    const original = container.querySelectorAll('li svg')[1]?.outerHTML;
+    expect(completedIcon).toBeDefined();
+    expect(original).toBeDefined();
+    render({
+      state: { kind: 'ready', subagents: [second, { ...first, status: 'completed' }] },
+      onSelect,
+    });
+    expect(container.querySelector('li svg')?.outerHTML).toBe(original);
+    const completedButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Completed · 1'
+    );
+    expect(completedButton).toBeDefined();
+    void act(() => completedButton?.click());
+    expect(container.querySelectorAll('li svg')[1]?.outerHTML).toBe(completedIcon);
   });
 
   it('sorts active sub-agents oldest first and keeps terminal results collapsed', () => {

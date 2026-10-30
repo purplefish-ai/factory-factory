@@ -5,9 +5,10 @@ import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
@@ -35,7 +36,7 @@ import { KanbanStatusChip } from './kanban-card-status-chip';
  */
 export type WorkspaceWithKanban = WorkspaceSummary<Date>;
 
-interface KanbanCardProps {
+export interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
@@ -353,7 +354,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   };
 }
 
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   workspace,
   projectSlug,
   onToggleRatcheting,
@@ -428,8 +429,15 @@ export function KanbanCard({
                 className="flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
               />
             ) : (
-              <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-                {workspace.name}
+              <CardTitle className="flex items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
+                {workspace.creationSource === 'PERIODIC_TASK' && (
+                  <RobotIcon
+                    role="img"
+                    aria-label="Agent workspace"
+                    className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
+                  />
+                )}
+                <span className="line-clamp-2">{workspace.name}</span>
               </CardTitle>
             )}
             <CardTitleIcons
@@ -471,4 +479,4 @@ export function KanbanCard({
       </Card>
     </Link>
   );
-}
+});

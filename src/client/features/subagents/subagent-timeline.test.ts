@@ -166,3 +166,20 @@ describe('mergeSubagentTimeline', () => {
     ).not.toContain('result');
   });
 });
+
+it('assigns distinct icons in creation order and retains them for finish events', () => {
+  const events = createSubagentTimelineEvents([
+    { ...agent, id: 'd', createdAt: '2026-10-30T12:00:02Z' },
+    { ...agent, id: 'a' },
+  ]);
+  expect(
+    events
+      .filter((event) => event.message?.subtype === 'subagent_started')
+      .map((event) => event.subagentIconIndex)
+  ).toEqual([0, 1]);
+  expect(
+    events
+      .filter((event) => event.id.startsWith('subagent-d-'))
+      .map((event) => event.subagentIconIndex)
+  ).toEqual([1, 1]);
+});

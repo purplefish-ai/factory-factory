@@ -27,20 +27,24 @@ describe('EventLoopMonitor', () => {
   });
 
   it('reports lag beyond the sampling interval and resets the window after each read', async () => {
-    monitor.start(10);
-    await nextTimer(30);
-    blockFor(120);
-    await nextTimer(30);
+    // A coarse resolution keeps OS scheduling jitter under parallel suite load
+    // well below the idle threshold, which is the resolution itself.
+    const resolutionMs = 50;
+    monitor.start(resolutionMs);
+    await nextTimer(2 * resolutionMs);
+    blockFor(250);
+    await nextTimer(2 * resolutionMs);
 
     const blocked = monitor.read();
-    expect(blocked?.delayMs.max).toBeGreaterThanOrEqual(80);
+    // The block delays one tick by at least its length minus one interval.
+    expect(blocked?.delayMs.max).toBeGreaterThanOrEqual(180);
     expect(blocked?.utilization).toBeGreaterThan(0);
     expect(blocked?.utilization).toBeLessThanOrEqual(1);
 
-    await nextTimer(60);
+    await nextTimer(6 * resolutionMs);
     const idle = monitor.read();
     // An idle loop samples at roughly the resolution, which is not lag.
-    expect(idle?.delayMs.p50).toBeLessThan(10);
+    expect(idle?.delayMs.p50).toBeLessThan(resolutionMs);
     expect(idle?.delayMs.max).toBeLessThan(blocked?.delayMs.max ?? 0);
   });
 

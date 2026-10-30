@@ -67,7 +67,7 @@ export function SessionActivityIndicator({
             className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
-              {SUBAGENT_ICONS.slice(0, runningSubagents).map(({ color }, index) => (
+              {SUBAGENT_ICONS.slice(0, Math.min(3, runningSubagents)).map(({ color }, index) => (
                 <SubagentIcon key={color} index={index} />
               ))}
             </span>

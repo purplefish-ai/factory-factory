@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { classifyGitHubCLIError, type GitHubCLIHealthStatus } from '@/backend/services/github';
+import { githubIssuePreviewInputSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewInputSchema } from '@/shared/github-pr-preview';
 import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
@@ -24,6 +25,12 @@ function buildAuthRequiredHealth(health: GitHubCLIHealthStatus): GitHubCLIHealth
 }
 
 export const githubRouter = router({
+  getIssuePreview: publicProcedure
+    .input(githubIssuePreviewInputSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.githubCLIService.getIssuePreview(input.repo, input.number)
+    ),
+
   getPRPreview: publicProcedure
     .input(githubPRPreviewInputSchema)
     .query(({ ctx, input }) =>

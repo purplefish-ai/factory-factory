@@ -768,10 +768,13 @@ sub-agent count in chat opens the right panel and selects Sessions. Its stored
 panel key remains `agents`; child-workspace access remains available for parent
 workspaces. The count has a decorative group of up to three colorful botanical
 icons; larger groups keep the full count without adding more icons. The Sessions
-list uses the same botanical icons for sub-agent rows. Its header counts active
-(starting, running, or waiting) sub-agents; terminal agents remain under the
-separate collapsible Completed count. The panel automatically loads all summary
-pages before showing the active count, so children on later provider pages are
+list and lifecycle rows share twelve nature icons assigned by session-wide
+creation order (with agent ID breaking ties), keeping assignments when agents
+finish. Additional agents use distinct numbered badges instead of repeating
+icons. Unknown creation times sort last. Its header counts active (starting,
+running, or waiting) sub-agents; terminal agents remain under the separate
+collapsible Completed count. The panel automatically loads all summary pages
+before showing the active count, so children on later provider pages are
 included. A page failure keeps loaded rows visible and offers Retry without
 displaying a partial count. Repeated provider cursors stop automatic pagination
 and offer the same recovery instead of repeatedly fetching the same page.
@@ -864,9 +867,11 @@ it is `process.execPath`.
 Electron main stops the backend before quitting (`before-quit`) and when the
 last window closes. Stopping sends `shutdown`, waits 25 seconds for a graceful
 exit, then sends `SIGKILL`. A stop during startup cancels the start the same way
-instead of waiting for the backend to become ready. If a started backend exits
-on its own, the app offers to restart it, reloading the window at the new URL,
-or to quit.
+instead of waiting for the backend to become ready; the start then rejects even
+if `ready` crosses the shutdown request, and the cancellation is not reported as
+a startup error. Once quitting begins, activating the app does not start a new
+backend. If a started backend exits on its own, the app offers to restart it,
+reloading the window at the new URL, or to quit.
 
 Electron fatal-error handlers await backend shutdown before quitting. Concurrent
 fatal errors share one shutdown attempt. Cleanup failures and a 30-second

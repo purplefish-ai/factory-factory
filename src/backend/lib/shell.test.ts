@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { LIB_LIMITS } from './constants';
 import { escapeForOsascript, execCommand } from './shell';
 
@@ -50,23 +55,75 @@ describe('execCommand', () => {
   });
 
   it('does not mark a successful process timed out while waiting for stdio close', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ff-shell-stdio-'));
+    const pidFile = join(directory, 'pids.json');
     const script = `
       const { spawn } = require('node:child_process');
-      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 500);'], {
+      const { writeFileSync } = require('node:fs');
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'], {
         detached: true,
         stdio: ['ignore', 'inherit', 'inherit'],
       });
       child.unref();
+      writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify({ parent: process.pid, child: child.pid }));
       process.exit(0);
     `;
+    const isRunning = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const readPids = () => {
+      try {
+        return z
+          .object({ parent: z.number(), child: z.number() })
+          .parse(JSON.parse(readFileSync(pidFile, 'utf8')));
+      } catch {
+        return undefined;
+      }
+    };
+    let childPid: number | undefined;
+    // Fake only execCommand's timer: fire it after the real parent has exited
+    // while its detached child still holds stdio, however slowly the parent starts.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const pending = execCommand(process.execPath, ['-e', script], { timeout: 200 });
+      // Observe a spawn failure even if the poll below gives up first.
+      pending.catch(() => undefined);
+      // Poll on a real timer: vi.waitFor would advance the fake clock while waiting.
+      // Date is not faked, so the deadline still reports a helper that never exits.
+      const deadline = Date.now() + 4000;
+      let pids = readPids();
+      while (!pids || isRunning(pids.parent)) {
+        if (Date.now() > deadline) {
+          throw new Error('Helper process did not record its pids and exit in time');
+        }
+        await delay(10);
+        pids = readPids();
+      }
+      childPid = pids.child;
+      vi.advanceTimersByTime(200);
+      process.kill(childPid);
 
-    const result = await execCommand(process.execPath, ['-e', script], {
-      timeout: 200,
-    });
+      const result = await pending;
 
-    expect(result.code).toBe(0);
-    expect(result.timedOut).toBe(false);
-    expect(result.stderr).not.toContain('timed out after 200ms');
+      expect(result.code).toBe(0);
+      expect(result.timedOut).toBe(false);
+      expect(result.stderr).not.toContain('timed out after 200ms');
+    } finally {
+      vi.useRealTimers();
+      // Clean up helpers even when the poll gave up before recording the child.
+      const pids = readPids();
+      for (const pid of [childPid ?? pids?.child, pids?.parent]) {
+        if (pid !== undefined && isRunning(pid)) {
+          process.kill(pid, 'SIGKILL');
+        }
+      }
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('force-kills the process when it ignores the timeout signal', async () => {

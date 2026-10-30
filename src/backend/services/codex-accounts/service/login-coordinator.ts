@@ -108,18 +108,16 @@ export class LoginCoordinator {
         await this.dependencies.verify(id, identity, true);
         this.ensureActive(entry);
         await adoptLoginStage(stage, target, entry.abort.signal);
-        this.states.set(id, { accountId: id, status: 'completed' });
+        return { accountId: id, status: 'completed' } satisfies CodexLoginState;
       })
-      .catch(() => {
-        this.states.set(id, {
-          accountId: id,
-          status: entry.abort.signal.aborted ? 'cancelled' : 'failed',
-          message: entry.abort.signal.aborted
-            ? 'Login cancelled or timed out'
-            : 'Login failed. Use the original, distinct account; existing profile credentials were preserved.',
-        });
-      })
-      .then(async () => {
+      .catch((): CodexLoginState => ({
+        accountId: id,
+        status: entry.abort.signal.aborted ? 'cancelled' : 'failed',
+        message: entry.abort.signal.aborted
+          ? 'Login cancelled or timed out'
+          : 'Login failed. Use the original, distinct account; existing profile credentials were preserved.',
+      }))
+      .then(async (outcome) => {
         clearTimeout(timer);
         if (entry.stage) {
           await discardLoginStage(entry.stage).catch(() => undefined);
@@ -127,6 +125,9 @@ export class LoginCoordinator {
         if (this.active === entry) {
           this.active = undefined;
         }
+        // Publish the outcome only once the account is usable again, so callers
+        // that react to a finished login never hit the pending-login guard.
+        this.states.set(id, outcome);
         this.dependencies.invalidate(id);
       });
     return preparation.then(() => this.status(id));

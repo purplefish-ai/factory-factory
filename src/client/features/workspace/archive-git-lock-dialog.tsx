@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +20,7 @@ export interface ArchiveGitLockDialogProps {
   isPending?: boolean;
 }
 
-export function ArchiveGitLockDialog({
+export const ArchiveGitLockDialog = memo(function ArchiveGitLockDialog({
   open,
   onOpenChange,
   onRetry,
@@ -70,4 +71,4 @@ export function ArchiveGitLockDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
-}
+});

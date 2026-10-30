@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
 import type { ArchiveWorkspaceDialogProps } from '@/client/features/workspace/archive-workspace-dialog';
+import { ChatContentPropsProvider } from './workspace-chat-slot';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 
@@ -217,16 +218,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       maxSessions: 5,
       hasWorktreePath: true,
     },
-    chat: {
-      transcriptScroll: {
-        identity: 'main',
-        active: true,
-        ready: true,
-        initialIntent: 'following',
-        initialPosition: null,
-      },
-      onScroll: vi.fn(),
-    } as unknown as WorkspaceDetailViewProps['chat'],
+    resumeQueuedMessages: vi.fn(),
     rightPanelVisible: false,
     setRightPanelVisible: vi.fn(),
     archiveDialog: {
@@ -238,13 +230,29 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   };
 }
 
+const chatProps = {
+  transcriptScroll: {
+    identity: 'main',
+    active: true,
+    ready: true,
+    initialIntent: 'following',
+    initialPosition: null,
+  },
+} as unknown as ChatContentProps;
+
 function renderView(props: WorkspaceDetailViewProps): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   void act(() => {
-    root.render(createElement(WorkspaceDetailView, props));
+    root.render(
+      createElement(
+        ChatContentPropsProvider,
+        { value: chatProps },
+        createElement(WorkspaceDetailView, props)
+      )
+    );
   });
 
   return { container, root };
@@ -315,7 +323,7 @@ describe('WorkspaceDetailView', () => {
       initStatus.chatBanner!.showPlay = showPlay;
       props.workspaceState.isScriptFailed = true;
       props.workspaceState.workspaceInitStatus = initStatus;
-      props.chat.resumeQueuedMessages = vi.fn();
+      props.resumeQueuedMessages = vi.fn();
       const { container, root } = renderView(props);
       try {
         const dispatch = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -324,7 +332,7 @@ describe('WorkspaceDetailView', () => {
         if (showPlay) {
           expect(dispatch).toBeDefined();
           await act(async () => dispatch!.click());
-          expect(props.chat.resumeQueuedMessages).toHaveBeenCalledOnce();
+          expect(props.resumeQueuedMessages).toHaveBeenCalledOnce();
         } else {
           expect(dispatch).toBeUndefined();
         }
@@ -429,6 +437,36 @@ describe('WorkspaceDetailView', () => {
       });
     });
     expect(props.sessionTabs.handleOpenSubagentTab).not.toHaveBeenCalled();
+    act(() => root.unmount());
+  });
+
+  it('streams chat updates without re-rendering the workspace layout', () => {
+    const props = createViewProps(0);
+    props.rightPanelVisible = true;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderWithChat = (sessionId: string) =>
+      act(() => {
+        root.render(
+          createElement(
+            ChatContentPropsProvider,
+            { value: { ...chatProps, sessionId } },
+            createElement(WorkspaceDetailView, props)
+          )
+        );
+      });
+
+    renderWithChat('session-1');
+    const layoutRenders = workspaceContentViewMock.mock.calls.length;
+    const panelRenders = rightPanelMock.mock.calls.length;
+    renderWithChat('session-streamed');
+
+    expect(
+      container.querySelector('[data-testid="parent-chat"]')?.getAttribute('data-session')
+    ).toBe('session-streamed');
+    expect(workspaceContentViewMock).toHaveBeenCalledTimes(layoutRenders);
+    expect(rightPanelMock).toHaveBeenCalledTimes(panelRenders);
     act(() => root.unmount());
   });
 });

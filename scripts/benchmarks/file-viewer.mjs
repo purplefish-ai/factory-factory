@@ -1,7 +1,9 @@
-import { chromium } from '@playwright/test';
+import { createRequire } from 'node:module';
 import { parseBenchmarkOrigin } from './file-viewer-origin.mjs';
 
 const origin = parseBenchmarkOrigin(process.argv[2]);
+// Load Playwright only after validating input, so a bad argument fails fast.
+const { chromium } = createRequire(import.meta.url)('@playwright/test');
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage();

@@ -5,6 +5,7 @@ const mockGithubCLIService = vi.hoisted(() => ({
   listIssues: vi.fn(),
   getIssue: vi.fn(),
   getPRPreview: vi.fn(),
+  getIssuePreview: vi.fn(),
 }));
 const mockClassifyGitHubCLIError = vi.hoisted(() => vi.fn());
 
@@ -66,6 +67,31 @@ describe('githubRouter', () => {
   ])('rejects invalid preview input before calling GitHub: $repo #$number', async (input) => {
     await expect(createCaller().getPRPreview(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(mockGithubCLIService.getPRPreview).not.toHaveBeenCalled();
+  });
+
+  it('returns issue previews for arbitrary repositories', async () => {
+    const preview = {
+      title: 'Fix it',
+      state: 'OPEN',
+      author: null,
+      createdAt: '2026-10-28T12:00:00Z',
+    };
+    mockGithubCLIService.getIssuePreview.mockResolvedValue(preview);
+    await expect(
+      createCaller().getIssuePreview({ repo: 'owner/repo', number: 42 })
+    ).resolves.toEqual(preview);
+    expect(mockGithubCLIService.getIssuePreview).toHaveBeenCalledExactlyOnceWith('owner/repo', 42);
+  });
+
+  it.each([
+    { repo: '-x/y', number: 42 },
+    { repo: 'owner/repo', number: 0 },
+    { repo: 'owner/repo', number: 9_007_199_254_740_992 },
+  ])('rejects invalid issue preview input: $repo #$number', async (input) => {
+    await expect(createCaller().getIssuePreview(input)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(mockGithubCLIService.getIssuePreview).not.toHaveBeenCalled();
   });
 
   it('lists project issues, and gets issue details with error handling', async () => {

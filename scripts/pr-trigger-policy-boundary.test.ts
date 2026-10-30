@@ -38,11 +38,16 @@ async function checkImport(source: string, target: string, typeOnly = true) {
   return { status: result.exitCode, output: result.output };
 }
 
-it.each([false, true])('enforces policy through the CLI (runtime import: %s)', (runtime) => {
+// The CLI process loads TypeScript and takes seconds under parallel suite load,
+// so one run covers both outcomes: a type-only import passes and a runtime one fails.
+it('enforces policy through the CLI', () => {
   const root = createFixture(
-    'src/shared/pr-trigger-policy.ts',
-    'src/shared/schemas/pr-event.schema.ts',
-    !runtime
+    'src/shared/pr-trigger-policy.types.ts',
+    'src/shared/schemas/pr-event.schema.ts'
+  );
+  writeFileSync(
+    join(root, 'src/shared/pr-trigger-policy.ts'),
+    "import { value } from './schemas/pr-event.schema';\nexport const result = value;\n"
   );
   const result = spawnSync(
     process.execPath,
@@ -52,14 +57,14 @@ it.each([false, true])('enforces policy through the CLI (runtime import: %s)', (
       encoding: 'utf8',
     }
   );
+  const output = result.stdout + result.stderr;
   expect(result.error).toBeUndefined();
-  expect(result.status).toBe(runtime ? 1 : 0);
-  if (runtime) {
-    expect(result.stdout + result.stderr).toContain(
-      'pr-trigger-policy-has-no-runtime-dependencies'
-    );
-  }
-});
+  expect(result.status).toBe(1);
+  expect(output).toContain(
+    'pr-trigger-policy-has-no-runtime-dependencies: src/shared/pr-trigger-policy.ts'
+  );
+  expect(output).not.toContain('src/shared/pr-trigger-policy.types.ts');
+}, 30_000);
 
 it.each([
   'src/shared/pr-monitoring.ts',

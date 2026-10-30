@@ -283,6 +283,23 @@ describe('ServerManager shutdown', () => {
     expect(harness.killProcess).not.toHaveBeenCalled();
   });
 
+  it('does not hand out the URL of a backend whose startup was cancelled', async () => {
+    const harness = createManager();
+    const startPromise = harness.manager.start();
+    const child = await harness.child();
+
+    const stopPromise = harness.manager.stop();
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'shutdown' });
+    // The backend finished starting just as the shutdown request was sent, so
+    // its ready message arrives before it handles the shutdown and exits.
+    child.ready();
+    child.exit(0);
+
+    await expect(startPromise).rejects.toThrow('startup was cancelled');
+    await expect(stopPromise).resolves.toBeUndefined();
+    expect(harness.killProcess).not.toHaveBeenCalled();
+  });
+
   it('kills a starting backend that ignores the cancel request', async () => {
     const harness = createManager({ stopTimeoutMs: 20 });
     const startPromise = harness.manager.start();

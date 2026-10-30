@@ -303,6 +303,12 @@ export class ServerManager {
           return;
         }
         if (parsed.data.type === 'ready') {
+          if (backend.stopping) {
+            // A stop cancelled this start and the backend is shutting down; its
+            // exit rejects the start instead of handing out a dying backend's URL.
+            this.logger.log('[electron] Ignoring ready from a backend that is stopping');
+            return;
+          }
           finish(null, parsed.data.url);
         } else {
           finish(new Error(`Backend failed to start:\n\n${parsed.data.message}`));
