@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, realpath } from 'node:fs/promises';
+import { access, realpath, stat } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 
 interface ClaudeUpdateCommand {
@@ -22,7 +22,9 @@ async function findClaudeExecutable(env: NodeJS.ProcessEnv): Promise<string | un
       try {
         const candidate = join(directory, name);
         await access(candidate, constants.X_OK);
-        return (await realpath(candidate)).replaceAll('\\', '/');
+        if ((await stat(candidate)).isFile()) {
+          return (await realpath(candidate)).replaceAll('\\', '/');
+        }
       } catch {
         // Missing or inaccessible entries do not shadow a later executable.
       }

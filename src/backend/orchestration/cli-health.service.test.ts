@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockAccess = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
+const mockStat = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockGithubCheckHealth = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
@@ -16,7 +17,7 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
-vi.mock('node:fs/promises', () => ({ access: mockAccess, realpath: mockRealpath }));
+vi.mock('node:fs/promises', () => ({ access: mockAccess, realpath: mockRealpath, stat: mockStat }));
 
 vi.mock('@/backend/services/config.service', () => ({
   configService: { getChildProcessEnv: () => ({ PATH: '/runtime/bin:/secondary/bin' }) },
@@ -51,6 +52,7 @@ describe('cliHealthService', () => {
     vi.stubGlobal('fetch', vi.fn());
     mockAccess.mockRejectedValue(new Error('not found'));
     mockRealpath.mockReset();
+    mockStat.mockResolvedValue({ isFile: () => true });
     mockResolve.mockReturnValue(
       '/app/resources/app.asar/node_modules/@agentclientprotocol/codex-acp/dist/index.js'
     );
