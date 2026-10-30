@@ -7,7 +7,15 @@ import { z } from 'zod';
 const directory = mkdtempSync(join(process.cwd(), '.lint-parity-'));
 const binary = resolve('node_modules/.bin/biome');
 
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
+// Linter processes still running if the hook times out; stop them with the suite.
+const running = new Set<ReturnType<typeof spawn>>();
+
+afterAll(() => {
+  for (const child of running) {
+    child.kill('SIGKILL');
+  }
+  rmSync(directory, { recursive: true, force: true });
+});
 
 const biomeFixtures = [
   {
@@ -64,6 +72,7 @@ type ProcessResult = {
 function run(command: string, args: string[]) {
   return new Promise<ProcessResult>((resolveResult) => {
     const child = spawn(command, args);
+    running.add(child);
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
@@ -72,10 +81,14 @@ function run(command: string, args: string[]) {
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
       stderr += chunk;
     });
-    child.on('error', (error) =>
-      resolveResult({ status: null, signal: null, stdout, stderr, error })
-    );
-    child.on('close', (status, signal) => resolveResult({ status, signal, stdout, stderr }));
+    child.on('error', (error) => {
+      running.delete(child);
+      resolveResult({ status: null, signal: null, stdout, stderr, error });
+    });
+    child.on('close', (status, signal) => {
+      running.delete(child);
+      resolveResult({ status, signal, stdout, stderr });
+    });
   });
 }
 

@@ -57,7 +57,8 @@ it('loads linked-worktree local config after inheriting native repository trust'
   };
   const context = await resolveAccountContext(row, config);
   // Each read starts the real Codex app-server. The default budget leaves only
-  // five seconds for startup, which parallel suite load can exceed.
+  // five seconds for startup, which parallel suite load can exceed. Two reads at
+  // 20 seconds each still fit the test budget, so an RPC failure is reported.
   const readConfig = () =>
     withNativeRpc(
       context,
@@ -66,7 +67,7 @@ it('loads linked-worktree local config after inheriting native repository trust'
           .object({ config: z.object({ model: z.string().nullish() }) })
           .parse(await rpc.request('config/read', { includeLayers: true, cwd: worktree })).config;
       },
-      { timeoutMs: 30_000 }
+      { timeoutMs: 20_000 }
     );
   expect((await readConfig()).model).not.toBe('ff-project-trust-probe');
   await writeFile(

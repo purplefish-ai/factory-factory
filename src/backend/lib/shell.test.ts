@@ -91,9 +91,16 @@ describe('execCommand', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const pending = execCommand(process.execPath, ['-e', script], { timeout: 200 });
+      // Observe a spawn failure even if the poll below gives up first.
+      pending.catch(() => undefined);
       // Poll on a real timer: vi.waitFor would advance the fake clock while waiting.
+      // Date is not faked, so the deadline still reports a helper that never exits.
+      const deadline = Date.now() + 4000;
       let pids = readPids();
       while (!pids || isRunning(pids.parent)) {
+        if (Date.now() > deadline) {
+          throw new Error('Helper process did not record its pids and exit in time');
+        }
         await delay(10);
         pids = readPids();
       }
@@ -108,8 +115,12 @@ describe('execCommand', () => {
       expect(result.stderr).not.toContain('timed out after 200ms');
     } finally {
       vi.useRealTimers();
-      if (childPid !== undefined && isRunning(childPid)) {
-        process.kill(childPid, 'SIGKILL');
+      // Clean up helpers even when the poll gave up before recording the child.
+      const pids = readPids();
+      for (const pid of [childPid ?? pids?.child, pids?.parent]) {
+        if (pid !== undefined && isRunning(pid)) {
+          process.kill(pid, 'SIGKILL');
+        }
       }
       rmSync(directory, { recursive: true, force: true });
     }
