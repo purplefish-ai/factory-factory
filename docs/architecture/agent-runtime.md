@@ -694,7 +694,10 @@ session switches reset their ACP state. The former Tasks sidebar tab is removed,
 and saved selections of that tab migrate to Changes. The session store retains
 the latest validated ACP task snapshot for reconnect replay, including empty
 lists. Plan snapshots emitted during provider history attachment pass replay
-suppression so restored conversations can recover tasks.
+suppression so restored conversations can recover tasks. Authoritative session
+snapshots include the current task list, so queue updates preserve valid tasks
+and hydration clears stale client state when no list exists. Replacing a
+provider's archived history also clears its task snapshot.
 
 ## Provider sub-agents
 

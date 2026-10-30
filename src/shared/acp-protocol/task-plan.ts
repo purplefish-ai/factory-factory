@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const acpPlanNotificationSchema = z.object({
+export const acpPlanNotificationSchema = z.object({
   type: z.literal('acp_plan'),
   entries: z.array(
     z.object({

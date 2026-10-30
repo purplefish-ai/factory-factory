@@ -12,7 +12,10 @@
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
-import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
+import {
+  acpPlanNotificationSchema,
+  parseAcpPlanNotification,
+} from '@/shared/acp-protocol/task-plan';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -253,9 +256,13 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
 }
 
 function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (!(data.messages && data.queuedMessages && data.sessionRuntime)) {
+  if (
+    data.type !== 'session_snapshot' ||
+    !(data.messages && data.queuedMessages && data.sessionRuntime)
+  ) {
     return null;
   }
+  const taskPlan = acpPlanNotificationSchema.safeParse(data.taskPlan);
   return {
     type: 'SESSION_SNAPSHOT',
     payload: {
@@ -263,6 +270,9 @@ function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
       queuedMessages: data.queuedMessages,
       sessionRuntime: data.sessionRuntime,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+      acpPlan: taskPlan.success
+        ? { entries: taskPlan.data.entries, updatedAt: new Date().toISOString() }
+        : null,
     },
   };
 }

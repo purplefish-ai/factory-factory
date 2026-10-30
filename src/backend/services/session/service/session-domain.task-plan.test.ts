@@ -1,7 +1,44 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { sessionDomainService } from './session-domain.service';
+import { sessionEventBus } from './session-event-bus';
 
-afterEach(() => sessionDomainService.clearAllSessions());
+afterEach(() => {
+  sessionDomainService.clearAllSessions();
+  vi.restoreAllMocks();
+});
+
+it('includes current tasks in queue snapshots and clears tasks when provider history resets', () => {
+  const publish = vi.spyOn(sessionEventBus, 'publishToSession').mockImplementation(() => undefined);
+  const taskPlan = {
+    type: 'acp_plan',
+    entries: [{ content: 'Current work', status: 'in_progress', priority: 'high' }],
+  };
+  sessionDomainService.emitDelta('codex', {
+    type: 'task_notification',
+    message: JSON.stringify(taskPlan),
+  });
+  sessionDomainService.enqueue('codex', {
+    id: 'queued',
+    text: 'Next message',
+    timestamp: '2026-10-30T00:00:00Z',
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  });
+  expect(publish).toHaveBeenCalledWith(
+    'codex',
+    expect.objectContaining({ type: 'session_snapshot', taskPlan })
+  );
+  publish.mockClear();
+  sessionDomainService.resetProviderHistory('codex', 'replacement-provider-session');
+  expect(publish).toHaveBeenCalledWith(
+    'codex',
+    expect.objectContaining({ type: 'session_snapshot', taskPlan: null })
+  );
+});
 
 it('replays the latest task snapshot per session, including an explicit clear', () => {
   const entries = [{ content: 'Ship the change', status: 'in_progress', priority: 'high' }];

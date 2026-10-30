@@ -640,6 +640,7 @@ export class SessionDomainService extends EventEmitter {
     store.historyProviderSessionId = providerSessionId;
     store.historyReadGeneration = (store.historyReadGeneration ?? 0) + 1;
     store.historySuspended = false;
+    store.taskPlan = undefined;
     store.historyHydrated = false;
     store.historyHydrationSource = undefined;
     store.historyHydratedAt = undefined;
