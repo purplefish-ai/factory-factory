@@ -12,7 +12,13 @@ Node/Electron launcher with model discovery. Runtime updates ship with the app.
 
 **Tech Stack:** TypeScript, Commander, ACP, Vitest, React, Electron.
 
-**Spec:** The investigation and four recommendations accepted in this thread.
+**Accepted requirements:**
+
+- Expose the bundled Claude CLI for authentication and native commands.
+- Probe the same runtime for health and authentication; ship updates with the
+  app.
+- Share the Node/Electron-safe launch path with model catalog discovery.
+- Verify packaged runtimes without global Claude or Node installations.
 
 ## Constraints and review focus
 
@@ -81,3 +87,18 @@ Delivery: commit, push the task branch, and create the requested PR.
   PATH. Native module rebuilding was disabled for this provider-only artifact
   check; Windows/Linux installers and interactive OAuth were not exercised
   locally.
+
+- PR upkeep rebased the change onto `47eea7d94`, preserving the workspace-form
+  changes and adapting global-updater regressions to the managed-runtime flow.
+- Review fixes share CLI lifecycle code, bound process-tree termination, own
+  native Windows commands, correlate login exits, block duplicate login starts,
+  display server failures, and make authentication-only smoke validation opt-in.
+- Retain strict managed entrypoint resolution instead of depending on session
+  capsule internals or its PATH fallback. Retain complete production dependency
+  unpacking because the backend also executes outside ASAR.
+
+- Final follow-up verification: 9,186 tests passed (3 skipped), 219 integration
+  tests passed (3 skipped), typecheck/check passed, and strict packaged catalog
+  smoke returned five models. A real process-tree regression and Storybook login
+  busy/error/stale-exit scenarios passed. The earlier unrelated benchmark
+  startup timeout did not recur in the final two-worker suite.

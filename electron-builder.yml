@@ -63,7 +63,7 @@ extraResources:
     to: prisma/schema.prisma
 asar: true
 asarUnpack:
-  # ACP subprocesses run as Node outside ASAR and need their full dependency tree,
+  # The unpacked backend and ACP subprocesses need the production dependency tree,
   # including pure-JS packages such as diff and zod. Keep runtime resolution intact.
   - node_modules/**/*
   - dist/prisma/generated/**/*

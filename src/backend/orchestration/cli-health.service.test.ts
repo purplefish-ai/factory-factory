@@ -124,6 +124,7 @@ describe('cliHealthService', () => {
     });
     expect(await cliHealthService.checkClaudeCLI()).toMatchObject({
       isInstalled: false,
+      isAuthenticated: false,
       error: expect.stringContaining('Update or reinstall Factory Factory'),
     });
     expect(mockExecFile).not.toHaveBeenCalled();

@@ -96,7 +96,13 @@ function handleCreate(
     }
     logger.info('Setup terminal exited', { exitCode });
     if (ws.readyState === WS_READY_STATE.OPEN) {
-      ws.send(JSON.stringify({ type: 'exit', exitCode }));
+      ws.send(
+        JSON.stringify({
+          type: 'exit',
+          exitCode,
+          ...(message.type === 'authenticate' ? { provider: message.provider } : {}),
+        })
+      );
     }
     state.pty = null;
   });

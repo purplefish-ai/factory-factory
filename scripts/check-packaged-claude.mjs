@@ -11,7 +11,8 @@ const execFileAsync = promisify(execFile);
 
 function findPackagedApp() {
   const release = resolve('release');
-  for (const entry of readdirSync(release, { withFileTypes: true })) {
+  const entries = existsSync(release) ? readdirSync(release, { withFileTypes: true }) : [];
+  for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
@@ -34,9 +35,14 @@ function findPackagedApp() {
   throw new Error('No packaged desktop app found in release/. Build it first.');
 }
 
-const [runtime, resources] = process.argv.length > 2 ? process.argv.slice(2) : findPackagedApp();
-if (!(runtime && resources)) {
-  throw new Error('Usage: node scripts/check-packaged-claude.mjs [executable resources-directory]');
+const args = process.argv.slice(2);
+const allowUnauthenticated = args.includes('--allow-unauthenticated');
+const paths = args.filter((arg) => arg !== '--allow-unauthenticated');
+const [runtime, resources] = paths.length ? paths : findPackagedApp();
+if (!(runtime && resources) || paths.length > 2) {
+  throw new Error(
+    'Usage: node scripts/check-packaged-claude.mjs [--allow-unauthenticated] [executable resources-directory]'
+  );
 }
 const backend = join(resolve(resources), 'app.asar.unpacked', 'dist', 'src', 'backend');
 const moduleUrl = (path) => JSON.stringify(pathToFileURL(join(backend, path)).href);
@@ -76,10 +82,10 @@ try {
     } catch (error) {
       // CI has no account credentials. An explicit authentication requirement
       // still proves the real adapter and catalog launch path initialized.
-      if (!/authentication required|not authenticated|not logged in|login required/i.test(error.message)) {
+      if (!${JSON.stringify(allowUnauthenticated)} || !/authentication required|not authenticated|not logged in|login required/i.test(error.message)) {
         throw error;
       }
-      console.log('Packaged ACP catalog launched with an empty PATH; sign-in required for models.');
+      console.log('Packaged ACP launched with an empty PATH; catalog not verified (authentication required).');
     }
   `,
     ],

@@ -14,6 +14,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 
 const setupTerminalState: UseSetupTerminalResult = {
   authenticate: vi.fn(),
+  authenticatingProvider: null,
   connected: false,
   gaveUp: false,
   reconnect: vi.fn(),
@@ -47,6 +48,7 @@ describe('SetupTerminalModal', () => {
   }
 
   beforeEach(() => {
+    setupTerminalState.authenticatingProvider = null;
     setupTerminalState.connected = false;
     setupTerminalState.gaveUp = false;
     setupTerminalState.showTerminal = false;
@@ -77,6 +79,17 @@ describe('SetupTerminalModal', () => {
     expect(button).toBeDefined();
     void act(() => button?.click());
     expect(setupTerminalState.authenticate).toHaveBeenCalledWith('CLAUDE');
+  });
+
+  it('disables both sign-in actions while a login is active', async () => {
+    setupTerminalState.connected = true;
+    setupTerminalState.authenticatingProvider = 'CLAUDE';
+    await render();
+    const actions = [...document.querySelectorAll('button')].filter((button) =>
+      /Sign in to (Claude|Codex)/.test(button.textContent ?? '')
+    );
+    expect(actions).toHaveLength(2);
+    expect(actions.every((button) => button.disabled)).toBe(true);
   });
 
   it('shows a Retry control when the connection gives up before ever connecting', async () => {

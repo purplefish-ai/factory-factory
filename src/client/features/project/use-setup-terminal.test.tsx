@@ -107,8 +107,74 @@ describe('useSetupTerminal', () => {
       rows: 24,
     });
     send.mockClear();
-    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0 }));
+    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0, provider: 'CLAUDE' }));
     expect(send).toHaveBeenCalledWith({ type: 'create', cols: 80, rows: 24 });
+  });
+
+  it('ignores an earlier shell exit while managed login is starting', () => {
+    render(true);
+    connect();
+    void act(() => resultRef.current?.authenticate('CLAUDE'));
+    send.mockClear();
+    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0 }));
+    expect(resultRef.current?.authenticatingProvider).toBe('CLAUDE');
+    expect(send).not.toHaveBeenCalled();
+    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0, provider: 'CLAUDE' }));
+    expect(resultRef.current?.authenticatingProvider).toBeNull();
+    expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'create', cols: 80, rows: 24 });
+  });
+
+  it('leaves a user-exited shell stopped', () => {
+    render(true);
+    connect();
+    send.mockClear();
+    void act(() => capturedOptions?.onMessage?.({ type: 'exit', exitCode: 0 }));
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('keeps one login active and shows server failures before permitting retry', () => {
+    render(true);
+    connect();
+    send.mockClear();
+    void act(() => {
+      resultRef.current?.authenticate('CLAUDE');
+      resultRef.current?.authenticate('CODEX');
+    });
+    expect(send).toHaveBeenCalledExactlyOnceWith({
+      type: 'authenticate',
+      provider: 'CLAUDE',
+      cols: 80,
+      rows: 24,
+    });
+    expect(resultRef.current?.authenticatingProvider).toBe('CLAUDE');
+    void act(() =>
+      capturedOptions?.onMessage?.({ type: 'error', message: 'Bundled runtime is unavailable' })
+    );
+    expect(resultRef.current?.output).toContain('Bundled runtime is unavailable');
+    expect(resultRef.current?.authenticatingProvider).toBeNull();
+    void act(() => resultRef.current?.authenticate('CODEX'));
+    expect(send).toHaveBeenLastCalledWith({
+      type: 'authenticate',
+      provider: 'CODEX',
+      cols: 80,
+      rows: 24,
+    });
+  });
+
+  it('clears login state across a disconnect', () => {
+    render(true);
+    connect();
+    void act(() => resultRef.current?.authenticate('CLAUDE'));
+    disconnect();
+    expect(resultRef.current?.authenticatingProvider).toBeNull();
+    connect();
+    void act(() => resultRef.current?.authenticate('CODEX'));
+    expect(send).toHaveBeenLastCalledWith({
+      type: 'authenticate',
+      provider: 'CODEX',
+      cols: 80,
+      rows: 24,
+    });
   });
 
   it('accumulates output messages and ignores invalid ones', () => {

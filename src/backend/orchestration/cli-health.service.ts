@@ -35,14 +35,6 @@ export interface CLIHealthStatus {
   allHealthy: boolean;
 }
 
-export interface CLIUpgradeResult {
-  provider: 'CLAUDE' | 'CODEX';
-  packageName: string;
-  command: string;
-  output: string;
-  health: CLIHealthStatus;
-}
-
 /**
  * Service for checking CLI dependencies health.
  * Checks that the managed Claude runtime and GitHub CLI are available and configured.
@@ -54,7 +46,7 @@ class CLIHealthService {
   private refreshInFlight: Promise<CLIHealthStatus> | null = null;
 
   /** Kept for older clients; provider runtimes are updated with the app. */
-  upgradeProviderCLI(provider: 'CLAUDE' | 'CODEX'): Promise<CLIUpgradeResult> {
+  upgradeProviderCLI(provider: 'CLAUDE' | 'CODEX'): Promise<never> {
     const label = provider === 'CLAUDE' ? 'Claude' : 'Codex';
     return Promise.reject(
       new Error(

@@ -28,6 +28,7 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
     showTerminal,
     output,
     authenticate,
+    authenticatingProvider,
     handleData,
     handleResize,
   } = useSetupTerminal(open);
@@ -56,7 +57,8 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
           <Button
             variant="outline"
             size="sm"
-            disabled={!connected}
+            disabled={!connected || authenticatingProvider !== null}
+            aria-busy={authenticatingProvider === 'CLAUDE'}
             onClick={() => authenticate('CLAUDE')}
           >
             Sign in to Claude
@@ -64,7 +66,8 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
           <Button
             variant="outline"
             size="sm"
-            disabled={!connected}
+            disabled={!connected || authenticatingProvider !== null}
+            aria-busy={authenticatingProvider === 'CODEX'}
             onClick={() => authenticate('CODEX')}
           >
             Sign in to Codex

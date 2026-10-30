@@ -107,3 +107,14 @@ it('rejects unknown authentication providers before replacing the terminal', () 
     JSON.stringify({ type: 'error', message: 'Invalid message format' })
   );
 });
+
+it('identifies login exits so earlier shell exits cannot finish the login', () => {
+  const auth = terminal();
+  mocks.spawn.mockReturnValue(auth);
+  const ws = connect();
+  ws.emit('message', JSON.stringify({ type: 'authenticate', provider: 'CLAUDE' }));
+  auth.onExit.mock.calls[0]?.[0]({ exitCode: 0 });
+  expect(ws.send).toHaveBeenCalledWith(
+    JSON.stringify({ type: 'exit', exitCode: 0, provider: 'CLAUDE' })
+  );
+});
