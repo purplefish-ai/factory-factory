@@ -19,6 +19,27 @@ export function shouldRejectStopWithoutProcess(
   return status !== 'STARTING';
 }
 
+/**
+ * Spawns `bash -c command` with piped output. Node reports spawn failures
+ * (ENOENT, EAGAIN, ...) as a pid-less child plus a deferred 'error' event, which
+ * crashes the server without a listener, so `onSpawnError` is attached then.
+ */
+export function spawnPipedShellCommand(
+  command: string,
+  cwd: string,
+  onSpawnError: (error: Error) => void
+): ChildProcess {
+  const childProcess = spawn('bash', ['-c', command], {
+    cwd,
+    detached: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (!childProcess.pid) {
+    childProcess.on('error', onSpawnError);
+  }
+  return childProcess;
+}
+
 export async function runCleanupScriptProcess(
   workspaceId: string,
   workspace: {

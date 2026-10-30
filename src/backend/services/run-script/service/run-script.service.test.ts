@@ -146,6 +146,28 @@ const createTrackedExitService = (childProcess: { pid: number }): ExitHandlerCap
   return service;
 };
 
+type PostRunCapable = {
+  spawnPostRunScript: (
+    workspaceId: string,
+    runProcess: FakeChildProcess,
+    runScriptPostRunCommand: string,
+    worktreePath: string,
+    port: number | undefined
+  ) => Promise<void>;
+  runningProcesses: Map<string, FakeChildProcess>;
+  postRunProcesses: Map<string, FakeChildProcess>;
+  getPostRunOutputBuffer: (workspaceId: string) => string;
+};
+
+const createActiveRunPostRunService = () => {
+  const service = new RunScriptService() as unknown as PostRunCapable;
+  const runProcess = new FakeChildProcess(12_345);
+  service.runningProcesses.set('ws-1', runProcess);
+  const spawnPostRun = (command: string, port?: number) =>
+    service.spawnPostRunScript('ws-1', runProcess, command, '/tmp/ws-1', port);
+  return { service, spawnPostRun };
+};
+
 type StopHandlerCapable = {
   runningProcesses: Map<string, { pid: number }>;
   postRunProcesses: Map<string, { pid: number; killed: boolean; kill: (signal: string) => void }>;
@@ -584,7 +606,7 @@ describe('RunScriptService.stopRunScript', () => {
     expect(mockFindById).toHaveBeenNthCalledWith(2, 'ws-1');
   });
 
-  it('clears output listeners when controlled tree-kill completes before exit', async () => {
+  it('keeps output listeners when controlled tree-kill completes before exit', async () => {
     mockFindById.mockResolvedValue({
       id: 'ws-1',
       runScriptStatus: 'RUNNING',
@@ -606,11 +628,11 @@ describe('RunScriptService.stopRunScript', () => {
     service.subscribeToOutput('ws-1', listener);
 
     const result = await service.stopRunScript('ws-1');
-    service.appendOutput('ws-1', 'after stop');
+    service.appendOutput('ws-1', 'next run output');
 
     expect(result).toEqual({ success: true });
     expect(service.runningProcesses.has('ws-1')).toBe(false);
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith('next run output');
   });
 
   it('retains controlled-stop evidence when completing STOPPING fails', async () => {
@@ -1233,20 +1255,15 @@ describe('RunScriptService.transitionToRunning', () => {
     mockMarkRunning.mockResolvedValue(undefined);
 
     const service = new RunScriptService() as unknown as TransitionToRunningCapable & {
-      spawnPostRunScript: (
-        workspaceId: string,
-        runScriptPostRunCommand: string,
-        worktreePath: string,
-        port: number | undefined
-      ) => Promise<void>;
+      spawnPostRunScript: (...args: unknown[]) => Promise<void>;
     };
-    const spawnPostRunSpy = vi.spyOn(service, 'spawnPostRunScript').mockResolvedValue(undefined);
-    const childProcess = { pid: 12_345, exitCode: null };
-    service.runningProcesses.set('ws-1', childProcess);
+    const spawnPostRun = vi.spyOn(service, 'spawnPostRunScript').mockResolvedValue(undefined);
+    const child = { pid: 12_345, exitCode: null };
+    service.runningProcesses.set('ws-1', child);
 
     const result = await service.transitionToRunning(
       'ws-1',
-      childProcess,
+      child,
       12_345,
       undefined,
       'echo post-run',
@@ -1254,7 +1271,13 @@ describe('RunScriptService.transitionToRunning', () => {
     );
 
     expect(result).toMatchObject({ success: true, pid: 12_345 });
-    expect(spawnPostRunSpy).toHaveBeenCalledWith('ws-1', 'echo post-run', '/tmp/ws-1', undefined);
+    expect(spawnPostRun).toHaveBeenCalledWith(
+      'ws-1',
+      child,
+      'echo post-run',
+      '/tmp/ws-1',
+      undefined
+    );
   });
 
   it('keeps transition successful when postRun setup throws synchronously', async () => {
@@ -1861,18 +1884,9 @@ describe('RunScriptService.cleanup/postRun internals', () => {
   it('spawns postRun process, captures output, and cleans map on exit', async () => {
     const postRunProcess = new FakeChildProcess(88_888);
     mockSpawn.mockReturnValue(postRunProcess);
-    const service = new RunScriptService() as unknown as {
-      spawnPostRunScript: (
-        workspaceId: string,
-        runScriptPostRunCommand: string,
-        worktreePath: string,
-        port: number | undefined
-      ) => Promise<void>;
-      postRunProcesses: Map<string, FakeChildProcess>;
-      getPostRunOutputBuffer: (workspaceId: string) => string;
-    };
+    const { service, spawnPostRun } = createActiveRunPostRunService();
 
-    await service.spawnPostRunScript('ws-1', 'echo postrun {port}', '/tmp/ws-1', 3000);
+    await spawnPostRun('echo postrun {port}', 3000);
     expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo postrun 3000'], {
       cwd: '/tmp/ws-1',
       detached: false,
@@ -1894,17 +1908,9 @@ describe('RunScriptService.cleanup/postRun internals', () => {
   it('removes postRun process from map on spawn error', async () => {
     const postRunProcess = new FakeChildProcess(88_888);
     mockSpawn.mockReturnValue(postRunProcess);
-    const service = new RunScriptService() as unknown as {
-      spawnPostRunScript: (
-        workspaceId: string,
-        runScriptPostRunCommand: string,
-        worktreePath: string,
-        port: number | undefined
-      ) => Promise<void>;
-      postRunProcesses: Map<string, FakeChildProcess>;
-    };
+    const { service, spawnPostRun } = createActiveRunPostRunService();
 
-    await service.spawnPostRunScript('ws-1', 'echo postrun', '/tmp/ws-1', undefined);
+    await spawnPostRun('echo postrun');
     expect(service.postRunProcesses.has('ws-1')).toBe(true);
 
     postRunProcess.emit('error', new Error('spawn failed'));
@@ -1915,17 +1921,9 @@ describe('RunScriptService.cleanup/postRun internals', () => {
     const previousProcess = new FakeChildProcess(88_888);
     const replacementProcess = new FakeChildProcess(99_999);
     mockSpawn.mockReturnValue(previousProcess);
-    const service = new RunScriptService() as unknown as {
-      spawnPostRunScript: (
-        workspaceId: string,
-        runScriptPostRunCommand: string,
-        worktreePath: string,
-        port: number | undefined
-      ) => Promise<void>;
-      postRunProcesses: Map<string, FakeChildProcess>;
-    };
+    const { service, spawnPostRun } = createActiveRunPostRunService();
 
-    await service.spawnPostRunScript('ws-1', 'echo postrun', '/tmp/ws-1', undefined);
+    await spawnPostRun('echo postrun');
     service.postRunProcesses.set('ws-1', replacementProcess);
 
     previousProcess.emit('exit', 0, null);
@@ -1937,17 +1935,9 @@ describe('RunScriptService.cleanup/postRun internals', () => {
 
   it('returns early when postRun process cannot provide a pid', async () => {
     mockSpawn.mockReturnValue(new FakeChildProcess(undefined));
-    const service = new RunScriptService() as unknown as {
-      spawnPostRunScript: (
-        workspaceId: string,
-        runScriptPostRunCommand: string,
-        worktreePath: string,
-        port: number | undefined
-      ) => Promise<void>;
-      postRunProcesses: Map<string, FakeChildProcess>;
-    };
+    const { service, spawnPostRun } = createActiveRunPostRunService();
 
-    await service.spawnPostRunScript('ws-1', 'echo postrun', '/tmp/ws-1', undefined);
+    await spawnPostRun('echo postrun');
     expect(service.postRunProcesses.has('ws-1')).toBe(false);
   });
 

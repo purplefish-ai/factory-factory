@@ -202,6 +202,12 @@ because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
 `registerInitializedWorktree` writes the worktree columns and the commands in
 one transaction, since they were one statement before the split.
 
+Run-script output subscribers, such as the dev-logs socket, persist across
+stops, exits, and restarts until they unsubscribe or the workspace is archived
+or deleted. The postRun command is spawned only if its run script is still
+active after tunnel startup, neither exited nor being stopped, because stop and
+exit cleanup would not see a postRun spawned later.
+
 ## Provider defaults
 
 Provider-default updates return `NOT_FOUND` when their workspace was deleted,
