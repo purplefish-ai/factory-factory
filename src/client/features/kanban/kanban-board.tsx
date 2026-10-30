@@ -84,6 +84,17 @@ export function KanbanBoard() {
     runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
   });
   const handleRenameWorkspace = useStableCallback(renameWorkspace);
+  const handleGitLockOpenChange = useStableCallback((open: boolean) => {
+    if (!open) {
+      dismissArchiveGitLock();
+    }
+  });
+  const handleRetryGitLockedArchives = useStableCallback(() => {
+    void retryGitLockedArchives(false);
+  });
+  const handleRemoveGitLocksAndArchive = useStableCallback(() => {
+    void retryGitLockedArchives(true);
+  });
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
@@ -168,14 +179,10 @@ export function KanbanBoard() {
   const archiveGitLockDialog = (
     <ArchiveGitLockDialog
       open={archiveGitLockWorkspaceIds.length > 0}
-      onOpenChange={(open) => {
-        if (!open) {
-          dismissArchiveGitLock();
-        }
-      }}
+      onOpenChange={handleGitLockOpenChange}
       workspaceCount={archiveGitLockWorkspaceIds.length}
-      onRetry={() => void retryGitLockedArchives(false)}
-      onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
+      onRetry={handleRetryGitLockedArchives}
+      onRemoveLockAndArchive={handleRemoveGitLocksAndArchive}
     />
   );
 

@@ -100,6 +100,24 @@ describe('resolveRendererTranscript', () => {
     expectMatchesRescan(resolveRendererTranscript(current, renamed, 1000));
   });
 
+  it('remaps a tool call replaced in place under a different tool-use id', () => {
+    const current = resolveRendererTranscript([], [assistant(1), toolUse(2), assistant(3)], 1000);
+    expect(current.indexes.toolUseIdToIndex.get('call-2')).toBe(1);
+
+    // Same message id and order, so only the tool-use key changes.
+    const original = toolUse(2);
+    const retargeted = toolUse(9);
+    const replaced = [...current.retained];
+    replaced[1] = { ...retargeted, id: original.id, order: original.order };
+    const resolved = resolveRendererTranscript(current.retained, replaced, 1000);
+
+    expect(resolved.indexes.toolUseIdToIndex.has('call-2')).toBe(false);
+    expect(resolved.indexes.toolUseIdToIndex.get('call-9')).toBe(1);
+    expectMatchesRescan(resolved);
+    // The previous transcript's lookups are untouched.
+    expect(current.indexes.toolUseIdToIndex.get('call-2')).toBe(1);
+  });
+
   it('never changes lookups that belong to a committed transcript', () => {
     const committed = resolveRendererTranscript([], [assistant(1), toolUse(2)], 1000);
     const snapshot = expectedIndexes(committed.retained);
