@@ -11,11 +11,9 @@ export function SubagentLifecycleRenderer({
 }) {
   const text = message.message?.text ?? message.text ?? 'Sub-agent';
   const failed = message.message?.status === 'failed';
-  const agentId = message.id.replace(/-(started|finished)$/, '');
-  const hash = Array.from(agentId).reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const content = (
     <>
-      <SubagentIcon index={hash} />
+      <SubagentIcon index={message.subagentIconIndex ?? 0} />
       <span className={cn('min-w-0 break-words', failed && 'text-destructive')}>{text}</span>
     </>
   );
