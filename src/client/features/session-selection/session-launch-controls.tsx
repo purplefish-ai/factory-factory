@@ -205,6 +205,7 @@ export function PlanningSelector({
   const unavailable =
     !control.enabled && (control.loading || Boolean(control.error) || !control.supported);
   const description = disabled ? disabledReason : getPlanDescription(control);
+  const stateLabel = control.enabled ? 'On' : 'Off';
   return (
     <TooltipProvider>
       <Tooltip>
@@ -215,12 +216,12 @@ export function PlanningSelector({
             icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
             className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
             disabled={disabled || unavailable}
-            aria-label={`Planning: ${control.enabled ? 'Plan' : 'Default'}`}
+            aria-label={`Planning: ${stateLabel}`}
             aria-description={description}
             aria-pressed={control.enabled}
             onClick={() => control.onChange(!control.enabled)}
           >
-            {control.enabled ? 'On' : 'Off'}
+            {stateLabel}
           </ComposerMenuTrigger>
         </TooltipTrigger>
         <TooltipContent side="top">{description}</TooltipContent>

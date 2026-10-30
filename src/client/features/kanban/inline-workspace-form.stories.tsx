@@ -220,8 +220,8 @@ export const SidebarSettings: Story = {
     await waitFor(() =>
       expect(within(settings).getByRole('button', { name: 'Codex account: Auto' })).toBeVisible()
     );
-    await userEvent.click(within(settings).getByRole('button', { name: 'Planning: Default' }));
-    await expect(within(settings).getByRole('button', { name: 'Planning: Plan' })).toHaveAttribute(
+    await userEvent.click(within(settings).getByRole('button', { name: 'Planning: Off' }));
+    await expect(within(settings).getByRole('button', { name: 'Planning: On' })).toHaveAttribute(
       'aria-pressed',
       'true'
     );

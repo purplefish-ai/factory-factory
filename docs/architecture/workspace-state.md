@@ -58,8 +58,9 @@ The sidebar creation form keeps provider/model and thinking settings above a
 compact action row with attachments, workspace settings, Cancel and Launch.
 Workspace settings groups account selection, access, Plan and PR updates in a
 labeled popover. Its trigger marks active options and warns about unsupported
-selections; closing it preserves the launch draft. Escape inside settings closes
-the popover without cancelling workspace creation.
+selections after discovery completes. Access warnings include an icon and text;
+closing settings preserves the launch draft. Escape inside settings closes the
+popover without cancelling workspace creation.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;

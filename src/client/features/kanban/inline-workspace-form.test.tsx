@@ -220,10 +220,10 @@ vi.mock('@/client/features/session-selection', async (importOriginal) => ({
     createElement(
       'button',
       {
-        'aria-label': `Planning: ${control.enabled ? 'Plan' : 'Default'}`,
+        'aria-label': `Planning: ${control.enabled ? 'On' : 'Off'}`,
         onClick: () => control.onChange(!control.enabled),
       },
-      control.enabled ? 'Plan' : showLabel ? 'Plan off' : 'Default'
+      showLabel ? (control.enabled ? 'On' : 'Off') : null
     ),
   SessionLaunchControls: ({
     provider,

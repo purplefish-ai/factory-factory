@@ -93,14 +93,8 @@ function WorkspaceSettings({
 }) {
   const { account, accessMode, planMode } = selection;
   const disabledReason = disabled ? 'Creating workspace' : undefined;
-  const { invalid, active, description } = getSettingsStatus(selection, ratchetEnabled);
-  const { warning } = getConfigPresentation({
-    id: 'mode',
-    name: 'Access',
-    type: 'select',
-    currentValue: accessMode?.value ?? '',
-    options: [],
-  });
+  const { invalid, active, warning, description } = getSettingsStatus(selection, ratchetEnabled);
+  const SettingsIcon = invalid || warning ? WarningCircleIcon : SlidersHorizontalIcon;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -120,11 +114,7 @@ function WorkspaceSettings({
           title={description || 'Workspace settings'}
           disabled={disabled}
         >
-          {invalid ? (
-            <WarningCircleIcon className="size-3.5" />
-          ) : (
-            <SlidersHorizontalIcon className="size-3.5" />
-          )}
+          <SettingsIcon className="size-3.5" aria-hidden="true" />
           {active && !invalid && (
             <span className="absolute right-1 top-1 size-1 rounded-full bg-primary" />
           )}
@@ -174,13 +164,13 @@ function WorkspaceSettings({
 
 function getSettingsStatus(selection: SessionLaunchControlsProps, ratchetEnabled: boolean) {
   const { account, accessMode, planMode } = selection;
-  const invalid = Boolean(accessMode?.invalid || (planMode?.enabled && !planMode.supported));
+  const invalid = Boolean(
+    accessMode?.invalid || (planMode?.enabled && !planMode.loading && !planMode.supported)
+  );
   const active = Boolean(account?.value || planMode?.enabled || ratchetEnabled);
-  const accessLabel = accessMode?.options.find(
-    (option) => option.value === accessMode.value
-  )?.label;
+  const { warning, accessDescription } = getAccessStatus(accessMode);
   const summary = [
-    accessLabel,
+    accessDescription,
     planMode?.enabled && 'Plan on',
     ratchetEnabled && 'PR updates on',
     account?.value && account.accounts.find((entry) => entry.id === account.value)?.label,
@@ -190,7 +180,22 @@ function getSettingsStatus(selection: SessionLaunchControlsProps, ratchetEnabled
   const description = invalid
     ? (selection.unavailableReason ?? 'Review workspace settings before launching')
     : summary;
-  return { invalid, active, description };
+  return { invalid, active, warning, description };
+}
+
+function getAccessStatus(control: SessionLaunchControlsProps['accessMode']) {
+  const { warning } = getConfigPresentation({
+    id: 'mode',
+    name: 'Access',
+    type: 'select',
+    currentValue: control?.value ?? '',
+    options: [],
+  });
+  const label = control?.options.find((option) => option.value === control.value)?.label;
+  return {
+    warning,
+    accessDescription: warning ? `Warning: ${label ?? 'Unrestricted access'}` : label,
+  };
 }
 
 function SettingRow({ label, children }: { label: string; children: ReactNode }) {

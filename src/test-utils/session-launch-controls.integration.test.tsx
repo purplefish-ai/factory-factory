@@ -311,7 +311,7 @@ describe('real launch controls and tRPC payloads', () => {
       }
       await open(provider === 'CLAUDE' ? 'Thinking level: Default' : 'Thinking level: High');
       await choose(effort);
-      await act(() => button('Planning: Default')?.click());
+      await act(() => button('Planning: Off')?.click());
       await act(() => button('Submit launch with message')?.click());
       await waitForReact(() =>
         expect(
@@ -511,8 +511,8 @@ describe('real launch controls and tRPC payloads', () => {
     // Let the dropdown restore focus before opening another dismissible surface.
     await waitForReact(() => expect(document.activeElement).toBe(button('Thinking level: Ultra')));
     await act(() => button('Workspace settings')?.click());
-    expect(button('Planning: Default')).toBeDefined();
-    await act(() => button('Planning: Default')?.click());
+    expect(button('Planning: Off')).toBeDefined();
+    await act(() => button('Planning: Off')?.click());
     await act(() => button('Workspace settings')?.click());
     await act(() => button('Launch')?.click());
     await waitForReact(() =>

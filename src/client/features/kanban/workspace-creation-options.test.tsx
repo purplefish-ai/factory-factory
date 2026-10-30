@@ -11,12 +11,18 @@ afterEach(() => vi.unstubAllGlobals());
 function Preview({
   invalidAccess = false,
   initialAccess = 'workspace-write',
+  initialPlan = false,
+  planLoading = false,
+  planSupported = true,
 }: {
   invalidAccess?: boolean;
   initialAccess?: string;
+  initialPlan?: boolean;
+  planLoading?: boolean;
+  planSupported?: boolean;
 }) {
   const [account, setAccount] = useState<string>();
-  const [plan, setPlan] = useState(false);
+  const [plan, setPlan] = useState(initialPlan);
   const [ratchet, setRatchet] = useState(false);
   const [access, setAccess] = useState(invalidAccess ? 'retired-mode' : initialAccess);
   return (
@@ -58,7 +64,12 @@ function Preview({
             invalid: access === 'retired-mode',
             onChange: setAccess,
           },
-          planMode: { enabled: plan, supported: true, loading: false, onChange: setPlan },
+          planMode: {
+            enabled: plan,
+            supported: planSupported,
+            loading: planLoading,
+            onChange: setPlan,
+          },
         }}
       >
         <button type="button">Launch</button>
@@ -103,14 +114,16 @@ it('keeps model and thinking visible while retaining secondary choices across se
     expect(container.querySelector('[aria-label^="Codex account:"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Planning:"]')).toBeNull();
     await act(() => button('Workspace settings').click());
+    expect(button('Planning: Off').textContent).toBe('Off');
     await choose(button('Codex account: Auto'), 'Work');
-    await act(() => button('Planning: Default').click());
+    await act(() => button('Planning: Off').click());
     await act(() => button('Enable PR updates').click());
     await act(() => button('Workspace settings').click());
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     await act(() => button('Workspace settings').click());
     button('Codex account: Work');
-    expect(button('Planning: Plan').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Planning: On').getAttribute('aria-pressed')).toBe('true');
+    expect(button('Planning: On').textContent).toBe('On');
     expect(button('Disable PR updates').getAttribute('aria-pressed')).toBe('true');
   } finally {
     await act(() => root.unmount());
@@ -127,7 +140,27 @@ it.each([
   const { container, root } = await mount(false, access);
   try {
     expect(button('Workspace settings').className).toMatch(/text-orange-/);
-    expect(button('Workspace settings').getAttribute('aria-description')).toContain('Full access');
+    expect(button('Workspace settings').getAttribute('aria-description')).toContain(
+      'Warning: Full access'
+    );
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('waits for Plan support discovery before warning about an enabled unsupported Plan', async () => {
+  const { container, root } = await mount();
+  try {
+    // Remount the preview with Plan already enabled, then resolve its discovery state.
+    await act(() =>
+      root.render(<Preview key="plan" initialPlan planLoading planSupported={false} />)
+    );
+    expect(button('Workspace settings').getAttribute('aria-invalid')).not.toBe('true');
+    await act(() => root.render(<Preview key="plan" initialPlan planSupported={false} />));
+    expect(button('Workspace settings').getAttribute('aria-invalid')).toBe('true');
+    await act(() => root.render(<Preview key="plan" initialPlan planSupported />));
+    expect(button('Workspace settings').getAttribute('aria-invalid')).not.toBe('true');
   } finally {
     await act(() => root.unmount());
     container.remove();
