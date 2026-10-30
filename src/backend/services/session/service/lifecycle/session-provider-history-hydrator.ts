@@ -70,7 +70,7 @@ function getProviderSessionIdFromMetadata(dbSession: ProviderHistorySession): st
     : null;
 }
 
-function getProviderSessionId(dbSession: ProviderHistorySession): string | null {
+export function getProviderHistorySessionId(dbSession: ProviderHistorySession): string | null {
   if (typeof dbSession.providerSessionId === 'string' && dbSession.providerSessionId.length > 0) {
     return dbSession.providerSessionId;
   }
@@ -90,7 +90,7 @@ async function hydrateProviderHistory(
   sessionId: string,
   dbSession: ProviderHistorySession
 ): Promise<void> {
-  const providerSessionId = getProviderSessionId(dbSession);
+  const providerSessionId = getProviderHistorySessionId(dbSession);
   const historyIsCurrent = providerSessionId
     ? domain.createProviderHistoryFence(sessionId, providerSessionId)
     : () => true;
@@ -109,7 +109,13 @@ async function hydrateProviderHistory(
     Boolean(providerSessionId) &&
     historyHydrationSource !== 'jsonl';
 
-  if (isHistoryHydrated && !shouldAttemptCodexToolBackfill) {
+  if (
+    isHistoryHydrated &&
+    !shouldAttemptCodexToolBackfill &&
+    (existingProviderMessages.length > 0 ||
+      historyHydrationSource === 'jsonl' ||
+      !providerSessionId)
+  ) {
     return;
   }
 
@@ -195,7 +201,9 @@ function handleLoadedProviderHistory(
   domain.clearHistoryRetryCooldown(sessionId);
   if (
     domain.getHistoryHydrationSource(sessionId) === 'jsonl' ||
-    (domain.isHistoryHydrated(sessionId) && !shouldAttemptCodexToolBackfill)
+    (domain.isHistoryHydrated(sessionId) &&
+      providerMessages(domain.getTranscriptSnapshot(sessionId)).length > 0 &&
+      !shouldAttemptCodexToolBackfill)
   ) {
     return;
   }

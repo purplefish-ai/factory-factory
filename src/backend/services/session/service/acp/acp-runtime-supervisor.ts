@@ -11,7 +11,11 @@ import type {
   AcpRuntimeMetadata,
   AcpStartupSignal,
 } from './acp-runtime-contracts';
-import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
+import type {
+  AcpRuntimeEvent,
+  AcpRuntimeEventHandlers,
+  AcpRuntimePurpose,
+} from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
   type AcpClientCreationOperation,
@@ -33,6 +37,10 @@ export class AcpRuntimeSupervisor {
   private readonly clientFactory: Pick<AcpClientFactory, 'createClient'>;
   private readonly cancelPrompt: AcpRuntimeSupervisorDependencies['cancelPrompt'];
   private readonly sessions = new Map<string, AcpProcessHandle>();
+  private readonly observedEmptyProviderSessions = new Map<
+    string,
+    { provider: AcpClientOptions['provider']; providerSessionId: string }
+  >();
   private readonly browseOnlySessions = new Set<string>();
   private readonly activeTaskSessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
@@ -78,6 +86,19 @@ export class AcpRuntimeSupervisor {
 
   getInstalledHandle(sessionId: string): AcpProcessHandle | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  hasObservedEmptyProviderSession(
+    sessionId: string,
+    provider: AcpClientOptions['provider'],
+    providerSessionId: string
+  ): boolean {
+    const proof = this.observedEmptyProviderSessions.get(sessionId);
+    return proof?.provider === provider && proof.providerSessionId === providerSessionId;
+  }
+
+  forgetObservedEmptyProviderSession(sessionId: string): void {
+    this.observedEmptyProviderSessions.delete(sessionId);
   }
 
   isBrowseOnlySession(sessionId: string): boolean {
@@ -149,6 +170,7 @@ export class AcpRuntimeSupervisor {
           return handle;
         }
 
+        this.forgetObservedEmptyProviderSession(sessionId);
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
         this.recordClientPurpose(sessionId, options);
         const runtime = {
@@ -361,6 +383,9 @@ export class AcpRuntimeSupervisor {
           logger.debug('Ignoring ACP event from stale runtime', { sessionId });
           return;
         }
+        if (isConversationActivity(event)) {
+          this.forgetObservedEmptyProviderSession(sessionId);
+        }
         if (event.type === 'acp_task_status_changed') {
           if (event.active) {
             this.activeTaskSessions.add(sessionId);
@@ -524,6 +549,12 @@ export class AcpRuntimeSupervisor {
 
       this.runtimeMetadata.set(handle.child, metadata);
       this.sessions.set(sessionId, handle);
+      if (handle.sessionCreationOutcome.kind === 'new') {
+        this.observedEmptyProviderSessions.set(sessionId, {
+          provider: handle.provider,
+          providerSessionId: handle.providerSessionId,
+        });
+      }
       metadata.installed = true;
       this.recordClientPurpose(sessionId, options);
       this.wireChildExitHandler(sessionId, handle, handlers, metadata);
@@ -571,6 +602,7 @@ export class AcpRuntimeSupervisor {
   ): Promise<void> {
     handle.failConfiguration(new Error(`ACP candidate setup failed: ${sessionId}`));
     if (this.sessions.get(sessionId) === handle) {
+      this.forgetObservedEmptyProviderSession(sessionId);
       this.sessions.delete(sessionId);
       this.clearActivity(sessionId);
       this.clearCurrentRuntime(sessionId, metadata);
@@ -892,6 +924,7 @@ export class AcpRuntimeSupervisor {
 
   private clearRegistries(): void {
     this.sessions.clear();
+    this.observedEmptyProviderSessions.clear();
     this.browseOnlySessions.clear();
     this.activeTaskSessions.clear();
     this.pendingCreation.clear();
@@ -905,4 +938,22 @@ export class AcpRuntimeSupervisor {
     this.shutdownWaiters.clear();
     this.sessionStopWaiters.clear();
   }
+}
+
+function isConversationActivity(event: AcpRuntimeEvent): boolean {
+  if (event.type === 'acp_session_update') {
+    return [
+      'user_message_chunk',
+      'agent_message_chunk',
+      'agent_thought_chunk',
+      'tool_call',
+      'tool_call_update',
+      'plan',
+    ].includes(event.update.sessionUpdate);
+  }
+  return (
+    (event.type === 'acp_task_status_changed' && event.active) ||
+    event.type === 'acp_subagents_changed' ||
+    event.type === 'acp_subagent_tool_update'
+  );
 }
