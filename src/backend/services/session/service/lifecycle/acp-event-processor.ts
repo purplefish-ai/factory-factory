@@ -497,16 +497,15 @@ export class AcpEventProcessor {
   private handleAcpUserMessageChunk(sid: string, text: string): void {
     this.thoughts.flush(sid);
     this.maybeLiftReplaySuppression(sid);
-    if (this.suppressAcpReplayForSession.has(sid)) {
-      return;
-    }
-    if (this.runtimeManager.isSessionWorking(sid)) {
+    if (this.suppressAcpReplayForSession.has(sid) || this.runtimeManager.isSessionWorking(sid)) {
       return;
     }
     const normalized = text.trim();
     if (normalized.length === 0) {
       return;
     }
+    // Close the replayed reply so the next reply starts a new message below this one.
+    this.finishAcpTextBlock(sid);
     this.sessionDomainService.injectCommittedUserMessage(sid, normalized);
   }
 

@@ -465,6 +465,14 @@ function parseCodexResponseItemMessages(
   return [];
 }
 
+// Rollouts without content_item_kinds record harness context as plain user text blocks.
+const LEGACY_INJECTED_CONTEXT_PATTERN =
+  /^\s*(?:<(environment_context|user_instructions)>[\s\S]*?<\/\1>\s*)+$/;
+
+function isLegacyInjectedContext(text: string | undefined): boolean {
+  return LEGACY_INJECTED_CONTEXT_PATTERN.test(text ?? '');
+}
+
 function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryMessage[] {
   const parsed = CodexResponseMessageSchema.safeParse(payload);
   if (!parsed.success) {
@@ -489,7 +497,8 @@ function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryM
     .filter((block, index) =>
       role === 'assistant'
         ? block.type === 'output_text'
-        : block.type === 'input_text' && (!kinds || kinds[index] === 'user.text')
+        : block.type === 'input_text' &&
+          (kinds ? kinds[index] === 'user.text' : !isLegacyInjectedContext(block.text))
     )
     .map((block) => block.text ?? '')
     .join('\n');

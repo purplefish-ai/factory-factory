@@ -441,12 +441,24 @@ describe('session-transcript', () => {
     });
 
     expect(store.transcript[0]).toMatchObject({
-      id: 'injected-1000',
+      id: 'injected-1000-0',
       source: 'user',
       text: 'injected',
       timestamp: '2026-02-01T00:00:00.000Z',
       order: 0,
     });
     expect(store.nextOrder).toBe(1);
+  });
+
+  it('keeps every injected user message when several arrive in the same millisecond', () => {
+    const store = createStore();
+    const clock = { nowIso: () => '2026-02-01T00:00:00.000Z', nowMs: () => 1000 };
+    injectCommittedUserMessage(store, 'Q1', clock);
+    injectCommittedUserMessage(store, 'Q2', clock);
+
+    expect(store.transcript.map(({ text, order }) => ({ text, order }))).toEqual([
+      { text: 'Q1', order: 0 },
+      { text: 'Q2', order: 1 },
+    ]);
   });
 });
