@@ -17,7 +17,13 @@ export const Queued: Story = {
   args: { text: 'PR update queued for the next turn', queued: true },
 };
 
-function ConversationPreview({ updateCount = 1 }: { updateCount?: number }) {
+function ConversationPreview({
+  updateCount = 1,
+  cancelled = false,
+}: {
+  updateCount?: number;
+  cancelled?: boolean;
+}) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const updates = Array.from({ length: updateCount }, (_, index) => ({
     id: `pr-event-queued-story-${index}`,
@@ -25,12 +31,21 @@ function ConversationPreview({ updateCount = 1 }: { updateCount?: number }) {
     order: index,
     timestamp: '2026-10-28T00:00:00.000Z',
     text: 'PR update queued for the next turn',
+    ...(cancelled
+      ? {
+          message: {
+            type: 'pr_update' as const,
+            text: 'PR update cancelled before dispatch',
+            prDeliveryState: 'cancelled' as const,
+          },
+        }
+      : {}),
   }));
   return (
     <div ref={scrollContainerRef} className="h-80 w-full max-w-3xl overflow-auto border rounded-md">
       <VirtualizedMessageList
         messages={updates}
-        queuedMessageIds={new Set(updates.map(({ id }) => id))}
+        queuedMessageIds={new Set(cancelled ? [] : updates.map(({ id }) => id))}
         running
         startingSession={false}
         loadingSession={false}
@@ -49,6 +64,11 @@ export const QueuedBelowThinking: StoryObj<typeof ConversationPreview> = {
 export const MultipleQueuedUpdates: StoryObj<typeof ConversationPreview> = {
   parameters: { controls: { disable: true } },
   render: () => <ConversationPreview updateCount={3} />,
+};
+
+export const CancelledDuringThinking: StoryObj<typeof ConversationPreview> = {
+  parameters: { controls: { disable: true } },
+  render: () => <ConversationPreview updateCount={3} cancelled />,
 };
 
 export const Failed: Story = {

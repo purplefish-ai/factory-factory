@@ -216,11 +216,14 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       if (loadingSession && !queuedMessageIds?.has(item.id)) {
         continue;
       }
-      const isQueuedPRUpdate =
+      const isPRUpdate =
         !isToolSequence(item) &&
-        queuedMessageIds?.has(item.id) &&
         (item.message?.type === 'pr_update' || item.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX));
-      if (isQueuedPRUpdate) {
+      // Retain cancellation records for recovery without rendering empty transcript rows.
+      if (isPRUpdate && item.message?.prDeliveryState === 'cancelled') {
+        continue;
+      }
+      if (isPRUpdate && queuedMessageIds?.has(item.id)) {
         queuedPRUpdate ??= item;
       } else {
         messages.push(item);
@@ -244,7 +247,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
     todoState.todos.length > 0 ||
-    allMessages.length > 0 ||
+    messages.length > 0 ||
+    Boolean(queuedPRUpdate) ||
     running ||
     hasBackgroundActivity ||
     startingSession ||
