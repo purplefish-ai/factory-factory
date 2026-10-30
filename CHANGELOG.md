@@ -8,6 +8,66 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-30
+
+### Added
+
+- Add multiple Codex accounts with usage-aware session selection (#2663)
+- Show Claude and Codex tasks inline in chat and expose sub-agent lifecycle
+  events (#2689, #2691)
+
+### Changed
+
+- Run the desktop backend in an Electron utility process and reduce event-loop
+  stalls during concurrent sub-agent activity and session-history loading
+  (#2698, #2703, #2704)
+- Manage the bundled Claude runtime consistently with Codex, including sign-in,
+  terminal resizing, shutdown, and exit-status handling (#2668)
+- Use botanical sub-agent icons and active counts, simplify chat activity, and
+  refresh sub-agent lists from live session events (#2670, #2690, #2691)
+- Tighten the new workspace form, unify Files and Changes tree rows, and remove
+  the scheduled agents banner from Settings (#2666, #2702, #2707)
+- Share GitHub issue search results across projects (#2684)
+- Refresh dependencies, including Claude ACP 0.99.1, Codex ACP 2.5.0, ACP SDK
+  2.1.0, and Electron 45.1, while retaining Prisma 7 compatibility (#2667)
+
+### Fixed
+
+- Preserve Codex project trust across managed account profiles and avoid false
+  "no remaining capacity" account errors (#2669, #2700)
+- Keep resumed history separate from live activity, exclude harness metadata
+  from restored Claude history, and prevent historical sub-agent activity from
+  appearing when reopening workspaces (#2682, #2688, #2706)
+- Restore saved chat drafts on initial mount, improve transcript follow and
+  scroll restoration, and hide cancelled PR updates from chat (#2686, #2692,
+  #2701)
+- Normalize Claude AIR plan approvals, restore pending permission requests,
+  preserve busy-turn tool tracking, and correct queue positions and settings
+  replay behavior (#2680, #2697)
+- Preserve sessions when provider history cannot be archived and handle
+  overlapping workspace archives without spurious failure notifications (#2687,
+  #2705)
+- Reject workspace creation in archived projects, preserve new workspaces during
+  reconciliation, recover missing worktrees on retry, and fix late scheduled
+  runs and initial settings saves (#2685, #2699)
+- Correct pending CI detection, retain in-flight PR fetch claims, notify parent
+  workspaces about draft PRs, and decode review-diff paths correctly (#2695)
+- Verify port availability after ambiguous checks, detect loopback listeners
+  when allocating run-script ports, and handle failed or timed-out IDE launches
+  (#2683, #2694)
+- Correct public tunnel URL detection, preserve proxied cookies, and format IPv6
+  serve origins correctly (#2693)
+- Preserve structured error logging, handle invalid dates and Windows file
+  links, validate question lengths by Unicode code points, and make subscription
+  cleanup idempotent (#2696)
+- Hide the Claude update button after successful upgrades (#2665)
+
+### Security
+
+- Block privileged HTTP access through public tunnels and isolate tunnel trust
+  from inherited proxy settings (#2681)
+- Prevent symlink paths from escaping worktrees (#2694)
+
 ## [0.5.0] - 2026-10-29
 
 ### Added
