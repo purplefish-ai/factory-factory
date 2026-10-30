@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
@@ -42,8 +43,16 @@ function listFiles(path: string) {
   });
 }
 
-function MatchingTrees({ virtualized = false }: { virtualized?: boolean }) {
-  const [queryClient] = useState(() => new QueryClient());
+function MatchingTrees({
+  virtualized = false,
+  directoryState = 'loaded',
+}: {
+  virtualized?: boolean;
+  directoryState?: 'loaded' | 'loading' | 'error';
+}) {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  );
   const [client] = useState(() =>
     trpc.createClient({
       links: [
@@ -51,6 +60,12 @@ function MatchingTrees({ virtualized = false }: { virtualized?: boolean }) {
           ({ op }) =>
             observable((observer) => {
               const { path = '' } = z.object({ path: z.string().optional() }).parse(op.input);
+              if (path === 'drafts' && directoryState !== 'loaded') {
+                if (directoryState === 'error') {
+                  observer.error(new TRPCClientError('Directory unavailable'));
+                }
+                return;
+              }
               observer.next({ result: { data: { entries: listFiles(path), hasWorktree: true } } });
               observer.complete();
             }),
@@ -131,4 +146,24 @@ export const CompactRows: Story = {
 export const VirtualizedRows: Story = {
   ...CompactRows,
   args: { virtualized: true },
+};
+
+async function checkPlaceholder(canvasElement: HTMLElement, text: string) {
+  const changes = within(within(canvasElement).getByTestId('changes'));
+  const placeholder = await changes.findByText(text);
+  const folder = changes.getByRole('button', { name: 'drafts ?' });
+  await expect(placeholder.parentElement?.getBoundingClientRect().height).toBe(
+    folder.getBoundingClientRect().height
+  );
+}
+
+export const LoadingDirectory: Story = {
+  args: { directoryState: 'loading' },
+  play: async ({ canvasElement }) => checkPlaceholder(canvasElement, 'Loading…'),
+};
+
+export const DirectoryError: Story = {
+  args: { directoryState: 'error' },
+  play: async ({ canvasElement }) =>
+    checkPlaceholder(canvasElement, 'Failed to load directory contents'),
 };

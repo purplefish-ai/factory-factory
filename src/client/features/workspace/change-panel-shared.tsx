@@ -347,10 +347,10 @@ function UntrackedDirContents({
   if (isLoading) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        className="flex items-center gap-1 px-2 text-sm text-muted-foreground"
+        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
-        <SpinnerGapIcon className="h-3 w-3 animate-spin" />
+        <SpinnerGapIcon className="h-4 w-4 shrink-0 animate-spin" />
         <span>Loading…</span>
       </div>
     );
@@ -359,11 +359,13 @@ function UntrackedDirContents({
   if (isError) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-1 text-xs text-destructive"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        className="flex items-center gap-1 px-2 text-sm text-destructive"
+        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
-        <WarningCircleIcon className="h-3 w-3 shrink-0" />
-        <span>Failed to load directory contents</span>
+        <WarningCircleIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate" title="Failed to load directory contents">
+          Failed to load directory contents
+        </span>
       </div>
     );
   }
