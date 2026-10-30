@@ -164,7 +164,7 @@ describe('ToolSequenceGroup', () => {
 });
 
 describe('quiet activity summaries', () => {
-  it('shows the command and reveals input and output on demand', () => {
+  it('summarizes a single command and reveals its details on demand', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     const call = {
@@ -179,18 +179,21 @@ describe('quiet activity summaries', () => {
         })
       )
     );
-    expect(container.textContent).toContain('Ran pnpm test');
+    expect(container.textContent).toBe('Ran commands');
     expect(container.textContent).not.toContain('Success');
     expect(container.textContent).not.toContain('All tests passed');
     expect(container.textContent).not.toContain('Run the full unit suite');
     flushSync(() => container.querySelector('button')?.click());
+    expect(container.textContent).toContain('Ran pnpm test');
+    expect(container.textContent).not.toContain('All tests passed');
+    flushSync(() => container.querySelectorAll('button')[1]?.click());
     expect(container.textContent).toContain('All tests passed');
     expect(container.textContent).toContain('Run the full unit suite');
     expect(container.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
     root.unmount();
   });
 
-  it('summarizes mixed activity and keeps failed commands visible', () => {
+  it('keeps failures inside expanded activity', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     const command = {
@@ -211,7 +214,8 @@ describe('quiet activity summaries', () => {
       )
     );
     expect(container.textContent).toContain('Edited a file, ran commands');
-    expect(container.textContent).toContain('1 failed');
+    expect(container.textContent).not.toMatch(/failed|error/i);
+    expect(container.querySelector('button')?.className).not.toContain('text-destructive');
     flushSync(() => container.querySelector('button')?.click());
     expect(container.textContent).toContain('Failed pnpm test');
     expect(container.textContent).not.toContain('Success');
@@ -219,7 +223,7 @@ describe('quiet activity summaries', () => {
   });
 });
 
-describe('bounded command previews', () => {
+describe('bounded command previews in expanded activity', () => {
   const command = `printf ${'x'.repeat(200)}`;
   it.each([
     { name: 'Bash', input: { command } },
@@ -239,9 +243,42 @@ describe('bounded command previews', () => {
       );
       const trigger = container.querySelector('button');
       expect(trigger?.textContent?.length).toBeLessThanOrEqual(84);
-      expect(trigger?.textContent).toMatch(/…$/);
+      expect(trigger?.textContent).toBe('Ran commands');
       flushSync(() => trigger?.click());
+      const commandTrigger = container.querySelectorAll('button')[1];
+      expect(commandTrigger?.textContent?.length).toBeLessThanOrEqual(84);
+      expect(commandTrigger?.textContent).toMatch(/…$/);
+      flushSync(() => commandTrigger?.click());
       expect(container.textContent).toContain(command);
+    } finally {
+      root.unmount();
+    }
+  });
+});
+
+describe('single activity summaries', () => {
+  it.each([
+    { name: 'Read', status: 'success' as const, label: 'Read files' },
+    { name: 'Bash', status: 'error' as const, label: 'Ran commands' },
+    { name: 'exec_command', status: 'pending' as const, label: 'Running commands' },
+  ])('summarizes $name with status $status', ({ name, status, label }) => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const call = { ...createCall('single', name), status };
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(ToolSequenceGroup, {
+            sequence: { type: 'tool_sequence', id: 'single', pairedCalls: [call] },
+          })
+        )
+      );
+      const trigger = container.querySelector('button');
+      expect(trigger?.textContent).toBe(label + (status === 'pending' ? 'Running' : ''));
+      expect(trigger?.className).not.toContain('text-destructive');
+      expect(container.textContent).not.toContain('single.ts');
+      flushSync(() => trigger?.click());
+      expect(container.textContent).toContain(name === 'Read' ? 'single.ts' : 'command');
     } finally {
       root.unmount();
     }

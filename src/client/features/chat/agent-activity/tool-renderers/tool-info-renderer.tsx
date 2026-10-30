@@ -1,4 +1,5 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
@@ -149,29 +150,20 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   if (!first) {
     return null;
   }
-  if (calls.length === 1) {
-    return (
-      <PairedToolCallRenderer
-        call={first}
-        open={isOpen}
-        onOpenChange={setIsOpen}
-        detailsClassName={toolDetailsClassName}
-        detailsMaxHeight={toolDetailsMaxHeight}
-      />
-    );
-  }
-  const errors = calls.filter((call) => call.status === 'error').length;
   const pending = calls.some((call) => call.status === 'pending');
   const label = getToolGroupLabel(calls);
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
       <CollapsibleTrigger asChild>
         <button type="button" className={triggerClassName}>
-          <ActivityIcon name={first.name} pending={pending} />
+          {pending ? (
+            <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
+          ) : (
+            <FolderSimpleIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+          )}
           <span className="min-w-0 truncate" title={label}>
             {label}
           </span>
-          {errors > 0 && <span className="shrink-0 text-xs text-destructive">{errors} failed</span>}
           {pending && <span className="sr-only">Running</span>}
           <DisclosureCaret />
         </button>

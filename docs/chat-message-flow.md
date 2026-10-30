@@ -184,6 +184,12 @@ duplicate-result filtering creates a new grouper. Message edits must replace the
 array and changed message objects; in-place appends and truncation are detected
 by length, but same-length in-place edits are unsupported.
 
+Tool activity starts collapsed behind a category summary such as “Read files,
+ran commands”, including sequences with only one call. Expanding the summary
+reveals chronological actions; each action expands to its full input and output.
+Failures appear within those expanded actions, without a failure count or error
+styling on the summary. Pending activity keeps its running indicator.
+
 Thinking-only assistant messages and thinking stream blocks are omitted from the
 grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the
