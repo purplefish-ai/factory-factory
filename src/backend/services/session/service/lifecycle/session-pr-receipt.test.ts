@@ -6,7 +6,12 @@ const mocks = vi.hoisted(() => ({
   archives: vi.fn(),
   read: vi.fn(),
 }));
-vi.mock('node:fs/promises', () => ({ readFile: mocks.read }));
+vi.mock('./closed-session-transcript-header', () => ({
+  readClosedSessionTranscriptHeader: async (
+    _path: string,
+    schema: { parse: (v: unknown) => unknown }
+  ) => schema.parse(JSON.parse(await mocks.read())),
+}));
 vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
   closedSessionAccessor: { findBySessionIdWithWorkspace: mocks.archives },
 }));
@@ -74,6 +79,7 @@ it.each(['CLAUDE', 'CODEX'])(
     expect(mocks.history).toHaveBeenLastCalledWith({
       providerSessionId: 'closed-provider',
       workingDir: '/tmp/repo',
+      onlyLinesContaining: '<!-- factory-factory-pr-event:delivery -->',
     });
     mocks.history.mockResolvedValue({ status: 'loaded', history: [] });
     expect(await findPRDeliveryReceipt('main', 'delivery')).toBe('absent');
