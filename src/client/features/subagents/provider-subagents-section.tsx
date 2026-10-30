@@ -2,6 +2,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useCallback, useEffect, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { SubagentList, type SubagentListState } from './subagent-list';
+import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
 import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem, SubagentSelection } from './types';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
@@ -25,10 +26,10 @@ export function ProviderSubagentsSection({
   const query = trpc.session.listSubagents.useInfiniteQuery(input, {
     enabled: queryEnabled,
     refetchOnMount: 'always',
-    getNextPageParam: (lastPage) =>
-      lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
+    getNextPageParam: getNextSubagentPageParam,
   });
-  const { fetchNextPage, hasNextPage, isFetching, error } = query;
+  const { fetchNextPage, hasNextPage, isFetching } = query;
+  const error = getSubagentListError(query);
   const pageCount = query.data?.pages.length;
   useEffect(() => {
     if (queryEnabled && pageCount && hasNextPage && !isFetching && !error) {
@@ -69,10 +70,10 @@ export function ProviderSubagentsSection({
   }
 
   let state: SubagentListState;
-  if (query.error && !query.data) {
+  if (error && !query.data) {
     state = {
       kind: 'error',
-      message: query.error.message,
+      message: error.message,
       onRetry: () => {
         void query.refetch();
       },
@@ -85,9 +86,9 @@ export function ProviderSubagentsSection({
       subagents,
       hasMore: Boolean(query.hasNextPage),
       loadingMore: query.isFetchingNextPage,
-      error: query.error
+      error: error
         ? {
-            message: query.error.message,
+            message: error.message,
             onRetry: query.isFetchNextPageError
               ? () => {
                   void query.fetchNextPage();
@@ -105,7 +106,7 @@ export function ProviderSubagentsSection({
       <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-2">
         <RobotIcon className="h-3.5 w-3.5 text-muted-foreground" />
         <h2 className="text-xs font-medium">Sub-agents</h2>
-        {state.kind === 'ready' && !state.hasMore && state.subagents.length > 0 && (
+        {state.kind === 'ready' && !state.hasMore && !state.error && state.subagents.length > 0 && (
           <span
             role="status"
             aria-label="Active sub-agents"

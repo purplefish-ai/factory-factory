@@ -673,7 +673,8 @@ list uses the same botanical icons for sub-agent rows. Its header counts active
 separate collapsible Completed count. The panel automatically loads all summary
 pages before showing the active count, so children on later provider pages are
 included. A page failure keeps loaded rows visible and offers Retry without
-displaying a partial count.
+displaying a partial count. Repeated provider cursors stop automatic pagination
+and offer the same recovery instead of repeatedly fetching the same page.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

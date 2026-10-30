@@ -27,9 +27,11 @@ function storySubagent(index: number, activeCount: number): SubagentListItem {
 function SectionStory({
   activeCount = 2,
   pageSize = 8,
+  repeatCursor = false,
 }: {
   activeCount?: number;
   pageSize?: number;
+  repeatCursor?: boolean;
 }) {
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
@@ -50,7 +52,7 @@ function SectionStory({
                   data: {
                     supported: true,
                     subagents: ordered.slice(offset, end),
-                    nextCursor: end < ordered.length ? String(end) : null,
+                    nextCursor: end < ordered.length ? String(repeatCursor ? pageSize : end) : null,
                   },
                 },
               });
@@ -78,7 +80,9 @@ function SectionStory({
 const meta = {
   title: 'Subagents/ProviderSubagentsSection',
   component: SectionStory,
-  render: (args) => <SectionStory key={`${args.activeCount}-${args.pageSize}`} {...args} />,
+  render: (args) => (
+    <SectionStory key={`${args.activeCount}-${args.pageSize}-${args.repeatCursor}`} {...args} />
+  ),
 } satisfies Meta<typeof SectionStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -117,5 +121,19 @@ export const ActiveAgentsOnLaterPages: Story = {
     await expect(canvas.getByText('Bug 12846')).toBeVisible();
     await expect(canvas.getByText('Audit and scope review')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Completed · 6' })).toBeVisible();
+  },
+};
+
+export const RepeatedProviderCursor: Story = {
+  args: { activeCount: 2, pageSize: 2, repeatCursor: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText(
+        'The provider repeated a sub-agent page cursor. Retry to reload the list.'
+      )
+    ).toBeVisible();
+    await expect(canvas.queryByLabelText('Active sub-agents')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
   },
 };

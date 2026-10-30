@@ -10,6 +10,7 @@ import type { SubagentListItem } from './types';
 const mocks = vi.hoisted(() => ({
   fetchNextPage: vi.fn(() => Promise.resolve()),
   infinitePages: undefined as unknown[] | undefined,
+  pageParams: [null] as unknown[],
   invalidate: vi.fn(() => Promise.resolve()),
   queryResult: {
     data: undefined as unknown,
@@ -38,10 +39,10 @@ vi.mock('@/client/lib/trpc', () => ({
             ...mocks.queryResult,
             data:
               mocks.infinitePages !== undefined
-                ? { pages: mocks.infinitePages }
+                ? { pages: mocks.infinitePages, pageParams: mocks.pageParams }
                 : mocks.queryResult.data === undefined
                   ? undefined
-                  : { pages: [mocks.queryResult.data] },
+                  : { pages: [mocks.queryResult.data], pageParams: mocks.pageParams },
             fetchNextPage: mocks.fetchNextPage,
           };
         },
@@ -65,6 +66,7 @@ describe('ProviderSubagentsSection', () => {
     });
     mocks.queryResult.data = undefined;
     mocks.infinitePages = undefined;
+    mocks.pageParams = [null];
     mocks.queryResult.error = null;
     mocks.queryResult.hasNextPage = false;
     mocks.queryResult.isFetchNextPageError = false;
@@ -371,6 +373,47 @@ describe('ProviderSubagentsSection', () => {
     });
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    'stops repeated cursors and offers retry when hasNextPage is %s',
+    (hasNextPage) => {
+      const loaded = {
+        id: 'loaded-agent',
+        name: 'Loaded agent',
+        status: 'running',
+        createdAt: null,
+        updatedAt: null,
+        completedAt: null,
+        latestActivity: null,
+        resultPreview: null,
+      };
+      mocks.infinitePages = [
+        { supported: true, subagents: [loaded], nextCursor: 'repeated' },
+        { supported: true, subagents: [], nextCursor: 'latest' },
+        { supported: true, subagents: [], nextCursor: 'repeated' },
+      ];
+      mocks.pageParams = [null, 'repeated', 'latest'];
+      mocks.queryResult.hasNextPage = hasNextPage;
+      render({
+        sessionId: 'session-1',
+        parentSessionName: 'Session 1',
+        enabled: true,
+        onSelect: vi.fn(),
+      });
+
+      expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+      expect(container.textContent).toContain('Loaded agent');
+      expect(container.textContent).toContain(
+        'The provider repeated a sub-agent page cursor. Retry to reload the list.'
+      );
+      expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+      const retry = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Retry'
+      );
+      void act(() => retry?.click());
+      expect(mocks.queryResult.refetch).toHaveBeenCalledOnce();
+    }
+  );
 
   it('keeps loaded sub-agents visible and retries only the failed next page', () => {
     const first = {
