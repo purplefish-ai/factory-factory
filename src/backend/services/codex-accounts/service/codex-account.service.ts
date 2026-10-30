@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   NATIVE_DEFAULT_CODEX_ACCOUNT_ID,
   type CodexAccountSummary,
@@ -27,6 +28,7 @@ import type {
   NativeLogin,
 } from './types';
 
+const logger = createLogger('codex-accounts');
 const labelSchema = z.string().trim().min(1).max(100);
 const updateSchema = z.object({ label: labelSchema.optional(), enabled: z.boolean().optional() });
 const unknownUsage = (): ProviderPlanUsage => ({
@@ -322,18 +324,34 @@ export class CodexAccountService {
     if (!row.enabled || this.logins.isPending(row.id)) {
       return null;
     }
+    let observation: AccountObservation;
     try {
-      const observation = await this.observe(row);
-      if (!observation.authenticated) {
-        return null;
-      }
-      const pressure = accountPressure(observation, model, reasoningEffort);
-      return pressure === null || (!includeExhausted && pressure === 100)
-        ? null
-        : { id: row.id, pressure };
-    } catch {
+      observation = await this.observe(row);
+    } catch (error) {
+      logger.warn('Skipping Codex account: usage could not be read', {
+        accountId: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
+    if (!observation.authenticated) {
+      logger.info('Skipping Codex account: not signed in', { accountId: row.id });
+      return null;
+    }
+    const pressure = accountPressure(observation, model, reasoningEffort);
+    if (pressure === null) {
+      logger.info('Skipping Codex account: requested model or reasoning effort unsupported', {
+        accountId: row.id,
+        model,
+        reasoningEffort,
+      });
+      return null;
+    }
+    if (!includeExhausted && pressure === 100) {
+      logger.info('Skipping Codex account: no remaining capacity', { accountId: row.id });
+      return null;
+    }
+    return { id: row.id, pressure };
   }
   private async candidates(
     model?: string,
