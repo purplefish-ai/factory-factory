@@ -187,6 +187,67 @@ grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the
 agent is running.
 
+## Transcript scrolling
+
+Main chat, quick chat and subagent transcripts use the chat feature's
+`ChatTranscript` surface. It owns the viewport, jump control, input observation
+and virtualizer. Callers supply a workspace/session/surface identity,
+visibility, hydration readiness, and optional committed-position persistence.
+They must not add message-count scroll effects or composer-height scroll writes.
+
+The scroll controller separates following from reading and from the suspended,
+restoring and ready lifecycle. Layout changes cannot change intent. Upward input
+yields immediately; downward movement within 24 pixels of the end or the jump
+control resumes following. A held touch/scrollbar gesture inhibits positioning
+until release, even if an older scroll operation emits `scrollend`.
+
+The virtualizer uses start anchoring with native append-follow disabled. One
+controller frame coalesces committed content/viewport changes; TanStack performs
+measured positioning and above-viewport compensation. A leading header stays
+mounted so offscreen image/banner changes remain measured. ResizeObserver
+batches run through the virtualizer's frame scheduler to avoid delivery loops
+when compensation mounts more rows. Headers and the final message's activity
+tail, inline tasks and subagent recovery status share the measured extent.
+Native CSS anchoring is disabled on the controlled viewport. The jump button
+overlays the viewport, so showing it cannot change its height.
+
+Canceled PR records remain available for recovery but do not create virtual
+rows. The empty state uses the filtered message model.
+
+Returning to a pane restores follow intent or a keyed visible-row offset. Row
+offsets are signed: a position in a gap anchors to the next visible row, keeping
+that gap stable across prepends and restores. Main chat stores validated
+optional `chatPosition` fields in the existing v1 workspace scroll records,
+adapting legacy pixel/follow records. Quick chat keeps only sheet-owner memory;
+subagent tabs use workspace-owned keyed positions that survive pane unmounts.
+Closing a session revokes saved-position callbacks before removing its record.
+Session switching never samples the previous session from the next session's
+DOM.
+
+Main readiness requires both workspace storage readiness and a matching
+`runtimeSessionId`; runtime phase alone can change before history hydration.
+Hidden, zero-size and hydrating panes suspend positioning and persistence.
+Reading restores mount a keyed target, wait for a valid node/width measurement,
+then refine its offset. A stalled restore cancels native commands after twelve
+attempts and waits for fresh measurement readiness; exhausting the budget does
+not persist an intermediate position. Anchoring inside a growing tool group is
+relative to its grouped row, rather than to a particular tool call within it.
+
+The `scrollToFn` provenance adapter is characterized against locked virtual-core
+3.19.9: command/reconciliation writes specify behavior; deferred compensation
+flushes and clamp retries can omit both behavior and adjustments. Those writes
+remain allowed after command cancellation. Re-run the engine contract tests when
+upgrading the virtualizer; do not infer write provenance from `isTrusted` or a
+one-frame programmatic flag.
+
+`pnpm test:e2e:scroll` runs the live transcript/installed virtualizer browser
+checks against the development-only `/__transcript-scroll` fixture. It uses
+local deterministic data, the real persistence adapter and no agent/backend.
+`pnpm exec playwright test --config=playwright.chat.config.ts` covers real
+composer expansion, attachments, prompts and jump-button reachability in
+Storybook. The iOS-branch engine characterization exercises deferred writes; it
+does not substitute for checking momentum behavior on an actual iOS device.
+
 ## Sources of truth
 
 | Concern                                               | Source                                                                                                                                                                                                             |

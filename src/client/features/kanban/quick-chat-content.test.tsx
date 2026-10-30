@@ -1,22 +1,20 @@
 // @vitest-environment jsdom
-import { type ComponentProps, createRef } from 'react';
+import { type ComponentProps } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
-import type { ChatInput, UseChatWebSocketReturn } from '@/client/features/chat';
-import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
+import type { ChatInput, ChatTranscript, UseChatWebSocketReturn } from '@/client/features/chat';
+import type { ChatMessage } from '@/lib/chat-protocol';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import { QuickChatContent } from './quick-chat-content';
 
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
-const list = vi.hoisted(() =>
-  vi.fn((_props: { queuedMessageIds?: Set<string>; messages?: GroupedMessageItem[] }) => null)
-);
+const list = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatTranscript>) => null));
 vi.mock('@/client/features/chat', async (importOriginal) => {
   const { useGroupedChatMessages } =
     await importOriginal<typeof import('@/client/features/chat')>();
   return {
-    VirtualizedMessageList: list,
+    ChatTranscript: list,
     useGroupedChatMessages,
     ChatInput: input,
     PermissionPrompt: () => null,
@@ -61,10 +59,13 @@ describe('QuickChatContent composer and queue controls', () => {
             <QuickChatContent
               workspaceId="workspace-1"
               chatState={chatState}
-              viewportRef={createRef()}
-              onScroll={vi.fn()}
-              isNearBottom
-              scrollToBottom={vi.fn()}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
             />
           )
         );
@@ -121,10 +122,13 @@ describe('QuickChatContent composer and queue controls', () => {
           <QuickChatContent
             workspaceId="workspace-1"
             chatState={chatState}
-            viewportRef={createRef()}
-            onScroll={vi.fn()}
-            isNearBottom
-            scrollToBottom={vi.fn()}
+            transcriptScroll={{
+              identity: 'quick-story',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
           />
         )
       );
@@ -169,10 +173,13 @@ describe('QuickChatContent composer and queue controls', () => {
           <QuickChatContent
             workspaceId="workspace-1"
             chatState={chatState}
-            viewportRef={createRef()}
-            onScroll={vi.fn()}
-            isNearBottom
-            scrollToBottom={vi.fn()}
+            transcriptScroll={{
+              identity: 'quick-story',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
           />
         )
       );

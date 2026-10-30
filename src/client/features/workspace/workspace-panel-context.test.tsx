@@ -26,6 +26,15 @@ const WORKSPACE_ID = 'workspace-1';
 const TABS_STORAGE_KEY = `workspace-panel-tabs-${WORKSPACE_ID}`;
 const ACTIVE_TAB_STORAGE_KEY = `workspace-panel-active-tab-${WORKSPACE_ID}`;
 
+function PanelScrollProbe({
+  onPanel,
+}: {
+  onPanel: (panel: ReturnType<typeof useWorkspacePanel>) => void;
+}) {
+  onPanel(useWorkspacePanel());
+  return null;
+}
+
 function WorkspacePanelProbe() {
   const { activeTabId, tabs } = useWorkspacePanel();
   return createElement('output', null, JSON.stringify({ activeTabId, tabs }));
@@ -301,4 +310,43 @@ describe('WorkspacePanelProvider persistence', () => {
     );
     actFlushSync(() => invalidRender.root.unmount());
   });
+});
+
+it('revokes only the cleared tab writer and preserves other viewer records', async () => {
+  vi.useFakeTimers();
+  let panel: ReturnType<typeof useWorkspacePanel> | undefined;
+  const { root } = renderPanel(
+    <PanelScrollProbe
+      onPanel={(value) => {
+        panel = value;
+      }}
+    />
+  );
+  const writeA = panel!.createScrollStateWriter('chat-a', 'chat');
+  const writeB = panel!.createScrollStateWriter('chat-b', 'chat');
+  actFlushSync(() => {
+    panel!.setScrollState('file', 'code', {
+      top: 70,
+      left: 10,
+      diffAnchor: { index: 3, offset: 2 },
+    });
+    writeA({ top: 10, left: 0 });
+    writeB({ top: 20, left: 0 });
+    panel!.clearScrollState('chat-b');
+    writeB({ top: 99, left: 0 });
+    writeA({ top: 11, left: 0 });
+    vi.advanceTimersByTime(120);
+  });
+  const payload = JSON.parse(
+    localStorage.getItem(`workspace-panel-scroll-${WORKSPACE_ID}`) ?? '{}'
+  );
+  expect(payload).toEqual({
+    v: 1,
+    states: {
+      'file:code': { top: 70, left: 10, diffAnchor: { index: 3, offset: 2 } },
+      'chat-a:chat': { top: 11, left: 0 },
+    },
+  });
+  await act(() => root.unmount());
+  vi.useRealTimers();
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
@@ -65,8 +65,13 @@ vi.mock('@/client/features/chat', async () => {
     GroupedMessageItemRenderer: ({ item }: { item: { id: string; text?: string } }) =>
       renderItem(item),
     projectAcpTranscriptUpdates: mocks.projectAcpTranscriptUpdates,
-    VirtualizedMessageList: ({ messages }: { messages: Array<{ id: string; text?: string }> }) =>
-      createMockElement('div', null, messages.map(renderItem)),
+    ChatTranscript: ({
+      messages,
+      header,
+    }: {
+      messages: Array<{ id: string; text?: string }>;
+      header?: ReactNode;
+    }) => createMockElement('div', null, header, messages.map(renderItem)),
   };
 });
 

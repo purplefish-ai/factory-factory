@@ -1,4 +1,7 @@
 // Components
+export { ChatTranscript } from './chat-transcript';
+export type { ChatTranscriptProps } from './chat-transcript';
+export type { TranscriptPosition, TranscriptScrollOptions } from './transcript-scroll.types';
 
 // Types
 export type { ChatMessage } from '@/lib/chat-protocol';
@@ -26,4 +29,3 @@ export { useGroupedChatMessages } from './use-grouped-chat-messages';
 export { useSessionCollectionCommands } from './use-session-collection-commands';
 export type { Todo, TodoState } from './use-todo-tracker';
 export { useTodoTracker } from './use-todo-tracker';
-export { VirtualizedMessageList } from './virtualized-message-list';

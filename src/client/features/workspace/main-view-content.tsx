@@ -4,6 +4,7 @@ import { SubagentTranscriptView } from '@/client/features/subagents';
 import { cn } from '@/lib/utils';
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 import { ScreenshotViewerTab } from './screenshot-viewer-tab';
+import { useTranscriptPositionPersistence } from './use-chat-transcript-persistence';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 const DiffViewer = lazy(() =>
@@ -38,6 +39,10 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
   const subagentSelection =
     activeTab?.type === 'subagent' ? activeTab.subagentSelection : undefined;
   const activeTabKey = activeTab?.id;
+  const subagentPosition = useTranscriptPositionPersistence({
+    workspaceId,
+    tabId: activeTab?.type === 'subagent' ? activeTab.id : null,
+  });
 
   return (
     <div className={cn('h-full', className)}>
@@ -45,7 +50,7 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
           This prevents unmounting/remounting which causes state loss. */}
       <div className={cn('h-full', !showChat && 'hidden')}>{children}</div>
       <ErrorBoundary
-        key={activeTabKey}
+        key={`viewer-${activeTabKey}`}
         fallback={
           <div role="alert" className="p-4 text-sm text-destructive">
             Unable to load viewer. Reload the app to try again.
@@ -90,6 +95,11 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
           key={activeTabKey}
           workspaceId={workspaceId}
           selection={subagentSelection}
+          scroll={{
+            ready: subagentPosition.ready,
+            initialPosition: subagentPosition.initialPosition,
+            onPositionChange: subagentPosition.onPositionChange,
+          }}
         />
       )}
     </div>

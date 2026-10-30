@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
 import {
   ArchiveGitLockDialog,
-  usePersistentScroll,
+  useChatTranscriptPersistence,
   useWorkspacePanel,
 } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
@@ -11,7 +11,6 @@ import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
-import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { isSessionSummaryWorking } from '@/shared/session-runtime';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -47,7 +46,7 @@ export function WorkspaceDetailContainer() {
     setActiveTopTab,
     activeTabId,
     selectTab,
-    clearScrollState,
+    tabs,
     openTab,
     openSubagentTab,
   } = useWorkspacePanel();
@@ -137,7 +136,6 @@ export function WorkspaceDetailContainer() {
     acpPlan,
     setConfigOption,
     inputRef,
-    messagesEndRef,
   } = useChatWebSocket({
     dbSessionId: selectedDbSessionId,
   });
@@ -227,45 +225,17 @@ export function WorkspaceDetailContainer() {
     [navigate, slug]
   );
 
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const prevSessionIdRef = useRef<string | null>(null);
-
-  const { onScroll, isNearBottom, scrollToBottom } = useAutoScroll(viewportRef);
-
+  const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: selectedDbSessionId });
   const handleCloseChatSession = useCallback(
     (sessionId: string) => {
-      clearScrollState(`chat-${sessionId}`);
+      persistence.clearSession(sessionId);
       handleCloseSession(sessionId);
     },
-    [clearScrollState, handleCloseSession]
+    [persistence.clearSession, handleCloseSession]
   );
-
-  const chatTabId = selectedDbSessionId ? `chat-${selectedDbSessionId}` : null;
+  const activeMainTab = tabs.find((tab) => tab.id === activeTabId);
+  const chatVisible = !activeMainTab || activeMainTab.type === 'chat';
   const initBanner = getVisibleInitBanner(workspaceInitStatus?.chatBanner, setupWarningDismissed);
-
-  const { persistCurrent: persistChatScroll } = usePersistentScroll({
-    tabId: chatTabId,
-    mode: 'chat',
-    viewportRef,
-    enabled: activeTabId === 'chat' && !!chatTabId,
-    restoreDeps: [messages.length, activeTabId, chatTabId],
-    autoStickToBottom: true,
-    stickToBottomThreshold: 48,
-    onRestore: onScroll,
-  });
-
-  useEffect(() => {
-    const prev = prevSessionIdRef.current;
-    if (prev && prev !== selectedDbSessionId) {
-      persistChatScroll(`chat-${prev}`);
-    }
-    prevSessionIdRef.current = selectedDbSessionId;
-  }, [selectedDbSessionId, persistChatScroll]);
-
-  const handleChatScroll = useCallback(() => {
-    onScroll();
-    persistChatScroll();
-  }, [onScroll, persistChatScroll]);
 
   const resolveWorkspaceChatFileLink = useCallback(
     (href: string) => resolveWorkspaceFileLink(href, workspace?.worktreePath),
@@ -303,11 +273,17 @@ export function WorkspaceDetailContainer() {
     messages,
     sessionStatus,
     sessionRuntime,
-    messagesEndRef,
-    viewportRef,
-    isNearBottom,
-    scrollToBottom,
-    onScroll: handleChatScroll,
+    transcriptScroll: {
+      identity: `${workspaceId}/main/${selectedDbSessionId ?? 'none'}`,
+      active: chatVisible,
+      ready:
+        persistence.ready &&
+        selectedDbSessionId !== null &&
+        runtimeSessionId === selectedDbSessionId,
+      initialIntent: 'following',
+      initialPosition: persistence.initialPosition,
+      onPositionChange: persistence.onPositionChange,
+    },
     pendingRequest,
     approvePermission,
     answerQuestion,

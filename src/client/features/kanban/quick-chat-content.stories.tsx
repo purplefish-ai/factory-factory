@@ -20,9 +20,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 function MockQuickChat({ promptInFlight = true }: { promptInFlight?: boolean }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>(
     promptInFlight
       ? [
@@ -77,7 +75,6 @@ function MockQuickChat({ promptInFlight = true }: { promptInFlight?: boolean }) 
     slashCommandsLoaded: true,
     acpConfigOptions: null,
     inputRef,
-    messagesEndRef,
     sendMessage: fn(),
     stopChat: fn(),
     updateSettings: fn(),
@@ -91,10 +88,13 @@ function MockQuickChat({ promptInFlight = true }: { promptInFlight?: boolean }) 
       <QuickChatContent
         workspaceId="quick-chat-story"
         chatState={chatState}
-        viewportRef={viewportRef}
-        onScroll={fn()}
-        isNearBottom
-        scrollToBottom={fn()}
+        transcriptScroll={{
+          identity: 'quick-story',
+          active: true,
+          ready: true,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
       />
     </div>
   );

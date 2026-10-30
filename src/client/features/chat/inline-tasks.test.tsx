@@ -4,22 +4,25 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
 import type { AcpPlanState } from './reducer';
 import { createActionFromWebSocketMessage } from './reducer';
-import { VirtualizedMessageList } from './virtualized-message-list';
+import { TranscriptTail } from './transcript-layout';
 
 describe('inline tasks', () => {
   it('shows shared ACP tasks while idle, updates them, and hides them during hydration', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
-    const render = (acpPlan: AcpPlanState | null, loadingSession = false) =>
+    const render = (acpPlan: AcpPlanState | null, loadingSession = false, isCompacting = false) =>
       flushSync(() =>
         root.render(
-          <VirtualizedMessageList
-            messages={[]}
-            acpPlan={acpPlan}
-            running={false}
-            startingSession={false}
-            loadingSession={loadingSession}
-            scrollContainerRef={{ current: null }}
+          <TranscriptTail
+            hasVisibleMessages={false}
+            props={{
+              messages: [],
+              acpPlan,
+              running: false,
+              startingSession: false,
+              loadingSession,
+              isCompacting,
+            }}
           />
         )
       );
@@ -32,7 +35,7 @@ describe('inline tasks', () => {
       updatedAt: '2026-10-30T00:00:00Z',
     };
     try {
-      render(plan);
+      render(plan, false, true);
       expect(container.querySelector('[aria-label="Tasks"]')?.textContent).toContain(
         'Read the code'
       );
@@ -41,6 +44,10 @@ describe('inline tasks', () => {
       );
       expect(container.querySelectorAll('[aria-label="Completed"]')).toHaveLength(1);
       expect(container.querySelectorAll('[aria-label="In progress"]')).toHaveLength(1);
+      expect(container.textContent).not.toContain('Ready to start');
+      expect(container.textContent?.indexOf('Implement tasks')).toBeLessThan(
+        container.textContent?.indexOf('Compacting context...') ?? -1
+      );
       render({
         ...plan,
         entries: plan.entries.map((entry) => ({ ...entry, status: 'completed' })),

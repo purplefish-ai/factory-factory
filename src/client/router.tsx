@@ -22,11 +22,24 @@ const ReviewsPage = lazy(() => import('./routes/reviews'));
 const LegacyReviewsPage = lazy(() => import('./routes/reviews/legacy'));
 
 const MobileBaselinePage = lazy(() => import('./routes/mobile-baseline'));
+const TranscriptScrollFixture = lazy(() => import('./routes/transcript-scroll-fixture'));
 const isDevelopmentMode = import.meta.env.MODE === 'development';
 const enableMobileBaselineRoute =
   isDevelopmentMode || import.meta.env.VITE_ENABLE_MOBILE_BASELINE === '1';
 
 export const router = createBrowserRouter([
+  ...(isDevelopmentMode
+    ? [
+        {
+          path: '/__transcript-scroll',
+          element: (
+            <Suspense fallback={null}>
+              <TranscriptScrollFixture />
+            </Suspense>
+          ),
+        },
+      ]
+    : []),
   ...(enableMobileBaselineRoute
     ? [
         {
