@@ -281,7 +281,9 @@ updates and reconnects. Status-only updates and invalid inputs leave the input
 intact.
 
 Permission requests retain the provider's option IDs and choices. Upstream Codex
-plan review is normalized into the application's plan UI. Interactive sessions
+plan review and Claude's AIR `Approve Plan` requests with plan text are
+normalized into the application's plan UI, including pending requests restored
+on reconnect. Approval clears the composer's plan mode. Interactive sessions
 wait for a user response; read-only reviewers automatically reject plan
 implementation. Both adapters own their plan implementation continuation; the
 client does not enqueue a second approval turn. Structured questions use ACP
