@@ -21,11 +21,8 @@ interface LogEntry {
   timestamp: string;
   message: string;
   context?: Record<string, unknown>;
-  error?: {
-    name: string;
-    message: string;
-    stack?: string;
-  };
+  // Serialized by safeStringify, which keeps the cause chain and own fields.
+  error?: Error;
 }
 
 /**
@@ -80,14 +77,15 @@ function safeStringify(obj: unknown): string {
     return result;
   }
 
-  // Error name, message, stack and cause are not enumerable, so traversing
-  // own entries alone would serialize an Error as {}.
+  // Error name, message, stack, cause and AggregateError errors are not
+  // enumerable, so traversing own entries alone would serialize an Error as {}.
   function serializeError(error: Error): Record<string, unknown> {
     return {
       name: error.name,
       message: error.message,
       stack: error.stack,
       ...(error.cause === undefined ? {} : { cause: preprocessValue(error.cause) }),
+      ...(error instanceof AggregateError ? { errors: preprocessValue(error.errors) } : {}),
       ...traverseObject(error),
     };
   }
@@ -258,11 +256,7 @@ class Logger {
     };
 
     if (error) {
-      entry.error = {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      };
+      entry.error = error;
     }
 
     if (this.config.prettyPrint) {

@@ -268,7 +268,7 @@ describe('LoggerService', () => {
       const raw = lastCall[0].toString().trim();
 
       // Fallback should still be valid JSON, not [object Object]
-      expect(() => JSON.parse(raw)).not.toThrow();
+      expect(JSON.parse(raw)).toEqual({ __serializationError: 'getter failed' });
     });
 
     it('should serialize BigInt values as strings', () => {
@@ -310,6 +310,36 @@ describe('LoggerService', () => {
         name: 'TypeError',
         message: 'socket closed',
         code: 'ECONNRESET',
+      });
+    });
+
+    it('should include the errors of an AggregateError', () => {
+      const logger = createLogger('test');
+      const error = new AggregateError([new Error('first'), new Error('second')], 'all failed');
+
+      logger.info('Aggregate failure', { error });
+
+      const logged = lastLogEntry().context.error;
+      expect(logged.message).toBe('all failed');
+      expect(logged.errors.map((item: { message: string }) => item.message)).toEqual([
+        'first',
+        'second',
+      ]);
+    });
+
+    it('should keep the cause and own fields of an Error passed to error()', () => {
+      const logger = createLogger('test');
+      const cause = new Error('socket closed');
+      const error = Object.assign(new Error('request failed', { cause }), { code: 'E_REQ' });
+
+      logger.error('Request failed', error);
+
+      expect(lastLogEntry().error).toMatchObject({
+        name: 'Error',
+        message: 'request failed',
+        stack: error.stack,
+        code: 'E_REQ',
+        cause: { message: 'socket closed' },
       });
     });
 

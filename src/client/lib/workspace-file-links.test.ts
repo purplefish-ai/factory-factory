@@ -54,6 +54,16 @@ describe('resolveWorkspaceFileLink', () => {
     ).toBe('src/app.ts');
   });
 
+  it('drops the fragment from a bare Windows absolute path', () => {
+    expect(
+      resolveWorkspaceFileLink(
+        'C:/Users/martin/factory-factory/workspace-demo/src/app.ts#L12',
+        String.raw`C:\Users\martin\factory-factory\workspace-demo`,
+        ORIGIN
+      )
+    ).toBe('src/app.ts');
+  });
+
   it('preserves backslashes as literal characters in POSIX paths', () => {
     expect(
       resolveWorkspaceFileLink(
