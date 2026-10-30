@@ -33,11 +33,11 @@ preflight check. Existing children of archived projects remain visible.
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through
-`@agentclientprotocol/sdk` 2.0.2 through its v1 `/unstable` entrypoint. Typed
+`@agentclientprotocol/sdk` 2.1.0 through its v1 `/unstable` entrypoint. Typed
 client app handlers preserve elicitation and native subagent features;
 `acp-connection.ts` owns SDK registration and peer-context calls. Claude uses
-`claude-agent-acp` 0.98 and Codex uses the released
-`@agentclientprotocol/codex-acp` 2.3.0. Factory Factory does not implement a
+`claude-agent-acp` 0.99 and Codex uses the released
+`@agentclientprotocol/codex-acp` 2.5.0. Factory Factory does not implement a
 Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
 `ff codex login` authenticates that same runtime.
 
