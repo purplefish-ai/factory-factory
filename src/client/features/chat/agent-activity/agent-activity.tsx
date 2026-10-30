@@ -71,6 +71,25 @@ export interface MessageItemProps {
   onWorkspaceFileLink?: (path: string) => void;
 }
 
+function PRUpdateMessageItem({
+  message,
+  isQueued,
+}: Pick<MessageItemProps, 'message' | 'isQueued'>) {
+  if (message.message?.prDeliveryState === 'cancelled') {
+    return null;
+  }
+  return (
+    <MessageWrapper>
+      <PRUpdateRenderer
+        text={message.message?.text ?? message.text ?? 'PR update'}
+        queued={isQueued}
+        deliveryState={message.message?.prDeliveryState}
+        error={message.message?.error}
+      />
+    </MessageWrapper>
+  );
+}
+
 export const MessageItem = memo(function MessageItem({
   message,
   isQueued,
@@ -81,16 +100,7 @@ export const MessageItem = memo(function MessageItem({
   onWorkspaceFileLink,
 }: MessageItemProps) {
   if (message.message?.type === 'pr_update' || message.id.startsWith('pr-event-')) {
-    return (
-      <MessageWrapper>
-        <PRUpdateRenderer
-          text={message.message?.text ?? message.text ?? 'PR update'}
-          queued={isQueued}
-          deliveryState={message.message?.prDeliveryState}
-          error={message.message?.error}
-        />
-      </MessageWrapper>
-    );
+    return <PRUpdateMessageItem message={message} isQueued={isQueued} />;
   }
   // User messages
   if (message.source === 'user') {

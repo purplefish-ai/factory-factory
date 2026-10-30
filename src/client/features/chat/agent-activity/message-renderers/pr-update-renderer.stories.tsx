@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef } from 'react';
 import { VirtualizedMessageList } from '@/client/features/chat/virtualized-message-list';
+import { MessageItem } from '../agent-activity';
 import { PRUpdateRenderer } from './pr-update-renderer';
 
 const meta = { title: 'Chat/PR update', component: PRUpdateRenderer } satisfies Meta<
@@ -78,4 +79,17 @@ export const Failed: Story = {
     error: 'Provider unavailable. PR updates are paused.',
   },
 };
-export const Cancelled: Story = { args: { ...Delivered.args, deliveryState: 'cancelled' } };
+export const Cancelled: Story = {
+  args: { ...Delivered.args, deliveryState: 'cancelled' },
+  render: ({ text, deliveryState, error }) => (
+    <MessageItem
+      message={{
+        id: 'pr-event-cancelled-story',
+        source: 'agent',
+        timestamp: '2026-10-30T00:00:00.000Z',
+        order: 0,
+        message: { type: 'pr_update', text, prDeliveryState: deliveryState, error },
+      }}
+    />
+  ),
+};
