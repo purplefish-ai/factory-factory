@@ -309,8 +309,9 @@ provider identities remain unchanged; transport calls use the underlying native
 Codex thread ID. A failed legacy resume cannot start a replacement conversation.
 History loading accepts both legacy event messages and current public response
 items, deduplicates copies per turn, and excludes injected context and internal
-reasoning; rollouts without content-kind metadata drop user text blocks that are
-only `<environment_context>` or `<user_instructions>`. Active and browse resumes
+reasoning; rollouts without content-kind metadata drop user messages before the
+first prompt that are only `<environment_context>` or `<user_instructions>`,
+while later tag-only messages are kept as typed. Active and browse resumes
 hydrate on-disk history before starting the ACP runtime, preserving original
 message timestamps and suppressing duplicate adapter replay. Concurrent startups
 share history preparation; joining a runtime already starting preserves its

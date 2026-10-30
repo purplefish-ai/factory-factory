@@ -369,7 +369,8 @@ describe('AcpEventProcessor assistant text streaming', () => {
     vi.mocked(deps.sessionDomainService.allocateOrder)
       .mockReturnValueOnce(1)
       .mockReturnValueOnce(3);
-    Object.assign(deps.sessionDomainService, { injectCommittedUserMessage: vi.fn() });
+    const injectCommittedUserMessage = vi.fn();
+    Object.assign(deps.sessionDomainService, { injectCommittedUserMessage });
     const processor = new AcpEventProcessor(deps);
     const { onAcpEvent } = processor.createRuntimeEventHandler('sid');
 
@@ -380,7 +381,10 @@ describe('AcpEventProcessor assistant text streaming', () => {
     } as Parameters<NonNullable<typeof onAcpEvent>>[1]);
     processor.handleAcpDelta('sid', assistantDelta('A2'));
 
-    // The second reply starts its own message instead of appending to A1 above Q2.
+    // A1 is flushed before Q2 is injected, and A2 starts its own message below Q2.
+    expect(
+      vi.mocked(deps.sessionDomainService.emitDelta).mock.invocationCallOrder[0] ?? Infinity
+    ).toBeLessThan(injectCommittedUserMessage.mock.invocationCallOrder[0] ?? 0);
     expect(deps.sessionDomainService.allocateOrder).toHaveBeenCalledTimes(2);
     expect(deps.sessionDomainService.emitDelta).toHaveBeenNthCalledWith(1, 'sid', {
       type: 'assistant_text_delta',

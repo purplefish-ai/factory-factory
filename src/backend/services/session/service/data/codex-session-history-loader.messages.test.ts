@@ -194,6 +194,22 @@ describe('Codex response-item history messages', () => {
     ]);
   });
 
+  it('keeps a legacy tag-only prompt the user sent after the first prompt', async () => {
+    const typed = '<environment_context>\n  <cwd>/tmp/other</cwd>\n</environment_context>';
+    const history = await load([
+      response('user', 'First'),
+      response('assistant', 'First answer'),
+      response('user', typed),
+      response('assistant', 'Second answer'),
+    ]);
+    expect(history.map(({ type, content }) => ({ type, content }))).toEqual([
+      { type: 'user', content: 'First' },
+      { type: 'assistant', content: 'First answer' },
+      { type: 'user', content: typed },
+      { type: 'assistant', content: 'Second answer' },
+    ]);
+  });
+
   it('keeps a repeated native prompt after a markerless cancelled legacy turn', async () => {
     const history = await load([
       event('user_message', 'Repeat'),
