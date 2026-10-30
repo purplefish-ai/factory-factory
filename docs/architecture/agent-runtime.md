@@ -687,7 +687,15 @@ reconnect, recipient, and failure contracts.
 
 ## Session lifecycle ownership
 
-`SessionLifecycleGate` owns domain startup/stop eligibility.
+`SessionLifecycleGate` owns domain startup/stop eligibility. Workspace
+initialization reserves the initial session launch before publishing READY. The
+runtime machine keeps idle startup and dispatch-preparation updates in
+`starting` until work begins, startup/dispatch exits, or a stop or error ends
+the launch. Ordinary queued follow-ups do not acquire this reservation. Runtime
+reads preserve `starting` after a provider handle becomes live, until the
+startup owner finishes configuration and persistence. A live process with no
+prompt in flight is not sufficient evidence of idle during startup; dropping
+that phase can move a newly ready workspace into Waiting before its first turn.
 `AcpRuntimeSupervisor` is the sole mutable ACP runtime authority: it owns
 subprocess handles, pending creation, incarnation filtering, exits, stops, and
 quiescence. `AcpRuntimeManager` is the stable compatibility facade over the

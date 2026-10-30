@@ -242,6 +242,16 @@ export class SessionDomainService extends EventEmitter {
     return { ...this.registry.getOrCreate(sessionId).runtime };
   }
 
+  beginInitialLaunch(sessionId: string): () => void {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const release = this.runtimeMachine.beginInitialLaunch(store);
+    return () => {
+      if (this.registry.isCurrentStore(sessionId, store)) {
+        release();
+      }
+    };
+  }
+
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
     const store = this.registry.getOrCreateActive(sessionId);
     const result = enqueueMessage(store, message);

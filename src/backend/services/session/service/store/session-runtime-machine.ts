@@ -25,6 +25,32 @@ function sameRuntimeIgnoringTimestamp(a: SessionRuntimeState, b: SessionRuntimeS
 }
 
 export class SessionRuntimeMachine {
+  private readonly initialLaunches = new WeakMap<SessionStore, { idle: SessionRuntimeState }>();
+
+  /** Bridge provisioning and first dispatch without treating ordinary queues as work. */
+  beginInitialLaunch(store: SessionStore): () => void {
+    if (
+      store.runtime.activity === 'WORKING' ||
+      !['idle', 'starting', 'loading'].includes(store.runtime.phase)
+    ) {
+      return () => undefined;
+    }
+    const launch = { idle: this.initialLaunches.get(store)?.idle ?? store.runtime };
+    this.initialLaunches.set(store, launch);
+    this.markRuntime(store, {
+      phase: 'starting',
+      processState: 'unknown',
+      activity: 'IDLE',
+    });
+    return () => {
+      if (this.initialLaunches.get(store) !== launch) {
+        return;
+      }
+      this.initialLaunches.delete(store);
+      this.markRuntime(store, { ...launch.idle, updatedAt: this.nowIso() }, { replace: true });
+    };
+  }
+
   constructor(
     private readonly emitRuntimeDelta: (sessionId: string, runtime: SessionRuntimeState) => void,
     private readonly nowIso: () => string,
@@ -65,6 +91,8 @@ export class SessionRuntimeMachine {
       updatedAt: updates.updatedAt ?? this.nowIso(),
     };
 
+    this.projectInitialLaunch(store);
+
     if (options?.emitDelta !== false) {
       if (clearSlashCommands) {
         this.clearSlashCommands?.(store.sessionId);
@@ -76,6 +104,18 @@ export class SessionRuntimeMachine {
         return;
       }
       this.emitRuntimeDelta(store.sessionId, store.runtime);
+    }
+  }
+
+  private projectInitialLaunch(store: SessionStore): void {
+    const launch = this.initialLaunches.get(store);
+    const { phase, processState } = store.runtime;
+    if (launch && phase === 'idle' && processState === 'alive') {
+      launch.idle = store.runtime;
+      store.runtime = { ...store.runtime, phase: 'starting' };
+    } else if (phase !== 'starting' && phase !== 'loading') {
+      // Actual work, failure, and explicit stop end this launch generation.
+      this.initialLaunches.delete(store);
     }
   }
 }
