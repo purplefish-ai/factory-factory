@@ -175,6 +175,41 @@ describe('Codex response-item history messages', () => {
     ]);
   });
 
+  it('hides injected context that legacy rollouts recorded as plain user text', async () => {
+    const history = await load([
+      response('user', '<user_instructions>\n  Repository rules\n</user_instructions>'),
+      response('user', '<environment_context>\n  <cwd>/tmp/work</cwd>\n</environment_context>'),
+      response('user', 'Fix the failing test'),
+      event('user_message', 'Fix the failing test'),
+      response('assistant', 'Done.'),
+      event('agent_message', 'Done.'),
+      response('user', 'Explain <environment_context> tags'),
+      response('assistant', 'Sure.'),
+    ]);
+    expect(history.map(({ type, content }) => ({ type, content }))).toEqual([
+      { type: 'user', content: 'Fix the failing test' },
+      { type: 'assistant', content: 'Done.' },
+      { type: 'user', content: 'Explain <environment_context> tags' },
+      { type: 'assistant', content: 'Sure.' },
+    ]);
+  });
+
+  it('keeps a legacy tag-only prompt the user sent after the first prompt', async () => {
+    const typed = '<environment_context>\n  <cwd>/tmp/other</cwd>\n</environment_context>';
+    const history = await load([
+      response('user', 'First'),
+      response('assistant', 'First answer'),
+      response('user', typed),
+      response('assistant', 'Second answer'),
+    ]);
+    expect(history.map(({ type, content }) => ({ type, content }))).toEqual([
+      { type: 'user', content: 'First' },
+      { type: 'assistant', content: 'First answer' },
+      { type: 'user', content: typed },
+      { type: 'assistant', content: 'Second answer' },
+    ]);
+  });
+
   it('keeps a repeated native prompt after a markerless cancelled legacy turn', async () => {
     const history = await load([
       event('user_message', 'Repeat'),

@@ -436,13 +436,15 @@ export function injectCommittedUserMessage(
   text: string,
   options: { messageId?: string; nowIso: () => string; nowMs: () => number }
 ): void {
-  const messageId = options.messageId ?? `injected-${options.nowMs()}`;
+  const order = store.nextOrder;
+  // Replay can inject several messages in the same millisecond; the order keeps ids unique.
+  const messageId = options.messageId ?? `injected-${options.nowMs()}-${order}`;
   const message: ChatMessage = {
     id: messageId,
     source: 'user',
     text,
     timestamp: options.nowIso(),
-    order: store.nextOrder,
+    order,
   };
   store.nextOrder += 1;
   upsertTranscriptMessage(store, message);

@@ -21,6 +21,10 @@ const MAX_RECENT_SESSION_DATE_DIRS = 120;
 const SESSION_FILE_LOOKUP_CACHE_LIMIT = 1024;
 const POSITIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS = 5 * 60 * 1000;
 const NEGATIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS = 30 * 1000;
+// Rollouts without content_item_kinds record harness context as plain user text before the
+// first prompt; later tag-only messages are kept because the user may have typed them.
+const INJECTED_CONTEXT_PATTERN =
+  /^\s*(?:<(environment_context|user_instructions)>[\s\S]*?<\/\1>\s*)+$/;
 const JsonObjectSchema = z.record(z.string(), z.unknown());
 
 const CodexHistoryEntrySchema = z
@@ -951,9 +955,8 @@ class CodexSessionHistoryLoaderService {
 
     const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
     const identity = CodexTurnIdentitySchema.safeParse(entry.payload);
-    const turnId = identity.success
-      ? (identity.data.turn_id ?? identity.data.internal_chat_message_metadata_passthrough?.turn_id)
-      : undefined;
+    const metadata = identity.data?.internal_chat_message_metadata_passthrough;
+    const turnId = identity.data?.turn_id ?? metadata?.turn_id;
     const taskStarted =
       entry.type === 'event_msg' &&
       isRecord(entry.payload) &&
@@ -961,7 +964,15 @@ class CodexSessionHistoryLoaderService {
     if ((turnId && turn.id && turnId !== turn.id) || (taskStarted && turn.messages.length > 0)) {
       appendHistoryTurn(history, turn);
     }
-    const parsedMessages = parseCodexHistoryMessages(entry, timestamp);
+    const legacyStart =
+      entry.type === 'response_item' &&
+      !metadata?.content_item_kinds &&
+      history.length === 0 &&
+      turn.messages.length === 0;
+    const parsedMessages = parseCodexHistoryMessages(entry, timestamp).filter(
+      ({ type, content }) =>
+        type !== 'user' || !legacyStart || !INJECTED_CONTEXT_PATTERN.test(content)
+    );
     const source = entry.type === 'event_msg' ? 'event' : 'response';
     if (!turn.id && startsImplicitTurn(turn, parsedMessages, source, turnId)) {
       appendHistoryTurn(history, turn);

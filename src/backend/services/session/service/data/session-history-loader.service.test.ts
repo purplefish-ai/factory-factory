@@ -273,6 +273,70 @@ describe('claudeSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it.each([{ isCompactSummary: true }, { isVisibleInTranscriptOnly: true }])(
+    'omits the /compact summary user entry flagged with %j',
+    async (flags) => {
+      const providerSessionId = 'compacted-session';
+      const cwd = '/Users/test/project';
+      const timestamp = '2026-10-30T10:00:00.000Z';
+      writeSessionFile({
+        claudeConfigDir: tempDir,
+        cwd,
+        providerSessionId,
+        entries: [
+          {
+            type: 'user',
+            sessionId: providerSessionId,
+            timestamp,
+            message: { role: 'user', content: 'My prompt' },
+          },
+          {
+            type: 'assistant',
+            sessionId: providerSessionId,
+            timestamp,
+            message: { role: 'assistant', content: [{ type: 'text', text: 'My answer' }] },
+          },
+          {
+            type: 'system',
+            subtype: 'compact_boundary',
+            sessionId: providerSessionId,
+            timestamp,
+            content: 'Conversation compacted',
+          },
+          {
+            type: 'user',
+            sessionId: providerSessionId,
+            timestamp,
+            ...flags,
+            message: {
+              role: 'user',
+              content:
+                'This session is being continued from a previous conversation that ran out of context. The conversation is summarized below: ...',
+            },
+          },
+          {
+            type: 'user',
+            sessionId: providerSessionId,
+            timestamp,
+            message: { role: 'user', content: 'Next prompt' },
+          },
+        ],
+      });
+
+      const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: cwd,
+      });
+      expect(result.status).toBe('loaded');
+      const history = result.status === 'loaded' ? result.history : [];
+      expect(history.map(({ type, content }) => ({ type, content }))).toEqual([
+        { type: 'user', content: 'My prompt' },
+        { type: 'assistant', content: 'My answer' },
+        { type: 'user', content: 'Next prompt' },
+      ]);
+    }
+  );
+
   it('restores image attachments on the user message and omits image companion metadata', async () => {
     const providerSessionId = 'images-session';
     const cwd = '/Users/test/project';

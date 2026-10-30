@@ -36,6 +36,8 @@ const ClaudeHistoryEntrySchema = z
     isSidechain: z.boolean().optional(),
     isMeta: z.boolean().optional(),
     turnCompanion: z.boolean().optional(),
+    isCompactSummary: z.boolean().optional(),
+    isVisibleInTranscriptOnly: z.boolean().optional(),
     sessionId: z.string().optional(),
     timestamp: z.string().optional(),
     createdAt: z.string().optional(),
@@ -386,8 +388,14 @@ function isEntryEligible(entry: ClaudeSessionHistoryEntry, providerSessionId: st
   if (entry.type !== 'user' && entry.type !== 'assistant') {
     return false;
   }
-  // Harness metadata and image companions are not conversation messages.
-  if (entry.isSidechain || entry.isMeta || entry.turnCompanion) {
+  // Harness metadata, image companions, and /compact summaries are not conversation messages.
+  if (
+    entry.isSidechain ||
+    entry.isMeta ||
+    entry.turnCompanion ||
+    entry.isCompactSummary ||
+    entry.isVisibleInTranscriptOnly
+  ) {
     return false;
   }
   if (entry.sessionId && entry.sessionId !== providerSessionId) {

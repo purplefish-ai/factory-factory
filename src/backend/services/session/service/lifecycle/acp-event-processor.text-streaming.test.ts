@@ -363,6 +363,46 @@ describe('AcpEventProcessor assistant text streaming', () => {
     ).toBeLessThan(injectCommittedUserMessage.mock.invocationCallOrder[0] ?? 0);
   });
 
+  it('closes an open text block before a replayed user message', () => {
+    const deps = makeDeps();
+    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(false);
+    vi.mocked(deps.sessionDomainService.allocateOrder)
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(3);
+    const injectCommittedUserMessage = vi.fn();
+    Object.assign(deps.sessionDomainService, { injectCommittedUserMessage });
+    const processor = new AcpEventProcessor(deps);
+    const { onAcpEvent } = processor.createRuntimeEventHandler('sid');
+
+    processor.handleAcpDelta('sid', assistantDelta('A1'));
+    onAcpEvent?.('sid', {
+      type: 'acp_session_update',
+      update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Q2' } },
+    } as Parameters<NonNullable<typeof onAcpEvent>>[1]);
+    processor.handleAcpDelta('sid', assistantDelta('A2'));
+
+    // A1 is flushed before Q2 is injected, and A2 starts its own message below Q2.
+    expect(
+      vi.mocked(deps.sessionDomainService.emitDelta).mock.invocationCallOrder[0] ?? Infinity
+    ).toBeLessThan(injectCommittedUserMessage.mock.invocationCallOrder[0] ?? 0);
+    expect(deps.sessionDomainService.allocateOrder).toHaveBeenCalledTimes(2);
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenNthCalledWith(1, 'sid', {
+      type: 'assistant_text_delta',
+      messageId: 'sid-1',
+      order: 1,
+      offset: 0,
+      text: 'A1',
+    });
+    vi.advanceTimersByTime(25);
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenNthCalledWith(2, 'sid', {
+      type: 'assistant_text_delta',
+      messageId: 'sid-3',
+      order: 3,
+      offset: 0,
+      text: 'A2',
+    });
+  });
+
   it('flushes a pending thought when the prompt turn finishes', () => {
     const deps = makeDeps();
     const processor = new AcpEventProcessor(deps);

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionLifecycleEventRecord } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import type { ChatMessage } from '@/shared/acp-protocol';
-import { mergeLifecycleTranscript, toLifecycleChatMessage } from './session-lifecycle-transcript';
+import {
+  mergeLifecycleMessage,
+  mergeLifecycleTranscript,
+  toLifecycleChatMessage,
+} from './session-lifecycle-transcript';
 
 const eventRecord: SessionLifecycleEventRecord = {
   id: 'event-1',
@@ -146,5 +150,56 @@ describe('session lifecycle transcript', () => {
       'session-lifecycle:event-1',
     ]);
     expect(merged.map((message) => message.order)).toEqual([0, 1, 1.5]);
+  });
+
+  describe('when a queued message is committed after a later-timestamped reply', () => {
+    // A message queued while the agent is still replying keeps its enqueue-time timestamp
+    // but is committed at the next transcript order, after the reply.
+    const transcript: ChatMessage[] = [
+      {
+        ...providerMessageAtNoon,
+        id: 'user-1',
+        timestamp: '2026-07-30T12:00:00.000Z',
+        order: 0,
+      },
+      {
+        ...providerMessageAtNoon,
+        id: 'agent-reply',
+        timestamp: '2026-07-30T12:02:00.000Z',
+        order: 1,
+      },
+      {
+        ...providerMessageAtNoon,
+        id: 'queued-user-2',
+        timestamp: '2026-07-30T12:01:00.000Z',
+        order: 2,
+      },
+    ];
+    const lifecycleAt = (timestamp: string) =>
+      toLifecycleChatMessage({ ...eventRecord, createdAt: new Date(timestamp) });
+
+    it('keeps provider messages in transcript order', () => {
+      const merged = mergeLifecycleMessage(transcript, lifecycleAt('2026-07-30T12:05:00.000Z'));
+
+      expect(merged.map((message) => message.id)).toEqual([
+        'user-1',
+        'agent-reply',
+        'queued-user-2',
+        'session-lifecycle:event-1',
+      ]);
+      expect(merged.map((message) => message.order)).toEqual([0, 1, 2, 2.5]);
+    });
+
+    it('places a lifecycle card after the last provider message at or before it', () => {
+      const merged = mergeLifecycleMessage(transcript, lifecycleAt('2026-07-30T12:00:30.000Z'));
+
+      expect(merged.map((message) => message.id)).toEqual([
+        'user-1',
+        'session-lifecycle:event-1',
+        'agent-reply',
+        'queued-user-2',
+      ]);
+      expect(merged.map((message) => message.order)).toEqual([0, 0.5, 1, 2]);
+    });
   });
 });

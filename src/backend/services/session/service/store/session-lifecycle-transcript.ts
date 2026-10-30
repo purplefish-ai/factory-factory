@@ -70,21 +70,34 @@ export function mergeLifecycleMessage(
     );
   }
 
-  const sortedMessages = [...byId.values()].sort(compareIndexedMessages);
-  return assignLifecycleOrders(sortedMessages);
+  const providerMessages: IndexedMessage[] = [];
+  const localMessages: IndexedMessage[] = [];
+  for (const indexedMessage of byId.values()) {
+    (indexedMessage.isLifecycle ? localMessages : providerMessages).push(indexedMessage);
+  }
+  // Provider messages keep their transcript order: a message queued during a reply keeps its
+  // enqueue timestamp but is committed after the reply, so timestamps are not order-sorted.
+  providerMessages.sort(compareProviderMessages);
+  localMessages.sort(compareLifecycleMessages);
+  return assignLifecycleOrders(providerMessages, localMessages);
 }
 
-function assignLifecycleOrders(sortedMessages: IndexedMessage[]): ChatMessage[] {
-  const providerMessages = sortedMessages.filter(({ isLifecycle }) => !isLifecycle);
+function assignLifecycleOrders(
+  providerMessages: IndexedMessage[],
+  lifecycleMessages: IndexedMessage[]
+): ChatMessage[] {
   if (providerMessages.length === 0) {
-    const lifecycleCount = sortedMessages.length;
-    return sortedMessages.map(({ message }, index) => ({
+    const lifecycleCount = lifecycleMessages.length;
+    return lifecycleMessages.map(({ message }, index) => ({
       ...message,
       order: (index + 1) / (lifecycleCount + 1),
     }));
   }
 
-  const lifecycleMessagesByProviderIndex = groupLifecycleMessages(sortedMessages);
+  const lifecycleMessagesByProviderIndex = groupLifecycleMessages(
+    providerMessages,
+    lifecycleMessages
+  );
 
   for (const [providerIndex, messages] of lifecycleMessagesByProviderIndex) {
     const [lowerOrder, upperOrder] = lifecycleOrderBounds(providerMessages, providerIndex);
@@ -97,23 +110,59 @@ function assignLifecycleOrders(sortedMessages: IndexedMessage[]): ChatMessage[] 
     });
   }
 
-  return sortedMessages.map(({ message }) => message);
+  const merged: ChatMessage[] = [];
+  const pushLifecycle = (providerIndex: number) => {
+    for (const { message } of lifecycleMessagesByProviderIndex.get(providerIndex) ?? []) {
+      merged.push(message);
+    }
+  };
+  pushLifecycle(-1);
+  providerMessages.forEach(({ message }, providerIndex) => {
+    merged.push(message);
+    pushLifecycle(providerIndex);
+  });
+  return merged;
 }
 
-function groupLifecycleMessages(sortedMessages: IndexedMessage[]): Map<number, IndexedMessage[]> {
+/**
+ * Places each lifecycle message after the last provider message (in transcript order) whose
+ * timestamp is not later than the lifecycle message, or before every provider message (-1).
+ */
+function groupLifecycleMessages(
+  providerMessages: IndexedMessage[],
+  lifecycleMessages: IndexedMessage[]
+): Map<number, IndexedMessage[]> {
+  // suffixMinTimestamp[i] is non-decreasing, and the last index whose suffix minimum is <= t is
+  // exactly the last provider message whose own timestamp is <= t.
+  const suffixMinTimestamp = new Array<number>(providerMessages.length);
+  let minTimestamp = Number.POSITIVE_INFINITY;
+  for (let index = providerMessages.length - 1; index >= 0; index -= 1) {
+    minTimestamp = Math.min(minTimestamp, providerMessages[index]?.timestampMs ?? minTimestamp);
+    suffixMinTimestamp[index] = minTimestamp;
+  }
+
   const groups = new Map<number, IndexedMessage[]>();
-  let precedingProviderCount = 0;
-  for (const indexedMessage of sortedMessages) {
-    if (!indexedMessage.isLifecycle) {
-      precedingProviderCount += 1;
-      continue;
-    }
-    const providerIndex = precedingProviderCount === 0 ? -1 : precedingProviderCount - 1;
+  for (const indexedMessage of lifecycleMessages) {
+    const providerIndex = lastIndexAtOrBefore(suffixMinTimestamp, indexedMessage.timestampMs);
     const messages = groups.get(providerIndex) ?? [];
     messages.push(indexedMessage);
     groups.set(providerIndex, messages);
   }
   return groups;
+}
+
+function lastIndexAtOrBefore(sortedValues: number[], value: number): number {
+  let low = 0;
+  let high = sortedValues.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((sortedValues[middle] ?? Number.POSITIVE_INFINITY) <= value) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low - 1;
 }
 
 function lifecycleOrderBounds(
@@ -136,15 +185,16 @@ function lifecycleOrderBounds(
   ];
 }
 
-function compareIndexedMessages(left: IndexedMessage, right: IndexedMessage): number {
+function compareProviderMessages(left: IndexedMessage, right: IndexedMessage): number {
+  if (left.message.order !== right.message.order) {
+    return left.message.order - right.message.order;
+  }
+  return left.originalIndex - right.originalIndex;
+}
+
+function compareLifecycleMessages(left: IndexedMessage, right: IndexedMessage): number {
   if (left.timestampMs !== right.timestampMs) {
     return left.timestampMs - right.timestampMs;
   }
-  if (left.isLifecycle !== right.isLifecycle) {
-    return left.isLifecycle ? 1 : -1;
-  }
-  if (left.isLifecycle) {
-    return left.message.id.localeCompare(right.message.id);
-  }
-  return left.originalIndex - right.originalIndex;
+  return left.message.id.localeCompare(right.message.id);
 }

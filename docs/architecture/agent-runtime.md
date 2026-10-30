@@ -9,12 +9,12 @@ and retained when typing begins after a reload.
 
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Harness metadata, sidechain
-entries, and image-reference companions are omitted from chat replay; their
-temporary file paths are not read. Codex history likewise restores user
-`input_image` data URLs, and images on legacy `user_message` events, onto the
-prompt; non-user images and `local_images` paths are skipped. Restoration
-rejects malformed base64 and images above the shared 10 MiB decoded size limit
-used for uploads.
+entries, `/compact` summaries, and image-reference companions are omitted from
+chat replay; their temporary file paths are not read. Codex history likewise
+restores user `input_image` data URLs, and images on legacy `user_message`
+events, onto the prompt; non-user images and `local_images` paths are skipped.
+Restoration rejects malformed base64 and images above the shared 10 MiB decoded
+size limit used for uploads.
 
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
@@ -309,14 +309,18 @@ provider identities remain unchanged; transport calls use the underlying native
 Codex thread ID. A failed legacy resume cannot start a replacement conversation.
 History loading accepts both legacy event messages and current public response
 items, deduplicates copies per turn, and excludes injected context and internal
-reasoning. Active and browse resumes hydrate on-disk history before starting the
-ACP runtime, preserving original message timestamps and suppressing duplicate
-adapter replay. Concurrent startups share history preparation; joining a runtime
-already starting preserves its replay policy. Without on-disk history or a
-retained provider transcript, ACP replay remains the fallback. Terminal output
-deltas are negotiated explicitly, accumulated with per-tool and total
-pending-tool limits, and included in completed tool results. Buffers are
-isolated by session and cleared on teardown.
+reasoning; rollouts without content-kind metadata drop user messages before the
+first prompt that are only `<environment_context>` or `<user_instructions>`,
+while later tag-only messages are kept as typed. Active and browse resumes
+hydrate on-disk history before starting the ACP runtime, preserving original
+message timestamps and suppressing duplicate adapter replay. Concurrent startups
+share history preparation; joining a runtime already starting preserves its
+replay policy. Without on-disk history or a retained provider transcript, ACP
+replay remains the fallback; each replayed user message closes the open reply
+and gets its own transcript row. Terminal output deltas are negotiated
+explicitly, accumulated with per-tool and total pending-tool limits, and
+included in completed tool results. Buffers are isolated by session and cleared
+on teardown.
 
 For tracked tool calls, object-valued ACP `rawInput` refinements replace the
 existing card's input, preserving its original order and tool name through live
@@ -451,10 +455,11 @@ workspace MCP configuration takes precedence over stale entries left by older
 Factory Factory versions; native configuration for other servers is retained.
 
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
-deduplicated by session/attempt key, merged chronologically with provider
-history, and rendered as structured chat rows after reconnect or restart. Normal
-user turns have a four-hour deadline. Startup/stop incarnation fences protect
-runtime replacement and shutdown.
+deduplicated by session/attempt key, and rendered as structured chat rows after
+reconnect or restart. Provider history keeps its transcript order; each card
+follows the last provider message timestamped at or before it. Normal user turns
+have a four-hour deadline. Startup/stop incarnation fences protect runtime
+replacement and shutdown.
 
 Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session
