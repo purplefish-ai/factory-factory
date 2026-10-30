@@ -35,6 +35,31 @@ function setup() {
 }
 
 describe('AcpEventProcessor replay suppression', () => {
+  it('restores task snapshots sent while attaching provider history', () => {
+    const { domain, sendUpdate } = setup();
+    const entries = [
+      { content: 'Resume work', status: 'in_progress' as const, priority: 'high' as const },
+    ];
+    sendUpdate({ sessionUpdate: 'plan', entries });
+    const replay = () =>
+      domain
+        .prepareLoad(SESSION_ID, {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-10-30T00:00:00Z',
+        })
+        .replayEvents.filter((event) => event.type === 'task_notification');
+    expect(replay()).toEqual([
+      { type: 'task_notification', message: JSON.stringify({ type: 'acp_plan', entries }) },
+    ]);
+    sendUpdate({ sessionUpdate: 'plan', entries: [] });
+    expect(replay()).toEqual([
+      { type: 'task_notification', message: JSON.stringify({ type: 'acp_plan', entries: [] }) },
+    ]);
+    domain.clearAllSessions();
+  });
+
   it('forwards the attach-time usage snapshot while idle replay stays suppressed', () => {
     const { domain, emitDelta, processor, sendUpdate } = setup();
     const usage: SessionUpdate = { sessionUpdate: 'usage_update', used: 180_000, size: 200_000 };
