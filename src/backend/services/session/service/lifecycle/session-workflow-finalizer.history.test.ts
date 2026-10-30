@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
@@ -13,7 +13,11 @@ vi.mock('@/backend/services/session/service/data/session-history-loader.service'
   claudeSessionHistoryLoaderService: { loadSessionHistory: loadHistory },
 }));
 
-function setup(provider: 'CLAUDE' | 'CODEX' = 'CLAUDE', metadataOnly = false) {
+function setup(
+  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE',
+  metadataOnly = false,
+  observedEmpty = false
+) {
   const session = createLifecycleTestSession({
     provider,
     workflow: 'ratchet',
@@ -34,7 +38,14 @@ function setup(provider: 'CLAUDE' | 'CODEX' = 'CLAUDE', metadataOnly = false) {
     closedSessionPersistenceService: persistence,
     hydrateProviderHistory: createProviderHistoryHydrator(domain),
     lifecycleEventService: { hydrate: async () => undefined },
-    runtimeManager: { isSessionRunning: () => false },
+    runtimeManager: {
+      isSessionRunning: () => false,
+      hasObservedEmptyProviderSession: (id, observedProvider, providerId) =>
+        observedEmpty &&
+        id === session.id &&
+        observedProvider === provider &&
+        providerId === 'provider-history',
+    },
     countViewers: () => 0,
   });
   return { session, domain, persistence, repository, finalizer };
@@ -52,6 +63,9 @@ const existingMessage: ChatMessage = {
 describe('closed-session provider history safety', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it.each(['CLAUDE', 'CODEX'] as const)(
@@ -74,6 +88,18 @@ describe('closed-session provider history safety', () => {
     }
   );
 
+  it('archives an observed new session that never received a prompt even without a provider file', async () => {
+    const { finalizer, persistence } = setup('CLAUDE', false, true);
+    loadHistory.mockResolvedValue({ status: 'not_found' });
+    await finalizer.persistClosedSession('session-1');
+    expect(persistence.persistClosedSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerSessionId: 'provider-history',
+        messages: [],
+      })
+    );
+  });
+
   it('protects provider identities retained only in metadata', async () => {
     const { finalizer, persistence } = setup('CLAUDE', true);
     loadHistory.mockResolvedValue({ status: 'not_found' });
@@ -82,6 +108,7 @@ describe('closed-session provider history safety', () => {
   });
 
   it('retains an unavailable transient session and retries history after the cooldown', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const h = setup();
     loadHistory.mockResolvedValueOnce({
       status: 'error',
@@ -100,7 +127,7 @@ describe('closed-session provider history safety', () => {
     await close(); // The hydration cooldown must also fail closed.
     expect(loadHistory).toHaveBeenCalledTimes(1);
     expect(h.repository.deleteSession).not.toHaveBeenCalled();
-    h.domain.clearHistoryRetryCooldown('session-1');
+    clock.mockReturnValue(1_800_000_030_001);
     loadHistory.mockResolvedValueOnce({
       ...loadedEmpty,
       history: [

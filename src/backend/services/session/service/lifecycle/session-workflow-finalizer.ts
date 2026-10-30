@@ -37,7 +37,7 @@ type WorkflowFinalizerDependencies = {
   };
   lifecycleEventService: Pick<SessionLifecycleEventService, 'hydrate'>;
   hydrateProviderHistory: HydrateProviderHistory;
-  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning'>;
+  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning' | 'hasObservedEmptyProviderSession'>;
   countViewers(sessionId: string): number;
 };
 
@@ -134,10 +134,16 @@ export class SessionWorkflowFinalizer {
     });
     await this.dependencies.lifecycleEventService.hydrate(sessionId);
     const messages = this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId);
+    const providerSessionId = getProviderHistorySessionId({ ...session, workspace });
     if (
-      getProviderHistorySessionId({ ...session, workspace }) &&
+      providerSessionId &&
       !messages.some((message) => !isLocalTranscriptMessage(message)) &&
-      this.dependencies.sessionDomainService.getHistoryHydrationSource(sessionId) !== 'jsonl'
+      this.dependencies.sessionDomainService.getHistoryHydrationSource(sessionId) !== 'jsonl' &&
+      !this.dependencies.runtimeManager.hasObservedEmptyProviderSession(
+        sessionId,
+        session.provider,
+        providerSessionId
+      )
     ) {
       throw new Error(
         'Provider history is unavailable; retry closing the session after history can be loaded.'
@@ -152,7 +158,7 @@ export class SessionWorkflowFinalizer {
       workflow: session.workflow,
       provider: session.provider,
       codexAccountId: session.codexAccountId,
-      ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
+      ...(providerSessionId ? { providerSessionId } : {}),
       model: session.model,
       startedAt: session.createdAt,
       messages,

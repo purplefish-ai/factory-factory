@@ -34,7 +34,14 @@ Closing a provider-backed session requires retained provider messages or a
 confirmed JSONL history load, including a confirmed empty history. Unavailable
 history and hydration cooldowns abort archival and preserve the live session for
 retry; local lifecycle and failed PR status cards do not prove the conversation
-was recovered. Empty ACP fallbacks remain eligible for a JSONL read.
+was recovered. A runtime observed creating a new provider conversation may
+archive it before its first prompt even if no JSONL file exists. This proof is
+scoped to the exact provider identity, survives a normal stop, and is revoked
+before any prompt attempt, on conversation activity, identity replacement,
+failed startup, permanent deletion, or shutdown. It is not inferred after a
+backend restart; an unprompted session without a file then remains protected
+until provider history can be confirmed. Empty ACP fallbacks remain eligible for
+a JSONL read.
 
 ## ACP runtime
 

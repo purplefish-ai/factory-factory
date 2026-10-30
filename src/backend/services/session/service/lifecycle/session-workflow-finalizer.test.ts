@@ -50,6 +50,7 @@ function createFinalizerHarness(options?: {
   const hydrateProviderHistory = vi.fn(async () => undefined);
   const runtime = {
     isSessionRunning: vi.fn(() => options?.running ?? false),
+    hasObservedEmptyProviderSession: vi.fn(() => false),
     isStopInProgress: vi.fn(() => false),
   };
   const viewerCount = vi.fn(() => options?.viewerCount ?? 0);
