@@ -75,7 +75,13 @@ export function TranscriptRows({
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(
     display.workspaceId
   );
-  const tail = <TranscriptTail props={display} queuedPRUpdate={layout.queuedPRUpdate} />;
+  const tail = (
+    <TranscriptTail
+      props={display}
+      queuedPRUpdate={layout.queuedPRUpdate}
+      hasVisibleMessages={layout.messages.length > 0 || !!layout.queuedPRUpdate}
+    />
+  );
   const content = (index: number) => {
     if (layout.headerOffset && index === 0) {
       return header;

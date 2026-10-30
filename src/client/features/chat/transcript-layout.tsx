@@ -24,24 +24,32 @@ function lastThinkingId(messages: GroupedMessageItem[]) {
   return lastThinkingMessageId;
 }
 
+function classifyPRUpdate(item: GroupedMessageItem, queuedIds?: ReadonlySet<string>) {
+  if (
+    isToolSequence(item) ||
+    !(item.message?.type === 'pr_update' || item.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX))
+  ) {
+    return null;
+  }
+  if (item.message?.prDeliveryState === 'cancelled') {
+    return 'cancelled';
+  }
+  return queuedIds?.has(item.id) ? 'queued' : null;
+}
+
 export function useTranscriptLayout(props: TranscriptDisplayProps, hasHeader: boolean) {
   return useMemo(() => {
-    const messages: GroupedMessageItem[] = [];
     let queuedPRUpdate: GroupedMessageItem | undefined;
-    for (const item of props.messages) {
+    const messages = props.messages.filter((item) => {
       if (props.loadingSession && !props.queuedMessageIds?.has(item.id)) {
-        continue;
+        return false;
       }
-      const queuedPR =
-        !isToolSequence(item) &&
-        props.queuedMessageIds?.has(item.id) &&
-        (item.message?.type === 'pr_update' || item.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX));
-      if (queuedPR) {
+      const prState = classifyPRUpdate(item, props.queuedMessageIds);
+      if (prState === 'queued') {
         queuedPRUpdate ??= item;
-      } else {
-        messages.push(item);
       }
-    }
+      return prState === null;
+    });
     const lastThinkingMessageId = lastThinkingId(messages);
     const keys = messages.length ? messages.map((item) => item.id) : ['transcript:status'];
     if (hasHeader) {
@@ -67,7 +75,9 @@ function getStartupLabel(props: TranscriptDisplayProps) {
 export function TranscriptTail({
   props,
   queuedPRUpdate,
+  hasVisibleMessages,
 }: {
+  hasVisibleMessages: boolean;
   props: TranscriptDisplayProps;
   queuedPRUpdate?: GroupedMessageItem;
 }) {
@@ -80,7 +90,7 @@ export function TranscriptTail({
   const starting = props.startingSession && !running && !loadingSession && !initializing;
   const idleEmpty =
     todoState.todos.length === 0 &&
-    props.messages.length === 0 &&
+    !hasVisibleMessages &&
     !running &&
     !background &&
     !initializing &&

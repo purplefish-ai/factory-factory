@@ -24,7 +24,7 @@ function createCaller() {
           findById: (...args: unknown[]) => mockFindProjectById(...args),
         },
         workspaceDataService: {
-          findByProjectId: (...args: unknown[]) => mockFindWorkspacesByProjectId(...args),
+          findIssueLinksByProjectId: (...args: unknown[]) => mockFindWorkspacesByProjectId(...args),
         },
       },
     },

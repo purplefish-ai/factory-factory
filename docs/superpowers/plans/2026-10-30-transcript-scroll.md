@@ -489,14 +489,14 @@ Execution decisions: Tasks 3–5 are delivered together so the public API
 migration is coherent. Renderer content/queue/history assertions remain in the
 renamed `transcript-rows` suites; controller/event/browser tests replace
 effect-call-count assertions. Browser restores assert keyed viewport coordinates
-across remounts, because offscreen size estimates can legitimately change
-absolute pixels. The viewport reserves 48px consistently so expanded prompts
-cannot occlude the jump overlay. Browser suites use separate output directories;
-cold Storybook graph compilation is warmed before the timed composer interaction
-cases.
+across remounts and reactivation, because offscreen size estimates can
+legitimately change absolute pixels. The viewport reserves 48px consistently so
+expanded prompts cannot occlude the jump overlay. Browser suites use separate
+output directories; cold Storybook graph compilation is warmed before the timed
+composer interaction cases.
 
-Final verification after PR review and both main integrations: `pnpm check:fix`,
-`pnpm typecheck` and `pnpm check` passed. The full unit suite passed 9,425 tests
+Final verification after PR review and all main integrations: `pnpm check:fix`,
+`pnpm typecheck` and `pnpm check` passed. The full unit suite passed 9,448 tests
 with 3 skipped and no failures. Browser verification covered all 38 transcript,
 4 Storybook and 30 existing mobile cases. The expanded tool-burst case was also
 repeated five times per viewport. It records both scroll position and total

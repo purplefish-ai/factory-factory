@@ -13,6 +13,9 @@ export function PRUpdateRenderer({
   deliveryState?: PRUpdateDeliveryState;
   error?: string;
 }) {
+  if (deliveryState === 'cancelled') {
+    return null;
+  }
   const status = deliveryState ?? (queued ? 'queued' : 'delivered');
   const label = status === 'queued' ? 'queued for next turn' : status;
   const body = text.replace(/^<!-- factory-factory-pr-event:[^\n]+ -->\n?/, '');

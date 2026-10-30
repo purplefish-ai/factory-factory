@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { projectAcpTranscriptUpdates } from '@/client/features/chat';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
+import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
 import {
   SubagentTranscriptContent,
@@ -62,14 +63,20 @@ export function SubagentTranscriptView({
   }, [query.data]);
 
   useEffect(() => {
-    return subscribeToSubagentChanges((detail) => {
+    // Change bursts run one refetch at a time plus one trailing refetch.
+    const refreshOnChange = createTrailingRefresh(() => query.refetch());
+    const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
         detail.subagentId === selection.subagent.id
       ) {
-        void query.refetch();
+        refreshOnChange.trigger();
       }
     });
+    return () => {
+      unsubscribe();
+      refreshOnChange.dispose();
+    };
   }, [query.refetch, selection.parentSessionId, selection.subagent.id]);
 
   const handleLoadOlder = useCallback(() => {

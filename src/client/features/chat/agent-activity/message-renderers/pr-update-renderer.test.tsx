@@ -29,17 +29,25 @@ it('renders a noneditable, escaped PR update card and hides its receipt marker',
   expect(html).not.toContain('<script>');
 });
 
-it.each(['failed', 'cancelled'] as const)(
-  'renders an explicit %s delivery state',
-  (prDeliveryState) => {
-    const html = renderToStaticMarkup(
-      createElement(PRUpdateRenderer, {
-        text: '<!-- factory-factory-pr-event:test -->\nReview feedback received',
-        deliveryState: prDeliveryState,
-      })
-    );
-    expect(html).toContain(prDeliveryState);
-    expect(html).not.toContain('queued for next turn');
-    expect(html).not.toContain('factory-factory-pr-event');
-  }
-);
+it.each(['failed'] as const)('renders an explicit %s delivery state', (prDeliveryState) => {
+  const html = renderToStaticMarkup(
+    createElement(PRUpdateRenderer, {
+      text: '<!-- factory-factory-pr-event:test -->\nReview feedback received',
+      deliveryState: prDeliveryState,
+    })
+  );
+  expect(html).toContain(prDeliveryState);
+  expect(html).not.toContain('queued for next turn');
+  expect(html).not.toContain('factory-factory-pr-event');
+});
+
+it('hides cancelled updates, including their details and cancellation errors', () => {
+  const html = renderToStaticMarkup(
+    createElement(PRUpdateRenderer, {
+      text: '<!-- factory-factory-pr-event:test -->\nReview feedback received',
+      deliveryState: 'cancelled',
+      error: 'Session stopped before dispatch',
+    })
+  );
+  expect(html).toBe('');
+});

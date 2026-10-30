@@ -349,14 +349,15 @@ preserving the original frozen delivery ID and text. The PR menu also offers
 explicit **Resume PR updates** for recoverable pauses, including when no
 dedicated conversation exists yet. Changing destinations alone preserves a
 pause; resuming uses the binding revision and retains frozen recipients. The
-chat renders PR updates as compact, noneditable rows with queued, delivered,
-failed, or cancelled delivery states. Queued updates appear below current agent
-activity as one shared status line, regardless of how many updates are queued;
-delivered update contents can be expanded in the transcript. Failed and
-cancelled queue outcomes remain in session snapshots and replay; background
-prompt text never enters composer recovery. Snapshots expose enablement,
-delivery mode, recipient, pause reason and pending count. Queued updates, paused
-delivery, and idle red CI do not imply live agent work.
+chat renders PR updates as compact, noneditable rows with queued, delivered, or
+failed delivery states. Cancelled updates are hidden from the conversation,
+including after history replay, without leaving empty rows. Queued updates
+appear below current agent activity as one shared status line, regardless of how
+many updates are queued; delivered update contents can be expanded in the
+transcript. Failed and cancelled queue outcomes remain in session snapshots and
+replay; background prompt text never enters composer recovery. Snapshots expose
+enablement, delivery mode, recipient, pause reason and pending count. Queued
+updates, paused delivery, and idle red CI do not imply live agent work.
 
 ### Migration and backups
 

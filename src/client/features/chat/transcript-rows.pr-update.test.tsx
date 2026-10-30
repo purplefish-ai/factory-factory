@@ -126,7 +126,7 @@ it('shows one PR queue status until all updates settle, preserving individual ou
         settled < 3 ? 1 : 0
       );
       expect(container.textContent).toContain(human.text);
-      expect(container.querySelectorAll('details')).toHaveLength(settled);
+      expect(container.querySelectorAll('details')).toHaveLength(Math.min(settled, 2));
       if (settled < 3) {
         expect(container.textContent!.indexOf('Checking the implementation')).toBeLessThan(
           container.textContent!.indexOf('PR update · queued for next turn')
@@ -138,10 +138,64 @@ it('shows one PR queue status until all updates settle, preserving individual ou
       if (settled > 1) {
         expect(container.textContent).toContain('PR update · failed');
       }
-      if (settled > 2) {
-        expect(container.textContent).toContain('PR update · cancelled');
-      }
+      expect(container.textContent).not.toContain('PR update · cancelled');
+      expect(container.textContent).not.toContain('Update 3 details');
     }
+  } finally {
+    flushSync(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('omits cancelled PR rows from replay without leaving virtualized gaps', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const cancelled: ChatMessage[] = ['pr-event-cancelled', 'restored-history-id'].map(
+    (id, order) => ({
+      id,
+      source: 'agent',
+      order,
+      timestamp: '2026-10-28T00:00:00.000Z',
+      message: {
+        type: 'pr_update',
+        text: 'Cancelled PR details',
+        prDeliveryState: 'cancelled',
+        error: 'Session stopped before dispatch',
+      },
+    })
+  );
+  const human: ChatMessage = {
+    id: 'human',
+    source: 'user',
+    order: 2,
+    timestamp: '2026-10-28T00:00:01.000Z',
+    text: 'PR update cancelled',
+  };
+  const render = (messages: ChatMessage[]) =>
+    flushSync(() =>
+      root.render(
+        createElement(TranscriptRenderingFixture, {
+          messages,
+          running: false,
+          startingSession: false,
+          loadingSession: false,
+        })
+      )
+    );
+  try {
+    render([...cancelled, human]);
+    expect(container.textContent).toContain(human.text);
+    expect(container.textContent).not.toContain('Cancelled PR details');
+    expect(container.textContent).not.toContain('Session stopped before dispatch');
+    expect(container.querySelectorAll('[data-index]')).toHaveLength(1);
+    render(cancelled);
+    expect(container.textContent).toContain('Ready to start');
+    expect(
+      [...container.querySelectorAll('[data-transcript-key]')].map((row) =>
+        row.getAttribute('data-transcript-key')
+      )
+    ).toEqual(['transcript:status']);
   } finally {
     flushSync(() => root.unmount());
     container.remove();

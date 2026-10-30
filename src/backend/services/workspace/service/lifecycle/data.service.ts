@@ -51,6 +51,10 @@ class WorkspaceDataService {
     return workspaceAccessor.findByProjectId(projectId);
   }
 
+  findIssueLinksByProjectId(projectId: string) {
+    return workspaceAccessor.findIssueLinksByProjectId(projectId);
+  }
+
   findByIdsWithProject(ids: string[]) {
     return workspaceAccessor.findByIdsWithProject(ids);
   }

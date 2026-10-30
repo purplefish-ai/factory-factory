@@ -211,6 +211,9 @@ tail, inline tasks and subagent recovery status share the measured extent.
 Native CSS anchoring is disabled on the controlled viewport. The jump button
 overlays the viewport, so showing it cannot change its height.
 
+Canceled PR records remain available for recovery but do not create virtual
+rows. The empty state uses the filtered message model.
+
 Returning to a pane restores follow intent or a keyed visible-row offset. Row
 offsets are signed: a position in a gap anchors to the next visible row, keeping
 that gap stable across prepends and restores. Main chat stores validated

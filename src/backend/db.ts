@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '@prisma-gen/client';
+import { TunedPrismaBetterSqlite3 } from './lib/sqlite-adapter';
 import { configService } from './services/config.service';
 
 declare global {
@@ -38,7 +38,7 @@ function createPrismaClient(): PrismaClient {
   // Create Prisma adapter with SQLite configuration
   // Note: The adapter expects a raw file path, not a file: URL
   // (getDatabaseUrl() with file: prefix is for Prisma CLI configuration)
-  const adapter = new PrismaBetterSqlite3({
+  const adapter = new TunedPrismaBetterSqlite3({
     url: databasePath,
   });
 

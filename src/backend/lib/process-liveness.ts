@@ -1,16 +1,19 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-function isZombieProcess(pid: number): boolean {
+const execFileAsync = promisify(execFile);
+
+async function isZombieProcess(pid: number): Promise<boolean> {
   if (process.platform === 'win32') {
     return false;
   }
 
   try {
-    const state = execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], {
+    // Async so recovery sweeps over many PIDs don't block the event loop on `ps`.
+    const { stdout } = await execFileAsync('ps', ['-o', 'stat=', '-p', String(pid)], {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    return state.startsWith('Z');
+    });
+    return stdout.trim().startsWith('Z');
   } catch {
     // A failed state lookup is not enough evidence to declare an existing PID dead.
     return false;
@@ -18,11 +21,11 @@ function isZombieProcess(pid: number): boolean {
 }
 
 /** Return whether a PID names a live, non-zombie process, including inaccessible processes. */
-export function isProcessRunning(pid: number): boolean {
+export async function isProcessRunning(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0);
-    return !isZombieProcess(pid);
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
+  return !(await isZombieProcess(pid));
 }

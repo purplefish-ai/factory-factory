@@ -132,11 +132,12 @@ test('pane return resumes following and preserves a reading position', async ({ 
   await viewport.hover();
   await page.mouse.wheel(0, -500);
   await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
-  const top = await viewport.evaluate((element) => element.scrollTop);
+  const anchor = await readingAnchor(viewport);
   await page.getByRole('button', { name: 'Hide or show', exact: true }).click();
   await page.getByRole('button', { name: 'Append burst', exact: true }).click();
   await page.getByRole('button', { name: 'Hide or show', exact: true }).click();
-  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(top);
+  // Re-enabling the engine may re-estimate its prefix; preserve visible content.
+  await expectAnchor(viewport, anchor);
 });
 
 test('reading anchor survives prepend and session switching', async ({ page }) => {

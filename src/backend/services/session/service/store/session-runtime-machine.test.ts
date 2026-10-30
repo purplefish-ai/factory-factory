@@ -45,6 +45,22 @@ describe('SessionRuntimeMachine', () => {
     expect(clearCommands).toHaveBeenCalledExactlyOnceWith('s1');
   });
 
+  it('refreshes the timestamp without emitting when the runtime state is unchanged', () => {
+    const emit = vi.fn();
+    let now = 0;
+    const machine = new SessionRuntimeMachine(emit, () => `2026-02-09T00:00:0${now++}.000Z`);
+    const store = createStore();
+    const running = { phase: 'running', processState: 'alive', activity: 'WORKING' } as const;
+
+    machine.markRuntime(store, { ...running, work });
+    machine.markRuntime(store, { ...running, work: { ...work } });
+    expect(emit).toHaveBeenCalledOnce();
+    expect(store.runtime.updatedAt).toBe('2026-02-09T00:00:01.000Z');
+
+    machine.markRuntime(store, { ...running, work: { ...work, runningSubagents: 1 } });
+    expect(emit).toHaveBeenCalledTimes(2);
+  });
+
   it('retains explicit work when restoring an alive idle snapshot', () => {
     const machine = new SessionRuntimeMachine(
       () => undefined,

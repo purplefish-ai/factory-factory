@@ -47,7 +47,7 @@ export const linearRouter = router({
       try {
         const [issues, workspaces] = await Promise.all([
           linearClientService.listMyIssues(config.apiKey, config.teamId),
-          workspaceDataService.findByProjectId(input.projectId),
+          workspaceDataService.findIssueLinksByProjectId(input.projectId),
         ]);
         return {
           issues: filterIssuesLinkedToActiveWorkspaces(

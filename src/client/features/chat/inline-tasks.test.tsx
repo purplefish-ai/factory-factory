@@ -14,6 +14,7 @@ describe('inline tasks', () => {
       flushSync(() =>
         root.render(
           <TranscriptTail
+            hasVisibleMessages={false}
             props={{
               messages: [],
               acpPlan,
