@@ -362,11 +362,14 @@ histories; no Factory Factory extension is required from either adapter. Each
 child's in-memory transcript retains at most 100 turns and 2 MiB of serialized
 updates. Oldest whole turns are evicted; an oversized active turn is discarded
 until the next user turn. Cursors use monotonic turn offsets, and expired
-cursors fail explicitly instead of returning another turn. Child `updated`
-notifications are throttled to one per subagent every 250 ms because each one
-makes viewers refetch the list or transcript; `created` and `completed` are sent
-immediately. Viewers run one refetch at a time and queue a single follow-up when
-changes arrive mid-flight, so the final update is never missed.
+cursors fail explicitly instead of returning another turn. Codex resumes of the
+same child thread share one list entry and transcript, including across provider
+generation IDs. Each generation starts a pagination turn; completion of an older
+generation cannot stop a resumed child. Child `updated` notifications are
+throttled to one per subagent every 250 ms because each one makes viewers
+refetch the list or transcript; `created` and `completed` are sent immediately.
+Viewers run one refetch at a time and queue a single follow-up when changes
+arrive mid-flight, so the final update is never missed.
 
 ACP negotiates structured session failures. A prompt response carrying an error
 in `_meta.jetbrains.air.sessionFailure` fails the turn through the normal

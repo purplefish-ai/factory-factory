@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+/** Codex ACP uses a generation suffix when an existing child thread resumes. */
+export function getSubagentThreadId(sessionId: string): string {
+  return sessionId.replace(/:generation:[1-9]\d*$/, '');
+}
+
 export const SUBAGENTS_CAPABILITY_META_KEY = 'factoryfactory.ai/subagents';
 export const SUBAGENT_TOOL_META_KEY = 'factoryfactory.ai/subagent';
 export const SUBAGENTS_LIST_METHOD = 'factoryfactory.ai/subagents/list';
@@ -229,6 +234,7 @@ export const subagentSummarySchema = z
     id: z.string().min(1),
     name: z.string().nullable(),
     status: subagentStatusSchema,
+    generation: z.number().int().positive().optional(),
     createdAt: z.string().datetime({ offset: true }).nullable(),
     updatedAt: z.string().datetime({ offset: true }).nullable(),
     completedAt: z.string().datetime({ offset: true }).nullable(),

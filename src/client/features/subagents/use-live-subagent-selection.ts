@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
 import { trpc } from '@/client/lib/trpc';
+import { getSubagentThreadId } from '@/shared/acp-protocol/subagents';
 import { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentSelection } from './types';
 
@@ -27,15 +28,27 @@ function isProvenAtLeastAsFresh(
   candidate: SubagentSelection['subagent'],
   hasSuccessfulPostMountFetch: boolean
 ): boolean {
-  if (TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status)) {
-    return false;
-  }
   const storedTimestamp = validTimestamp(stored.updatedAt);
   const candidateTimestamp = validTimestamp(candidate.updatedAt);
   if (
     (stored.updatedAt !== null && storedTimestamp === null) ||
     (candidate.updatedAt !== null && candidateTimestamp === null)
   ) {
+    return false;
+  }
+  // Generations include a runtime-local replay offset. Real observation times
+  // take precedence when a restarted backend reconstructs a lower counter.
+  if (
+    storedTimestamp !== null &&
+    candidateTimestamp !== null &&
+    storedTimestamp !== candidateTimestamp
+  ) {
+    return candidateTimestamp > storedTimestamp;
+  }
+  if ((candidate.generation ?? 1) !== (stored.generation ?? 1)) {
+    return (candidate.generation ?? 1) > (stored.generation ?? 1);
+  }
+  if (TERMINAL_STATUSES.has(stored.status) && !TERMINAL_STATUSES.has(candidate.status)) {
     return false;
   }
   if (storedTimestamp === null || candidateTimestamp === null) {
@@ -56,10 +69,23 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   const hadCachedDataAtMount = useRef(query.data !== undefined);
   const [successfulRefetchDataUpdatedAt, setSuccessfulRefetchDataUpdatedAt] = useState(0);
 
-  const refreshed = query.data?.pages
+  const candidate = query.data?.pages
     .filter((page) => page.supported)
     .flatMap((page) => page.subagents)
-    .find((candidate) => candidate.id === selection.subagent.id);
+    .find(
+      (candidate) =>
+        candidate.id === selection.subagent.id ||
+        (candidate.generation !== undefined &&
+          candidate.id === getSubagentThreadId(selection.subagent.id))
+    );
+  // Keep persisted generation tab identities stable for the panel's tab lookup.
+  const refreshed = useMemo(
+    () =>
+      candidate && candidate.id !== selection.subagent.id
+        ? { ...candidate, id: selection.subagent.id }
+        : candidate,
+    [candidate, selection.subagent.id]
+  );
   const candidateWasCachedAtMount = useRef(refreshed !== undefined);
   const querySnapshot = useRef({
     dataUpdatedAt: query.dataUpdatedAt,
@@ -124,7 +150,7 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     const unsubscribe = subscribeToSubagentChanges((detail) => {
       if (
         detail.sessionId === selection.parentSessionId &&
-        detail.subagentId === selection.subagent.id
+        getSubagentThreadId(detail.subagentId) === getSubagentThreadId(selection.subagent.id)
       ) {
         refreshOnChange.trigger();
       }

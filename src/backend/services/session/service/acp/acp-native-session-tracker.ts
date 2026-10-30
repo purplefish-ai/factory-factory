@@ -6,6 +6,7 @@ import {
   type SubagentTranscriptUpdate,
   type SubagentsChangedParams,
   subagentTranscriptUpdateSchema,
+  getSubagentThreadId,
 } from '@/shared/acp-protocol/subagents';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import { normalizeSessionUpdateMessage } from './acp-stream-normalizer';
@@ -40,6 +41,10 @@ type TranscriptTurn = { updates: SubagentTranscriptUpdate[]; bytes: number };
 
 type ChildSession = {
   parentSessionId: string;
+  activeSessionId: string;
+  startNewTurn: boolean;
+  generationOffset: number;
+  replayed: boolean;
   summary: SubagentSummary;
   turns: TranscriptTurn[];
   turnOffset: number;
@@ -55,6 +60,8 @@ export type SubagentToolUpdate = Extract<
 >;
 
 type TrackerCallbacks = {
+  /** Codex resumes one thread under successive native generation IDs. */
+  groupCodexGenerations?: boolean;
   onSubagentsChanged?: (params: SubagentsChangedParams) => void;
   onTaskStatusChanged?: (active: boolean) => void;
   /** Child tool activity stays out of the parent transcript but still reaches observers. */
@@ -132,6 +139,7 @@ export class AcpNativeSessionTracker {
     }
     this.activeGoals.clear();
     for (const child of this.children.values()) {
+      child.replayed = true;
       if (child.summary.status === 'running') {
         child.summary.status = 'interrupted';
         // Replay completion proves interruption, not when the historical work ended.
@@ -185,7 +193,7 @@ export class AcpNativeSessionTracker {
   }
 
   ownsSession(sessionId: string): boolean {
-    return this.children.has(sessionId);
+    return this.children.has(this.childId(sessionId));
   }
 
   /** Returns true only when the decoded notification must not be passed to SDK validation. */
@@ -210,7 +218,7 @@ export class AcpNativeSessionTracker {
   }
 
   private handleSessionUpdate(sessionId: string, update: Record<string, unknown>): boolean {
-    if (this.abandonedSessions.has(sessionId)) {
+    if (this.abandonedSessions.has(this.childId(sessionId))) {
       return true;
     }
     // Providers publish the parent spawn before any child output, including on load.
@@ -229,9 +237,9 @@ export class AcpNativeSessionTracker {
       this.trackGoal(sessionId, update);
       return false;
     }
-    const child = this.children.get(sessionId);
-    if (child) {
-      this.trackGoal(sessionId, update);
+    const child = this.children.get(this.childId(sessionId));
+    if (child?.activeSessionId === sessionId) {
+      this.trackGoal(child.summary.id, update);
       this.append(child, update);
     }
     // Never let a foreign session's updates contaminate the root, even if its spawn was malformed.
@@ -291,7 +299,7 @@ export class AcpNativeSessionTracker {
   }
 
   read(input: { subagentId: string; cursor?: string | null; limit: number }): SubagentReadResult {
-    const child = this.children.get(input.subagentId);
+    const child = this.children.get(this.childId(input.subagentId));
     if (!child) {
       throw new AcpSubagentBrowseError(
         'NOT_FOUND',
@@ -319,13 +327,28 @@ export class AcpNativeSessionTracker {
     if (!parsed.success) {
       return;
     }
-    const { subagentSessionId: id, name, task, prompt } = parsed.data;
-    if (id === this.rootSessionId || id === parentSessionId || this.children.has(id)) {
+    const { subagentSessionId, name, task, prompt } = parsed.data;
+    const id = this.childId(subagentSessionId);
+    const nativeGeneration =
+      id === subagentSessionId ? 1 : Number(subagentSessionId.split(':').at(-1));
+    if (!Number.isSafeInteger(nativeGeneration)) {
+      return;
+    }
+    if (id === this.rootSessionId || id === this.childId(parentSessionId)) {
       return;
     }
     const now = this.observationTimestamp();
+    const previous = this.children.get(id);
+    if (previous) {
+      this.resumeChild(previous, parentSessionId, subagentSessionId, nativeGeneration);
+      return;
+    }
     const child: ChildSession = {
       parentSessionId,
+      activeSessionId: subagentSessionId,
+      startNewTurn: false,
+      generationOffset: 0,
+      replayed: false,
       turns: [],
       turnOffset: 0,
       transcriptBytes: 0,
@@ -333,6 +356,7 @@ export class AcpNativeSessionTracker {
       pendingPrompt: false,
       summary: {
         id,
+        ...(this.callbacks.groupCodexGenerations ? { generation: nativeGeneration } : {}),
         name,
         status: 'running',
         createdAt: now,
@@ -354,13 +378,45 @@ export class AcpNativeSessionTracker {
     this.publishActivity();
   }
 
+  private resumeChild(
+    child: ChildSession,
+    parentSessionId: string,
+    subagentSessionId: string,
+    nativeGeneration: number
+  ): void {
+    // The adapter's live router starts its counter over after loading history.
+    if (child.replayed && this.callbacks.groupCodexGenerations) {
+      child.generationOffset = (child.summary.generation ?? 1) + 1 - nativeGeneration;
+      child.replayed = false;
+    }
+    const generation = nativeGeneration + child.generationOffset;
+    if (generation <= (child.summary.generation ?? 1)) {
+      return;
+    }
+    child.activeSessionId = subagentSessionId;
+    child.parentSessionId = parentSessionId;
+    child.startNewTurn = true;
+    child.previousUserChunk = undefined;
+    child.pendingPrompt = false;
+    child.summary.status = 'running';
+    child.summary.generation = generation;
+    child.summary.completedAt = null;
+    child.summary.updatedAt = this.observationTimestamp();
+    this.changed(child.summary.id, 'updated');
+    this.publishActivity();
+  }
+
   private finish(parentSessionId: string, update: Record<string, unknown>): void {
     const parsed = stateSchema.safeParse(update);
     if (!parsed.success) {
       return;
     }
-    const child = this.children.get(parsed.data.subagentSessionId);
-    if (!child || child.parentSessionId !== parentSessionId) {
+    const child = this.children.get(this.childId(parsed.data.subagentSessionId));
+    if (
+      !child ||
+      child.parentSessionId !== parentSessionId ||
+      child.activeSessionId !== parsed.data.subagentSessionId
+    ) {
       return;
     }
     child.summary.status = parsed.data.state === 'disconnected' ? 'interrupted' : parsed.data.state;
@@ -405,10 +461,11 @@ export class AcpNativeSessionTracker {
       (!(messageId && child.previousUserChunk.messageId) ||
         messageId === child.previousUserChunk.messageId);
     child.previousUserChunk = user ? { messageId } : undefined;
-    if (!(turn || child.discardingTurn) || (user && !sameUserMessage)) {
+    if (child.startNewTurn || !(turn || child.discardingTurn) || (user && !sameUserMessage)) {
       turn = { updates: [], bytes: 0 };
       child.turns.push(turn);
       child.discardingTurn = false;
+      child.startNewTurn = false;
     }
     if (!turn || child.discardingTurn) {
       return;
@@ -453,6 +510,10 @@ export class AcpNativeSessionTracker {
     } else if ('title' in value && typeof value.title === 'string') {
       summary.latestActivity = value.title.slice(-500);
     }
+  }
+
+  private childId(sessionId: string): string {
+    return this.callbacks.groupCodexGenerations ? getSubagentThreadId(sessionId) : sessionId;
   }
 
   private observationTimestamp(): string | null {
