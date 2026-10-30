@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SESSION_OUTBOUND_EVENT, sessionEventBus } from '../session-event-bus';
+import {
+  SESSION_OUTBOUND_EVENT,
+  sessionEventBus,
+} from '@/backend/services/session/service/session-event-bus';
 import { SessionPublisher } from './session-publisher';
 import { SessionStoreRegistry } from './session-store-registry';
 

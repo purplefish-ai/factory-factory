@@ -421,6 +421,8 @@ describe('TerminalService', () => {
   // resource monitoring
   // =========================================================================
   describe('resource usage', () => {
+    const TERMINAL_PID = 12_345;
+
     it('does not sample in the background', async () => {
       vi.useFakeTimers();
       await service.createTerminal(defaultOpts);
@@ -430,13 +432,13 @@ describe('TerminalService', () => {
     });
 
     it('samples all terminals with one batched call on demand', async () => {
-      mockPidusage.mockResolvedValueOnce({ 12345: createPidUsageStat(7.25, 4096) });
+      mockPidusage.mockResolvedValueOnce({ [TERMINAL_PID]: createPidUsageStat(7.25, 4096) });
 
       await service.createTerminal(defaultOpts);
       await service.refreshResourceUsage();
 
       expect(mockPidusage).toHaveBeenCalledOnce();
-      expect(mockPidusage).toHaveBeenCalledWith([12_345]);
+      expect(mockPidusage).toHaveBeenCalledWith([TERMINAL_PID]);
       expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
         expect.objectContaining({ cpu: 7.25, memory: 4096, timestamp: expect.any(Date) })
       );
@@ -449,7 +451,7 @@ describe('TerminalService', () => {
 
       const first = service.refreshResourceUsage();
       const second = service.refreshResourceUsage();
-      pendingUsage.resolve({ 12345: createPidUsageStat(1, 1) });
+      pendingUsage.resolve({ [TERMINAL_PID]: createPidUsageStat(1, 1) });
       await Promise.all([first, second]);
 
       expect(mockPidusage).toHaveBeenCalledOnce();
@@ -463,7 +465,7 @@ describe('TerminalService', () => {
       await service.createTerminal(defaultOpts);
       await service.refreshResourceUsage();
 
-      expect(mockPidusage).toHaveBeenLastCalledWith(12_345);
+      expect(mockPidusage).toHaveBeenLastCalledWith(TERMINAL_PID);
       expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
         expect.objectContaining({ cpu: 3.5, memory: 2048 })
       );
