@@ -192,8 +192,10 @@ it('logs why each Auto candidate was skipped', async () => {
       ? Promise.reject(new Error('Codex native account operation failed'))
       : read(context)
   );
+  logs.info.mockClear();
+  logs.warn.mockClear();
   expect(await service.withAccountReservation({}, async (id) => id)).toBe(usable.id);
-  expect(logs.warn).toHaveBeenCalledWith('Skipping Codex account: usage could not be read', {
+  expect(logs.warn).toHaveBeenCalledWith('Skipping Codex account: account status check failed', {
     accountId: 'codex-native-default',
     error: 'Codex native account operation failed',
   });

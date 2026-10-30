@@ -169,7 +169,10 @@ it.skipIf(process.platform === 'win32').each([runClaudeCommand, runCodexCommand]
         await vi.advanceTimersByTimeAsync(0);
       }
       child.emit('exit', outcome.code, outcome.signal);
-      await expect(pending).resolves.toBe(outcome.status);
+      // A persistent EPERM is reported as a failure once the cleanup budget expires.
+      const settled = expect(pending).resolves.toBe(outcome.status);
+      await vi.advanceTimersByTimeAsync(5000);
+      await settled;
       expect(process.listenerCount('SIGTERM')).toBe(before);
     }
     expect(log).toHaveBeenCalledTimes(3);

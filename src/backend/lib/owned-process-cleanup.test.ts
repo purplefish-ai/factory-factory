@@ -62,10 +62,14 @@ it.skipIf(process.platform === 'win32')(
         code: reaped ? 'ESRCH' : 'EPERM',
       });
     });
+    let settled = false;
     const cleanup = terminateDisposableProcessTree(child() as unknown as ChildProcess, {
       timeoutMs: 1000,
+    }).finally(() => {
+      settled = true;
     });
     await vi.advanceTimersByTimeAsync(100);
+    expect(settled).toBe(false);
     reaped = true;
     await vi.advanceTimersByTimeAsync(100);
     await expect(cleanup).resolves.toBeUndefined();
@@ -78,11 +82,16 @@ it.skipIf(process.platform === 'win32')(
     vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
     });
+    let settled = false;
     const cleanup = terminateDisposableProcessTree(child() as unknown as ChildProcess, {
       timeoutMs: 100,
+    }).finally(() => {
+      settled = true;
     });
     const rejected = expect(cleanup).rejects.toThrow('Disposable process cleanup failed');
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(50);
     await rejected;
   }
 );

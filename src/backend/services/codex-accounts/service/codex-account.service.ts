@@ -328,7 +328,8 @@ export class CodexAccountService {
     try {
       observation = await this.observe(row);
     } catch (error) {
-      logger.warn('Skipping Codex account: usage could not be read', {
+      // observe() also verifies identity, so this covers read and identity failures.
+      logger.warn('Skipping Codex account: account status check failed', {
         accountId: row.id,
         error: error instanceof Error ? error.message : String(error),
       });
