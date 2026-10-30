@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 
 function update(sessionId: string, value: Record<string, unknown>) {
@@ -24,6 +24,10 @@ function text(tracker: AcpNativeSessionTracker, id: string, role: 'agent', value
 }
 
 describe('sub-agent replay timestamps', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('does not date historical lifecycle or transcript activity at workspace reopen time', () => {
     const tracker = new AcpNativeSessionTracker();
     tracker.beginHistoryReplay();
@@ -57,13 +61,27 @@ describe('sub-agent replay timestamps', () => {
       },
     ]);
     expect(tracker.getBackgroundWork().runningSubagents).toBe(0);
+    expect(tracker.read({ subagentId: 'finished', limit: 10 }).updates).toContainEqual({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Historical answer' },
+    });
   });
 
   it('still dates new lifecycle activity after replay completes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-30T12:00:00Z'));
     const tracker = new AcpNativeSessionTracker();
     tracker.beginHistoryReplay();
     tracker.completeHistoryReplay();
     spawn(tracker);
+    vi.setSystemTime(new Date('2026-10-30T12:00:01Z'));
+    text(tracker, 'child', 'agent', 'Live answer');
+    expect(tracker.list({ limit: 10 }).subagents[0]).toMatchObject({
+      createdAt: '2026-10-30T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:01.000Z',
+      completedAt: null,
+    });
+    vi.setSystemTime(new Date('2026-10-30T12:00:02Z'));
     tracker.onRawMessage(
       update('root', {
         sessionUpdate: 'subagent_state_update',
@@ -72,9 +90,9 @@ describe('sub-agent replay timestamps', () => {
       })
     );
     expect(tracker.list({ limit: 10 }).subagents[0]).toMatchObject({
-      createdAt: expect.any(String),
-      updatedAt: expect.any(String),
-      completedAt: expect.any(String),
+      createdAt: '2026-10-30T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:02.000Z',
+      completedAt: '2026-10-30T12:00:02.000Z',
     });
   });
 });
