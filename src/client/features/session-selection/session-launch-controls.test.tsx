@@ -96,9 +96,7 @@ describe('SessionLaunchControls', () => {
     keyboardOpen(trigger);
     keyboardSelect('Default');
     expect(onReasoningChange).toHaveBeenCalledWith(null);
-    const plan = mounted.container.querySelector<HTMLButtonElement>(
-      '[aria-label="Planning: Plan"]'
-    );
+    const plan = mounted.container.querySelector<HTMLButtonElement>('[aria-label="Planning: On"]');
     expect(plan?.disabled).toBe(false);
     expect(plan?.getAttribute('aria-description')).toContain('Turn Plan off to launch');
     expect(plan?.getAttribute('aria-pressed')).toBe('true');
@@ -132,7 +130,7 @@ describe('SessionLaunchControls', () => {
   it('toggles planning directly without opening a menu', () => {
     const mounted = mount();
     const trigger = mounted.container.querySelector<HTMLButtonElement>(
-      '[aria-label="Planning: Default"]'
+      '[aria-label="Planning: Off"]'
     );
     expect(trigger?.getAttribute('aria-description')).toBe('Plan mode off');
     expect(trigger?.getAttribute('aria-pressed')).toBe('false');
@@ -170,8 +168,7 @@ describe('SessionLaunchControls', () => {
     flushSync(() => retry?.click());
     expect(onRetry).toHaveBeenCalledOnce();
     expect(
-      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Planning: Default"]')
-        ?.disabled
+      mounted.container.querySelector<HTMLButtonElement>('[aria-label="Planning: Off"]')?.disabled
     ).toBe(true);
   });
 });

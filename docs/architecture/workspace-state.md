@@ -54,9 +54,13 @@ model, including when that provider is already selected. Hover, the row's arrow,
 or Right Arrow opens its models without changing the draft. Workspace/provider
 inheritance still applies when no explicit provider is selected.
 
-The sidebar creation form groups provider/model and thinking settings above an
-action row with attachments, PR updates and Plan. Action groups wrap together at
-narrow widths so individual icons do not fall onto their own row.
+The sidebar creation form keeps provider/model and thinking settings above a
+compact action row with attachments, workspace settings, Cancel and Launch.
+Workspace settings groups account selection, access, Plan and PR updates in a
+labeled popover. Its trigger marks active options and warns about unsupported
+selections after discovery completes. Access warnings include an icon and text;
+closing settings preserves the launch draft. Escape inside settings closes the
+popover without cancelling workspace creation.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
