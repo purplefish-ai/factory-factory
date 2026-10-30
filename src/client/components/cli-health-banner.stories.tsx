@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useArgs } from 'storybook/preview-api';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { CLIHealthBannerContent, collectIssues } from './cli-health-banner';
 
@@ -55,6 +56,34 @@ export const SignInRequired: Story = {
 export const UpdateAndWarning: Story = {
   args: {
     issues: collectIssues({ ...health, github: { isInstalled: true, isAuthenticated: false } }),
+  },
+};
+
+export const UpdateCompleted: Story = {
+  args: UpdateAndWarning.args,
+  render: function UpdateCompletedRender(args) {
+    const [, updateArgs] = useArgs();
+    return (
+      <CLIHealthBannerContent
+        {...args}
+        onUpgrade={(provider) => {
+          args.onUpgrade(provider);
+          updateArgs({
+            issues: collectIssues({
+              ...health,
+              claude: { ...health.claude, version: health.claude.latestVersion, isOutdated: false },
+              github: { isInstalled: true, isAuthenticated: false },
+            }),
+          });
+        }}
+      />
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Update Claude' }));
+    await expect(canvas.queryByRole('button', { name: 'Update Claude' })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('alert')).toHaveTextContent('GitHub sign-in required');
   },
 };
 

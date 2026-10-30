@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
-    useUtils: () => ({ admin: { checkCLIHealth: { setData: vi.fn() } } }),
+    useUtils: () => ({ admin: { checkCLIHealth: { setData: vi.fn(), cancel: vi.fn() } } }),
     admin: {
       upgradeProviderCLI: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       checkCLIHealth: {

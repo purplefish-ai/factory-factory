@@ -1,6 +1,10 @@
+import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExecFile = vi.hoisted(() => vi.fn());
+const mockAccess = vi.hoisted(() => vi.fn());
+const mockRealpath = vi.hoisted(() => vi.fn());
+const mockStat = vi.hoisted(() => vi.fn());
 const mockResolve = vi.hoisted(() => vi.fn());
 const mockGithubCheckHealth = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
@@ -12,6 +16,14 @@ const mockLogger = vi.hoisted(() => ({
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
+}));
+
+vi.mock('node:fs/promises', () => ({ access: mockAccess, realpath: mockRealpath, stat: mockStat }));
+
+vi.mock('@/backend/services/config.service', () => ({
+  configService: {
+    getChildProcessEnv: () => ({ PATH: ['/runtime/bin', '/secondary/bin'].join(delimiter) }),
+  },
 }));
 
 vi.mock('node:module', () => ({ createRequire: () => ({ resolve: mockResolve }) }));
@@ -32,7 +44,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { execFile } from 'node:child_process';
-import { cliHealthService } from './cli-health.service';
+import { type ClaudeCLIHealthStatus, cliHealthService } from './cli-health.service';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
 
@@ -41,6 +53,9 @@ describe('cliHealthService', () => {
     vi.clearAllMocks();
     cliHealthService.clearCache();
     vi.stubGlobal('fetch', vi.fn());
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockRealpath.mockReset();
+    mockStat.mockResolvedValue({ isFile: () => true });
     mockResolve.mockReturnValue(
       '/app/resources/app.asar/node_modules/@agentclientprotocol/codex-acp/dist/index.js'
     );
@@ -180,7 +195,13 @@ describe('cliHealthService', () => {
   it('upgrades provider CLI and returns refreshed health', async () => {
     mockExecFile.mockResolvedValue({ stdout: 'installed\n', stderr: '' });
     const refreshed = {
-      claude: { isInstalled: true, isAuthenticated: true, version: '1.0.0' },
+      claude: {
+        isInstalled: true,
+        isAuthenticated: true,
+        version: '1.0.0',
+        latestVersion: '1.0.0',
+        isOutdated: false,
+      },
       codex: { isInstalled: true, isAuthenticated: true, version: '0.5.0' },
       github: { isInstalled: true, isAuthenticated: true, version: '2.0.0' },
       allHealthy: true,
@@ -191,26 +212,216 @@ describe('cliHealthService', () => {
 
     expect(result.provider).toBe('CLAUDE');
     expect(result.packageName).toBe('@anthropic-ai/claude-code');
-    expect(result.command).toBe('npm install -g @anthropic-ai/claude-code');
+    expect(result.command).toBe('claude update');
     expect(result.output).toContain('installed');
     expect(result.health).toBe(refreshed);
     expect(checkHealthSpy).toHaveBeenCalledWith(true);
     expect(mockExecFile).toHaveBeenCalledWith(
-      'npm',
-      ['install', '-g', '@anthropic-ai/claude-code'],
+      'claude',
+      ['update'],
       expect.objectContaining({ timeout: expect.any(Number) })
     );
   });
 
+  it('updates the Claude executable used by health checks and clears the outdated status', async () => {
+    let installedVersion = '2.1.310';
+    mockExecFile.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'claude' && args[0] === 'update') {
+        installedVersion = '2.1.312';
+        return Promise.resolve({ stdout: 'Successfully updated', stderr: '' });
+      }
+      if (cmd === 'claude' && args[0] === '--version') {
+        return Promise.resolve({ stdout: `${installedVersion} (Claude Code)`, stderr: '' });
+      }
+      if (cmd === 'claude' && args[0] === 'auth') {
+        return Promise.resolve({ stdout: '{"loggedIn":true}', stderr: '' });
+      }
+      // A global package install can succeed without updating the active executable.
+      if (cmd === 'npm') {
+        return Promise.resolve({ stdout: 'installed', stderr: '' });
+      }
+      throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
+    });
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '2.1.312' }),
+    } as never);
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({ isInstalled: true });
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: true, isAuthenticated: true });
+    expect((await cliHealthService.checkHealth()).claude.isOutdated).toBe(true);
+
+    const result = await cliHealthService.upgradeProviderCLI('CLAUDE');
+
+    expect(result.health.claude).toMatchObject({
+      version: '2.1.312 (Claude Code)',
+      latestVersion: '2.1.312',
+      isOutdated: false,
+    });
+    expect((await cliHealthService.checkHealth()).claude.isOutdated).toBe(false);
+  });
+
+  it('reports an unsuccessful update when the active Claude remains outdated', async () => {
+    mockExecFile.mockResolvedValue({ stdout: 'Run brew upgrade claude-code', stderr: '' });
+    vi.spyOn(cliHealthService, 'checkHealth').mockResolvedValue({
+      claude: {
+        isInstalled: true,
+        version: '2.1.310',
+        latestVersion: '2.1.312',
+        isOutdated: true,
+      },
+      codex: { isInstalled: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    });
+
+    await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
+      /still outdated.*2\.1\.310.*2\.1\.312/
+    );
+    await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
+      'Run brew upgrade claude-code'
+    );
+  });
+
+  it.each([
+    {
+      name: 'Homebrew stable',
+      executable: '/opt/homebrew/Caskroom/claude-code/2.1.310/claude',
+      command: '/opt/homebrew/bin/brew',
+      args: ['upgrade', '--cask', 'claude-code'],
+    },
+    {
+      name: 'Homebrew latest on Intel',
+      executable: '/usr/local/Caskroom/claude-code@latest/2.1.310/claude',
+      command: '/usr/local/bin/brew',
+      args: ['upgrade', '--cask', 'claude-code@latest'],
+    },
+    {
+      name: 'WinGet',
+      executable:
+        'C:\\Users\\User\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\claude.exe',
+      command: 'winget',
+      args: [
+        'upgrade',
+        '--id',
+        'Anthropic.ClaudeCode',
+        '--exact',
+        '--silent',
+        '--disable-interactivity',
+      ],
+    },
+  ])(
+    'updates the active $name installation with its package manager',
+    async ({ executable, command, args: updateArgs }) => {
+      mockAccess.mockResolvedValue(undefined);
+      mockRealpath.mockResolvedValue(executable);
+      let installedVersion = '2.1.310';
+      mockExecFile.mockImplementation((cmd: string, args: string[]) => {
+        if (cmd === command && args.join(' ') === updateArgs.join(' ')) {
+          installedVersion = '2.1.312';
+          return Promise.resolve({ stdout: 'Updated package', stderr: '' });
+        }
+        if (cmd === 'claude') {
+          switch (args[0]) {
+            case '--version':
+              return Promise.resolve({ stdout: `${installedVersion} (Claude Code)`, stderr: '' });
+            case 'auth':
+              return Promise.resolve({ stdout: '{"loggedIn":true}', stderr: '' });
+            // Claude's own updater exits successfully without updating these installs.
+            case 'update':
+              return Promise.resolve({ stdout: 'Claude is up to date!', stderr: '' });
+          }
+        }
+        throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
+      });
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ version: '2.1.312' }),
+      } as never);
+      vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({ isInstalled: true });
+      mockGithubCheckHealth.mockResolvedValue({ isInstalled: true, isAuthenticated: true });
+
+      const result = await cliHealthService.upgradeProviderCLI('CLAUDE');
+
+      expect(result.health.claude.isOutdated).toBe(false);
+      expect(result.command).toBe(`${command} ${updateArgs.join(' ')}`);
+    }
+  );
+
+  it.each([{ isInstalled: true, version: '2.1.310' }, { isInstalled: false }])(
+    'rejects an update when the active version cannot be verified: %j',
+    async (claude) => {
+      mockExecFile.mockResolvedValue({ stdout: 'Updater finished', stderr: '' });
+      vi.spyOn(cliHealthService, 'checkHealth').mockResolvedValue({
+        claude,
+        codex: { isInstalled: true },
+        github: { isInstalled: true, isAuthenticated: true },
+        allHealthy: true,
+      });
+
+      await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
+        /could not be verified[\s\S]*Updater finished/
+      );
+    }
+  );
+
+  it.each([
+    { installed: 'invalid version', latest: '2.1.312' },
+    { installed: '2.1.312 (Claude Code)', latest: 'invalid version' },
+  ])('rejects malformed versions during verification: %j', async ({ installed, latest }) => {
+    mockExecFile.mockImplementation((_cmd: string, args: string[]) =>
+      Promise.resolve({
+        stdout: args[0] === '--version' ? installed : '{"loggedIn":true}',
+        stderr: '',
+      })
+    );
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: latest }),
+    } as never);
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({ isInstalled: true });
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: true, isAuthenticated: true });
+
+    await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
+      'could not be verified'
+    );
+  });
+
+  it('keeps updating native Claude when a later PATH entry is managed by Homebrew', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockRealpath.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.startsWith(join('/runtime/bin'))
+          ? '/home/user/.local/share/claude/versions/2.1.312'
+          : '/opt/homebrew/Caskroom/claude-code/2.1.310/claude'
+      )
+    );
+    mockExecFile.mockResolvedValue({ stdout: 'Updated native installation', stderr: '' });
+    vi.spyOn(cliHealthService, 'checkHealth').mockResolvedValue({
+      claude: {
+        isInstalled: true,
+        version: '2.1.312',
+        latestVersion: '2.1.312',
+        isOutdated: false,
+      },
+      codex: { isInstalled: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    });
+
+    const result = await cliHealthService.upgradeProviderCLI('CLAUDE');
+
+    expect(result.command).toBe('claude update');
+  });
+
   it('includes process stdout/stderr when CLI upgrade fails', async () => {
     mockExecFile.mockRejectedValue({
-      message: 'npm failed',
+      message: 'update failed',
       stderr: 'EACCES',
       stdout: 'partial output',
     });
 
     await expect(cliHealthService.upgradeProviderCLI('CLAUDE')).rejects.toThrow(
-      'Failed to upgrade Claude CLI via npm'
+      /Failed to upgrade Claude CLI via claude update[\s\S]*EACCES[\s\S]*partial output/
     );
   });
 
@@ -268,7 +479,13 @@ describe('cliHealthService', () => {
 
   it('keeps post-upgrade health when a cleared background refresh finishes later', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(0);
-    const healthy = { isInstalled: true, isAuthenticated: true };
+    const healthy: ClaudeCLIHealthStatus = {
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '2.1.312',
+      latestVersion: '2.1.312',
+      isOutdated: false,
+    };
     const checkClaude = vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue(healthy);
     vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue(healthy);
     mockGithubCheckHealth.mockResolvedValue(healthy);

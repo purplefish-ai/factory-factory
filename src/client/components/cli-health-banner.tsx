@@ -236,10 +236,11 @@ export function CLIHealthBanner() {
   );
   const utils = trpc.useUtils();
   const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
-    onSuccess: (result) => {
-      toast.success(result.message);
+    onSuccess: async (result) => {
+      // A health request started before the update must not restore old versions.
+      await utils.admin.checkCLIHealth.cancel();
       utils.admin.checkCLIHealth.setData({ forceRefresh: false }, result.health);
-      void refetch();
+      toast.success(result.message);
     },
     onError: (error) => {
       toast.error(error.message);

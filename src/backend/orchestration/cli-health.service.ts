@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
+import { resolveClaudeUpdateCommand } from '@/backend/lib/claude-cli-command';
 import { getBundledCodexCommand } from '@/backend/lib/codex-cli-command';
 import { toError } from '@/backend/lib/error-utils';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/services/github';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
@@ -86,8 +88,8 @@ class CLIHealthService {
         return undefined;
       }
 
-      const payload = (await response.json()) as { version?: unknown };
-      return typeof payload.version === 'string' ? payload.version : undefined;
+      const payload = z.object({ version: z.string() }).safeParse(await response.json());
+      return payload.success ? payload.data.version : undefined;
     } catch {
       return undefined;
     }
@@ -98,8 +100,8 @@ class CLIHealthService {
     packageName: string;
   }): Promise<{ latestVersion?: string; isOutdated?: boolean }> {
     const latestRaw = await this.fetchLatestNpmVersion(input.packageName);
-    const latestVersion = this.extractSemver(latestRaw) ?? latestRaw;
-    const installedVersion = this.extractSemver(input.installedVersion) ?? input.installedVersion;
+    const latestVersion = this.extractSemver(latestRaw);
+    const installedVersion = this.extractSemver(input.installedVersion);
 
     if (!(installedVersion && latestVersion)) {
       return { latestVersion };
@@ -118,22 +120,31 @@ class CLIHealthService {
       );
     }
     const packageName = CLAUDE_CLI_NPM_PACKAGE;
-    const args = ['install', '-g', packageName];
+    const { command, args } = await resolveClaudeUpdateCommand(configService.getChildProcessEnv());
 
     try {
-      const { stdout, stderr } = await execFileAsync('npm', args, {
+      // Use the same executable as the health check; a global npm install may
+      // update a different installation from the Claude resolved on PATH.
+      const { stdout, stderr } = await execFileAsync(command, args, {
         timeout: SERVICE_TIMEOUT_MS.cliUpgrade,
       });
+      const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
 
       // Invalidate cache and return refreshed health so callers can update UI immediately.
       this.clearCache();
       const health = await this.checkHealth(true);
+      if (health.claude.isOutdated !== false) {
+        const problem = health.claude.isOutdated ? 'is still outdated' : 'could not be verified';
+        throw new Error(
+          `Claude CLI ${problem} (installed ${health.claude.version ?? 'unknown'}; latest ${health.claude.latestVersion ?? 'unknown'}).\n${output}`
+        );
+      }
 
       return {
         provider,
         packageName,
-        command: `npm ${args.join(' ')}`,
-        output: [stdout.trim(), stderr.trim()].filter(Boolean).join('\n'),
+        command: `${command} ${args.join(' ')}`,
+        output,
         health,
       };
     } catch (error) {
@@ -145,7 +156,7 @@ class CLIHealthService {
       const stderr = typeof output.stderr === 'string' ? output.stderr : undefined;
       const stdout = typeof output.stdout === 'string' ? output.stdout : undefined;
       const details = [normalizedError.message, stderr, stdout].filter(Boolean).join('\n');
-      throw new Error(`Failed to upgrade Claude CLI via npm: ${details}`);
+      throw new Error(`Failed to upgrade Claude CLI via ${command} ${args.join(' ')}: ${details}`);
     }
   }
 
