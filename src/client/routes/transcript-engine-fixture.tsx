@@ -23,6 +23,26 @@ export function TranscriptEngineFixture() {
   return (
     <section>
       <div className="flex flex-wrap gap-2 p-2">
+        <button
+          type="button"
+          onClick={() => {
+            engine.cancelScroll();
+            const visible = engine.getVirtualItemForOffset(viewport.current?.scrollTop ?? 0);
+            setRows((items) =>
+              items.map((item, index) =>
+                index === (visible?.index ?? 1) - 1 ? { ...item, height: item.height + 200 } : item
+              )
+            );
+          }}
+        >
+          Grow preceding engine row
+        </button>
+        <button
+          type="button"
+          onClick={() => setRows((items) => [{ key: 999, height: 1200 }, ...items])}
+        >
+          Prepend giant engine row
+        </button>
         <button type="button" onClick={() => engine.scrollToEnd({ behavior: 'instant' })}>
           End command
         </button>
