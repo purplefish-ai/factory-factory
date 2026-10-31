@@ -575,7 +575,6 @@ export function InlineWorkspaceForm({
             </DropdownMenu>
           </div>
         </WorkspaceCreationOptions>
-        <DiscardWorkspaceDraft recovery={recovery} disabled={isBusy} onCancel={onCancel} />
       </CardContent>
     </Card>
   );
@@ -591,40 +590,4 @@ function DraftPersistenceWarning({ message }: { message: string | null }) {
       {message}
     </p>
   ) : null;
-}
-
-function DiscardWorkspaceDraft({
-  recovery,
-  disabled,
-  onCancel,
-}: {
-  recovery: ReturnType<typeof useInlineWorkspaceDraft>;
-  disabled: boolean;
-  onCancel: () => void;
-}) {
-  if (!(recovery.hasDraft || recovery.hasUnreadableDraft)) {
-    return null;
-  }
-  return (
-    <div className="flex justify-end">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 text-xs"
-        disabled={disabled}
-        onClick={() => {
-          void recovery
-            .discardDraft()
-            .then((discarded) => {
-              if (discarded) {
-                onCancel();
-              }
-            })
-            .catch(() => undefined);
-        }}
-      >
-        Discard draft
-      </Button>
-    </div>
-  );
 }
