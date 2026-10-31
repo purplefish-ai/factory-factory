@@ -1,40 +1,20 @@
+import logoUrl from '@/client/assets/logo.svg';
 import { cn } from '@/lib/utils';
 
 interface LogoIconProps {
   className?: string;
+  decorative?: boolean;
 }
 
-export function LogoIcon({ className }: LogoIconProps) {
+export function LogoIcon({ className, decorative = false }: LogoIconProps) {
   return (
-    <svg
-      viewBox="0 0 512 512"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <img
+      src={logoUrl}
+      alt={decorative ? '' : 'Factory Factory'}
+      width={512}
+      height={512}
       className={cn('size-8', className)}
-    >
-      <rect width="512" height="512" rx="96" fill="#0A0A0A" />
-      <text
-        x="70"
-        y="320"
-        fontFamily="'IBM Plex Mono', monospace"
-        fontWeight="600"
-        fontSize="120"
-        fill="#FFE500"
-      >
-        $
-      </text>
-      <text
-        x="175"
-        y="320"
-        fontFamily="'IBM Plex Mono', monospace"
-        fontWeight="600"
-        fontSize="120"
-        fill="#FAFAFA"
-      >
-        ff
-      </text>
-      <rect x="355" y="225" width="60" height="105" fill="#FAFAFA" />
-    </svg>
+    />
   );
 }
 
@@ -71,7 +51,7 @@ export function Logo({
 }: LogoProps) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      {showIcon && <LogoIcon className={iconClassName} />}
+      {showIcon && <LogoIcon className={iconClassName} decorative={showText} />}
       {showText && <LogoText className={textClassName} />}
     </div>
   );
