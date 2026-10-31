@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { slackConnectInputSchema, type SlackConnectionSummary } from '@/shared/slack-connection';
-import { slackConnectionAccessor } from '../resources/slack-connection.accessor';
+import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack-connection.accessor';
+import { slackConnectInputSchema } from '@/shared/slack-connection';
 
 const botIdentitySchema = z.object({
   ok: z.literal(true),
@@ -12,17 +12,6 @@ const botIdentitySchema = z.object({
 });
 const slackFailureSchema = z.object({ ok: z.literal(false), error: z.string() });
 type Crypto = { encrypt(value: string): string; decrypt(value: string): string };
-type Connection = Awaited<ReturnType<typeof slackConnectionAccessor.save>>;
-
-function summary(connection: Connection): SlackConnectionSummary {
-  return {
-    id: connection.id,
-    name: connection.name,
-    workspaceId: connection.externalId,
-    isEnabled: connection.isEnabled,
-    hasCredentials: Boolean(connection.credentialsEncrypted),
-  };
-}
 
 /** Tokens stay server-side. Provider errors are never propagated verbatim. */
 export class SlackConnectionService {
@@ -31,8 +20,8 @@ export class SlackConnectionService {
     private readonly request: typeof fetch = fetch
   ) {}
 
-  async list() {
-    return (await slackConnectionAccessor.list()).map(summary);
+  list() {
+    return slackConnectionAccessor.list();
   }
 
   async connect(input: unknown) {
@@ -43,7 +32,7 @@ export class SlackConnectionService {
       identity.team,
       this.crypto.encrypt(botToken)
     );
-    return summary(connection);
+    return connection;
   }
 
   async test(id: string) {
@@ -63,7 +52,7 @@ export class SlackConnectionService {
         'Could not decrypt Slack credentials. Reconnect this workspace.'
       );
     }
-    const identity = await this.identify(token);
+    const identity = await this.identify(token, 'PRECONDITION_FAILED');
     if (identity.team_id !== connection.externalId) {
       throw new ApplicationError(
         'PRECONDITION_FAILED',
@@ -81,7 +70,10 @@ export class SlackConnectionService {
     return { disconnected: true };
   }
 
-  private async identify(token: string) {
+  private async identify(
+    token: string,
+    identityError: 'INVALID_INPUT' | 'PRECONDITION_FAILED' = 'INVALID_INPUT'
+  ) {
     let response: Response;
     let body: unknown;
     try {
@@ -109,21 +101,21 @@ export class SlackConnectionService {
       body = await response.json();
     } catch {
       throw new ApplicationError(
-        'INVALID_INPUT',
-        'Slack returned an invalid bot identity. Use a workspace bot token.'
+        'PRECONDITION_FAILED',
+        'Could not reach Slack. Check your connection and try again.'
       );
     }
     const failure = slackFailureSchema.safeParse(body);
     if (failure.success) {
       throw new ApplicationError(
-        'INVALID_INPUT',
+        identityError,
         'Slack rejected this bot token. Check that it is valid and has not been revoked.'
       );
     }
     const identity = botIdentitySchema.safeParse(body);
     if (!identity.success) {
       throw new ApplicationError(
-        'INVALID_INPUT',
+        identityError,
         'Slack returned an invalid bot identity. Use a workspace bot token.'
       );
     }

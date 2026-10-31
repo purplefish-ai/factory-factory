@@ -66,6 +66,14 @@ it('reconnects one workspace without creating duplicate connection rows', async 
   expect(await db.prisma.agentConnection.count()).toBe(1);
 });
 
+it('exposes no ciphertext from the list accessor', async () => {
+  const saved = await service.connect({ botToken: token });
+  const { slackConnectionAccessor } = await vi.importActual<
+    typeof import('@/backend/services/agent-definition/resources/slack-connection.accessor')
+  >('@/backend/services/agent-definition/resources/slack-connection.accessor');
+  expect(await slackConnectionAccessor.list()).toEqual([saved]);
+});
+
 it('does not persist tokens Slack rejects and never echoes untrusted errors', async () => {
   request.mockResolvedValue(new Response(JSON.stringify({ ok: false, error: token })));
   await expect(service.connect({ botToken: token })).rejects.toThrow(
@@ -106,8 +114,39 @@ it('sanitizes transport failures that might contain credentials', async () => {
 });
 
 it('rejects user tokens before sending a request', async () => {
-  await expect(service.connect({ botToken: 'xoxp-user-secret' })).rejects.toThrow();
+  await expect(service.connect({ botToken: 'xoxp-user-secret' })).rejects.toThrow(
+    'Enter a Slack bot token'
+  );
+  expect(request).not.toHaveBeenCalled();
   expect(await db.prisma.agentConnection.count()).toBe(0);
+});
+
+it('accepts rotated bot access tokens', async () => {
+  expect(await service.connect({ botToken: 'xoxe.xoxb-1-test-token' })).toMatchObject({
+    hasCredentials: true,
+  });
+});
+
+it('treats rejected saved tokens as a failed precondition', async () => {
+  const saved = await service.connect({ botToken: token });
+  request.mockResolvedValue(new Response(JSON.stringify({ ok: false, error: 'token_revoked' })));
+  await expect(service.test(saved.id)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+});
+
+it('sanitizes a dropped response body as a transport failure', async () => {
+  request.mockResolvedValue(
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error(token));
+        },
+      })
+    )
+  );
+  await expect(service.connect({ botToken: token })).rejects.toMatchObject({
+    code: 'PRECONDITION_FAILED',
+    message: expect.stringContaining('Could not reach Slack'),
+  });
 });
 
 it('reports rate limiting even when Slack returns a non-JSON response', async () => {

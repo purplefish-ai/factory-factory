@@ -4,7 +4,10 @@ export const slackConnectInputSchema = z.strictObject({
   botToken: z
     .string()
     .trim()
-    .regex(/^xoxb-[A-Za-z0-9-]+$/, 'Enter a Slack bot token starting with xoxb-')
+    .regex(
+      /^(?:xoxe\.)?xoxb-[A-Za-z0-9-]+$/,
+      'Enter a Slack bot token starting with xoxb- or xoxe.xoxb-'
+    )
     .max(4096),
 });
 export const slackConnectionSummarySchema = z.strictObject({

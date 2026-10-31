@@ -268,12 +268,14 @@ separate change.
 
 - A project owns agent definitions. Each definition stores task instructions,
   versioned execution configuration, and an enabled flag. Definitions have no
-  mandatory schedule and default to paused.
+  mandatory schedule and default to paused. Explicit model or reasoning-effort
+  settings require a provider; model compatibility uses the same shared
+  normalization as interactive session launch.
 - Connections identify reusable Slack workspaces or GitHub installations, unique
   by provider and external ID. Optional credentials belong in
   `credentialsEncrypted`, using the existing encryption service; never put
-  credentials in trigger configuration or run snapshots. Connections are not yet
-  returned by the public connection API.
+  credentials in trigger configuration or run snapshots. Public connection APIs
+  return only metadata and credential presence.
 - A definition owns any number of independently enabled triggers. Schedule,
   Slack-message, and GitHub-issue triggers retain the user's natural-language
   `description` alongside resolved, versioned `config`. Optional
@@ -322,21 +324,23 @@ workspace deletion rather than relying exclusively on workspace-owned PR rows.
 ### Slack credentials
 
 Settings > General Settings > Slack accepts an existing Slack Bot User OAuth
-Token (`xoxb-`). Connect Slack validates it against Slack's `auth.test`
-endpoint, requires a bot identity and workspace ID, and encrypts the token with
-the existing AES-256-GCM encryption service before upserting an
-`AgentConnection`. Connecting the same workspace replaces its token without
-changing the connection ID or trigger references. Multiple workspaces can be
-connected.
+Token (`xoxb-` or a rotating `xoxe.xoxb-` access token). Rotating tokens require
+manual renewal when they expire; automatic OAuth refresh is not implemented.
+Connect Slack validates it against Slack's `auth.test` endpoint, requires a bot
+identity and workspace ID, and encrypts the token with the existing AES-256-GCM
+encryption service before upserting an `AgentConnection`. Connecting the same
+workspace replaces its token without changing the connection ID or trigger
+references. Multiple workspaces can be connected.
 
 The trusted-local `slack` tRPC router supports list, connect, test and
 disconnect. Its summaries expose workspace name/ID, enabled state and credential
-presence; neither plaintext nor encrypted tokens cross read responses. Provider
-responses are Zod-validated, outbound validation has a ten-second timeout,
-redirects are rejected, and provider/transport errors are sanitized rather than
-echoed. Disconnect clears credentials and disables the connection while
-retaining its identity and trigger references. It does not revoke the Slack
-token.
+presence; neither plaintext nor encrypted tokens cross read responses. List
+reads compute credential presence without loading ciphertext. Only the internal
+credential lookup loads the token for decryption. Provider responses are
+Zod-validated, outbound validation has a ten-second timeout, redirects are
+rejected, and provider/transport errors are sanitized rather than echoed.
+Disconnect clears credentials and disables the connection while retaining its
+identity and trigger references. It does not revoke the Slack token.
 
 The UI masks token entry, keeps it out of browser persistence, and clears it
 after a successful save. Existing tokens are never prefilled. Test connection

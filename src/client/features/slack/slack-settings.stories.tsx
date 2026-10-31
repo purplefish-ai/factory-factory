@@ -11,7 +11,7 @@ const meta = {
     onTokenChange: () => undefined,
     onConnect: () => undefined,
     onTest: () => undefined,
-    onDisconnect: () => undefined,
+    onDisconnect: () => Promise.resolve(true),
   },
 } satisfies Meta<typeof SlackConnectionsView>;
 export default meta;
@@ -50,6 +50,7 @@ export const ConnectionError: Story = {
   },
 };
 export const Saving: Story = { args: { token: 'xoxb-example', busy: true } };
+export const RotatingToken: Story = { args: { token: 'xoxe.xoxb-1-example' } };
 export const Interactive: Story = {
   render: function Preview(args) {
     const [token, setToken] = useState('');

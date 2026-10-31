@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { SlackConnectionSummary } from '@/shared/slack-connection';
+import { slackConnectInputSchema, type SlackConnectionSummary } from '@/shared/slack-connection';
 
 interface SlackConnectionsViewProps {
   connections?: readonly SlackConnectionSummary[];
@@ -17,7 +17,7 @@ interface SlackConnectionsViewProps {
   onTokenChange: (value: string) => void;
   onConnect: () => void;
   onTest: (id: string) => void;
-  onDisconnect: (id: string) => void;
+  onDisconnect: (id: string) => Promise<boolean>;
 }
 
 export function SlackConnectionsView(props: SlackConnectionsViewProps) {
@@ -104,11 +104,17 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
             <p id="slack-token-help" className="text-xs text-muted-foreground">
               Find the Bot User OAuth Token in your Slack app’s OAuth &amp; Permissions settings.
               Reconnecting the same workspace replaces its saved token.
+              {props.token.trim().startsWith('xoxe.xoxb-') &&
+                ' Rotating tokens need manual renewal; automatic refresh is not supported.'}
             </p>
           </div>
           <Button
             type="submit"
-            disabled={props.busy || props.loading || !props.token.trim().startsWith('xoxb-')}
+            disabled={
+              props.busy ||
+              props.loading ||
+              !slackConnectInputSchema.safeParse({ botToken: props.token }).success
+            }
           >
             Connect Slack
           </Button>
@@ -124,14 +130,20 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
             }
           }}
           title="Disconnect Slack?"
-          description="Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app."
+          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app.${props.error ? ` ${props.error}` : ''}`}
           confirmText="Disconnect Slack"
           variant="destructive"
           isPending={props.busy}
           onConfirm={() => {
             if (disconnectId) {
-              props.onDisconnect(disconnectId);
-              setDisconnectId(undefined);
+              void props.onDisconnect(disconnectId).then(
+                (succeeded) => {
+                  if (succeeded) {
+                    setDisconnectId(undefined);
+                  }
+                },
+                () => undefined
+              );
             }
           }}
         />
@@ -154,18 +166,25 @@ export function SlackSettings() {
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
+    let succeeded = false;
     try {
       setNotice(await operation());
-      const refreshed = await connections.refetch();
-      if (refreshed.error) {
-        setError('The change succeeded, but connections could not be refreshed. Reload Settings.');
-      }
+      succeeded = true;
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update Slack connection.');
     } finally {
+      try {
+        const refreshed = await connections.refetch();
+        if (refreshed.error) {
+          setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
+        }
+      } catch {
+        setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
+      }
       setBusy(false);
       connect.reset();
     }
+    return succeeded;
   }
 
   return (
@@ -191,7 +210,7 @@ export function SlackSettings() {
         });
       }}
       onDisconnect={(id) => {
-        void perform(async () => {
+        return perform(async () => {
           await disconnect.mutateAsync({ id });
           return 'Slack credentials removed.';
         });

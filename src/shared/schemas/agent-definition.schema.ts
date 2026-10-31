@@ -6,6 +6,7 @@ import {
   PeriodicTaskCadence,
   SessionProvider,
 } from '@/shared/core/enums';
+import { normalizeSessionModelForProvider } from '@/shared/session-model';
 
 const identifier = z.string().trim().min(1);
 const instructions = z.string().trim().min(1);
@@ -14,12 +15,33 @@ export const agentConnectionProviderSchema = z.enum(AgentConnectionProvider);
 export const agentTriggerTypeSchema = z.enum(AgentTriggerType);
 export const agentRunStatusSchema = z.enum(AgentRunStatus);
 
-export const agentExecutionConfigSchema = z.strictObject({
-  version: z.literal(1),
-  provider: z.enum(SessionProvider).optional(),
-  model: identifier.optional(),
-  reasoningEffort: identifier.optional(),
-});
+export const agentExecutionConfigSchema = z
+  .strictObject({
+    version: z.literal(1),
+    provider: z.enum(SessionProvider).optional(),
+    model: identifier.optional(),
+    reasoningEffort: identifier.optional(),
+  })
+  .superRefine((config, ctx) => {
+    if (!config.provider && (config.model || config.reasoningEffort)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['provider'],
+        message: 'Choose a provider when setting a model or reasoning effort',
+      });
+    }
+    if (
+      config.provider &&
+      config.model &&
+      !normalizeSessionModelForProvider(config.model, config.provider)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['model'],
+        message: 'Model is not compatible with the selected provider',
+      });
+    }
+  });
 
 export const agentDefinitionInputSchema = z.strictObject({
   name: identifier,

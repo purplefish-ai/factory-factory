@@ -35,6 +35,8 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   api.connections = [];
   api.connect.mockReset().mockResolvedValue({ name: 'Purplefish' });
+  api.test.mockReset().mockResolvedValue({ valid: true, workspaceName: 'Purplefish' });
+  api.disconnect.mockReset().mockResolvedValue({ disconnected: true });
   api.refetch.mockReset().mockResolvedValue({});
   const container = document.createElement('div');
   document.body.append(container);
@@ -50,11 +52,11 @@ function mount() {
 function tokenInput() {
   return document.querySelector('input') as HTMLInputElement;
 }
-function enterToken() {
+function enterToken(value = 'xoxb-test-token') {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
       tokenInput(),
-      'xoxb-test-token'
+      value
     );
     tokenInput().dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -83,7 +85,7 @@ it('preserves the draft and shows a connection error on failed save', async () =
   expect(tokenInput().value).toBe('xoxb-test-token');
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('Slack rejected');
 });
-it('shows saved connection status without prefilling a token and confirms disconnect', () => {
+function savedConnection() {
   api.connections = [
     {
       id: 'slack-1',
@@ -94,13 +96,89 @@ it('shows saved connection status without prefilling a token and confirms discon
     },
   ];
   mount();
+}
+function button(text: string) {
+  const found = [...document.querySelectorAll('button')].find(
+    (button) => button.textContent === text
+  );
+  if (!found) {
+    throw new Error(`Missing button: ${text}`);
+  }
+  return found;
+}
+
+it('shows saved status without prefilling a token and waits for confirmed disconnect', async () => {
+  let finish: () => void = () => undefined;
+  api.disconnect.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      })
+  );
+  savedConnection();
   expect(tokenInput().value).toBe('');
   expect(document.body.textContent).toContain('Purplefish');
-  const disconnect = [...document.querySelectorAll('button')].find(
-    (button) => button.textContent === 'Disconnect'
-  );
-  act(() => disconnect?.click());
+  act(() => button('Disconnect').click());
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
     'Remove the saved bot token'
   );
+  act(() => button('Disconnect Slack').click());
+  expect(api.disconnect).toHaveBeenCalledWith({ id: 'slack-1' });
+  expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(
+    [...document.querySelectorAll('[role="alertdialog"] button')].every(
+      (button) => (button as HTMLButtonElement).disabled
+    )
+  ).toBe(true);
+  await act(async () => {
+    finish();
+    await Promise.resolve();
+  });
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(document.body.textContent).toContain('Slack credentials removed');
+});
+
+it('tests a saved connection and displays the result', async () => {
+  savedConnection();
+  await act(async () => {
+    button('Test connection').click();
+    await Promise.resolve();
+  });
+  expect(api.test).toHaveBeenCalledWith({ id: 'slack-1' });
+  expect(document.body.textContent).toContain('Connected to Purplefish');
+});
+
+it('refreshes stale connections after a failed operation', async () => {
+  api.test.mockRejectedValue(new Error('Connection was removed'));
+  api.refetch.mockImplementation(() => {
+    api.connections = [];
+    return Promise.resolve({});
+  });
+  savedConnection();
+  await act(async () => {
+    button('Test connection').click();
+    await Promise.resolve();
+  });
+  expect(document.body.textContent).toContain('Connection was removed');
+  expect(document.body.textContent).not.toContain('Purplefish');
+});
+
+it('allows rotated bot token submission', () => {
+  mount();
+  enterToken('xoxe.xoxb-1-test-token');
+  expect(button('Connect Slack').disabled).toBe(false);
+});
+
+it('keeps a failed disconnect open with its error', async () => {
+  api.disconnect.mockRejectedValue(new Error('Could not disconnect'));
+  savedConnection();
+  act(() => button('Disconnect').click());
+  await act(async () => {
+    button('Disconnect Slack').click();
+    await Promise.resolve();
+  });
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    'Could not disconnect'
+  );
+  expect(button('Disconnect Slack').disabled).toBe(false);
 });
