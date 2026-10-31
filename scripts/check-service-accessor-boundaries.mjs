@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  slackConnectionAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/slack-connection.accessor',
+  },
   codexAccountBackupAccessor: {
     owner: 'codex-accounts',
     module: 'src/backend/services/codex-accounts/resources/codex-account-backup.accessor',

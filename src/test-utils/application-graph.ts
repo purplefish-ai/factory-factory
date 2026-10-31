@@ -111,6 +111,14 @@ vi.mock('@/backend/services/config.service', () => ({
   configService: { getDebugConfig: () => ({ chatWebSocket: false }) },
 }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
+vi.mock('@/backend/services/agent-definition', () => ({
+  slackConnectionService: {
+    list: vi.fn(async () => []),
+    connect: vi.fn(),
+    test: vi.fn(),
+    disconnect: vi.fn(),
+  },
+}));
 vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/search', () => ({ metadataSearchService: { search: vi.fn() } }));
 vi.mock('@/backend/services/github', () => ({
@@ -283,6 +291,7 @@ import {
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
+import { slackConnectionService } from '@/backend/services/agent-definition';
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
@@ -459,6 +468,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     updateProjectSettings: vi.fn(),
     renameWorkspace: vi.fn(),
     cryptoService,
+    slackConnectionService,
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     metadataSearchService,

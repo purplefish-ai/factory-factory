@@ -302,6 +302,7 @@ export type ProjectWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Project"> | Date | string
   workspaces?: Prisma.WorkspaceListRelationFilter
   periodicTasks?: Prisma.PeriodicTaskListRelationFilter
+  agentDefinitions?: Prisma.AgentDefinitionListRelationFilter
 }
 
 export type ProjectOrderByWithRelationInput = {
@@ -323,6 +324,7 @@ export type ProjectOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   workspaces?: Prisma.WorkspaceOrderByRelationAggregateInput
   periodicTasks?: Prisma.PeriodicTaskOrderByRelationAggregateInput
+  agentDefinitions?: Prisma.AgentDefinitionOrderByRelationAggregateInput
 }
 
 export type ProjectWhereUniqueInput = Prisma.AtLeast<{
@@ -347,6 +349,7 @@ export type ProjectWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"Project"> | Date | string
   workspaces?: Prisma.WorkspaceListRelationFilter
   periodicTasks?: Prisma.PeriodicTaskListRelationFilter
+  agentDefinitions?: Prisma.AgentDefinitionListRelationFilter
 }, "id" | "slug">
 
 export type ProjectOrderByWithAggregationInput = {
@@ -414,6 +417,7 @@ export type ProjectCreateInput = {
   updatedAt?: Date | string
   workspaces?: Prisma.WorkspaceCreateNestedManyWithoutProjectInput
   periodicTasks?: Prisma.PeriodicTaskCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectUncheckedCreateInput = {
@@ -435,6 +439,7 @@ export type ProjectUncheckedCreateInput = {
   updatedAt?: Date | string
   workspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutProjectInput
   periodicTasks?: Prisma.PeriodicTaskUncheckedCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectUpdateInput = {
@@ -456,6 +461,7 @@ export type ProjectUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspaces?: Prisma.WorkspaceUpdateManyWithoutProjectNestedInput
   periodicTasks?: Prisma.PeriodicTaskUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUpdateManyWithoutProjectNestedInput
 }
 
 export type ProjectUncheckedUpdateInput = {
@@ -477,6 +483,7 @@ export type ProjectUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutProjectNestedInput
   periodicTasks?: Prisma.PeriodicTaskUncheckedUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedUpdateManyWithoutProjectNestedInput
 }
 
 export type ProjectCreateManyInput = {
@@ -646,6 +653,20 @@ export type ProjectUpdateOneRequiredWithoutWorkspacesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.ProjectUpdateToOneWithWhereWithoutWorkspacesInput, Prisma.ProjectUpdateWithoutWorkspacesInput>, Prisma.ProjectUncheckedUpdateWithoutWorkspacesInput>
 }
 
+export type ProjectCreateNestedOneWithoutAgentDefinitionsInput = {
+  create?: Prisma.XOR<Prisma.ProjectCreateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedCreateWithoutAgentDefinitionsInput>
+  connectOrCreate?: Prisma.ProjectCreateOrConnectWithoutAgentDefinitionsInput
+  connect?: Prisma.ProjectWhereUniqueInput
+}
+
+export type ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput = {
+  create?: Prisma.XOR<Prisma.ProjectCreateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedCreateWithoutAgentDefinitionsInput>
+  connectOrCreate?: Prisma.ProjectCreateOrConnectWithoutAgentDefinitionsInput
+  upsert?: Prisma.ProjectUpsertWithoutAgentDefinitionsInput
+  connect?: Prisma.ProjectWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.ProjectUpdateToOneWithWhereWithoutAgentDefinitionsInput, Prisma.ProjectUpdateWithoutAgentDefinitionsInput>, Prisma.ProjectUncheckedUpdateWithoutAgentDefinitionsInput>
+}
+
 export type ProjectCreateNestedOneWithoutPeriodicTasksInput = {
   create?: Prisma.XOR<Prisma.ProjectCreateWithoutPeriodicTasksInput, Prisma.ProjectUncheckedCreateWithoutPeriodicTasksInput>
   connectOrCreate?: Prisma.ProjectCreateOrConnectWithoutPeriodicTasksInput
@@ -678,6 +699,7 @@ export type ProjectCreateWithoutWorkspacesInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   periodicTasks?: Prisma.PeriodicTaskCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectUncheckedCreateWithoutWorkspacesInput = {
@@ -698,6 +720,7 @@ export type ProjectUncheckedCreateWithoutWorkspacesInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   periodicTasks?: Prisma.PeriodicTaskUncheckedCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectCreateOrConnectWithoutWorkspacesInput = {
@@ -734,6 +757,7 @@ export type ProjectUpdateWithoutWorkspacesInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   periodicTasks?: Prisma.PeriodicTaskUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUpdateManyWithoutProjectNestedInput
 }
 
 export type ProjectUncheckedUpdateWithoutWorkspacesInput = {
@@ -753,6 +777,107 @@ export type ProjectUncheckedUpdateWithoutWorkspacesInput = {
   startupScriptTimeout?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  periodicTasks?: Prisma.PeriodicTaskUncheckedUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedUpdateManyWithoutProjectNestedInput
+}
+
+export type ProjectCreateWithoutAgentDefinitionsInput = {
+  id?: string
+  name: string
+  slug: string
+  repoPath: string
+  worktreeBasePath: string
+  defaultBranch?: string
+  githubOwner?: string | null
+  githubRepo?: string | null
+  isArchived?: boolean
+  issueProvider?: $Enums.IssueProvider
+  issueTrackerConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  startupScriptCommand?: string | null
+  startupScriptPath?: string | null
+  startupScriptTimeout?: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  workspaces?: Prisma.WorkspaceCreateNestedManyWithoutProjectInput
+  periodicTasks?: Prisma.PeriodicTaskCreateNestedManyWithoutProjectInput
+}
+
+export type ProjectUncheckedCreateWithoutAgentDefinitionsInput = {
+  id?: string
+  name: string
+  slug: string
+  repoPath: string
+  worktreeBasePath: string
+  defaultBranch?: string
+  githubOwner?: string | null
+  githubRepo?: string | null
+  isArchived?: boolean
+  issueProvider?: $Enums.IssueProvider
+  issueTrackerConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  startupScriptCommand?: string | null
+  startupScriptPath?: string | null
+  startupScriptTimeout?: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  workspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutProjectInput
+  periodicTasks?: Prisma.PeriodicTaskUncheckedCreateNestedManyWithoutProjectInput
+}
+
+export type ProjectCreateOrConnectWithoutAgentDefinitionsInput = {
+  where: Prisma.ProjectWhereUniqueInput
+  create: Prisma.XOR<Prisma.ProjectCreateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedCreateWithoutAgentDefinitionsInput>
+}
+
+export type ProjectUpsertWithoutAgentDefinitionsInput = {
+  update: Prisma.XOR<Prisma.ProjectUpdateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedUpdateWithoutAgentDefinitionsInput>
+  create: Prisma.XOR<Prisma.ProjectCreateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedCreateWithoutAgentDefinitionsInput>
+  where?: Prisma.ProjectWhereInput
+}
+
+export type ProjectUpdateToOneWithWhereWithoutAgentDefinitionsInput = {
+  where?: Prisma.ProjectWhereInput
+  data: Prisma.XOR<Prisma.ProjectUpdateWithoutAgentDefinitionsInput, Prisma.ProjectUncheckedUpdateWithoutAgentDefinitionsInput>
+}
+
+export type ProjectUpdateWithoutAgentDefinitionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  slug?: Prisma.StringFieldUpdateOperationsInput | string
+  repoPath?: Prisma.StringFieldUpdateOperationsInput | string
+  worktreeBasePath?: Prisma.StringFieldUpdateOperationsInput | string
+  defaultBranch?: Prisma.StringFieldUpdateOperationsInput | string
+  githubOwner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  githubRepo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isArchived?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  issueProvider?: Prisma.EnumIssueProviderFieldUpdateOperationsInput | $Enums.IssueProvider
+  issueTrackerConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  startupScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  startupScriptPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  startupScriptTimeout?: Prisma.IntFieldUpdateOperationsInput | number
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  workspaces?: Prisma.WorkspaceUpdateManyWithoutProjectNestedInput
+  periodicTasks?: Prisma.PeriodicTaskUpdateManyWithoutProjectNestedInput
+}
+
+export type ProjectUncheckedUpdateWithoutAgentDefinitionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  slug?: Prisma.StringFieldUpdateOperationsInput | string
+  repoPath?: Prisma.StringFieldUpdateOperationsInput | string
+  worktreeBasePath?: Prisma.StringFieldUpdateOperationsInput | string
+  defaultBranch?: Prisma.StringFieldUpdateOperationsInput | string
+  githubOwner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  githubRepo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isArchived?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  issueProvider?: Prisma.EnumIssueProviderFieldUpdateOperationsInput | $Enums.IssueProvider
+  issueTrackerConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  startupScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  startupScriptPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  startupScriptTimeout?: Prisma.IntFieldUpdateOperationsInput | number
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  workspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutProjectNestedInput
   periodicTasks?: Prisma.PeriodicTaskUncheckedUpdateManyWithoutProjectNestedInput
 }
 
@@ -774,6 +899,7 @@ export type ProjectCreateWithoutPeriodicTasksInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   workspaces?: Prisma.WorkspaceCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectUncheckedCreateWithoutPeriodicTasksInput = {
@@ -794,6 +920,7 @@ export type ProjectUncheckedCreateWithoutPeriodicTasksInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   workspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutProjectInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedCreateNestedManyWithoutProjectInput
 }
 
 export type ProjectCreateOrConnectWithoutPeriodicTasksInput = {
@@ -830,6 +957,7 @@ export type ProjectUpdateWithoutPeriodicTasksInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspaces?: Prisma.WorkspaceUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUpdateManyWithoutProjectNestedInput
 }
 
 export type ProjectUncheckedUpdateWithoutPeriodicTasksInput = {
@@ -850,6 +978,7 @@ export type ProjectUncheckedUpdateWithoutPeriodicTasksInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutProjectNestedInput
+  agentDefinitions?: Prisma.AgentDefinitionUncheckedUpdateManyWithoutProjectNestedInput
 }
 
 
@@ -860,11 +989,13 @@ export type ProjectUncheckedUpdateWithoutPeriodicTasksInput = {
 export type ProjectCountOutputType = {
   workspaces: number
   periodicTasks: number
+  agentDefinitions: number
 }
 
 export type ProjectCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspaces?: boolean | ProjectCountOutputTypeCountWorkspacesArgs
   periodicTasks?: boolean | ProjectCountOutputTypeCountPeriodicTasksArgs
+  agentDefinitions?: boolean | ProjectCountOutputTypeCountAgentDefinitionsArgs
 }
 
 /**
@@ -891,6 +1022,13 @@ export type ProjectCountOutputTypeCountPeriodicTasksArgs<ExtArgs extends runtime
   where?: Prisma.PeriodicTaskWhereInput
 }
 
+/**
+ * ProjectCountOutputType without action
+ */
+export type ProjectCountOutputTypeCountAgentDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AgentDefinitionWhereInput
+}
+
 
 export type ProjectSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -911,6 +1049,7 @@ export type ProjectSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   updatedAt?: boolean
   workspaces?: boolean | Prisma.Project$workspacesArgs<ExtArgs>
   periodicTasks?: boolean | Prisma.Project$periodicTasksArgs<ExtArgs>
+  agentDefinitions?: boolean | Prisma.Project$agentDefinitionsArgs<ExtArgs>
   _count?: boolean | Prisma.ProjectCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["project"]>
 
@@ -975,6 +1114,7 @@ export type ProjectOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
 export type ProjectInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspaces?: boolean | Prisma.Project$workspacesArgs<ExtArgs>
   periodicTasks?: boolean | Prisma.Project$periodicTasksArgs<ExtArgs>
+  agentDefinitions?: boolean | Prisma.Project$agentDefinitionsArgs<ExtArgs>
   _count?: boolean | Prisma.ProjectCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type ProjectIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -985,6 +1125,7 @@ export type $ProjectPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
   objects: {
     workspaces: Prisma.$WorkspacePayload<ExtArgs>[]
     periodicTasks: Prisma.$PeriodicTaskPayload<ExtArgs>[]
+    agentDefinitions: Prisma.$AgentDefinitionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1399,6 +1540,7 @@ export interface Prisma__ProjectClient<T, Null = never, ExtArgs extends runtime.
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspaces<T extends Prisma.Project$workspacesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Project$workspacesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   periodicTasks<T extends Prisma.Project$periodicTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Project$periodicTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  agentDefinitions<T extends Prisma.Project$agentDefinitionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Project$agentDefinitionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1880,6 +2022,30 @@ export type Project$periodicTasksArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   distinct?: Prisma.PeriodicTaskScalarFieldEnum | Prisma.PeriodicTaskScalarFieldEnum[]
+}
+
+/**
+ * Project.agentDefinitions
+ */
+export type Project$agentDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentDefinition
+   */
+  select?: Prisma.AgentDefinitionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentDefinition
+   */
+  omit?: Prisma.AgentDefinitionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentDefinitionInclude<ExtArgs> | null
+  where?: Prisma.AgentDefinitionWhereInput
+  orderBy?: Prisma.AgentDefinitionOrderByWithRelationInput | Prisma.AgentDefinitionOrderByWithRelationInput[]
+  cursor?: Prisma.AgentDefinitionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AgentDefinitionScalarFieldEnum | Prisma.AgentDefinitionScalarFieldEnum[]
 }
 
 /**

@@ -257,6 +257,98 @@ that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 
+## Event-triggered agent data model
+
+The agent-centered persistence foundation lives in `AgentDefinition`,
+`AgentConnection`, `AgentTrigger`, and `AgentRun`, owned by the
+`agent-definition` capsule. It is additive: existing `PeriodicTask` definitions,
+executions, polling, and UI remain authoritative for scheduled agents. No
+definitions are copied into the new tables. Migrating the scheduler is a
+separate change.
+
+- A project owns agent definitions. Each definition stores task instructions,
+  versioned execution configuration, and an enabled flag. Definitions have no
+  mandatory schedule and default to paused.
+- Connections identify reusable Slack workspaces or GitHub installations, unique
+  by provider and external ID. Optional credentials belong in
+  `credentialsEncrypted`, using the existing encryption service; never put
+  credentials in trigger configuration or run snapshots. Connections are not yet
+  returned by the public connection API.
+- A definition owns any number of independently enabled triggers. Schedule,
+  Slack-message, and GitHub-issue triggers retain the user's natural-language
+  `description` alongside resolved, versioned `config`. Optional
+  `filterInstructions` are separate from the agent's task instructions. Triggers
+  default to paused. Future admission must check the definition, trigger,
+  connection, and project state.
+- Runs have an agent-scoped unique `idempotencyKey`, optional trigger and
+  workspace links, status, lifecycle timestamps, error text, and frozen
+  definition/trigger snapshots. Their input is normalized source context rather
+  than arbitrary provider JSON. A null trigger supports manual runs. One
+  workspace belongs to at most one run. A queued row is a reservation, not
+  evidence that an agent started.
+
+The public contracts are exported from `@/backend/services/agent-definition`;
+backend and client-neutral schemas live in
+`src/shared/schemas/agent-definition.schema.ts`. Future writers must validate
+JSON configuration, run inputs, and snapshots with these schemas. Schedule
+triggers must have no connection; Slack and GitHub triggers require the matching
+provider connection. JSON schemas validate shape, not relational state: the
+future persistence boundary must also check that a referenced connection has the
+expected provider and that a linked workspace belongs to the definition's
+project. Provider event adapters must resolve channel/repository IDs within that
+installation before matching.
+
+Database constraints prevent duplicate installation identities, duplicate run
+keys within an agent, and runs referencing another agent's trigger. A connection
+with configured triggers cannot be deleted. A trigger with run history must be
+paused rather than deleted. Deleting a definition cascades its triggers and run
+history but retains its workspaces. Deleting a workspace clears its run link
+without deleting run history. Editing definitions or triggers does not rewrite
+stored snapshots; future run writers must keep them immutable.
+
+This foundation does not implement natural-language configuration resolution,
+OAuth installation flows, event reception, classification, evaluation history,
+launch dispatch, retries, schedule admission, or management UI. Natural-language
+authoring can later resolve descriptions into validated configuration without
+discarding the original intent. The execution pipeline will need a durable
+event/evaluation ledger before provider events can be acknowledged and replayed
+safely. Logical export/import does not yet include these tables; use a
+database-file backup if testing them directly.
+
+Runs currently retain status and workspace linkage, not separate PR/result
+metadata. When implementing execution/history, decide which results must survive
+workspace deletion rather than relying exclusively on workspace-owned PR rows.
+
+### Slack credentials
+
+Settings > General Settings > Slack accepts an existing Slack Bot User OAuth
+Token (`xoxb-`). Connect Slack validates it against Slack's `auth.test`
+endpoint, requires a bot identity and workspace ID, and encrypts the token with
+the existing AES-256-GCM encryption service before upserting an
+`AgentConnection`. Connecting the same workspace replaces its token without
+changing the connection ID or trigger references. Multiple workspaces can be
+connected.
+
+The trusted-local `slack` tRPC router supports list, connect, test and
+disconnect. Its summaries expose workspace name/ID, enabled state and credential
+presence; neither plaintext nor encrypted tokens cross read responses. Provider
+responses are Zod-validated, outbound validation has a ten-second timeout,
+redirects are rejected, and provider/transport errors are sanitized rather than
+echoed. Disconnect clears credentials and disables the connection while
+retaining its identity and trigger references. It does not revoke the Slack
+token.
+
+The UI masks token entry, keeps it out of browser persistence, and clears it
+after a successful save. Existing tokens are never prefilled. Test connection
+uses the stored token and verifies its workspace identity. No signing secret or
+Socket Mode app token is needed for credential validation. Saving a connection
+does not enable event subscriptions, change an existing Slack app's webhook, or
+start agents. Slack event intake is still a separate implementation step.
+
+These credentials depend on the server's `encryption.key`; retain it with any
+database-file backup. Logical export/import does not yet include agent
+connections or their credentials.
+
 ## Client query transport
 
 The browser streams completed tRPC queries within each HTTP batch so a slow read

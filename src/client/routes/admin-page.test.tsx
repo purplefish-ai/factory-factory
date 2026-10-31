@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
 
+vi.mock('@/client/features/slack', () => ({
+  SlackSettings: () => createElement('section', null, 'Slack'),
+}));
+
 vi.mock('@/client/features/codex-accounts', () => ({
   CodexAccountsSettings: () => createElement('section', null, 'Codex accounts'),
 }));
