@@ -174,6 +174,12 @@ remain connected to Tailscale. Installation does not add offline workspace
 access or keep sessions connected while the phone suspends the app; reopen it to
 reconnect. No app store account or native mobile build is needed.
 
+For builds using relative assets (`VITE_BASE_PATH=./`) behind a path-based
+proxy, also set `VITE_WEB_APP_BASE_PATH` to the absolute deployment prefix (e.g.
+`/machine/example/api/port/3000/`). Installation links then remain stable when
+opening a deep route. By default, installation links use `/`, or the absolute
+prefix configured through `VITE_BASE_PATH`.
+
 ### Hosting behind your own reverse proxy
 
 To serve Factory Factory from your own domain (e.g. `https://ff.example.com`)

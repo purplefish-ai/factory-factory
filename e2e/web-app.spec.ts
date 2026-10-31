@@ -51,3 +51,21 @@ test('browser can discover a standalone app and decode its installation icons', 
   expect(parsed.errors).toEqual([]);
   expect(parsed.url).toBe(manifestUrl);
 });
+
+test('browser theme color follows light, dark, and custom page backgrounds', async ({ page }) => {
+  await page.goto('/__mobile-baseline?surface=agents');
+  await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+  const meta = page.locator('meta[name="theme-color"]');
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    root.setAttribute('data-color-scheme', 'github');
+  });
+  await expect(meta).toHaveAttribute('content', 'rgb(255, 255, 255)');
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  await expect(meta).toHaveAttribute('content', 'rgb(13, 17, 23)');
+  await page.evaluate(() => document.documentElement.style.setProperty('--background', '#123456'));
+  await expect(meta).toHaveAttribute('content', 'rgb(18, 52, 86)');
+  await page.evaluate(() => document.documentElement.style.removeProperty('--background'));
+  await expect(meta).toHaveAttribute('content', 'rgb(13, 17, 23)');
+});
