@@ -1,0 +1,20 @@
+@font-face {
+  font-family: 'Factory Jost';
+  src: url('/fonts/jost/Jost-900-Black.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+}
+
+.factory-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  font-family: 'Factory Jost', sans-serif;
+  font-weight: 900;
+  font-synthesis: none;
+  font-kerning: normal;
+  line-height: 0.84;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

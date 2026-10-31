@@ -1,5 +1,6 @@
 import logoUrl from '@/client/assets/logo.svg';
 import { cn } from '@/lib/utils';
+import './logo.css';
 
 interface LogoIconProps {
   className?: string;
@@ -24,12 +25,8 @@ interface LogoTextProps {
 
 export function LogoText({ className }: LogoTextProps) {
   return (
-    <span
-      className={cn('tracking-tight uppercase', className)}
-      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-    >
-      <span className="font-black text-foreground">Factory</span>
-      <span className="font-black ml-1 text-foreground/35 dark:text-brand">Factory</span>
+    <span className={cn('factory-wordmark text-base text-foreground', className)}>
+      <span>Factory</span> <span>Factory</span>
     </span>
   );
 }

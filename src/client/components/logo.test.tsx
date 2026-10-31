@@ -21,3 +21,11 @@ it('names a standalone logo icon', () => {
   const document = new DOMParser().parseFromString(renderToStaticMarkup(<LogoIcon />), 'text/html');
   expect(document.querySelector('img')?.alt).toBe('Factory Factory');
 });
+
+it('preserves the space between the stacked brand words for reading and copying', () => {
+  const document = new DOMParser().parseFromString(
+    renderToStaticMarkup(<Logo showIcon={false} />),
+    'text/html'
+  );
+  expect(document.body.textContent).toBe('Factory Factory');
+});
