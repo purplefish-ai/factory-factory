@@ -135,7 +135,7 @@ export function ProviderModelPicker({
             ) : undefined
           }
         >
-          {displayName}
+          {modelName}
         </ComposerMenuTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">

@@ -28,6 +28,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const CurrentConversation: Story = {};
+export const ClaudeConversation: Story = {
+  args: { provider: 'CLAUDE', model: 'sonnet', models: providerOptions.CLAUDE.models },
+};
 export const ApplyingModelSelection: Story = { args: { model: 'six-luna', updating: true } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = {

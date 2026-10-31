@@ -475,6 +475,9 @@ resume, plan approval, questions, native subagents, and reviewer permissions.
 
 ### Codex accounts
 
+The composer previews only the model name; provider groups remain in the
+selection menu. Account labels are omitted from composer controls.
+
 Settings → Codex accounts supports one or many native ChatGPT accounts. The
 Native default entry preserves the existing Codex home and inherited
 configuration. Add Codex account creates a separate private profile under FF's
