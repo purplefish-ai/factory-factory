@@ -87,6 +87,8 @@ describe('workspace creation submission lifecycle', () => {
       expect(second.current.begin()).toBeNull();
     });
     actFlushSync(() => second.current.fail({ ...submission!, id: 'obsolete-request' }, 'Ignored'));
+    expect(second.current.isPending).toBe(true);
+    expect(second.current.error).toBeNull();
     expect(storage.pins.has(`${id}:submitted`)).toBe(true);
     actFlushSync(() => second.current.fail(submission!, 'Could not create worktree'));
     expect(second.current.isPending).toBe(false);
