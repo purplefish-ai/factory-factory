@@ -31,6 +31,16 @@ function ToolPreview({ initialTool }: { initialTool: Tool }) {
   );
 }
 
+function HydratedToolPreview({ initialTool }: { initialTool: Tool }) {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return (
+    <WorkspacePanelProvider workspaceId={`mobile-tools-${initialTool}`}>
+      {hydrated && <ToolPreview initialTool={initialTool} />}
+    </WorkspacePanelProvider>
+  );
+}
+
 function MobileToolsStory({
   initialTool = 'changes',
   width = 320,
@@ -38,13 +48,9 @@ function MobileToolsStory({
   initialTool?: Tool;
   width?: number;
 }) {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
   return (
     <div style={{ width }} className="h-64 border bg-background">
-      <WorkspacePanelProvider key={initialTool} workspaceId={`mobile-tools-${initialTool}`}>
-        {hydrated && <ToolPreview initialTool={initialTool} />}
-      </WorkspacePanelProvider>
+      <HydratedToolPreview key={initialTool} initialTool={initialTool} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import mobileToolsStory from './mobile-tool-switcher.stories';
 import { RightPanelLayout } from './right-panel-layout';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -65,6 +66,17 @@ describe('mobile tool navigation', () => {
     });
     return tab;
   }
+
+  it('selects Terminal when the story argument changes after hydration', () => {
+    const Story = mobileToolsStory.component;
+    act(() => root.render(<Story initialTool="changes" />));
+    act(() => root.render(<Story initialTool="terminal" />));
+    const terminal = container.querySelector('[role="tab"][data-state="active"]');
+    expect(terminal?.textContent).toBe('Terminal');
+    const panel = document.getElementById(terminal?.getAttribute('aria-controls') ?? '');
+    expect(panel?.hidden).toBe(false);
+    expect(panel?.textContent).toBe('terminal content');
+  });
 
   it('switches directly to Files and exposes exactly one selected tool and panel', () => {
     const files = selectTab('Files');
