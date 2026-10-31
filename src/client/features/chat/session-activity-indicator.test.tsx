@@ -100,3 +100,15 @@ describe('SessionActivityIndicator', () => {
     expect(markup).not.toContain('Background activity');
   });
 });
+
+it('removes the inline thinking slot while retaining background controls', () => {
+  const work = { promptInFlight: true, backgroundTasks: [], runningSubagents: 0, activeGoals: 0 };
+  expect(renderToStaticMarkup(<SessionActivityIndicator work={work} showThinking={false} />)).toBe(
+    ''
+  );
+  const markup = renderToStaticMarkup(
+    <SessionActivityIndicator work={{ ...work, runningSubagents: 2 }} showThinking={false} />
+  );
+  expect(markup).toContain('2 sub-agents running');
+  expect(markup).not.toContain('Agent is working');
+});

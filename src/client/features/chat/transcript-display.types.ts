@@ -15,6 +15,8 @@ export interface TranscriptDisplayProps {
   startingSession: boolean;
   loadingSession: boolean;
   latestThinking?: string | null;
+  /** The composer footer owns the live thinking preview. */
+  hideThinkingIndicator?: boolean;
   startingLabel?: string;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;

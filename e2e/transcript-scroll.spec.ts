@@ -444,3 +444,35 @@ function expectAnchor(viewport: Locator, anchor: { key: string; top: number }) {
     )
     .toBe(anchor.top);
 }
+
+test('thinking wrapping and completion do not move the conversation', async ({ page }) => {
+  await page.goto('/__transcript-scroll?footer=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  const footer = page.getByTestId('thinking-footer');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  const geometry = () =>
+    viewport.evaluate((element) => ({
+      top: element.scrollTop,
+      height: element.clientHeight,
+      extent: element.scrollHeight,
+    }));
+  const initial = await geometry();
+  for (const name of ['Toggle activity', 'Change thinking', 'Toggle activity', 'Toggle activity']) {
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect.poll(geometry).toEqual(initial);
+    await expect(footer).toHaveCSS('height', '32px');
+  }
+  expect(await viewport.locator('[aria-label="Session activity"]').count()).toBe(0);
+  await page.getByRole('button', { name: 'Show thinking preview' }).click();
+  await expect(page.getByRole('dialog', { name: 'Thinking preview' })).toBeVisible();
+  await expect.poll(geometry).toEqual(initial);
+  await page.keyboard.press('Escape');
+  await viewport.hover();
+  await page.mouse.wheel(0, -500);
+  await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
+  const reading = await geometry();
+  await page.getByRole('button', { name: 'Change thinking', exact: true }).click();
+  await expect.poll(geometry).toEqual(reading);
+  await page.getByRole('button', { name: 'Toggle activity', exact: true }).click();
+  await expect.poll(geometry).toEqual(reading);
+});

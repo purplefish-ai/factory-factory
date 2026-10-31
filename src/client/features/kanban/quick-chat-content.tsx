@@ -47,6 +47,7 @@ export function QuickChatContent({
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Messages area */}
       <ChatTranscript
+        thinkingInFooter
         workspaceId={workspaceId}
         messages={groupedMessages}
         subagentTimelineError={timeline.error}

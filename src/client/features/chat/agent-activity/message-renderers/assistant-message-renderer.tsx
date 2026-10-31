@@ -172,6 +172,7 @@ export const MessageWrapper = memo(function MessageWrapper({
 // =============================================================================
 
 interface LoadingIndicatorProps {
+  singleLine?: boolean;
   latestReasoning?: string | null;
   className?: string;
 }
@@ -221,13 +222,21 @@ function getLoadingText(latestReasoning: string | null | undefined): string {
  */
 export const LoadingIndicator = memo(function LoadingIndicator({
   latestReasoning = null,
+  singleLine = false,
   className,
 }: LoadingIndicatorProps) {
   const loadingText = getLoadingText(latestReasoning);
   return (
     <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
-      <SpinnerGapIcon className="h-4 w-4 animate-spin shrink-0 mt-0.5" />
-      <span className="min-w-0 flex-1 text-sm leading-normal break-words">{loadingText}</span>
+      <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin shrink-0 mt-0.5" />
+      <span
+        className={cn(
+          'min-w-0 flex-1 text-sm leading-normal',
+          singleLine ? 'truncate' : 'break-words'
+        )}
+      >
+        {loadingText}
+      </span>
     </div>
   );
 });

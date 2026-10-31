@@ -37,6 +37,7 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const [hidden, setHidden] = useState(false);
   const [ready, setReady] = useState(true);
   const [running, setRunning] = useState(false);
+  const [longThinking, setLongThinking] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
   const [height, setHeight] = useState(360);
   const [narrow, setNarrow] = useState(false);
@@ -110,10 +111,14 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         <button type="button" onClick={() => setHeaderHeight((value) => (value === 24 ? 240 : 24))}>
           Resize image header
         </button>
+        <button type="button" onClick={() => setLongThinking((value) => !value)}>
+          Change thinking
+        </button>
         <output>Session {session}</output>
       </div>
       <div style={{ height, width: narrow ? '80%' : '100%', display: hidden ? 'none' : 'block' }}>
         <ChatTranscript
+          thinkingInFooter={new URLSearchParams(location.search).get('footer') === '1'}
           messages={data[session]}
           running={running}
           acpPlan={
@@ -128,7 +133,13 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
                 }
               : null
           }
-          latestThinking="Inspecting output"
+          latestThinking={
+            longThinking
+              ? 'Inspecting output and checking the detailed implementation across the entire workspace. '.repeat(
+                  8
+                )
+              : 'Inspecting output'
+          }
           startingSession={false}
           loadingSession={false}
           header={

@@ -279,6 +279,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
+        thinkingInFooter
         header={createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
           retryPending: retryInit.isPending,
           onRetry: retry,

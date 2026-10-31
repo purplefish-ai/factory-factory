@@ -128,6 +128,7 @@ export function TranscriptTail({
       {(running || background) && (
         <SessionActivityIndicator
           work={work}
+          showThinking={!props.hideThinkingIndicator}
           latestThinking={props.latestThinking}
           onOpenAgents={props.onOpenAgents}
         />
