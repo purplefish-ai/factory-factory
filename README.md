@@ -156,6 +156,24 @@ Serve/Funnel listeners are preserved; if HTTPS port 443 is occupied, use
 `--database-path` selects a database; otherwise the normal Factory Factory
 database is used. Source checkouts require `pnpm build` after code changes.
 
+### Install on your phone
+
+Factory Factory can be installed as a web app that opens in its own window,
+without browser tabs or an address bar. Open the HTTPS address printed by
+`ff tailscale` on your phone, then:
+
+- **Android (Chrome):** Open the browser menu, select **Add to Home screen** or
+  **Install app**, and follow the installation prompt.
+- **iPhone (Safari):** Select **Share → Add to Home Screen**, enable **Open as
+  Web App** if shown, then tap **Add**.
+
+Launch Factory Factory from the new home-screen icon. The same frontend runs
+against your existing server, so frontend updates arrive when you reload the app
+after updating the server. The host server must stay running and your phone must
+remain connected to Tailscale. Installation does not add offline workspace
+access or keep sessions connected while the phone suspends the app; reopen it to
+reconnect. No app store account or native mobile build is needed.
+
 ### Hosting behind your own reverse proxy
 
 To serve Factory Factory from your own domain (e.g. `https://ff.example.com`)
