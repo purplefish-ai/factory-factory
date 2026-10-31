@@ -32,6 +32,7 @@ vi.mock('./kanban-column', () => ({
   getKanbanColumns: () => [
     { id: 'ISSUES', label: 'To Do', description: 'Tasks' },
     { id: 'WORKING', label: 'Working', description: 'Agent is working' },
+    { id: 'DONE', label: 'Done', description: 'PR merged' },
     {
       id: 'WAITING',
       label: 'Waiting',
@@ -186,7 +187,7 @@ describe('KanbanBoard', () => {
         projectId: 'project-1',
         name: 'Older working task',
         ratchetEnabled: true,
-        createdAt: new Date('2026-01-01'),
+        createdAt: new Date(Date.now() - 60_000),
       })
     );
     void act(() => root.render(createElement(KanbanBoard)));
@@ -225,6 +226,7 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
       'Existing task'
     );
+    expect(container.querySelector('[data-column="DONE"]')).not.toBeNull();
     expect(container.querySelector('input')).toBeNull();
   });
 

@@ -160,9 +160,10 @@ export const AllColumns: Story = {
 /** The mobile destination after a task is successfully created. */
 export const MobileTaskCreated: Story = {
   parameters: { layout: 'fullscreen' },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
   decorators: [
     (Story) => (
-      <div className="w-[375px] h-[500px] flex">
+      <div className="w-full max-w-[375px] h-[500px] flex">
         <Story />
       </div>
     ),
