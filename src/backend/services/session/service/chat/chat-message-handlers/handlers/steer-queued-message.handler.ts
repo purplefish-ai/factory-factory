@@ -1,5 +1,5 @@
+import type { SessionCommandHandler } from '@/backend/services/session/service/chat/session-command.types';
 import type { ChatMessageInput } from '@/shared/websocket';
-import type { SessionCommandHandler } from '../../session-command.types';
 
 export function createSteerQueuedMessageHandler(deps: {
   steerQueuedMessage(sessionId: string, messageId: string): Promise<void>;
