@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provider-usage-control';
-import { SavedCodexAccount } from '@/client/features/codex-accounts';
 import {
   FileMentionPalette,
   SlashCommandPalette,
@@ -338,9 +337,6 @@ export const ChatInput = memo(function ChatInput({
             disabled={isDisabled}
             inputRef={resolvedInputRef}
           >
-            {capabilities?.provider === 'CODEX' && codexAccountId && (
-              <SavedCodexAccount id={codexAccountId} />
-            )}
             {capabilities?.usageStats.enabled &&
               (capabilities.provider === 'CLAUDE' || capabilities.provider === 'CODEX') && (
                 <ProviderUsageControl

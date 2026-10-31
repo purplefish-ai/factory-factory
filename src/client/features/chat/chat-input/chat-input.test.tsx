@@ -5,12 +5,20 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { createEmptyTokenStats } from '@/lib/chat-protocol';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { EMPTY_CHAT_BAR_CAPABILITIES, type ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input';
 
 const mocks = vi.hoisted(() => ({
   fileSelect: vi.fn(async () => undefined),
   callbacks: [] as unknown[],
+}));
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    codexAccounts: {
+      list: { useQuery: () => ({ data: [{ id: 'work', label: 'Work' }] }) },
+    },
+  },
 }));
 
 vi.mock('@/client/features/composer', () => ({
@@ -140,3 +148,28 @@ it.each([true, false])(
     }
   }
 );
+
+it('keeps the saved account out of the composer while retaining usage controls', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    flushSync(() =>
+      root.render(
+        <ChatInput
+          onSend={vi.fn()}
+          codexAccountId="work"
+          capabilities={{
+            ...EMPTY_CHAT_BAR_CAPABILITIES,
+            provider: 'CODEX',
+            usageStats: { enabled: true, contextWindow: true },
+          }}
+        />
+      )
+    );
+    expect(container.querySelector('[aria-label^="Saved Codex account"]')).toBeNull();
+    expect(container.textContent).not.toContain('Work');
+    expect(container.textContent).toContain('Compact');
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});

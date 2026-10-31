@@ -252,3 +252,19 @@ export const AcpWithImageUpload: Story = {
     onSetConfigOption: fn(),
   },
 };
+
+export const SavedCodexAccount: Story = {
+  args: {
+    onSend: onSendAction,
+    codexAccountId: 'work-account',
+    capabilities: {
+      ...EMPTY_CHAT_BAR_CAPABILITIES,
+      provider: 'CODEX',
+      model: {
+        enabled: true,
+        selected: 'gpt-6.1-sol',
+        options: [{ value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }],
+      },
+    },
+  },
+};
