@@ -56,15 +56,16 @@ export const metadataSearchAccessor = {
           group_concat(url, ' ') AS urls
         FROM WorkspacePR WHERE detachedAt IS NULL GROUP BY workspaceId
       ), workspace_metadata AS (
-        SELECT w.*, p.name AS projectName, p.slug AS projectSlug,
+        SELECT w.*, p.name AS projectName, p.slug AS projectSlug, cm.summary AS conversationSummary,
           (p.isArchived OR w.status = 'ARCHIVED') AS archived,
-          coalesce(w.branchName, '') || ' ' || coalesce(w.description, '') || ' ' ||
+          coalesce(w.branchName, '') || ' ' || coalesce(w.description, '') || ' ' || coalesce(cm.summary, '') || ' ' ||
           CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE 'Issue #' || w.githubIssueNumber END || ' ' ||
           coalesce(w.linearIssueIdentifier, '') || ' ' || coalesce(pr.text, '') ||
           CASE WHEN @includeUrls THEN ' ' || coalesce(w.githubIssueUrl, '') || ' ' ||
           coalesce(w.linearIssueUrl, '') || ' ' || coalesce(pr.urls, '') ELSE '' END AS metadata
         FROM Workspace w JOIN Project p ON p.id = w.projectId
         LEFT JOIN pr_metadata pr ON pr.workspaceId = w.id
+        LEFT JOIN WorkspaceMetadata cm ON cm.workspaceId = w.id
       ), candidates AS (
         SELECT 'project' AS kind, p.id, p.name AS title, p.repoPath AS subtitle,
           p.slug AS projectSlug, NULL AS workspaceId, NULL AS sessionId,
@@ -78,7 +79,7 @@ export const metadataSearchAccessor = {
           CASE WHEN w.githubIssueNumber IS NULL THEN '' ELSE ' · Issue #' || w.githubIssueNumber END ||
           CASE WHEN pr.refs IS NULL THEN '' ELSE ' · ' || pr.refs END,
           w.projectSlug, w.id, NULL, w.archived, w.updatedAt,
-          coalesce(w.description, '') || char(10) || coalesce(pr.text, '') ||
+          coalesce(w.conversationSummary, '') || char(10) || coalesce(w.description, '') || char(10) || coalesce(pr.text, '') ||
           CASE WHEN @includeUrls THEN char(10) || coalesce(w.githubIssueUrl, '') || ' ' ||
           coalesce(w.linearIssueUrl, '') || ' ' || coalesce(pr.urls, '') ELSE '' END,
           w.name || ' ' || w.projectName || ' ' || w.metadata

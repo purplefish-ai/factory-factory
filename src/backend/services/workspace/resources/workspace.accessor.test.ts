@@ -76,6 +76,7 @@ describe('workspaceAccessor', () => {
           runScript: { create: {} },
         }),
         include: {
+          conversationMetadata: true,
           prMonitoring: true,
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
@@ -112,6 +113,7 @@ describe('workspaceAccessor', () => {
           runScript: { create: {} },
         }),
         include: {
+          conversationMetadata: true,
           prMonitoring: true,
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
@@ -165,6 +167,7 @@ describe('workspaceAccessor', () => {
       include: {
         agentSessions: true,
         terminalSessions: true,
+        conversationMetadata: true,
         prMonitoring: true,
         prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
@@ -236,6 +239,7 @@ describe('workspaceAccessor', () => {
       expect(mockFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           include: expect.objectContaining({
+            conversationMetadata: true,
             prMonitoring: true,
             prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
             prDiscovery: true,

@@ -2,6 +2,7 @@ export const prismaModelNames = [
   'Project',
   'DecisionLog',
   'Workspace',
+  'WorkspaceMetadata',
   'WorkspacePR',
   'WorkspacePRMonitoring',
   'WorkspacePRDedicatedSession',
@@ -115,6 +116,7 @@ export const serviceRegistry = {
     ownsModels: [
       'Project',
       'Workspace',
+      'WorkspaceMetadata',
       'WorkspacePR',
       'WorkspacePRMonitoring',
       'WorkspacePREvent',

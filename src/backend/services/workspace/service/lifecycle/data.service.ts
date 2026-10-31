@@ -1,3 +1,4 @@
+import { workspaceMetadataAccessor } from '@/backend/services/workspace/resources/workspace-metadata.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
@@ -5,6 +6,13 @@ import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { AcceptedBranchPublisher, type AcceptedWorkspaceBranch } from './accepted-branch';
 
 class WorkspaceDataService {
+  reserveMetadata(workspaceId: string, requestId: string) {
+    return workspaceMetadataAccessor.reserve(workspaceId, requestId);
+  }
+
+  acceptMetadata(input: Parameters<typeof workspaceMetadataAccessor.accept>[0]) {
+    return workspaceMetadataAccessor.accept(input);
+  }
   private readonly acceptedBranches = new AcceptedBranchPublisher();
 
   subscribeAcceptedBranch(listener: (row: AcceptedWorkspaceBranch) => void): () => void {
@@ -80,7 +88,7 @@ class WorkspaceDataService {
   }
 
   rename(id: string, name: string) {
-    return workspaceAccessor.update(id, { name });
+    return workspaceMetadataAccessor.renameAndPin(id, name);
   }
 
   update(

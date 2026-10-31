@@ -337,6 +337,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const sessionRuntimeError = findWorkspaceSessionRuntimeError(workspace.sessionSummaries)?.message;
   const showBranch = Boolean(workspace.branchName);
   const hasMetadata =
+    Boolean(workspace.conversationSummary) ||
     Boolean(workspace.statusReason) ||
     showBranch ||
     showPR ||
@@ -456,6 +457,14 @@ export const KanbanCard = memo(function KanbanCard({
         </CardHeader>
         {hasMetadata && (
           <CardContent className="space-y-1">
+            {workspace.conversationSummary && (
+              <p
+                className="line-clamp-2 text-xs text-muted-foreground"
+                title={`${workspace.conversationSummary.summary}\nSummary updated ${new Date(workspace.conversationSummary.generatedAt).toLocaleString()}`}
+              >
+                {workspace.conversationSummary.summary}
+              </p>
+            )}
             {workspace.statusReason && <KanbanStatusChip statusReason={workspace.statusReason} />}
             <IssueAndPullRequestRow workspace={workspace} issue={issue} showPR={showPR} />
             {showBranch && (

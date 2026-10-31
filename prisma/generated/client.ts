@@ -57,6 +57,11 @@ export type DecisionLog = Prisma.DecisionLogModel
  */
 export type Workspace = Prisma.WorkspaceModel
 /**
+ * Model WorkspaceMetadata
+ * Generated workspace names and summaries, independent of working sessions.
+ */
+export type WorkspaceMetadata = Prisma.WorkspaceMetadataModel
+/**
  * Model WorkspacePR
  * Each association retains its own GitHub cache. Detached rows suppress discovery.
  */

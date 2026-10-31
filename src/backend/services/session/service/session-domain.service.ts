@@ -338,6 +338,7 @@ export class SessionDomainService extends EventEmitter {
     options?: { emitSnapshot?: boolean }
   ): void {
     commitSentUserMessageWithOrder(store, message, order);
+    this.emit('user_message_committed', { sessionId: store.sessionId });
 
     if (options?.emitSnapshot !== false) {
       this.publisher.forwardSnapshot(store, { reason: 'commit_user_message' });

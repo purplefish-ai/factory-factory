@@ -2,11 +2,12 @@
 
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
-for all five poll loops: the snapshot reconciliation safety net, the PR
+for the poll loops: the snapshot reconciliation safety net, the PR
 sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, and the
-periodic-task poll. Each service registers its job in its constructor and keeps
-a thin `start()`/`stop()` that delegates — those delegators are the injection
-seam `server.ts` and `server.upgrade.test.ts` use, not leftovers.
+periodic-task poll, and workspace metadata updates. Each service registers its
+job in its constructor and keeps a thin `start()`/`stop()` that delegates —
+those delegators are the injection seam `server.ts` and `server.upgrade.test.ts`
+use, not leftovers.
 
 ## Pacing
 

@@ -10,6 +10,7 @@ type FieldPolicy = {
   drift: SnapshotFieldGroup | 'name' | 'branch' | { excluded: string };
 };
 export const snapshotFieldPolicy = {
+  conversationSummary: { group: 'metadata', required: false, drift: 'metadata' },
   projectId: {
     group: 'workspace',
     required: true,
@@ -91,6 +92,7 @@ export const snapshotClockDefaults = {
 
 export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
   return {
+    conversationSummary: null,
     projectId: 'project',
     name: 'Workspace',
     nameUpdatedAt: 100,
@@ -145,6 +147,15 @@ export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
 
 export function changedSnapshotInput(): Required<SnapshotUpdateInput> {
   return {
+    conversationSummary: {
+      title: 'Login race',
+      branch: 'login-race',
+      summary: 'Testing the fix.',
+      sidebarSummary: 'Testing login',
+      generatedAt: '2026-10-31T12:00:00.000Z',
+      sourceSessionId: 'session',
+      sourceMessageId: 'message',
+    },
     projectId: 'other-project',
     name: 'Renamed',
     nameUpdatedAt: 200,

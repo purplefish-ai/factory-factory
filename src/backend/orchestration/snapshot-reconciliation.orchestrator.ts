@@ -137,12 +137,14 @@ type DriftComparableField =
   | 'linearIssueId'
   | 'linearIssueIdentifier'
   | 'linearIssueUrl'
-  | 'creationSource';
+  | 'creationSource'
+  | 'conversationSummary';
 
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   {
     group: 'metadata',
     fields: [
+      'conversationSummary',
       'defaultSessionProvider',
       'worktreePath',
       'initErrorMessage',

@@ -1,4 +1,6 @@
 // Domain: session
+export { generateWorkspaceMetadata } from './metadata/workspace-metadata-generator';
+export type { WorkspaceMetadataGenerationInput } from './metadata/workspace-metadata-generator';
 // Public API for the session domain module.
 // Consumers should import from '@/backend/services/session' only.
 

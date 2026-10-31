@@ -57,6 +57,21 @@ async function seed() {
 }
 
 describe('metadata search', () => {
+  it('finds work by its latest generated summary and returns a matching snippet', async () => {
+    const { workspace } = await seed();
+    await db.prisma.workspaceMetadata.create({
+      data: {
+        workspaceId: workspace.id,
+        requestId: 'r',
+        summary: 'Investigating expired authentication cookies.',
+        sidebarSummary: 'Investigating cookies',
+        generatedAt: new Date(),
+      },
+    });
+    const results = await search.search({ query: 'expired authentication' });
+    expect(results.map((result) => result.id)).toEqual([workspace.id]);
+    expect(results[0]?.matchSnippet).toContain('expired authentication cookies');
+  });
   it('uses complete legacy SQLite timestamps for recency before limiting', async () => {
     const { project } = await seed();
     const old = await db.prisma.workspace.create({

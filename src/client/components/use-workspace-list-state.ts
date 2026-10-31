@@ -8,6 +8,7 @@ export type ServerWorkspace = Pick<
   | 'worktreePath'
   | 'status'
   | 'name'
+  | 'conversationSummary'
   | 'createdAt'
   | 'branchName'
   | 'prs'

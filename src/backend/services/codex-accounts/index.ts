@@ -8,6 +8,7 @@ import {
 } from './service/native-account';
 export { CodexAccountService } from './service/codex-account.service';
 export type { CodexRuntimeContext } from './service/types';
+export { getMetadataCredentialsStore } from './service/metadata-credentials-store';
 export { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 export const codexAccountService = new CodexAccountService({
   store: codexAccountAccessor,

@@ -76,6 +76,24 @@ afterEach(() => {
 });
 
 describe('WorkspaceItemContent', () => {
+  it('shows the current focus with the full summary and update time available on hover', () => {
+    const { container, root } = renderContent({
+      ...baseWorkspace,
+      conversationSummary: {
+        title: 'Login race',
+        branch: 'login-race',
+        summary: 'Found a login race. Testing the fix.',
+        sidebarSummary: 'Testing login',
+        generatedAt: '2026-10-31T12:00:00.000Z',
+        sourceSessionId: 's',
+        sourceMessageId: 'm',
+      },
+    });
+    const summary = within(container).getByText('Testing login');
+    expect(summary.getAttribute('title')).toContain('Found a login race. Testing the fix.');
+    expect(summary.getAttribute('title')).toContain('Summary updated');
+    actFlushSync(() => root.unmount());
+  });
   it('opens a pull request without propagating pointerup to its parent', () => {
     const onOpenPr = vi.fn();
     const onParentPointerUp = vi.fn();

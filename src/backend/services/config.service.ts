@@ -158,6 +158,7 @@ interface SystemConfig {
 
   // Conversation rename settings
   branchRenameMessageThreshold: number;
+  workspaceMetadata: { enabled: boolean; codexModel: string; claudeModel: string };
 
   // App version
   appVersion: string;
@@ -324,6 +325,11 @@ function loadSystemConfig(): SystemConfig {
 
     // Conversation rename settings
     branchRenameMessageThreshold: env.BRANCH_RENAME_MESSAGE_THRESHOLD,
+    workspaceMetadata: {
+      enabled: env.WORKSPACE_METADATA_ENABLED,
+      codexModel: env.WORKSPACE_METADATA_CODEX_MODEL,
+      claudeModel: env.WORKSPACE_METADATA_CLAUDE_MODEL,
+    },
 
     // App version
     appVersion: env.npm_package_version ?? '0.1.0',
@@ -614,6 +620,10 @@ class ConfigService {
    */
   getBranchRenameMessageThreshold(): number {
     return this.config.branchRenameMessageThreshold;
+  }
+
+  getWorkspaceMetadataConfig() {
+    return this.config.workspaceMetadata;
   }
 
   /**

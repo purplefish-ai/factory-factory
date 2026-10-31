@@ -665,8 +665,9 @@ messages:
   [PR updates](pull-requests.md).
 - Quick actions: `prompts/quick-actions/` (see below).
 - Child workspace starts append `buildChildWorkspaceContext` through workspace
-  initialization. Conversation-based branch renaming sends a separate prompt
-  through the rename interceptor.
+  initialization. Workspace metadata generation runs separately from working
+  sessions; it never injects branch-renaming prompts into the conversation. See
+  [conversation names and summaries](workspace-state.md#conversation-names-and-summaries).
 
 Legacy workflow templates and unused system-prompt construction have been
 removed. Stored workflow IDs still select session behavior and permissions. Keep

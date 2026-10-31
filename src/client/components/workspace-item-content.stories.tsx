@@ -48,6 +48,30 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const ConversationSummary: Story = {
+  args: {
+    workspace: {
+      ...meta.args.workspace,
+      name: 'Clearer workspace names and summaries',
+      conversationSummary: {
+        title: 'Clearer workspace names and summaries',
+        branch: 'workspace-discoverability',
+        summary:
+          'Tested a small model on this conversation. Summary wording needs refinement before implementation.',
+        sidebarSummary: 'Evaluating conversation summaries',
+        generatedAt: '2026-10-31T12:00:00.000Z',
+        sourceSessionId: 's',
+        sourceMessageId: 'm',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText('Evaluating conversation summaries')
+    ).toBeVisible();
+  },
+};
+
 export const PullRequestWithChangeCounts: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

@@ -200,6 +200,7 @@ model Workspace {
   project             Project           @relation(fields: [projectId], references: [id])
   name                String
   description         String?
+  conversationMetadata WorkspaceMetadata?
   status              WorkspaceStatus   @default(NEW)
   worktreePath        String?
   branchName          String?
@@ -268,6 +269,20 @@ model Workspace {
   // into `prUrl` / `prUpdatedAt` / `prDiscoveryNextCheckAt` are gone with those
   // columns. Their queries now filter `status` here and the PR columns on
   // WorkspacePR, which carries the matching indexes.
+}
+
+/// Generated workspace names and summaries, independent of working sessions.
+model WorkspaceMetadata {
+  workspaceId     String    @id
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requestId       String
+  title           String?
+  branch          String?
+  summary         String?
+  sidebarSummary  String?
+  generatedAt     DateTime?
+  sourceSessionId String?
+  sourceMessageId String?
 }
 
 /// Each association retains its own GitHub cache. Detached rows suppress discovery.

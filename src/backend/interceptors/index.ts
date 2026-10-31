@@ -6,7 +6,6 @@
  */
 
 import { branchNamingInterceptor } from './branch-naming.interceptor';
-import { conversationRenameInterceptor } from './conversation-rename.interceptor';
 import { prDetectionInterceptor } from './pr-detection.interceptor';
 import { interceptorRegistry } from './registry';
 
@@ -15,7 +14,6 @@ import { interceptorRegistry } from './registry';
  */
 export function registerInterceptors(): void {
   interceptorRegistry.register(branchNamingInterceptor);
-  interceptorRegistry.register(conversationRenameInterceptor);
   interceptorRegistry.register(prDetectionInterceptor);
 }
 
