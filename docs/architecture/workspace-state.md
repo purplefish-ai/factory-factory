@@ -532,11 +532,14 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 ## Workspace tools on phones and foldables
 
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
-of the session still visible. Changes and Terminal each occupy the content area;
-More keeps files, sessions, screenshots, agent configuration, and logs
-available. The selected tool survives closing and reopening the drawer in the
-workspace. Selecting a file, diff, or screenshot closes the drawer to reveal the
-main view. Wider screens retain the resizable desktop split.
+of the session still visible. A compact 44px strip uses the shared underline
+tabs for Changes, Files, and Terminal. The overflow menu keeps sessions,
+screenshots, agent configuration, and logs available, marks the current
+selection, and shows the selected tool as an additional underlined tab. The tab
+strip scrolls on narrow screens while the overflow button stays visible. The
+selected tool survives closing and reopening the drawer in the workspace.
+Selecting a file, diff, or screenshot closes the drawer to reveal the main view.
+Wider screens retain the resizable desktop split.
 
 Terminal selection on compact or touch screens never automatically focuses its
 input. Tap inside the terminal to type. The drawer tracks the visual viewport so

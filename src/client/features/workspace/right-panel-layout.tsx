@@ -1,7 +1,9 @@
 import { type ReactNode, useState } from 'react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { MobileToolSwitcher } from './mobile-tool-switcher';
+import { useWorkspacePanel } from './workspace-panel-context';
 
 export function RightPanelLayout({
   workspaceId,
@@ -22,6 +24,7 @@ export function RightPanelLayout({
   topPanel: ReactNode;
   bottomPanel: ReactNode;
 }) {
+  const { activeTopTab, activeBottomTab } = useWorkspacePanel();
   const [bottomMountedFor, setBottomMountedFor] = useState<string | null>(null);
   if (mobilePanel === 'bottom' && bottomMountedFor !== workspaceId) {
     setBottomMountedFor(workspaceId);
@@ -31,15 +34,26 @@ export function RightPanelLayout({
   if (isMobile) {
     return (
       <div className={cn('flex h-full min-h-0 flex-col', className)}>
-        <MobileToolSwitcher periodicTaskId={periodicTaskId} onOpenLogs={onOpenLogs} />
-        <div hidden={mobilePanel !== 'top'} className="min-h-0 flex-1">
-          {topPanel}
-        </div>
-        {bottomMountedFor === workspaceId && (
-          <div hidden={mobilePanel !== 'bottom'} className="min-h-0 flex-1">
-            {bottomPanel}
-          </div>
-        )}
+        <MobileToolSwitcher periodicTaskId={periodicTaskId} onOpenLogs={onOpenLogs}>
+          <TabsContent
+            forceMount
+            value={activeTopTab}
+            hidden={mobilePanel !== 'top'}
+            className="min-h-0 flex-1"
+          >
+            {topPanel}
+          </TabsContent>
+          {bottomMountedFor === workspaceId && (
+            <TabsContent
+              forceMount
+              value={activeBottomTab === 'terminal' ? 'terminal' : 'logs'}
+              hidden={mobilePanel !== 'bottom'}
+              className="min-h-0 flex-1"
+            >
+              {bottomPanel}
+            </TabsContent>
+          )}
+        </MobileToolSwitcher>
       </div>
     );
   }
