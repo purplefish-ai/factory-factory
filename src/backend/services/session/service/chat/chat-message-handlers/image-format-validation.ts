@@ -221,9 +221,9 @@ function consumeJpegMarker(
   marker: number
 ): JpegMarkerResult {
   if (marker === 0xd9) {
-    return state.sawFrame && state.sawScan && state.cursor === bytes.length
-      ? 'complete'
-      : 'invalid';
+    // EOI completes the JPEG codestream. Samsung screenshots and other encoders
+    // append metadata after it; those bytes are not part of the image structure.
+    return state.sawFrame && state.sawScan ? 'complete' : 'invalid';
   }
   if (isStandaloneJpegMarker(marker)) {
     return 'invalid';

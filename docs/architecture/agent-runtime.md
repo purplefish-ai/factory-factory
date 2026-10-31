@@ -16,6 +16,10 @@ events, onto the prompt; non-user images and `local_images` paths are skipped.
 Restoration rejects malformed base64 and images above the shared 10 MiB decoded
 size limit used for uploads.
 
+Upload validation checks the complete JPEG codestream through its end-of-image
+marker and permits trailing metadata, including Samsung screenshot capture
+information. Truncated image segments and scans remain invalid.
+
 The new-workspace slash-command palette prefers project command descriptions
 over same-named global commands, matching the workspace-first precedence used
 when loading a Claude session. Commands found only in the global directory
