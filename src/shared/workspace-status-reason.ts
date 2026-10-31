@@ -218,13 +218,18 @@ function deriveRatchetTroubleReason(
 }
 
 /**
- * The two PR states that are done for good: nothing else can happen to them.
+ * Terminal PRs describe an idle workspace, but a new chat can still do work.
  *
  * Split out of `derivePrFlowReason`, and run ahead of the whole rest of the
- * chain, so a merged or closed PR is reported as such even when a pending
- * request, a session error, or a FAILED lifecycle would otherwise win.
+ * chain, so an idle merged or closed PR is reported as such even when a stale
+ * pending request, session error, or FAILED lifecycle would otherwise win.
+ * Starting or active sessions use the normal blocking/lifecycle/activity rules.
  */
 function deriveTerminalPrReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (input.isWorking || input.isSessionStarting) {
+    return null;
+  }
+
   if (
     input.flowPhase === 'MERGED' ||
     input.prState === 'MERGED' ||

@@ -31,6 +31,48 @@ function makeInput(
 }
 
 describe('assembleWorkspaceDerivedState', () => {
+  it.each([PRState.MERGED, PRState.CLOSED])(
+    'moves a workspace with a %s PR from Done to Working for a new chat',
+    (prState) => {
+      const input = makeInput({
+        prState,
+        ratchetState: prState === PRState.MERGED ? RatchetState.MERGED : RatchetState.IDLE,
+        flowState: {
+          phase: prState === PRState.MERGED ? 'MERGED' : 'NO_PR',
+          ciObservation: 'CHECKS_PASSED',
+          shouldAnimateRatchetButton: false,
+        },
+      });
+      const derive = (overrides: Partial<WorkspaceDerivedStateInput> = {}) =>
+        assembleWorkspaceDerivedState(
+          { ...input, ...overrides },
+          {
+            deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
+          }
+        );
+
+      expect(derive().kanbanColumn).toBe(KanbanColumn.DONE);
+      expect(derive({ isSessionStarting: true })).toMatchObject({
+        kanbanColumn: KanbanColumn.WORKING,
+        statusReason: { code: 'STARTING_SESSION' },
+      });
+      expect(derive({ sessionIsWorking: true })).toMatchObject({
+        kanbanColumn: KanbanColumn.WORKING,
+        statusReason: { code: 'AGENT_WORKING' },
+      });
+      expect(
+        derive({ sessionIsWorking: true, pendingRequestType: 'permission_request' })
+      ).toMatchObject({
+        kanbanColumn: KanbanColumn.WAITING,
+        statusReason: { code: 'NEEDS_PERMISSION' },
+      });
+      expect(derive().kanbanColumn).toBe(KanbanColumn.DONE);
+      for (const lifecycle of [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED]) {
+        expect(derive({ lifecycle, sessionIsWorking: true }).kanbanColumn).toBeNull();
+      }
+    }
+  );
+
   it('projects the kanban column from the status reason it just computed', () => {
     const idle = assembleWorkspaceDerivedState(makeInput(), {
       deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
