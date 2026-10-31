@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sessionLaunchSelectionSnapshotSchema } from '@/client/features/session-selection';
 import { AttachmentSchema } from '@/shared/websocket';
+import { WorkspaceDraftRevisions } from './workspace-draft-revisions';
 
 export const workspaceCreationDraftSchema = z.object({
   schemaVersion: z.literal(1),
@@ -45,8 +46,7 @@ interface Entry {
   listeners: Set<() => void>;
   loading?: Promise<WorkspaceCreationDraft | null>;
   queue: Promise<unknown>;
-  cleared: Set<string>;
-  parents: Map<string, string>;
+  revisions: WorkspaceDraftRevisions;
 }
 const entries = new Map<string, Entry>();
 function entryFor(projectId: string): Entry {
@@ -62,8 +62,7 @@ function entryFor(projectId: string): Entry {
       },
       listeners: new Set(),
       queue: Promise.resolve(),
-      cleared: new Set(),
-      parents: new Map(),
+      revisions: new WorkspaceDraftRevisions(),
     };
     entries.set(projectId, entry);
   }
@@ -183,6 +182,9 @@ export function loadWorkspaceCreationDraft(
       }
       const draft = parsed.success ? parsed.data : null;
       if (entry.snapshot.isRestoring) {
+        if (draft) {
+          entry.revisions.persisted(draft.revision, entry.revisions.edit(draft));
+        }
         publish(entry, { draft, isRestoring: false });
       }
       return entry.snapshot.draft;
@@ -200,13 +202,10 @@ export function saveWorkspaceCreationDraft(
   draft: WorkspaceCreationDraft
 ): Promise<void> {
   const entry = entryFor(projectId);
-  if (entry.cleared.has(draft.revision)) {
+  if (entry.revisions.isCleared(draft)) {
     return Promise.resolve();
   }
-  const previous = entry.snapshot.draft;
-  if (previous && previous.revision !== draft.revision) {
-    entry.parents.set(draft.revision, previous.revision);
-  }
+  const order = entry.revisions.edit(draft);
   // Publish before any await: navigating away immediately must retain this edit.
   publish(entry, { draft, isRestoring: false, hasUnreadableDraft: false });
   return enqueue(entry, async () => {
@@ -214,6 +213,7 @@ export function saveWorkspaceCreationDraft(
       await transact<void>('readwrite', (store) => {
         store.put(draft, projectId);
       });
+      entry.revisions.persisted(draft.revision, order);
       publish(entry, { persistenceError: null });
     } catch (cause) {
       const message =
@@ -223,42 +223,39 @@ export function saveWorkspaceCreationDraft(
     }
   });
 }
-function isOwnedAncestor(entry: Entry, revision: string, expectedRevision: string): boolean {
-  const visited = new Set<string>();
-  let current: string | undefined = expectedRevision;
-  while (current !== undefined && !visited.has(current)) {
-    if (current === revision) {
-      return true;
-    }
-    visited.add(current);
-    current = entry.parents.get(current);
-  }
-  return false;
+export function pinWorkspaceCreationDraft(projectId: string, revision: string): () => void {
+  return entryFor(projectId).revisions.pin(revision);
 }
 export function clearWorkspaceCreationDraft(
   projectId: string,
   expectedRevision: string
 ): Promise<boolean> {
   const entry = entryFor(projectId);
-  entry.cleared.add(expectedRevision);
+  const order = entry.revisions.clear(expectedRevision);
   const matches = entry.snapshot.draft?.revision === expectedRevision;
   if (matches) {
     publish(entry, { draft: null, isRestoring: false, generation: entry.snapshot.generation + 1 });
   }
   return enqueue(entry, async () => {
     try {
+      let deletedRevision: string | undefined;
       const cleared = await transact<boolean>('readwrite', (store, result) => {
         const request = store.get(projectId);
         request.onsuccess = () => {
           const parsed = workspaceCreationDraftSchema.safeParse(request.result);
           const matching =
-            parsed.success && isOwnedAncestor(entry, parsed.data.revision, expectedRevision);
+            parsed.success &&
+            entry.revisions.canClear(expectedRevision, parsed.data.revision, order);
           if (matching) {
             store.delete(projectId);
+            deletedRevision = parsed.data.revision;
           }
           result(matching);
         };
       });
+      if (deletedRevision) {
+        entry.revisions.deleted(deletedRevision);
+      }
       if (entry.snapshot.draft === null) {
         publish(entry, { persistenceError: null });
       }
@@ -299,6 +296,9 @@ export function discardWorkspaceCreationDraft(projectId: string): Promise<boolea
         entry.snapshot.generation === captured.generation &&
         entry.snapshot.draft === captured.draft
       ) {
+        if (outcome.draft) {
+          entry.revisions.persisted(outcome.draft.revision, entry.revisions.edit(outcome.draft));
+        }
         publish(entry, {
           draft: outcome.draft,
           hasUnreadableDraft: false,

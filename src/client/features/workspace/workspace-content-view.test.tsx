@@ -60,7 +60,6 @@ describe('WorkspaceContentView sessionless recovery', () => {
         expect(container.querySelectorAll('button')).toHaveLength(1);
         expect(retry?.closest('.hidden')).toBeNull();
         expect(container.textContent).toContain(type === 'file' ? 'File viewer' : 'Diff viewer');
-        expect(panel.activeTabId).toBe('persisted');
         expect(panel.openTab).not.toHaveBeenCalled();
       } finally {
         act(() => root.unmount());

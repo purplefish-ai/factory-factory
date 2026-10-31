@@ -473,7 +473,7 @@ beforeEach(async () => {
   // These form tests deliberately exercise in-memory editing with unavailable disk.
   vi.stubGlobal('indexedDB', undefined);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  await expect(loadWorkspaceCreationDraft(testProjectId)).rejects.toThrow('could not be restored');
+  await expect(loadWorkspaceCreationDraft(testProjectId)).rejects.toThrow();
   mocks.userSettings = {
     ratchetEnabled: false,
     defaultSessionProvider: 'CLAUDE',

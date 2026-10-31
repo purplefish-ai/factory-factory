@@ -6,6 +6,7 @@ import { actFlushSync } from '@/test-utils/react-act';
 import { useWorkspaceCreationSubmission } from './use-workspace-creation-submission';
 
 const storage = vi.hoisted(() => ({
+  pins: new Set<string>(),
   drafts: new Map<string, { revision: string } | null>(),
   clear: vi.fn<(projectId: string, revision: string) => Promise<boolean>>(),
 }));
@@ -14,6 +15,11 @@ vi.mock('./workspace-creation-draft-storage', () => ({
     draft: storage.drafts.get(projectId) ?? null,
   }),
   clearWorkspaceCreationDraft: storage.clear,
+  pinWorkspaceCreationDraft: (projectId: string, revision: string) => {
+    const key = `${projectId}:${revision}`;
+    storage.pins.add(key);
+    return () => storage.pins.delete(key);
+  },
 }));
 let unmount: (() => void)[] = [];
 function SubmissionHarness({
@@ -46,6 +52,7 @@ function mount(projectId: string) {
 }
 beforeEach(() => {
   storage.drafts.clear();
+  storage.pins.clear();
   storage.clear.mockImplementation((projectId, revision) => {
     if (storage.drafts.get(projectId)?.revision !== revision) {
       return Promise.resolve(false);
@@ -75,12 +82,16 @@ describe('workspace creation submission lifecycle', () => {
     unmount.shift();
     const second = mount(id);
     expect(second.current.isPending).toBe(true);
+    expect(storage.pins.has(`${id}:submitted`)).toBe(true);
     actFlushSync(() => {
       expect(second.current.begin()).toBeNull();
     });
+    actFlushSync(() => second.current.fail({ ...submission!, id: 'obsolete-request' }, 'Ignored'));
+    expect(storage.pins.has(`${id}:submitted`)).toBe(true);
     actFlushSync(() => second.current.fail(submission!, 'Could not create worktree'));
     expect(second.current.isPending).toBe(false);
     expect(second.current.error).toBe('Could not create worktree');
+    expect(storage.pins.size).toBe(0);
     expect(storage.drafts.get(id)?.revision).toBe('submitted');
   });
 
@@ -99,6 +110,7 @@ describe('workspace creation submission lifecycle', () => {
     expect(close).toBe(true);
     expect(storage.drafts.get(id)).toBeNull();
     expect(form.current.isPending).toBe(false);
+    expect(storage.pins.size).toBe(0);
   });
 
   it('retains a newer draft and never closes it on a late success', async () => {
@@ -197,6 +209,7 @@ describe('workspace creation submission lifecycle', () => {
     });
     expect(close).toBe(false);
     expect(form.current.isPending).toBe(false);
+    expect(storage.pins.size).toBe(0);
     expect(form.current.error).toContain('created');
     expect(form.current.error).toContain('draft');
   });

@@ -78,7 +78,8 @@ test.describe('workspace draft storage in Chromium', () => {
       const first = s.saveWorkspaceCreationDraft('ordered', old);
       const clear = s.clearWorkspaceCreationDraft('ordered', 'old');
       const late = s.saveWorkspaceCreationDraft('ordered', old);
-      await Promise.all([first, clear, late]);
+      const clonedLate = s.saveWorkspaceCreationDraft('ordered', { ...old });
+      await Promise.all([first, clear, late, clonedLate]);
       const absent = await s.loadWorkspaceCreationDraft('ordered');
       await s.saveWorkspaceCreationDraft('ordered', { ...old, revision: 'new', prompt: 'New' });
       await s.clearWorkspaceCreationDraft('ordered', 'old');
@@ -348,4 +349,45 @@ test('unreadable discard preserves a new draft lifecycle started while deletion 
   });
   expect(result.snapshot.generation).toBe(result.generation);
   expect(result.snapshot.draft).toMatchObject({ prompt: 'New lifecycle' });
+});
+
+test('retains a pending submitted fallback while newer writes fail', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('pinned', {
+      ...s.createWorkspaceCreationDraft(),
+      revision: 'persisted',
+    });
+    IDBObjectStore.prototype.put = () => {
+      throw new DOMException('Full', 'QuotaExceededError');
+    };
+    const failedEdit = async (revision: string) => {
+      try {
+        await s.saveWorkspaceCreationDraft('pinned', {
+          ...s.createWorkspaceCreationDraft(),
+          revision,
+          prompt: revision,
+        });
+      } catch (error) {
+        if (!String(error).includes('could not be saved')) {
+          throw error;
+        }
+      }
+    };
+    await failedEdit('submitted');
+    const release = s.pinWorkspaceCreationDraft('pinned', 'submitted');
+    for (let index = 0; index < 20; index++) {
+      await failedEdit(`newer-${index}`);
+    }
+    await s.clearWorkspaceCreationDraft('pinned', 'submitted');
+    release();
+    return s.getWorkspaceCreationDraftSnapshot('pinned').draft;
+  });
+  expect(result).toMatchObject({ prompt: 'newer-19' });
+  await page.reload();
+  expect(
+    await page.evaluate(async () =>
+      (await window.loadDraftStorage()).loadWorkspaceCreationDraft('pinned')
+    )
+  ).toBeNull();
 });

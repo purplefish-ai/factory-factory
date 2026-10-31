@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useSyncExternalStore } from 'reac
 import {
   clearWorkspaceCreationDraft,
   getWorkspaceCreationDraftSnapshot,
+  pinWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
 
 export interface WorkspaceCreationSubmission {
@@ -16,6 +17,7 @@ interface SubmissionState {
 interface Entry {
   state: SubmissionState;
   listeners: Set<() => void>;
+  releaseRevision?: () => void;
 }
 // Request ownership survives composer navigation, but never another window.
 const entries = new Map<string, Entry>();
@@ -34,6 +36,8 @@ function publish(entry: Entry, state: SubmissionState) {
 function finish(submission: WorkspaceCreationSubmission, error: string | null) {
   const entry = entryFor(submission.projectId);
   if (entry.state.pending?.id === submission.id) {
+    entry.releaseRevision?.();
+    entry.releaseRevision = undefined;
     publish(entry, { pending: null, error });
   }
 }
@@ -69,6 +73,9 @@ export function useWorkspaceCreationSubmission(projectId: string) {
       revision: getWorkspaceCreationDraftSnapshot(projectId).draft?.revision ?? null,
       id: crypto.randomUUID(),
     };
+    if (submission.revision) {
+      entry.releaseRevision = pinWorkspaceCreationDraft(projectId, submission.revision);
+    }
     publish(entry, { pending: submission, error: null });
     return submission;
   }, [projectId]);
