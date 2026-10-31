@@ -1,99 +1,116 @@
 import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWorkspacePanel } from './workspace-panel-context';
+
+const overflowTools = [
+  { value: 'agents', label: 'Sessions' },
+  { value: 'screenshots', label: 'Screenshots' },
+  { value: 'periodic-task', label: 'Agent' },
+  { value: 'logs', label: 'Logs' },
+] as const;
+
+const tabClassName =
+  'h-11 flex-none rounded-none px-2.5 text-xs group-data-[orientation=horizontal]/tabs:after:bottom-0';
 
 export function MobileToolSwitcher({
   periodicTaskId,
   onOpenLogs,
+  children,
 }: {
   periodicTaskId: string | null;
   onOpenLogs: () => void;
+  children: ReactNode;
 }) {
   const { mobilePanel, activeTopTab, activeBottomTab, setActiveTopTab, setActiveBottomTab } =
     useWorkspacePanel();
-  const changesActive = mobilePanel === 'top' && activeTopTab === 'changes';
-  const terminalActive = mobilePanel === 'bottom' && activeBottomTab === 'terminal';
-  const otherLabel =
-    mobilePanel === 'bottom'
-      ? 'Logs'
-      : {
-          changes: 'More tools',
-          files: 'Files',
-          screenshots: 'Screenshots',
-          'periodic-task': 'Agent',
-          agents: 'Sessions',
-        }[activeTopTab];
+  const activeTool =
+    mobilePanel === 'top' ? activeTopTab : activeBottomTab === 'terminal' ? 'terminal' : 'logs';
+  const activeOverflowTool = overflowTools.find((tool) => tool.value === activeTool);
+  const activeOverflowRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (activeOverflowTool) {
+      activeOverflowRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [activeOverflowTool]);
+
+  function selectTool(value: string) {
+    switch (value) {
+      case 'changes':
+      case 'files':
+      case 'agents':
+      case 'screenshots':
+      case 'periodic-task':
+        setActiveTopTab(value);
+        break;
+      case 'terminal':
+        setActiveBottomTab('terminal');
+        break;
+      case 'logs':
+        onOpenLogs();
+        break;
+    }
+  }
+
   return (
-    <nav
-      aria-label="Workspace tools"
-      className="flex shrink-0 items-center gap-1 border-b bg-muted/30 p-2"
-    >
-      <div className="flex min-w-0 flex-1 gap-1">
-        <Button
-          variant="ghost"
-          aria-pressed={changesActive}
-          onClick={() => setActiveTopTab('changes')}
-          className={cn('min-h-11 flex-1 px-2', changesActive && 'bg-background shadow-sm')}
-        >
-          Changes
-        </Button>
-        <Button
-          variant="ghost"
-          aria-pressed={terminalActive}
-          onClick={() => setActiveBottomTab('terminal')}
-          className={cn('min-h-11 flex-1 px-2', terminalActive && 'bg-background shadow-sm')}
-        >
-          Terminal
-        </Button>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className={cn(
-              'min-h-11 max-w-28 gap-1 px-2',
-              !(changesActive || terminalActive) && 'bg-background shadow-sm'
+    <Tabs value={activeTool} onValueChange={selectTool} className="h-full min-h-0 gap-0">
+      <nav aria-label="Workspace tools" className="flex h-11 shrink-0 items-center border-b">
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <TabsList variant="line" aria-label="Workspace tools" className="h-11 gap-0 p-0">
+            <TabsTrigger value="changes" className={tabClassName}>
+              Changes
+            </TabsTrigger>
+            <TabsTrigger value="files" className={tabClassName}>
+              Files
+            </TabsTrigger>
+            <TabsTrigger value="terminal" className={tabClassName}>
+              Terminal
+            </TabsTrigger>
+            {activeOverflowTool && (
+              <TabsTrigger
+                ref={activeOverflowRef}
+                value={activeOverflowTool.value}
+                className={tabClassName}
+              >
+                {activeOverflowTool.label}
+              </TabsTrigger>
             )}
-            aria-label={
-              changesActive || terminalActive ? 'More tools' : `${otherLabel}, more tools`
-            }
-          >
-            <span className="truncate">
-              {changesActive || terminalActive ? 'More' : otherLabel}
-            </span>
-            <DotsThreeIcon className="size-4 shrink-0" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem className="min-h-11" onSelect={() => setActiveTopTab('files')}>
-            Files
-          </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-11" onSelect={() => setActiveTopTab('agents')}>
-            Sessions
-          </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-11" onSelect={() => setActiveTopTab('screenshots')}>
-            Screenshots
-          </DropdownMenuItem>
-          {periodicTaskId && (
-            <DropdownMenuItem
-              className="min-h-11"
-              onSelect={() => setActiveTopTab('periodic-task')}
+          </TabsList>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-11 rounded-none"
+              aria-label="More tools"
             >
-              Agent
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem className="min-h-11" onSelect={onOpenLogs}>
-            Logs
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </nav>
+              <DotsThreeIcon className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup value={activeTool} onValueChange={selectTool}>
+              {overflowTools
+                .filter((tool) => tool.value !== 'periodic-task' || periodicTaskId)
+                .map((tool) => (
+                  <DropdownMenuRadioItem key={tool.value} value={tool.value} className="min-h-11">
+                    {tool.label}
+                  </DropdownMenuRadioItem>
+                ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
+      {children}
+    </Tabs>
   );
 }

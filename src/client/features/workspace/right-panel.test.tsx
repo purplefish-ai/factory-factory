@@ -195,9 +195,11 @@ describe('RightPanel Agents tab', () => {
     const terminalTab = [...container.querySelectorAll('button')].find(
       (b) => b.textContent === 'Terminal'
     );
-    void act(() => terminalTab?.click());
+    void act(() =>
+      terminalTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    );
     expect(changes?.closest('[hidden]')).not.toBeNull();
-    expect(terminalTab?.getAttribute('aria-pressed')).toBe('true');
+    expect(terminalTab?.getAttribute('aria-selected')).toBe('true');
     // The provider outlives the drawer content.
     void act(() =>
       root.render(
@@ -213,7 +215,7 @@ describe('RightPanel Agents tab', () => {
     expect(
       [...container.querySelectorAll('button')]
         .find((b) => b.textContent === 'Terminal')
-        ?.getAttribute('aria-pressed')
+        ?.getAttribute('aria-selected')
     ).toBe('true');
   });
 
