@@ -78,6 +78,12 @@ for (const viewport of [
 }
 
 test('More tools render their fixtures and Logs reopens the last source', async ({ page }) => {
+  const missingOperations: string[] = [];
+  page.on('pageerror', (error) => {
+    if (error.message.startsWith('Missing tools fixture:')) {
+      missingOperations.push(error.message);
+    }
+  });
   await page.setViewportSize({ width: 344, height: 882 });
   await page.routeWebSocket(/\/(dev-logs|post-run-logs)\?/, (ws) => {
     ws.send(JSON.stringify({ type: 'output', data: 'Development server listening' }));
@@ -104,5 +110,5 @@ test('More tools render their fixtures and Logs reopens the last source', async 
   await drawer.getByRole('button', { name: /more tools/i }).click();
   await page.getByRole('menuitem', { name: 'Logs', exact: true }).click();
   await expect(drawer.locator('pre')).toContainText('Development server listening');
-  await expect(drawer.getByText('Missing tools fixture', { exact: false })).toHaveCount(0);
+  expect(missingOperations).toEqual([]);
 });

@@ -52,7 +52,9 @@ export function WorkspaceToolsFixture() {
                 'project.list': [{ id: 'demo', name: 'Demo', slug: 'demo' }],
               };
               if (!(op.path in responses)) {
-                observer.error(new TRPCClientError(`Missing tools fixture: ${op.path}`));
+                const message = `Missing tools fixture: ${op.path}`;
+                reportError(new Error(message));
+                observer.error(new TRPCClientError(message));
                 return;
               }
               observer.next({ result: { data: responses[op.path] } });
