@@ -9,6 +9,7 @@ context, not a new task or a substitute for current repository guidance.
 | Need                                         | Start here                                                                                            |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Install and run                              | [README](../README.md)                                                                                |
+| Logo source and installation icons           | [Brand assets](brand-assets.md)                                                                       |
 | Contribute and verify changes                | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
 | Service boundaries and subsystem contracts   | [Architecture notes](architecture/README.md)                                                          |
 | Chat streaming, loading, and replay          | [Chat message flow](chat-message-flow.md)                                                             |

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import type React from 'react';
-import { Logo } from './logo';
+import { Logo, LogoIcon } from './logo';
 
 const meta = {
   title: 'Components/Logo',
@@ -46,6 +46,7 @@ export const LargeIcon: Story = {
 };
 
 export const OnDarkBackground: Story = {
+  globals: { theme: 'dark' },
   args: {
     showText: true,
   },
@@ -55,6 +56,30 @@ export const OnDarkBackground: Story = {
         <div className="text-white">
           <Story />
         </div>
+      </div>
+    ),
+  ],
+};
+
+export const IconSizes: Story = {
+  render: () => (
+    <div className="flex items-end gap-6">
+      <LogoIcon className="size-4" />
+      <LogoIcon className="size-6" />
+      <LogoIcon className="size-8" />
+      <LogoIcon className="size-12" />
+      <LogoIcon className="size-24" />
+    </div>
+  ),
+};
+
+export const OnLightBackground: Story = {
+  globals: { theme: 'light' },
+  args: { showText: false, iconClassName: 'size-24' },
+  decorators: [
+    (Story: () => React.ReactNode) => (
+      <div className="bg-white p-8">
+        <Story />
       </div>
     ),
   ],

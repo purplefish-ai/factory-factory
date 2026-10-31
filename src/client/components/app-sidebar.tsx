@@ -422,7 +422,7 @@ function SidebarInner({
         <SidebarSeparator />
 
         <div className="flex justify-center px-3 pb-2 pt-1">
-          <Logo showIcon={false} textClassName="text-base" />
+          <Logo iconClassName="size-6" textClassName="text-base" />
         </div>
       </SidebarFooter>
     </>
