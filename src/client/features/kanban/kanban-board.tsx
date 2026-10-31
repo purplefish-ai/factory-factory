@@ -268,9 +268,14 @@ export function KanbanBoard() {
           </Button>
 
           {/* Active column content */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div key={activeColumn.id} className="flex-1 min-h-0 overflow-y-auto">
             {activeColumn.id === 'ISSUES' ? (
-              <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
+              <IssuesColumn
+                column={activeColumn}
+                issues={issues ?? []}
+                projectId={projectId}
+                onWorkspaceCreated={() => setActiveColumnId('WORKING')}
+              />
             ) : (
               <KanbanColumn
                 column={activeColumn}
@@ -356,9 +361,10 @@ interface IssuesColumnProps {
   column: ColumnConfig;
   issues: NormalizedIssue[];
   projectId: string;
+  onWorkspaceCreated?: () => void;
 }
 
-function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
+function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesColumnProps) {
   const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
   const isMobile = useIsMobile();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
@@ -401,6 +407,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
               onCancel={() => setShowInlineForm(false)}
               onCreated={() => {
                 setShowInlineForm(false);
+                onWorkspaceCreated?.();
               }}
             />
           ) : !isMobile ? (
