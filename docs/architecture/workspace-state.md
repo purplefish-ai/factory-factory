@@ -73,6 +73,13 @@ restore saved inputs. Browser storage failures appear in the form while editing
 remains available; keep the tab open when a warning says changes could not be
 saved.
 
+Creation request errors appear beside the retained inputs. An in-flight request
+continues to own its project draft across composer remounts, preventing
+duplicate submissions. Success clears only the submitted revision; a late
+response cannot clear or close a newer draft or a composer in another project.
+Discarding a draft also invalidates unfinished attachment conversions for that
+draft.
+
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
 switching providers requires a new conversation. Model controls remain visible
@@ -120,6 +127,12 @@ failures without changing the response or deleting the workspace. The same owner
 selects separate child and periodic-task policies, described in
 [agent runtime](agent-runtime.md#child-workspaces) and
 [integrations](integrations.md#periodic-tasks).
+
+Setup failures retain the workspace and its original instructions and
+attachments. The board shows **Setup failed** in Waiting, and the workspace
+exposes **Retry setup** even when no chat session exists. Retrying uses the same
+workspace. A creation response preserves an existing live summary rather than
+replacing a newer setup failure with a synthetic Setting up state.
 
 ## Accepted workspace names
 
