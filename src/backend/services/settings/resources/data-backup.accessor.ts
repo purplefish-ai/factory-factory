@@ -15,6 +15,7 @@ export type DataBackupTransactionClient = Prisma.TransactionClient;
  */
 export type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
   include: {
+    conversationMetadata: true;
     prMonitoring: true;
     prEvents: true;
     prDiscovery: true;
@@ -38,6 +39,7 @@ class DataBackupAccessor {
       prisma.workspace.findMany({
         orderBy: { createdAt: 'asc' },
         include: {
+          conversationMetadata: true,
           prMonitoring: true,
           prEvents: true,
           prDiscovery: true,

@@ -30,6 +30,29 @@ const result = {
   summary: 'Testing the login fix.',
   sidebarSummary: 'Testing login',
 };
+it('rolls back summaries and names invalidated while acceptance is in progress', async () => {
+  await workspace('superseded-write');
+  await workspaceMetadataAccessor.reserve('superseded-write', 'r');
+  let checks = 0;
+  const accepted = await workspaceMetadataAccessor.accept({
+    workspaceId: 'superseded-write',
+    requestId: 'r',
+    expectedName: 'fix-the-login',
+    rename: true,
+    result,
+    sourceSessionId: 's',
+    sourceMessageId: 'm',
+    generatedAt: new Date(),
+    isCurrent: () => ++checks === 1,
+  });
+  expect(accepted).toBeNull();
+  expect(
+    await db.prisma.workspaceMetadata.findUnique({ where: { workspaceId: 'superseded-write' } })
+  ).toMatchObject({ generatedAt: null, summary: null });
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'superseded-write' } })).toMatchObject(
+    { name: 'fix-the-login' }
+  );
+});
 async function workspace(id: string) {
   await db.prisma.workspace.create({
     data: {

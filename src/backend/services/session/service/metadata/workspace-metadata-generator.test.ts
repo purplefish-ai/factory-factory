@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { access, writeFile } from 'node:fs/promises';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { generateWorkspaceMetadata } from './workspace-metadata-generator';
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ vi.mock('@/backend/services/config.service', () => ({
       claudeModel: 'haiku',
     }),
     getChildProcessEnv: () => ({ CLAUDE_CONFIG_DIR: '/managed/claude' }),
+    getNodeExecPath: () => '/electron/node',
   },
 }));
 const result = {
@@ -115,6 +117,24 @@ describe('disposable metadata inference', () => {
     );
     expect(close).toHaveBeenCalledTimes(1);
     expect(mocks.context).not.toHaveBeenCalled();
+    const invocation = mocks.query.mock.calls[0]![0];
+    const signal = new AbortController().signal;
+    invocation.options.spawnClaudeCodeProcess({
+      command: 'node',
+      args: ['/app.asar/claude.js'],
+      cwd: '/disposable',
+      env: invocation.options.env,
+      signal,
+    });
+    expect(mocks.spawn).toHaveBeenCalledWith('/electron/node', ['/app.asar.unpacked/claude.js'], {
+      cwd: '/disposable',
+      env: expect.objectContaining({
+        ELECTRON_RUN_AS_NODE: '1',
+        CLAUDE_CONFIG_DIR: '/managed/claude',
+      }),
+      signal,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
   });
 
   it('rejects malformed provider output instead of publishing it', async () => {
@@ -130,9 +150,14 @@ describe('disposable metadata inference', () => {
       },
       close,
     });
-    await expect(
-      generateWorkspaceMetadata({ provider: 'CLAUDE', input: {} }, new AbortController().signal)
-    ).rejects.toThrow();
+    const generation = generateWorkspaceMetadata(
+      { provider: 'CLAUDE', input: {} },
+      new AbortController().signal
+    );
+    await expect(generation).rejects.toBeInstanceOf(ZodError);
+    await expect(generation).rejects.toMatchObject({
+      issues: expect.arrayContaining([expect.objectContaining({ path: ['branch'] })]),
+    });
     expect(close).toHaveBeenCalledTimes(1);
   });
 });

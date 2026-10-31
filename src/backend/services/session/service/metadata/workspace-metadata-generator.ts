@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { getNodeExecPath } from '@/backend/lib/node-runtime';
 import { getOwnedCodexCommand } from '@/backend/lib/owned-codex-command';
 import { terminateDisposableProcessTree } from '@/backend/lib/owned-process-cleanup';
 import { WORKSPACE_METADATA_INSTRUCTIONS } from '@/backend/prompts/workspace-metadata';
@@ -13,6 +12,7 @@ import {
   getMetadataCredentialsStore,
 } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
+import { spawnClaudeCodeProcess } from '@/backend/services/session/service/acp/claude-code-process';
 import { WorkspaceMetadataResultSchema } from '@/shared/workspace-conversation-summary';
 
 export interface WorkspaceMetadataGenerationInput {
@@ -62,19 +62,7 @@ export async function generateWorkspaceMetadata(
             ELECTRON_RUN_AS_NODE: '1',
             CLAUDE_CODE_SAFE_MODE: '1',
           },
-          spawnClaudeCodeProcess: (options) => {
-            // Match the Electron-aware launch path used by provider discovery.
-            return spawn(
-              options.command === 'node' ? getNodeExecPath() : options.command,
-              options.args.map((arg) => arg.replace(/\.asar([/\\])/g, '.asar.unpacked$1')),
-              {
-                cwd: options.cwd,
-                env: options.env,
-                signal: options.signal,
-                stdio: ['pipe', 'pipe', 'pipe'],
-              }
-            );
-          },
+          spawnClaudeCodeProcess,
         },
       });
       try {

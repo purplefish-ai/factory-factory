@@ -38,3 +38,16 @@ it('uses file credentials for managed profiles without another native query', as
   ).toBe('file');
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
+
+it('defaults to file credentials when the native setting is absent', async () => {
+  mocks.request.mockResolvedValue({ config: {} });
+  expect(await getMetadataCredentialsStore(context, new AbortController().signal)).toBe('file');
+});
+
+it.each(['file', 'auto', 'ephemeral'] as const)(
+  'preserves the native %s credentials store',
+  async (store) => {
+    mocks.request.mockResolvedValue({ config: { cli_auth_credentials_store: store } });
+    expect(await getMetadataCredentialsStore(context, new AbortController().signal)).toBe(store);
+  }
+);

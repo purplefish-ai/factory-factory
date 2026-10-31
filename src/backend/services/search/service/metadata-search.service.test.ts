@@ -57,7 +57,7 @@ async function seed() {
 }
 
 describe('metadata search', () => {
-  it('finds work by its latest generated summary and returns a matching snippet', async () => {
+  it('finds work by its generated summary and returns a matching snippet', async () => {
     const { workspace } = await seed();
     await db.prisma.workspaceMetadata.create({
       data: {

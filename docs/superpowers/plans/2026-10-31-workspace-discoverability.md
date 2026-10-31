@@ -3,7 +3,8 @@
 **Goal:** Give workspaces clear, stable names and branches, with short summaries
 that track the work's current position in Kanban, the sidebar, and search.
 
-**Spec:** The approved approach and real Luna trial in this conversation.
+**Status:** Historical implementation plan. This record describes the design
+decisions below; it does not grant authorization for future work.
 
 **Architecture:** A best-effort background orchestrator receives completed-turn
 notifications. It calls a bounded, tool-free helper using the conversation's
@@ -11,7 +12,7 @@ provider/account, persists validated metadata through the workspace capsule, and
 publishes it through the existing snapshot contract. Existing working sessions
 and launch never wait for metadata inference.
 
-## Constraints and decisions
+## Committed design decisions
 
 - Use Luna with low reasoning for Codex and Haiku for Claude; preserve the
   selected account. No new API keys or provider switching.
@@ -49,9 +50,3 @@ and launch never wait for metadata inference.
 - Missing credentials and provider failures must not affect the working agent.
 - Large histories must remain bounded and omit tools/reasoning.
 - Pending final updates must run after throttling even without another turn.
-
-## Execution notes
-
-The workspace is already an isolated linked worktree. The user authorized
-implementation of the discussed approach; execute inline without another
-approval round. Keep changes uncommitted for review.

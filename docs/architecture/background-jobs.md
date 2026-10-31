@@ -3,7 +3,7 @@
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, and the
+sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, the
 periodic-task poll, and workspace metadata updates. Each service registers its
 job in its constructor and keeps a thin `start()`/`stop()` that delegates —
 those delegators are the injection seam `server.ts` and `server.upgrade.test.ts`
@@ -73,6 +73,6 @@ detach the dispatch promise. An unlinked reservation remains subject to the
 
 ## Out of scope by design
 
-The `fileLock`, `terminal`, `rateLimiter` and conversation-rename cleanup
-timers. They are process-local memory eviction with no database or network work
-and no shutdown-ordering hazard.
+The `fileLock`, `terminal`, and `rateLimiter` cleanup timers. They are
+process-local memory eviction with no database or network work and no
+shutdown-ordering hazard.

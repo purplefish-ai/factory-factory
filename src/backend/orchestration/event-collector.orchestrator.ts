@@ -936,7 +936,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.sessionDomainService.off('runtime_changed', runtimeChangedHandler)
   );
 
-  state.logger.info('Event collector started with 14 event subscriptions');
+  state.logger.info('Event collector started');
 }
 
 // ---------------------------------------------------------------------------

@@ -210,7 +210,7 @@ describe('workspace metadata orchestration', () => {
     expect(dependencies.accept).toHaveBeenCalledTimes(1);
   });
   it('does not rename explicit titles, and drops archived workspaces', async () => {
-    const { service, dependencies } = setup();
+    const { service, dependencies, advance } = setup();
     dependencies.findWorkspace.mockResolvedValueOnce({
       id: 'w',
       projectId: 'p',
@@ -230,8 +230,38 @@ describe('workspace metadata orchestration', () => {
       creationSource: 'MANUAL',
       conversationSummary: null,
     });
+    advance(120_000);
+    dependencies.reserve.mockClear();
     await service.schedule('s');
     await service.run(signal());
     expect(dependencies.generate).toHaveBeenCalledTimes(1);
+    expect(dependencies.reserve).not.toHaveBeenCalled();
+  });
+
+  it('avoids transcript and database work on subsequent initial-message notifications while invalidating pending work', async () => {
+    const { service, dependencies, history, result, advance } = setup();
+    await service.schedule('s', true);
+    await service.run(signal());
+    history.push({ type: 'user', content: 'New turn', timestamp: '2' });
+    await service.schedule('s');
+    advance(120_000);
+    let resolve!: (value: typeof result) => void;
+    dependencies.generate.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        })
+    );
+    const work = service.run(signal());
+    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalledTimes(2));
+    dependencies.history.mockClear();
+    dependencies.findSession.mockClear();
+    dependencies.accept.mockClear();
+    await service.schedule('s', true);
+    expect(dependencies.history).not.toHaveBeenCalled();
+    expect(dependencies.findSession).not.toHaveBeenCalled();
+    resolve(result);
+    await work;
+    expect(dependencies.accept).not.toHaveBeenCalled();
   });
 });

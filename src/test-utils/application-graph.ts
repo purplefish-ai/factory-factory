@@ -405,8 +405,7 @@ const fakeSystemConfig = {
   wsLogsEnabled: false,
   runScriptProxyEnabled: false,
   compression: { enabled: false },
-  branchRenameMessageThreshold: 5,
-  workspaceMetadata: { enabled: true, codexModel: 'gpt-6-luna', claudeModel: 'haiku' },
+  workspaceMetadata: { enabled: false, codexModel: 'gpt-6-luna', claudeModel: 'haiku' },
   appVersion: 'test',
 };
 

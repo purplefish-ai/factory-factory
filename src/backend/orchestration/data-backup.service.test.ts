@@ -117,6 +117,7 @@ const mockProject: Project = {
 type WorkspaceForExport = import('@/backend/services/settings').WorkspaceForExport;
 
 const mockWorkspace: WorkspaceForExport = {
+  conversationMetadata: null,
   id: 'ws-1',
   projectId: 'proj-1',
   name: 'Test Workspace',

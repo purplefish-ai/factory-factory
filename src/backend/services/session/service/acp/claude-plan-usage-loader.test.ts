@@ -6,8 +6,16 @@ const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
   usage: vi.fn(),
   close: vi.fn(),
+  spawn: vi.fn(),
+  terminate: vi.fn(),
 }));
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: mocks.query }));
+vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
+vi.mock('@/backend/lib/node-runtime', () => ({ getNodeExecPath: () => '/electron/node' }));
+vi.mock('./acp-runtime-spawn', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./acp-runtime-spawn')>()),
+  terminateCatalogProcess: mocks.terminate,
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -57,6 +65,36 @@ describe('fetchClaudePlanUsage', () => {
     mocks.usage.mockResolvedValue({ unexpected: true });
     await expect(fetchClaudePlanUsage()).rejects.toThrow();
     expect(mocks.close).toHaveBeenCalledOnce();
+  });
+
+  it('uses the Electron-aware launcher and terminates the spawned usage process', async () => {
+    const child = {};
+    mocks.spawn.mockReturnValue(child);
+    mocks.query.mockImplementation(({ options }) => {
+      expect(options.spawnClaudeCodeProcess).toBeTypeOf('function');
+      options.spawnClaudeCodeProcess({
+        command: 'node',
+        args: ['/app.asar/claude.js'],
+        cwd: '/disposable',
+        env: options.env,
+        signal: options.abortController.signal,
+      });
+      return {
+        initializationResult: mocks.initialize,
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: mocks.usage,
+        close: mocks.close,
+      };
+    });
+
+    await fetchClaudePlanUsage();
+
+    expect(mocks.spawn).toHaveBeenCalledWith('/electron/node', ['/app.asar.unpacked/claude.js'], {
+      cwd: '/disposable',
+      env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: '1' }),
+      signal: expect.any(AbortSignal),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    expect(mocks.terminate).toHaveBeenCalledWith(child);
   });
 
   it('bounds a stalled native quota read and closes it', async () => {
