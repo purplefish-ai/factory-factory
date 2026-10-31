@@ -90,7 +90,11 @@ describe('workspace creation submission recovery', () => {
       expect(context).toMatchObject({
         submission: { projectId: getTestProjectId(), revision: expect.any(String) },
       });
-      const newer = { ...createWorkspaceCreationDraft(), prompt: 'A newer task' };
+      const newer = {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'A newer task',
+        ratchetInitialized: true,
+      };
       await act(async () => {
         await saveWorkspaceCreationDraft(getTestProjectId(), newer).catch(() => undefined);
       });

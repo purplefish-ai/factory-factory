@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
+import { useWorkspaceCreationSubmission } from './use-workspace-creation-submission';
 import type { WorkspaceCreationDraft } from './workspace-creation-draft-storage';
 
 /** Bind editor setters to a project, including asynchronous attachment work. */
@@ -10,14 +11,21 @@ export function useInlineWorkspaceDraft(
 ) {
   const recovery = useWorkspaceCreationDraft(projectId);
   const { draft, updateDraft, hasDraft } = recovery;
+  const { isPending } = useWorkspaceCreationSubmission(projectId);
   const ratchetEnabled = draft.ratchetInitialized
     ? draft.ratchetEnabled
     : (defaultRatchetEnabled ?? false);
+  // Passive defaults must preserve the submitted revision until the request finishes.
   useEffect(() => {
-    if (hasDraft && !draft.ratchetInitialized && defaultRatchetEnabled !== undefined) {
+    if (
+      !isPending &&
+      hasDraft &&
+      !draft.ratchetInitialized &&
+      defaultRatchetEnabled !== undefined
+    ) {
       updateDraft({ ratchetEnabled: defaultRatchetEnabled, ratchetInitialized: true });
     }
-  }, [hasDraft, draft.ratchetInitialized, defaultRatchetEnabled, updateDraft]);
+  }, [isPending, hasDraft, draft.ratchetInitialized, defaultRatchetEnabled, updateDraft]);
   const launchSelection = useSessionLaunchSelection(projectId, {
     snapshot: draft.launchSelection,
     onChange: (launchSelection) =>
