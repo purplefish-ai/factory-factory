@@ -119,6 +119,31 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).not.toThrow();
   });
 
+  it('should dispatch a complete JPEG with trailing Samsung capture metadata', () => {
+    const data = Buffer.concat([
+      Buffer.from(VALID_JPEG_BASE64, 'base64'),
+      Buffer.from('Samsung_Capture_InfoScreenshot\0SEFH\0SEFT'),
+    ]).toString('base64');
+    const attachment = createImageAttachment({ type: 'image/jpeg', data });
+
+    expect(processAttachmentsAndBuildContent('', [attachment])).toEqual([
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } },
+    ]);
+  });
+
+  it('should reject a truncated JPEG even when trailing metadata contains an EOI marker', () => {
+    const bytes = Buffer.from(VALID_JPEG_BASE64, 'base64');
+    const data = Buffer.concat([
+      bytes.subarray(0, 30), // Truncate inside a length-delimited quantization table.
+      Buffer.from('Samsung_Capture_InfoScreenshot'),
+      Buffer.from([0xff, 0xd9]),
+    ]).toString('base64');
+
+    expect(() => validateAttachment(createImageAttachment({ type: 'image/jpeg', data }))).toThrow(
+      PermanentAttachmentError
+    );
+  });
+
   it('should throw error if attachment is missing data', () => {
     const attachment = createTextAttachment({ data: '' });
     expect(() => validateAttachment(attachment)).toThrow(
