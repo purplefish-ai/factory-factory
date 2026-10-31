@@ -68,17 +68,17 @@ popover without cancelling workspace creation.
 The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and
 periodic-agent schedules. Cancel and Escape preserve the draft; **Resume draft**
-reopens it and **Discard draft** clears it explicitly. Navigation and refresh
+reopens it. Clear instructions by selecting and deleting the text; remove
+attachments with their individual remove controls. Navigation and refresh
 restore saved inputs. Browser storage failures appear in the form while editing
 remains available; keep the tab open when a warning says changes could not be
-saved.
+saved. If a saved draft is unreadable, **Reset saved draft** appears beside the
+restore warning to remove the invalid stored record and keep the editor open.
 
 Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
 duplicate submissions. Success clears only the submitted revision; a late
 response cannot clear or close a newer draft or a composer in another project.
-Discarding a draft also invalidates unfinished attachment conversions for that
-draft.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;

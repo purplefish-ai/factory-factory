@@ -441,7 +441,14 @@ export function InlineWorkspaceForm({
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
-        <DraftPersistenceWarning message={recovery.persistenceError} />
+        <DraftPersistenceWarning
+          message={recovery.persistenceError}
+          hasUnreadableDraft={recovery.hasUnreadableDraft}
+          onReset={() => {
+            void recovery.discardDraft().catch(() => undefined);
+          }}
+          disabled={isBusy}
+        />
         {submission.error && (
           <p role="alert" className="text-xs text-destructive">
             {submission.error}
@@ -575,7 +582,6 @@ export function InlineWorkspaceForm({
             </DropdownMenu>
           </div>
         </WorkspaceCreationOptions>
-        <DiscardWorkspaceDraft recovery={recovery} disabled={isBusy} onCancel={onCancel} />
       </CardContent>
     </Card>
   );
@@ -585,46 +591,25 @@ function getLaunchDisabledReason(restoring: boolean, workspaceOptions: boolean, 
   return restoring ? 'Restoring draft' : workspaceOptions ? reason : undefined;
 }
 
-function DraftPersistenceWarning({ message }: { message: string | null }) {
-  return message ? (
-    <p role="alert" className="text-xs text-destructive">
-      {message}
-    </p>
-  ) : null;
-}
-
-function DiscardWorkspaceDraft({
-  recovery,
+function DraftPersistenceWarning({
+  message,
+  hasUnreadableDraft,
+  onReset,
   disabled,
-  onCancel,
 }: {
-  recovery: ReturnType<typeof useInlineWorkspaceDraft>;
+  message: string | null;
+  hasUnreadableDraft: boolean;
+  onReset: () => void;
   disabled: boolean;
-  onCancel: () => void;
 }) {
-  if (!(recovery.hasDraft || recovery.hasUnreadableDraft)) {
-    return null;
-  }
-  return (
-    <div className="flex justify-end">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 text-xs"
-        disabled={disabled}
-        onClick={() => {
-          void recovery
-            .discardDraft()
-            .then((discarded) => {
-              if (discarded) {
-                onCancel();
-              }
-            })
-            .catch(() => undefined);
-        }}
-      >
-        Discard draft
-      </Button>
+  return message ? (
+    <div role="alert" className="space-y-1 text-xs text-destructive">
+      <p>{message}</p>
+      {hasUnreadableDraft && (
+        <Button variant="outline" size="sm" onClick={onReset} disabled={disabled}>
+          Reset saved draft
+        </Button>
+      )}
     </div>
-  );
+  ) : null;
 }
