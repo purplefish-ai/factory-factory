@@ -130,3 +130,10 @@ row to preserve narrow launch controls. Screenshots are temporary evidence at
   before adding substantial Task 2 coverage. No file-length baseline grows.
 - Commit identifier and final check output are recorded in the completion
   message accompanying this report.
+
+## Commit
+
+Implementation and initial report: `a7b18a82d` — Preserve project task creation
+drafts across navigation. Pre-commit formatting, lint, typecheck, Prisma drift,
+dependency boundaries, and Knip checks all passed. The two root-owned submission
+helper files remain uncommitted and outside Task 1.
