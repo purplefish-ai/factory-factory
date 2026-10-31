@@ -533,3 +533,10 @@ input. Tap inside the terminal to type. The drawer tracks the visual viewport so
 its content fits above the software keyboard, and closing restores focus without
 focusing an editable control. Terminal processes continue on the server when the
 drawer closes.
+
+Crossing the 1024px drawer/desktop boundary remounts the tool presentation when
+moving between the modal portal and the desktop panels. This is an accepted
+layout boundary: client-only terminal scroll and transient tool state can reset,
+while terminal processes remain alive and their buffered output is restored from
+the server. Folding within the compact range (including the 344px, 690px, and
+800px regression viewports) preserves the mounted drawer content.

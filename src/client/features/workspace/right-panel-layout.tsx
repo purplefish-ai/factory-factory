@@ -8,6 +8,7 @@ export function RightPanelLayout({
   isMobile,
   mobilePanel,
   periodicTaskId,
+  onOpenLogs,
   className,
   topPanel,
   bottomPanel,
@@ -16,6 +17,7 @@ export function RightPanelLayout({
   isMobile: boolean;
   mobilePanel: 'top' | 'bottom';
   periodicTaskId: string | null;
+  onOpenLogs: () => void;
   className?: string;
   topPanel: ReactNode;
   bottomPanel: ReactNode;
@@ -24,10 +26,12 @@ export function RightPanelLayout({
   if (mobilePanel === 'bottom' && bottomMountedFor !== workspaceId) {
     setBottomMountedFor(workspaceId);
   }
+  // The outer route also remounts tools when crossing the modal/desktop boundary.
+  // Fold widths within the compact range keep this panel tree mounted.
   if (isMobile) {
     return (
       <div className={cn('flex h-full min-h-0 flex-col', className)}>
-        <MobileToolSwitcher periodicTaskId={periodicTaskId} />
+        <MobileToolSwitcher periodicTaskId={periodicTaskId} onOpenLogs={onOpenLogs} />
         <div hidden={mobilePanel !== 'top'} className="min-h-0 flex-1">
           {topPanel}
         </div>

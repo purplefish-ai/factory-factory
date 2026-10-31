@@ -9,7 +9,13 @@ import {
 import { cn } from '@/lib/utils';
 import { useWorkspacePanel } from './workspace-panel-context';
 
-export function MobileToolSwitcher({ periodicTaskId }: { periodicTaskId: string | null }) {
+export function MobileToolSwitcher({
+  periodicTaskId,
+  onOpenLogs,
+}: {
+  periodicTaskId: string | null;
+  onOpenLogs: () => void;
+}) {
   const { mobilePanel, activeTopTab, activeBottomTab, setActiveTopTab, setActiveBottomTab } =
     useWorkspacePanel();
   const changesActive = mobilePanel === 'top' && activeTopTab === 'changes';
@@ -83,7 +89,7 @@ export function MobileToolSwitcher({ periodicTaskId }: { periodicTaskId: string 
               Agent
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem className="min-h-11" onSelect={() => setActiveBottomTab('setup-logs')}>
+          <DropdownMenuItem className="min-h-11" onSelect={onOpenLogs}>
             Logs
           </DropdownMenuItem>
         </DropdownMenuContent>

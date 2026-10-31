@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -19,8 +19,9 @@ export function WorkspaceToolsDrawer({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!(open && window.visualViewport)) {
+      setViewport(null);
       return;
     }
     const visibleViewport = window.visualViewport;

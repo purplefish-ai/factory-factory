@@ -43,6 +43,13 @@ export function WorkspaceToolsFixture() {
                   noMergeBase: false,
                 },
                 'workspace.getUnpushedFiles': { files: [], hasUpstream: true },
+                'workspace.listFiles': {
+                  entries: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+                  hasWorktree: true,
+                },
+                'workspace.listScreenshots': { screenshots: [] },
+                'workspace.listChildren': [],
+                'project.list': [{ id: 'demo', name: 'Demo', slug: 'demo' }],
               };
               if (!(op.path in responses)) {
                 observer.error(new TRPCClientError(`Missing tools fixture: ${op.path}`));

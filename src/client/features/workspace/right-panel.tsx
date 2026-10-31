@@ -255,7 +255,12 @@ export const RightPanel = memo(function RightPanel({
       </div>
 
       {isLogsActive && (
-        <div className="flex items-center gap-2 px-2 py-1 bg-muted/40 border-b min-w-0">
+        <div
+          className={cn(
+            'flex items-center gap-2 px-2 py-1 bg-muted/40 border-b min-w-0',
+            isMobile && '[&_button]:min-h-11 [&_button]:min-w-11'
+          )}
+        >
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium whitespace-nowrap">
             Log source
           </span>
@@ -324,6 +329,7 @@ export const RightPanel = memo(function RightPanel({
       isMobile={isMobile}
       mobilePanel={mobilePanel}
       periodicTaskId={periodicTaskId}
+      onOpenLogs={handleLogsTabChange}
       className={className}
       topPanel={topPanel}
       bottomPanel={bottomPanel}

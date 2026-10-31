@@ -76,3 +76,33 @@ for (const viewport of [
     });
   });
 }
+
+test('More tools render their fixtures and Logs reopens the last source', async ({ page }) => {
+  await page.setViewportSize({ width: 344, height: 882 });
+  await page.routeWebSocket(/\/(dev-logs|post-run-logs)\?/, (ws) => {
+    ws.send(JSON.stringify({ type: 'output', data: 'Development server listening' }));
+  });
+  await page.goto('/__mobile-baseline?surface=tools');
+  await page.getByRole('button', { name: 'Open tools' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Workspace tools' });
+  await drawer.getByRole('button', { name: /more tools/i }).click();
+  await page.getByRole('menuitem', { name: 'Files', exact: true }).click();
+  await expect(drawer.getByText('README.md', { exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: /more tools/i }).click();
+  await page.getByRole('menuitem', { name: 'Screenshots', exact: true }).click();
+  await expect(drawer.getByText('No screenshots yet', { exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: /more tools/i }).click();
+  await page.getByRole('menuitem', { name: 'Sessions', exact: true }).click();
+  await expect(drawer.getByText('No child workspaces yet.', { exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: /more tools/i }).click();
+  await page.getByRole('menuitem', { name: 'Logs', exact: true }).click();
+  const dev = drawer.getByRole('button', { name: 'Dev', exact: true });
+  await dev.click();
+  await expect(drawer.locator('pre')).toContainText('Development server listening');
+  expect((await dev.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  await drawer.getByRole('button', { name: 'Changes', exact: true }).click();
+  await drawer.getByRole('button', { name: /more tools/i }).click();
+  await page.getByRole('menuitem', { name: 'Logs', exact: true }).click();
+  await expect(drawer.locator('pre')).toContainText('Development server listening');
+  await expect(drawer.getByText('Missing tools fixture', { exact: false })).toHaveCount(0);
+});

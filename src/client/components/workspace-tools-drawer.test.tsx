@@ -52,5 +52,19 @@ it('fits the visible viewport above the keyboard and restores focus to the opene
   // Radix dispatches unmount autofocus on the next timer tick.
   await vi.waitFor(() => expect(document.activeElement).toBe(opener));
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+  // The keyboard can disappear while the closed drawer isn't listening.
+  viewport.height = 882;
+  viewport.offsetTop = 0;
+  let heightAtFocus = '';
+  const captureReopenHeight = () => {
+    if (heightAtFocus) {
+      return;
+    }
+    heightAtFocus = document.querySelector<HTMLElement>('[role="dialog"]')?.style.height ?? '';
+  };
+  document.addEventListener('focusin', captureReopenHeight);
+  await act(() => opener.click());
+  document.removeEventListener('focusin', captureReopenHeight);
+  expect(heightAtFocus).toBe('882px');
   await act(() => root.unmount());
 });
