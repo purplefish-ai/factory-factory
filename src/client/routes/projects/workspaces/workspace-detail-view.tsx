@@ -1,5 +1,6 @@
 import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
+import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
 import type { SubagentSelection } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
@@ -7,17 +8,10 @@ import {
   WorkspaceContentView,
 } from '@/client/features/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
+import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { useIsMobile } from '@/hooks/use-mobile';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
@@ -128,7 +122,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   setRightPanelVisible,
   archiveDialog,
 }: WorkspaceDetailViewProps) {
-  const isMobile = useIsMobile();
+  const isMobile = useWorkspaceDrawer();
   const [isTakingScreenshots, setIsTakingScreenshots] = useState(false);
   const selectedSessionIndex =
     sessionTabs.sessions?.findIndex((session) => session.id === sessionTabs.selectedDbSessionId) ??
@@ -248,20 +242,9 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
       {isMobile ? (
         <>
           <div className="flex-1 min-h-0">{mainContent}</div>
-          <Sheet open={rightPanelVisible} onOpenChange={setRightPanelVisible}>
-            <SheetContent
-              side="bottom"
-              className="h-[85dvh] w-full max-w-none p-0 pt-12 [&>button]:right-3 [&>button]:top-3 [&>button]:z-30"
-            >
-              <SheetHeader className="sr-only">
-                <SheetTitle>Workspace Side Panel</SheetTitle>
-                <SheetDescription>
-                  Browse files, diffs, logs, and terminals for this workspace.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="h-full">{rightPanel}</div>
-            </SheetContent>
-          </Sheet>
+          <WorkspaceToolsDrawer open={rightPanelVisible} onOpenChange={setRightPanelVisible}>
+            {rightPanel}
+          </WorkspaceToolsDrawer>
         </>
       ) : (
         <ResizablePanelGroup

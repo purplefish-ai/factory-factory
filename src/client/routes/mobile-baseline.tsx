@@ -28,6 +28,7 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
 import { WorkspaceHeaderFixture } from './workspace-header-fixture';
+import { WorkspaceToolsFixture } from './workspace-tools-fixture';
 
 const mobileBaselinePRs: PRWithFullDetails[] = [
   {
@@ -139,6 +140,9 @@ const noop = () => undefined;
 
 export default function MobileBaselinePage() {
   const [searchParams] = useSearchParams();
+  if (searchParams.get('surface') === 'tools') {
+    return <WorkspaceToolsFixture />;
+  }
   if (searchParams.get('surface') === 'header') {
     return <WorkspaceHeaderFixture />;
   }

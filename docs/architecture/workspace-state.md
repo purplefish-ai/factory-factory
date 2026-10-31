@@ -518,3 +518,18 @@ recipient, pause and pending-event count come from `WorkspacePRMonitoring` and
 failed CI, a queued update or a paused delivery does not create a working agent
 signal. An attached open PR keeps the workspace actionable when a sibling
 merges. See [PR update delivery and recovery](pull-requests.md).
+
+## Workspace tools on phones and foldables
+
+Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
+of the session still visible. Changes and Terminal each occupy the content area;
+More keeps files, sessions, screenshots, agent configuration, and logs
+available. The selected tool survives closing and reopening the drawer in the
+workspace. Selecting a file, diff, or screenshot closes the drawer to reveal the
+main view. Wider screens retain the resizable desktop split.
+
+Terminal selection on compact or touch screens never automatically focuses its
+input. Tap inside the terminal to type. The drawer tracks the visual viewport so
+its content fits above the software keyboard, and closing restores focus without
+focusing an editable control. Terminal processes continue on the server when the
+drawer closes.

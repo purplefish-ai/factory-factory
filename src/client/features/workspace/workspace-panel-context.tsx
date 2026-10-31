@@ -10,7 +10,10 @@ import {
 } from 'react';
 import { z } from 'zod';
 import type { SubagentSelection } from '@/client/features/subagents';
-import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
+import {
+  useWorkspaceDrawer,
+  WORKSPACE_DRAWER_BREAKPOINT,
+} from '@/client/hooks/use-workspace-drawer';
 import { subagentSummarySchema } from '@/shared/acp-protocol';
 import type { TopPanelTab } from './right-panel-state';
 import {
@@ -45,6 +48,7 @@ export interface WorkspacePanelState {
   rightPanelVisible: boolean;
   activeBottomTab: BottomPanelTab;
   activeTopTab: TopPanelTab;
+  mobilePanel: 'top' | 'bottom';
 }
 
 interface WorkspacePanelContextValue extends WorkspacePanelState {
@@ -113,7 +117,7 @@ const MainViewTabSchema = z
   });
 
 const MainViewTabsSchema = z.array(MainViewTabSchema);
-const MOBILE_MAX_WIDTH_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+const MOBILE_MAX_WIDTH_MEDIA_QUERY = `(max-width: ${WORKSPACE_DRAWER_BREAKPOINT - 1}px)`;
 const SCROLL_STATE_PERSIST_DEBOUNCE_MS = 120;
 
 // =============================================================================
@@ -263,8 +267,16 @@ export function WorkspacePanelProvider({
   children,
   initialActiveTabId,
 }: WorkspacePanelProviderProps) {
-  const isMobile = useIsMobile();
-  const { activeTopTab, setActiveTopTab } = useRightPanelTopTab(workspaceId);
+  const isMobile = useWorkspaceDrawer();
+  const { activeTopTab, setActiveTopTab: selectTopTab } = useRightPanelTopTab(workspaceId);
+  const [mobilePanel, setMobilePanel] = useState<'top' | 'bottom'>('top');
+  const setActiveTopTab = useCallback(
+    (tab: TopPanelTab) => {
+      setMobilePanel('top');
+      selectTopTab(tab);
+    },
+    [selectTopTab]
+  );
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const scrollStatesRef = useRef<Record<string, ScrollState>>({});
@@ -328,6 +340,7 @@ export function WorkspacePanelProvider({
 
     // Load bottom tab (workspace-scoped)
     setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
+    setMobilePanel('top');
 
     // Load right panel visibility (workspace-scoped). On mobile we start closed.
     setRightPanelVisibleState(isMobileViewport() ? false : loadRightPanelVisibility(workspaceId));
@@ -493,6 +506,9 @@ export function WorkspacePanelProvider({
 
   const openTab = useCallback(
     (type: Exclude<MainViewTab['type'], 'subagent'>, path?: string, label?: string) => {
+      if (isMobile) {
+        setRightPanelVisibleState(false);
+      }
       // Check for existing tab
       const existing = tabs.find((tab) => {
         if (type === 'closed-session' && path) {
@@ -524,7 +540,7 @@ export function WorkspacePanelProvider({
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(id);
     },
-    [tabs]
+    [tabs, isMobile]
   );
 
   const openSubagentTab = useCallback((selection: SubagentSelection) => {
@@ -593,6 +609,7 @@ export function WorkspacePanelProvider({
 
   const setActiveBottomTab = useCallback((tab: BottomPanelTab) => {
     setActiveBottomTabState(tab);
+    setMobilePanel('bottom');
   }, []);
 
   const value = useMemo<WorkspacePanelContextValue>(
@@ -602,6 +619,7 @@ export function WorkspacePanelProvider({
       rightPanelVisible,
       activeBottomTab,
       activeTopTab,
+      mobilePanel,
       openTab,
       openSubagentTab,
       updateSubagentTab,
@@ -623,6 +641,7 @@ export function WorkspacePanelProvider({
       rightPanelVisible,
       activeBottomTab,
       activeTopTab,
+      mobilePanel,
       openTab,
       openSubagentTab,
       updateSubagentTab,

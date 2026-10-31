@@ -2,18 +2,18 @@ import * as React from 'react';
 
 export const MOBILE_BREAKPOINT = 768;
 
-export function useIsMobile() {
+export function useIsMobile(breakpoint = MOBILE_BREAKPOINT) {
   const [isMobile, setIsMobile] = React.useState<boolean>(() => {
     if (typeof window === 'undefined') {
       return false;
     }
-    return window.innerWidth < MOBILE_BREAKPOINT;
+    return window.innerWidth < breakpoint;
   });
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
     const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      setIsMobile(window.innerWidth < breakpoint);
     };
 
     if (typeof mql.addEventListener === 'function') {
@@ -22,7 +22,7 @@ export function useIsMobile() {
       mql.addListener(onChange);
     }
 
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    setIsMobile(window.innerWidth < breakpoint);
 
     return () => {
       if (typeof mql.removeEventListener === 'function') {
@@ -31,7 +31,7 @@ export function useIsMobile() {
         mql.removeListener(onChange);
       }
     };
-  }, []);
+  }, [breakpoint]);
 
   return isMobile;
 }

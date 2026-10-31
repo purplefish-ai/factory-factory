@@ -11,9 +11,11 @@ import {
   WorkspacePanelProvider,
 } from './workspace-panel-context';
 
+const viewport = vi.hoisted(() => ({ mobile: false }));
+
 vi.mock('@/hooks/use-mobile', () => ({
   MOBILE_BREAKPOINT: 768,
-  useIsMobile: () => false,
+  useIsMobile: () => viewport.mobile,
 }));
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -141,6 +143,7 @@ function readProbe(container: HTMLElement): { activeTabId: string; tabs: MainVie
 
 beforeEach(() => {
   localStorage.clear();
+  viewport.mobile = false;
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
 });
 
@@ -150,6 +153,24 @@ afterEach(() => {
 });
 
 describe('WorkspacePanelProvider persistence', () => {
+  it('dismisses the drawer when opening a file or diff in the main view', async () => {
+    viewport.mobile = true;
+    let state: ReturnType<typeof useWorkspacePanel> | undefined;
+    const panel = renderPanel(
+      <PanelScrollProbe
+        onPanel={(value) => {
+          state = value;
+        }}
+      />
+    );
+    await act(() => state!.setRightPanelVisible(true));
+    expect(state!.rightPanelVisible).toBe(true);
+    await act(() => state!.openTab('diff', 'src/app.tsx'));
+    expect(state!.rightPanelVisible).toBe(false);
+    expect(state!.activeTabId).toBe('diff-src/app.tsx');
+    await act(() => panel.root.unmount());
+  });
+
   it('reactivates an open screenshot without duplicating its tab', async () => {
     let panel: ReturnType<typeof renderPanel>;
     await act(() => {

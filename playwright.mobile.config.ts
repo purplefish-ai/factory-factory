@@ -3,7 +3,12 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   outputDir: 'test-results/mobile',
-  testMatch: ['mobile-baseline.spec.ts', 'workspace-header.spec.ts', 'agents-responsive.spec.ts'],
+  testMatch: [
+    'mobile-baseline.spec.ts',
+    'workspace-header.spec.ts',
+    'agents-responsive.spec.ts',
+    'workspace-tools.spec.ts',
+  ],
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',

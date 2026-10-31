@@ -98,7 +98,9 @@ export function TerminalInstance({
 
     terminal.open(containerRef.current);
     fitAddon.fit();
-    terminal.focus();
+    if (!window.matchMedia('(max-width: 1023px), (any-pointer: coarse)').matches) {
+      terminal.focus();
+    }
 
     // Store refs
     terminalRef.current = terminal;
@@ -184,7 +186,11 @@ export function TerminalInstance({
 
   // Focus terminal when it becomes active (e.g., tab switch)
   useEffect(() => {
-    if (isActive && terminalRef.current) {
+    if (
+      isActive &&
+      terminalRef.current &&
+      !window.matchMedia('(max-width: 1023px), (any-pointer: coarse)').matches
+    ) {
       terminalRef.current.focus();
     }
   }, [isActive]);
