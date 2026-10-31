@@ -886,7 +886,8 @@ UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.
 
 - Orchestration: `src/backend/orchestration/workspace-children.orchestrator.ts`
-- MCP server:
+- MCP entrypoint: `src/backend/mcp/workspace-mcp-server.ts`
+- Session MCP spawn configuration:
   `src/backend/services/session/service/acp/child-workspace-mcp-server.ts`
 
 ## Quick actions

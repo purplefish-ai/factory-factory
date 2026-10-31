@@ -6,6 +6,7 @@
         "src/backend/server.ts",
         "src/backend/migrate.ts",
         "src/backend/electron-utility-entry.ts",
+        "src/backend/mcp/workspace-mcp-server.ts",
         "electron/main/index.ts",
         "electron/preload/index.cts"
       ],

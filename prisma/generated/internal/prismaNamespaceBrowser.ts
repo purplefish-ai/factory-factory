@@ -67,6 +67,7 @@ export const ModelName = {
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
   AgentDefinition: 'AgentDefinition',
+  AgentProposal: 'AgentProposal',
   AgentConnection: 'AgentConnection',
   AgentTrigger: 'AgentTrigger',
   AgentRun: 'AgentRun',
@@ -382,6 +383,20 @@ export const AgentDefinitionScalarFieldEnum = {
 } as const
 
 export type AgentDefinitionScalarFieldEnum = (typeof AgentDefinitionScalarFieldEnum)[keyof typeof AgentDefinitionScalarFieldEnum]
+
+
+export const AgentProposalScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  specification: 'specification',
+  sourceNames: 'sourceNames',
+  agentDefinitionId: 'agentDefinitionId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentProposalScalarFieldEnum = (typeof AgentProposalScalarFieldEnum)[keyof typeof AgentProposalScalarFieldEnum]
 
 
 export const AgentConnectionScalarFieldEnum = {

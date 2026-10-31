@@ -205,6 +205,7 @@ export type AgentDefinitionWhereInput = {
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   triggers?: Prisma.AgentTriggerListRelationFilter
   runs?: Prisma.AgentRunListRelationFilter
+  proposal?: Prisma.XOR<Prisma.AgentProposalNullableScalarRelationFilter, Prisma.AgentProposalWhereInput> | null
 }
 
 export type AgentDefinitionOrderByWithRelationInput = {
@@ -219,6 +220,7 @@ export type AgentDefinitionOrderByWithRelationInput = {
   project?: Prisma.ProjectOrderByWithRelationInput
   triggers?: Prisma.AgentTriggerOrderByRelationAggregateInput
   runs?: Prisma.AgentRunOrderByRelationAggregateInput
+  proposal?: Prisma.AgentProposalOrderByWithRelationInput
 }
 
 export type AgentDefinitionWhereUniqueInput = Prisma.AtLeast<{
@@ -236,6 +238,7 @@ export type AgentDefinitionWhereUniqueInput = Prisma.AtLeast<{
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   triggers?: Prisma.AgentTriggerListRelationFilter
   runs?: Prisma.AgentRunListRelationFilter
+  proposal?: Prisma.XOR<Prisma.AgentProposalNullableScalarRelationFilter, Prisma.AgentProposalWhereInput> | null
 }, "id">
 
 export type AgentDefinitionOrderByWithAggregationInput = {
@@ -277,6 +280,7 @@ export type AgentDefinitionCreateInput = {
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutAgentDefinitionInput
   runs?: Prisma.AgentRunCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionUncheckedCreateInput = {
@@ -290,6 +294,7 @@ export type AgentDefinitionUncheckedCreateInput = {
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalUncheckedCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionUpdateInput = {
@@ -303,6 +308,7 @@ export type AgentDefinitionUpdateInput = {
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
   triggers?: Prisma.AgentTriggerUpdateManyWithoutAgentDefinitionNestedInput
   runs?: Prisma.AgentRunUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionUncheckedUpdateInput = {
@@ -316,6 +322,7 @@ export type AgentDefinitionUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUncheckedUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionCreateManyInput = {
@@ -391,6 +398,11 @@ export type AgentDefinitionMinOrderByAggregateInput = {
   updatedAt?: Prisma.SortOrder
 }
 
+export type AgentDefinitionNullableScalarRelationFilter = {
+  is?: Prisma.AgentDefinitionWhereInput | null
+  isNot?: Prisma.AgentDefinitionWhereInput | null
+}
+
 export type AgentDefinitionScalarRelationFilter = {
   is?: Prisma.AgentDefinitionWhereInput
   isNot?: Prisma.AgentDefinitionWhereInput
@@ -438,6 +450,22 @@ export type AgentDefinitionUncheckedUpdateManyWithoutProjectNestedInput = {
   deleteMany?: Prisma.AgentDefinitionScalarWhereInput | Prisma.AgentDefinitionScalarWhereInput[]
 }
 
+export type AgentDefinitionCreateNestedOneWithoutProposalInput = {
+  create?: Prisma.XOR<Prisma.AgentDefinitionCreateWithoutProposalInput, Prisma.AgentDefinitionUncheckedCreateWithoutProposalInput>
+  connectOrCreate?: Prisma.AgentDefinitionCreateOrConnectWithoutProposalInput
+  connect?: Prisma.AgentDefinitionWhereUniqueInput
+}
+
+export type AgentDefinitionUpdateOneWithoutProposalNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentDefinitionCreateWithoutProposalInput, Prisma.AgentDefinitionUncheckedCreateWithoutProposalInput>
+  connectOrCreate?: Prisma.AgentDefinitionCreateOrConnectWithoutProposalInput
+  upsert?: Prisma.AgentDefinitionUpsertWithoutProposalInput
+  disconnect?: Prisma.AgentDefinitionWhereInput | boolean
+  delete?: Prisma.AgentDefinitionWhereInput | boolean
+  connect?: Prisma.AgentDefinitionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentDefinitionUpdateToOneWithWhereWithoutProposalInput, Prisma.AgentDefinitionUpdateWithoutProposalInput>, Prisma.AgentDefinitionUncheckedUpdateWithoutProposalInput>
+}
+
 export type AgentDefinitionCreateNestedOneWithoutTriggersInput = {
   create?: Prisma.XOR<Prisma.AgentDefinitionCreateWithoutTriggersInput, Prisma.AgentDefinitionUncheckedCreateWithoutTriggersInput>
   connectOrCreate?: Prisma.AgentDefinitionCreateOrConnectWithoutTriggersInput
@@ -476,6 +504,7 @@ export type AgentDefinitionCreateWithoutProjectInput = {
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutAgentDefinitionInput
   runs?: Prisma.AgentRunCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionUncheckedCreateWithoutProjectInput = {
@@ -488,6 +517,7 @@ export type AgentDefinitionUncheckedCreateWithoutProjectInput = {
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalUncheckedCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionCreateOrConnectWithoutProjectInput = {
@@ -529,6 +559,74 @@ export type AgentDefinitionScalarWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
 }
 
+export type AgentDefinitionCreateWithoutProposalInput = {
+  id?: string
+  name: string
+  instructions: string
+  isEnabled?: boolean
+  executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
+  triggers?: Prisma.AgentTriggerCreateNestedManyWithoutAgentDefinitionInput
+  runs?: Prisma.AgentRunCreateNestedManyWithoutAgentDefinitionInput
+}
+
+export type AgentDefinitionUncheckedCreateWithoutProposalInput = {
+  id?: string
+  projectId: string
+  name: string
+  instructions: string
+  isEnabled?: boolean
+  executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
+  runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutAgentDefinitionInput
+}
+
+export type AgentDefinitionCreateOrConnectWithoutProposalInput = {
+  where: Prisma.AgentDefinitionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentDefinitionCreateWithoutProposalInput, Prisma.AgentDefinitionUncheckedCreateWithoutProposalInput>
+}
+
+export type AgentDefinitionUpsertWithoutProposalInput = {
+  update: Prisma.XOR<Prisma.AgentDefinitionUpdateWithoutProposalInput, Prisma.AgentDefinitionUncheckedUpdateWithoutProposalInput>
+  create: Prisma.XOR<Prisma.AgentDefinitionCreateWithoutProposalInput, Prisma.AgentDefinitionUncheckedCreateWithoutProposalInput>
+  where?: Prisma.AgentDefinitionWhereInput
+}
+
+export type AgentDefinitionUpdateToOneWithWhereWithoutProposalInput = {
+  where?: Prisma.AgentDefinitionWhereInput
+  data: Prisma.XOR<Prisma.AgentDefinitionUpdateWithoutProposalInput, Prisma.AgentDefinitionUncheckedUpdateWithoutProposalInput>
+}
+
+export type AgentDefinitionUpdateWithoutProposalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  instructions?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
+  triggers?: Prisma.AgentTriggerUpdateManyWithoutAgentDefinitionNestedInput
+  runs?: Prisma.AgentRunUpdateManyWithoutAgentDefinitionNestedInput
+}
+
+export type AgentDefinitionUncheckedUpdateWithoutProposalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  projectId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  instructions?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+  runs?: Prisma.AgentRunUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+}
+
 export type AgentDefinitionCreateWithoutTriggersInput = {
   id?: string
   name: string
@@ -539,6 +637,7 @@ export type AgentDefinitionCreateWithoutTriggersInput = {
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
   runs?: Prisma.AgentRunCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionUncheckedCreateWithoutTriggersInput = {
@@ -551,6 +650,7 @@ export type AgentDefinitionUncheckedCreateWithoutTriggersInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalUncheckedCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionCreateOrConnectWithoutTriggersInput = {
@@ -579,6 +679,7 @@ export type AgentDefinitionUpdateWithoutTriggersInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
   runs?: Prisma.AgentRunUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionUncheckedUpdateWithoutTriggersInput = {
@@ -591,6 +692,7 @@ export type AgentDefinitionUncheckedUpdateWithoutTriggersInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUncheckedUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionCreateWithoutRunsInput = {
@@ -603,6 +705,7 @@ export type AgentDefinitionCreateWithoutRunsInput = {
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionUncheckedCreateWithoutRunsInput = {
@@ -615,6 +718,7 @@ export type AgentDefinitionUncheckedCreateWithoutRunsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
+  proposal?: Prisma.AgentProposalUncheckedCreateNestedOneWithoutAgentDefinitionInput
 }
 
 export type AgentDefinitionCreateOrConnectWithoutRunsInput = {
@@ -643,6 +747,7 @@ export type AgentDefinitionUpdateWithoutRunsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
   triggers?: Prisma.AgentTriggerUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionUncheckedUpdateWithoutRunsInput = {
@@ -655,6 +760,7 @@ export type AgentDefinitionUncheckedUpdateWithoutRunsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUncheckedUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionCreateManyProjectInput = {
@@ -677,6 +783,7 @@ export type AgentDefinitionUpdateWithoutProjectInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutAgentDefinitionNestedInput
   runs?: Prisma.AgentRunUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionUncheckedUpdateWithoutProjectInput = {
@@ -689,6 +796,7 @@ export type AgentDefinitionUncheckedUpdateWithoutProjectInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutAgentDefinitionNestedInput
+  proposal?: Prisma.AgentProposalUncheckedUpdateOneWithoutAgentDefinitionNestedInput
 }
 
 export type AgentDefinitionUncheckedUpdateManyWithoutProjectInput = {
@@ -753,6 +861,7 @@ export type AgentDefinitionSelect<ExtArgs extends runtime.Types.Extensions.Inter
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   triggers?: boolean | Prisma.AgentDefinition$triggersArgs<ExtArgs>
   runs?: boolean | Prisma.AgentDefinition$runsArgs<ExtArgs>
+  proposal?: boolean | Prisma.AgentDefinition$proposalArgs<ExtArgs>
   _count?: boolean | Prisma.AgentDefinitionCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentDefinition"]>
 
@@ -796,6 +905,7 @@ export type AgentDefinitionInclude<ExtArgs extends runtime.Types.Extensions.Inte
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   triggers?: boolean | Prisma.AgentDefinition$triggersArgs<ExtArgs>
   runs?: boolean | Prisma.AgentDefinition$runsArgs<ExtArgs>
+  proposal?: boolean | Prisma.AgentDefinition$proposalArgs<ExtArgs>
   _count?: boolean | Prisma.AgentDefinitionCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AgentDefinitionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -811,6 +921,7 @@ export type $AgentDefinitionPayload<ExtArgs extends runtime.Types.Extensions.Int
     project: Prisma.$ProjectPayload<ExtArgs>
     triggers: Prisma.$AgentTriggerPayload<ExtArgs>[]
     runs: Prisma.$AgentRunPayload<ExtArgs>[]
+    proposal: Prisma.$AgentProposalPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1218,6 +1329,7 @@ export interface Prisma__AgentDefinitionClient<T, Null = never, ExtArgs extends 
   project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   triggers<T extends Prisma.AgentDefinition$triggersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentDefinition$triggersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentTriggerPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   runs<T extends Prisma.AgentDefinition$runsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentDefinition$runsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentRunPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  proposal<T extends Prisma.AgentDefinition$proposalArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentDefinition$proposalArgs<ExtArgs>>): Prisma.Prisma__AgentProposalClient<runtime.Types.Result.GetResult<Prisma.$AgentProposalPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1699,6 +1811,25 @@ export type AgentDefinition$runsArgs<ExtArgs extends runtime.Types.Extensions.In
   take?: number
   skip?: number
   distinct?: Prisma.AgentRunScalarFieldEnum | Prisma.AgentRunScalarFieldEnum[]
+}
+
+/**
+ * AgentDefinition.proposal
+ */
+export type AgentDefinition$proposalArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentProposal
+   */
+  select?: Prisma.AgentProposalSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentProposal
+   */
+  omit?: Prisma.AgentProposalOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentProposalInclude<ExtArgs> | null
+  where?: Prisma.AgentProposalWhereInput
 }
 
 /**

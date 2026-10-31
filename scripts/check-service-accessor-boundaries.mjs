@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentProposalAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-proposal.accessor',
+  },
   slackConnectionAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/slack-connection.accessor',

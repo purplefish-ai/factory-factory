@@ -163,6 +163,11 @@ export type UserSettings = Prisma.UserSettingsModel
  */
 export type AgentDefinition = Prisma.AgentDefinitionModel
 /**
+ * Model AgentProposal
+ * A chat-authored draft. Acceptance creates its definition exactly once.
+ */
+export type AgentProposal = Prisma.AgentProposalModel
+/**
  * Model AgentConnection
  * Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.
  */
