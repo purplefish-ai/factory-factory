@@ -19,6 +19,7 @@ import type { WorkspaceWithKanban } from './kanban-card';
 import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { QuickChatSheet } from './quick-chat-sheet';
+import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
 
 export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
@@ -264,7 +265,11 @@ export function KanbanBoard() {
             onClick={handleMobileNewTaskClick}
           >
             <PlusIcon className="h-4 w-4" />
-            New Task
+            <WorkspaceCreationButtonLabel
+              projectId={projectId}
+              isOpen={showInlineForm}
+              defaultLabel="New Task"
+            />
           </Button>
 
           {/* Active column content */}
@@ -402,6 +407,7 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
         <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
           {showInlineForm ? (
             <InlineWorkspaceForm
+              key={projectId}
               projectId={projectId}
               existingNames={existingNames}
               onCancel={() => setShowInlineForm(false)}
@@ -417,7 +423,11 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
               className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-card px-3 py-5 text-sm text-primary hover:border-primary/70 hover:text-primary transition-colors cursor-pointer"
             >
               <PlusIcon className="h-4 w-4" />
-              New Workspace
+              <WorkspaceCreationButtonLabel
+                projectId={projectId}
+                isOpen={false}
+                defaultLabel="New Workspace"
+              />
             </button>
           ) : null}
           {!isEmpty &&
@@ -441,4 +451,17 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
       />
     </>
   );
+}
+
+function WorkspaceCreationButtonLabel({
+  projectId,
+  isOpen,
+  defaultLabel,
+}: {
+  projectId: string;
+  isOpen: boolean;
+  defaultLabel: string;
+}) {
+  const { hasDraft } = useWorkspaceCreationDraft(projectId);
+  return hasDraft && !isOpen ? 'Resume draft' : defaultLabel;
 }

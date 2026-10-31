@@ -6,6 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
+import {
+  clearWorkspaceCreationDraft,
+  createWorkspaceCreationDraft,
+  getWorkspaceCreationDraftSnapshot,
+  loadWorkspaceCreationDraft,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 const mocks = vi.hoisted(() => ({
   isMobile: true,
@@ -126,7 +133,12 @@ describe('KanbanBoard', () => {
   let root: Root;
   let originalActEnvironmentDescriptor: PropertyDescriptor | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await loadWorkspaceCreationDraft('project-1').catch(() => undefined);
+    const previous = getWorkspaceCreationDraftSnapshot('project-1').draft;
+    if (previous) {
+      await clearWorkspaceCreationDraft('project-1', previous.revision).catch(() => undefined);
+    }
     mocks.isMobile = true;
     mocks.showInlineForm = false;
     mocks.workspaces = [
@@ -180,6 +192,25 @@ describe('KanbanBoard', () => {
     void act(() => root.render(createElement(KanbanBoard)));
   }
 
+  it.each([true, false])(
+    'offers a saved draft without reopening an explicitly closed composer (mobile=%s)',
+    async (mobile) => {
+      mocks.isMobile = mobile;
+      await saveWorkspaceCreationDraft('project-1', {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'Resume this task',
+      }).catch(() => undefined);
+      act(() => root.render(createElement(KanbanBoard)));
+      expect(container.querySelector('input')).toBeNull();
+      click('Resume draft');
+      expect(container.querySelector('input')).not.toBeNull();
+      click('Cancel creation');
+      act(() => root.render(createElement(KanbanBoard)));
+      expect(container.querySelector('input')).toBeNull();
+      expect(container.textContent).toContain('Resume draft');
+    }
+  );
+
   it('shows the created task at the top of Working on mobile', () => {
     mocks.workspaces.push(
       createOptimisticWorkspaceSummary({
@@ -204,6 +235,43 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('input')).toBeNull();
     expect(oldScrollContainer.isConnected).toBe(false);
     expect(container.querySelector('[data-column="WORKING"]')!.parentElement!.scrollTop).toBe(0);
+  });
+
+  it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
+    mocks.isMobile = mobile;
+    act(() => root.render(createElement(KanbanBoard)));
+    click(mobile ? 'New Task' : 'New Workspace');
+    click('Complete creation');
+    mocks.workspaces = mocks.workspaces.map((workspace) =>
+      workspace.id === 'new-task'
+        ? {
+            ...workspace,
+            status: 'FAILED',
+            kanbanColumn: 'WAITING',
+            isWorking: false,
+            initErrorMessage: 'Git worktree failed',
+            statusReason: {
+              code: 'SETUP_FAILED',
+              label: 'Setup failed',
+              tone: 'danger',
+              needsUser: true,
+            },
+          }
+        : workspace
+    );
+    act(() => root.render(createElement(KanbanBoard)));
+    expect(container.querySelector('[data-column="WORKING"]')?.textContent).not.toContain(
+      'New task'
+    );
+    if (mobile) {
+      click('Waiting2');
+    }
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
+    // Remounting the board keeps the failed task supplied by its query visible.
+    act(() => root.unmount());
+    root = createRoot(container);
+    act(() => root.render(createElement(KanbanBoard)));
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
   });
 
   it('stays on To Do when task creation is cancelled', () => {

@@ -68,6 +68,11 @@ Markdown; inspect its diff and keep unrelated changes out of the PR.
 | Prisma schema      | Follow the application-code row. Run `pnpm check:prisma-schema` to regenerate the client, validate ownership and typecheck. Include any required migration (`pnpm db:migrate`) and commit the regenerated `prisma/generated/` output. Generate before checking code that depends on the new schema. |
 | Documentation only | Run the shared checks above, validate changed links and anchors, verify documented commands against package scripts, and check `CLAUDE.md` imports when changing agent guides. Application tests are not needed solely for prose changes.                                                           |
 
+Draft persistence also has a browser storage suite:
+`pnpm exec playwright test --config=playwright.drafts.config.ts`. It uses the
+installed Playwright Chromium and a frontend-only Vite server; the regular
+Vitest suite does not require a browser installation.
+
 Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
 may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails

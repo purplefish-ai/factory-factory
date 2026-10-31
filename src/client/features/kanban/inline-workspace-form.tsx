@@ -3,7 +3,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   AgentScheduleFields,
@@ -19,7 +19,6 @@ import {
   useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -39,13 +38,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
 } from '@/shared/workspace-words';
+import { useInlineWorkspaceDraft } from './use-inline-workspace-draft';
+import {
+  useWorkspaceCreationSubmission,
+  type WorkspaceCreationSubmission,
+} from './use-workspace-creation-submission';
 import { WorkspaceCreationOptions } from './workspace-creation-options';
 
 function handleFormKeyDown(
@@ -116,6 +119,7 @@ type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
 
 interface CreateWorkspaceMutationContext {
   optimisticWorkspaceId: string;
+  submission: WorkspaceCreationSubmission | null;
 }
 
 /** Put an optimistic row at the head of the shared project list. */
@@ -177,15 +181,38 @@ export function InlineWorkspaceForm({
   const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [initialPrompt, setInitialPrompt] = useState('');
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
-  const [ratchetEnabled, setRatchetEnabled] = useState(false);
-  const launchSelection = useSessionLaunchSelection(projectId);
-  const [mode, setMode] = useState<'STANDARD' | 'PERIODIC_TASK'>('STANDARD');
-  const [cadence, setCadence] = useState<
-    'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
-  >('DAILY');
-  const [scheduledTime, setScheduledTime] = useState('');
+  const recovery = useInlineWorkspaceDraft(projectId, userSettings?.ratchetEnabled);
+  const {
+    draft,
+    launchSelection,
+    ratchetEnabled,
+    setInitialPrompt,
+    setAttachments,
+    setRatchetEnabled,
+    setMode,
+    setCadence,
+    setScheduledTime,
+  } = recovery;
+  const { prompt: initialPrompt, attachments, mode, cadence, scheduledTime } = draft;
+  const submission = useWorkspaceCreationSubmission(projectId);
+  const submitted = useRef<WorkspaceCreationSubmission | null>(null);
+  const completeCreation = (
+    token: WorkspaceCreationSubmission | null | undefined,
+    onComplete: () => void
+  ) => {
+    if (!token) {
+      onComplete();
+      return;
+    }
+    runInBackground(
+      submission.succeed(token).then((mayClose) => {
+        if (mayClose) {
+          onComplete();
+        }
+      }),
+      'Could not finalize task creation'
+    );
+  };
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -203,7 +230,7 @@ export function InlineWorkspaceForm({
       setInitialPrompt(value);
       autoResize();
     },
-    [autoResize]
+    [autoResize, setInitialPrompt]
   );
 
   const fileMentions = useProjectFileMentions({
@@ -224,31 +251,31 @@ export function InlineWorkspaceForm({
     onChange: onPromptChange,
   });
 
-  // Initialize defaults from user settings once loaded
   useEffect(() => {
-    if (!userSettings) {
-      return;
+    // Wait until React has applied a restored value before measuring its height.
+    if (textareaRef.current?.value === initialPrompt) {
+      autoResize();
     }
-    setRatchetEnabled(userSettings.ratchetEnabled);
-  }, [userSettings]);
+  }, [autoResize, initialPrompt]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onMutate: async (input): Promise<CreateWorkspaceMutationContext> => {
+      const token = submitted.current;
       const optimisticWorkspaceId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const optimisticWorkspace = createOptimisticWorkspaceSummary({
         id: optimisticWorkspaceId,
-        projectId,
+        projectId: input.projectId,
         name: input.type === 'MANUAL' ? input.name : 'New Workspace',
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
       });
 
-      await utils.workspace.listForProject.cancel({ projectId });
+      await utils.workspace.listForProject.cancel({ projectId: input.projectId });
 
-      utils.workspace.listForProject.setData({ projectId }, (old) =>
+      utils.workspace.listForProject.setData({ projectId: input.projectId }, (old) =>
         withOptimisticWorkspaceFirst(old, optimisticWorkspace, [optimisticWorkspaceId])
       );
 
-      return { optimisticWorkspaceId };
+      return { optimisticWorkspaceId, submission: token };
     },
     onSuccess: (workspace, _input, context) => {
       const optimisticWorkspace = createOptimisticWorkspaceSummary({
@@ -259,28 +286,34 @@ export function InlineWorkspaceForm({
         createdAt: workspace.createdAt,
       });
 
-      utils.workspace.listForProject.setData({ projectId }, (old) =>
-        withOptimisticWorkspaceFirst(old, optimisticWorkspace, [
-          workspace.id,
-          ...(context?.optimisticWorkspaceId ? [context.optimisticWorkspaceId] : []),
-        ])
+      utils.workspace.listForProject.setData({ projectId: workspace.projectId }, (old) =>
+        withOptimisticWorkspaceFirst(
+          old,
+          old?.workspaces.find((row) => row.id === workspace.id) ?? optimisticWorkspace,
+          [workspace.id, ...(context?.optimisticWorkspaceId ? [context.optimisticWorkspaceId] : [])]
+        )
       );
 
       seedCreatedWorkspaceDetail(queryClient, workspace);
       runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId }),
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
         'Could not refresh data'
       );
-      onCreated(workspace.id);
+      completeCreation(context?.submission ?? submitted.current, () => onCreated(workspace.id));
     },
-    onError: (error, _input, context) => {
+    onError: (error, input, context) => {
+      const token = context?.submission ?? submitted.current;
+      if (token) {
+        submission.fail(token, `Failed to create workspace: ${error.message}`);
+      }
       if (context) {
         // Drop only the optimistic row. Restoring the pre-mutation cache would
         // also revert snapshot deltas and concurrent mutations that landed
         // while the create was in flight, and this cache backs the sidebar as
         // well as the board.
-        utils.workspace.listForProject.setData({ projectId }, (old) =>
-          removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
+        utils.workspace.listForProject.setData(
+          { projectId: input?.projectId ?? token?.projectId ?? projectId },
+          (old) => removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
         );
       }
       toast.error(`Failed to create workspace: ${error.message}`);
@@ -288,26 +321,37 @@ export function InlineWorkspaceForm({
   });
 
   const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
-    onSuccess: (task) => {
+    onMutate: () => ({ submission: submitted.current }),
+    onSuccess: (task, _input, context) => {
       toast.success(`Agent "${task.name}" created`);
       runInBackground(
         invalidateAgentProjectQueries(utils, task.projectId),
         'Could not refresh data'
       );
-      onCancel();
+      completeCreation(context?.submission ?? submitted.current, onCancel);
     },
-    onError: (error) => {
+    onError: (error, _input, context) => {
+      const token = context?.submission ?? submitted.current;
+      if (token) {
+        submission.fail(token, `Failed to create agent: ${error.message}`);
+      }
       toast.error(`Failed to create agent: ${error.message}`);
     },
   });
 
-  const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
+  const isCreating =
+    submission.isPending ||
+    createWorkspaceMutation.isPending ||
+    createPeriodicTaskMutation.isPending;
+  const isBusy = isCreating || recovery.isRestoring;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled = isCreating || (supportsWorkspaceOptions && !launchSelection.ready);
+  const isLaunchDisabled = isBusy || (supportsWorkspaceOptions && !launchSelection.ready);
 
-  const launchDisabledReason = supportsWorkspaceOptions
-    ? launchSelection.unavailableReason
-    : undefined;
+  const launchDisabledReason = getLaunchDisabledReason(
+    recovery.isRestoring,
+    supportsWorkspaceOptions,
+    launchSelection.unavailableReason
+  );
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -331,6 +375,11 @@ export function InlineWorkspaceForm({
       toast.error('Agent requires instructions.');
       return;
     }
+    const token = submission.begin();
+    if (!token) {
+      return;
+    }
+    submitted.current = token;
     const name = generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames);
     createPeriodicTaskMutation.mutate({
       projectId,
@@ -342,6 +391,11 @@ export function InlineWorkspaceForm({
   };
 
   const launchWorkspace = (trimmedPrompt: string) => {
+    const token = submission.begin();
+    if (!token) {
+      return;
+    }
+    submitted.current = token;
     const name = trimmedPrompt
       ? generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames)
       : generateUniqueWorkspaceName(existingNames);
@@ -387,6 +441,12 @@ export function InlineWorkspaceForm({
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
+        <DraftPersistenceWarning message={recovery.persistenceError} />
+        {submission.error && (
+          <p role="alert" className="text-xs text-destructive">
+            {submission.error}
+          </p>
+        )}
         {mode === 'PERIODIC_TASK' && <Label htmlFor={instructionsId}>Instructions</Label>}
         <div className="relative">
           <SlashCommandPalette
@@ -426,7 +486,7 @@ export function InlineWorkspaceForm({
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus
-            disabled={isCreating}
+            disabled={isBusy}
           />
         </div>
         {supportsWorkspaceOptions && attachments.length > 0 ? (
@@ -443,7 +503,7 @@ export function InlineWorkspaceForm({
             setCadence={setCadence}
             scheduledTime={scheduledTime}
             setScheduledTime={setScheduledTime}
-            isCreating={isCreating}
+            isCreating={isBusy}
           />
         )}
         {supportsWorkspaceOptions && (
@@ -462,7 +522,7 @@ export function InlineWorkspaceForm({
         <WorkspaceCreationOptions
           selection={launchSelection.controlsProps}
           enabled={supportsWorkspaceOptions}
-          disabled={isCreating}
+          disabled={isBusy}
           settingsLoading={isLoadingSettings}
           ratchetEnabled={ratchetEnabled}
           onRatchetChange={setRatchetEnabled}
@@ -473,7 +533,7 @@ export function InlineWorkspaceForm({
             size="sm"
             className="h-7 text-xs whitespace-nowrap"
             onClick={onCancel}
-            disabled={isCreating}
+            disabled={isBusy}
           >
             Cancel
           </Button>
@@ -497,7 +557,7 @@ export function InlineWorkspaceForm({
                 <Button
                   size="sm"
                   className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                  disabled={isCreating}
+                  disabled={isBusy}
                   aria-label="Choose launch mode"
                 >
                   <CaretDownIcon className="size-3" />
@@ -515,7 +575,56 @@ export function InlineWorkspaceForm({
             </DropdownMenu>
           </div>
         </WorkspaceCreationOptions>
+        <DiscardWorkspaceDraft recovery={recovery} disabled={isBusy} onCancel={onCancel} />
       </CardContent>
     </Card>
+  );
+}
+
+function getLaunchDisabledReason(restoring: boolean, workspaceOptions: boolean, reason?: string) {
+  return restoring ? 'Restoring draft' : workspaceOptions ? reason : undefined;
+}
+
+function DraftPersistenceWarning({ message }: { message: string | null }) {
+  return message ? (
+    <p role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
+  ) : null;
+}
+
+function DiscardWorkspaceDraft({
+  recovery,
+  disabled,
+  onCancel,
+}: {
+  recovery: ReturnType<typeof useInlineWorkspaceDraft>;
+  disabled: boolean;
+  onCancel: () => void;
+}) {
+  if (!(recovery.hasDraft || recovery.hasUnreadableDraft)) {
+    return null;
+  }
+  return (
+    <div className="flex justify-end">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs"
+        disabled={disabled}
+        onClick={() => {
+          void recovery
+            .discardDraft()
+            .then((discarded) => {
+              if (discarded) {
+                onCancel();
+              }
+            })
+            .catch(() => undefined);
+        }}
+      >
+        Discard draft
+      </Button>
+    </div>
   );
 }

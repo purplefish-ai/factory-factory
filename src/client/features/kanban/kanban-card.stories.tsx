@@ -238,6 +238,29 @@ export const Provisioning: Story = {
   },
 };
 
+export const SetupFailed: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Workspace needing setup recovery',
+      status: 'FAILED',
+      kanbanColumn: 'WAITING',
+      worktreePath: null,
+      branchName: null,
+      initErrorMessage:
+        'Git could not create the worktree. Resolve the repository error and retry setup.',
+      statusReason: {
+        code: 'SETUP_FAILED',
+        label: 'Setup failed',
+        tone: 'danger',
+        needsUser: true,
+      },
+      isWorking: false,
+    },
+    projectSlug: 'my-project',
+  },
+};
+
 export const RatchetOnProcessing: Story = {
   args: {
     workspace: withPR({

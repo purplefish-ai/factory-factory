@@ -1,443 +1,21 @@
-// @vitest-environment jsdom
-
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, createElement, forwardRef, type ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { collectAttachments } from '@/client/features/composer';
 import { actFlushSync } from '@/test-utils/react-act';
-import { InlineWorkspaceForm } from './inline-workspace-form';
-
-const mocks = vi.hoisted(() => ({
-  userSettings: {
-    ratchetEnabled: false,
-    defaultSessionProvider: 'CLAUDE',
-    defaultClaudeModel: 'saved-sonnet',
-    defaultCodexModel: 'saved-sol',
-  },
-  settingsUnavailable: false,
-  settingsLoading: false,
-  settingsError: null as Error | null,
-  createPeriodicTaskMutateMock: vi.fn(),
-  navigationSummaryInvalidate: vi.fn(),
-  agentMutationOptions: undefined as
-    | { onSuccess: (task: { name: string; projectId: string }) => void }
-    | undefined,
-  detectFileMentionMock: vi.fn(),
-  toastErrorMock: vi.fn(),
-  listForProjectCancelMock: vi.fn(),
-  listForProjectGetDataMock: vi.fn(),
-  listForProjectSetDataMock: vi.fn(),
-  listForProjectInvalidateMock: vi.fn(),
-  getSetDataMock: vi.fn(),
-  createWorkspaceMutateMock: vi.fn(),
-  createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
-  workspaceListCache: undefined as
-    | { workspaces: Array<{ id: string }>; reviewCount: number }
-    | undefined,
-}));
-
-vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
-  ArrowsClockwiseIcon: () => null,
-}));
-vi.mock('@phosphor-icons/react/dist/csr/Calendar', () => ({ CalendarIcon: () => null }));
-vi.mock('@phosphor-icons/react/dist/csr/CaretDown', () => ({ CaretDownIcon: () => null }));
-vi.mock('@phosphor-icons/react/dist/csr/Paperclip', () => ({ PaperclipIcon: () => null }));
-vi.mock('@phosphor-icons/react/dist/csr/SpinnerGap', () => ({ SpinnerGapIcon: () => null }));
-
-vi.mock('sonner', () => ({
-  toast: {
-    error: mocks.toastErrorMock,
-    success: vi.fn(),
-  },
-}));
-
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    codexAccounts: {
-      list: {
-        useQuery: () => ({
-          data: [
-            { id: 'native', label: 'Personal', authenticated: true, enabled: true },
-            { id: 'work', label: 'Work', authenticated: true, enabled: true },
-          ],
-        }),
-      },
-    },
-    useUtils: () => ({
-      workspace: {
-        get: { setData: mocks.getSetDataMock },
-        listForProject: {
-          cancel: mocks.listForProjectCancelMock,
-          getData: mocks.listForProjectGetDataMock,
-          setData: mocks.listForProjectSetDataMock,
-          invalidate: mocks.listForProjectInvalidateMock,
-        },
-      },
-      periodicTask: {
-        list: { invalidate: vi.fn() },
-        navigationSummary: { invalidate: mocks.navigationSummaryInvalidate },
-      },
-    }),
-    userSettings: {
-      getProviderOptions: {
-        useQuery: () => ({
-          data: {
-            CLAUDE: {
-              models: [
-                { value: 'saved-sonnet', label: 'Saved Sonnet' },
-                { value: 'catalog-opus', label: 'Opus' },
-              ],
-            },
-            CODEX: {
-              models: [
-                { value: 'saved-sol', label: 'Saved Sol' },
-                { value: 'chosen-model', label: 'Catalog Luna' },
-              ],
-            },
-          },
-          isLoading: false,
-        }),
-      },
-      get: {
-        useQuery: () => ({
-          data: mocks.settingsUnavailable ? undefined : mocks.userSettings,
-          isLoading: mocks.settingsLoading,
-          error: mocks.settingsError,
-        }),
-      },
-    },
-    session: {
-      getLaunchOptions: {
-        useQuery: (input: { provider: 'CLAUDE' | 'CODEX'; model?: string }) => ({
-          data: {
-            provider: input.provider,
-            model: input.model ?? 'native',
-            reasoning: {
-              options: [
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
-              ],
-              selected: 'medium',
-              defaultValue: 'medium',
-            },
-            planMode: { supported: true, selected: false },
-          },
-          refetch: vi.fn(),
-        }),
-      },
-    },
-    workspace: {
-      list: {
-        useQuery: () => ({
-          data: [],
-          isLoading: false,
-        }),
-      },
-      create: {
-        useMutation: (options: Record<string, unknown>) => {
-          mocks.createWorkspaceMutationOptions = options;
-          return {
-            mutate: mocks.createWorkspaceMutateMock,
-            isPending: false,
-          };
-        },
-      },
-    },
-    periodicTask: {
-      create: {
-        useMutation: (options: typeof mocks.agentMutationOptions) => {
-          mocks.agentMutationOptions = options;
-          return { mutate: mocks.createPeriodicTaskMutateMock, isPending: false };
-        },
-      },
-    },
-    project: {
-      listSlashCommands: {
-        useQuery: () => ({
-          data: { commands: [] },
-          isFetched: true,
-        }),
-      },
-    },
-  },
-}));
-
-vi.mock('@/client/lib/workspace-cache-helpers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/client/lib/workspace-cache-helpers')>()),
-  seedCreatedWorkspaceDetail: vi.fn(),
-}));
-
-// One factory for the whole composer, because the form now consumes it through
-// a single barrel. Everything the form imports has to appear here: a partial
-// factory leaves the rest undefined rather than falling through to the real
-// module.
-vi.mock('@/client/features/composer', () => ({
-  AttachmentPreview: () => null,
-  FileMentionPalette: () => null,
-  SlashCommandPalette: () => null,
-  collectAttachments: vi.fn(),
-  usePasteDropHandler: () => ({
-    handlePaste: vi.fn(),
-    handleDrop: vi.fn(),
-    handleDragOver: vi.fn(),
-    handleDragLeave: vi.fn(),
-    isDragging: false,
-  }),
-  useProjectFileMentions: () => ({
-    files: [],
-    fileMentionMenuOpen: false,
-    filesLoading: false,
-    fileMentionFilter: '',
-    handleFileMentionMenuClose: vi.fn(),
-    handleFileMentionSelect: vi.fn(),
-    delegateToFileMentionMenu: () => 'passthrough',
-    detectFileMention: mocks.detectFileMentionMock,
-    paletteRef: { current: null },
-  }),
-  useSlashCommands: ({ onChange }: { onChange?: (value: string) => void }) => ({
-    slashMenuOpen: false,
-    slashFilter: '',
-    commandsReady: true,
-    paletteRef: { current: null },
-    handleInputChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
-      onChange?.(event.target.value),
-    handleSlashCommandSelect: vi.fn(),
-    handleSlashMenuClose: vi.fn(),
-    delegateToSlashMenu: () => 'passthrough',
-  }),
-}));
-
-vi.mock('@/client/features/session-selection', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/client/features/session-selection')>()),
-  AccessModeSelector: () => null,
-  PlanningSelector: ({
-    control,
-    showLabel,
-  }: {
-    control: { enabled: boolean; onChange: (value: boolean) => void };
-    showLabel?: boolean;
-  }) =>
-    createElement(
-      'button',
-      {
-        'aria-label': `Planning: ${control.enabled ? 'On' : 'Off'}`,
-        onClick: () => control.onChange(!control.enabled),
-      },
-      showLabel ? (control.enabled ? 'On' : 'Off') : null
-    ),
-  SessionLaunchControls: ({
-    provider,
-    model,
-    onProviderChange,
-    onModelChange,
-    models,
-    reasoning,
-    planMode,
-    account,
-    children,
-  }: import('@/client/features/session-selection').SessionLaunchControlsProps) =>
-    createElement(
-      'div',
-      { 'aria-label': 'New conversation provider and model' },
-      `${provider} ${model}`,
-      account &&
-        createElement(
-          'button',
-          { 'aria-label': 'Choose Work account', onClick: () => account.onChange('work') },
-          'Work'
-        ),
-      reasoning &&
-        createElement(
-          'button',
-          { 'aria-label': `Thinking level: ${reasoning.value ?? 'Default'}` },
-          reasoning.value ?? 'Default'
-        ),
-      planMode &&
-        createElement(
-          'button',
-          {
-            'aria-label': 'Plan mode',
-            'aria-pressed': planMode.enabled,
-            onClick: () => planMode.onChange(!planMode.enabled),
-          },
-          'Plan'
-        ),
-      createElement(
-        'button',
-        { onClick: () => onProviderChange?.('CLAUDE'), 'aria-label': 'Choose Claude' },
-        'Claude'
-      ),
-      createElement(
-        'button',
-        { onClick: () => onProviderChange?.('CODEX'), 'aria-label': 'Choose Codex' },
-        'Codex'
-      ),
-      createElement(
-        'button',
-        {
-          onClick: () => {
-            const option = models.find((entry) => entry.value !== model);
-            if (option) {
-              onModelChange?.(option.value);
-            }
-          },
-          'aria-label': 'Choose model',
-        },
-        model
-      ),
-      children
-    ),
-}));
-
-vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) =>
-    createElement('button', props, children),
-}));
-
-vi.mock('@/components/ui/dropdown-menu', () => ({
-  DropdownMenu: ({ children }: { children: ReactNode }) => createElement('div', null, children),
-  DropdownMenuContent: ({ children }: { children: ReactNode }) =>
-    createElement('div', null, children),
-  DropdownMenuItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>
-    createElement('div', { onClick }, children),
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) =>
-    createElement('div', null, children),
-}));
-
-vi.mock('@/components/ui/input', () => ({
-  Input: (props: import('react').InputHTMLAttributes<HTMLInputElement>) =>
-    createElement('input', props),
-}));
-
-vi.mock('@/components/ui/label', () => ({
-  Label: ({ children, ...props }: import('react').LabelHTMLAttributes<HTMLLabelElement>) =>
-    createElement('label', props, children),
-}));
-
-vi.mock('@/components/ui/card', () => ({
-  Card: ({ children, ...props }: import('react').HTMLAttributes<HTMLDivElement>) =>
-    createElement('div', props, children),
-  CardContent: ({ children, ...props }: import('react').HTMLAttributes<HTMLDivElement>) =>
-    createElement('div', props, children),
-}));
-
-vi.mock('@/components/ui/select', () => ({
-  Select: ({
-    children,
-    onValueChange,
-  }: {
-    children: ReactNode;
-    onValueChange?: (value: string) => void;
-  }) =>
-    createElement(
-      'div',
-      {
-        onClick: (event: React.MouseEvent<HTMLElement>) => {
-          const value = (event.target as HTMLElement)
-            .closest('[data-select-value]')
-            ?.getAttribute('data-select-value');
-          if (value) {
-            onValueChange?.(value);
-          }
-        },
-      },
-      children
-    ),
-  SelectContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
-  SelectItem: ({ children, value }: { children: ReactNode; value: string }) =>
-    createElement('div', { 'data-select-value': value }, children),
-  SelectTrigger: ({ children }: { children: ReactNode }) => createElement('button', null, children),
-  SelectValue: () => null,
-}));
-
-vi.mock('@/components/ui/textarea', () => ({
-  Textarea: forwardRef<HTMLTextAreaElement, import('react').ComponentProps<'textarea'>>(
-    function Textarea(props, ref) {
-      return createElement('textarea', { ...props, ref });
-    }
-  ),
-}));
-
-vi.mock('@/client/features/workspace', () => ({
-  RatchetToggleButton: () => createElement('button', { 'aria-label': 'Toggle ratchet' }),
-}));
-
-vi.mock('@/client/features/codex-accounts', () => ({
-  CodexAccountPicker: ({ onChange }: { onChange: (id: string) => void }) =>
-    createElement(
-      'button',
-      { 'aria-label': 'Choose Work account', onClick: () => onChange('work') },
-      'Work'
-    ),
-}));
-
-function textareaLabel(container: HTMLElement) {
-  const textarea = container.querySelector('textarea');
-  return container.querySelector(`label[for="${textarea?.id}"]`)?.textContent;
-}
-
-function renderForm(): {
-  container: HTMLDivElement;
-  root: Root;
-  textarea: HTMLTextAreaElement;
-} {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  const queryClient = new QueryClient();
-  const render = root.render.bind(root);
-  root.render = (children) =>
-    render(createElement(QueryClientProvider, { client: queryClient }, children));
-
-  actFlushSync(() => {
-    root.render(
-      createElement(InlineWorkspaceForm, {
-        projectId: 'project-1',
-        existingNames: [],
-        onCancel: vi.fn(),
-        onCreated: vi.fn(),
-      })
-    );
-  });
-
-  const textarea = container.querySelector('textarea');
-  if (!textarea) {
-    throw new Error('Expected textarea to render');
-  }
-
-  return { container, root, textarea };
-}
-
-beforeEach(() => {
-  Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
-    configurable: true,
-    writable: true,
-    value: true,
-  });
-  mocks.userSettings = {
-    ratchetEnabled: false,
-    defaultSessionProvider: 'CLAUDE',
-    defaultClaudeModel: 'saved-sonnet',
-    defaultCodexModel: 'saved-sol',
-  };
-  mocks.settingsUnavailable = false;
-  mocks.settingsLoading = false;
-  mocks.settingsError = null;
-  mocks.workspaceListCache = undefined;
-  mocks.createWorkspaceMutationOptions = undefined;
-  mocks.listForProjectCancelMock.mockResolvedValue(undefined);
-  mocks.listForProjectGetDataMock.mockImplementation(() => mocks.workspaceListCache);
-  mocks.listForProjectSetDataMock.mockImplementation((_input, updater) => {
-    mocks.workspaceListCache =
-      typeof updater === 'function' ? updater(mocks.workspaceListCache) : updater;
-    return mocks.workspaceListCache;
-  });
-});
-
-afterEach(() => {
-  document.body.innerHTML = '';
-  vi.clearAllMocks();
-});
+// @vitest-environment jsdom
+import {
+  collectAttachmentsMock,
+  createFormElement,
+  getTestProjectId,
+  mocks,
+  renderForm,
+  textareaLabel,
+} from './inline-workspace-form.test-harness';
+import {
+  getWorkspaceCreationDraftSnapshot,
+  createWorkspaceCreationDraft,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 describe('InlineWorkspaceForm', () => {
   it('offers ordinary launch and periodic tasks without auto-iteration controls', () => {
@@ -550,7 +128,7 @@ describe('InlineWorkspaceForm', () => {
 
     const context = await mutationOptions.onMutate({
       type: 'MANUAL',
-      projectId: 'project-1',
+      projectId: getTestProjectId(),
       name: 'New Workspace',
       ratchetEnabled: true,
     });
@@ -618,8 +196,8 @@ it('retains the chosen provider and model when saved settings refetch during a w
     };
     actFlushSync(() =>
       root.render(
-        createElement(InlineWorkspaceForm, {
-          projectId: 'project-1',
+        createFormElement({
+          projectId: getTestProjectId(),
           existingNames: [],
           onCancel: vi.fn(),
           onCreated: vi.fn(),
@@ -672,7 +250,7 @@ it.each(['loading', 'failed'])(
         actFlushSync(() => create?.click());
         expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
           expect.objectContaining({
-            projectId: 'project-1',
+            projectId: getTestProjectId(),
             prompt: 'Run the periodic review',
             cadence: 'DAILY',
           })
@@ -732,6 +310,9 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
     );
+    actFlushSync(() => {
+      mocks.agentMutationOptions?.onError?.(new Error('Change schedule before retry'));
+    });
     actFlushSync(() =>
       container.querySelector<HTMLElement>('[data-select-value="EVERY_MINUTE"]')?.click()
     );
@@ -782,4 +363,179 @@ it('propagates a manual Codex account into the workspace launch request', () => 
     actFlushSync(() => root.unmount());
     container.remove();
   }
+});
+
+it('preserves and explicitly discards an in-memory draft while disk storage is unavailable', async () => {
+  const first = renderForm();
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  actFlushSync(() => {
+    setter?.call(first.textarea, 'A task worth keeping');
+    first.textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  actFlushSync(() =>
+    [...first.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Cancel')
+      ?.click()
+  );
+  actFlushSync(() => first.root.unmount());
+  const second = renderForm();
+  expect(second.textarea.value).toBe('A task worth keeping');
+  await act(() => Promise.resolve());
+  expect(second.container.querySelector('[role="alert"]')?.textContent).toContain(
+    'could not be saved'
+  );
+  const discard = [...second.container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Discard draft'
+  );
+  expect(discard).toBeDefined();
+  await act(async () => discard?.click());
+  actFlushSync(() => second.root.unmount());
+  const third = renderForm();
+  expect(third.textarea.value).toBe('');
+  actFlushSync(() => third.root.unmount());
+});
+
+it('restores textarea height and provider choices after reopening', () => {
+  const first = renderForm();
+  actFlushSync(() =>
+    first.container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
+  );
+  actFlushSync(() =>
+    first.container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
+  );
+  actFlushSync(() => first.root.unmount());
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight');
+  Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get: () => 180,
+  });
+  const second = renderForm();
+  expect(second.container.textContent).toContain('CODEX chosen-model');
+  expect(second.textarea.style.height).toBe('180px');
+  actFlushSync(() => second.root.unmount());
+  if (descriptor) {
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', descriptor);
+  } else {
+    Reflect.deleteProperty(HTMLTextAreaElement.prototype, 'scrollHeight');
+  }
+});
+
+it('keeps late attachment conversion in its original project after switching', async () => {
+  let finish: (result: Awaited<ReturnType<typeof collectAttachments>>) => void = () => {
+    throw new Error('Attachment conversion did not start');
+  };
+  collectAttachmentsMock.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const mounted = renderForm();
+  const input = mounted.container.querySelector<HTMLInputElement>('input[type="file"]');
+  Object.defineProperty(input, 'files', { value: [new File(['x'], 'notes.txt')] });
+  actFlushSync(() => input?.dispatchEvent(new Event('change', { bubbles: true })));
+  await act(() => {
+    mounted.root.render(
+      createFormElement({
+        projectId: 'attachment-destination',
+        existingNames: [],
+        onCancel: vi.fn(),
+        onCreated: vi.fn(),
+      })
+    );
+  });
+  await act(() =>
+    finish({
+      attachments: [
+        {
+          id: 'late',
+          name: 'notes.txt',
+          type: 'text/plain',
+          size: 1,
+          data: 'x',
+          contentType: 'text',
+        },
+      ],
+      errors: [],
+    })
+  );
+  expect(
+    getWorkspaceCreationDraftSnapshot('attachment-destination').draft?.attachments ?? []
+  ).toEqual([]);
+  expect(getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.attachments[0]?.data).toBe(
+    'x'
+  );
+  actFlushSync(() => mounted.root.unmount());
+});
+
+it('blocks launch only while restoring and makes storage failure visible', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('indexedDB', { open: () => ({}) });
+  const mounted = renderForm('blocked-form');
+  try {
+    const launch = [...mounted.container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    expect(launch?.disabled).toBe(true);
+    expect(launch?.getAttribute('title')).toBe('Restoring draft');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+    expect(launch?.disabled).toBe(false);
+    expect(mounted.container.querySelector('[role="alert"]')?.textContent).toContain(
+      'could not be restored'
+    );
+  } finally {
+    actFlushSync(() => mounted.root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('restores periodic schedules and explicit ratchet settings without applying later defaults', async () => {
+  await expect(
+    saveWorkspaceCreationDraft(getTestProjectId(), {
+      ...createWorkspaceCreationDraft(),
+      prompt: 'Periodic review',
+      mode: 'PERIODIC_TASK',
+      cadence: 'WEEKLY',
+      scheduledTime: '09:30',
+      ratchetEnabled: true,
+      ratchetInitialized: true,
+    })
+  ).rejects.toThrow('could not be saved');
+  const mounted = renderForm();
+  expect(mounted.textarea.value).toBe('Periodic review');
+  expect(mounted.container.querySelector<HTMLInputElement>('input[type="time"]')?.value).toBe(
+    '09:30'
+  );
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Create Agent')
+      ?.click()
+  );
+  expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      prompt: 'Periodic review',
+      cadence: 'WEEKLY',
+      scheduledTime: '09:30',
+    })
+  );
+  actFlushSync(() => {
+    mocks.agentMutationOptions?.onError?.(new Error('Change mode before retry'));
+  });
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('div')]
+      .find((element) => element.textContent === 'Launch as Standard Workspace')
+      ?.click()
+  );
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Launch')
+      ?.click()
+  );
+  expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+    expect.objectContaining({ ratchetEnabled: true })
+  );
+  actFlushSync(() => mounted.root.unmount());
 });

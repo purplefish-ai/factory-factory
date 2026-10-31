@@ -93,12 +93,19 @@ function LaunchStateHarness({
   scopeKey,
   settings,
   onResult,
+  restoration,
 }: {
   scopeKey: string;
   settings?: SessionLaunchDefaults;
+  restoration?: {
+    snapshot?: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot;
+    onChange?: (
+      snapshot: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot
+    ) => void;
+  };
   onResult: (result: LaunchState) => void;
 }) {
-  onResult(useSessionLaunchSelectionState(scopeKey, settings));
+  onResult(useSessionLaunchSelectionState(scopeKey, settings, restoration));
   return null;
 }
 function ConnectedLaunchHarness({
@@ -110,16 +117,20 @@ function ConnectedLaunchHarness({
   return null;
 }
 
-function mount(seed: SessionLaunchDefaults | undefined) {
+function mount(
+  seed: SessionLaunchDefaults | undefined,
+  restoration?: Parameters<typeof useSessionLaunchSelectionState>[2]
+) {
   let result: ReturnType<typeof useSessionLaunchSelectionState> | undefined;
   const root = createRoot(document.createElement('div'));
   roots.push(root);
-  const render = (scopeKey: string, settings = seed) =>
+  const render = (scopeKey: string, settings = seed, restore = restoration) =>
     flushSync(() =>
       root.render(
         createElement(LaunchStateHarness, {
           scopeKey,
           settings,
+          restoration: restore,
           onResult: (next) => {
             result = next;
           },
@@ -534,4 +545,113 @@ it('uses the manual account for creation, launch options and model discovery, an
   expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
   expect(mounted.current.controlsProps.account).toBeUndefined();
   expect(mocks.catalogQuery).toHaveBeenLastCalledWith(undefined);
+});
+
+describe('serializable launch selection restoration', () => {
+  it('resets restored choices to current defaults and publishes the cleared snapshot', () => {
+    const snapshot = {
+      provider: 'CLAUDE' as const,
+      defaults,
+      drafts: { CLAUDE: { model: 'restored-opus', planModeEnabled: true } },
+    };
+    const onChange = vi.fn();
+    const mounted = mount(defaults, { snapshot, onChange });
+    const latest = { ...defaults, defaultCodexModel: 'latest-sol' };
+    mounted.render('workspace-a', latest);
+    flushSync(() => mounted.current.reset());
+    expect(mounted.current.provider).toBe('CODEX');
+    expect(mounted.current.model).toBe('latest-sol');
+    expect(mounted.current.planModeEnabled).toBeUndefined();
+    expect(onChange).toHaveBeenLastCalledWith({ defaults: latest, drafts: {} });
+    mounted.render('workspace-a', latest);
+    expect(mounted.current.model).toBe('latest-sol');
+    mounted.render('workspace-a', latest, { snapshot: onChange.mock.lastCall?.[0], onChange });
+    expect(mounted.current.model).toBe('latest-sol');
+  });
+
+  it('preserves local edits and reset when the same restored snapshot has no onChange', () => {
+    const snapshot = {
+      provider: 'CODEX' as const,
+      drafts: { CODEX: { model: 'restored-sol', codexAccountId: 'work' } },
+    };
+    const mounted = mount(defaults, { snapshot });
+    flushSync(() => mounted.current.onModelChange('local-model'));
+    flushSync(() => mounted.current.onReasoningChange(null));
+    mounted.render('workspace-a');
+    expect(mounted.current.model).toBe('local-model');
+    expect(mounted.current.reasoningEffort).toBeNull();
+    expect(mounted.current.codexAccountId).toBe('work');
+    flushSync(() => mounted.current.reset());
+    mounted.render('workspace-a');
+    expect(mounted.current.model).toBe('saved-sol');
+    expect(mounted.current.codexAccountId).toBeUndefined();
+  });
+
+  it('restores a distinct incoming snapshot and clears local state on project change', () => {
+    const snapshot = { provider: 'CODEX' as const, drafts: {} };
+    const mounted = mount(defaults, { snapshot });
+    flushSync(() => mounted.current.onModelChange('local-model'));
+    const incoming = {
+      provider: 'CLAUDE' as const,
+      drafts: { CLAUDE: { model: 'incoming-opus' } },
+    };
+    mounted.render('workspace-a', defaults, { snapshot: incoming });
+    expect(mounted.current.model).toBe('incoming-opus');
+    mounted.render('project-b', defaults, {});
+    expect(mounted.current.provider).toBe('CODEX');
+    expect(mounted.current.model).toBe('saved-sol');
+  });
+
+  it('restores provider-specific choices and null reasoning before delayed settings arrive', () => {
+    const root = createRoot(document.createElement('div'));
+    roots.push(root);
+    let selection: LaunchState | undefined;
+    let snapshot: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot = {
+      provider: 'CODEX',
+      drafts: {
+        CLAUDE: { model: 'chosen-claude', reasoningEffort: 'high', planModeEnabled: true },
+        CODEX: {
+          model: 'chosen-codex',
+          reasoningEffort: null,
+          codexAccountId: 'work',
+          accessMode: 'agent',
+        },
+      },
+    };
+    const render = (scopeKey: string, settings?: SessionLaunchDefaults, restore = snapshot) =>
+      flushSync(() =>
+        root.render(
+          createElement(LaunchStateHarness, {
+            scopeKey,
+            settings,
+            restoration: {
+              snapshot: restore,
+              onChange: (next) => {
+                snapshot = next;
+              },
+            },
+            onResult: (next) => {
+              selection = next;
+            },
+          })
+        )
+      );
+    render('project-a');
+    expect(selection?.model).toBe('chosen-codex');
+    expect(selection?.reasoningEffort).toBeNull();
+    expect(selection?.codexAccountId).toBe('work');
+    render('project-a', defaults);
+    expect(selection?.model).toBe('chosen-codex');
+    flushSync(() => selection?.onProviderChange('CLAUDE'));
+    expect(selection?.reasoningEffort).toBe('high');
+    expect(selection?.planModeEnabled).toBe(true);
+    expect(snapshot.provider).toBe('CLAUDE');
+    expect(snapshot.drafts.CODEX?.reasoningEffort).toBeNull();
+    render('project-b', defaults, {
+      provider: 'CLAUDE',
+      drafts: { CLAUDE: { model: 'project-b-model' } },
+    });
+    expect(selection?.model).toBe('project-b-model');
+    expect(selection?.reasoningEffort).toBeUndefined();
+  });
 });

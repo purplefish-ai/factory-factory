@@ -12,6 +12,7 @@ import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { SessionlessSetupFailure } from './sessionless-setup-failure';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
@@ -208,6 +209,15 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         onQuickAction={handleQuickAction}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
+        emptyState={
+          workspaceState.workspaceInitStatus?.phase === 'BLOCKED_FAILED' ? (
+            <SessionlessSetupFailure
+              workspaceId={workspaceState.workspaceId}
+              banner={workspaceState.workspaceInitStatus.chatBanner}
+              errorMessage={workspaceState.workspaceInitStatus.initErrorMessage}
+            />
+          ) : undefined
+        }
       >
         {CONNECTED_CHAT_CONTENT}
       </WorkspaceContentView>

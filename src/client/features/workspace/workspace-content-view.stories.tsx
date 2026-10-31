@@ -46,3 +46,14 @@ export const NoSessionsInitializing: Story = {
     hasWorktreePath: false,
   },
 };
+
+export const NoSessionsSetupFailed: Story = {
+  args: {
+    hasWorktreePath: false,
+    emptyState: (
+      <div className="p-4" role="alert">
+        Workspace setup failed. Retry setup to continue.
+      </div>
+    ),
+  },
+};

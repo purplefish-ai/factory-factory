@@ -1,12 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError, type TRPCLink } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { trpc } from '@/client/lib/trpc';
+import { trpc, type AppRouter } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
+import {
+  createWorkspaceCreationDraft,
+  WORKSPACE_DRAFT_DATABASE_NAME,
+  WORKSPACE_DRAFT_DATABASE_VERSION,
+  WORKSPACE_DRAFT_STORE_NAME,
+  getWorkspaceCreationDraftSnapshot,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 const onCreate = fn();
 const onCancel = fn();
@@ -82,6 +91,10 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
     'project.listSlashCommands': { commands: [] },
     'project.listAllFiles': { files: [] },
     'workspace.listForProject': { workspaces: [], reviewCount: 0 },
+    'periodicTask.create': {
+      name: 'Retained periodic review',
+      projectId: 'preview-periodic-success',
+    },
     'workspace.create': {
       id: 'preview-workspace',
       projectId: 'preview-project',
@@ -100,6 +113,30 @@ function previewShouldWait(path: string, loading: boolean, catalogLoading: boole
   );
 }
 
+function previewLink(
+  provider: ChatProvider,
+  loading: boolean,
+  catalogLoading: boolean,
+  creationError?: string
+): TRPCLink<AppRouter> {
+  return () =>
+    ({ op }) =>
+      observable((observer) => {
+        if (previewShouldWait(op.path, loading, catalogLoading)) {
+          return;
+        }
+        if (op.type === 'mutation') {
+          onCreate(op.input);
+          if (creationError) {
+            observer.error(TRPCClientError.from(new Error(creationError)));
+            return;
+          }
+        }
+        observer.next({ result: { data: previewResponse(op.path, op.input, provider) } });
+        observer.complete();
+      });
+}
+
 /** All requests stay inside this preview transport, including launch button clicks. */
 function WorkspaceCreationPreviewSession({
   provider = 'CODEX',
@@ -107,12 +144,16 @@ function WorkspaceCreationPreviewSession({
   catalogLoading = false,
   compact = false,
   startCollapsed = false,
+  projectId = 'preview-project',
+  creationError,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
   catalogLoading?: boolean;
   compact?: boolean;
   startCollapsed?: boolean;
+  projectId?: string;
+  creationError?: string;
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -120,20 +161,7 @@ function WorkspaceCreationPreviewSession({
   );
   const [client] = useState(() =>
     trpc.createClient({
-      links: [
-        () =>
-          ({ op }) =>
-            observable((observer) => {
-              if (previewShouldWait(op.path, loading, catalogLoading)) {
-                return;
-              }
-              if (op.type === 'mutation') {
-                onCreate(op.input);
-              }
-              observer.next({ result: { data: previewResponse(op.path, op.input, provider) } });
-              observer.complete();
-            }),
-      ],
+      links: [previewLink(provider, loading, catalogLoading, creationError)],
     })
   );
   return (
@@ -147,9 +175,13 @@ function WorkspaceCreationPreviewSession({
         >
           {open ? (
             <InlineWorkspaceForm
-              projectId="preview-project"
+              projectId={projectId}
               existingNames={[]}
-              onCreated={fn()}
+              onCreated={() => {
+                if (startCollapsed) {
+                  setOpen(false);
+                }
+              }}
               onCancel={() => {
                 onCancel();
                 if (startCollapsed) {
@@ -174,8 +206,10 @@ function WorkspaceCreationPreview(props: {
   catalogLoading?: boolean;
   compact?: boolean;
   startCollapsed?: boolean;
+  projectId?: string;
+  creationError?: string;
 }) {
-  const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -245,4 +279,141 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
   play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Agent'),
+};
+
+export const RestoredDraft: Story = {
+  args: { projectId: 'preview-restored-draft' },
+  loaders: [
+    async () => {
+      await saveWorkspaceCreationDraft('preview-restored-draft', {
+        ...createWorkspaceCreationDraft(),
+        prompt:
+          'Investigate the failing workspace setup and preserve these notes.\nResume this task after checking the board.',
+        attachments: [
+          {
+            id: 'notes',
+            name: 'setup-notes.txt',
+            type: 'text/plain',
+            size: 19,
+            data: 'Keep the worktree.',
+            contentType: 'text',
+          },
+        ],
+        launchSelection: {
+          provider: 'CODEX',
+          defaults: { defaultSessionProvider: 'CODEX', defaultCodexModel: 'six-sol' },
+          drafts: { CODEX: { reasoningEffort: null, planModeEnabled: true } },
+        },
+      });
+      return {};
+    },
+  ],
+};
+
+export const UnrestorableDraft: Story = {
+  args: { projectId: 'preview-corrupt-draft' },
+  loaders: [
+    async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(
+          WORKSPACE_DRAFT_DATABASE_NAME,
+          WORKSPACE_DRAFT_DATABASE_VERSION
+        );
+        request.onupgradeneeded = () =>
+          request.result.createObjectStore(WORKSPACE_DRAFT_STORE_NAME);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readwrite');
+          transaction
+            .objectStore(WORKSPACE_DRAFT_STORE_NAME)
+            .put({ schemaVersion: 999, attachments: 'incompatible' }, 'preview-corrupt-draft');
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            database.close();
+            reject(transaction.error);
+          };
+        };
+      });
+      return {};
+    },
+  ],
+};
+
+export const RestoredDraftNarrow: Story = {
+  ...RestoredDraft,
+  args: { ...RestoredDraft.args, compact: true },
+};
+
+export const SubmissionError: Story = {
+  args: {
+    projectId: 'preview-request-error',
+    creationError: 'Repository is unavailable. Check its location and try again.',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox');
+    const launch = canvas.getByRole('button', { name: /^Launch$/ });
+    await waitFor(() => expect(launch).toBeEnabled());
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Keep these instructions while I fix the repository.');
+    await userEvent.click(launch);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Repository is unavailable');
+    await expect(input).toHaveValue('Keep these instructions while I fix the repository.');
+  },
+};
+export const SubmissionErrorNarrow: Story = {
+  ...SubmissionError,
+  args: { ...SubmissionError.args, compact: true },
+};
+
+export const PeriodicSubmissionSuccess: Story = {
+  args: { projectId: 'preview-periodic-success', startCollapsed: true },
+  loaders: [
+    async () => {
+      await saveWorkspaceCreationDraft('preview-periodic-success', {
+        ...createWorkspaceCreationDraft(),
+        mode: 'PERIODIC_TASK',
+        cadence: 'EVERY_FIVE_MINUTES',
+        prompt: 'Retained periodic review',
+      });
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await expect(await canvas.findByRole('textbox')).toHaveValue('Retained periodic review');
+    const launch = canvas.getByRole('button', { name: 'Create Agent' });
+    await waitFor(() => expect(launch).toBeEnabled());
+    await userEvent.click(launch);
+    // This close uses onCancel, which only runs after periodic success cleanup.
+    await expect(await canvas.findByRole('button', { name: 'New Workspace' })).toBeVisible();
+    await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
+    const persisted = await new Promise<unknown>((resolve, reject) => {
+      const request = indexedDB.open(
+        WORKSPACE_DRAFT_DATABASE_NAME,
+        WORKSPACE_DRAFT_DATABASE_VERSION
+      );
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readonly');
+        const read = transaction
+          .objectStore(WORKSPACE_DRAFT_STORE_NAME)
+          .get('preview-periodic-success');
+        read.onsuccess = () => resolve(read.result);
+        transaction.oncomplete = () => database.close();
+        transaction.onerror = () => reject(transaction.error);
+      };
+    });
+    await expect(persisted).toBeUndefined();
+    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await expect(await canvas.findByRole('textbox')).toHaveValue('');
+    // Pending ownership must also be released so another task can launch.
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
+  },
 };

@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createWorkspaceCreationDraft,
+  workspaceCreationDraftSchema,
+} from './workspace-creation-draft-storage';
+
+describe('versioned creation draft validation', () => {
+  it('treats older saved ratchet values as initialized choices', () => {
+    const restored = workspaceCreationDraftSchema.parse({
+      ...createWorkspaceCreationDraft(),
+      ratchetEnabled: false,
+      ratchetInitialized: undefined,
+    });
+    expect(restored.ratchetInitialized).toBe(true);
+    expect(restored.ratchetEnabled).toBe(false);
+  });
+  it.each([
+    { schemaVersion: 2 },
+    { attachments: [{ id: 'missing-contents', name: 'notes.txt', type: 'text/plain', size: 1 }] },
+    { launchSelection: { provider: 'unknown', drafts: {} } },
+  ])('rejects incompatible storage instead of restoring a partial draft: %j', (patch) => {
+    expect(
+      workspaceCreationDraftSchema.safeParse({ ...createWorkspaceCreationDraft(), ...patch })
+        .success
+    ).toBe(false);
+  });
+});

@@ -6,6 +6,7 @@ import type { CodexAccountSummary } from '@/shared/codex-accounts';
 import type { SessionPermissionPreset } from '@/shared/core';
 import type { SessionLaunchOptions, SessionLaunchSettings } from '@/shared/session-launch';
 import { getEffectiveLaunchOptions } from './launch-options-state';
+import type { SessionLaunchSelectionSnapshot } from './launch-selection-snapshot';
 import type { ProviderModelPickerProps } from './provider-model-picker';
 import type { SessionLaunchControlsProps } from './session-launch-controls';
 
@@ -30,29 +31,51 @@ interface LaunchSelectionState {
   defaults: SessionLaunchDefaults | undefined;
   provider?: ChatProvider;
   drafts: Partial<Record<ChatProvider, ProviderDraft>>;
+  restoredSnapshot?: SessionLaunchSelectionSnapshot;
 }
 
 /** A draft owns a snapshot of saved defaults and its explicit per-provider choices. */
 export function useSessionLaunchSelectionState(
   scopeKey: string | null,
-  defaults: SessionLaunchDefaults | undefined
+  defaults: SessionLaunchDefaults | undefined,
+  restoration: {
+    snapshot?: SessionLaunchSelectionSnapshot;
+    onChange?: (snapshot: SessionLaunchSelectionSnapshot) => void;
+  } = {}
 ) {
   const [stored, setStored] = useState<LaunchSelectionState>(() => ({
     scopeKey,
     defaults,
     drafts: {},
+    ...restoration.snapshot,
+    restoredSnapshot: restoration.snapshot,
   }));
-  const committedDefaults = useRef({ scopeKey, defaults });
+  const committedInputs = useRef({ scopeKey, defaults, restoration });
   useLayoutEffect(() => {
-    committedDefaults.current = { scopeKey, defaults };
-  }, [scopeKey, defaults]);
+    committedInputs.current = { scopeKey, defaults, restoration };
+  }, [scopeKey, defaults, restoration]);
   const reset = useCallback(() => {
-    const current = committedDefaults.current;
-    setStored({ scopeKey: current.scopeKey, defaults: current.defaults, drafts: {} });
+    const current = committedInputs.current;
+    const snapshot = { defaults: current.defaults, drafts: {} };
+    const next: LaunchSelectionState = {
+      ...snapshot,
+      scopeKey: current.scopeKey,
+      // Remember the consumed external snapshot so reset cannot restore its old choices.
+      restoredSnapshot: current.restoration.snapshot,
+    };
+    latestState.current = next;
+    setStored(next);
+    current.restoration.onChange?.(snapshot);
   }, []);
   let state = stored;
-  if (stored.scopeKey !== scopeKey) {
-    state = { scopeKey, defaults, drafts: {} };
+  if (stored.scopeKey !== scopeKey || stored.restoredSnapshot !== restoration.snapshot) {
+    state = {
+      scopeKey,
+      defaults,
+      drafts: {},
+      ...restoration.snapshot,
+      restoredSnapshot: restoration.snapshot,
+    };
     setStored(state);
   } else if (!stored.defaults && defaults) {
     state = { ...stored, defaults };
@@ -67,15 +90,33 @@ export function useSessionLaunchSelectionState(
     provider === 'CODEX'
       ? state.defaults?.defaultCodexReasoningEffort
       : state.defaults?.defaultClaudeReasoningEffort;
+  const latestState = useRef(state);
+  latestState.current = state;
+  const commit = (next: LaunchSelectionState) => {
+    const snapshot: SessionLaunchSelectionSnapshot = {
+      provider: next.provider,
+      defaults: next.defaults,
+      drafts: next.drafts,
+    };
+    latestState.current = next;
+    setStored(next);
+    restoration.onChange?.(snapshot);
+  };
   const updateDraft = (patch: Partial<ProviderDraft>) => {
     if (provider) {
-      setStored((current) => ({
+      const current = latestState.current;
+      commit({
         ...current,
         drafts: { ...current.drafts, [provider]: { ...current.drafts[provider], ...patch } },
-      }));
+      });
     }
   };
   return {
+    snapshot: {
+      provider: state.provider,
+      defaults: state.defaults,
+      drafts: state.drafts,
+    } satisfies SessionLaunchSelectionSnapshot,
     provider,
     model,
     codexAccountId: provider === 'CODEX' ? draft?.codexAccountId : undefined,
@@ -87,12 +128,14 @@ export function useSessionLaunchSelectionState(
     accessMode: draft?.accessMode,
     loading: !state.defaults,
     defaults: state.defaults,
-    onProviderChange: (next: ChatProvider, model?: string) =>
-      setStored((current) => ({
+    onProviderChange: (next: ChatProvider, model?: string) => {
+      const current = latestState.current;
+      commit({
         ...current,
         provider: next,
         drafts: { ...current.drafts, [next]: { ...current.drafts[next], model } },
-      })),
+      });
+    },
     onModelChange: (model: string) => updateDraft({ model }),
     onReasoningChange: (reasoningEffort: string | null) => updateDraft({ reasoningEffort }),
     onAccessModeChange: (accessMode: string) => updateDraft({ accessMode }),
@@ -115,6 +158,7 @@ export interface SessionLaunchSelection {
     model?: string;
     codexAccountId?: string;
   };
+  snapshot: SessionLaunchSelectionSnapshot;
   reset: () => void;
 }
 
@@ -235,6 +279,8 @@ export function useSessionLaunchSelection(
     ready?: boolean;
     error?: string;
     onRetry?: () => void;
+    snapshot?: SessionLaunchSelectionSnapshot;
+    onChange?: (snapshot: SessionLaunchSelectionSnapshot) => void;
   } = {}
 ): SessionLaunchSelection {
   const {
@@ -252,7 +298,8 @@ export function useSessionLaunchSelection(
             settings.defaultSessionProvider
           ),
         }
-      : undefined
+      : undefined,
+    options
   );
   const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
     getAccountInput(selection.codexAccountId),
@@ -330,6 +377,7 @@ export function useSessionLaunchSelection(
     ...getConfigurationControls(selection, discovery, effective),
   };
   return {
+    snapshot: selection.snapshot,
     provider: selection.provider,
     model: selection.model,
     loading,
