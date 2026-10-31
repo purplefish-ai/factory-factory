@@ -25,15 +25,101 @@ type Options = {
 function options() {
   return mocks.createWorkspaceMutationOptions as unknown as Options;
 }
-function launch(container: HTMLElement) {
+function launch(container: HTMLElement, label = 'Launch') {
   const button = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === 'Launch'
+    (button) => button.textContent === label
   );
   expect(button).toBeDefined();
   actFlushSync(() => button?.click());
 }
 
 describe('workspace creation submission recovery', () => {
+  it('explains a cleanup failure after production storage has already cleared the draft in memory', async () => {
+    await saveWorkspaceCreationDraft(getTestProjectId(), {
+      ...createWorkspaceCreationDraft(),
+      prompt: 'Create this task',
+    }).catch(() => undefined);
+    const form = renderForm();
+    try {
+      launch(form.container);
+      const input = mocks.createWorkspaceMutateMock.mock.calls[0]?.[0] as Input;
+      const mutation = options();
+      const context = await mutation.onMutate(input);
+      await act(async () => {
+        await mutation.onSuccess(
+          createOptimisticWorkspaceSummary({
+            id: 'created',
+            projectId: input.projectId,
+            name: input.name,
+            ratchetEnabled: false,
+          }),
+          input,
+          context
+        );
+      });
+      expect(getWorkspaceCreationDraftSnapshot(input.projectId).draft).toBeNull();
+      expect(form.container.textContent).toContain('Task created');
+      expect(form.container.textContent).toContain('saved draft may reappear after a refresh');
+      expect(form.container.textContent).not.toContain('Discard draft');
+      expect(form.onCreated).not.toHaveBeenCalled();
+      expect(
+        [...form.container.querySelectorAll('button')].find((button) =>
+          ['Launch', 'Create Agent'].includes(button.textContent ?? '')
+        )?.disabled
+      ).toBe(false);
+    } finally {
+      actFlushSync(() => form.root.unmount());
+    }
+  });
+
+  it('preserves a newer draft when a submitted periodic task succeeds late', async () => {
+    await saveWorkspaceCreationDraft(getTestProjectId(), {
+      ...createWorkspaceCreationDraft(),
+      mode: 'PERIODIC_TASK',
+      cadence: 'EVERY_FIVE_MINUTES',
+      prompt: 'Retained periodic review',
+    }).catch(() => undefined);
+    const form = renderForm();
+    try {
+      launch(form.container, 'Create Agent');
+      expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: 'Retained periodic review' })
+      );
+      const mutation = mocks.agentMutationOptions!;
+      const context = mutation.onMutate!();
+      expect(context).toMatchObject({
+        submission: { projectId: getTestProjectId(), revision: expect.any(String) },
+      });
+      const newer = { ...createWorkspaceCreationDraft(), prompt: 'A newer task' };
+      await act(async () => {
+        await saveWorkspaceCreationDraft(getTestProjectId(), newer).catch(() => undefined);
+      });
+      const revisionBeforeSuccess =
+        getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.revision;
+      await act(async () => {
+        await mutation.onSuccess(
+          { name: 'Periodic review', projectId: getTestProjectId() },
+          mocks.createPeriodicTaskMutateMock.mock.calls[0]?.[0],
+          context
+        );
+      });
+      expect(getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.revision).toBe(
+        revisionBeforeSuccess
+      );
+      expect(getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.prompt).toBe(
+        'A newer task'
+      );
+      expect(form.onCancel).not.toHaveBeenCalled();
+      expect(
+        [...form.container.querySelectorAll('button')].find((button) =>
+          ['Launch', 'Create Agent'].includes(button.textContent ?? '')
+        )?.disabled
+      ).toBe(false);
+    } finally {
+      actFlushSync(() => form.root.unmount());
+    }
+  });
+
   it('retains instructions, attachments and launch choices beside a request error and retries them', async () => {
     const attachments = [
       {

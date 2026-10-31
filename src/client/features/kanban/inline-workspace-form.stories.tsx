@@ -10,6 +10,7 @@ import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 import {
   createWorkspaceCreationDraft,
+  getWorkspaceCreationDraftSnapshot,
   saveWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
 
@@ -87,6 +88,10 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
     'project.listSlashCommands': { commands: [] },
     'project.listAllFiles': { files: [] },
     'workspace.listForProject': { workspaces: [], reviewCount: 0 },
+    'periodicTask.create': {
+      name: 'Retained periodic review',
+      projectId: 'preview-periodic-success',
+    },
     'workspace.create': {
       id: 'preview-workspace',
       projectId: 'preview-project',
@@ -356,4 +361,47 @@ export const SubmissionError: Story = {
 export const SubmissionErrorNarrow: Story = {
   ...SubmissionError,
   args: { ...SubmissionError.args, compact: true },
+};
+
+export const PeriodicSubmissionSuccess: Story = {
+  args: { projectId: 'preview-periodic-success', startCollapsed: true },
+  loaders: [
+    async () => {
+      await saveWorkspaceCreationDraft('preview-periodic-success', {
+        ...createWorkspaceCreationDraft(),
+        mode: 'PERIODIC_TASK',
+        cadence: 'EVERY_FIVE_MINUTES',
+        prompt: 'Retained periodic review',
+      });
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await expect(await canvas.findByRole('textbox')).toHaveValue('Retained periodic review');
+    const launch = canvas.getByRole('button', { name: 'Create Agent' });
+    await waitFor(() => expect(launch).toBeEnabled());
+    await userEvent.click(launch);
+    // This close uses onCancel, which only runs after periodic success cleanup.
+    await expect(await canvas.findByRole('button', { name: 'New Workspace' })).toBeVisible();
+    await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
+    const persisted = await new Promise<unknown>((resolve, reject) => {
+      const request = indexedDB.open('factory-factory-workspace-drafts', 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction('drafts', 'readonly');
+        const read = transaction.objectStore('drafts').get('preview-periodic-success');
+        read.onsuccess = () => resolve(read.result);
+        transaction.oncomplete = () => database.close();
+        transaction.onerror = () => reject(transaction.error);
+      };
+    });
+    await expect(persisted).toBeUndefined();
+    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await expect(await canvas.findByRole('textbox')).toHaveValue('');
+    // Pending ownership must also be released so another task can launch.
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
+  },
 };

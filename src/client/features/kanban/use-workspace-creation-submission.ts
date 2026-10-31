@@ -92,7 +92,7 @@ export function useWorkspaceCreationSubmission(projectId: string) {
     } catch {
       finish(
         submission,
-        'Workspace created, but its saved draft could not be cleared. Discard the draft before creating another task.'
+        'Task created, but its saved draft could not be cleared. The saved draft may reappear after a refresh.'
       );
       return false;
     }
