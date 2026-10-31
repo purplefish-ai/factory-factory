@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="public/logo-full.svg" alt="Factory Factory" width="400">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/logo-full-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="public/logo-full.svg">
+    <img src="public/logo-full.svg" alt="Factory Factory" width="400">
+  </picture>
 </p>
 
 <p align="center">
