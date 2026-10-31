@@ -76,7 +76,7 @@ try {
   for (const [type, size] of [
     ['icp4', 16],
     ['icp5', 32],
-    ['icp6', 64],
+    ['ic12', 64], // 32x32@2x: 64 physical pixels, interpreted as Retina by macOS.
     ['ic07', 128],
     ['ic08', 256],
     ['ic09', 512],
