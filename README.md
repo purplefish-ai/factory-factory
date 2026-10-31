@@ -1,9 +1,10 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="public/logo-full-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="public/logo-full.svg">
+  <a href="public/logo-full.svg#gh-light-mode-only">
     <img src="public/logo-full.svg" alt="Factory Factory" width="400">
-  </picture>
+  </a>
+  <a href="public/logo-full-dark.svg#gh-dark-mode-only">
+    <img src="public/logo-full-dark.svg" alt="Factory Factory" width="400">
+  </a>
 </p>
 
 <p align="center">
