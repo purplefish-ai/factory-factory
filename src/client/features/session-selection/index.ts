@@ -10,3 +10,7 @@ export {
   type SessionLaunchControlsProps,
 } from './session-launch-controls';
 export { NewSessionAccountAction } from './new-session-account-action';
+export {
+  sessionLaunchSelectionSnapshotSchema,
+  type SessionLaunchSelectionSnapshot,
+} from './launch-selection-snapshot';

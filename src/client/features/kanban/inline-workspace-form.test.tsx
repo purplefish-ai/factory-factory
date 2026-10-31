@@ -4,8 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, forwardRef, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { collectAttachments } from '@/client/features/composer';
 import { actFlushSync } from '@/test-utils/react-act';
 import { InlineWorkspaceForm } from './inline-workspace-form';
+import {
+  clearWorkspaceCreationDraft,
+  getWorkspaceCreationDraftSnapshot,
+  loadWorkspaceCreationDraft,
+  createWorkspaceCreationDraft,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 const mocks = vi.hoisted(() => ({
   userSettings: {
@@ -376,7 +384,7 @@ function textareaLabel(container: HTMLElement) {
   return container.querySelector(`label[for="${textarea?.id}"]`)?.textContent;
 }
 
-function renderForm(): {
+function renderForm(projectId = 'project-1'): {
   container: HTMLDivElement;
   root: Root;
   textarea: HTMLTextAreaElement;
@@ -392,7 +400,7 @@ function renderForm(): {
   actFlushSync(() => {
     root.render(
       createElement(InlineWorkspaceForm, {
-        projectId: 'project-1',
+        projectId,
         existingNames: [],
         onCancel: vi.fn(),
         onCreated: vi.fn(),
@@ -408,7 +416,12 @@ function renderForm(): {
   return { container, root, textarea };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await loadWorkspaceCreationDraft('project-1').catch(() => undefined);
+  const previous = getWorkspaceCreationDraftSnapshot('project-1').draft;
+  if (previous) {
+    await clearWorkspaceCreationDraft('project-1', previous.revision).catch(() => undefined);
+  }
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
     writable: true,
@@ -782,4 +795,169 @@ it('propagates a manual Codex account into the workspace launch request', () => 
     actFlushSync(() => root.unmount());
     container.remove();
   }
+});
+
+it('preserves a closed draft across remounts and discards only explicitly', async () => {
+  const first = renderForm();
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  actFlushSync(() => {
+    setter?.call(first.textarea, 'A task worth keeping');
+    first.textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  actFlushSync(() =>
+    [...first.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Cancel')
+      ?.click()
+  );
+  actFlushSync(() => first.root.unmount());
+  const second = renderForm();
+  expect(second.textarea.value).toBe('A task worth keeping');
+  await act(() => Promise.resolve());
+  expect(second.container.querySelector('[role="alert"]')?.textContent).toContain('saved');
+  const discard = [...second.container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Discard draft'
+  );
+  expect(discard).toBeDefined();
+  await act(async () => discard?.click());
+  actFlushSync(() => second.root.unmount());
+  const third = renderForm();
+  expect(third.textarea.value).toBe('');
+  actFlushSync(() => third.root.unmount());
+});
+
+it('restores textarea height and provider choices after reopening', () => {
+  const first = renderForm();
+  actFlushSync(() =>
+    first.container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
+  );
+  actFlushSync(() =>
+    first.container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
+  );
+  actFlushSync(() => first.root.unmount());
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight');
+  Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get: () => 180,
+  });
+  const second = renderForm();
+  expect(second.container.textContent).toContain('CODEX chosen-model');
+  expect(second.textarea.style.height).toBe('180px');
+  actFlushSync(() => second.root.unmount());
+  if (descriptor) {
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', descriptor);
+  } else {
+    Reflect.deleteProperty(HTMLTextAreaElement.prototype, 'scrollHeight');
+  }
+});
+
+it('keeps late attachment conversion in its original project after switching', async () => {
+  let finish: (result: Awaited<ReturnType<typeof collectAttachments>>) => void = () => {
+    throw new Error('Attachment conversion did not start');
+  };
+  vi.mocked(collectAttachments).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const mounted = renderForm();
+  const input = mounted.container.querySelector<HTMLInputElement>('input[type="file"]');
+  Object.defineProperty(input, 'files', { value: [new File(['x'], 'notes.txt')] });
+  actFlushSync(() => input?.dispatchEvent(new Event('change', { bubbles: true })));
+  await act(() => {
+    mounted.root.render(
+      createElement(InlineWorkspaceForm, {
+        projectId: 'attachment-destination',
+        existingNames: [],
+        onCancel: vi.fn(),
+        onCreated: vi.fn(),
+      })
+    );
+  });
+  await act(() =>
+    finish({
+      attachments: [
+        {
+          id: 'late',
+          name: 'notes.txt',
+          type: 'text/plain',
+          size: 1,
+          data: 'x',
+          contentType: 'text',
+        },
+      ],
+      errors: [],
+    })
+  );
+  expect(
+    getWorkspaceCreationDraftSnapshot('attachment-destination').draft?.attachments ?? []
+  ).toEqual([]);
+  expect(getWorkspaceCreationDraftSnapshot('project-1').draft?.attachments[0]?.data).toBe('x');
+  actFlushSync(() => mounted.root.unmount());
+});
+
+it('blocks launch only while restoring and makes storage failure visible', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('indexedDB', { open: () => ({}) });
+  const mounted = renderForm('blocked-form');
+  try {
+    const launch = [...mounted.container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    expect(launch?.disabled).toBe(true);
+    expect(launch?.getAttribute('title')).toBe('Restoring draft');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+    expect(launch?.disabled).toBe(false);
+    expect(mounted.container.querySelector('[role="alert"]')?.textContent).toContain(
+      'could not be restored'
+    );
+  } finally {
+    actFlushSync(() => mounted.root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('restores periodic schedules and explicit ratchet settings without applying later defaults', async () => {
+  await saveWorkspaceCreationDraft('project-1', {
+    ...createWorkspaceCreationDraft(),
+    prompt: 'Periodic review',
+    mode: 'PERIODIC_TASK',
+    cadence: 'WEEKLY',
+    scheduledTime: '09:30',
+    ratchetEnabled: true,
+  }).catch(() => undefined);
+  const mounted = renderForm();
+  expect(mounted.textarea.value).toBe('Periodic review');
+  expect(mounted.container.querySelector<HTMLInputElement>('input[type="time"]')?.value).toBe(
+    '09:30'
+  );
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Create Agent')
+      ?.click()
+  );
+  expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      prompt: 'Periodic review',
+      cadence: 'WEEKLY',
+      scheduledTime: '09:30',
+    })
+  );
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('div')]
+      .find((element) => element.textContent === 'Launch as Standard Workspace')
+      ?.click()
+  );
+  actFlushSync(() =>
+    [...mounted.container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'Launch')
+      ?.click()
+  );
+  expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+    expect.objectContaining({ ratchetEnabled: true })
+  );
+  actFlushSync(() => mounted.root.unmount());
 });

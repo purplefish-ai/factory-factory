@@ -3,7 +3,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   AgentScheduleFields,
@@ -19,7 +19,6 @@ import {
   useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
-import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -39,13 +38,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
 } from '@/shared/workspace-words';
+import { useInlineWorkspaceDraft } from './use-inline-workspace-draft';
 import { WorkspaceCreationOptions } from './workspace-creation-options';
 
 function handleFormKeyDown(
@@ -177,15 +176,19 @@ export function InlineWorkspaceForm({
   const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [initialPrompt, setInitialPrompt] = useState('');
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
-  const [ratchetEnabled, setRatchetEnabled] = useState(false);
-  const launchSelection = useSessionLaunchSelection(projectId);
-  const [mode, setMode] = useState<'STANDARD' | 'PERIODIC_TASK'>('STANDARD');
-  const [cadence, setCadence] = useState<
-    'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
-  >('DAILY');
-  const [scheduledTime, setScheduledTime] = useState('');
+  const recovery = useInlineWorkspaceDraft(projectId, userSettings?.ratchetEnabled ?? false);
+  const {
+    draft,
+    launchSelection,
+    ratchetEnabled,
+    setInitialPrompt,
+    setAttachments,
+    setRatchetEnabled,
+    setMode,
+    setCadence,
+    setScheduledTime,
+  } = recovery;
+  const { prompt: initialPrompt, attachments, mode, cadence, scheduledTime } = draft;
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -203,7 +206,7 @@ export function InlineWorkspaceForm({
       setInitialPrompt(value);
       autoResize();
     },
-    [autoResize]
+    [autoResize, setInitialPrompt]
   );
 
   const fileMentions = useProjectFileMentions({
@@ -224,13 +227,12 @@ export function InlineWorkspaceForm({
     onChange: onPromptChange,
   });
 
-  // Initialize defaults from user settings once loaded
   useEffect(() => {
-    if (!userSettings) {
-      return;
+    // Wait until React has applied a restored value before measuring its height.
+    if (textareaRef.current?.value === initialPrompt) {
+      autoResize();
     }
-    setRatchetEnabled(userSettings.ratchetEnabled);
-  }, [userSettings]);
+  }, [autoResize, initialPrompt]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onMutate: async (input): Promise<CreateWorkspaceMutationContext> => {
@@ -302,12 +304,15 @@ export function InlineWorkspaceForm({
   });
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
+  const isBusy = isCreating || recovery.isRestoring;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
-  const isLaunchDisabled = isCreating || (supportsWorkspaceOptions && !launchSelection.ready);
+  const isLaunchDisabled = isBusy || (supportsWorkspaceOptions && !launchSelection.ready);
 
-  const launchDisabledReason = supportsWorkspaceOptions
-    ? launchSelection.unavailableReason
-    : undefined;
+  const launchDisabledReason = getLaunchDisabledReason(
+    recovery.isRestoring,
+    supportsWorkspaceOptions,
+    launchSelection.unavailableReason
+  );
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -387,6 +392,7 @@ export function InlineWorkspaceForm({
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
+        <DraftPersistenceWarning message={recovery.persistenceError} />
         {mode === 'PERIODIC_TASK' && <Label htmlFor={instructionsId}>Instructions</Label>}
         <div className="relative">
           <SlashCommandPalette
@@ -426,7 +432,7 @@ export function InlineWorkspaceForm({
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus
-            disabled={isCreating}
+            disabled={isBusy}
           />
         </div>
         {supportsWorkspaceOptions && attachments.length > 0 ? (
@@ -443,7 +449,7 @@ export function InlineWorkspaceForm({
             setCadence={setCadence}
             scheduledTime={scheduledTime}
             setScheduledTime={setScheduledTime}
-            isCreating={isCreating}
+            isCreating={isBusy}
           />
         )}
         {supportsWorkspaceOptions && (
@@ -462,7 +468,7 @@ export function InlineWorkspaceForm({
         <WorkspaceCreationOptions
           selection={launchSelection.controlsProps}
           enabled={supportsWorkspaceOptions}
-          disabled={isCreating}
+          disabled={isBusy}
           settingsLoading={isLoadingSettings}
           ratchetEnabled={ratchetEnabled}
           onRatchetChange={setRatchetEnabled}
@@ -473,7 +479,7 @@ export function InlineWorkspaceForm({
             size="sm"
             className="h-7 text-xs whitespace-nowrap"
             onClick={onCancel}
-            disabled={isCreating}
+            disabled={isBusy}
           >
             Cancel
           </Button>
@@ -497,7 +503,7 @@ export function InlineWorkspaceForm({
                 <Button
                   size="sm"
                   className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                  disabled={isCreating}
+                  disabled={isBusy}
                   aria-label="Choose launch mode"
                 >
                   <CaretDownIcon className="size-3" />
@@ -515,7 +521,52 @@ export function InlineWorkspaceForm({
             </DropdownMenu>
           </div>
         </WorkspaceCreationOptions>
+        <DiscardWorkspaceDraft recovery={recovery} disabled={isBusy} onCancel={onCancel} />
       </CardContent>
     </Card>
+  );
+}
+
+function getLaunchDisabledReason(restoring: boolean, workspaceOptions: boolean, reason?: string) {
+  return restoring ? 'Restoring draft' : workspaceOptions ? reason : undefined;
+}
+
+function DraftPersistenceWarning({ message }: { message: string | null }) {
+  return message ? (
+    <p role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
+  ) : null;
+}
+
+function DiscardWorkspaceDraft({
+  recovery,
+  disabled,
+  onCancel,
+}: {
+  recovery: ReturnType<typeof useInlineWorkspaceDraft>;
+  disabled: boolean;
+  onCancel: () => void;
+}) {
+  if (!recovery.hasDraft) {
+    return null;
+  }
+  return (
+    <div className="flex justify-end">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs"
+        disabled={disabled}
+        onClick={() => {
+          void recovery
+            .clearSubmittedDraft(recovery.draft.revision)
+            .then(onCancel)
+            .catch(() => undefined);
+        }}
+      >
+        Discard draft
+      </Button>
+    </div>
   );
 }

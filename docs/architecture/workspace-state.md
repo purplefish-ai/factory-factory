@@ -65,6 +65,14 @@ selections after discovery completes. Access warnings include an icon and text;
 closing settings preserves the launch draft. Escape inside settings closes the
 popover without cancelling workspace creation.
 
+The board keeps one creation draft per project in this browser, including
+instructions, attachment contents, launch choices, PR updates, and
+periodic-agent schedules. Cancel and Escape preserve the draft; **Resume draft**
+reopens it and **Discard draft** clears it explicitly. Navigation and refresh
+restore saved inputs. Browser storage failures appear in the form while editing
+remains available; keep the tab open when a warning says changes could not be
+saved.
+
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
 switching providers requires a new conversation. Model controls remain visible

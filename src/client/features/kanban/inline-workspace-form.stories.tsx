@@ -7,6 +7,10 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
+import {
+  createWorkspaceCreationDraft,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 const onCreate = fn();
 const onCancel = fn();
@@ -107,12 +111,14 @@ function WorkspaceCreationPreviewSession({
   catalogLoading = false,
   compact = false,
   startCollapsed = false,
+  projectId = 'preview-project',
 }: {
   provider?: ChatProvider;
   loading?: boolean;
   catalogLoading?: boolean;
   compact?: boolean;
   startCollapsed?: boolean;
+  projectId?: string;
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -147,7 +153,7 @@ function WorkspaceCreationPreviewSession({
         >
           {open ? (
             <InlineWorkspaceForm
-              projectId="preview-project"
+              projectId={projectId}
               existingNames={[]}
               onCreated={fn()}
               onCancel={() => {
@@ -174,8 +180,9 @@ function WorkspaceCreationPreview(props: {
   catalogLoading?: boolean;
   compact?: boolean;
   startCollapsed?: boolean;
+  projectId?: string;
 }) {
-  const key = `${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -245,4 +252,67 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
   play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Agent'),
+};
+
+export const RestoredDraft: Story = {
+  args: { projectId: 'preview-restored-draft' },
+  loaders: [
+    async () => {
+      await saveWorkspaceCreationDraft('preview-restored-draft', {
+        ...createWorkspaceCreationDraft(),
+        prompt:
+          'Investigate the failing workspace setup and preserve these notes.\nResume this task after checking the board.',
+        attachments: [
+          {
+            id: 'notes',
+            name: 'setup-notes.txt',
+            type: 'text/plain',
+            size: 19,
+            data: 'Keep the worktree.',
+            contentType: 'text',
+          },
+        ],
+        launchSelection: {
+          provider: 'CODEX',
+          defaults: { defaultSessionProvider: 'CODEX', defaultCodexModel: 'six-sol' },
+          drafts: { CODEX: { reasoningEffort: null, planModeEnabled: true } },
+        },
+      });
+      return {};
+    },
+  ],
+};
+
+export const UnrestorableDraft: Story = {
+  args: { projectId: 'preview-corrupt-draft' },
+  loaders: [
+    async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('factory-factory-workspace-drafts', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction('drafts', 'readwrite');
+          transaction
+            .objectStore('drafts')
+            .put({ schemaVersion: 999, attachments: 'incompatible' }, 'preview-corrupt-draft');
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            database.close();
+            reject(transaction.error);
+          };
+        };
+      });
+      return {};
+    },
+  ],
+};
+
+export const RestoredDraftNarrow: Story = {
+  ...RestoredDraft,
+  args: { ...RestoredDraft.args, compact: true },
 };

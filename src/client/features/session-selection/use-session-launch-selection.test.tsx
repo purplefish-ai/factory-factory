@@ -93,12 +93,19 @@ function LaunchStateHarness({
   scopeKey,
   settings,
   onResult,
+  restoration,
 }: {
   scopeKey: string;
   settings?: SessionLaunchDefaults;
+  restoration?: {
+    snapshot?: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot;
+    onChange?: (
+      snapshot: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot
+    ) => void;
+  };
   onResult: (result: LaunchState) => void;
 }) {
-  onResult(useSessionLaunchSelectionState(scopeKey, settings));
+  onResult(useSessionLaunchSelectionState(scopeKey, settings, restoration));
   return null;
 }
 function ConnectedLaunchHarness({
@@ -534,4 +541,59 @@ it('uses the manual account for creation, launch options and model discovery, an
   expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
   expect(mounted.current.controlsProps.account).toBeUndefined();
   expect(mocks.catalogQuery).toHaveBeenLastCalledWith(undefined);
+});
+
+describe('serializable launch selection restoration', () => {
+  it('restores provider-specific choices and null reasoning before delayed settings arrive', () => {
+    const root = createRoot(document.createElement('div'));
+    roots.push(root);
+    let selection: LaunchState | undefined;
+    let snapshot: import('./launch-selection-snapshot').SessionLaunchSelectionSnapshot = {
+      provider: 'CODEX',
+      drafts: {
+        CLAUDE: { model: 'chosen-claude', reasoningEffort: 'high', planModeEnabled: true },
+        CODEX: {
+          model: 'chosen-codex',
+          reasoningEffort: null,
+          codexAccountId: 'work',
+          accessMode: 'agent',
+        },
+      },
+    };
+    const render = (scopeKey: string, settings?: SessionLaunchDefaults, restore = snapshot) =>
+      flushSync(() =>
+        root.render(
+          createElement(LaunchStateHarness, {
+            scopeKey,
+            settings,
+            restoration: {
+              snapshot: restore,
+              onChange: (next) => {
+                snapshot = next;
+              },
+            },
+            onResult: (next) => {
+              selection = next;
+            },
+          })
+        )
+      );
+    render('project-a');
+    expect(selection?.model).toBe('chosen-codex');
+    expect(selection?.reasoningEffort).toBeNull();
+    expect(selection?.codexAccountId).toBe('work');
+    render('project-a', defaults);
+    expect(selection?.model).toBe('chosen-codex');
+    flushSync(() => selection?.onProviderChange('CLAUDE'));
+    expect(selection?.reasoningEffort).toBe('high');
+    expect(selection?.planModeEnabled).toBe(true);
+    expect(snapshot.provider).toBe('CLAUDE');
+    expect(snapshot.drafts.CODEX?.reasoningEffort).toBeNull();
+    render('project-b', defaults, {
+      provider: 'CLAUDE',
+      drafts: { CLAUDE: { model: 'project-b-model' } },
+    });
+    expect(selection?.model).toBe('project-b-model');
+    expect(selection?.reasoningEffort).toBeUndefined();
+  });
 });

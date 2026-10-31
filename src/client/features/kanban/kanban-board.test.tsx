@@ -6,6 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
+import {
+  clearWorkspaceCreationDraft,
+  createWorkspaceCreationDraft,
+  getWorkspaceCreationDraftSnapshot,
+  loadWorkspaceCreationDraft,
+  saveWorkspaceCreationDraft,
+} from './workspace-creation-draft-storage';
 
 const mocks = vi.hoisted(() => ({
   isMobile: true,
@@ -126,7 +133,12 @@ describe('KanbanBoard', () => {
   let root: Root;
   let originalActEnvironmentDescriptor: PropertyDescriptor | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await loadWorkspaceCreationDraft('project-1').catch(() => undefined);
+    const previous = getWorkspaceCreationDraftSnapshot('project-1').draft;
+    if (previous) {
+      await clearWorkspaceCreationDraft('project-1', previous.revision).catch(() => undefined);
+    }
     mocks.isMobile = true;
     mocks.showInlineForm = false;
     mocks.workspaces = [
@@ -179,6 +191,25 @@ describe('KanbanBoard', () => {
     void act(() => button!.click());
     void act(() => root.render(createElement(KanbanBoard)));
   }
+
+  it.each([true, false])(
+    'offers a saved draft without reopening an explicitly closed composer (mobile=%s)',
+    async (mobile) => {
+      mocks.isMobile = mobile;
+      await saveWorkspaceCreationDraft('project-1', {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'Resume this task',
+      }).catch(() => undefined);
+      act(() => root.render(createElement(KanbanBoard)));
+      expect(container.querySelector('input')).toBeNull();
+      click('Resume draft');
+      expect(container.querySelector('input')).not.toBeNull();
+      click('Cancel creation');
+      act(() => root.render(createElement(KanbanBoard)));
+      expect(container.querySelector('input')).toBeNull();
+      expect(container.textContent).toContain('Resume draft');
+    }
+  );
 
   it('shows the created task at the top of Working on mobile', () => {
     mocks.workspaces.push(

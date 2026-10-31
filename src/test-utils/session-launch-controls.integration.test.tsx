@@ -9,6 +9,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
+import {
+  clearWorkspaceCreationDraft,
+  getWorkspaceCreationDraftSnapshot,
+  loadWorkspaceCreationDraft,
+} from '@/client/features/kanban/workspace-creation-draft-storage';
 import { SessionLaunchControls } from '@/client/features/session-selection';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { trpc } from '@/client/lib/trpc';
@@ -24,7 +29,13 @@ const inputSchema = z.object({
 });
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
-beforeEach(() => {
+beforeEach(async () => {
+  // Each case starts a separate task; production remounts intentionally retain it.
+  await loadWorkspaceCreationDraft('project').catch(() => undefined);
+  const draft = getWorkspaceCreationDraftSnapshot('project').draft;
+  if (draft) {
+    await clearWorkspaceCreationDraft('project', draft.revision).catch(() => undefined);
+  }
   // Radix tooltip content measures its trigger when focus returns after menu selection.
   vi.stubGlobal(
     'ResizeObserver',
