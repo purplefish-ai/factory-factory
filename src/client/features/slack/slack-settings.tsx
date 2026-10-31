@@ -17,11 +17,12 @@ interface SlackConnectionsViewProps {
   onTokenChange: (value: string) => void;
   onConnect: () => void;
   onTest: (id: string) => void;
-  onDisconnect: (id: string) => Promise<boolean>;
+  onDisconnect: (id: string) => Promise<{ succeeded: boolean; error?: string }>;
 }
 
 export function SlackConnectionsView(props: SlackConnectionsViewProps) {
   const [disconnectId, setDisconnectId] = useState<string>();
+  const [disconnectError, setDisconnectError] = useState<string>();
   return (
     <Card>
       <CardHeader>
@@ -73,7 +74,10 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
                   variant="ghost"
                   size="sm"
                   disabled={props.busy}
-                  onClick={() => setDisconnectId(connection.id)}
+                  onClick={() => {
+                    setDisconnectError(undefined);
+                    setDisconnectId(connection.id);
+                  }}
                 >
                   Disconnect
                 </Button>
@@ -130,19 +134,22 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
             }
           }}
           title="Disconnect Slack?"
-          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app.${props.error ? ` ${props.error}` : ''}`}
+          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app.${disconnectError ? ` ${disconnectError}` : ''}`}
           confirmText="Disconnect Slack"
           variant="destructive"
           isPending={props.busy}
           onConfirm={() => {
             if (disconnectId) {
+              setDisconnectError(undefined);
               void props.onDisconnect(disconnectId).then(
-                (succeeded) => {
-                  if (succeeded) {
+                (result) => {
+                  if (result.succeeded) {
                     setDisconnectId(undefined);
+                  } else {
+                    setDisconnectError(result.error ?? 'Could not disconnect Slack. Try again.');
                   }
                 },
-                () => undefined
+                () => setDisconnectError('Could not disconnect Slack. Try again.')
               );
             }
           }}
@@ -167,11 +174,14 @@ export function SlackSettings() {
     setError(undefined);
     setNotice(undefined);
     let succeeded = false;
+    let operationError: string | undefined;
     try {
       setNotice(await operation());
       succeeded = true;
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Could not update Slack connection.');
+      operationError =
+        error instanceof Error ? error.message : 'Could not update Slack connection.';
+      setError(operationError);
     } finally {
       try {
         const refreshed = await connections.refetch();
@@ -184,7 +194,7 @@ export function SlackSettings() {
       setBusy(false);
       connect.reset();
     }
-    return succeeded;
+    return { succeeded, ...(operationError ? { error: operationError } : {}) };
   }
 
   return (

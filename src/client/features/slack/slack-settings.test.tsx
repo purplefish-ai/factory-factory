@@ -42,8 +42,8 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
 });
-afterEach(() => {
-  flushSync(() => root.unmount());
+afterEach(async () => {
+  await act(() => root.unmount());
   document.body.innerHTML = '';
 });
 function mount() {
@@ -181,4 +181,20 @@ it('keeps a failed disconnect open with its error', async () => {
     'Could not disconnect'
   );
   expect(button('Disconnect Slack').disabled).toBe(false);
+});
+
+it('does not show an unrelated test error in a new disconnect dialog', async () => {
+  api.test.mockRejectedValue(new Error('Saved token validation failed'));
+  savedConnection();
+  await act(async () => {
+    button('Test connection').click();
+    await Promise.resolve();
+  });
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'Saved token validation failed'
+  );
+  act(() => button('Disconnect').click());
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).not.toContain(
+    'Saved token validation failed'
+  );
 });

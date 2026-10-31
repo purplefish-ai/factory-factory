@@ -11,7 +11,7 @@ const meta = {
     onTokenChange: () => undefined,
     onConnect: () => undefined,
     onTest: () => undefined,
-    onDisconnect: () => Promise.resolve(true),
+    onDisconnect: () => Promise.resolve({ succeeded: true }),
   },
 } satisfies Meta<typeof SlackConnectionsView>;
 export default meta;

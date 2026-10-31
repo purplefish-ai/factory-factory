@@ -13,6 +13,14 @@ describe('normalizeSessionModelForProvider', () => {
     expect(normalizeSessionModelForProvider('SONNET', 'CLAUDE')).toBe('sonnet');
   });
 
+  it.each([
+    ['Sonnet[1m]', 'sonnet[1m]'],
+    ['Opus[1M]', 'opus[1m]'],
+  ])('canonicalizes suffixed alias %s', (input, expected) => {
+    expect(normalizeSessionModelForProvider(input, 'CLAUDE')).toBe(expected);
+    expect(normalizeSessionModelForProvider(input, 'CODEX')).toBeUndefined();
+  });
+
   it('rejects obvious cross-provider model leakage', () => {
     expect(normalizeSessionModelForProvider('opus', 'CODEX')).toBeUndefined();
     expect(normalizeSessionModelForProvider('opus[1m]', 'CODEX')).toBeUndefined();

@@ -49,7 +49,7 @@ export function normalizeSessionModelForProvider(
   }
 
   const lower = normalized.toLowerCase();
-  if (CLAUDE_MODEL_ALIASES.has(lower)) {
+  if (CLAUDE_MODEL_ALIASES.has(lower.replace(/\[1m\]$/, ''))) {
     return lower;
   }
 
