@@ -255,6 +255,10 @@ for (const operation of ['remove first', 'reorder']) {
     });
     const slack = rows.find((row) => row.type === 'SLACK_MESSAGE')!;
     const schedule = rows.find((row) => row.type === 'SCHEDULE')!;
+    await db.prisma.agentTrigger.update({
+      where: { id: slack.id },
+      data: { isEnabled: true },
+    });
     await db.prisma.agentRun.create({
       data: {
         agentDefinitionId: created.agentDefinitionId!,
@@ -276,7 +280,7 @@ for (const operation of ['remove first', 'reorder']) {
     });
     expect(
       await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: slack.id } })
-    ).toMatchObject({ type: 'SLACK_MESSAGE' });
+    ).toMatchObject({ type: 'SLACK_MESSAGE', isEnabled: false });
     expect(
       await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: schedule.id } })
     ).toMatchObject({ type: 'SCHEDULE' });
