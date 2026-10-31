@@ -7,6 +7,7 @@ export default defineConfig({
     'mobile-baseline.spec.ts',
     'workspace-header.spec.ts',
     'agents-responsive.spec.ts',
+    'workspace-tools.spec.ts',
     'web-app.spec.ts',
   ],
   timeout: 30_000,

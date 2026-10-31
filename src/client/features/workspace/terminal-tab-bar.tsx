@@ -62,6 +62,7 @@ export function TerminalTabBar({
             </button>
             <button
               type="button"
+              aria-label={`Close ${tab.label}`}
               onClick={() => onCloseTab(tab.id)}
               className={cn(
                 'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',

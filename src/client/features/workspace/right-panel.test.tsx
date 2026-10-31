@@ -8,6 +8,7 @@ import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-con
 
 const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
+  mobile: false,
   workspaceData: undefined as undefined | { periodicTaskId: string | null; creationSource: string },
 }));
 
@@ -62,7 +63,7 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => createElement('div', null, children),
 }));
 
-vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => false }));
+vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => mocks.mobile }));
 
 vi.mock('./use-log-stream', () => ({
   useLogStream: () => ({
@@ -152,6 +153,7 @@ describe('RightPanel Agents tab', () => {
     });
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     localStorage.clear();
+    mocks.mobile = false;
     mocks.workspaceData = {
       periodicTaskId: null,
       creationSource: 'MANUAL',
@@ -184,6 +186,36 @@ describe('RightPanel Agents tab', () => {
       )
     );
   }
+
+  it('shows only the selected tool on mobile and remembers it across closing the panel', () => {
+    mocks.mobile = true;
+    render();
+    const changes = container.querySelector('[data-testid="changes-panel"]');
+    expect(changes?.closest('[hidden]')).toBeNull();
+    const terminalTab = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Terminal'
+    );
+    void act(() => terminalTab?.click());
+    expect(changes?.closest('[hidden]')).not.toBeNull();
+    expect(terminalTab?.getAttribute('aria-pressed')).toBe('true');
+    // The provider outlives the drawer content.
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <span>Closed</span>
+        </WorkspacePanelProvider>
+      )
+    );
+    render();
+    expect(
+      container.querySelector('[data-testid="changes-panel"]')?.closest('[hidden]')
+    ).not.toBeNull();
+    expect(
+      [...container.querySelectorAll('button')]
+        .find((b) => b.textContent === 'Terminal')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+  });
 
   it('selects Agents from outside the panel and preserves it when the panel remounts', () => {
     void act(() =>

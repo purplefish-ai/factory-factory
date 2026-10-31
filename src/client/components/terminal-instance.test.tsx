@@ -66,6 +66,7 @@ class MockResizeObserver {
 describe('TerminalInstance', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
     Object.assign(mocks.appearance, DEFAULT_APPEARANCE);
     vi.mocked(Terminal).mockClear();
     mocks.fit.mockReset();
@@ -81,6 +82,20 @@ describe('TerminalInstance', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+  });
+
+  it('waits for an explicit tap before focusing on touch screens, including after activation', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const props = { onData: vi.fn(), onResize: vi.fn(), output: '' };
+    flushSync(() => root.render(createElement(TerminalInstance, { ...props, isActive: false })));
+    flushSync(() => root.render(createElement(TerminalInstance, { ...props, isActive: true })));
+    expect(mocks.focus).not.toHaveBeenCalled();
+    container.querySelector<HTMLElement>('[role="application"]')?.click();
+    expect(mocks.focus).toHaveBeenCalledOnce();
+    root.unmount();
   });
 
   it('uses the default terminal font when appearance is default', () => {

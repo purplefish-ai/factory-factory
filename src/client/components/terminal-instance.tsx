@@ -3,7 +3,10 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppearance } from '@/client/components/appearance-provider';
+import { WORKSPACE_DRAWER_BREAKPOINT } from '@/client/hooks/use-workspace-drawer';
 import { scaledTerminalFontSize } from '@/shared/appearance';
+
+const MANUAL_FOCUS_MEDIA_QUERY = `(max-width: ${WORKSPACE_DRAWER_BREAKPOINT - 1}px), (any-pointer: coarse)`;
 
 const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 
@@ -98,7 +101,9 @@ export function TerminalInstance({
 
     terminal.open(containerRef.current);
     fitAddon.fit();
-    terminal.focus();
+    if (!window.matchMedia(MANUAL_FOCUS_MEDIA_QUERY).matches) {
+      terminal.focus();
+    }
 
     // Store refs
     terminalRef.current = terminal;
@@ -184,7 +189,7 @@ export function TerminalInstance({
 
   // Focus terminal when it becomes active (e.g., tab switch)
   useEffect(() => {
-    if (isActive && terminalRef.current) {
+    if (isActive && terminalRef.current && !window.matchMedia(MANUAL_FOCUS_MEDIA_QUERY).matches) {
       terminalRef.current.focus();
     }
   }, [isActive]);
