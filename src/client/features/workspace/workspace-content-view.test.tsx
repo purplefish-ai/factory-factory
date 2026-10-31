@@ -11,7 +11,7 @@ vi.mock('./main-view-content', () => ({
 vi.mock('./workspace-panel-context', () => ({ useWorkspacePanel: () => ({ openTab: vi.fn() }) }));
 
 describe('WorkspaceContentView sessionless recovery', () => {
-  it('renders supplied recovery without sessions and preserves chat when sessions exist', () => {
+  it('renders supplied recovery without sessions and preserves chat while sessions load', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     const props: WorkspaceContentViewProps = {

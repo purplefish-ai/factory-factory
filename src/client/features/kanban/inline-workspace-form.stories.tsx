@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError, type TRPCLink } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { trpc } from '@/client/lib/trpc';
+import { trpc, type AppRouter } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
@@ -104,6 +105,30 @@ function previewShouldWait(path: string, loading: boolean, catalogLoading: boole
   );
 }
 
+function previewLink(
+  provider: ChatProvider,
+  loading: boolean,
+  catalogLoading: boolean,
+  creationError?: string
+): TRPCLink<AppRouter> {
+  return () =>
+    ({ op }) =>
+      observable((observer) => {
+        if (previewShouldWait(op.path, loading, catalogLoading)) {
+          return;
+        }
+        if (op.type === 'mutation') {
+          onCreate(op.input);
+          if (creationError) {
+            observer.error(TRPCClientError.from(new Error(creationError)));
+            return;
+          }
+        }
+        observer.next({ result: { data: previewResponse(op.path, op.input, provider) } });
+        observer.complete();
+      });
+}
+
 /** All requests stay inside this preview transport, including launch button clicks. */
 function WorkspaceCreationPreviewSession({
   provider = 'CODEX',
@@ -112,6 +137,7 @@ function WorkspaceCreationPreviewSession({
   compact = false,
   startCollapsed = false,
   projectId = 'preview-project',
+  creationError,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
@@ -119,6 +145,7 @@ function WorkspaceCreationPreviewSession({
   compact?: boolean;
   startCollapsed?: boolean;
   projectId?: string;
+  creationError?: string;
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -126,20 +153,7 @@ function WorkspaceCreationPreviewSession({
   );
   const [client] = useState(() =>
     trpc.createClient({
-      links: [
-        () =>
-          ({ op }) =>
-            observable((observer) => {
-              if (previewShouldWait(op.path, loading, catalogLoading)) {
-                return;
-              }
-              if (op.type === 'mutation') {
-                onCreate(op.input);
-              }
-              observer.next({ result: { data: previewResponse(op.path, op.input, provider) } });
-              observer.complete();
-            }),
-      ],
+      links: [previewLink(provider, loading, catalogLoading, creationError)],
     })
   );
   return (
@@ -155,7 +169,11 @@ function WorkspaceCreationPreviewSession({
             <InlineWorkspaceForm
               projectId={projectId}
               existingNames={[]}
-              onCreated={fn()}
+              onCreated={() => {
+                if (startCollapsed) {
+                  setOpen(false);
+                }
+              }}
               onCancel={() => {
                 onCancel();
                 if (startCollapsed) {
@@ -181,8 +199,9 @@ function WorkspaceCreationPreview(props: {
   compact?: boolean;
   startCollapsed?: boolean;
   projectId?: string;
+  creationError?: string;
 }) {
-  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -315,4 +334,26 @@ export const UnrestorableDraft: Story = {
 export const RestoredDraftNarrow: Story = {
   ...RestoredDraft,
   args: { ...RestoredDraft.args, compact: true },
+};
+
+export const SubmissionError: Story = {
+  args: {
+    projectId: 'preview-request-error',
+    creationError: 'Repository is unavailable. Check its location and try again.',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox');
+    const launch = canvas.getByRole('button', { name: /^Launch$/ });
+    await waitFor(() => expect(launch).toBeEnabled());
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Keep these instructions while I fix the repository.');
+    await userEvent.click(launch);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Repository is unavailable');
+    await expect(input).toHaveValue('Keep these instructions while I fix the repository.');
+  },
+};
+export const SubmissionErrorNarrow: Story = {
+  ...SubmissionError,
+  args: { ...SubmissionError.args, compact: true },
 };
