@@ -18,7 +18,7 @@ const basePath = process.env.VITE_BASE_PATH || '/';
 // use a relative base. Relative proxy builds can supply their deployment prefix.
 const webAppBase =
   process.env.VITE_WEB_APP_BASE_PATH || (basePath.startsWith('/') ? basePath : '/');
-if (!/^\/(?!\/)[^?#]*$/.test(webAppBase)) {
+if (!/^\/(?![/\\])[^?#\\]*$/.test(webAppBase)) {
   throw new Error('VITE_WEB_APP_BASE_PATH must be an absolute same-origin path');
 }
 const webAppBasePath = webAppBase.endsWith('/') ? webAppBase : `${webAppBase}/`;

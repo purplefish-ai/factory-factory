@@ -48,3 +48,26 @@ it.each([
   },
   30_000
 );
+
+it.each(['//example.com/', String.raw`/\example.com/`, String.raw`/prefix\escape/`])(
+  'rejects deployment prefixes that can resolve outside the configured origin: %s',
+  async (prefix) => {
+    const root = await mkdtemp(join(tmpdir(), 'ff-web-app-invalid-base-'));
+    vi.stubEnv('VITE_WEB_APP_BASE_PATH', prefix);
+    try {
+      await writeFile(join(root, 'index.html'), '<html><body></body></html>');
+      await expect(
+        build({
+          configFile: resolve('vite.config.ts'),
+          root,
+          publicDir: false,
+          logLevel: 'silent',
+          build: { write: false },
+        })
+      ).rejects.toThrow('VITE_WEB_APP_BASE_PATH must be an absolute same-origin path');
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+);
