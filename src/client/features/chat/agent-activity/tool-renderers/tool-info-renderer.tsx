@@ -6,6 +6,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { memo, useState } from 'react';
+import { AgentProposalCard, extractAgentProposal } from '@/client/features/agent-authoring';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
@@ -152,42 +153,58 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   }
   const pending = calls.some((call) => call.status === 'pending');
   const label = getToolGroupLabel(calls);
+  const proposals = new Map(
+    calls.flatMap((call) => {
+      const proposal =
+        call.result && !call.result.isError
+          ? extractAgentProposal(call.result.content, call.name)
+          : null;
+      return proposal
+        ? [[`${proposal.workspaceId}:${proposal.proposalId}`, proposal] as const]
+        : [];
+    })
+  );
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
-      <CollapsibleTrigger asChild>
-        <button type="button" className={triggerClassName}>
-          {pending ? (
-            <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
-          ) : (
-            <FolderSimpleIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
-          )}
-          <span className="min-w-0 truncate" title={label}>
-            {label}
-          </span>
-          {pending && <span className="sr-only">Running</span>}
-          <DisclosureCaret />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ml-1 mt-1 space-y-0.5">
-        {calls.map((call) => {
-          const callOpen = getCallOpen?.(call.id, false);
-          return (
-            <PairedToolCallRenderer
-              key={call.id}
-              call={call}
-              open={callOpen}
-              onOpenChange={
-                callOpen !== undefined && onCallOpenChange
-                  ? (next) => onCallOpenChange(call.id, next)
-                  : undefined
-              }
-              detailsClassName={toolDetailsClassName}
-              detailsMaxHeight={toolDetailsMaxHeight}
-            />
-          );
-        })}
-      </CollapsibleContent>
-    </Collapsible>
+    <div className="min-w-0">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
+        <CollapsibleTrigger asChild>
+          <button type="button" className={triggerClassName}>
+            {pending ? (
+              <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
+            ) : (
+              <FolderSimpleIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+            )}
+            <span className="min-w-0 truncate" title={label}>
+              {label}
+            </span>
+            {pending && <span className="sr-only">Running</span>}
+            <DisclosureCaret />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="ml-1 mt-1 space-y-0.5">
+          {calls.map((call) => {
+            const callOpen = getCallOpen?.(call.id, false);
+            return (
+              <PairedToolCallRenderer
+                key={call.id}
+                call={call}
+                open={callOpen}
+                onOpenChange={
+                  callOpen !== undefined && onCallOpenChange
+                    ? (next) => onCallOpenChange(call.id, next)
+                    : undefined
+                }
+                detailsClassName={toolDetailsClassName}
+                detailsMaxHeight={toolDetailsMaxHeight}
+              />
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+      {[...proposals].map(([key, reference]) => (
+        <AgentProposalCard key={key} reference={reference} />
+      ))}
+    </div>
   );
 });
 

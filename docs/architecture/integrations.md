@@ -260,7 +260,7 @@ Service capsule: `src/backend/services/periodic-task/`.
 ## Event-triggered agent data model
 
 The agent-centered persistence foundation lives in `AgentDefinition`,
-`AgentConnection`, `AgentTrigger`, and `AgentRun`, owned by the
+`AgentConnection`, `AgentTrigger`, `AgentRun`, and `AgentProposal`, owned by the
 `agent-definition` capsule. It is additive: existing `PeriodicTask` definitions,
 executions, polling, and UI remain authoritative for scheduled agents. No
 definitions are copied into the new tables. Migrating the scheduler is a
@@ -308,18 +308,69 @@ history but retains its workspaces. Deleting a workspace clears its run link
 without deleting run history. Editing definitions or triggers does not rewrite
 stored snapshots; future run writers must keep them immutable.
 
-This foundation does not implement natural-language configuration resolution,
-OAuth installation flows, event reception, classification, evaluation history,
-launch dispatch, retries, schedule admission, or management UI. Natural-language
-authoring can later resolve descriptions into validated configuration without
-discarding the original intent. The execution pipeline will need a durable
-event/evaluation ledger before provider events can be acknowledged and replayed
-safely. Logical export/import does not yet include these tables; use a
-database-file backup if testing them directly.
+This foundation does not implement OAuth installation flows, event reception,
+classification, event evaluation history, launch dispatch, retries, or schedule
+admission. The execution pipeline will need a durable event/evaluation ledger
+before provider events can be acknowledged and replayed safely. Logical
+export/import does not yet include these tables; use a database-file backup if
+testing them directly.
 
 Runs currently retain status and workspace linkage, not separate PR/result
 metadata. When implementing execution/history, decide which results must survive
 workspace deletion rather than relying exclusively on workspace-owned PR rows.
+
+### Conversational creation
+
+Workspace sessions expose `list_agent_sources`, `propose_agent`, and
+`get_agent_proposal` through their existing MCP server. The workspace agent
+interprets the user's request, discovers resource IDs, and proposes a structured
+configuration. Slack discovery lists bot-member public/private channels with
+pagination. GitHub discovery resolves the current project's repository and
+labels through the authenticated `gh` CLI; its connection identity is
+repository-scoped (`gh:<repository-id>`), not a GitHub App installation or an
+event subscription. Missing GitHub access does not prevent Slack authoring.
+Actor-specific ID restrictions are rejected until actor discovery is supported.
+
+`AgentProposal` persists the specification, verified display names, workspace,
+revision, and optional created definition. Tool results carry a proposal
+reference; chat loads its current state and renders an editable card outside the
+collapsed activity group. Users can edit instructions, filters, event settings,
+and execution settings. **Create agent** atomically creates a paused definition
+and its paused triggers. The card explicitly says that listening and automatic
+runs are not yet available. Creation does not start legacy periodic tasks.
+
+Conversational edits use optimistic revision checks and cannot silently replace
+a newer proposal. A widget that receives a newer revision refreshes its data;
+loading that revision combines conversational changes with local field edits.
+Local values take precedence for task/execution fields edited on both sides. If
+both sides changed events, loading stops and preserves local edits until the
+user explicitly discards them; positional merging could move a filter to a
+different source. Creation retries return the existing definition only when the
+accepted revision and specification match. Saved configurations remain editable
+through **Edit agent** / **Save changes** on the same card; updates preserve
+trigger identities and historical run snapshots. Removed trigger slots are
+paused, preserving history. Tools cannot commit proposals; creation and
+saved-agent updates are user actions through trusted local API procedures.
+
+Proposals belong to their authoring workspace and are removed with it; created
+definitions belong to the project and survive workspace deletion. Definitions
+referenced by a proposal cannot be deleted until that proposal is removed.
+Logical export/import does not include proposals or the other new agent tables.
+
+The live authoring evaluation uses the installed Codex ACP runtime, the actual
+MCP server and authoring API, a disposable database, and fixed provider
+catalogs:
+
+```sh
+RUN_AGENT_AUTHORING_EVAL=1 pnpm test src/backend/services/session/service/acp/agent-authoring.manual.integration.test.ts
+```
+
+It covers the feedback, packet-unlock, and GitHub-label scenarios, a focused
+follow-up edit, and ambiguous workspace clarification. Optional
+`AGENT_AUTHORING_EVAL_MODEL` selects a model and `AGENT_AUTHORING_EVAL_OUTPUT`
+names an existing directory for transcripts/configurations. These are authoring
+evaluations, not classifier recall/precision measurements: event matching and
+classification require their own replay evaluation when the runtime is built.
 
 ### Slack credentials
 

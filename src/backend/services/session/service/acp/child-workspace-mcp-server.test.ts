@@ -1,18 +1,10 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../../');
-const TSX_BIN = join(
-  REPO_ROOT,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
-);
+import { getChildWorkspaceMcpServerConfig } from './child-workspace-mcp-server';
 
 const toolResponseSchema = z.object({
   result: z.object({
@@ -26,7 +18,13 @@ type ToolResponse = z.infer<typeof toolResponseSchema>;
 async function callToolWithHttpResponse(options: {
   body: unknown;
   status: number;
-  toolName: 'spawn_child_workspace' | 'list_projects' | 'archive_child_workspace';
+  toolName:
+    | 'spawn_child_workspace'
+    | 'list_projects'
+    | 'archive_child_workspace'
+    | 'propose_agent'
+    | 'list_agent_sources'
+    | 'get_agent_proposal';
   toolArguments?: Record<string, unknown>;
 }): Promise<{
   requestBody: unknown;
@@ -56,19 +54,19 @@ async function callToolWithHttpResponse(options: {
     if (address === null || typeof address === 'string') {
       throw new Error('Expected the test HTTP server to listen on a TCP port');
     }
-    const child = spawn(
-      TSX_BIN,
-      [fileURLToPath(new URL('./child-workspace-mcp-server.ts', import.meta.url))],
-      {
-        env: {
-          ...process.env,
-          FF_CHILD_WORKSPACE_MCP: '1',
-          FF_WORKSPACE_ID: 'parent-workspace',
-          FF_WORKSPACE_PARENT_ID: '',
-          FF_API_BASE_URL: `http://127.0.0.1:${address.port}`,
-        },
-      }
-    );
+    const config = getChildWorkspaceMcpServerConfig({
+      nodeExecPath: process.execPath,
+      workspaceId: 'parent-workspace',
+      parentWorkspaceId: null,
+      apiBaseUrl: `http://127.0.0.1:${address.port}`,
+    });
+    const child = spawn(config.command, config.args, {
+      cwd: tmpdir(),
+      env: {
+        ...process.env,
+        ...config.env,
+      },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -110,6 +108,55 @@ async function callToolWithHttpResponse(options: {
 }
 
 describe('child workspace MCP tRPC errors', () => {
+  it('binds proposals to the current workspace and returns a renderable reference', async () => {
+    const { requestBody, response } = await callToolWithHttpResponse({
+      status: 200,
+      toolName: 'propose_agent',
+      toolArguments: {
+        workspaceId: 'spoofed',
+        specification: {
+          name: 'QA reviewer',
+          instructions: 'Compare QA edits.',
+          triggers: [
+            { type: 'SCHEDULE', description: 'Daily QA', config: { version: 1, cadence: 'DAILY' } },
+          ],
+        },
+      },
+      body: {
+        result: {
+          data: {
+            json: {
+              id: 'proposal-1',
+              workspaceId: 'parent-workspace',
+              revision: 1,
+              agentDefinitionId: null,
+              sourceNames: {},
+              specification: {
+                name: 'QA reviewer',
+                instructions: 'Compare QA edits.',
+                triggers: [
+                  {
+                    type: 'SCHEDULE',
+                    description: 'Daily QA',
+                    config: { version: 1, cadence: 'DAILY' },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(requestBody).toMatchObject({
+      json: { workspaceId: 'parent-workspace', specification: { name: 'QA reviewer' } },
+    });
+    expect(JSON.parse(response.result.content[0]?.text ?? '')).toMatchObject({
+      type: 'agent_proposal',
+      proposalId: 'proposal-1',
+      workspaceId: 'parent-workspace',
+      revision: 1,
+    });
+  });
   it('surfaces nested superjson mutation errors before legacy messages', async () => {
     const { requestMethod, response } = await callToolWithHttpResponse({
       status: 404,

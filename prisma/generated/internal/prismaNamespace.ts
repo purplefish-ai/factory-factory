@@ -413,6 +413,7 @@ export const ModelName = {
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
   AgentDefinition: 'AgentDefinition',
+  AgentProposal: 'AgentProposal',
   AgentConnection: 'AgentConnection',
   AgentTrigger: 'AgentTrigger',
   AgentRun: 'AgentRun',
@@ -434,7 +435,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentConnection" | "agentTrigger" | "agentRun" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1622,6 +1623,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    AgentProposal: {
+      payload: Prisma.$AgentProposalPayload<ExtArgs>
+      fields: Prisma.AgentProposalFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentProposalFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentProposalFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentProposalFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentProposalFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        findMany: {
+          args: Prisma.AgentProposalFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>[]
+        }
+        create: {
+          args: Prisma.AgentProposalCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        createMany: {
+          args: Prisma.AgentProposalCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentProposalCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentProposalDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        update: {
+          args: Prisma.AgentProposalUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentProposalDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentProposalUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentProposalUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentProposalUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentProposalPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentProposalAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentProposal>
+        }
+        groupBy: {
+          args: Prisma.AgentProposalGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentProposalGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentProposalCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentProposalCountAggregateOutputType> | number
+        }
+      }
+    }
     AgentConnection: {
       payload: Prisma.$AgentConnectionPayload<ExtArgs>
       fields: Prisma.AgentConnectionFieldRefs
@@ -2398,6 +2473,20 @@ export const AgentDefinitionScalarFieldEnum = {
 export type AgentDefinitionScalarFieldEnum = (typeof AgentDefinitionScalarFieldEnum)[keyof typeof AgentDefinitionScalarFieldEnum]
 
 
+export const AgentProposalScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  specification: 'specification',
+  sourceNames: 'sourceNames',
+  agentDefinitionId: 'agentDefinitionId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentProposalScalarFieldEnum = (typeof AgentProposalScalarFieldEnum)[keyof typeof AgentProposalScalarFieldEnum]
+
+
 export const AgentConnectionScalarFieldEnum = {
   id: 'id',
   provider: 'provider',
@@ -2905,6 +2994,7 @@ export type GlobalOmitConfig = {
   closedSession?: Prisma.ClosedSessionOmit
   userSettings?: Prisma.UserSettingsOmit
   agentDefinition?: Prisma.AgentDefinitionOmit
+  agentProposal?: Prisma.AgentProposalOmit
   agentConnection?: Prisma.AgentConnectionOmit
   agentTrigger?: Prisma.AgentTriggerOmit
   agentRun?: Prisma.AgentRunOmit
