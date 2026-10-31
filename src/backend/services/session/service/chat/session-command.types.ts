@@ -29,7 +29,8 @@ export type SessionCommandError =
         | 'set_config_option_failed'
         | 'set_thinking_budget_failed'
         | 'permission_response_failed'
-        | 'start_failed';
+        | 'start_failed'
+        | 'steer_failed';
       cause: unknown;
     };
 

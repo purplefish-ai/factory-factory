@@ -31,6 +31,7 @@ function createGraph(label: string) {
     configure: vi.fn(),
     setManualDispatchResume: vi.fn(),
     resetDispatchState: vi.fn(),
+    steerQueuedMessage: vi.fn(),
     tryDispatchNextMessage(sessionId: string) {
       this.attempts.push(sessionId);
       const message = sessionDomainService.dequeueNext(sessionId);
@@ -270,6 +271,7 @@ describe('application queue producer composition', () => {
         configure: vi.fn(),
         setManualDispatchResume: vi.fn(),
         resetDispatchState: vi.fn(),
+        steerQueuedMessage: vi.fn(),
         tryDispatchNextMessage: dispatch,
       };
       domain.storeInitialMessage('shared-load', `Initial ${label}`);

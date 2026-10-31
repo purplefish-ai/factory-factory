@@ -72,6 +72,7 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   inputAttachments: MessageAttachment[];
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;

@@ -1,3 +1,4 @@
+import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
@@ -41,7 +42,7 @@ import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadat
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
-import { slackConnectionService } from './services/agent-definition';
+import { agentProposalService, slackConnectionService } from './services/agent-definition';
 import { codexAccountService } from './services/codex-accounts';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
@@ -129,10 +130,15 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
+  agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
-    'configure' | 'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
+    | 'configure'
+    | 'tryDispatchNextMessage'
+    | 'setManualDispatchResume'
+    | 'resetDispatchState'
+    | 'steerQueuedMessage'
   >;
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
@@ -146,6 +152,7 @@ export type ApplicationServices = BridgeServices & {
   codexAccountService: typeof codexAccountService;
   cryptoService: typeof cryptoService;
   slackConnectionService: typeof slackConnectionService;
+  agentProposalService: typeof agentProposalService;
   createLogger: typeof createLogger;
   dataBackupService: typeof dataBackupService;
   decisionLogQueryService: typeof decisionLogService;
@@ -306,6 +313,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     triggerAdversarialReview,
     cryptoService,
     slackConnectionService,
+    agentProposalService,
+    agentAuthoring: createAgentAuthoring(() => services),
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,

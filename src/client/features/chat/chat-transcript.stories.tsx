@@ -275,3 +275,22 @@ export const SubagentTimelineRecoveryWithTasks: Story = {
     },
   },
 };
+
+export const QueuedMessageSteering: Story = {
+  parameters: { layout: 'padded' },
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    messages: [startupMessage],
+    queuedMessageIds: new Set([startupMessage.id]),
+    onRemoveQueuedMessage: () => undefined,
+    onSteerQueuedMessage: () => undefined,
+    running: true,
+    loadingSession: false,
+    work: {
+      promptInFlight: true,
+      backgroundTasks: [],
+      runningSubagents: 0,
+      activeGoals: 0,
+    },
+  },
+};

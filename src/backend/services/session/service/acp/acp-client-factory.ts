@@ -35,6 +35,7 @@ import {
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { toAcpSessionId } from './acp-session-identity';
+import { supportsAcpSteering } from './acp-steering';
 import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 import type { AcpClientOptions } from './types';
 
@@ -257,6 +258,7 @@ export class AcpClientFactory {
         providerSessionId: sessionInfo.providerSessionId,
         sessionCreationOutcome: sessionInfo.outcome,
         agentCapabilities,
+        supportsSteering: supportsAcpSteering(initResult._meta),
       });
       handle.configOptions =
         options.purpose === 'browse'

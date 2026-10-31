@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack-connection.accessor';
 import { slackConnectInputSchema } from '@/shared/slack-connection';
+import { readSlackSource } from './slack-sources';
 
 const botIdentitySchema = z.object({
   ok: z.literal(true),
@@ -22,6 +23,29 @@ export class SlackConnectionService {
 
   list() {
     return slackConnectionAccessor.list();
+  }
+
+  channels(connectionId: string, cursor?: string) {
+    return readSlackSource({
+      connectionId,
+      cursor,
+      decrypt: (value) => this.crypto.decrypt(value),
+      request: this.request,
+    });
+  }
+
+  async channel(connectionId: string, channelId: string) {
+    const result = await readSlackSource({
+      connectionId,
+      channelId,
+      decrypt: (value) => this.crypto.decrypt(value),
+      request: this.request,
+    });
+    const channel = result.channels[0];
+    if (!channel) {
+      throw new ApplicationError('PRECONDITION_FAILED', 'Slack channel is unavailable.');
+    }
+    return channel;
   }
 
   async connect(input: unknown) {

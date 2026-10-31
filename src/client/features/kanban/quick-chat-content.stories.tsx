@@ -80,6 +80,7 @@ function MockQuickChat({ promptInFlight = true }: { promptInFlight?: boolean }) 
     updateSettings: fn(),
     setInputDraft: fn(),
     setConfigOption: fn(),
+    steerQueuedMessage: fn(),
     removeQueuedMessage: (id: string) =>
       setQueuedMessages((messages) => messages.filter((message) => message.id !== id)),
   } as unknown as UseChatWebSocketReturn;

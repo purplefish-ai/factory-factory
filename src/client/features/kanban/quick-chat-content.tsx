@@ -62,6 +62,11 @@ export function QuickChatContent({
         isCompacting={chatState.isCompacting}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={chatState.removeQueuedMessage}
+        onSteerQueuedMessage={
+          chatState.connected && promptInFlight && !stopping && !chatState.isCompacting
+            ? chatState.steerQueuedMessage
+            : undefined
+        }
       />
       {/* Prompts + input area */}
       <div className="z-20 border-t bg-background pb-safe">

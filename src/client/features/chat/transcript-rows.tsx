@@ -44,6 +44,11 @@ function TranscriptMessage({
             ].join(':')
           : undefined
       }
+      onSteer={
+        queued && display.onSteerQueuedMessage
+          ? () => display.onSteerQueuedMessage?.(item.id)
+          : undefined
+      }
       onRemove={
         queued && display.onRemoveQueuedMessage
           ? () => display.onRemoveQueuedMessage?.(item.id)

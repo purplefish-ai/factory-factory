@@ -59,6 +59,70 @@ it('encrypts validated credentials and exposes only safe workspace metadata', as
   );
 });
 
+it('discovers paginated channels without exposing tokens and rejects inaccessible channels', async () => {
+  const saved = await service.connect({ botToken: token });
+  request.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        ok: true,
+        channels: [
+          { id: 'C-feedback', name: 'customer-feedback', is_member: true, is_archived: false },
+          { id: 'C-other', name: 'other', is_member: false, is_archived: false },
+        ],
+        response_metadata: { next_cursor: 'page-two' },
+      })
+    )
+  );
+  const page = await service.channels(saved.id);
+  expect(page).toEqual({
+    channels: [{ id: 'C-feedback', name: 'customer-feedback' }],
+    nextCursor: 'page-two',
+  });
+  expect(JSON.stringify(page)).not.toContain(token);
+  request.mockImplementationOnce((url) => {
+    expect(new URL(String(url)).searchParams.get('cursor')).toBe('page-two');
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          channels: [{ id: 'C-next', name: 'next-page', is_member: true, is_archived: false }],
+          response_metadata: { next_cursor: '' },
+        })
+      )
+    );
+  });
+  expect(await service.channels(saved.id, page.nextCursor ?? undefined)).toEqual({
+    channels: [{ id: 'C-next', name: 'next-page' }],
+    nextCursor: null,
+  });
+  request.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        ok: true,
+        channel: {
+          id: 'C-other',
+          name: 'other',
+          is_member: false,
+          is_archived: false,
+        },
+      })
+    )
+  );
+  await expect(service.channel(saved.id, 'C-other')).rejects.toMatchObject({
+    code: 'PRECONDITION_FAILED',
+  });
+});
+
+it('sanitizes Slack source failures and refuses disconnected connections', async () => {
+  const saved = await service.connect({ botToken: token });
+  request.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: token })));
+  const failure = service.channels(saved.id);
+  await expect(failure).rejects.toThrow('Could not read Slack channels');
+  await expect(failure).rejects.not.toThrow(token);
+  await service.disconnect(saved.id);
+  await expect(service.channels(saved.id)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+});
+
 it('reconnects one workspace without creating duplicate connection rows', async () => {
   const first = await service.connect({ botToken: token });
   const second = await service.connect({ botToken: 'xoxb-replacement' });

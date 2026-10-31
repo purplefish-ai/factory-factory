@@ -436,6 +436,28 @@ active turn that the client cannot observe, the existing bounded busy retry
 preserves the queued message, and the running turn keeps its tool-call tracking
 for interceptors such as PR detection.
 
+Queued human messages also offer an explicit **Steer** action during an active
+prompt. Normal sends still queue. Steer submits only that message through the
+adapter's advertised `_session/steering` extension, preserving attachments and
+the active turn's configuration. Slash commands and automatic notifications
+remain queued. Concurrent steering of a different message reports a busy error;
+repeated clicks on the same pending message coalesce. If there is no active
+turn, a stale click on a later message is rejected instead of dispatching an
+earlier queue entry. Failed steering leaves the message queued. A steering
+acknowledgment has a 10-second deadline. On timeout, the client terminates that
+runtime before releasing queue ownership and withholds immediate automatic
+resend. Input may have been consumed before the missing acknowledgment, so a
+later explicit retry may repeat prior effects. The host requests
+`idleBehavior: "promptRequired"`, so a completion race falls back to ordinary
+prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
+input is removed from the queue even if stopping advances the generation while
+the request settles, preventing a delivered steer from being replayed on resume.
+
+Codex uses native `turn/steer` without cancelling the current turn. Claude's
+native steering may pre-empt generation or background a foreground tool; neither
+provider promises delivery at a specific tool boundary. The action tooltip
+explains that active work may be redirected.
+
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control
 available for active agent work without implying that the next message must
@@ -865,7 +887,8 @@ UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.
 
 - Orchestration: `src/backend/orchestration/workspace-children.orchestrator.ts`
-- MCP server:
+- MCP entrypoint: `src/backend/mcp/workspace-mcp-server.ts`
+- Session MCP spawn configuration:
   `src/backend/services/session/service/acp/child-workspace-mcp-server.ts`
 
 ## Quick actions

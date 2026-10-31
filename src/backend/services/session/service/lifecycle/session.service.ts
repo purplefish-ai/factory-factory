@@ -60,6 +60,18 @@ export class SessionService {
     this.workspaceBridge = bridges.workspace;
   }
 
+  steerSessionMessage(
+    sessionId: string,
+    content: string | AgentContentItem[]
+  ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
+    const client = this.runtimeManager.getClient(sessionId);
+    const prompt =
+      typeof content === 'string'
+        ? [{ type: 'text' as const, text: content }]
+        : this.toContentBlocks(content, client?.supportsImages() ?? false);
+    return this.runtimeManager.steerSession(sessionId, prompt);
+  }
+
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
     const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {

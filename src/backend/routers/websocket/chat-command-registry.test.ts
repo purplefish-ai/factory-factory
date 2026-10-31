@@ -38,6 +38,7 @@ describe('socket-free command registry', () => {
       prompt: { sendSessionMessage: vi.fn() },
       startup: { getSessionClient: () => undefined, getOrCreateSessionClient: vi.fn() },
       dispatch: {
+        steerQueuedMessage: vi.fn().mockResolvedValue(undefined),
         tryDispatchNextMessage: vi.fn(),
         setManualDispatchResume: vi.fn(),
         resetDispatchState: vi.fn(),
@@ -131,7 +132,12 @@ it('routes execution commands using injected application capabilities and typed 
       getSessionConfigOptions: vi.fn(),
     },
     permission: { respondToPermission: vi.fn() },
-    dispatch: { resetDispatchState, tryDispatchNextMessage, setManualDispatchResume },
+    dispatch: {
+      steerQueuedMessage: vi.fn(),
+      resetDispatchState,
+      tryDispatchNextMessage,
+      setManualDispatchResume,
+    },
   });
   const context = { sessionId: 'injected-execution', workingDir: '/injected' };
   expect(await registry.start(context, { type: 'start', model: 'requested' })).toEqual({

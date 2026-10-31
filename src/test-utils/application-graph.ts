@@ -1,4 +1,5 @@
 import { type Mock, vi } from 'vitest';
+import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
 import type {
   PreparedSessionLoad,
@@ -119,6 +120,7 @@ vi.mock('@/backend/services/config.service', () => ({
 }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/agent-definition', () => ({
+  agentProposalService: {},
   slackConnectionService: {
     list: vi.fn(async () => []),
     connect: vi.fn(),
@@ -298,7 +300,7 @@ import {
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
-import { slackConnectionService } from '@/backend/services/agent-definition';
+import { agentProposalService, slackConnectionService } from '@/backend/services/agent-definition';
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
@@ -476,6 +478,8 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     renameWorkspace: vi.fn(),
     cryptoService,
     slackConnectionService,
+    agentProposalService,
+    agentAuthoring: createAgentAuthoring((): ApplicationServices => services),
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     metadataSearchService,

@@ -1,5 +1,9 @@
 import { cryptoService } from '@/backend/services/crypto.service';
+import { AgentProposalService } from './service/agent-proposal.service';
 import { SlackConnectionService } from './service/slack-connection.service';
+
+export { AgentProposalService } from './service/agent-proposal.service';
+export const agentProposalService = new AgentProposalService();
 
 export { SlackConnectionService } from './service/slack-connection.service';
 export const slackConnectionService = new SlackConnectionService(cryptoService);

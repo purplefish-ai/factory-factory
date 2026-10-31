@@ -217,6 +217,7 @@ model DecisionLog {
 
 model Workspace {
   agentRun            AgentRun?
+  agentProposals      AgentProposal[]
   id                  String            @id @default(cuid())
   projectId           String
   project             Project           @relation(fields: [projectId], references: [id])
@@ -628,8 +629,25 @@ model AgentDefinition {
   updatedAt DateTime @updatedAt
   triggers AgentTrigger[]
   runs AgentRun[]
+  proposal AgentProposal?
 
   @@index([projectId, isEnabled])
+}
+
+/// A chat-authored draft. Acceptance creates its definition exactly once.
+model AgentProposal {
+  id String @id @default(cuid())
+  workspaceId String
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  revision Int @default(1)
+  specification Json // agentSpecificationSchema
+  sourceNames Json @default("{}")
+  agentDefinitionId String? @unique
+  agentDefinition AgentDefinition? @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
 }
 
 /// Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.

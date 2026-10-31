@@ -3,6 +3,7 @@ import type { CIStatus, PRState } from '@/shared/core';
 import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
+import { getAgentRepository } from './github-cli/agent-sources';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import {
   classifyError,
@@ -61,6 +62,11 @@ type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSig
  * and read-only calls benefit from in-flight deduplication (singleflight).
  */
 class GitHubCLIService {
+  getAgentRepository(repository: string) {
+    return getAgentRepository(repository, (args) =>
+      this.exec(args, { maxBuffer: GH_MAX_BUFFER_BYTES.agentSources })
+    );
+  }
   private readonly executor = new GitHubCLIExecutor();
 
   private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;

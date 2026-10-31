@@ -1,5 +1,6 @@
 import { adminRouter } from './admin.trpc';
 import { adversarialReviewRouter } from './adversarial-review.trpc';
+import { agentRouter } from './agent.trpc';
 import { closedSessionsRouter } from './closed-sessions.trpc';
 import { codexAccountsRouter } from './codex-accounts.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
@@ -17,6 +18,7 @@ import { voiceRouter } from './voice.trpc';
 import { workspaceRouter } from './workspace.trpc';
 
 export const appRouter = router({
+  agent: agentRouter,
   project: projectRouter,
   decisionLog: decisionLogRouter,
   admin: adminRouter,

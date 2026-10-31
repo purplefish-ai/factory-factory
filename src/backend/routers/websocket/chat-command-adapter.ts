@@ -52,6 +52,8 @@ function formatCommandError(error: SessionCommandError): string {
     default: {
       const detail = error.cause instanceof Error ? error.cause.message : String(error.cause);
       switch (error.kind) {
+        case 'steer_failed':
+          return `Failed to steer message: ${detail}`;
         case 'start_failed':
           return `Failed to start agent: ${detail}`;
         case 'set_model_failed':
