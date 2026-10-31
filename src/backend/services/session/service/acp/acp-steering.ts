@@ -1,6 +1,16 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import type { AcpProcessHandle } from './acp-process-handle';
+import { withTimeout } from './acp-runtime-spawn';
+
+const STEERING_TIMEOUT_MS = 10_000;
+
+export class AcpSteeringTimeoutError extends Error {
+  constructor() {
+    super('Steering acknowledgment timed out. The unresponsive agent runtime was stopped.');
+    this.name = 'AcpSteeringTimeoutError';
+  }
+}
 
 const steeringCapabilitySchema = z.object({
   steering: z.object({ supported: z.literal(true) }),
@@ -21,10 +31,15 @@ export async function steerAcpPrompt(
   if (!handle.supportsSteering) {
     throw new Error('The agent adapter does not support steering. The message remains queued.');
   }
-  const response = await handle.connection.extMethod('_session/steering', {
-    sessionId: handle.acpSessionId,
-    prompt,
-    _meta: { steering: { idleBehavior: 'promptRequired' } },
+  const response = await withTimeout({
+    promise: handle.connection.extMethod('_session/steering', {
+      sessionId: handle.acpSessionId,
+      prompt,
+      _meta: { steering: { idleBehavior: 'promptRequired' } },
+    }),
+    timeoutMs: STEERING_TIMEOUT_MS,
+    description: 'steering request',
+    timeoutError: new AcpSteeringTimeoutError(),
   });
   const parsed = steeringResponseSchema.safeParse(response);
   if (!parsed.success) {

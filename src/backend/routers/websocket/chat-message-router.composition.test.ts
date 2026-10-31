@@ -92,3 +92,12 @@ it('routes an explicit steer by queued id and returns failures without rejecting
     replies: [{ type: 'error', error: { kind: 'steer_failed', cause: expect.any(Error) } }],
   });
 });
+
+it('reports a stale queued-message id as message_not_queued', async () => {
+  vi.restoreAllMocks();
+  const result = await router.handleMessage('stale-session', '/tmp/worktree', {
+    type: 'steer_queued_message',
+    messageId: 'no-longer-queued',
+  });
+  expect(result).toEqual({ replies: [{ type: 'error', error: { kind: 'message_not_queued' } }] });
+});

@@ -99,6 +99,7 @@ it('accepts explicit steering of a queued id and rejects missing ids', () => {
   expect(
     ChatMessageSchema.safeParse({ type: 'steer_queued_message', messageId: 'selected' }).success
   ).toBe(true);
+  expect(ChatMessageSchema.safeParse({ type: 'steer_queued_message' }).success).toBe(false);
   expect(ChatMessageSchema.safeParse({ type: 'steer_queued_message', messageId: '' }).success).toBe(
     false
   );

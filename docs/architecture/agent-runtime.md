@@ -440,7 +440,14 @@ Queued human messages also offer an explicit **Steer** action during an active
 prompt. Normal sends still queue. Steer submits only that message through the
 adapter's advertised `_session/steering` extension, preserving attachments and
 the active turn's configuration. Slash commands and automatic notifications
-remain queued. Failed steering leaves the message queued. The host requests
+remain queued. Concurrent steering of a different message reports a busy error;
+repeated clicks on the same pending message coalesce. If there is no active
+turn, a stale click on a later message is rejected instead of dispatching an
+earlier queue entry. Failed steering leaves the message queued. A steering
+acknowledgment has a 10-second deadline. On timeout, the client terminates that
+runtime before releasing queue ownership and withholds immediate automatic
+resend. Input may have been consumed before the missing acknowledgment, so a
+later explicit retry may repeat prior effects. The host requests
 `idleBehavior: "promptRequired"`, so a completion race falls back to ordinary
 prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
 input is removed from the queue even if stopping advances the generation while

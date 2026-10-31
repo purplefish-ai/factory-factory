@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/acp-steering';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -736,8 +737,12 @@ describe('explicit queued-message steering', () => {
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     const command = enqueue('/compact');
     const background = enqueue('pr-event-hidden');
-    await expect(h.dispatcher.steerQueuedMessage('session', command.id)).rejects.toThrow();
-    await expect(h.dispatcher.steerQueuedMessage('session', background.id)).rejects.toThrow();
+    await expect(h.dispatcher.steerQueuedMessage('session', command.id)).rejects.toThrow(
+      'Only ordinary queued human messages can be steered'
+    );
+    await expect(h.dispatcher.steerQueuedMessage('session', background.id)).rejects.toThrow(
+      'Only ordinary queued human messages can be steered'
+    );
     expect(h.steerSessionMessage).not.toHaveBeenCalled();
     expect(sessionDomainService.getQueueLength('session')).toBe(2);
   });
@@ -827,4 +832,53 @@ it('releases stale steering ownership on stop so a replacement turn can dispatch
   expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
     'new-input',
   ]);
+});
+
+it('reports a conflicting steer for another queued message instead of silently ignoring it', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  const other = enqueue('other');
+  const pending = deferred();
+  h.steerSessionMessage.mockImplementationOnce(async () => {
+    await pending.promise;
+    return { outcome: 'injected' };
+  });
+  const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
+  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  const conflicting = h.dispatcher.steerQueuedMessage('session', other.id);
+  pending.resolve();
+  await expect(conflicting).rejects.toThrow('Another queued message is being steered');
+  await steer;
+  expect(sessionDomainService.hasQueuedMessage('session', other.id)).toBe(true);
+});
+
+it('does not dispatch an earlier message when a stale steer selects a later queued message', async () => {
+  const h = harness();
+  const first = enqueue('first');
+  const selected = enqueue('selected');
+  await expect(h.dispatcher.steerQueuedMessage('session', selected.id)).rejects.toThrow(
+    'No active turn to steer'
+  );
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([first, selected]);
+});
+
+it('retains timed-out steering without automatically restarting and resending it', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  h.steerSessionMessage.mockImplementationOnce(() => {
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+    return Promise.reject(new AcpSteeringTimeoutError());
+  });
+  await expect(h.dispatcher.steerQueuedMessage('session', selected.id)).rejects.toThrow(
+    'timed out'
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([selected]);
+  // The claim is released so a later user-triggered delivery can proceed.
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected');
 });
