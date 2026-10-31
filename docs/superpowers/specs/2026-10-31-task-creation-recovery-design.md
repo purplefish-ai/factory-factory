@@ -1,6 +1,6 @@
 # Task creation drafts and recovery
 
-Status: behavior approved in conversation; implementation not started.
+Status: approved design.
 
 ## Intent
 
