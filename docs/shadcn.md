@@ -49,12 +49,14 @@ current toast styling.
 ## Touch and keyboard action visibility
 
 Secondary actions use the `hover-reveal` utility from `src/client/globals.css`.
-It hides actions only at desktop widths with a fine pointer and hover support,
-and reveals them when their parent `group` is hovered or contains keyboard
-focus. On touch devices (including wide tablets) and narrow screens, actions
-remain visible. Use this for card, message, screenshot and tab actions rather
-than unconditional `opacity-0` or width-only hover rules. Named sidebar and
-scrollbar groups use equivalent pointer media queries.
+It hides actions only at desktop widths with a fine pointer, hover support, and
+no coarse pointer (the shared `mouse-only` variant), and reveals them when their
+parent `group` is hovered or contains keyboard focus. On touch devices
+(including wide tablets) and narrow screens, actions remain visible, including
+hybrid devices with both touch and a mouse. Sidebar action hit-area expansion
+follows the same rule. Use this for card, message, screenshot and tab actions
+rather than unconditional `opacity-0` or width-only hover rules. Named sidebar
+and scrollbar groups use equivalent pointer media queries.
 
 The `Responsive/HoverActions` Storybook story and
 `pnpm test:e2e:mobile e2e/hover-actions.spec.ts` exercise these states.

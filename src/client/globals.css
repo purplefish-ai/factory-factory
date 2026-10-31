@@ -5,11 +5,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A secondary touchscreen must keep actions visible even with a primary mouse. */
+@custom-variant mouse-only (@media (hover: hover) and (pointer: fine) and (not (any-pointer: coarse)));
+
 /* Touch actions stay visible at every width; desktop actions reveal on hover or focus. */
 @utility hover-reveal {
-  @media (min-width: 48rem) and (hover: hover) and (pointer: fine) {
-    &:not(:focus-within):not([data-state='open']):not(:is(.group:hover *, .group:focus-within *)) {
-      opacity: 0;
+  @media (min-width: 48rem) {
+    @variant mouse-only {
+      &:not(:focus-within):not([data-state='open']):not(
+          :is(.group:hover *, .group:focus-within *)
+        ) {
+        opacity: 0;
+      }
     }
   }
 }
