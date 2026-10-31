@@ -10,6 +10,7 @@ import { prReviewRouter } from './pr-review.trpc';
 import { projectRouter } from './project.trpc';
 import { searchRouter } from './search.trpc';
 import { sessionRouter } from './session.trpc';
+import { slackRouter } from './slack.trpc';
 import { router } from './trpc';
 import { userSettingsRouter } from './user-settings.trpc';
 import { voiceRouter } from './voice.trpc';
@@ -31,6 +32,7 @@ export const appRouter = router({
   linear: linearRouter,
   periodicTask: periodicTaskRouter,
   voice: voiceRouter,
+  slack: slackRouter,
 });
 
 // Export type for use in frontend

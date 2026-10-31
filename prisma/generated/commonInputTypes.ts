@@ -545,6 +545,57 @@ export type FloatWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedFloatFilter<$PrismaModel>
 }
 
+export type EnumAgentConnectionProviderFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentConnectionProvider | Prisma.EnumAgentConnectionProviderFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentConnectionProvider[]
+  notIn?: $Enums.AgentConnectionProvider[]
+  not?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel> | $Enums.AgentConnectionProvider
+}
+
+export type EnumAgentConnectionProviderWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentConnectionProvider | Prisma.EnumAgentConnectionProviderFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentConnectionProvider[]
+  notIn?: $Enums.AgentConnectionProvider[]
+  not?: Prisma.NestedEnumAgentConnectionProviderWithAggregatesFilter<$PrismaModel> | $Enums.AgentConnectionProvider
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel>
+}
+
+export type EnumAgentTriggerTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentTriggerType | Prisma.EnumAgentTriggerTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentTriggerType[]
+  notIn?: $Enums.AgentTriggerType[]
+  not?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel> | $Enums.AgentTriggerType
+}
+
+export type EnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentTriggerType | Prisma.EnumAgentTriggerTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentTriggerType[]
+  notIn?: $Enums.AgentTriggerType[]
+  not?: Prisma.NestedEnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel> | $Enums.AgentTriggerType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+}
+
+export type EnumAgentRunStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentRunStatus | Prisma.EnumAgentRunStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentRunStatus[]
+  notIn?: $Enums.AgentRunStatus[]
+  not?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel> | $Enums.AgentRunStatus
+}
+
+export type EnumAgentRunStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentRunStatus | Prisma.EnumAgentRunStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentRunStatus[]
+  notIn?: $Enums.AgentRunStatus[]
+  not?: Prisma.NestedEnumAgentRunStatusWithAggregatesFilter<$PrismaModel> | $Enums.AgentRunStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel>
+}
+
 export type EnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {
   equals?: $Enums.PeriodicTaskCadence | Prisma.EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel>
   in?: $Enums.PeriodicTaskCadence[]
@@ -1087,6 +1138,57 @@ export type NestedFloatWithAggregatesFilter<$PrismaModel = never> = {
   _sum?: Prisma.NestedFloatFilter<$PrismaModel>
   _min?: Prisma.NestedFloatFilter<$PrismaModel>
   _max?: Prisma.NestedFloatFilter<$PrismaModel>
+}
+
+export type NestedEnumAgentConnectionProviderFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentConnectionProvider | Prisma.EnumAgentConnectionProviderFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentConnectionProvider[]
+  notIn?: $Enums.AgentConnectionProvider[]
+  not?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel> | $Enums.AgentConnectionProvider
+}
+
+export type NestedEnumAgentConnectionProviderWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentConnectionProvider | Prisma.EnumAgentConnectionProviderFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentConnectionProvider[]
+  notIn?: $Enums.AgentConnectionProvider[]
+  not?: Prisma.NestedEnumAgentConnectionProviderWithAggregatesFilter<$PrismaModel> | $Enums.AgentConnectionProvider
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentConnectionProviderFilter<$PrismaModel>
+}
+
+export type NestedEnumAgentTriggerTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentTriggerType | Prisma.EnumAgentTriggerTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentTriggerType[]
+  notIn?: $Enums.AgentTriggerType[]
+  not?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel> | $Enums.AgentTriggerType
+}
+
+export type NestedEnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentTriggerType | Prisma.EnumAgentTriggerTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentTriggerType[]
+  notIn?: $Enums.AgentTriggerType[]
+  not?: Prisma.NestedEnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel> | $Enums.AgentTriggerType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+}
+
+export type NestedEnumAgentRunStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentRunStatus | Prisma.EnumAgentRunStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentRunStatus[]
+  notIn?: $Enums.AgentRunStatus[]
+  not?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel> | $Enums.AgentRunStatus
+}
+
+export type NestedEnumAgentRunStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AgentRunStatus | Prisma.EnumAgentRunStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AgentRunStatus[]
+  notIn?: $Enums.AgentRunStatus[]
+  not?: Prisma.NestedEnumAgentRunStatusWithAggregatesFilter<$PrismaModel> | $Enums.AgentRunStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAgentRunStatusFilter<$PrismaModel>
 }
 
 export type NestedEnumPeriodicTaskCadenceFilter<$PrismaModel = never> = {

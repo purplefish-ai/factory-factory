@@ -151,3 +151,24 @@ export type PeriodicTaskExecutionStatus =
 
 export const CodexAccountKind = { NATIVE_DEFAULT: 'NATIVE_DEFAULT', MANAGED: 'MANAGED' } as const;
 export type CodexAccountKind = (typeof CodexAccountKind)[keyof typeof CodexAccountKind];
+
+export const AgentConnectionProvider = { SLACK: 'SLACK', GITHUB: 'GITHUB' } as const;
+export type AgentConnectionProvider =
+  (typeof AgentConnectionProvider)[keyof typeof AgentConnectionProvider];
+
+export const AgentTriggerType = {
+  SCHEDULE: 'SCHEDULE',
+  SLACK_MESSAGE: 'SLACK_MESSAGE',
+  GITHUB_ISSUE: 'GITHUB_ISSUE',
+} as const;
+export type AgentTriggerType = (typeof AgentTriggerType)[keyof typeof AgentTriggerType];
+
+export const AgentRunStatus = {
+  QUEUED: 'QUEUED',
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  PR_CREATED: 'PR_CREATED',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export type AgentRunStatus = (typeof AgentRunStatus)[keyof typeof AgentRunStatus];

@@ -412,6 +412,10 @@ export const ModelName = {
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
+  AgentDefinition: 'AgentDefinition',
+  AgentConnection: 'AgentConnection',
+  AgentTrigger: 'AgentTrigger',
+  AgentRun: 'AgentRun',
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification'
@@ -430,7 +434,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentConnection" | "agentTrigger" | "agentRun" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1544,6 +1548,302 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    AgentDefinition: {
+      payload: Prisma.$AgentDefinitionPayload<ExtArgs>
+      fields: Prisma.AgentDefinitionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentDefinitionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentDefinitionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentDefinitionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentDefinitionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        findMany: {
+          args: Prisma.AgentDefinitionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>[]
+        }
+        create: {
+          args: Prisma.AgentDefinitionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        createMany: {
+          args: Prisma.AgentDefinitionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentDefinitionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentDefinitionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        update: {
+          args: Prisma.AgentDefinitionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentDefinitionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentDefinitionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentDefinitionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentDefinitionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentDefinitionPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentDefinitionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentDefinition>
+        }
+        groupBy: {
+          args: Prisma.AgentDefinitionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentDefinitionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentDefinitionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentDefinitionCountAggregateOutputType> | number
+        }
+      }
+    }
+    AgentConnection: {
+      payload: Prisma.$AgentConnectionPayload<ExtArgs>
+      fields: Prisma.AgentConnectionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentConnectionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentConnectionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentConnectionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentConnectionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        findMany: {
+          args: Prisma.AgentConnectionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>[]
+        }
+        create: {
+          args: Prisma.AgentConnectionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        createMany: {
+          args: Prisma.AgentConnectionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentConnectionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentConnectionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        update: {
+          args: Prisma.AgentConnectionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentConnectionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentConnectionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentConnectionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentConnectionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentConnectionPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentConnectionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentConnection>
+        }
+        groupBy: {
+          args: Prisma.AgentConnectionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentConnectionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentConnectionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentConnectionCountAggregateOutputType> | number
+        }
+      }
+    }
+    AgentTrigger: {
+      payload: Prisma.$AgentTriggerPayload<ExtArgs>
+      fields: Prisma.AgentTriggerFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentTriggerFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentTriggerFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentTriggerFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentTriggerFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        findMany: {
+          args: Prisma.AgentTriggerFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>[]
+        }
+        create: {
+          args: Prisma.AgentTriggerCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        createMany: {
+          args: Prisma.AgentTriggerCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentTriggerCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentTriggerDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        update: {
+          args: Prisma.AgentTriggerUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentTriggerDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentTriggerUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentTriggerUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentTriggerUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentTriggerPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentTriggerAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentTrigger>
+        }
+        groupBy: {
+          args: Prisma.AgentTriggerGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentTriggerGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentTriggerCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentTriggerCountAggregateOutputType> | number
+        }
+      }
+    }
+    AgentRun: {
+      payload: Prisma.$AgentRunPayload<ExtArgs>
+      fields: Prisma.AgentRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        findMany: {
+          args: Prisma.AgentRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>[]
+        }
+        create: {
+          args: Prisma.AgentRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        createMany: {
+          args: Prisma.AgentRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        update: {
+          args: Prisma.AgentRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentRunPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentRun>
+        }
+        groupBy: {
+          args: Prisma.AgentRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentRunCountAggregateOutputType> | number
+        }
+      }
+    }
     PeriodicTask: {
       payload: Prisma.$PeriodicTaskPayload<ExtArgs>
       fields: Prisma.PeriodicTaskFieldRefs
@@ -2084,6 +2384,69 @@ export const UserSettingsScalarFieldEnum = {
 export type UserSettingsScalarFieldEnum = (typeof UserSettingsScalarFieldEnum)[keyof typeof UserSettingsScalarFieldEnum]
 
 
+export const AgentDefinitionScalarFieldEnum = {
+  id: 'id',
+  projectId: 'projectId',
+  name: 'name',
+  instructions: 'instructions',
+  isEnabled: 'isEnabled',
+  executionConfig: 'executionConfig',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentDefinitionScalarFieldEnum = (typeof AgentDefinitionScalarFieldEnum)[keyof typeof AgentDefinitionScalarFieldEnum]
+
+
+export const AgentConnectionScalarFieldEnum = {
+  id: 'id',
+  provider: 'provider',
+  externalId: 'externalId',
+  name: 'name',
+  isEnabled: 'isEnabled',
+  credentialsEncrypted: 'credentialsEncrypted',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentConnectionScalarFieldEnum = (typeof AgentConnectionScalarFieldEnum)[keyof typeof AgentConnectionScalarFieldEnum]
+
+
+export const AgentTriggerScalarFieldEnum = {
+  id: 'id',
+  agentDefinitionId: 'agentDefinitionId',
+  type: 'type',
+  connectionId: 'connectionId',
+  description: 'description',
+  config: 'config',
+  filterInstructions: 'filterInstructions',
+  isEnabled: 'isEnabled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentTriggerScalarFieldEnum = (typeof AgentTriggerScalarFieldEnum)[keyof typeof AgentTriggerScalarFieldEnum]
+
+
+export const AgentRunScalarFieldEnum = {
+  id: 'id',
+  agentDefinitionId: 'agentDefinitionId',
+  triggerId: 'triggerId',
+  idempotencyKey: 'idempotencyKey',
+  status: 'status',
+  definitionSnapshot: 'definitionSnapshot',
+  triggerSnapshot: 'triggerSnapshot',
+  input: 'input',
+  workspaceId: 'workspaceId',
+  errorMessage: 'errorMessage',
+  createdAt: 'createdAt',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt'
+} as const
+
+export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typeof AgentRunScalarFieldEnum]
+
+
 export const PeriodicTaskScalarFieldEnum = {
   id: 'id',
   projectId: 'projectId',
@@ -2335,6 +2698,27 @@ export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, '
 
 
 /**
+ * Reference to a field of type 'AgentConnectionProvider'
+ */
+export type EnumAgentConnectionProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentConnectionProvider'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentTriggerType'
+ */
+export type EnumAgentTriggerTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentTriggerType'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunStatus'
+ */
+export type EnumAgentRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunStatus'>
+    
+
+
+/**
  * Reference to a field of type 'PeriodicTaskCadence'
  */
 export type EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PeriodicTaskCadence'>
@@ -2520,6 +2904,10 @@ export type GlobalOmitConfig = {
   terminalSession?: Prisma.TerminalSessionOmit
   closedSession?: Prisma.ClosedSessionOmit
   userSettings?: Prisma.UserSettingsOmit
+  agentDefinition?: Prisma.AgentDefinitionOmit
+  agentConnection?: Prisma.AgentConnectionOmit
+  agentTrigger?: Prisma.AgentTriggerOmit
+  agentRun?: Prisma.AgentRunOmit
   periodicTask?: Prisma.PeriodicTaskOmit
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOmit
   workspaceNotification?: Prisma.WorkspaceNotificationOmit
