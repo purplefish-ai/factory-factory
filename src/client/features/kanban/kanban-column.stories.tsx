@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.stories';
 import { getKanbanColumns, KanbanColumn } from './kanban-column';
@@ -153,5 +154,31 @@ export const AllColumns: Story = {
     column: workingColumn,
     workspaces: [],
     projectSlug: 'demo',
+  },
+};
+
+/** The mobile destination after a task is successfully created. */
+export const MobileTaskCreated: Story = {
+  parameters: { layout: 'fullscreen' },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+  decorators: [
+    (Story) => (
+      <div className="w-full max-w-[375px] h-[500px] flex">
+        <Story />
+      </div>
+    ),
+  ],
+  args: {
+    column: workingColumn,
+    projectSlug: 'my-project',
+    workspaces: [
+      createOptimisticWorkspaceSummary({
+        id: 'new-task',
+        projectId: 'project-1',
+        name: 'New task',
+        ratchetEnabled: true,
+      }),
+      { ...baseWorkspace, id: 'existing-task', name: 'Existing task', kanbanColumn: 'WORKING' },
+    ],
   },
 };

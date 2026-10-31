@@ -107,14 +107,6 @@ export function WorkspaceSwitcherDropdown({
         </SelectItem>
         <SelectGroup>
           <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Waiting · {grouped.waiting.length}
-          </SelectLabel>
-          {grouped.waiting.map((workspace) => (
-            <WorkspaceSwitcherItem key={`waiting-${workspace.id}`} workspace={workspace} />
-          ))}
-        </SelectGroup>
-        <SelectGroup>
-          <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Working · {grouped.working.length}
           </SelectLabel>
           {grouped.working.map((workspace) => (
@@ -123,10 +115,10 @@ export function WorkspaceSwitcherDropdown({
         </SelectGroup>
         <SelectGroup>
           <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Todo · {grouped.todo.length}
+            Waiting · {grouped.waiting.length}
           </SelectLabel>
-          {grouped.todo.map((workspace) => (
-            <WorkspaceSwitcherItem key={`todo-${workspace.id}`} workspace={workspace} />
+          {grouped.waiting.map((workspace) => (
+            <WorkspaceSwitcherItem key={`waiting-${workspace.id}`} workspace={workspace} />
           ))}
         </SelectGroup>
         <SelectGroup>

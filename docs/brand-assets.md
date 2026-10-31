@@ -28,12 +28,9 @@ node scripts/generate-brand-assets.mjs
 - `public/icons/apple-touch-icon.png`: Apple touch icon, 180 pixels.
 - `build-resources/icon.{svg,png,ico,icns}`: desktop packaging icons.
 
-The installation icon paths match
-[PWA PR #2729](https://github.com/purplefish-ai/factory-factory/pull/2729): its
-manifest uses `icons/app-192.png` and `logo.png`, and its HTML links
-`icons/apple-touch-icon.png`. When combining the branches, retain these gear
-PNGs instead of the older artwork added by that PR. This change prepares the
-artwork; the manifest and installation behavior remain in the PWA PR.
+The web app manifest uses `icons/app-192.png` and `logo.png`, and the HTML links
+`icons/apple-touch-icon.png` for iOS. All three installation icons are generated
+from the same gear source as the app and browser icons.
 
 The PNG backgrounds are opaque yellow with square corners. The operating system
 applies its own icon shape. Do not bake rounded corners into PWA exports.

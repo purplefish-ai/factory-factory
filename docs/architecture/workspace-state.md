@@ -234,8 +234,18 @@ application migration.
 
 ## Kanban model
 
+On mobile, successful task creation closes the inline form and selects Working.
+The newly created workspace is already cached and sorted first; switching tabs
+resets the column scroll position so its setup card is visible immediately.
+Cancelling or failing creation does not switch tabs. Desktop keeps all columns
+visible and closes the form on success.
+
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
 plus the columns `WORKING`, `WAITING`, `DONE`.
+
+The workspace switcher groups workspaces under Working, Waiting, and Done in
+board order. All WAITING workspaces share one group regardless of pending
+request type; Todo is reserved for the board's issue intake column.
 
 The column is a projection of `statusReason.code` through
 `KANBAN_COLUMN_BY_STATUS_REASON_CODE`
