@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type { z } from 'zod';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
@@ -261,8 +262,10 @@ function LatestProposalButton({
 export function AgentProposalCard({ reference }: { reference: AgentProposalReference }) {
   const input = { workspaceId: reference.workspaceId, proposalId: reference.proposalId };
   const query = trpc.agent.getProposal.useQuery(input, { refetchOnWindowFocus: false });
-  const mutation = trpc.agent.create.useMutation();
-  const update = trpc.agent.update.useMutation();
+  const mutation = trpc.agent.create.useMutation({
+    onError: (error) => toast.error(error.message),
+  });
+  const update = trpc.agent.update.useMutation({ onError: (error) => toast.error(error.message) });
   const utils = trpc.useUtils();
   const { refetch } = query;
   useEffect(() => {

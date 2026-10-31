@@ -63,7 +63,9 @@ type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSig
  */
 class GitHubCLIService {
   getAgentRepository(repository: string) {
-    return getAgentRepository(repository, (args) => this.exec(args));
+    return getAgentRepository(repository, (args) =>
+      this.exec(args, { maxBuffer: GH_MAX_BUFFER_BYTES.agentSources })
+    );
   }
   private readonly executor = new GitHubCLIExecutor();
 

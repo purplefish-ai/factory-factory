@@ -628,7 +628,7 @@ model AgentProposal {
   specification Json // agentSpecificationSchema
   sourceNames Json @default("{}")
   agentDefinitionId String? @unique
-  agentDefinition AgentDefinition? @relation(fields: [agentDefinitionId], references: [id], onDelete: Restrict)
+  agentDefinition AgentDefinition? @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -348,14 +348,15 @@ user explicitly discards them; positional merging could move a filter to a
 different source. Creation retries return the existing definition only when the
 accepted revision and specification match. Saved configurations remain editable
 through **Edit agent** / **Save changes** on the same card; updates preserve
-trigger identities and historical run snapshots. Removed trigger slots are
-paused, preserving history. Tools cannot commit proposals; creation and
-saved-agent updates are user actions through trusted local API procedures.
+stable event IDs and historical run snapshots, including across removal and
+reordering. Removed events are paused, preserving history. The MCP catalog does
+not expose commit operations; creation and saved-agent updates are user actions
+through trusted local API procedures.
 
 Proposals belong to their authoring workspace and are removed with it; created
-definitions belong to the project and survive workspace deletion. Definitions
-referenced by a proposal cannot be deleted until that proposal is removed.
-Logical export/import does not include proposals or the other new agent tables.
+definitions belong to the project and survive workspace deletion. Deleting a
+saved definition also removes its accepted proposal. Logical export/import does
+not include proposals or the other new agent tables.
 
 The live authoring evaluation uses the installed Codex ACP runtime, the actual
 MCP server and authoring API, a disposable database, and fixed provider

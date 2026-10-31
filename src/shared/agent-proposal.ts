@@ -4,7 +4,17 @@ import {
   agentTriggerInputSchema,
 } from './schemas/agent-definition.schema';
 
-const paused = { isEnabled: z.literal(false).default(false) };
+const paused = {
+  isEnabled: z.literal(false).default(false),
+  id: z
+    .string()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe(
+      'Stable event ID returned by proposals. Preserve it when editing or reordering existing events; omit it only for new events.'
+    ),
+};
 const authoringTriggerSchema = z.discriminatedUnion('type', [
   agentTriggerInputSchema.options[0].extend(paused),
   agentTriggerInputSchema.options[1].extend(paused),
@@ -19,6 +29,10 @@ export const agentSpecificationSchema = agentDefinitionInputSchema
     triggers: z.array(authoringTriggerSchema).min(1).max(20),
   })
   .superRefine((specification, ctx) => {
+    const ids = specification.triggers.flatMap((trigger) => (trigger.id ? [trigger.id] : []));
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({ code: 'custom', message: 'Each event needs a unique stable ID.' });
+    }
     if (
       specification.triggers.some(
         (trigger) =>

@@ -72,7 +72,14 @@ beforeAll(async () => {
     },
     slackConnectionService: slack,
     agentProposalService: new AgentProposalService(),
-    githubCLIService: { getAgentRepository: async () => repository },
+    githubCLIService: {
+      getAgentRepository: (name: string) => {
+        if (name !== 'purplefish-ai/factory-factory') {
+          throw new Error('Unexpected repository');
+        }
+        return Promise.resolve(repository);
+      },
+    },
   };
   caller = agentRouter.createCaller({
     appContext: {

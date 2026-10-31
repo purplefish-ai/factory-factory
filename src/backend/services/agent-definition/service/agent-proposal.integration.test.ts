@@ -96,7 +96,7 @@ it('revises a proposal and refuses stale conversational edits', async () => {
 it('creates the exact user-edited definition and triggers once across repeated acceptance', async () => {
   const proposal = await service.propose({ workspaceId, specification: specification() });
   const edited = {
-    ...specification(),
+    ...proposal.specification,
     instructions: 'Compare QA edits in the development database.',
   };
   const results = await Promise.all([
@@ -131,7 +131,7 @@ it('rejects stale acceptance without creating anything', async () => {
     workspaceId,
     proposalId: proposal.id,
     revision: 1,
-    specification: specification(),
+    specification: proposal.specification,
   });
   const count = await db.prisma.agentDefinition.count();
   await expect(
@@ -151,7 +151,7 @@ it('edits a created agent without replacing trigger identities or historical sna
     workspaceId,
     proposalId: proposal.id,
     revision: 1,
-    specification: specification(),
+    specification: proposal.specification,
   });
   const trigger = await db.prisma.agentTrigger.findFirstOrThrow({
     where: { agentDefinitionId: created.agentDefinitionId! },
@@ -165,7 +165,7 @@ it('edits a created agent without replacing trigger identities or historical sna
       input: { version: 1, context: [] },
     },
   });
-  const edited = { ...specification(), instructions: 'Updated investigation instructions' };
+  const edited = { ...proposal.specification, instructions: 'Updated investigation instructions' };
   const updated = await service.update({
     workspaceId,
     proposalId: proposal.id,
@@ -229,6 +229,89 @@ it('rejects invalid providers and connections disconnected after proposing', asy
     where: { id: connectionId },
     data: { isEnabled: true, credentialsEncrypted: 'encrypted' },
   });
+});
+
+for (const operation of ['remove first', 'reorder']) {
+  it(`preserves trigger identities and historical source links when edits ${operation}`, async () => {
+    const base = specification();
+    const proposal = await service.propose({
+      workspaceId,
+      specification: {
+        ...base,
+        triggers: [
+          base.triggers[0],
+          { type: 'SCHEDULE', description: 'Daily QA', config: { version: 1, cadence: 'DAILY' } },
+        ],
+      },
+    });
+    const created = await service.create({
+      workspaceId,
+      proposalId: proposal.id,
+      revision: 1,
+      specification: proposal.specification,
+    });
+    const rows = await db.prisma.agentTrigger.findMany({
+      where: { agentDefinitionId: created.agentDefinitionId! },
+    });
+    const slack = rows.find((row) => row.type === 'SLACK_MESSAGE')!;
+    const schedule = rows.find((row) => row.type === 'SCHEDULE')!;
+    await db.prisma.agentRun.create({
+      data: {
+        agentDefinitionId: created.agentDefinitionId!,
+        triggerId: slack.id,
+        idempotencyKey: 'source-history',
+        definitionSnapshot: { instructions: 'Investigate bugs' },
+        input: { version: 1, context: [] },
+      },
+    });
+    const triggers =
+      operation === 'remove first'
+        ? created.specification.triggers.slice(1)
+        : [...created.specification.triggers].reverse();
+    await service.update({
+      workspaceId,
+      proposalId: proposal.id,
+      revision: 1,
+      specification: { ...created.specification, triggers },
+    });
+    expect(
+      await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: slack.id } })
+    ).toMatchObject({ type: 'SLACK_MESSAGE' });
+    expect(
+      await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: schedule.id } })
+    ).toMatchObject({ type: 'SCHEDULE' });
+    expect(
+      await db.prisma.agentRun.findFirstOrThrow({ where: { triggerId: slack.id } })
+    ).toMatchObject({ triggerId: slack.id });
+    expect(
+      await db.prisma.agentTrigger.count({
+        where: { agentDefinitionId: created.agentDefinitionId! },
+      })
+    ).toBe(2);
+  });
+}
+
+it('deletes the accepted proposal when its saved agent is deleted', async () => {
+  const proposal = await service.propose({ workspaceId, specification: specification() });
+  const created = await service.create({
+    workspaceId,
+    proposalId: proposal.id,
+    revision: 1,
+    specification: proposal.specification,
+  });
+  await db.prisma.agentDefinition.delete({ where: { id: created.agentDefinitionId! } });
+  await expect(service.get(workspaceId, proposal.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+});
+
+it('refuses authoring while the workspace is archiving', async () => {
+  await db.prisma.workspace.update({ where: { id: workspaceId }, data: { status: 'ARCHIVING' } });
+  try {
+    await expect(
+      service.propose({ workspaceId, specification: specification() })
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  } finally {
+    await db.prisma.workspace.update({ where: { id: workspaceId }, data: { status: 'NEW' } });
+  }
 });
 
 it('rejects missing workspaces and archived projects', async () => {

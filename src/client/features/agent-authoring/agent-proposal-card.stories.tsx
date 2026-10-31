@@ -31,18 +31,21 @@ const proposal = agentProposalSchema.parse({
     ],
   },
 });
+function proposalArgs(fixture: AgentProposal) {
+  const onCreate: Parameters<typeof AgentProposalEditor>[0]['onCreate'] = (input) =>
+    Promise.resolve({
+      ...fixture,
+      specification: input.specification,
+      agentDefinitionId: fixture.agentDefinitionId ?? 'agent-1',
+    });
+  return { proposal: fixture, onCreate };
+}
+
 const meta = {
   title: 'Chat/Agent proposal',
   component: AgentProposalEditor,
   parameters: { layout: 'padded' },
-  args: {
-    proposal,
-    onCreate: async (input): Promise<AgentProposal> => ({
-      ...proposal,
-      specification: input.specification,
-      agentDefinitionId: 'agent-1',
-    }),
-  },
+  args: proposalArgs(proposal),
   decorators: [
     (Story) => (
       <div className="mx-auto max-w-2xl">
@@ -55,8 +58,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Feedback: Story = {};
 export const PacketReview: Story = {
-  args: {
-    proposal: agentProposalSchema.parse({
+  args: proposalArgs(
+    agentProposalSchema.parse({
       ...proposal,
       specification: {
         name: 'Packet QA reviewer',
@@ -76,12 +79,12 @@ export const PacketReview: Story = {
           },
         ],
       },
-    }),
-  },
+    })
+  ),
 };
 export const GitHub: Story = {
-  args: {
-    proposal: agentProposalSchema.parse({
+  args: proposalArgs(
+    agentProposalSchema.parse({
       ...proposal,
       sourceNames: { 'github-1:123': 'purplefish-ai/factory-factory' },
       specification: {
@@ -101,10 +104,10 @@ export const GitHub: Story = {
           },
         ],
       },
-    }),
-  },
+    })
+  ),
 };
-export const Created: Story = { args: { proposal: { ...proposal, agentDefinitionId: 'agent-1' } } };
+export const Created: Story = { args: proposalArgs({ ...proposal, agentDefinitionId: 'agent-1' }) };
 export const Failure: Story = {
   args: {
     onCreate: () =>

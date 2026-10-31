@@ -77,11 +77,16 @@ export async function createAgentAuthoringEvalFixture() {
     slackConnectionService: slack,
     agentProposalService: new AgentProposalService(),
     githubCLIService: {
-      getAgentRepository: async () => ({
-        id: '123',
-        name: 'purplefish-ai/factory-factory',
-        labels: ['bug', 'agent'],
-      }),
+      getAgentRepository: (name: string) => {
+        if (name !== 'purplefish-ai/factory-factory') {
+          throw new Error('Unexpected repository');
+        }
+        return Promise.resolve({
+          id: '123',
+          name: 'purplefish-ai/factory-factory',
+          labels: ['bug', 'agent'],
+        });
+      },
     },
   };
   const paths: string[] = [];

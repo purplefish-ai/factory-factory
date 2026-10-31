@@ -22,7 +22,11 @@ async function validate(tx: Transaction, workspaceId: string, spec: AgentSpecifi
   if (!workspace) {
     throw new ApplicationError('NOT_FOUND', 'Workspace not found.');
   }
-  if (workspace.project.isArchived || workspace.status === 'ARCHIVED') {
+  if (
+    workspace.project.isArchived ||
+    workspace.status === 'ARCHIVING' ||
+    workspace.status === 'ARCHIVED'
+  ) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active workspace and project.');
   }
   for (const trigger of spec.triggers) {
@@ -46,6 +50,17 @@ async function validate(tx: Transaction, workspaceId: string, spec: AgentSpecifi
     }
   }
   return workspace.projectId;
+}
+
+function ownedTrigger(proposalId: string, trigger: AgentSpecification['triggers'][number]) {
+  const { id, ...settings } = trigger;
+  if (!id) {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      'Preserve event IDs from the saved proposal before creating or editing an agent.'
+    );
+  }
+  return { ...settings, id: `${proposalId}:${id}`, isEnabled: false };
 }
 
 export const agentProposalAccessor = {
@@ -101,11 +116,7 @@ export const agentProposalAccessor = {
           projectId,
           isEnabled: false,
           triggers: {
-            create: triggers.map((trigger, index) => ({
-              ...trigger,
-              id: `${proposal.id}:${index}`,
-              isEnabled: false,
-            })),
+            create: triggers.map((trigger) => ownedTrigger(proposal.id, trigger)),
           },
         },
       });
@@ -151,19 +162,20 @@ export const agentProposalAccessor = {
         );
       }
       await tx.agentDefinition.update({ where: { id: agent.id }, data: definition });
-      // Trigger slots keep their identity and run history when their settings change.
-      for (const [index, trigger] of triggers.entries()) {
-        const id = `${proposal.id}:${index}`;
+      // Stable event IDs survive reordering/removal without changing run ownership.
+      for (const trigger of triggers) {
+        const data = ownedTrigger(proposal.id, trigger);
+        const { id } = data;
         await tx.agentTrigger.upsert({
           where: { id },
-          create: { ...trigger, id, agentDefinitionId: agent.id, isEnabled: false },
-          update: { ...trigger, isEnabled: false },
+          create: { ...data, agentDefinitionId: agent.id },
+          update: data,
         });
       }
       await tx.agentTrigger.updateMany({
         where: {
           agentDefinitionId: agent.id,
-          id: { notIn: triggers.map((_, index) => `${proposal.id}:${index}`) },
+          id: { notIn: triggers.map((trigger) => ownedTrigger(proposal.id, trigger).id) },
         },
         data: { isEnabled: false },
       });

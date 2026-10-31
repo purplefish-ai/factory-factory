@@ -93,6 +93,7 @@ async function verifyFollowUp(
     'C-feedback',
   ]);
   expect(trigger.filterInstructions).toBe(proposal.specification.triggers[0]?.filterInstructions);
+  expect(trigger.id).toBe(proposal.specification.triggers[0]?.id);
 }
 
 describe.skipIf(!enabled)('live natural-language agent authoring evaluation', () => {

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 import { expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import type { ToolSequence } from '@/lib/chat-protocol';
@@ -31,6 +33,10 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
       () =>
         ({ op }) =>
           observable((observer) => {
+            if (op.path === 'agent.create') {
+              observer.error(new TRPCClientError('Could not save this agent.'));
+              return;
+            }
             if (op.path !== 'agent.getProposal') {
               throw new Error(`Unexpected request ${op.path}`);
             }
@@ -69,6 +75,7 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         <trpc.Provider client={client} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ToolSequenceGroup sequence={sequence} />
+            <Toaster />
           </QueryClientProvider>
         </trpc.Provider>
       )
@@ -104,6 +111,7 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         <trpc.Provider client={client} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ToolSequenceGroup sequence={revised} />
+            <Toaster />
           </QueryClientProvider>
         </trpc.Provider>
       );
@@ -117,6 +125,20 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
     );
     expect(container.querySelector<HTMLTextAreaElement>('[aria-label="Instructions"]')?.value).toBe(
       'New conversational instructions.'
+    );
+    await act(async () => {
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-sonner-toast]')?.textContent).toContain(
+        'Could not save this agent.'
+      )
+    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Could not save this agent.'
     );
   } finally {
     await act(() => root.unmount());

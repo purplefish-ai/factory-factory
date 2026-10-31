@@ -9,8 +9,8 @@ export function draftFrom(proposal: AgentProposal) {
     name: proposal.specification.name,
     instructions: proposal.specification.instructions,
     triggers: proposal.specification.triggers.map(
-      ({ description, filterInstructions, isEnabled: _enabled, ...event }) => ({
-        key: crypto.randomUUID(),
+      ({ id, description, filterInstructions, isEnabled: _enabled, ...event }) => ({
+        key: id ?? crypto.randomUUID(),
         description,
         filterInstructions: filterInstructions ?? '',
         event: JSON.stringify(event, null, 2),
@@ -23,6 +23,7 @@ export type AgentProposalDraft = ReturnType<typeof draftFrom>;
 export function specificationFromDraft(draft: AgentProposalDraft) {
   const triggers = draft.triggers.map((trigger) => ({
     ...z.record(z.string(), z.unknown()).parse(JSON.parse(trigger.event)),
+    id: trigger.key,
     description: trigger.description,
     filterInstructions: trigger.filterInstructions.trim() || null,
     isEnabled: false,

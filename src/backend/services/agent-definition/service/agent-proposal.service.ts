@@ -21,6 +21,10 @@ export class AgentProposalService {
   }
   async propose(input: unknown, sourceNames: Record<string, string> = {}) {
     const parsed = proposeAgentInputSchema.parse(input);
+    parsed.specification.triggers = parsed.specification.triggers.map((trigger) => ({
+      ...trigger,
+      id: trigger.id ?? crypto.randomUUID(),
+    }));
     return publicProposal(await agentProposalAccessor.propose({ ...parsed, sourceNames }));
   }
   async create(input: unknown, sourceNames: Record<string, string> = {}) {

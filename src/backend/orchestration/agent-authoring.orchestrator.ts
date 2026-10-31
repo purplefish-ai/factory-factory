@@ -38,7 +38,11 @@ async function authoringWorkspace(workspaceId: string, services: Services) {
   if (!workspace) {
     throw new ApplicationError('NOT_FOUND', 'Workspace not found.');
   }
-  if (workspace.project.isArchived || workspace.status === 'ARCHIVED') {
+  if (
+    workspace.project.isArchived ||
+    workspace.status === 'ARCHIVING' ||
+    workspace.status === 'ARCHIVED'
+  ) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active workspace and project.');
   }
   return workspace;

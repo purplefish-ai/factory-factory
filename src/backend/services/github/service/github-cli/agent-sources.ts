@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { githubIssuePreviewInputSchema } from '@/shared/github-issue-preview';
 
 const repositorySchema = z.object({
   id: z.number().int().positive(),
@@ -12,7 +13,7 @@ export async function getAgentRepository(
   repository: string,
   read: (args: string[]) => Promise<{ stdout: string }>
 ) {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) {
+  if (!githubIssuePreviewInputSchema.shape.repo.safeParse(repository).success) {
     throw new ApplicationError('INVALID_INPUT', 'Invalid GitHub repository.');
   }
   try {
