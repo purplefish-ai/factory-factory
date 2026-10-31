@@ -66,6 +66,12 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     voiceMode: z.boolean().optional(),
   }),
 
+  // Explicitly inject a queued message into the active provider turn.
+  z.object({
+    type: z.literal('steer_queued_message'),
+    messageId: z.string().min(1),
+  }),
+
   // Remove a queued message
   z.object({
     type: z.literal('remove_queued_message'),

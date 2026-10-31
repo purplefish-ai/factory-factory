@@ -81,3 +81,14 @@ describe('chat router application composition', () => {
     expect(sessionDomainService.peekNextMessage('queued-session')?.id).toBe('user-message');
   });
 });
+
+it('routes an explicit steer by queued id and returns failures without rejecting the queued message', async () => {
+  const steer = vi.spyOn(sessionDispatchService, 'steerQueuedMessage').mockResolvedValue();
+  const message = { type: 'steer_queued_message', messageId: 'selected' } as const;
+  expect(await router.handleMessage('session', '/tmp/worktree', message)).toEqual({ replies: [] });
+  expect(steer).toHaveBeenCalledExactlyOnceWith('session', 'selected');
+  steer.mockRejectedValueOnce(new Error('Steering unsupported'));
+  expect(await router.handleMessage('session', '/tmp/worktree', message)).toMatchObject({
+    replies: [{ type: 'error', error: { kind: 'steer_failed', cause: expect.any(Error) } }],
+  });
+});

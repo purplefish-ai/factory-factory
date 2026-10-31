@@ -22,6 +22,8 @@ export interface TranscriptDisplayProps {
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
   onRemoveQueuedMessage?: (id: string) => void;
+  /** Send a queued human message into the active turn. */
+  onSteerQueuedMessage?: (id: string) => void;
   /** Whether context compaction is in progress */
   isCompacting?: boolean;
   /** Get the SDK-assigned UUID for a user message by its stable message ID */

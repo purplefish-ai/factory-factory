@@ -436,6 +436,21 @@ active turn that the client cannot observe, the existing bounded busy retry
 preserves the queued message, and the running turn keeps its tool-call tracking
 for interceptors such as PR detection.
 
+Queued human messages also offer an explicit **Steer** action during an active
+prompt. Normal sends still queue. Steer submits only that message through the
+adapter's advertised `_session/steering` extension, preserving attachments and
+the active turn's configuration. Slash commands and automatic notifications
+remain queued. Failed steering leaves the message queued. The host requests
+`idleBehavior: "promptRequired"`, so a completion race falls back to ordinary
+prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
+input is removed from the queue even if stopping advances the generation while
+the request settles, preventing a delivered steer from being replayed on resume.
+
+Codex uses native `turn/steer` without cancelling the current turn. Claude's
+native steering may pre-empt generation or background a foreground tool; neither
+provider promises delivery at a specific tool boundary. The action tooltip
+explains that active work may be redirected.
+
 The workspace and quick-chat composers use prompt ownership for their queue
 placeholder and send-button label; background activity keeps the stop control
 available for active agent work without implying that the next message must

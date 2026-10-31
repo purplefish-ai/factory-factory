@@ -56,6 +56,10 @@ export interface SessionDispatchDependencies {
     'configureQueuedMessage' | 'resolveQueuedMessageSettings'
   >;
   promptService: {
+    steerSessionMessage(
+      sessionId: string,
+      content: string | AgentContentItem[]
+    ): Promise<{ outcome: 'injected' | 'promptRequired' }>;
     sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void>;
   };
   backgroundDelivery: Pick<

@@ -141,6 +141,88 @@ describe('QuickChatContent composer and queue controls', () => {
     }
   });
 
+  it.each([
+    {
+      connected: true,
+      promptInFlight: true,
+      isCompacting: false,
+      phase: 'running',
+      available: true,
+    },
+    {
+      connected: false,
+      promptInFlight: true,
+      isCompacting: false,
+      phase: 'running',
+      available: false,
+    },
+    {
+      connected: true,
+      promptInFlight: false,
+      isCompacting: false,
+      phase: 'running',
+      available: false,
+    },
+    {
+      connected: true,
+      promptInFlight: true,
+      isCompacting: true,
+      phase: 'running',
+      available: false,
+    },
+    {
+      connected: true,
+      promptInFlight: true,
+      isCompacting: false,
+      phase: 'stopping',
+      available: false,
+    },
+  ])('offers steering only for a connected active prompt ($available)', (state) => {
+    const steerQueuedMessage = vi.fn();
+    const chatState = {
+      messages: [],
+      queuedMessages: [],
+      pendingMessages: new Map(),
+      pendingRequest: { type: 'none' },
+      sessionStatus: { phase: state.phase },
+      sessionRuntime: {
+        ...createInitialSessionRuntimeState(),
+        work: {
+          promptInFlight: state.promptInFlight,
+          backgroundTasks: [],
+          runningSubagents: 0,
+          activeGoals: 0,
+        },
+      },
+      connected: state.connected,
+      isCompacting: state.isCompacting,
+      steerQueuedMessage,
+    } as unknown as UseChatWebSocketReturn;
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() =>
+        root.render(
+          <QuickChatContent
+            workspaceId="workspace-1"
+            chatState={chatState}
+            transcriptScroll={{
+              identity: 'steering',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
+          />
+        )
+      );
+      expect(list.mock.lastCall?.[0].onSteerQueuedMessage).toBe(
+        state.available ? steerQueuedMessage : undefined
+      );
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('connects queue controls and composer attachments to shared chat state', () => {
     const removeQueuedMessage = vi.fn();
     const attachments = [

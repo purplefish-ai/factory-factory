@@ -1,21 +1,12 @@
 /** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
-import {
-  PermanentAttachmentError,
-  processAttachmentsAndBuildContent,
-} from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
-import {
-  type AgentContentItem,
-  MessageState,
-  type QueuedMessage,
-  resolveSelectedModel,
-} from '@/shared/acp-protocol';
+import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,
   collectDispatchBatch,
@@ -28,6 +19,8 @@ import type {
   SessionDispatchLifecycleDependencies,
   DispatchOptions,
 } from './session-dispatch.types';
+import { buildMessageContent } from './session-message-content';
+import { SessionQueuedSteering } from './session-queued-steering';
 
 const logger = createLogger('chat-message-handlers');
 const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
@@ -77,7 +70,20 @@ function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetClient {
 // ============================================================================
 
 export class SessionDispatchService {
+  private readonly steering = new SessionQueuedSteering({
+    isPromptInFlight: (id) => this.dependencies.runtimeManager.isSessionPromptInFlight(id),
+    captureGuard: (id) => {
+      const generation = this.lifecycle.gate.getGeneration(id);
+      return () => this.isDispatchGenerationCurrent(id, generation);
+    },
+    isAllowed: async (id) => (await this.evaluateDispatchGateSafely(id)).policy === 'allowed',
+    send: (id, content) => this.dependencies.promptService.steerSessionMessage(id, content),
+    dispatch: (id) => this.tryDispatchNextMessage(id),
+  });
   constructor(private readonly dependencies: SessionDispatchDependencies) {}
+  steerQueuedMessage(sessionId: string, messageId: string): Promise<void> {
+    return this.steering.steer(sessionId, messageId);
+  }
 
   /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
   private dispatchInProgress = new Map<string, number>();
@@ -147,6 +153,7 @@ export class SessionDispatchService {
   }
 
   resetDispatchState(sessionId: string): void {
+    this.steering.reset(sessionId);
     this.dispatchInProgress.delete(sessionId);
     this.clearTurnInProgressRetry(sessionId);
     this.notificationDeliveryService?.resetSession(sessionId);
@@ -199,7 +206,7 @@ export class SessionDispatchService {
     }
 
     // Guard against concurrent dispatch calls for the same session
-    if (this.isDispatchInProgress(dbSessionId)) {
+    if (this.steering.isPending(dbSessionId) || this.isDispatchInProgress(dbSessionId)) {
       return;
     }
 
@@ -618,7 +625,7 @@ export class SessionDispatchService {
   ): Promise<void> {
     const contents = prepareBatchContents(
       messages,
-      (message) => this.buildMessageContent(message),
+      (message) => buildMessageContent(message),
       (message, error) => this.handleDispatchError(dbSessionId, message, error, stopGeneration)
     );
     const msg =
@@ -832,23 +839,6 @@ export class SessionDispatchService {
   private isCompactCommand(text: string): boolean {
     const trimmed = text.trim();
     return trimmed === '/compact' || trimmed.startsWith('/compact ');
-  }
-
-  /**
-   * Build message content for sending to Claude.
-   * Note: Thinking is now controlled via setMaxThinkingTokens, not message suffix.
-   *
-   * Text attachments are combined into the main text content with a prefix.
-   * Image attachments are sent as separate image content blocks.
-   */
-  private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
-    const content = processAttachmentsAndBuildContent(msg.text, msg.attachments);
-    if (!msg.voiceMode) {
-      return content;
-    }
-    const blocks: AgentContentItem[] =
-      typeof content === 'string' ? [{ type: 'text', text: content }] : content;
-    return [...blocks, { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION }];
   }
 
   private handleBlockedDispatchGate(

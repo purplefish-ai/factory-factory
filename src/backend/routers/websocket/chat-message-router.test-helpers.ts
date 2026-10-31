@@ -39,6 +39,7 @@ export function createChatRouterServices(
     prompt: { sendSessionMessage: vi.fn(async () => undefined) },
     startup: { getSessionClient: vi.fn(), getOrCreateSessionClient: vi.fn(async () => undefined) },
     dispatch: {
+      steerQueuedMessage: vi.fn().mockResolvedValue(undefined),
       tryDispatchNextMessage: vi.fn(async () => undefined),
       setManualDispatchResume: vi.fn(),
       resetDispatchState: vi.fn(),

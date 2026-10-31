@@ -123,6 +123,7 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
           setInputAttachments={setAttachments}
           queuedMessages={[]}
           removeQueuedMessage={noop}
+          steerQueuedMessage={noop}
           resumeQueuedMessages={noop}
           latestThinking={null}
           pendingMessages={new Map()}

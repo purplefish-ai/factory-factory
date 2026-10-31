@@ -39,6 +39,7 @@ function harness(
   const sendSessionMessage = vi
     .fn<(sessionId: string, content: string | AgentContentItem[]) => Promise<void>>()
     .mockResolvedValue(undefined);
+  const steerSessionMessage = vi.fn().mockResolvedValue({ outcome: 'injected' });
   const startup = {
     getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
@@ -66,7 +67,7 @@ function harness(
       resolveQueuedMessageSettings,
       configureQueuedMessage,
     },
-    promptService: { sendSessionMessage },
+    promptService: { sendSessionMessage, steerSessionMessage },
     backgroundDelivery,
   });
   dispatcher.configure({
@@ -94,6 +95,7 @@ function harness(
   );
   return {
     dispatcher,
+    steerSessionMessage,
     resolveQueuedMessageSettings,
     sendSessionMessage,
     startup,
@@ -663,4 +665,166 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledTimes(2);
   });
+});
+
+describe('explicit queued-message steering', () => {
+  it('injects only the selected queued message while the original turn remains active', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const first = enqueue('first');
+    const selected = enqueue('selected');
+    await h.dispatcher.steerQueuedMessage('session', selected.id);
+    expect(h.steerSessionMessage).toHaveBeenCalledWith('session', 'selected');
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(h.configureQueuedMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([first]);
+    expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
+      selected.id,
+    ]);
+  });
+
+  it('leaves failed steering queued and does not turn it into a message rejection', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const selected = enqueue('selected');
+    h.steerSessionMessage.mockRejectedValueOnce(new Error('provider refused'));
+    await expect(h.dispatcher.steerQueuedMessage('session', selected.id)).rejects.toThrow(
+      'provider refused'
+    );
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([selected]);
+    expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+  });
+
+  it('keeps host ownership when the provider reports an idle race', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const selected = enqueue('selected');
+    h.steerSessionMessage.mockResolvedValueOnce({ outcome: 'promptRequired' });
+    await h.dispatcher.steerQueuedMessage('session', selected.id);
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([selected]);
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+    await h.dispatcher.tryDispatchNextMessage('session');
+    await vi.waitFor(() =>
+      expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected')
+    );
+  });
+
+  it('blocks duplicate steering and normal dispatch until the steer settles', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const selected = enqueue('selected');
+    const pending = deferred();
+    h.steerSessionMessage.mockImplementationOnce(async () => {
+      await pending.promise;
+      return { outcome: 'injected' };
+    });
+    const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
+    await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+    await h.dispatcher.steerQueuedMessage('session', selected.id);
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+    await h.dispatcher.tryDispatchNextMessage('session');
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    pending.resolve();
+    await steer;
+    expect(h.steerSessionMessage).toHaveBeenCalledOnce();
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([]);
+  });
+
+  it('does not steer slash commands or background messages', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    const command = enqueue('/compact');
+    const background = enqueue('pr-event-hidden');
+    await expect(h.dispatcher.steerQueuedMessage('session', command.id)).rejects.toThrow();
+    await expect(h.dispatcher.steerQueuedMessage('session', background.id)).rejects.toThrow();
+    expect(h.steerSessionMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.getQueueLength('session')).toBe(2);
+  });
+});
+
+it('does not resend accepted steering after a stop-generation change', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  const pending = deferred();
+  h.steerSessionMessage.mockImplementationOnce(async () => {
+    await pending.promise;
+    return { outcome: 'injected' };
+  });
+  const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
+  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  h.stop();
+  pending.resolve();
+  await steer;
+  expect(sessionDomainService.hasQueuedMessage('session', selected.id)).toBe(false);
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+});
+
+it('preserves validated attachments when steering a selected message', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  selected.attachments = [
+    {
+      id: 'a',
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 7,
+      data: 'context',
+      contentType: 'text',
+    },
+  ];
+  await h.dispatcher.steerQueuedMessage('session', selected.id);
+  expect(h.steerSessionMessage).toHaveBeenCalledWith(
+    'session',
+    expect.stringContaining('[Pasted content: notes.txt]\ncontext')
+  );
+});
+
+it('wakes normal queue delivery if the turn completes before a failed steer settles', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  const pending = deferred();
+  h.steerSessionMessage.mockImplementationOnce(async () => {
+    await pending.promise;
+    throw new Error('steer refused');
+  });
+  const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
+  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+  await h.dispatcher.tryDispatchNextMessage('session');
+  pending.resolve();
+  await expect(steer).rejects.toThrow('steer refused');
+  await vi.waitFor(() =>
+    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected')
+  );
+});
+
+it('releases stale steering ownership on stop so a replacement turn can dispatch', async () => {
+  const h = harness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  const selected = enqueue('selected');
+  const pending = deferred();
+  h.steerSessionMessage.mockImplementationOnce(async () => {
+    await pending.promise;
+    return { outcome: 'injected' };
+  });
+  const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
+  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  h.stop();
+  sessionDomainService.clearQueuedWork('session');
+  enqueue('new-input');
+  h.dispatcher.resetDispatchState('session');
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
+  await h.dispatcher.tryDispatchNextMessage('session');
+  const dispatched = h.sendSessionMessage.mock.calls.length;
+  pending.resolve();
+  await steer;
+  expect(dispatched).toBe(1);
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'new-input');
+  expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
+    'new-input',
+  ]);
 });

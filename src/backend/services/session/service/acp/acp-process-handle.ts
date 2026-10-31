@@ -25,6 +25,7 @@ export class AcpProcessHandle {
   readonly nativeSessionTracker?: AcpNativeSessionTracker;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
+  readonly supportsSteering: boolean;
   private promptLease?: AcpConfigurationLease;
   private readonly promptCompletion = new AcpPromptReadiness();
   private pendingConfigUpdate?: Promise<void>;
@@ -43,6 +44,7 @@ export class AcpProcessHandle {
     providerSessionId: string;
     sessionCreationOutcome?: AcpSessionCreationOutcome;
     agentCapabilities: Record<string, unknown>;
+    supportsSteering?: boolean;
   }) {
     this.connection = params.connection;
     this.child = params.child;
@@ -52,6 +54,7 @@ export class AcpProcessHandle {
     this.providerSessionId = params.providerSessionId;
     this.sessionCreationOutcome = params.sessionCreationOutcome ?? { kind: 'new' };
     this.agentCapabilities = params.agentCapabilities;
+    this.supportsSteering = params.supportsSteering ?? false;
     this.isPromptInFlight = false;
     this.configOptions = [];
     this.createdAt = new Date();

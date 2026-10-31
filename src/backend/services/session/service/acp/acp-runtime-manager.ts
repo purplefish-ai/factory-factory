@@ -14,6 +14,7 @@ import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime
 import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import type { AcpClientCreationOperation } from './acp-runtime-quiescence';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
+import { steerAcpPrompt } from './acp-steering';
 import { AcpSubagentBrowser } from './acp-subagent-browser';
 import type { AcpClientOptions } from './types';
 
@@ -157,6 +158,25 @@ export class AcpRuntimeManager {
     }
     this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
+  }
+
+  /** Adds input to the active turn while its original prompt keeps owning completion. */
+  async steerSession(
+    sessionId: string,
+    prompt: ContentBlock[]
+  ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
+    const handle = this.supervisor.getClient(sessionId);
+    if (!handle?.isPromptInFlight) {
+      return { outcome: 'promptRequired' };
+    }
+    if (
+      this.supervisor.isStopInProgress(sessionId) ||
+      !handle.isRunning() ||
+      handle.configurationReady !== undefined
+    ) {
+      throw new Error(`ACP session is not ready for steering: ${sessionId}`);
+    }
+    return await steerAcpPrompt(handle, prompt);
   }
 
   /** Returns true when a prompt was actually in flight and got cancelled. */
