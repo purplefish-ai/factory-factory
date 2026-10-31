@@ -67,8 +67,20 @@ describe('workspace initialization startup order', () => {
     }
   );
 
-  it('retains one initial prompt when failed provisioning is retried', async () => {
-    setupHappyPath({ creationMetadata: { initialPrompt: 'Keep this task queued' } });
+  it('retains one initial prompt and attachments when failed provisioning is retried', async () => {
+    const attachments = [
+      {
+        id: 'attachment-1',
+        name: 'context.txt',
+        type: 'text/plain',
+        size: 7,
+        data: 'context',
+        contentType: 'text',
+      },
+    ];
+    setupHappyPath({
+      creationMetadata: { initialPrompt: 'Keep this task queued', initialAttachments: attachments },
+    });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
@@ -84,6 +96,12 @@ describe('workspace initialization startup order', () => {
     await initializeWorkspaceWorktree(WORKSPACE_ID);
 
     expect(sessionDomainService.emitDelta).toHaveBeenCalledTimes(1);
+    expect(sessionDomainService.emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        userMessage: expect.objectContaining({ text: 'Keep this task queued', attachments }),
+      })
+    );
     expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
   });
 

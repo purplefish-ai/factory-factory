@@ -28,6 +28,8 @@ export interface WorkspaceContentViewProps {
   onRestartSession?: () => void;
   onQuickAction?: (name: string, prompt: string) => void;
   children: ReactNode;
+  /** Route-owned recovery content for workspaces without a session. */
+  emptyState?: ReactNode;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
   /** Whether the workspace has a worktree path (required for sessions) */
@@ -58,6 +60,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   onRestartSession,
   onQuickAction,
   children,
+  emptyState,
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
@@ -90,31 +93,31 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
 
       {/* Main View Content */}
       <MainViewContent workspaceId={workspaceId} className="flex-1 min-h-0">
-        {hasNoSessions ? (
-          <div className="flex flex-col items-center justify-center h-full p-8">
-            <div className="max-w-md w-full space-y-6 text-center">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-semibold">Start a Session</h2>
-                <p className="text-muted-foreground">
-                  Click the + button above to start a new chat session in this workspace.
-                </p>
-              </div>
+        {hasNoSessions
+          ? (emptyState ?? (
+              <div className="flex flex-col items-center justify-center h-full p-8">
+                <div className="max-w-md w-full space-y-6 text-center">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-semibold">Start a Session</h2>
+                    <p className="text-muted-foreground">
+                      Click the + button above to start a new chat session in this workspace.
+                    </p>
+                  </div>
 
-              {!hasWorktreePath && (
-                <div
-                  className={[
-                    'border px-4 py-3 rounded-md text-sm',
-                    getStatusBannerClassName('warning'),
-                  ].join(' ')}
-                >
-                  Workspace is initializing... Please wait for the worktree to be created.
+                  {!hasWorktreePath && (
+                    <div
+                      className={[
+                        'border px-4 py-3 rounded-md text-sm',
+                        getStatusBannerClassName('warning'),
+                      ].join(' ')}
+                    >
+                      Workspace is initializing... Please wait for the worktree to be created.
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          children
-        )}
+              </div>
+            ))
+          : children}
       </MainViewContent>
     </div>
   );

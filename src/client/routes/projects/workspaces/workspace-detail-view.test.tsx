@@ -95,6 +95,8 @@ const rightPanelMock = vi.hoisted(() =>
 );
 
 const workspaceContentViewMock = vi.hoisted(() => vi.fn());
+const retrySetup = vi.hoisted(() => vi.fn());
+const retryWorkspace = vi.hoisted(() => vi.fn());
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('@/hooks/use-mobile', () => ({
@@ -128,9 +130,18 @@ vi.mock('@/components/ui/sheet', () => ({
 vi.mock('@/client/features/workspace', () => ({
   ArchiveWorkspaceDialog: archiveDialogMock,
   RightPanel: rightPanelMock,
-  WorkspaceContentView: (props: { children: ReactNode; selectedSessionId: string | null }) => {
+  WorkspaceContentView: (props: {
+    children: ReactNode;
+    emptyState?: ReactNode;
+    sessions?: unknown[];
+    selectedSessionId: string | null;
+  }) => {
     workspaceContentViewMock(props);
-    return createElement('main', null, props.children);
+    return createElement(
+      'main',
+      null,
+      props.sessions?.length === 0 ? (props.emptyState ?? 'Start a Session') : props.children
+    );
   },
 }));
 
@@ -144,7 +155,10 @@ vi.mock('./workspace-detail-chat-content', () => ({
 }));
 
 vi.mock('./use-retry-workspace-init', () => ({
-  useRetryWorkspaceInit: () => ({ retry: vi.fn(), retryInit: { isPending: false } }),
+  useRetryWorkspaceInit: (workspaceId: string) => {
+    retryWorkspace(workspaceId);
+    return { retry: retrySetup, retryInit: { isPending: false } };
+  },
 }));
 
 function createInitStatus(
@@ -468,5 +482,53 @@ describe('WorkspaceDetailView', () => {
     expect(workspaceContentViewMock).toHaveBeenCalledTimes(layoutRenders);
     expect(rightPanelMock).toHaveBeenCalledTimes(panelRenders);
     act(() => root.unmount());
+  });
+});
+
+describe('sessionless setup recovery', () => {
+  it('shows setup failure and retries the same workspace without a session', () => {
+    const props = createViewProps(0);
+    props.sessionTabs.sessions = [];
+    props.sessionTabs.hasWorktreePath = false;
+    props.workspaceState.workspaceInitStatus = {
+      ...createInitStatus(false),
+      status: 'FAILED',
+      phase: 'BLOCKED_FAILED',
+      hasWorktreePath: false,
+      initErrorMessage: 'Worktree could not be created',
+      chatBanner: {
+        kind: 'error',
+        message: 'Worktree could not be created',
+        showRetry: true,
+        showPlay: false,
+        showDismiss: false,
+      },
+    };
+    const { container, root } = renderView(props);
+    try {
+      expect(container.textContent).toContain('Worktree could not be created');
+      expect(container.textContent).not.toContain('Workspace is initializing');
+      const retry = [...container.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Retry setup')
+      );
+      expect(retry).toBeDefined();
+      act(() => retry?.click());
+      expect(retrySetup).toHaveBeenCalledOnce();
+      expect(retryWorkspace).toHaveBeenCalledWith('workspace-1');
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
+  it('keeps the normal sessionless prompt when setup is ready', () => {
+    const props = createViewProps(0);
+    props.sessionTabs.sessions = [];
+    const { container, root } = renderView(props);
+    try {
+      expect(container.textContent).toContain('Start a Session');
+      expect(container.textContent).not.toContain('Retry setup');
+    } finally {
+      act(() => root.unmount());
+    }
   });
 });

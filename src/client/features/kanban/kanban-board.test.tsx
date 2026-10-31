@@ -206,6 +206,43 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('[data-column="WORKING"]')!.parentElement!.scrollTop).toBe(0);
   });
 
+  it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
+    mocks.isMobile = mobile;
+    act(() => root.render(createElement(KanbanBoard)));
+    click(mobile ? 'New Task' : 'New Workspace');
+    click('Complete creation');
+    mocks.workspaces = mocks.workspaces.map((workspace) =>
+      workspace.id === 'new-task'
+        ? {
+            ...workspace,
+            status: 'FAILED',
+            kanbanColumn: 'WAITING',
+            isWorking: false,
+            initErrorMessage: 'Git worktree failed',
+            statusReason: {
+              code: 'SETUP_FAILED',
+              label: 'Setup failed',
+              tone: 'danger',
+              needsUser: true,
+            },
+          }
+        : workspace
+    );
+    act(() => root.render(createElement(KanbanBoard)));
+    expect(container.querySelector('[data-column="WORKING"]')?.textContent).not.toContain(
+      'New task'
+    );
+    if (mobile) {
+      click('Waiting2');
+    }
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
+    // Reloading the board preserves the persisted failed task too.
+    act(() => root.unmount());
+    root = createRoot(container);
+    act(() => root.render(createElement(KanbanBoard)));
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
+  });
+
   it('stays on To Do when task creation is cancelled', () => {
     void act(() => root.render(createElement(KanbanBoard)));
     click('New Task');
