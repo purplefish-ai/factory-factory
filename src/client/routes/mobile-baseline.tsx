@@ -23,9 +23,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
+import { SettingsTabsList } from './admin/settings-tabs-list';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
 import { WorkspaceHeaderFixture } from './workspace-header-fixture';
 import { WorkspaceToolsFixture } from './workspace-tools-fixture';
@@ -142,6 +144,19 @@ export default function MobileBaselinePage() {
   const [searchParams] = useSearchParams();
   if (searchParams.get('surface') === 'tools') {
     return <WorkspaceToolsFixture />;
+  }
+  if (searchParams.get('surface') === 'settings') {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="space-y-6 p-3 md:p-6">
+          <Tabs defaultValue="general">
+            <SettingsTabsList />
+            <TabsContent value="general">General settings content</TabsContent>
+            <TabsContent value="voice">Voice settings content</TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    );
   }
   if (searchParams.get('surface') === 'header') {
     return <WorkspaceHeaderFixture />;

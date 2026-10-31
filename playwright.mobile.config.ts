@@ -8,6 +8,7 @@ export default defineConfig({
     'workspace-header.spec.ts',
     'agents-responsive.spec.ts',
     'workspace-tools.spec.ts',
+    'web-app.spec.ts',
   ],
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
