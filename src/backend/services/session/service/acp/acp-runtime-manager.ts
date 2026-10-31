@@ -14,6 +14,7 @@ import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime
 import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import type { AcpClientCreationOperation } from './acp-runtime-quiescence';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
+import { AcpSteeringTimeoutError, steerAcpPrompt } from './acp-steering';
 import { AcpSubagentBrowser } from './acp-subagent-browser';
 import type { AcpClientOptions } from './types';
 
@@ -157,6 +158,51 @@ export class AcpRuntimeManager {
     }
     this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
+  }
+
+  /** Adds input to the active turn while its original prompt keeps owning completion. */
+  async steerSession(
+    sessionId: string,
+    prompt: ContentBlock[]
+  ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
+    const handle = this.supervisor.getInstalledHandle(sessionId);
+    if (!handle?.isPromptInFlight) {
+      return { outcome: 'promptRequired' };
+    }
+    if (
+      this.supervisor.isStopInProgress(sessionId) ||
+      this.supervisor.getClient(sessionId) !== handle ||
+      !handle.isRunning() ||
+      handle.configurationReady !== undefined
+    ) {
+      throw new Error(`ACP session is not ready for steering: ${sessionId}`);
+    }
+    try {
+      return await steerAcpPrompt(handle, prompt);
+    } catch (error) {
+      if (
+        error instanceof AcpSteeringTimeoutError &&
+        this.supervisor.isCurrentHandle(sessionId, handle)
+      ) {
+        // A timed-out request may still be accepted. Kill this incarnation before
+        // releasing the queue claim. Closing transport also rejects cancellation
+        // RPCs belonging to an already-pending stop of this hung adapter.
+        try {
+          try {
+            handle.connection.close();
+          } finally {
+            handle.isPromptInFlight = false;
+            await this.supervisor.stopClient(sessionId);
+          }
+        } catch (cleanupError) {
+          // Keep the timeout identity: callers must not automatically retry input
+          // whose delivery is uncertain, even when runtime cleanup also fails.
+          error.cause = cleanupError;
+          error.message = 'Steering acknowledgment timed out. Runtime cleanup reported an error.';
+        }
+      }
+      throw error;
+    }
   }
 
   /** Returns true when a prompt was actually in flight and got cancelled. */

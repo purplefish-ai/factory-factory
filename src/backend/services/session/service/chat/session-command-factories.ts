@@ -7,6 +7,7 @@ import { createSetConfigOptionHandler } from './chat-message-handlers/handlers/s
 import { createSetModelHandler } from './chat-message-handlers/handlers/set-model.handler';
 import { createSetThinkingBudgetHandler } from './chat-message-handlers/handlers/set-thinking-budget.handler';
 import { createStartHandler } from './chat-message-handlers/handlers/start.handler';
+import { createSteerQueuedMessageHandler } from './chat-message-handlers/handlers/steer-queued-message.handler';
 import { createStopHandler } from './chat-message-handlers/handlers/stop.handler';
 import { createUserInputHandler } from './chat-message-handlers/handlers/user-input.handler';
 
@@ -22,6 +23,7 @@ export const sessionCommandFactories = {
   createSetThinkingBudgetHandler,
   createStartHandler,
   createStopHandler,
+  createSteerQueuedMessageHandler,
   createUserInputHandler,
 };
 export type SessionCommandFactories = typeof sessionCommandFactories;

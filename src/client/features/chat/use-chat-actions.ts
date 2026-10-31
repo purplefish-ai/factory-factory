@@ -71,6 +71,7 @@ export interface UseChatActionsReturn {
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   removeQueuedMessage: (id: string) => void;
+  steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   setConfigOption: (configId: string, value: string) => void;
   startRewindPreview: (userMessageUuid: string) => void;
@@ -378,6 +379,14 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send]
   );
 
+  const steerQueuedMessage = useCallback(
+    (id: string) => {
+      send({ type: 'steer_queued_message', messageId: id }, UNQUEUED_SEND);
+      // Keep the message queued until the server confirms native delivery.
+    },
+    [send]
+  );
+
   const resumeQueuedMessages = useCallback(() => {
     send({ type: 'resume_queued_messages' } as ResumeQueuedMessagesInput);
   }, [send]);
@@ -490,6 +499,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     answerQuestion,
     updateSettings,
     removeQueuedMessage,
+    steerQueuedMessage,
     resumeQueuedMessages,
     setConfigOption,
     startRewindPreview,

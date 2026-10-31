@@ -114,6 +114,7 @@ function setup(provider: ChatProvider) {
     runtimeManager: runtime,
     configService,
     promptService: {
+      steerSessionMessage: async () => ({ outcome: 'injected' }),
       sendSessionMessage: () => {
         prompted.push({
           effort: handle.configOptions.find((option) => option.id === effortId)?.currentValue,

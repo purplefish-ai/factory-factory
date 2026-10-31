@@ -24,7 +24,10 @@ export interface ChatMessageRouterServices {
   startup: Parameters<SessionCommandFactories['createStartHandler']>[0]['startupService'];
   dispatch: Pick<
     SessionDispatchService,
-    'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
+    | 'tryDispatchNextMessage'
+    | 'setManualDispatchResume'
+    | 'resetDispatchState'
+    | 'steerQueuedMessage'
   >;
   load: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
   eventBus: Pick<SessionEventBus, 'publishToSession'>;
@@ -49,6 +52,7 @@ export function createChatCommandRegistry(
     createSetThinkingBudgetHandler,
     createStartHandler,
     createStopHandler,
+    createSteerQueuedMessageHandler,
     createUserInputHandler,
   } = services.factories;
   const dispatch = (sessionId: string) => services.dispatch.tryDispatchNextMessage(sessionId);
@@ -68,6 +72,9 @@ export function createChatCommandRegistry(
       domain: services.execution.domain,
       backgroundDelivery: services.execution.backgroundDelivery,
       tryDispatchNextMessage: dispatch,
+    }),
+    steer_queued_message: createSteerQueuedMessageHandler({
+      steerQueuedMessage: (id, messageId) => services.dispatch.steerQueuedMessage(id, messageId),
     }),
     remove_queued_message: createRemoveQueuedMessageHandler({ domain: services.execution.domain }),
     resume_queued_messages: createResumeQueuedMessagesHandler({
@@ -133,6 +140,8 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
           return await registry.user_input(context, message);
         case 'queue_message':
           return await registry.queue_message(context, message);
+        case 'steer_queued_message':
+          return await registry.steer_queued_message(context, message);
         case 'remove_queued_message':
           return await registry.remove_queued_message(context, message);
         case 'resume_queued_messages':

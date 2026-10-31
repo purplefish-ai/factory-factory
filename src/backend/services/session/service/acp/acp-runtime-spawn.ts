@@ -72,10 +72,14 @@ export async function withTimeout<T>(params: {
   timeoutMs: number;
   description: string;
   cancelOn?: Promise<unknown>;
+  timeoutError?: Error;
 }): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
+      reject(
+        params.timeoutError ??
+          new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`)
+      );
     }, params.timeoutMs);
     timeout.unref?.();
     const clearTimer = () => {

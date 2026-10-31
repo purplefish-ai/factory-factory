@@ -129,7 +129,11 @@ export type ApplicationServices = BridgeServices & {
   listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
-    'configure' | 'tryDispatchNextMessage' | 'setManualDispatchResume' | 'resetDispatchState'
+    | 'configure'
+    | 'tryDispatchNextMessage'
+    | 'setManualDispatchResume'
+    | 'resetDispatchState'
+    | 'steerQueuedMessage'
   >;
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;

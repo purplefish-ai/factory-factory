@@ -1,5 +1,6 @@
 import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
 import { CopyIcon } from '@phosphor-icons/react/dist/csr/Copy';
+import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/client/features/composer';
@@ -71,6 +72,7 @@ export interface MessageItemProps {
   isQueued?: boolean;
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
+  onSteer?: () => void;
   /** SDK-assigned UUID for this user message (enables rewind functionality) */
   userMessageUuid?: string;
   /** Callback to initiate rewind to before this message */
@@ -99,10 +101,49 @@ function PRUpdateMessageItem({
   );
 }
 
+function getUserMessageActionsClassName(isQueued: boolean | undefined): string {
+  return cn(
+    'flex items-center gap-1 transition-all z-10',
+    isQueued ? 'mb-1 justify-end' : 'absolute -top-1 -right-1 hover-reveal'
+  );
+}
+
+function QueuedMessageSteerAction({
+  message,
+  isQueued,
+  onSteer,
+}: Pick<MessageItemProps, 'message' | 'isQueued' | 'onSteer'>) {
+  if (
+    !(isQueued && onSteer) ||
+    message.id.startsWith('workspace-notification-') ||
+    message.text?.trimStart().startsWith('/')
+  ) {
+    return null;
+  }
+  return (
+    <button
+      onClick={onSteer}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium',
+        'bg-background/90 text-primary hover:bg-primary/10',
+        'border border-primary/30 hover:border-primary/60 shadow-sm',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+      )}
+      title="Send into the active turn now. The agent may redirect its current work."
+      type="button"
+      aria-label="Steer queued message"
+    >
+      <LightningIcon className="h-3.5 w-3.5" />
+      Steer
+    </button>
+  );
+}
+
 export const MessageItem = memo(function MessageItem({
   message,
   isQueued,
   onRemove,
+  onSteer,
   userMessageUuid,
   onRewindToMessage,
   resolveWorkspaceFileLink,
@@ -120,17 +161,10 @@ export const MessageItem = memo(function MessageItem({
     const userText = getMessageText(message.text);
     return (
       <MessageWrapper>
-        {/* Wrapper for positioning action buttons outside opacity container */}
+        {/* Keep queued actions readable outside the faded message content. */}
         <div className="group relative w-full max-w-full">
-          {/* Action buttons group - positioned at top-right, outside opacity container */}
-          <div
-            className={cn(
-              'absolute -top-1 -right-1 flex items-center gap-1',
-              'hover-reveal',
-              'transition-all',
-              'z-10'
-            )}
-          >
+          {/* Queued actions reserve a row so they cannot cover message text. */}
+          <div className={getUserMessageActionsClassName(isQueued)}>
             {/* Copy button */}
             {userText && (
               <button
@@ -180,6 +214,7 @@ export const MessageItem = memo(function MessageItem({
                 <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
               </button>
             )}
+            <QueuedMessageSteerAction message={message} isQueued={isQueued} onSteer={onSteer} />
             {/* Cancel button for queued messages */}
             {isQueued && onRemove && (
               <button
@@ -277,6 +312,7 @@ export interface GroupedMessageItemRendererProps {
   isQueued?: boolean;
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
+  onSteer?: () => void;
   /** SDK-assigned UUID for user messages (enables rewind functionality) */
   userMessageUuid?: string;
   /** Callback to initiate rewind to before this message */
@@ -299,6 +335,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   item,
   isQueued,
   onRemove,
+  onSteer,
   userMessageUuid,
   onRewindToMessage,
   resolveWorkspaceFileLink,
@@ -343,6 +380,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       onOpenAgents={onOpenAgents}
       isQueued={isQueued}
       onRemove={onRemove}
+      onSteer={onSteer}
       userMessageUuid={userMessageUuid}
       onRewindToMessage={onRewindToMessage}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
