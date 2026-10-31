@@ -8,7 +8,7 @@ import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import {
   AdversarialReviewSection,
   ApiUsageSection,
@@ -27,6 +27,7 @@ import {
   VoiceModeSection,
   WorktreeCleanupSection,
 } from './admin/index';
+import { SettingsTabsList } from './admin/settings-tabs-list';
 
 type SettingsTab = 'general' | 'appearance' | 'project' | 'voice';
 
@@ -74,20 +75,7 @@ export default function AdminDashboardPage() {
       )}
       <div className="space-y-6 p-3 md:p-6">
         <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="general" className="flex-1 sm:flex-initial">
-              General Settings
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="flex-1 sm:flex-initial">
-              Appearance
-            </TabsTrigger>
-            <TabsTrigger value="project" className="flex-1 sm:flex-initial">
-              Project Settings
-            </TabsTrigger>
-            <TabsTrigger value="voice" className="flex-1 sm:flex-initial">
-              Voice Mode
-            </TabsTrigger>
-          </TabsList>
+          <SettingsTabsList />
 
           <TabsContent value="general" className="space-y-6 mt-4">
             <ApiUsageSection
