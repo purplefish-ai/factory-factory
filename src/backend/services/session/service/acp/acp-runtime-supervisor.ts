@@ -808,7 +808,9 @@ export class AcpRuntimeSupervisor {
       this.managedStopChildren.add(handle.child);
       if (handle.isPromptInFlight) {
         try {
-          await this.cancelPrompt(sessionId, handle);
+          // Transport shutdown can fail too. Never let its pending cancellation
+          // prevent the bounded process termination below from starting.
+          await raceWithSoftTimeout(this.cancelPrompt(sessionId, handle), STOP_TIMEOUT_MS);
         } catch (error) {
           logger.debug('Failed to cancel prompt during stop (expected)', {
             sessionId,

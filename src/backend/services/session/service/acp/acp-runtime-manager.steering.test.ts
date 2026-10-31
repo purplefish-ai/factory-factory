@@ -235,13 +235,56 @@ describe('ACP runtime steering', () => {
     vi.useFakeTimers();
     try {
       const steering = manager.steerSession('session', input).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(9000);
       const stop = manager.stopClient('session');
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(1000);
       expect(handle.connection.close).toHaveBeenCalledOnce();
       await expect(steering).resolves.toMatchObject({ name: 'AcpSteeringTimeoutError' });
       await stop;
       expect(manager.getClient('session')).toBeUndefined();
       extension.resolve({ outcome: 'injected' });
+      pending.resolve({ stopReason: 'end_turn' });
+      await prompt;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('terminates a pending stop when transport close and cancellation both fail', async () => {
+    const { manager, pending, prompt, handle } = await runningSession();
+    const extension = createDeferred<unknown>();
+    const cancel = createDeferred<void>();
+    const closeError = new Error('Transport close failed');
+    mockExtMethod.mockReturnValue(extension.promise);
+    mockCancel.mockReturnValue(cancel.promise);
+    handle.connection.close = vi.fn(() => {
+      throw closeError;
+    });
+    const child = handle.child as unknown as MockChildProcess;
+    exitChildAfterSigterm(child);
+    let settled = false;
+    vi.useFakeTimers();
+    try {
+      const steering = manager
+        .steerSession('session', input)
+        .catch((error: unknown) => error)
+        .finally(() => {
+          settled = true;
+        });
+      await vi.advanceTimersByTimeAsync(9000);
+      const stop = manager.stopClient('session');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(handle.connection.close).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      const error = await steering;
+      expect(error).toBeInstanceOf(AcpSteeringTimeoutError);
+      expect(error).toMatchObject({ cause: closeError });
+      await stop;
+      expect(manager.getClient('session')).toBeUndefined();
+      extension.resolve({ outcome: 'injected' });
+      cancel.resolve();
       pending.resolve({ stopReason: 'end_turn' });
       await prompt;
     } finally {
