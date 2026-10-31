@@ -53,7 +53,7 @@ export function WorkspaceToolsFixture() {
               };
               if (!(op.path in responses)) {
                 const message = `Missing tools fixture: ${op.path}`;
-                reportError(new Error(message));
+                globalThis.reportError?.(new Error(message));
                 observer.error(new TRPCClientError(message));
                 return;
               }
