@@ -11,6 +11,7 @@ export interface TranscriptDisplayProps {
   running: boolean;
   work?: SessionWorkState;
   onOpenAgents?: () => void;
+  runningSubagentIconIndices?: readonly number[];
   subagentTimelineError?: { message: string; onRetry: () => void } | null;
   startingSession: boolean;
   loadingSession: boolean;

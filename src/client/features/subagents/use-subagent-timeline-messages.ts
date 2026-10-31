@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
+import { isActiveSubagent } from './subagent-status';
 import { createSubagentTimelineEvents, mergeSubagentTimeline } from './subagent-timeline';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
 
@@ -41,17 +43,25 @@ export function useSubagentTimelineMessages(
   );
 
   const pages = query.data?.pages;
-  const events = useMemo(() => {
+  const subagents = useMemo(() => {
     if (!sessionId || pages?.some((page) => !page.supported)) {
       return [];
     }
-    return createSubagentTimelineEvents(
-      pages?.flatMap((page) => (page.supported ? page.subagents : [])) ?? []
-    );
+    return pages?.flatMap((page) => (page.supported ? page.subagents : [])) ?? [];
   }, [pages, sessionId]);
+  const events = useMemo(() => createSubagentTimelineEvents(subagents), [subagents]);
+  const runningSubagentIconIndices = useMemo(() => {
+    // Earlier-created agents can arrive on later pages and shift every index.
+    if (hasNextPage || errorMessage) {
+      return [];
+    }
+    const indices = getSubagentIconIndices(subagents);
+    const activeIds = new Set(subagents.filter(isActiveSubagent).map((agent) => agent.id));
+    return [...indices].filter(([id]) => activeIds.has(id)).map(([, index]) => index);
+  }, [subagents, hasNextPage, errorMessage]);
   const timelineMessages = useMemo(
     () => mergeSubagentTimeline(messages, events),
     [messages, events]
   );
-  return { messages: timelineMessages, error };
+  return { messages: timelineMessages, error, runningSubagentIconIndices };
 }

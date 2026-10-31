@@ -72,10 +72,16 @@ const agent: SubagentListItem = {
 };
 const EMPTY_MESSAGES: ChatMessage[] = [];
 let projectedMessages: ChatMessage[] = [];
+let runningIconIndices: number[] | undefined;
 let timelineError: { message: string; onRetry: () => void } | null = null;
 type HarnessProps = { sessionId: string | null; enabled: boolean; rawMessages?: ChatMessage[] };
 function Harness({ sessionId, enabled, rawMessages = EMPTY_MESSAGES }: HarnessProps) {
-  const { messages, error } = useSubagentTimelineMessages(rawMessages, sessionId, enabled);
+  const { messages, error, runningSubagentIconIndices } = useSubagentTimelineMessages(
+    rawMessages,
+    sessionId,
+    enabled
+  );
+  runningIconIndices = runningSubagentIconIndices;
   timelineError = error;
   projectedMessages = messages;
   return createElement('div', null, messages.map((item) => item.text).join(','));
@@ -135,6 +141,7 @@ it('keeps known lifecycle rows and offers recovery when the provider repeats a p
   const harness = createHarness({ sessionId: 'parent', enabled: true });
   expect(harness.container.textContent).toBe('Review started working');
   expect(timelineError?.message).toBe('Some sub-agent activity could not be loaded.');
+  expect(runningIconIndices).toEqual([]);
   timelineError?.onRetry();
   expect(mocks.refetch).toHaveBeenCalledOnce();
   expect(mocks.next).not.toHaveBeenCalled();
@@ -148,6 +155,7 @@ it('offers the same recovery after a page request fails without discarding loade
   const harness = createHarness({ sessionId: 'parent', enabled: true });
   expect(harness.container.textContent).toBe('Review started working');
   expect(timelineError?.message).toBe('Some sub-agent activity could not be loaded.');
+  expect(runningIconIndices).toEqual([]);
   timelineError?.onRetry();
   expect(mocks.refetch).toHaveBeenCalledOnce();
   expect(mocks.next).not.toHaveBeenCalled();
@@ -166,4 +174,54 @@ it('automatically loads the next provider page and stops at the end of the list'
   expect(harness.container.textContent).toBe('Review started working,Build started working');
   expect(mocks.next).toHaveBeenCalledOnce();
   expect(timelineError).toBeNull();
+});
+
+it('keeps session-wide icon assignments when earlier agents finish and later pages load', () => {
+  mocks.pagesBySession.set('parent', [
+    {
+      supported: true,
+      subagents: [{ ...agent, id: 'b', createdAt: '2026-10-30T12:00:01Z' }],
+      nextCursor: 'next',
+    },
+    { supported: true, subagents: [{ ...agent, status: 'completed' }], nextCursor: null },
+  ]);
+  const harness = createHarness({ sessionId: 'parent', enabled: true });
+  expect(runningIconIndices).toEqual([1]);
+  expect(
+    projectedMessages.find((message) => message.id === 'subagent-b-started')?.subagentIconIndex
+  ).toBe(1);
+  harness.render({ sessionId: 'other', enabled: true });
+  expect(runningIconIndices).toEqual([]);
+});
+
+it('withholds running icons until all pages establish the session-wide creation order', () => {
+  const laterPage: SubagentListResult = {
+    supported: true,
+    subagents: [{ ...agent, id: 'b', createdAt: '2026-10-30T12:00:01Z' }],
+    nextCursor: 'next',
+  };
+  mocks.pagesBySession.set('parent', [laterPage]);
+  const harness = createHarness({ sessionId: 'parent', enabled: true });
+  expect(runningIconIndices).toEqual([]);
+  expect(harness.container.textContent).toBe('Review started working');
+
+  mocks.pagesBySession.set('parent', [
+    laterPage,
+    { supported: true, subagents: [{ ...agent, status: 'completed' }], nextCursor: null },
+  ]);
+  mocks.pageParams = [null, 'next'];
+  harness.render({ sessionId: 'parent', enabled: true });
+  expect(runningIconIndices).toEqual([1]);
+});
+
+it('withholds running icons on query errors even when cached pages have no next cursor', () => {
+  mocks.pagesBySession.set('parent', [{ supported: true, subagents: [agent], nextCursor: null }]);
+  mocks.error = new Error('Refresh failed');
+  const harness = createHarness({ sessionId: 'parent', enabled: true });
+  expect(runningIconIndices).toEqual([]);
+  expect(harness.container.textContent).toBe('Review started working');
+
+  mocks.error = null;
+  harness.render({ sessionId: 'parent', enabled: true });
+  expect(runningIconIndices).toEqual([0]);
 });

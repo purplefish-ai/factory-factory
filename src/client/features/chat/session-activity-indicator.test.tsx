@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { SubagentIcon } from '@/client/components/subagent-icon';
 import { SessionActivityIndicator } from './session-activity-indicator';
 
 describe('SessionActivityIndicator', () => {
@@ -111,4 +112,36 @@ it('removes the inline thinking slot while retaining background controls', () =>
   );
   expect(markup).toContain('2 sub-agents running');
   expect(markup).not.toContain('Agent is working');
+});
+
+it('uses the running agents assigned icons rather than restarting the icon sequence', () => {
+  const container = document.createElement('div');
+  container.innerHTML = renderToStaticMarkup(
+    <SessionActivityIndicator
+      work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 2, activeGoals: 0 }}
+      runningSubagentIconIndices={[3, 12]}
+    />
+  );
+  const icons = container.querySelector('button > span[aria-hidden="true"]');
+  expect(icons?.innerHTML).toBe(
+    renderToStaticMarkup(
+      <>
+        <SubagentIcon index={3} />
+        <SubagentIcon index={12} />
+      </>
+    )
+  );
+});
+
+it('does not invent agent icons while summaries are unavailable', () => {
+  const container = document.createElement('div');
+  container.innerHTML = renderToStaticMarkup(
+    <SessionActivityIndicator
+      work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 2, activeGoals: 0 }}
+    />
+  );
+  expect(container.querySelector('button > span[aria-hidden="true"]')?.children.length ?? 0).toBe(
+    0
+  );
+  expect(container.textContent).toContain('2 sub-agents running');
 });
