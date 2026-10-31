@@ -13,17 +13,20 @@ The editable source is
 prefixes and deep routes.
 
 The wordmark uses the unmodified **Jost Black (900)** font, with two uppercase
-lines in the same color, normal kerning, and `-0.01em` letter spacing. The app
-loads it locally from `public/fonts/jost/Jost-900-Black.ttf`; it needs no font
-CDN or installed system font. Its size can be set with `LogoText`'s `className`
-or `Logo`'s `textClassName`.
+lines in the same font, weight, color, and full opacity, normal kerning, and
+`-0.01em` letter spacing. Both rows inherit these styles from the shared
+`LogoText` wrapper; do not add per-row font, color, or opacity overrides. The
+app loads it locally from `public/fonts/jost/Jost-900-Black.ttf`; it needs no
+font CDN or installed system font. Its size can be set with `LogoText`'s
+`className` or `Logo`'s `textClassName`.
 
 The font is from
 [indestructible type's Jost project](https://github.com/indestructible-type/Jost),
 revision `35f141c970538f1ed0f235789c19156b3ce2a762`. The original font copyright
-and SIL Open Font License are included at `public/fonts/jost/OFL.txt`, which
-ships with the application. The font remains under the OFL; the application
-remains MIT-licensed.
+notice and the complete
+[SIL Open Font License 1.1 text](https://openfontlicense.org/open-font-license-official-text/)
+are included at `public/fonts/jost/OFL.txt`, which ships with the application.
+The font remains under the OFL; the application remains MIT-licensed.
 
 Regenerate exports after changing the source, using ImageMagick 7 and the
 installed development dependencies:
