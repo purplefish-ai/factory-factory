@@ -63,9 +63,12 @@ function findProvider(menu: HTMLElement, name: string) {
 }
 
 describe('ProviderModelPicker', () => {
-  it.each(['CLAUDE', 'CODEX'] as const)('previews only the model for %s', (provider) => {
-    const { trigger } = mount({ provider });
-    expect(trigger.textContent).toBe('6 Sol');
+  it.each([
+    { provider: 'CLAUDE' as const, model: 'sonnet', label: 'Sonnet' },
+    { provider: 'CODEX' as const, model: 'six-sol', label: '6 Sol' },
+  ])('previews only the model for $provider', ({ provider, model, label }) => {
+    const { trigger } = mount({ provider, model, models: [{ value: model, label }] });
+    expect(trigger.textContent).toBe(label);
   });
   it('keeps an unknown model truthful instead of claiming the first catalog model', () => {
     const { trigger } = mount({ model: 'custom-model' });

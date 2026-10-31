@@ -260,6 +260,7 @@ export const SavedCodexAccount: Story = {
     capabilities: {
       ...EMPTY_CHAT_BAR_CAPABILITIES,
       provider: 'CODEX',
+      usageStats: { enabled: true, contextWindow: true },
       model: {
         enabled: true,
         selected: 'gpt-6.1-sol',
