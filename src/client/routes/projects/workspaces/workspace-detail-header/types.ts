@@ -10,7 +10,6 @@ export type WorkspaceHeaderWorkspace = NonNullable<
 export type WorkspaceSessionManagement = ReturnType<typeof useSessionManagement>;
 
 export type WorkspaceSwitchGroups = {
-  todo: ServerWorkspace[];
   waiting: ServerWorkspace[];
   working: ServerWorkspace[];
   done: ServerWorkspace[];
