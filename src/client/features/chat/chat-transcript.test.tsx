@@ -153,3 +153,75 @@ it('models the queued PR notice after rows and keeps header/status keys distinct
   expect(result?.queuedPRUpdate?.id).toBe(pr.id);
   unmount(root);
 });
+
+it('keeps the thinking footer outside the viewport and mounted when work stops', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = mountRoot(host);
+  const render = (running: boolean, latestThinking: string | null) =>
+    flushSync(() =>
+      root.render(
+        <ChatTranscript
+          {...display}
+          thinkingInFooter
+          loadingSession={false}
+          running={running}
+          latestThinking={latestThinking}
+          scroll={{
+            identity: 'footer',
+            active: true,
+            ready: true,
+            initialIntent: 'following',
+            initialPosition: null,
+          }}
+        />
+      )
+    );
+  render(true, 'Checking the implementation');
+  const footer = host.querySelector('[data-testid="thinking-footer"]');
+  expect(footer).not.toBeNull();
+  const viewport = host.querySelector('[data-testid="transcript-viewport"]');
+  expect(viewport?.contains(footer)).toBe(false);
+  expect(footer?.querySelector('button')?.disabled).toBe(false);
+  render(false, null);
+  expect(host.querySelector('[data-testid="thinking-footer"]')).toBe(footer);
+  expect(footer?.querySelector('button')?.disabled).toBe(true);
+});
+
+it.each([
+  { running: true, promptInFlight: true, turn: false, active: true },
+  { running: true, promptInFlight: false, turn: false, active: false },
+  { running: false, promptInFlight: false, turn: true, active: true },
+])(
+  'reflects prompt ownership and autonomous turns in the footer: %j',
+  ({ running, promptInFlight, turn, active }) => {
+    const host = document.createElement('div');
+    const root = mountRoot(host);
+    flushSync(() =>
+      root.render(
+        <ChatTranscript
+          {...display}
+          loadingSession={false}
+          thinkingInFooter
+          running={running}
+          work={{
+            promptInFlight,
+            backgroundTasks: turn ? [{ id: 'turn', name: 'Working', kind: 'turn' }] : [],
+            runningSubagents: 0,
+            activeGoals: 0,
+          }}
+          scroll={{
+            identity: 'work',
+            active: true,
+            ready: true,
+            initialIntent: 'following',
+            initialPosition: null,
+          }}
+        />
+      )
+    );
+    expect(
+      host.querySelector<HTMLButtonElement>('[data-testid="thinking-footer"] button')?.disabled
+    ).toBe(!active);
+  }
+);

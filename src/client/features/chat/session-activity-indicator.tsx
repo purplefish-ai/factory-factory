@@ -5,15 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
 
-export function SessionActivityIndicator({
-  work,
-  latestThinking,
-  onOpenAgents,
-}: {
-  work?: SessionWorkState;
-  latestThinking?: string | null;
-  onOpenAgents?: () => void;
-}) {
+function getActivityState(work?: SessionWorkState) {
   const tasks = work?.backgroundTasks ?? [];
   const backgroundTasks = tasks.filter((task) => task.kind !== 'turn');
   const agentWorking = work?.promptInFlight !== false || tasks.some((task) => task.kind === 'turn');
@@ -26,9 +18,46 @@ export function SessionActivityIndicator({
       : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`;
   const runningSubagents = work?.runningSubagents ?? 0;
   const subagentLabel = `${runningSubagents} ${runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running`;
+  const activeGoals = work?.activeGoals ?? 0;
+  const hasBackgroundActivity =
+    backgroundTasks.length > 0 || runningSubagents > 0 || activeGoals > 0;
+  return {
+    backgroundTasks,
+    agentWorking,
+    backgroundLabel,
+    runningSubagents,
+    subagentLabel,
+    activeGoals,
+    hasBackgroundActivity,
+  };
+}
+
+export function SessionActivityIndicator({
+  work,
+  latestThinking,
+  onOpenAgents,
+  showThinking = true,
+}: {
+  showThinking?: boolean;
+  work?: SessionWorkState;
+  latestThinking?: string | null;
+  onOpenAgents?: () => void;
+}) {
+  const {
+    backgroundTasks,
+    agentWorking,
+    backgroundLabel,
+    runningSubagents,
+    subagentLabel,
+    activeGoals,
+    hasBackgroundActivity,
+  } = getActivityState(work);
+  if (!(showThinking || hasBackgroundActivity)) {
+    return null;
+  }
   return (
     <div className="space-y-3 py-4">
-      {agentWorking && (
+      {showThinking && agentWorking && (
         <div role="status" aria-label="Session activity">
           <LoadingIndicator latestReasoning={latestThinking} />
         </div>
@@ -79,12 +108,12 @@ export function SessionActivityIndicator({
           </button>
         </div>
       )}
-      {!!work?.activeGoals && (
+      {activeGoals > 0 && (
         <p className="text-sm text-muted-foreground" role="status">
-          {work.activeGoals} {work.activeGoals === 1 ? 'goal' : 'goals'} active
+          {activeGoals} {activeGoals === 1 ? 'goal' : 'goals'} active
         </p>
       )}
-      {!agentWorking && backgroundTasks.length === 0 && !runningSubagents && !work?.activeGoals && (
+      {!(agentWorking || hasBackgroundActivity) && (
         <p className="text-sm text-muted-foreground" role="status">
           Background activity running
         </p>
