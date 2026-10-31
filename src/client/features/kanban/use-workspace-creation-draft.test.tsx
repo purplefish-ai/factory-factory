@@ -99,3 +99,31 @@ it('discards the current draft explicitly while preserving a newer revision', as
   expect(mounted.current.draft.prompt).toBe('');
   expect(mounted.current.hasDraft).toBe(false);
 });
+
+it.each([false, true])(
+  'ignores attachment completion from a discarded lifecycle (replacement=%s)',
+  async (replacement) => {
+    const mounted = mount(`discard-attachment-${replacement}`);
+    await mounted.start();
+    act(() => mounted.current.updateDraft({ prompt: 'Discard this' }));
+    const finishAttachment = mounted.current.updateDraft;
+    const revision = mounted.current.captureDraft().revision;
+    await act(async () => {
+      await mounted.current.clearSubmittedDraft(revision).catch(() => undefined);
+    });
+    if (replacement) {
+      act(() => mounted.current.updateDraft({ prompt: 'Replacement draft' }));
+    }
+    act(() =>
+      finishAttachment((draft) => ({
+        attachments: [
+          ...draft.attachments,
+          { id: 'late', name: 'late.txt', type: 'text/plain', size: 1, data: 'late' },
+        ],
+      }))
+    );
+    expect(mounted.current.draft.attachments).toEqual([]);
+    expect(mounted.current.draft.prompt).toBe(replacement ? 'Replacement draft' : '');
+    expect(mounted.current.hasDraft).toBe(replacement);
+  }
+);

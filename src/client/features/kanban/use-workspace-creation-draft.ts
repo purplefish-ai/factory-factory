@@ -25,7 +25,11 @@ export function useWorkspaceCreationDraft(projectId: string) {
   // project switch still belong to the project where they started.
   const updateDraft = useCallback(
     (patch: DraftPatch | ((draft: WorkspaceCreationDraft) => DraftPatch)) => {
-      const current = getWorkspaceCreationDraftSnapshot(projectId).draft ?? emptyDraft;
+      const currentSnapshot = getWorkspaceCreationDraftSnapshot(projectId);
+      if (currentSnapshot.generation !== snapshot.generation) {
+        return;
+      }
+      const current = currentSnapshot.draft ?? emptyDraft;
       const next = {
         ...current,
         ...(typeof patch === 'function' ? patch(current) : patch),
@@ -33,7 +37,7 @@ export function useWorkspaceCreationDraft(projectId: string) {
       };
       void saveWorkspaceCreationDraft(projectId, next).catch(() => undefined);
     },
-    [projectId, emptyDraft]
+    [projectId, emptyDraft, snapshot.generation]
   );
   const captureDraft = useCallback(() => {
     const draft = getWorkspaceCreationDraftSnapshot(projectId).draft ?? emptyDraft;

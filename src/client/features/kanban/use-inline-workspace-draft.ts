@@ -1,16 +1,31 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useSessionLaunchSelection } from '@/client/features/session-selection';
 import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
 import type { WorkspaceCreationDraft } from './workspace-creation-draft-storage';
 
 /** Bind editor setters to a project, including asynchronous attachment work. */
-export function useInlineWorkspaceDraft(projectId: string, defaultRatchetEnabled: boolean) {
+export function useInlineWorkspaceDraft(
+  projectId: string,
+  defaultRatchetEnabled: boolean | undefined
+) {
   const recovery = useWorkspaceCreationDraft(projectId);
   const { draft, updateDraft, hasDraft } = recovery;
-  const ratchetEnabled = hasDraft ? draft.ratchetEnabled : defaultRatchetEnabled;
+  const ratchetEnabled = draft.ratchetInitialized
+    ? draft.ratchetEnabled
+    : (defaultRatchetEnabled ?? false);
+  useEffect(() => {
+    if (hasDraft && !draft.ratchetInitialized && defaultRatchetEnabled !== undefined) {
+      updateDraft({ ratchetEnabled: defaultRatchetEnabled, ratchetInitialized: true });
+    }
+  }, [hasDraft, draft.ratchetInitialized, defaultRatchetEnabled, updateDraft]);
   const launchSelection = useSessionLaunchSelection(projectId, {
     snapshot: draft.launchSelection,
-    onChange: (launchSelection) => updateDraft({ launchSelection, ratchetEnabled }),
+    onChange: (launchSelection) =>
+      updateDraft({
+        launchSelection,
+        ratchetEnabled,
+        ratchetInitialized: draft.ratchetInitialized || defaultRatchetEnabled !== undefined,
+      }),
   });
   const snapshot = launchSelection.snapshot;
   const setField = useCallback(
@@ -21,12 +36,18 @@ export function useInlineWorkspaceDraft(projectId: string, defaultRatchetEnabled
         | ((previous: WorkspaceCreationDraft[K]) => WorkspaceCreationDraft[K])
     ) => {
       updateDraft((previous) => ({
-        ratchetEnabled: previous.launchSelection ? previous.ratchetEnabled : ratchetEnabled,
+        ratchetEnabled: previous.ratchetInitialized
+          ? previous.ratchetEnabled
+          : (defaultRatchetEnabled ?? false),
+        ratchetInitialized:
+          previous.ratchetInitialized ||
+          defaultRatchetEnabled !== undefined ||
+          key === 'ratchetEnabled',
         launchSelection: previous.launchSelection ?? snapshot,
         [key]: typeof value === 'function' ? value(previous[key]) : value,
       }));
     },
-    [updateDraft, ratchetEnabled, snapshot]
+    [updateDraft, defaultRatchetEnabled, snapshot]
   );
   return {
     ...recovery,

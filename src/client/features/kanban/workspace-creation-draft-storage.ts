@@ -8,6 +8,7 @@ export const workspaceCreationDraftSchema = z.object({
   prompt: z.string(),
   attachments: z.array(AttachmentSchema),
   ratchetEnabled: z.boolean(),
+  ratchetInitialized: z.boolean().default(true),
   launchSelection: sessionLaunchSelectionSnapshotSchema.optional(),
   mode: z.enum(['STANDARD', 'PERIODIC_TASK']),
   cadence: z.enum(['EVERY_MINUTE', 'EVERY_FIVE_MINUTES', 'DAILY', 'WEEKLY', 'MONTHLY']),
@@ -21,6 +22,7 @@ export function createWorkspaceCreationDraft(): WorkspaceCreationDraft {
     prompt: '',
     attachments: [],
     ratchetEnabled: false,
+    ratchetInitialized: false,
     mode: 'STANDARD',
     cadence: 'DAILY',
     scheduledTime: '',
@@ -30,6 +32,7 @@ export function createWorkspaceCreationDraft(): WorkspaceCreationDraft {
 export interface WorkspaceDraftSnapshot {
   draft: WorkspaceCreationDraft | null;
   isRestoring: boolean;
+  generation: number;
   persistenceError: string | null;
 }
 interface Entry {
@@ -44,7 +47,7 @@ function entryFor(projectId: string): Entry {
   let entry = entries.get(projectId);
   if (!entry) {
     entry = {
-      snapshot: { draft: null, isRestoring: true, persistenceError: null },
+      snapshot: { draft: null, isRestoring: true, persistenceError: null, generation: 0 },
       listeners: new Set(),
       queue: Promise.resolve(),
       cleared: new Set(),
@@ -203,7 +206,7 @@ export function clearWorkspaceCreationDraft(
   entry.cleared.add(expectedRevision);
   const matches = entry.snapshot.draft?.revision === expectedRevision;
   if (matches) {
-    publish(entry, { draft: null, isRestoring: false });
+    publish(entry, { draft: null, isRestoring: false, generation: entry.snapshot.generation + 1 });
   }
   return enqueue(entry, async () => {
     try {

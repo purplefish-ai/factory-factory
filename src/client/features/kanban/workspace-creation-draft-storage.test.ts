@@ -5,6 +5,15 @@ import {
 } from './workspace-creation-draft-storage';
 
 describe('versioned creation draft validation', () => {
+  it('treats older saved ratchet values as initialized choices', () => {
+    const restored = workspaceCreationDraftSchema.parse({
+      ...createWorkspaceCreationDraft(),
+      ratchetEnabled: false,
+      ratchetInitialized: undefined,
+    });
+    expect(restored.ratchetInitialized).toBe(true);
+    expect(restored.ratchetEnabled).toBe(false);
+  });
   it.each([
     { schemaVersion: 2 },
     { attachments: [{ id: 'missing-contents' }] },
