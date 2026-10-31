@@ -37,7 +37,8 @@ regressions.
 - Delayed settings hydration must not replace restored explicit launch choices.
 - Storage errors or malformed records must preserve usable input and explain
   loss.
-- A failed setup before any session starts must remain visible and retry once.
+- A failed setup before any session starts must remain visible and be manually
+  retryable on the same workspace.
 
 ## Task 1: Persist and restore project creation drafts
 

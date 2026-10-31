@@ -91,33 +91,38 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
         />
       </div>
 
+      {/* Setup recovery must remain visible even when a file or diff tab hides chat. */}
+      {hasNoSessions && emptyState}
+
       {/* Main View Content */}
       <MainViewContent workspaceId={workspaceId} className="flex-1 min-h-0">
-        {hasNoSessions
-          ? (emptyState ?? (
-              <div className="flex flex-col items-center justify-center h-full p-8">
-                <div className="max-w-md w-full space-y-6 text-center">
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-semibold">Start a Session</h2>
-                    <p className="text-muted-foreground">
-                      Click the + button above to start a new chat session in this workspace.
-                    </p>
-                  </div>
-
-                  {!hasWorktreePath && (
-                    <div
-                      className={[
-                        'border px-4 py-3 rounded-md text-sm',
-                        getStatusBannerClassName('warning'),
-                      ].join(' ')}
-                    >
-                      Workspace is initializing... Please wait for the worktree to be created.
-                    </div>
-                  )}
+        {hasNoSessions ? (
+          emptyState ? null : (
+            <div className="flex flex-col items-center justify-center h-full p-8">
+              <div className="max-w-md w-full space-y-6 text-center">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold">Start a Session</h2>
+                  <p className="text-muted-foreground">
+                    Click the + button above to start a new chat session in this workspace.
+                  </p>
                 </div>
+
+                {!hasWorktreePath && (
+                  <div
+                    className={[
+                      'border px-4 py-3 rounded-md text-sm',
+                      getStatusBannerClassName('warning'),
+                    ].join(' ')}
+                  >
+                    Workspace is initializing... Please wait for the worktree to be created.
+                  </div>
+                )}
               </div>
-            ))
-          : children}
+            </div>
+          )
+        ) : (
+          children
+        )}
       </MainViewContent>
     </div>
   );

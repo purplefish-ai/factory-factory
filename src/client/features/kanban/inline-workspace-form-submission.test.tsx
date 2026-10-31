@@ -34,11 +34,14 @@ function launch(container: HTMLElement, label = 'Launch') {
 }
 
 describe('workspace creation submission recovery', () => {
-  it('explains a cleanup failure after production storage has already cleared the draft in memory', async () => {
-    await saveWorkspaceCreationDraft(getTestProjectId(), {
-      ...createWorkspaceCreationDraft(),
-      prompt: 'Create this task',
-    }).catch(() => undefined);
+  it('explains an explicit disk failure after production storage clears the draft in memory', async () => {
+    // The harness deliberately stubs IndexedDB unavailable; retain the real logical clear.
+    await expect(
+      saveWorkspaceCreationDraft(getTestProjectId(), {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'Create this task',
+      })
+    ).rejects.toThrow('could not be saved');
     const form = renderForm();
     try {
       launch(form.container);
@@ -73,12 +76,14 @@ describe('workspace creation submission recovery', () => {
   });
 
   it('preserves a newer draft when a submitted periodic task succeeds late', async () => {
-    await saveWorkspaceCreationDraft(getTestProjectId(), {
-      ...createWorkspaceCreationDraft(),
-      mode: 'PERIODIC_TASK',
-      cadence: 'EVERY_FIVE_MINUTES',
-      prompt: 'Retained periodic review',
-    }).catch(() => undefined);
+    await expect(
+      saveWorkspaceCreationDraft(getTestProjectId(), {
+        ...createWorkspaceCreationDraft(),
+        mode: 'PERIODIC_TASK',
+        cadence: 'EVERY_FIVE_MINUTES',
+        prompt: 'Retained periodic review',
+      })
+    ).rejects.toThrow('could not be saved');
     const form = renderForm();
     try {
       launch(form.container, 'Create Agent');
@@ -96,7 +101,9 @@ describe('workspace creation submission recovery', () => {
         ratchetInitialized: true,
       };
       await act(async () => {
-        await saveWorkspaceCreationDraft(getTestProjectId(), newer).catch(() => undefined);
+        await expect(saveWorkspaceCreationDraft(getTestProjectId(), newer)).rejects.toThrow(
+          'could not be saved'
+        );
       });
       const revisionBeforeSuccess =
         getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.revision;
@@ -135,11 +142,13 @@ describe('workspace creation submission recovery', () => {
         contentType: 'text' as const,
       },
     ];
-    await saveWorkspaceCreationDraft(getTestProjectId(), {
-      ...createWorkspaceCreationDraft(),
-      prompt: 'Keep all of this task',
-      attachments,
-    }).catch(() => undefined);
+    await expect(
+      saveWorkspaceCreationDraft(getTestProjectId(), {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'Keep all of this task',
+        attachments,
+      })
+    ).rejects.toThrow('could not be saved');
     const form = renderForm();
     try {
       actFlushSync(() =>
@@ -179,10 +188,12 @@ describe('workspace creation submission recovery', () => {
   });
 
   it('keeps a pending request across remount and displays its eventual failure in the resumed form', async () => {
-    await saveWorkspaceCreationDraft(getTestProjectId(), {
-      ...createWorkspaceCreationDraft(),
-      prompt: 'Pending task',
-    }).catch(() => undefined);
+    await expect(
+      saveWorkspaceCreationDraft(getTestProjectId(), {
+        ...createWorkspaceCreationDraft(),
+        prompt: 'Pending task',
+      })
+    ).rejects.toThrow('could not be saved');
     const first = renderForm();
     launch(first.container);
     const input = mocks.createWorkspaceMutateMock.mock.calls[0]?.[0] as Input;

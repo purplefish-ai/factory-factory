@@ -29,7 +29,12 @@ export function createWorkspaceCreationDraft(): WorkspaceCreationDraft {
   };
 }
 
+export const WORKSPACE_DRAFT_DATABASE_NAME = 'factory-factory-workspace-drafts';
+export const WORKSPACE_DRAFT_DATABASE_VERSION = 1;
+export const WORKSPACE_DRAFT_STORE_NAME = 'drafts';
+
 export interface WorkspaceDraftSnapshot {
+  hasUnreadableDraft: boolean;
   draft: WorkspaceCreationDraft | null;
   isRestoring: boolean;
   generation: number;
@@ -41,16 +46,24 @@ interface Entry {
   loading?: Promise<WorkspaceCreationDraft | null>;
   queue: Promise<unknown>;
   cleared: Set<string>;
+  parents: Map<string, string>;
 }
 const entries = new Map<string, Entry>();
 function entryFor(projectId: string): Entry {
   let entry = entries.get(projectId);
   if (!entry) {
     entry = {
-      snapshot: { draft: null, isRestoring: true, persistenceError: null, generation: 0 },
+      snapshot: {
+        hasUnreadableDraft: false,
+        draft: null,
+        isRestoring: true,
+        persistenceError: null,
+        generation: 0,
+      },
       listeners: new Set(),
       queue: Promise.resolve(),
       cleared: new Set(),
+      parents: new Map(),
     };
     entries.set(projectId, entry);
   }
@@ -84,8 +97,11 @@ function openDatabase() {
     };
     const timer = setTimeout(fail, 1500);
     try {
-      const request = indexedDB.open('factory-factory-workspace-drafts', 1);
-      request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+      const request = indexedDB.open(
+        WORKSPACE_DRAFT_DATABASE_NAME,
+        WORKSPACE_DRAFT_DATABASE_VERSION
+      );
+      request.onupgradeneeded = () => request.result.createObjectStore(WORKSPACE_DRAFT_STORE_NAME);
       request.onerror = fail;
       request.onblocked = fail;
       request.onsuccess = () => {
@@ -117,7 +133,7 @@ async function transact<T>(
 ): Promise<T> {
   const database = await openDatabase();
   return new Promise<T>((resolve, reject) => {
-    const transaction = database.transaction('drafts', mode);
+    const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, mode);
     let result: T;
     const timer = setTimeout(() => {
       transaction.abort();
@@ -132,7 +148,7 @@ async function transact<T>(
       reject(transaction.error ?? new Error('Draft storage failed'));
     };
     try {
-      action(transaction.objectStore('drafts'), (value) => {
+      action(transaction.objectStore(WORKSPACE_DRAFT_STORE_NAME), (value) => {
         result = value;
       });
     } catch (error) {
@@ -160,7 +176,12 @@ export function loadWorkspaceCreationDraft(
         const request = store.get(projectId);
         request.onsuccess = () => result(request.result);
       });
-      const draft = raw === undefined ? null : workspaceCreationDraftSchema.parse(raw);
+      const parsed = workspaceCreationDraftSchema.safeParse(raw);
+      if (raw !== undefined && !parsed.success) {
+        publish(entry, { hasUnreadableDraft: true });
+        throw new Error('Invalid saved draft');
+      }
+      const draft = parsed.success ? parsed.data : null;
       if (entry.snapshot.isRestoring) {
         publish(entry, { draft, isRestoring: false });
       }
@@ -182,8 +203,12 @@ export function saveWorkspaceCreationDraft(
   if (entry.cleared.has(draft.revision)) {
     return Promise.resolve();
   }
+  const previous = entry.snapshot.draft;
+  if (previous && previous.revision !== draft.revision) {
+    entry.parents.set(draft.revision, previous.revision);
+  }
   // Publish before any await: navigating away immediately must retain this edit.
-  publish(entry, { draft, isRestoring: false });
+  publish(entry, { draft, isRestoring: false, hasUnreadableDraft: false });
   return enqueue(entry, async () => {
     try {
       await transact<void>('readwrite', (store) => {
@@ -197,6 +222,18 @@ export function saveWorkspaceCreationDraft(
       throw new Error(message, { cause });
     }
   });
+}
+function isOwnedAncestor(entry: Entry, revision: string, expectedRevision: string): boolean {
+  const visited = new Set<string>();
+  let current: string | undefined = expectedRevision;
+  while (current !== undefined && !visited.has(current)) {
+    if (current === revision) {
+      return true;
+    }
+    visited.add(current);
+    current = entry.parents.get(current);
+  }
+  return false;
 }
 export function clearWorkspaceCreationDraft(
   projectId: string,
@@ -214,15 +251,62 @@ export function clearWorkspaceCreationDraft(
         const request = store.get(projectId);
         request.onsuccess = () => {
           const parsed = workspaceCreationDraftSchema.safeParse(request.result);
-          const matching = parsed.success && parsed.data.revision === expectedRevision;
+          const matching =
+            parsed.success && isOwnedAncestor(entry, parsed.data.revision, expectedRevision);
           if (matching) {
             store.delete(projectId);
           }
           result(matching);
         };
       });
-      publish(entry, { persistenceError: null });
+      if (entry.snapshot.draft === null) {
+        publish(entry, { persistenceError: null });
+      }
       return cleared || matches;
+    } catch (cause) {
+      const message = 'Your saved draft could not be cleared. It may return after a refresh.';
+      publish(entry, { persistenceError: message });
+      throw new Error(message, { cause });
+    }
+  });
+}
+
+/** Explicit discard also allows removing a record that failed schema validation. */
+export function discardWorkspaceCreationDraft(projectId: string): Promise<boolean> {
+  const entry = entryFor(projectId);
+  if (!entry.snapshot.hasUnreadableDraft) {
+    const revision = entry.snapshot.draft?.revision;
+    return revision ? clearWorkspaceCreationDraft(projectId, revision) : Promise.resolve(false);
+  }
+  const captured = entry.snapshot;
+  return enqueue(entry, async () => {
+    try {
+      const outcome = await transact<{ discarded: boolean; draft: WorkspaceCreationDraft | null }>(
+        'readwrite',
+        (store, result) => {
+          const request = store.get(projectId);
+          request.onsuccess = () => {
+            const parsed = workspaceCreationDraftSchema.safeParse(request.result);
+            const invalid = request.result !== undefined && !parsed.success;
+            if (invalid) {
+              store.delete(projectId);
+            }
+            result({ discarded: invalid, draft: parsed.success ? parsed.data : null });
+          };
+        }
+      );
+      if (
+        entry.snapshot.generation === captured.generation &&
+        entry.snapshot.draft === captured.draft
+      ) {
+        publish(entry, {
+          draft: outcome.draft,
+          hasUnreadableDraft: false,
+          persistenceError: null,
+          generation: captured.generation + 1,
+        });
+      }
+      return outcome.discarded;
     } catch (cause) {
       const message = 'Your saved draft could not be cleared. It may return after a refresh.';
       publish(entry, { persistenceError: message });

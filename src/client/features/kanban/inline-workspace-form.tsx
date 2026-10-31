@@ -602,7 +602,7 @@ function DiscardWorkspaceDraft({
   disabled: boolean;
   onCancel: () => void;
 }) {
-  if (!recovery.hasDraft) {
+  if (!(recovery.hasDraft || recovery.hasUnreadableDraft)) {
     return null;
   }
   return (
@@ -614,8 +614,12 @@ function DiscardWorkspaceDraft({
         disabled={disabled}
         onClick={() => {
           void recovery
-            .clearSubmittedDraft(recovery.draft.revision)
-            .then(onCancel)
+            .discardDraft()
+            .then((discarded) => {
+              if (discarded) {
+                onCancel();
+              }
+            })
             .catch(() => undefined);
         }}
       >

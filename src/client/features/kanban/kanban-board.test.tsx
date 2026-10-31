@@ -267,7 +267,7 @@ describe('KanbanBoard', () => {
       click('Waiting2');
     }
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
-    // Reloading the board preserves the persisted failed task too.
+    // Remounting the board keeps the failed task supplied by its query visible.
     act(() => root.unmount());
     root = createRoot(container);
     act(() => root.render(createElement(KanbanBoard)));

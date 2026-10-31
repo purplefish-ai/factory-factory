@@ -3,15 +3,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, forwardRef, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, expect, type Mock, vi } from 'vitest';
 import { collectAttachments } from '@/client/features/composer';
 import { actFlushSync } from '@/test-utils/react-act';
 import { InlineWorkspaceForm } from './inline-workspace-form';
-import {
-  clearWorkspaceCreationDraft,
-  getWorkspaceCreationDraftSnapshot,
-  loadWorkspaceCreationDraft,
-} from './workspace-creation-draft-storage';
+import { loadWorkspaceCreationDraft } from './workspace-creation-draft-storage';
 
 interface FormMocks {
   userSettings: {
@@ -415,6 +411,8 @@ export function textareaLabel(container: HTMLElement) {
   return container.querySelector(`label[for="${textarea?.id}"]`)?.textContent;
 }
 
+const formRoots = new Set<Root>();
+
 export function renderForm(
   projectId = getTestProjectId(),
   callbacks: { onCreated?: (id: string) => void; onCancel?: () => void } = {}
@@ -431,6 +429,15 @@ export function renderForm(
   document.body.appendChild(container);
   const root = createRoot(container);
   const queryClient = new QueryClient();
+  formRoots.add(root);
+  const unmount = root.unmount.bind(root);
+  root.unmount = () => {
+    if (!formRoots.delete(root)) {
+      return;
+    }
+    unmount();
+    queryClient.clear();
+  };
   const render = root.render.bind(root);
   root.render = (children) =>
     render(createElement(QueryClientProvider, { client: queryClient }, children));
@@ -463,16 +470,10 @@ beforeEach(async () => {
   testProjectId = crypto.randomUUID();
   mocks.createWorkspaceMutateMock.mockReset();
   mocks.createPeriodicTaskMutateMock.mockReset();
-  await loadWorkspaceCreationDraft(testProjectId).catch(() => undefined);
-  const previous = getWorkspaceCreationDraftSnapshot(testProjectId).draft;
-  if (previous) {
-    await clearWorkspaceCreationDraft(testProjectId, previous.revision).catch(() => undefined);
-  }
-  Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
-    configurable: true,
-    writable: true,
-    value: true,
-  });
+  // These form tests deliberately exercise in-memory editing with unavailable disk.
+  vi.stubGlobal('indexedDB', undefined);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  await expect(loadWorkspaceCreationDraft(testProjectId)).rejects.toThrow('could not be restored');
   mocks.userSettings = {
     ratchetEnabled: false,
     defaultSessionProvider: 'CLAUDE',
@@ -494,7 +495,13 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  actFlushSync(() => {
+    for (const root of [...formRoots]) {
+      root.unmount();
+    }
+  });
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 

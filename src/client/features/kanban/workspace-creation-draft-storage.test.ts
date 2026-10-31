@@ -16,7 +16,7 @@ describe('versioned creation draft validation', () => {
   });
   it.each([
     { schemaVersion: 2 },
-    { attachments: [{ id: 'missing-contents' }] },
+    { attachments: [{ id: 'missing-contents', name: 'notes.txt', type: 'text/plain', size: 1 }] },
     { launchSelection: { provider: 'unknown', drafts: {} } },
   ])('rejects incompatible storage instead of restoring a partial draft: %j', (patch) => {
     expect(

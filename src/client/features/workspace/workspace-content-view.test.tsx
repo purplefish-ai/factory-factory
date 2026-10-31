@@ -1,16 +1,75 @@
 // @vitest-environment jsdom
-import { act, type ReactNode } from 'react';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceContentView, type WorkspaceContentViewProps } from './workspace-content-view';
 
 vi.mock('./main-view-tab-bar', () => ({ MainViewTabBar: () => null }));
-vi.mock('./main-view-content', () => ({
-  MainViewContent: ({ children }: { children: ReactNode }) => children,
+beforeEach(() => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const panel = vi.hoisted(() => ({
+  tabs: [] as { id: string; type: string; path: string }[],
+  activeTabId: 'chat',
+  openTab: vi.fn(),
 }));
-vi.mock('./workspace-panel-context', () => ({ useWorkspacePanel: () => ({ openTab: vi.fn() }) }));
+vi.mock('./use-chat-transcript-persistence', () => ({
+  useTranscriptPositionPersistence: () => ({}),
+}));
+vi.mock('@/client/features/subagents', () => ({ SubagentTranscriptView: () => null }));
+vi.mock('./closed-session-transcript-view', () => ({ ClosedSessionTranscriptView: () => null }));
+vi.mock('./screenshot-viewer-tab', () => ({ ScreenshotViewerTab: () => null }));
+vi.mock('./file-viewer', () => ({ FileViewer: () => <p>File viewer</p> }));
+vi.mock('./diff-viewer', () => ({ DiffViewer: () => <p>Diff viewer</p> }));
+vi.mock('./workspace-panel-context', () => ({ useWorkspacePanel: () => panel }));
 
 describe('WorkspaceContentView sessionless recovery', () => {
+  it.each(['file', 'diff'])(
+    'keeps sessionless recovery outside the hidden chat pane with an active %s tab',
+    async (type) => {
+      panel.tabs = [{ id: 'persisted', type, path: 'README.md' }];
+      panel.activeTabId = 'persisted';
+      const container = document.createElement('div');
+      const root = createRoot(container);
+      try {
+        await act(async () =>
+          root.render(
+            <WorkspaceContentView
+              workspaceId="ws-1"
+              sessions={[]}
+              selectedSessionId={null}
+              sessionSummariesById={new Map()}
+              isCreatingSession={false}
+              isDeletingSession={false}
+              onSelectSession={vi.fn()}
+              onCreateSession={vi.fn()}
+              onCloseSession={vi.fn()}
+              hasWorktreePath={false}
+              emptyState={<button>Retry setup</button>}
+            >
+              <p>Chat</p>
+            </WorkspaceContentView>
+          )
+        );
+        const retry = container.querySelector('button');
+        expect(retry).not.toBeNull();
+        expect(container.querySelectorAll('button')).toHaveLength(1);
+        expect(retry?.closest('.hidden')).toBeNull();
+        expect(container.textContent).toContain(type === 'file' ? 'File viewer' : 'Diff viewer');
+        expect(panel.activeTabId).toBe('persisted');
+        expect(panel.openTab).not.toHaveBeenCalled();
+      } finally {
+        act(() => root.unmount());
+        panel.tabs = [];
+        panel.activeTabId = 'chat';
+      }
+    }
+  );
+
   it('renders supplied recovery without sessions and preserves chat while sessions load', () => {
     const container = document.createElement('div');
     const root = createRoot(container);

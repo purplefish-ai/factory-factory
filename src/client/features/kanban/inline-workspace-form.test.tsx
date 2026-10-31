@@ -365,7 +365,7 @@ it('propagates a manual Codex account into the workspace launch request', () => 
   }
 });
 
-it('preserves a closed draft across remounts and discards only explicitly', async () => {
+it('preserves and explicitly discards an in-memory draft while disk storage is unavailable', async () => {
   const first = renderForm();
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
   actFlushSync(() => {
@@ -381,7 +381,9 @@ it('preserves a closed draft across remounts and discards only explicitly', asyn
   const second = renderForm();
   expect(second.textarea.value).toBe('A task worth keeping');
   await act(() => Promise.resolve());
-  expect(second.container.querySelector('[role="alert"]')?.textContent).toContain('saved');
+  expect(second.container.querySelector('[role="alert"]')?.textContent).toContain(
+    'could not be saved'
+  );
   const discard = [...second.container.querySelectorAll('button')].find(
     (button) => button.textContent === 'Discard draft'
   );
@@ -491,15 +493,17 @@ it('blocks launch only while restoring and makes storage failure visible', async
 });
 
 it('restores periodic schedules and explicit ratchet settings without applying later defaults', async () => {
-  await saveWorkspaceCreationDraft(getTestProjectId(), {
-    ...createWorkspaceCreationDraft(),
-    prompt: 'Periodic review',
-    mode: 'PERIODIC_TASK',
-    cadence: 'WEEKLY',
-    scheduledTime: '09:30',
-    ratchetEnabled: true,
-    ratchetInitialized: true,
-  }).catch(() => undefined);
+  await expect(
+    saveWorkspaceCreationDraft(getTestProjectId(), {
+      ...createWorkspaceCreationDraft(),
+      prompt: 'Periodic review',
+      mode: 'PERIODIC_TASK',
+      cadence: 'WEEKLY',
+      scheduledTime: '09:30',
+      ratchetEnabled: true,
+      ratchetInitialized: true,
+    })
+  ).rejects.toThrow('could not be saved');
   const mounted = renderForm();
   expect(mounted.textarea.value).toBe('Periodic review');
   expect(mounted.container.querySelector<HTMLInputElement>('input[type="time"]')?.value).toBe(

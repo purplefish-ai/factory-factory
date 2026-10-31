@@ -10,6 +10,9 @@ import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 import {
   createWorkspaceCreationDraft,
+  WORKSPACE_DRAFT_DATABASE_NAME,
+  WORKSPACE_DRAFT_DATABASE_VERSION,
+  WORKSPACE_DRAFT_STORE_NAME,
   getWorkspaceCreationDraftSnapshot,
   saveWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
@@ -312,14 +315,18 @@ export const UnrestorableDraft: Story = {
   loaders: [
     async () => {
       await new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('factory-factory-workspace-drafts', 1);
-        request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+        const request = indexedDB.open(
+          WORKSPACE_DRAFT_DATABASE_NAME,
+          WORKSPACE_DRAFT_DATABASE_VERSION
+        );
+        request.onupgradeneeded = () =>
+          request.result.createObjectStore(WORKSPACE_DRAFT_STORE_NAME);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const database = request.result;
-          const transaction = database.transaction('drafts', 'readwrite');
+          const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readwrite');
           transaction
-            .objectStore('drafts')
+            .objectStore(WORKSPACE_DRAFT_STORE_NAME)
             .put({ schemaVersion: 999, attachments: 'incompatible' }, 'preview-corrupt-draft');
           transaction.oncomplete = () => {
             database.close();
@@ -387,12 +394,17 @@ export const PeriodicSubmissionSuccess: Story = {
     await expect(await canvas.findByRole('button', { name: 'New Workspace' })).toBeVisible();
     await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
     const persisted = await new Promise<unknown>((resolve, reject) => {
-      const request = indexedDB.open('factory-factory-workspace-drafts', 1);
+      const request = indexedDB.open(
+        WORKSPACE_DRAFT_DATABASE_NAME,
+        WORKSPACE_DRAFT_DATABASE_VERSION
+      );
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const database = request.result;
-        const transaction = database.transaction('drafts', 'readonly');
-        const read = transaction.objectStore('drafts').get('preview-periodic-success');
+        const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readonly');
+        const read = transaction
+          .objectStore(WORKSPACE_DRAFT_STORE_NAME)
+          .get('preview-periodic-success');
         read.onsuccess = () => resolve(read.result);
         transaction.oncomplete = () => database.close();
         transaction.onerror = () => reject(transaction.error);

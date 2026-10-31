@@ -29,4 +29,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const BeforeFirstSession: Story = {};
-export const RetryingSetup: Story = { args: { retryPending: true } };
+export const RetryingSetup: Story = {
+  args: { retryPending: true },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Setup retry is pending: the action shows a spinner and stays disabled.',
+      },
+    },
+  },
+};

@@ -50,13 +50,22 @@ export function useSessionLaunchSelectionState(
     ...restoration.snapshot,
     restoredSnapshot: restoration.snapshot,
   }));
-  const committedDefaults = useRef({ scopeKey, defaults });
+  const committedInputs = useRef({ scopeKey, defaults, restoration });
   useLayoutEffect(() => {
-    committedDefaults.current = { scopeKey, defaults };
-  }, [scopeKey, defaults]);
+    committedInputs.current = { scopeKey, defaults, restoration };
+  }, [scopeKey, defaults, restoration]);
   const reset = useCallback(() => {
-    const current = committedDefaults.current;
-    setStored({ scopeKey: current.scopeKey, defaults: current.defaults, drafts: {} });
+    const current = committedInputs.current;
+    const snapshot = { defaults: current.defaults, drafts: {} };
+    const next: LaunchSelectionState = {
+      ...snapshot,
+      scopeKey: current.scopeKey,
+      // Remember the consumed external snapshot so reset cannot restore its old choices.
+      restoredSnapshot: current.restoration.snapshot,
+    };
+    latestState.current = next;
+    setStored(next);
+    current.restoration.onChange?.(snapshot);
   }, []);
   let state = stored;
   if (stored.scopeKey !== scopeKey || stored.restoredSnapshot !== restoration.snapshot) {

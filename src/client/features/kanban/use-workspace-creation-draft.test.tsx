@@ -3,6 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
+import { getWorkspaceCreationDraftSnapshot } from './workspace-creation-draft-storage';
 
 const roots: Root[] = [];
 afterEach(() => {
@@ -71,7 +72,9 @@ it('keeps async edits with their original project and clears only a captured rev
   const captured = mounted.current.captureDraft();
   act(() => mounted.current.updateDraft({ prompt: 'Newer' }));
   await act(async () => {
-    await mounted.current.clearSubmittedDraft(captured.revision).catch(() => undefined);
+    await expect(mounted.current.clearSubmittedDraft(captured.revision)).rejects.toThrow(
+      'could not be cleared'
+    );
   });
   expect(mounted.current.draft.prompt).toBe('Newer');
   await mounted.render('destination');
@@ -94,7 +97,9 @@ it('discards the current draft explicitly while preserving a newer revision', as
   act(() => mounted.current.updateDraft({ prompt: 'Discard' }));
   const revision = mounted.current.captureDraft().revision;
   await act(async () => {
-    await mounted.current.clearSubmittedDraft(revision).catch(() => undefined);
+    await expect(mounted.current.clearSubmittedDraft(revision)).rejects.toThrow(
+      'could not be cleared'
+    );
   });
   expect(mounted.current.draft.prompt).toBe('');
   expect(mounted.current.hasDraft).toBe(false);
@@ -109,7 +114,9 @@ it.each([false, true])(
     const finishAttachment = mounted.current.updateDraft;
     const revision = mounted.current.captureDraft().revision;
     await act(async () => {
-      await mounted.current.clearSubmittedDraft(revision).catch(() => undefined);
+      await expect(mounted.current.clearSubmittedDraft(revision)).rejects.toThrow(
+        'could not be cleared'
+      );
     });
     if (replacement) {
       act(() => mounted.current.updateDraft({ prompt: 'Replacement draft' }));
@@ -127,3 +134,27 @@ it.each([false, true])(
     expect(mounted.current.hasDraft).toBe(replacement);
   }
 );
+
+it('queues edits until restoration finishes', async () => {
+  const mounted = mount('hydrating');
+  let updated = false;
+  let remainedRestoring = false;
+  await act(() => {
+    mounted.root.render(
+      createElement(Harness, {
+        id: 'hydrating',
+        onResult: (result) => {
+          if (result.isRestoring && !updated) {
+            updated = true;
+            result.updateDraft({ prompt: 'Queued' });
+            remainedRestoring = getWorkspaceCreationDraftSnapshot('hydrating').isRestoring;
+          }
+        },
+      })
+    );
+  });
+  expect(remainedRestoring).toBe(true);
+  await mounted.render('hydrating');
+  expect(mounted.current.isRestoring).toBe(false);
+  expect(mounted.current.draft.prompt).toBe('Queued');
+});

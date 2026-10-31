@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   clearWorkspaceCreationDraft,
   createWorkspaceCreationDraft,
+  discardWorkspaceCreationDraft,
   getWorkspaceCreationDraftSnapshot,
   loadWorkspaceCreationDraft,
   saveWorkspaceCreationDraft,
@@ -29,6 +30,14 @@ export function useWorkspaceCreationDraft(projectId: string) {
       if (currentSnapshot.generation !== snapshot.generation) {
         return;
       }
+      if (currentSnapshot.isRestoring) {
+        void loadWorkspaceCreationDraft(projectId)
+          .catch(() => undefined)
+          .then(() => {
+            updateDraft(patch);
+          });
+        return;
+      }
       const current = currentSnapshot.draft ?? emptyDraft;
       const next = {
         ...current,
@@ -47,8 +56,10 @@ export function useWorkspaceCreationDraft(projectId: string) {
     (revision: string) => clearWorkspaceCreationDraft(projectId, revision),
     [projectId]
   );
+  const discardDraft = useCallback(() => discardWorkspaceCreationDraft(projectId), [projectId]);
   return {
     ...snapshot,
+    discardDraft,
     draft: snapshot.draft ?? emptyDraft,
     hasDraft: snapshot.draft !== null,
     updateDraft,

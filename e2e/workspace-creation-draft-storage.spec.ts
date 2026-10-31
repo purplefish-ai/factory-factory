@@ -170,3 +170,182 @@ test.describe('workspace draft storage in Chromium', () => {
     expect(result.draft).toMatchObject({ prompt: 'Keep editing' });
   });
 });
+
+test('clears a persisted ancestor after the latest save fails', async ({ page }) => {
+  await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('ancestor', {
+      ...s.createWorkspaceCreationDraft(),
+      revision: 'old',
+    });
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = () => {
+      throw new DOMException('Full', 'QuotaExceededError');
+    };
+    try {
+      await s.saveWorkspaceCreationDraft('ancestor', {
+        ...s.createWorkspaceCreationDraft(),
+        revision: 'latest',
+      });
+      throw new Error('Expected quota rejection');
+    } catch (error) {
+      if (!String(error).includes('could not be saved')) {
+        throw error;
+      }
+    } finally {
+      IDBObjectStore.prototype.put = put;
+    }
+    await s.clearWorkspaceCreationDraft('ancestor', 'latest');
+  });
+  await page.reload();
+  expect(
+    await page.evaluate(async () =>
+      (await window.loadDraftStorage()).loadWorkspaceCreationDraft('ancestor')
+    )
+  ).toBeNull();
+});
+
+test('explicitly discards unreadable records but preserves a concurrent valid replacement', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('seed', s.createWorkspaceCreationDraft());
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open(s.WORKSPACE_DRAFT_DATABASE_NAME, s.WORKSPACE_DRAFT_DATABASE_VERSION);
+      r.onsuccess = () => resolve(r.result);
+    });
+    const put = (id: string, value: unknown) =>
+      new Promise<void>((resolve) => {
+        const tx = db.transaction(s.WORKSPACE_DRAFT_STORE_NAME, 'readwrite');
+        tx.objectStore(s.WORKSPACE_DRAFT_STORE_NAME).put(value, id);
+        tx.oncomplete = () => resolve();
+      });
+    for (const id of ['invalid', 'replaced']) {
+      await put(id, { schemaVersion: 999 });
+      try {
+        await s.loadWorkspaceCreationDraft(id);
+      } catch {
+        /* expected malformed record */
+      }
+    }
+    const unreadable = s.getWorkspaceCreationDraftSnapshot('invalid').hasUnreadableDraft;
+    await put('replaced', { ...s.createWorkspaceCreationDraft(), prompt: 'Concurrent' });
+    await s.discardWorkspaceCreationDraft('invalid');
+    await s.discardWorkspaceCreationDraft('replaced');
+    db.close();
+    return { unreadable, replacement: s.getWorkspaceCreationDraftSnapshot('replaced').draft };
+  });
+  expect(result.unreadable).toBe(true);
+  expect(result.replacement).toMatchObject({ prompt: 'Concurrent' });
+  await page.reload();
+  const drafts = await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    return Promise.all(['invalid', 'replaced'].map((id) => s.loadWorkspaceCreationDraft(id)));
+  });
+  expect(drafts[0]).toBeNull();
+  expect(drafts[1]).toMatchObject({ prompt: 'Concurrent' });
+});
+
+test('preserves a valid disk revision written by another window during clear', async ({ page }) => {
+  await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('concurrent', {
+      ...s.createWorkspaceCreationDraft(),
+      revision: 'owned',
+    });
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open(
+        s.WORKSPACE_DRAFT_DATABASE_NAME,
+        s.WORKSPACE_DRAFT_DATABASE_VERSION
+      );
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(s.WORKSPACE_DRAFT_STORE_NAME, 'readwrite');
+      tx.objectStore(s.WORKSPACE_DRAFT_STORE_NAME).put(
+        {
+          ...s.createWorkspaceCreationDraft(),
+          revision: 'other-window',
+          prompt: 'Keep concurrent',
+        },
+        'concurrent'
+      );
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    await s.clearWorkspaceCreationDraft('concurrent', 'owned');
+  });
+  await page.reload();
+  expect(
+    await page.evaluate(async () =>
+      (await window.loadDraftStorage()).loadWorkspaceCreationDraft('concurrent')
+    )
+  ).toMatchObject({ prompt: 'Keep concurrent' });
+});
+
+test('retains the unsaved-edit warning when clearing an older submission', async ({ page }) => {
+  const warning = await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('warning', {
+      ...s.createWorkspaceCreationDraft(),
+      revision: 'submitted',
+    });
+    IDBObjectStore.prototype.put = () => {
+      throw new DOMException('Full', 'QuotaExceededError');
+    };
+    try {
+      await s.saveWorkspaceCreationDraft('warning', {
+        ...s.createWorkspaceCreationDraft(),
+        revision: 'newer',
+        prompt: 'Unsaved',
+      });
+    } catch (error) {
+      if (!String(error).includes('could not be saved')) {
+        throw error;
+      }
+    }
+    await s.clearWorkspaceCreationDraft('warning', 'submitted');
+    return s.getWorkspaceCreationDraftSnapshot('warning').persistenceError;
+  });
+  expect(warning).toContain('could not be saved');
+});
+
+test('unreadable discard preserves a new draft lifecycle started while deletion is queued', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async () => {
+    const s = await window.loadDraftStorage();
+    await s.saveWorkspaceCreationDraft('seed', s.createWorkspaceCreationDraft());
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open(
+        s.WORKSPACE_DRAFT_DATABASE_NAME,
+        s.WORKSPACE_DRAFT_DATABASE_VERSION
+      );
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(s.WORKSPACE_DRAFT_STORE_NAME, 'readwrite');
+      tx.objectStore(s.WORKSPACE_DRAFT_STORE_NAME).put({ schemaVersion: 999 }, 'discard-race');
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    try {
+      await s.loadWorkspaceCreationDraft('discard-race');
+    } catch (error) {
+      if (!String(error).includes('could not be restored')) {
+        throw error;
+      }
+    }
+    const discard = s.discardWorkspaceCreationDraft('discard-race');
+    const save = s.saveWorkspaceCreationDraft('discard-race', {
+      ...s.createWorkspaceCreationDraft(),
+      prompt: 'New lifecycle',
+    });
+    const generation = s.getWorkspaceCreationDraftSnapshot('discard-race').generation;
+    await Promise.all([discard, save]);
+    return { generation, snapshot: s.getWorkspaceCreationDraftSnapshot('discard-race') };
+  });
+  expect(result.snapshot.generation).toBe(result.generation);
+  expect(result.snapshot.draft).toMatchObject({ prompt: 'New lifecycle' });
+});

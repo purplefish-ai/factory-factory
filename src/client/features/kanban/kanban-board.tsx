@@ -98,7 +98,6 @@ export function KanbanBoard() {
   });
 
   const isMobile = useIsMobile();
-  const { hasDraft } = useWorkspaceCreationDraft(projectId);
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
@@ -266,7 +265,11 @@ export function KanbanBoard() {
             onClick={handleMobileNewTaskClick}
           >
             <PlusIcon className="h-4 w-4" />
-            {workspaceCreationButtonLabel(hasDraft, showInlineForm, 'New Task')}
+            <WorkspaceCreationButtonLabel
+              projectId={projectId}
+              isOpen={showInlineForm}
+              defaultLabel="New Task"
+            />
           </Button>
 
           {/* Active column content */}
@@ -370,7 +373,6 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
   const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
   const isMobile = useIsMobile();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
-  const { hasDraft } = useWorkspaceCreationDraft(projectId);
   const isEmpty = issues.length === 0;
   const [selectedIssue, setSelectedIssue] = useState<NormalizedIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -421,7 +423,11 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
               className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-card px-3 py-5 text-sm text-primary hover:border-primary/70 hover:text-primary transition-colors cursor-pointer"
             >
               <PlusIcon className="h-4 w-4" />
-              {workspaceCreationButtonLabel(hasDraft, false, 'New Workspace')}
+              <WorkspaceCreationButtonLabel
+                projectId={projectId}
+                isOpen={false}
+                defaultLabel="New Workspace"
+              />
             </button>
           ) : null}
           {!isEmpty &&
@@ -447,6 +453,15 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
   );
 }
 
-function workspaceCreationButtonLabel(hasDraft: boolean, isOpen: boolean, defaultLabel: string) {
+function WorkspaceCreationButtonLabel({
+  projectId,
+  isOpen,
+  defaultLabel,
+}: {
+  projectId: string;
+  isOpen: boolean;
+  defaultLabel: string;
+}) {
+  const { hasDraft } = useWorkspaceCreationDraft(projectId);
   return hasDraft && !isOpen ? 'Resume draft' : defaultLabel;
 }

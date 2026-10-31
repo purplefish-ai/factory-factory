@@ -41,8 +41,12 @@ export const InitStatusBanner = memo(function InitStatusBanner({
             <div className="mt-2 flex items-center gap-2">
               {banner.showRetry && (
                 <Button size="sm" variant="outline" disabled={retryPending} onClick={onRetry}>
-                  <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Retry setup
+                  {retryPending ? (
+                    <SpinnerGapIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {retryPending ? 'Retrying...' : 'Retry setup'}
                 </Button>
               )}
               {banner.showPlay && (
