@@ -51,6 +51,7 @@ export function QuickChatContent({
         workspaceId={workspaceId}
         messages={groupedMessages}
         subagentTimelineError={timeline.error}
+        runningSubagentIconIndices={timeline.runningSubagentIconIndices}
         acpPlan={chatState.acpPlan}
         running={running}
         work={chatState.sessionRuntime.work}
