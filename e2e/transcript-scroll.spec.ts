@@ -470,9 +470,63 @@ test('thinking wrapping and completion do not move the conversation', async ({ p
   await viewport.hover();
   await page.mouse.wheel(0, -500);
   await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
+  // Wheel input and newly mounted row measurements can finish on later frames.
+  // Capture only once both have settled, before applying thinking updates.
+  await viewport.evaluate(async (element) => {
+    let previous = '';
+    let stableFrames = 0;
+    for (let frame = 0; frame < 120; frame++) {
+      await new Promise(requestAnimationFrame);
+      const current = `${element.scrollTop}:${element.scrollHeight}`;
+      stableFrames = current === previous ? stableFrames + 1 : 0;
+      previous = current;
+      if (stableFrames >= 6) {
+        return;
+      }
+    }
+    throw new Error('Reading geometry did not settle');
+  });
   const reading = await geometry();
   await page.getByRole('button', { name: 'Change thinking', exact: true }).click();
   await expect.poll(geometry).toEqual(reading);
   await page.getByRole('button', { name: 'Toggle activity', exact: true }).click();
   await expect.poll(geometry).toEqual(reading);
+});
+
+test('completed thinking cannot leave focus inside a hidden preview', async ({ page }) => {
+  await page.goto('/__transcript-scroll?footer=1');
+  const footer = page.getByTestId('thinking-footer');
+  const toggle = page.getByRole('button', { name: 'Toggle activity', exact: true });
+  await toggle.click();
+  const trigger = page.getByRole('button', { name: 'Show thinking preview' });
+  await trigger.focus();
+  await expect(trigger).toBeFocused();
+  // Complete work without moving focus to the fixture control first.
+  await toggle.evaluate((button) => button.click());
+  await expect
+    .poll(() => footer.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(false);
+  await expect(footer.locator(':scope > div')).toHaveAttribute('inert');
+  const inactiveTrigger = footer.getByRole('button', { name: 'Show thinking preview' });
+  await expect(inactiveTrigger).toBeDisabled();
+  await inactiveTrigger.evaluate((button) => button.focus());
+  await expect(inactiveTrigger).not.toBeFocused();
+  await toggle.click();
+  await trigger.click();
+  await expect(page.getByRole('dialog', { name: 'Thinking preview' })).toBeVisible();
+  await toggle.evaluate((button) => button.click());
+  await expect(page.getByRole('dialog', { name: 'Thinking preview' })).toHaveCount(0);
+  await expect
+    .poll(() => footer.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(false);
+});
+
+test('thinking completion preserves focus outside the preview', async ({ page }) => {
+  await page.goto('/__transcript-scroll?footer=1');
+  const toggle = page.getByRole('button', { name: 'Toggle activity', exact: true });
+  await toggle.click();
+  const outside = page.getByRole('button', { name: 'Change thinking', exact: true });
+  await outside.focus();
+  await toggle.evaluate((button) => button.click());
+  await expect(outside).toBeFocused();
 });

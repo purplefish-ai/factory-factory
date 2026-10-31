@@ -58,7 +58,13 @@ export const ActivityChanges: Story = {
     const height = footer.getBoundingClientRect().height;
     await userEvent.click(canvas.getByRole('button', { name: 'Change thinking' }));
     await expect(footer.getBoundingClientRect().height).toBe(height);
-    await userEvent.click(canvas.getByRole('button', { name: 'Toggle activity' }));
+    const preview = canvas.getByRole('button', { name: 'Show thinking preview' });
+    preview.focus();
+    await expect(preview).toHaveFocus();
+    canvas.getByRole('button', { name: 'Toggle activity' }).click();
+    await expect(footer.contains(document.activeElement)).toBe(false);
+    await expect(preview).toBeDisabled();
+    await expect(preview).not.toHaveFocus();
     await expect(footer.getBoundingClientRect().height).toBe(height);
   },
 };

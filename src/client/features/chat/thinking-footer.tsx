@@ -18,7 +18,7 @@ export function ThinkingFooter({
   return (
     <div data-testid="thinking-footer" className="h-8 shrink-0 min-w-0 px-4 py-1.5">
       <div
-        aria-hidden={!active}
+        inert={!active}
         className={cn(
           'transition-opacity duration-150 motion-reduce:transition-none',
           active ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -40,6 +40,11 @@ export function ThinkingFooter({
             </button>
           </PopoverTrigger>
           <PopoverContent
+            onCloseAutoFocus={(event) => {
+              if (!active) {
+                event.preventDefault();
+              }
+            }}
             side="top"
             align="start"
             aria-label="Thinking preview"

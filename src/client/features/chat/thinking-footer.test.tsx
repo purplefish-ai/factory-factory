@@ -21,9 +21,12 @@ describe('ThinkingFooter', () => {
       );
       flushSync(() => root.render(<ThinkingFooter active={false} latestThinking={null} />));
       expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+      expect(host.querySelector('[inert]')).not.toBeNull();
+      expect(host.querySelector('[aria-hidden="true"]')).toBeNull();
       expect(host.querySelector('button')?.disabled).toBe(true);
       expect(host.querySelector('button')?.tabIndex).toBe(-1);
       flushSync(() => root.render(<ThinkingFooter active latestThinking="Next turn" />));
+      expect(host.querySelector('[inert]')).toBeNull();
       expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
     } finally {
       flushSync(() => root.unmount());

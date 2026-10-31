@@ -9,10 +9,12 @@ provider startup, cancellation, and lifecycle ownership, see
 Workspace chat and quick chat render live thinking in a reserved single-line
 footer above the composer, outside the transcript viewport. The slot remains 32
 pixels high while idle; only its opacity changes when activity starts or
-finishes. Long previews truncate, with the full text available in a popover.
-Reduced-motion preferences disable the fade and spinner animation. Background
-processes, sub-agents, and goals retain their transcript controls. Read-only
-transcripts retain the inline activity presentation.
+finishes. Long previews truncate, with the full text available in a popover. The
+inactive preview is inert, and closing its popover after completion does not
+return focus to the inactive trigger. Reduced-motion preferences disable the
+fade and spinner animation. Background processes, sub-agents, and goals retain
+their transcript controls. Read-only transcripts retain the inline activity
+presentation.
 
 ## Live messages
 
