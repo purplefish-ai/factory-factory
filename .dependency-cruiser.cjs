@@ -280,13 +280,13 @@ module.exports = {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:
-        'Session-model normalization is provider/session-specific and should only be consumed by session internals/resources and user settings persistence.',
+        'Session-model normalization is provider/session-specific and is limited to session internals, settings persistence, and agent configuration validation.',
       from: {
-        path: '^src/backend',
+        path: '^src/',
         pathNot:
-          '^src/backend/services/session/(service/|resources/)|^src/backend/services/settings/resources/user-settings\\.accessor\\.ts$|^src/backend/lib/session-model\\.ts$|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/services/session/(service/|resources/)|^src/backend/services/settings/resources/user-settings\\.accessor\\.ts$|^src/backend/lib/session-model\\.ts$|^src/shared/schemas/agent-definition\\.schema\\.ts$|^src/.*\\.test\\.(ts|tsx)$',
       },
-      to: { path: '^src/backend/lib/session-model\\.ts$' },
+      to: { path: '^src/(backend/lib|shared)/session-model\\.ts$' },
     },
     {
       name: 'session-runtime-import-boundary',

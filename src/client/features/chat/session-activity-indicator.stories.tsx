@@ -16,6 +16,7 @@ const meta = {
   args: {
     work: { promptInFlight: false, backgroundTasks: [], runningSubagents: 3, activeGoals: 0 },
     onOpenAgents: fn(),
+    runningSubagentIconIndices: [0, 1, 2],
   },
 } satisfies Meta<typeof SessionActivityIndicator>;
 
@@ -65,4 +66,15 @@ export const WithSessionActivity: Story = {
 
 export const WithoutNavigation: Story = {
   args: { onOpenAgents: undefined },
+};
+
+export const AfterEarlierAgentsFinish: Story = {
+  args: {
+    work: { promptInFlight: false, backgroundTasks: [], runningSubagents: 2, activeGoals: 0 },
+    runningSubagentIconIndices: [3, 12],
+  },
+};
+
+export const SummariesLoading: Story = {
+  args: { runningSubagentIconIndices: [] },
 };

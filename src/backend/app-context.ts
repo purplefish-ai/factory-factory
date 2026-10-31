@@ -41,6 +41,7 @@ import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadat
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
+import { slackConnectionService } from './services/agent-definition';
 import { codexAccountService } from './services/codex-accounts';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
@@ -144,6 +145,7 @@ export type ApplicationServices = BridgeServices & {
   configService: typeof configService;
   codexAccountService: typeof codexAccountService;
   cryptoService: typeof cryptoService;
+  slackConnectionService: typeof slackConnectionService;
   createLogger: typeof createLogger;
   dataBackupService: typeof dataBackupService;
   decisionLogQueryService: typeof decisionLogService;
@@ -303,6 +305,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     computePendingRequestType,
     triggerAdversarialReview,
     cryptoService,
+    slackConnectionService,
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,

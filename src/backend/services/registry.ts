@@ -19,6 +19,10 @@ export const prismaModelNames = [
   'UserSettings',
   'PeriodicTask',
   'PeriodicTaskExecution',
+  'AgentDefinition',
+  'AgentConnection',
+  'AgentTrigger',
+  'AgentRun',
 ] as const;
 
 export type PrismaModelName = (typeof prismaModelNames)[number];
@@ -89,6 +93,7 @@ export const serviceNames = [
   'settings',
   'decision-log',
   'periodic-task',
+  'agent-definition',
   'search',
 ] as const;
 
@@ -100,6 +105,10 @@ type ServiceDefinition = {
 };
 
 export const serviceRegistry = {
+  'agent-definition': {
+    dependsOn: [],
+    ownsModels: ['AgentDefinition', 'AgentConnection', 'AgentTrigger', 'AgentRun'],
+  },
   'codex-accounts': { dependsOn: [], ownsModels: ['CodexAccount'] },
   search: { dependsOn: ['workspace', 'session'], ownsModels: [] },
   session: {

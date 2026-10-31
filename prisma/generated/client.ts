@@ -163,6 +163,26 @@ export type ClosedSession = Prisma.ClosedSessionModel
  */
 export type UserSettings = Prisma.UserSettingsModel
 /**
+ * Model AgentDefinition
+ * General agent definitions; legacy PeriodicTask scheduling is migrated separately.
+ */
+export type AgentDefinition = Prisma.AgentDefinitionModel
+/**
+ * Model AgentConnection
+ * Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.
+ */
+export type AgentConnection = Prisma.AgentConnectionModel
+/**
+ * Model AgentTrigger
+ * 
+ */
+export type AgentTrigger = Prisma.AgentTriggerModel
+/**
+ * Model AgentRun
+ * 
+ */
+export type AgentRun = Prisma.AgentRunModel
+/**
  * Model PeriodicTask
  * 
  */

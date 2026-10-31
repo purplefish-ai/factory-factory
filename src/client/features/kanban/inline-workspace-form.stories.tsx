@@ -282,6 +282,15 @@ export const SidebarPeriodicTask: Story = {
 };
 
 export const RestoredDraft: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const prompt = await canvas.findByRole('textbox');
+    await waitFor(() => expect(prompt).toHaveValue(expect.stringContaining('Investigate')));
+    await expect(canvas.queryByRole('button', { name: 'Discard draft' })).not.toBeInTheDocument();
+    await userEvent.clear(prompt);
+    await expect(prompt).toHaveValue('');
+    await expect(canvas.getByText('setup-notes.txt')).toBeVisible();
+  },
   args: { projectId: 'preview-restored-draft' },
   loaders: [
     async () => {
@@ -311,6 +320,17 @@ export const RestoredDraft: Story = {
 };
 
 export const UnrestorableDraft: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('could not be restored');
+    await expect(canvas.queryByRole('button', { name: 'Discard draft' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Reset saved draft' }));
+    await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
+    await expect(
+      canvas.queryByRole('button', { name: 'Reset saved draft' })
+    ).not.toBeInTheDocument();
+    await expect(canvas.getByRole('textbox')).toHaveValue('');
+  },
   args: { projectId: 'preview-corrupt-draft' },
   loaders: [
     async () => {

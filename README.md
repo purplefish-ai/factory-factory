@@ -1,5 +1,10 @@
 <p align="center">
-  <img src="public/logo-full.svg" alt="Factory Factory" width="400">
+  <a href="public/logo-full.svg#gh-light-mode-only">
+    <img src="public/logo-full.svg" alt="Factory Factory" width="400">
+  </a>
+  <a href="public/logo-full-dark.svg#gh-dark-mode-only">
+    <img src="public/logo-full-dark.svg" alt="Factory Factory" width="400">
+  </a>
 </p>
 
 <p align="center">

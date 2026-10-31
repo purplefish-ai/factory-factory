@@ -45,6 +45,14 @@ pnpm brand:generate
 - `public/icons/apple-touch-icon.png`: Apple touch icon, 180 pixels.
 - `build-resources/icon.{svg,png,ico,icns}`: desktop packaging icons.
 
+The README selects `logo-full-dark.svg` (white lettering) for dark mode and
+`logo-full.svg` (black lettering) for light mode using GitHub's
+`#gh-dark-mode-only` and `#gh-light-mode-only` link fragments. Keep the
+fragments on the enclosing links: GitHub's CSS uses their `href` to hide the
+other logo. This follows GitHub's selected theme even when it differs from the
+device theme; `<picture>` media queries follow the device instead. Other
+Markdown renderers may display both logos.
+
 The SVG wordmark exports contain outlines generated directly from the bundled
 Jost font using OpenType.js. They retain the font's letterforms and spacing
 without depending on font loading in image viewers or on GitHub. The gear-only

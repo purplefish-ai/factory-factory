@@ -365,7 +365,7 @@ it('propagates a manual Codex account into the workspace launch request', () => 
   }
 });
 
-it('preserves and explicitly discards an in-memory draft while disk storage is unavailable', async () => {
+it('preserves an in-memory draft and allows clearing its text while disk storage is unavailable', async () => {
   const first = renderForm();
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
   actFlushSync(() => {
@@ -387,8 +387,12 @@ it('preserves and explicitly discards an in-memory draft while disk storage is u
   const discard = [...second.container.querySelectorAll('button')].find(
     (button) => button.textContent === 'Discard draft'
   );
-  expect(discard).toBeDefined();
-  await act(async () => discard?.click());
+  expect(discard).toBeUndefined();
+  expect(second.container.textContent).not.toContain('Reset saved draft');
+  actFlushSync(() => {
+    setter?.call(second.textarea, '');
+    second.textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   actFlushSync(() => second.root.unmount());
   const third = renderForm();
   expect(third.textarea.value).toBe('');

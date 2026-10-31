@@ -67,6 +67,10 @@ export const ModelName = {
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
+  AgentDefinition: 'AgentDefinition',
+  AgentConnection: 'AgentConnection',
+  AgentTrigger: 'AgentTrigger',
+  AgentRun: 'AgentRun',
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification'
@@ -380,6 +384,69 @@ export const UserSettingsScalarFieldEnum = {
 } as const
 
 export type UserSettingsScalarFieldEnum = (typeof UserSettingsScalarFieldEnum)[keyof typeof UserSettingsScalarFieldEnum]
+
+
+export const AgentDefinitionScalarFieldEnum = {
+  id: 'id',
+  projectId: 'projectId',
+  name: 'name',
+  instructions: 'instructions',
+  isEnabled: 'isEnabled',
+  executionConfig: 'executionConfig',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentDefinitionScalarFieldEnum = (typeof AgentDefinitionScalarFieldEnum)[keyof typeof AgentDefinitionScalarFieldEnum]
+
+
+export const AgentConnectionScalarFieldEnum = {
+  id: 'id',
+  provider: 'provider',
+  externalId: 'externalId',
+  name: 'name',
+  isEnabled: 'isEnabled',
+  credentialsEncrypted: 'credentialsEncrypted',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentConnectionScalarFieldEnum = (typeof AgentConnectionScalarFieldEnum)[keyof typeof AgentConnectionScalarFieldEnum]
+
+
+export const AgentTriggerScalarFieldEnum = {
+  id: 'id',
+  agentDefinitionId: 'agentDefinitionId',
+  type: 'type',
+  connectionId: 'connectionId',
+  description: 'description',
+  config: 'config',
+  filterInstructions: 'filterInstructions',
+  isEnabled: 'isEnabled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentTriggerScalarFieldEnum = (typeof AgentTriggerScalarFieldEnum)[keyof typeof AgentTriggerScalarFieldEnum]
+
+
+export const AgentRunScalarFieldEnum = {
+  id: 'id',
+  agentDefinitionId: 'agentDefinitionId',
+  triggerId: 'triggerId',
+  idempotencyKey: 'idempotencyKey',
+  status: 'status',
+  definitionSnapshot: 'definitionSnapshot',
+  triggerSnapshot: 'triggerSnapshot',
+  input: 'input',
+  workspaceId: 'workspaceId',
+  errorMessage: 'errorMessage',
+  createdAt: 'createdAt',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt'
+} as const
+
+export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typeof AgentRunScalarFieldEnum]
 
 
 export const PeriodicTaskScalarFieldEnum = {

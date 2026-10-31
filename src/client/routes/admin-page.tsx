@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
+import { SlackSettings } from '@/client/features/slack';
 import { WorkspacesBackLink } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
@@ -105,6 +106,7 @@ export default function AdminDashboardPage() {
             <ChatProviderDefaultsSection />
             <CodexAccountsSettings />
             <CliAuthSection />
+            <SlackSettings />
             <RatchetSettingsSection />
             <AdversarialReviewSection />
             <AppInfoSection />

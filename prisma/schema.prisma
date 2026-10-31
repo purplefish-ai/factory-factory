@@ -148,6 +148,26 @@ enum NotificationDirection {
   PARENT_TO_CHILD
 }
 
+enum AgentConnectionProvider {
+  SLACK
+  GITHUB
+}
+
+enum AgentTriggerType {
+  SCHEDULE
+  SLACK_MESSAGE
+  GITHUB_ISSUE
+}
+
+enum AgentRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PR_CREATED
+  FAILED
+  CANCELLED
+}
+
 
 // Models
 model Project {
@@ -176,6 +196,7 @@ model Project {
   // Relations
   workspaces        Workspace[]
   periodicTasks     PeriodicTask[]
+  agentDefinitions  AgentDefinition[]
 
   @@index([slug])
   @@index([isArchived])
@@ -195,6 +216,7 @@ model DecisionLog {
 }
 
 model Workspace {
+  agentRun            AgentRun?
   id                  String            @id @default(cuid())
   projectId           String
   project             Project           @relation(fields: [projectId], references: [id])
@@ -591,6 +613,84 @@ model UserSettings {
   updatedAt             DateTime @updatedAt
 
   @@index([userId])
+}
+
+/// General agent definitions; legacy PeriodicTask scheduling is migrated separately.
+model AgentDefinition {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name String
+  instructions String
+  isEnabled Boolean @default(false)
+  executionConfig Json @default("{\"version\":1}") // agentExecutionConfigSchema
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  triggers AgentTrigger[]
+  runs AgentRun[]
+
+  @@index([projectId, isEnabled])
+}
+
+/// Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.
+model AgentConnection {
+  id String @id @default(cuid())
+  provider AgentConnectionProvider
+  externalId String // Slack workspace ID or GitHub installation ID
+  name String
+  isEnabled Boolean @default(true)
+  credentialsEncrypted String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  triggers AgentTrigger[]
+
+  @@unique([provider, externalId])
+}
+
+model AgentTrigger {
+  id String @id @default(cuid())
+  agentDefinitionId String
+  agentDefinition AgentDefinition @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  type AgentTriggerType
+  connectionId String?
+  connection AgentConnection? @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  description String // User's natural-language intent, retained when config is resolved
+  config Json // Versioned configuration, validated with agentTriggerInputSchema
+  filterInstructions String?
+  isEnabled Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs AgentRun[]
+
+  @@unique([id, agentDefinitionId])
+  @@index([agentDefinitionId, isEnabled])
+  @@index([connectionId, type, isEnabled])
+}
+
+model AgentRun {
+  id String @id @default(cuid())
+  agentDefinitionId String
+  agentDefinition AgentDefinition @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  triggerId String? // Null for manual runs
+  // Composite FK prevents a run from borrowing another agent's trigger.
+  // NoAction preserves referenced triggers and allows deleting an entire definition atomically.
+  trigger AgentTrigger? @relation(fields: [triggerId, agentDefinitionId], references: [id, agentDefinitionId], onDelete: NoAction, onUpdate: NoAction)
+  idempotencyKey String // Caller-defined event/group identity, scoped to this definition
+  status AgentRunStatus @default(QUEUED)
+  definitionSnapshot Json // agentDefinitionInputSchema; frozen at admission
+  triggerSnapshot Json? // agentTriggerInputSchema; null for manual runs
+  input Json // agentRunInputSchema; normalized event context, never raw provider payloads
+  workspaceId String? @unique
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  errorMessage String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  completedAt DateTime?
+
+  @@unique([agentDefinitionId, idempotencyKey])
+  @@index([agentDefinitionId, createdAt])
+  @@index([triggerId, agentDefinitionId])
+  @@index([status, createdAt])
 }
 
 model PeriodicTask {
