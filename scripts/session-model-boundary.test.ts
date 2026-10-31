@@ -27,7 +27,7 @@ it.each([
     mkdirSync(dirname(join(root, path)), { recursive: true });
   }
   writeFileSync(join(root, target), 'export const value = 1;\n');
-  const importPath = relative(dirname(source), target).replace(/\.ts$/, '');
+  const importPath = relative(dirname(source), target).replaceAll('\\', '/').replace(/\.ts$/, '');
   writeFileSync(
     join(root, source),
     `import { value } from '${importPath.startsWith('.') ? importPath : `./${importPath}`}';\nexport const result = value;\n`
