@@ -126,7 +126,7 @@ export const MessageItem = memo(function MessageItem({
           <div
             className={cn(
               'absolute -top-1 -right-1 flex items-center gap-1',
-              'opacity-0 group-hover:opacity-100',
+              'hover-reveal',
               'transition-all',
               'z-10'
             )}

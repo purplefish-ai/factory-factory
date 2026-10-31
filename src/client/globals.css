@@ -5,6 +5,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A secondary touchscreen must keep actions visible even with a primary mouse. */
+@custom-variant mouse-only (@media (hover: hover) and (pointer: fine) and (not (any-pointer: coarse)));
+
+/* Touch actions stay visible at every width; desktop actions reveal on hover or focus. */
+@utility hover-reveal {
+  @media (min-width: 48rem) {
+    @variant mouse-only {
+      &:not(:focus-within):not([data-state='open']):not(
+          :is(.group:hover *, .group:focus-within *)
+        ) {
+        opacity: 0;
+      }
+    }
+  }
+}
+
 :root {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), 'IBM Plex Mono', ui-monospace, monospace;

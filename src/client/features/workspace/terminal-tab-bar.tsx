@@ -66,8 +66,7 @@ export function TerminalTabBar({
               onClick={() => onCloseTab(tab.id)}
               className={cn(
                 'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
-                'opacity-0 group-hover:opacity-100',
-                activeTabId === tab.id && 'opacity-100'
+                activeTabId !== tab.id && 'hover-reveal'
               )}
             >
               <XIcon className="h-3 w-3" />

@@ -5,6 +5,7 @@ export default defineConfig({
   outputDir: 'test-results/mobile',
   testMatch: [
     'mobile-baseline.spec.ts',
+    'hover-actions.spec.ts',
     'workspace-header.spec.ts',
     'agents-responsive.spec.ts',
     'workspace-tools.spec.ts',

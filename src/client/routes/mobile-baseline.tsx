@@ -28,6 +28,7 @@ import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { SettingsTabsList } from './admin/settings-tabs-list';
+import { HoverActionsFixture } from './hover-actions-fixture';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
 import { WorkspaceHeaderFixture } from './workspace-header-fixture';
 import { WorkspaceToolsFixture } from './workspace-tools-fixture';
@@ -157,6 +158,9 @@ export default function MobileBaselinePage() {
         </div>
       </div>
     );
+  }
+  if (searchParams.get('surface') === 'hover-actions') {
+    return <HoverActionsFixture />;
   }
   if (searchParams.get('surface') === 'header') {
     return <WorkspaceHeaderFixture />;

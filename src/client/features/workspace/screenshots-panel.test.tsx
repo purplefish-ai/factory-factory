@@ -8,6 +8,8 @@ import { ScreenshotsPanel } from './screenshots-panel';
 
 const mocks = vi.hoisted(() => ({
   openTab: vi.fn(),
+  deleteScreenshot: vi.fn(),
+  screenshots: [] as { name: string; path: string; size: number }[],
   onTakeScreenshots: vi.fn(),
 }));
 
@@ -35,11 +37,11 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     workspace: {
       deleteScreenshot: {
-        useMutation: () => ({ mutate: vi.fn() }),
+        useMutation: () => ({ mutate: mocks.deleteScreenshot }),
       },
       listScreenshots: {
         useQuery: () => ({
-          data: { screenshots: [] },
+          data: { screenshots: mocks.screenshots },
           isLoading: false,
         }),
       },
@@ -56,10 +58,42 @@ vi.mock('./workspace-panel-context', () => ({
 
 afterEach(() => {
   document.body.innerHTML = '';
+  mocks.screenshots = [];
   vi.clearAllMocks();
 });
 
 describe('ScreenshotsPanel', () => {
+  it('keeps delete and open as independent screenshot actions', () => {
+    mocks.screenshots = [{ name: 'Home', path: 'home.png', size: 1 }];
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() =>
+      root.render(
+        createElement(ScreenshotsPanel, {
+          workspaceId: 'workspace-1',
+          isTakingScreenshots: false,
+        })
+      )
+    );
+    const remove = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Delete screenshot Home"]'
+    );
+    const open = container.querySelector<HTMLButtonElement>('[aria-label="Open screenshot Home"]');
+    expect(remove).not.toBeNull();
+    expect(open).not.toBeNull();
+    expect(container.querySelector('button button')).toBeNull();
+    flushSync(() => remove?.click());
+    expect(mocks.deleteScreenshot).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      path: 'home.png',
+    });
+    expect(mocks.openTab).not.toHaveBeenCalled();
+    flushSync(() => open?.click());
+    expect(mocks.openTab).toHaveBeenCalledWith('screenshot', 'home.png', 'Home');
+    flushSync(() => root.unmount());
+  });
+
   it('shows the retry action again when its controlled loading state clears', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

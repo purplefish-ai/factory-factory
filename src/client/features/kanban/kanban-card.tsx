@@ -194,9 +194,10 @@ function CardArchiveButton({
             size="icon"
             className={cn(
               'h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0',
-              requiresConfirmation && 'opacity-0 group-hover:opacity-100 transition-opacity'
+              requiresConfirmation && 'hover-reveal transition-opacity'
             )}
             onClick={handleClick}
+            aria-label="Archive workspace"
           >
             <ArchiveIcon className="h-3 w-3" />
           </Button>
@@ -249,7 +250,7 @@ function CardTitleIcons({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 shrink-0 hover-reveal transition-opacity"
               aria-label="Rename workspace"
               onClick={(e) => {
                 e.preventDefault();
@@ -271,9 +272,9 @@ function CardTitleIcons({
               size="icon"
               className={cn(
                 'h-6 w-6 shrink-0 relative',
-                !workspace.pendingRequestType &&
-                  'md:opacity-0 md:group-hover:opacity-100 transition-opacity'
+                !workspace.pendingRequestType && 'hover-reveal transition-opacity'
               )}
+              aria-label="Quick Chat"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

@@ -18,7 +18,7 @@ interface CopyMessageButtonProps {
 }
 
 /**
- * A copy-to-clipboard button that appears on hover of the parent message.
+ * A copy button that stays visible on touch and reveals on desktop hover or focus.
  * Shows a checkmark briefly after successful copy.
  */
 export function CopyMessageButton({ textContent, className }: CopyMessageButtonProps) {
@@ -64,7 +64,7 @@ export function CopyMessageButton({ textContent, className }: CopyMessageButtonP
         'bg-background/90 hover:bg-background',
         'border border-border',
         'shadow-sm',
-        'opacity-0 group-hover:opacity-100',
+        'hover-reveal',
         'transition-all',
         'z-10',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
