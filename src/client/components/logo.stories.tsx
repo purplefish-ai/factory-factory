@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import type React from 'react';
-import { Logo, LogoIcon } from './logo';
+import { Logo, LogoIcon, LogoText } from './logo';
 
 const meta = {
   title: 'Components/Logo',
@@ -83,4 +83,20 @@ export const OnLightBackground: Story = {
       </div>
     ),
   ],
+};
+
+export const Wordmark: Story = {
+  render: () => <LogoText className="text-6xl" />,
+};
+
+export const SidebarLockup: Story = {
+  args: { iconClassName: 'size-8', textClassName: 'text-base' },
+};
+
+export const StackedLockup: Story = {
+  args: {
+    iconClassName: 'size-16',
+    textClassName: 'text-2xl',
+    className: 'flex-col gap-3',
+  },
 };
