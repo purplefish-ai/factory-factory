@@ -15,18 +15,15 @@ export function byNewest(a: ServerWorkspace, b: ServerWorkspace): number {
 }
 
 export function groupWorkspaceSwitcherItems(workspaces: ServerWorkspace[]): WorkspaceSwitchGroups {
-  const todo = workspaces
-    .filter((workspace) => workspace.kanbanColumn === 'WAITING' && !workspace.pendingRequestType)
-    .sort(byNewest);
   const waiting = workspaces
-    .filter((workspace) => workspace.kanbanColumn === 'WAITING' && workspace.pendingRequestType)
+    .filter((workspace) => workspace.kanbanColumn === 'WAITING')
     .sort(byNewest);
   const working = workspaces
     .filter((workspace) => workspace.kanbanColumn === 'WORKING')
     .sort(byNewest);
   const done = workspaces.filter((workspace) => workspace.kanbanColumn === 'DONE').sort(byNewest);
 
-  return { todo, waiting, working, done };
+  return { working, waiting, done };
 }
 
 export function getWorkspaceHeaderLabel(

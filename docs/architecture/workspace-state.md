@@ -237,6 +237,10 @@ application migration.
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
 plus the columns `WORKING`, `WAITING`, `DONE`.
 
+The workspace switcher groups workspaces under Working, Waiting, and Done in
+board order. All WAITING workspaces share one group regardless of pending
+request type; Todo is reserved for the board's issue intake column.
+
 The column is a projection of `statusReason.code` through
 `KANBAN_COLUMN_BY_STATUS_REASON_CODE`
 (`src/shared/kanban-column-projection.ts`), derived on every read and never

@@ -15,16 +15,16 @@ type TestWorkspace = {
 };
 
 describe('groupWorkspaceSwitcherItems', () => {
-  it('groups workspaces by kanban state and pending status, newest first', () => {
+  it('groups workspaces by Kanban column regardless of pending status, newest first', () => {
     const workspaces: TestWorkspace[] = [
       {
-        id: 'todo-old',
+        id: 'waiting-old',
         createdAt: '2025-01-01T00:00:00.000Z',
         kanbanColumn: 'WAITING',
         pendingRequestType: null,
       },
       {
-        id: 'todo-new',
+        id: 'waiting-new',
         createdAt: '2025-02-01T00:00:00.000Z',
         kanbanColumn: 'WAITING',
         pendingRequestType: null,
@@ -51,8 +51,12 @@ describe('groupWorkspaceSwitcherItems', () => {
 
     const grouped = groupWorkspaceSwitcherItems(workspaces as never[]);
 
-    expect(grouped.todo.map((workspace) => workspace.id)).toEqual(['todo-new', 'todo-old']);
-    expect(grouped.waiting.map((workspace) => workspace.id)).toEqual(['waiting']);
+    expect(Object.keys(grouped)).toEqual(['working', 'waiting', 'done']);
+    expect(grouped.waiting.map((workspace) => workspace.id)).toEqual([
+      'waiting',
+      'waiting-new',
+      'waiting-old',
+    ]);
     expect(grouped.working.map((workspace) => workspace.id)).toEqual(['working']);
     expect(grouped.done.map((workspace) => workspace.id)).toEqual(['done']);
   });
