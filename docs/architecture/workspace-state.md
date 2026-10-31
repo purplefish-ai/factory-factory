@@ -277,6 +277,11 @@ without a column is a compile error. WAITING is positively asserted — it means
 human owns the next action — and a code with no obvious home belongs in WORKING.
 Archived workspaces derive no column at all so they stay off the board.
 
+A merged or closed PR places an idle workspace in Done. Starting a session or
+sending another chat prompt moves it to Working while the session is active;
+pending user requests still take precedence. Once idle, the terminal PR places
+it back in Done.
+
 Codex tasks remain automation-owned between turns. An `active` goal keeps the
 workspace in WORKING even when no prompt is currently in flight; paused,
 blocked, limited, completed and cleared goals do not.
