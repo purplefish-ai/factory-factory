@@ -51,10 +51,14 @@ export function useSubagentTimelineMessages(
   }, [pages, sessionId]);
   const events = useMemo(() => createSubagentTimelineEvents(subagents), [subagents]);
   const runningSubagentIconIndices = useMemo(() => {
+    // Earlier-created agents can arrive on later pages and shift every index.
+    if (hasNextPage || errorMessage) {
+      return [];
+    }
     const indices = getSubagentIconIndices(subagents);
     const activeIds = new Set(subagents.filter(isActiveSubagent).map((agent) => agent.id));
     return [...indices].filter(([id]) => activeIds.has(id)).map(([, index]) => index);
-  }, [subagents]);
+  }, [subagents, hasNextPage, errorMessage]);
   const timelineMessages = useMemo(
     () => mergeSubagentTimeline(messages, events),
     [messages, events]

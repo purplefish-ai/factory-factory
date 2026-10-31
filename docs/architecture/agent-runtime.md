@@ -792,24 +792,24 @@ sub-agent count in chat opens the right panel and selects Sessions. Its stored
 panel key remains `agents`; child-workspace access remains available for parent
 workspaces. The count shows the assigned icons of up to three active sub-agents
 in creation order; larger groups keep the full count without adding more icons.
-While summaries are unavailable, the count remains visible without placeholder
-agent icons. The Sessions list, lifecycle rows, and sub-agent tabs share twelve
-nature icons assigned by session-wide creation order (with agent ID breaking
-ties), keeping assignments when agents finish. Additional agents use distinct
-numbered badges instead of repeating icons. Tabs preserve the assigned icon
-color and pulse while starting or running. Unknown creation times sort last. Its
-header counts active (starting, running, or waiting) sub-agents; terminal agents
-remain under the separate collapsible Completed count. The panel automatically
-loads all summary pages before showing the active count, so children on later
-provider pages are included. A page failure keeps loaded rows visible and offers
-Retry without displaying a partial count. Repeated provider cursors stop
-automatic pagination and offer the same recovery instead of repeatedly fetching
-the same page. Sub-agent tabs also load all summary pages, even after finding
-the selected child, so earlier-created agents on later pages receive the same
-icon ordering. Restored transcript selection uses the same cursor guard. Live
-sub-agent events invalidate list queries by parent session, without cursor or
-page-size fields, so infinite-query caches refresh newly spawned and completed
-children without a page reload.
+Until all summary pages load without errors, the count remains visible without
+placeholder agent icons. The Sessions list, lifecycle rows, and sub-agent tabs
+share twelve nature icons assigned by session-wide creation order (with agent ID
+breaking ties), keeping assignments when agents finish. Additional agents use
+distinct numbered badges instead of repeating icons. Tabs preserve the assigned
+icon color and pulse while starting or running. Unknown creation times sort
+last. Its header counts active (starting, running, or waiting) sub-agents;
+terminal agents remain under the separate collapsible Completed count. The panel
+automatically loads all summary pages before showing the active count, so
+children on later provider pages are included. A page failure keeps loaded rows
+visible and offers Retry without displaying a partial count. Repeated provider
+cursors stop automatic pagination and offer the same recovery instead of
+repeatedly fetching the same page. Sub-agent tabs also load all summary pages,
+even after finding the selected child, so earlier-created agents on later pages
+receive the same icon ordering. Restored transcript selection uses the same
+cursor guard. Live sub-agent events invalidate list queries by parent session,
+without cursor or page-size fields, so infinite-query caches refresh newly
+spawned and completed children without a page reload.
 
 The chat timeline projects provider creation and completion timestamps into
 separate, muted sub-agent start and finish rows. Failure, cancellation, and
