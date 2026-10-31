@@ -60,7 +60,7 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        'flex touch-none p-px select-none transition-opacity duration-300 opacity-0 hover:opacity-100 group-hover/scroll:opacity-100',
+        'flex touch-none p-px select-none transition-opacity duration-300 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 hover:opacity-100 group-hover/scroll:opacity-100 group-focus-within/scroll:opacity-100',
         orientation === 'vertical' && 'h-full w-2.5 border-l border-l-transparent',
         orientation === 'horizontal' && 'h-2.5 flex-col border-t border-t-transparent',
         className

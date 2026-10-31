@@ -142,7 +142,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 hover-reveal transition-opacity"
                   onClick={handleStartEdit}
                   disabled={isSaving}
                   aria-label="Rename workspace"
@@ -153,7 +153,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 hover-reveal transition-opacity"
                 onClick={() => setDetailsOpen(true)}
                 aria-label="View workspace details"
               >

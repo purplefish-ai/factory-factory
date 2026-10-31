@@ -140,34 +140,38 @@ function ScreenshotThumbnail({
   );
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative aspect-video rounded-md border bg-muted/30 overflow-hidden hover:border-primary/50 transition-colors cursor-pointer"
-    >
-      {isLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : data ? (
-        <img
-          src={`data:${data.mimeType};base64,${data.data}`}
-          alt={screenshot.name}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      ) : null}
-      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="group relative aspect-video rounded-md border bg-muted/30 overflow-hidden hover:border-primary/50 transition-colors cursor-pointer">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Open screenshot ${screenshot.name}`}
+        className="absolute inset-0"
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : data ? (
+          <img
+            src={`data:${data.mimeType};base64,${data.data}`}
+            alt={screenshot.name}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : null}
+      </button>
+      <div className="absolute top-1 right-1 hover-reveal transition-opacity">
         <button
           type="button"
           onClick={handleDelete}
+          aria-label={`Delete screenshot ${screenshot.name}`}
           className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
         >
           <XIcon className="h-3 w-3" />
         </button>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">
         {screenshot.name}
       </div>
-    </button>
+    </div>
   );
 }

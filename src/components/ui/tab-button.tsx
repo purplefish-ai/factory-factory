@@ -120,9 +120,8 @@ export function TabButton({
           onClick={handleClose}
           className={cn(
             'ml-1 rounded p-0.5 transition-opacity',
-            'opacity-100 md:opacity-0',
-            'hover:bg-muted-foreground/20 md:focus-visible:opacity-100',
-            'md:group-hover:opacity-100'
+            'hover-reveal',
+            'hover:bg-muted-foreground/20'
           )}
           aria-label={`Close ${label}`}
         >

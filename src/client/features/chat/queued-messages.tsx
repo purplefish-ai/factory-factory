@@ -33,7 +33,7 @@ export function QueuedMessages({ messages, onRemove }: QueuedMessagesProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-5 w-5 hover-reveal transition-opacity"
                 onClick={() => onRemove(msg.id)}
                 aria-label="Remove queued message"
               >

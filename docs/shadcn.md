@@ -27,7 +27,8 @@ current toast styling.
   descriptions belong inside the modal so outside-content hiding does not hide
   their accessible labels.
 - ScrollArea retains `viewportRef`, viewport `onScroll`, `smoothScroll`,
-  both-axis scrollbars and hover visibility. File and diff viewers depend on
+  both-axis scrollbars and hover visibility on fine-pointer devices. Touch
+  scrollbars remain visible while mounted. File and diff viewers depend on
   these.
 - Sidebar retains localStorage/cookie persistence, its 18rem width, full-width
   mobile layout, keyboard shortcut, and application height/overflow behavior.
@@ -44,6 +45,19 @@ current toast styling.
   default, and thumb surfaces use the application background in both themes.
 - Menu inset attributes are present only when enabled. Keep semantic popover
   headings, visible tab-panel focus rings, and the existing sheet title size.
+
+## Touch and keyboard action visibility
+
+Secondary actions use the `hover-reveal` utility from `src/client/globals.css`.
+It hides actions only at desktop widths with a fine pointer and hover support,
+and reveals them when their parent `group` is hovered or contains keyboard
+focus. On touch devices (including wide tablets) and narrow screens, actions
+remain visible. Use this for card, message, screenshot and tab actions rather
+than unconditional `opacity-0` or width-only hover rules. Named sidebar and
+scrollbar groups use equivalent pointer media queries.
+
+The `Responsive/HoverActions` Storybook story and
+`pnpm test:e2e:mobile e2e/hover-actions.spec.ts` exercise these states.
 
 ## CSS and dependencies
 
