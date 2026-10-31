@@ -388,6 +388,7 @@ it('preserves an in-memory draft and allows clearing its text while disk storage
     (button) => button.textContent === 'Discard draft'
   );
   expect(discard).toBeUndefined();
+  expect(second.container.textContent).not.toContain('Reset saved draft');
   actFlushSync(() => {
     setter?.call(second.textarea, '');
     second.textarea.dispatchEvent(new Event('input', { bubbles: true }));

@@ -441,7 +441,14 @@ export function InlineWorkspaceForm({
   return (
     <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
       <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
-        <DraftPersistenceWarning message={recovery.persistenceError} />
+        <DraftPersistenceWarning
+          message={recovery.persistenceError}
+          hasUnreadableDraft={recovery.hasUnreadableDraft}
+          onReset={() => {
+            void recovery.discardDraft().catch(() => undefined);
+          }}
+          disabled={isBusy}
+        />
         {submission.error && (
           <p role="alert" className="text-xs text-destructive">
             {submission.error}
@@ -584,10 +591,25 @@ function getLaunchDisabledReason(restoring: boolean, workspaceOptions: boolean, 
   return restoring ? 'Restoring draft' : workspaceOptions ? reason : undefined;
 }
 
-function DraftPersistenceWarning({ message }: { message: string | null }) {
+function DraftPersistenceWarning({
+  message,
+  hasUnreadableDraft,
+  onReset,
+  disabled,
+}: {
+  message: string | null;
+  hasUnreadableDraft: boolean;
+  onReset: () => void;
+  disabled: boolean;
+}) {
   return message ? (
-    <p role="alert" className="text-xs text-destructive">
-      {message}
-    </p>
+    <div role="alert" className="space-y-1 text-xs text-destructive">
+      <p>{message}</p>
+      {hasUnreadableDraft && (
+        <Button variant="outline" size="sm" onClick={onReset} disabled={disabled}>
+          Reset saved draft
+        </Button>
+      )}
+    </div>
   ) : null;
 }

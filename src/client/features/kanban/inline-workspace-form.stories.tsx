@@ -320,6 +320,17 @@ export const RestoredDraft: Story = {
 };
 
 export const UnrestorableDraft: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('could not be restored');
+    await expect(canvas.queryByRole('button', { name: 'Discard draft' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Reset saved draft' }));
+    await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
+    await expect(
+      canvas.queryByRole('button', { name: 'Reset saved draft' })
+    ).not.toBeInTheDocument();
+    await expect(canvas.getByRole('textbox')).toHaveValue('');
+  },
   args: { projectId: 'preview-corrupt-draft' },
   loaders: [
     async () => {

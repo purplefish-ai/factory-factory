@@ -72,7 +72,8 @@ reopens it. Clear instructions by selecting and deleting the text; remove
 attachments with their individual remove controls. Navigation and refresh
 restore saved inputs. Browser storage failures appear in the form while editing
 remains available; keep the tab open when a warning says changes could not be
-saved.
+saved. If a saved draft is unreadable, **Reset saved draft** appears beside the
+restore warning to remove the invalid stored record and keep the editor open.
 
 Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
