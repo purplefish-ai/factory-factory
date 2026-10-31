@@ -8,6 +8,61 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-31
+
+### Added
+
+- Add first-class Tailscale access with CLI setup and diagnostics (#2728)
+- Support standalone web app installation on mobile (#2729)
+- Show GitHub issue previews on conversation links (#2719)
+
+### Changed
+
+- Reduce React re-renders while sessions stream (#2713)
+- Show agent icons on Kanban cards and distinct sub-agent icons across lists,
+  timelines, and workspace tabs (#2714, #2715, #2725)
+- Simplify collapsed tool activity summaries, model previews, and chat account
+  labels (#2726, #2737)
+- Align workspace switcher groups with Kanban columns (#2731)
+- Add a tabbed mobile tools drawer and tighten workspace tool navigation (#2733,
+  #2740)
+- Use the gear logo across the app and installation icons, with Jost Black for
+  the stacked wordmark (#2734, #2739)
+
+### Fixed
+
+- Preserve task creation drafts across navigation and failed submissions, and
+  keep setup retry and cleanup controls available without a chat session (#2741)
+- Keep newly created workspaces in Working through initial session launch and
+  show newly created tasks in Working on mobile (#2727, #2732)
+- Restore chat messages without dropping or merging replies, preserve transcript
+  order, and exclude injected provider context and compaction summaries from
+  restored history (#2721)
+- Restore complete transcripts for resumed Codex sub-agents (#2724)
+- Keep thinking updates from shifting the chat conversation (#2736)
+- Keep Codex accounts usable when another account's login ends or native
+  credentials move from keyring to file storage, and reject stale identity
+  observations (#2718)
+- Fix desktop backend races during window closing and application shutdown
+  (#2717)
+- Keep the backend running when run scripts fail to spawn, preserve dev-log
+  subscriptions across restarts, and clean up worktrees after initialization
+  failures (#2722)
+- Avoid misreporting GitHub CLI failures as authentication errors, skip
+  repositories with Issues disabled in issue search, and prevent duplicate PR
+  attachments caused by URL casing (#2723)
+- Wait for the complete backend port announcement before starting the proxy
+  (#2720)
+- Prevent settings menu overflow on narrow screens and keep hover-only actions
+  accessible on phones, tablets, and hybrid devices (#2730, #2738)
+- Accept JPEG attachments with trailing capture metadata (#2735)
+- Stabilize tests that time out under full-suite load (#2716)
+
+### Security
+
+- Enforce proxy login lockouts for in-flight attempts and preserve active
+  lockouts when concurrent requests fail (#2720)
+
 ## [0.5.1] - 2026-10-30
 
 ### Added
