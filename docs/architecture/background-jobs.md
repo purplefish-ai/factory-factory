@@ -4,10 +4,10 @@ Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
 sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, the
-periodic-task poll, and workspace metadata updates. Each service registers its
-job in its constructor and keeps a thin `start()`/`stop()` that delegates —
-those delegators are the injection seam `server.ts` and `server.upgrade.test.ts`
-use, not leftovers.
+periodic-task poll, GitHub agent source intake, and workspace metadata updates.
+Each service registers its job in its constructor and keeps a thin
+`start()`/`stop()` that delegates — those delegators are the injection seam
+`server.ts` and `server.upgrade.test.ts` use, not leftovers.
 
 ## Pacing
 
@@ -57,6 +57,13 @@ interruptibility is a shutdown concern rather than a scheduling feature.
 — bounding it would change shutdown to abandon work mid-flight.
 
 ## Timer dispatch ownership
+
+The `agent-source-poll` job runs immediately, then waits 60 seconds after each
+cycle. It reads at most ten issue-event pages per repository per cycle, shared
+between capture and verification. Its GitHub port uses the existing CLI budget
+and cancellation signal. Shutdown stops and drains this intake before stopping
+provider sessions or disconnecting the database. This job does not evaluate
+events, activate saved triggers, or launch workspaces.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule

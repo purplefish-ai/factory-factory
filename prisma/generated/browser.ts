@@ -169,6 +169,16 @@ export type AgentRun = Prisma.AgentRunModel
  */
 export type AgentSourceState = Prisma.AgentSourceStateModel
 /**
+ * Model AgentSourcePage
+ * Immutable ordered feed/control identities. PR and unsupported content is never retained.
+ */
+export type AgentSourcePage = Prisma.AgentSourcePageModel
+/**
+ * Model AgentSourceBaseline
+ * Prepared provider head; an ordinal is assigned only after all older captured events.
+ */
+export type AgentSourceBaseline = Prisma.AgentSourceBaselineModel
+/**
  * Model AgentEvent
  * 
  */

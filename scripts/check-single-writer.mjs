@@ -527,6 +527,10 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
  * that gap for the workspace side tables and other single-writer models.
  */
 const OWNED_SIDE_TABLES = {
+  agentEvent: 'src/backend/services/agent-definition/resources/agent-event.accessor.ts',
+  agentSourceState: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
+  agentSourcePage: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
+  agentSourceBaseline: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   workspacePRDedicatedSession:
     'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
   sessionLifecycleEvent:

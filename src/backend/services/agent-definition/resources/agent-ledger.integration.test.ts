@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
+  createLedgerFixture,
+  executionConfig,
+} from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
+import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { Prisma } from '@prisma-gen/client';
-import { createLedgerFixture, executionConfig } from './agent-ledger.test-support';
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
@@ -72,7 +75,7 @@ it('defers unfinalized GitHub events and never compares numerical provider event
   const first = await runtime.ingestEvent(github('99999999999999999999'));
   const waiting = await evaluation(first.eventId);
   expect(waiting).toMatchObject({ status: 'DEFERRED', reason: 'SOURCE_ORDER_PENDING' });
-  await runtime.finalizeEventOrder({ connectionId, eventIds: [first.eventId] });
+  await fixture.finalize({ connectionId, eventIds: [first.eventId] });
   await db.prisma.agentTrigger.update({
     where: { id: triggerId },
     data: {
@@ -103,7 +106,7 @@ it('admits a definition/event exactly once across concurrent delivery and admiss
   if (!id) {
     throw new Error('Concurrent delivery returned no event');
   }
-  await runtime.finalizeEventOrder({ connectionId, eventIds: [id] });
+  await fixture.finalize({ connectionId, eventIds: [id] });
   const outcomes = await Promise.all([admit(id), admit(id), admit(id)]);
   expect(outcomes.map((result) => result.status).sort()).toEqual([
     'ADMITTED',
@@ -347,7 +350,7 @@ it('rejects automatic admission for event text older than 30 days despite a fres
     },
   };
   const captured = await runtime.ingestEvent(old);
-  await runtime.finalizeEventOrder({ connectionId, eventIds: [captured.eventId] });
+  await fixture.finalize({ connectionId, eventIds: [captured.eventId] });
   expect(await evaluation(captured.eventId)).toEqual({
     status: 'REJECTED',
     reason: 'EVENT_EXPIRED',
@@ -406,7 +409,7 @@ it('enforces the absolute event-age limit at admission even with a future payloa
   const incoming = github('ancient');
   incoming.payload.occurredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
   const captured = await runtime.ingestEvent(incoming);
-  await runtime.finalizeEventOrder({ connectionId, eventIds: [captured.eventId] });
+  await fixture.finalize({ connectionId, eventIds: [captured.eventId] });
   await db.prisma.agentEvent.update({
     where: { id: captured.eventId },
     data: { payloadExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },

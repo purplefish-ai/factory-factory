@@ -1,4 +1,5 @@
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
+import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orchestrator';
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
@@ -130,6 +131,7 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
+  agentRuntime: ReturnType<typeof createAgentRuntime>;
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
@@ -316,6 +318,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     slackConnectionService,
     agentProposalService,
     agentAuthoring: createAgentAuthoring(() => services),
+    agentRuntime: createAgentRuntime(),
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,
@@ -553,6 +556,7 @@ export function createApplication(
 }
 
 export async function disposeApplication(application: Application): Promise<void> {
+  await application.services.agentRuntime?.stop();
   await application.services.workspaceMetadata?.stop();
   await application.services.codexAccountService.shutdown();
   application.lifecycle.eventCollector.stop();

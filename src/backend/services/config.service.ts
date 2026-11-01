@@ -344,6 +344,7 @@ function loadAgentRuntimeLimits() {
     activeGlobal: env.AGENT_ACTIVE_GLOBAL,
     waitingPerDefinition: env.AGENT_WAITING_PER_DEFINITION,
     waitingExpiryMs: 24 * 60 * 60 * 1000,
+    githubPagesPerCycle: 10,
   };
 }
 

@@ -109,6 +109,10 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       start: vi.fn(),
       stop: vi.fn(async () => undefined),
     },
+    agentRuntime: {
+      start: vi.fn(),
+      stop: vi.fn(async () => undefined),
+    },
     reconciliationService: {
       cleanupOrphans: vi.fn(async () => undefined),
       reconcile: vi.fn(async () => undefined),
@@ -467,6 +471,7 @@ describe('server websocket upgrade routing', () => {
     expect(lifecycle.eventCollector.configure).not.toHaveBeenCalled();
     expect(lifecycle.snapshotReconciliation.configure).not.toHaveBeenCalled();
     expect(lifecycle.snapshotReconciliation.start).toHaveBeenCalledOnce();
+    expect(application.services.agentRuntime.start).toHaveBeenCalledOnce();
   });
 
   it('rejects concurrent start calls without running startup cleanup', async () => {
@@ -769,6 +774,10 @@ describe('server websocket upgrade routing', () => {
     await server.stop();
 
     expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
+    expect(harness.services.agentRuntime.stop).toHaveBeenCalledOnce();
+    expect(harness.services.agentRuntime.stop.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.services.sessionLifecycleService.stopAllClients.mock.invocationCallOrder[0] ?? 0
+    );
     expect(harness.services.sessionLifecycleService.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();

@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import { createLedgerFixture } from './agent-ledger.test-support';
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;

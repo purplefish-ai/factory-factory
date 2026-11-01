@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('./orchestration/agent-runtime.orchestrator', () => ({
+  createAgentRuntime: () => ({ start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) }),
+}));
 import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

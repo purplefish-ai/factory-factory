@@ -311,8 +311,8 @@ stored snapshots; future run writers must keep them immutable.
 The agent-definition capsule also owns the durable event runtime foundation:
 `AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
 Its barrel exports `ingestEvent`, `finalizeEventOrder`, `recordEvaluation`,
-`admitRun` and `claimNextRun`. These are persistence primitives; no listener,
-activation API, launch worker or automatic execution starts from them.
+`admitRun` and `claimNextRun`. These are persistence primitives; no activation
+API, launch worker or automatic execution starts from them.
 
 Events use the immutable `(connectionId, providerEventId)` identity and bounded,
 versioned GitHub/Slack payload schemas. Evaluations retain their definition and
@@ -335,6 +335,38 @@ older than its provider head before recording that boundary's ordinal. A head
 can be a PR or unsupported control event with no executable event row, including
 an ordinal of zero. Slack compares exact provider timestamp strings against
 verified per-channel boundaries.
+
+GitHub intake uses authenticated repository issue-event reads through the shared
+`GitHubCLIService` budget. Only `labeled` issue events enter the executable
+ledger; PRs and other actions retain only their feed identities as control
+anchors. The configured project path must resolve to the connection's numeric
+repository identity on each cycle, including after repository renames. Paused
+authoring remains inert: only active triggers or explicit starting activations
+on non-archived projects are source targets.
+
+`AgentSourcePage` retains immutable page identities, captured event references,
+and completed interval high water. Capture, event insertion and continuation
+commit in one transaction. Capture and a second ordered verification traversal
+share the ten-page cycle budget, resume with persisted overlap, and keep the
+original head fixed. New head events wait for the next interval. Missing anchors
+or observed sequence changes stop intake with `RECOVERY_REQUIRED`; no cursor is
+silently reset. GitHub's offset pages are not a snapshot, so these checks detect
+observed discontinuity rather than guarantee lossless capture under arbitrary
+provider deletion or reordering. Finalization requires verified durable scan
+evidence and commits each oldest-first chunk with its progress before another
+interval can start.
+
+`AgentSourcePollService.prepareBaseline(connectionId, signal)` requires an
+active or starting source and returns a baseline ID plus a nullable boundary. An
+initial baseline saves the actual head (or empty marker) without backfilling
+historical events. An already-polled source retains a prepared head in
+`AgentSourceBaseline` until all older events have canonical ordinals;
+`getBaseline(connectionId, id)` reads that result. A non-executable head can
+have ordinal zero. Retained completed-interval evidence also resolves
+preparation that races a newer commit, even after event rows are pruned. These
+methods do not enable any trigger; trusted activation and its
+revision/generation checks remain separate work. Source page and baseline
+retention cleanup is likewise a separate worker.
 
 Defaults are one active run per definition, four globally, 100 waiting runs per
 definition and 24-hour waiting expiry. The first three limits are configurable
