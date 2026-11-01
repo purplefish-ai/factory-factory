@@ -23,6 +23,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-launch-origin.accessor',
   },
+  workspaceEventInitAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-event-init.accessor',
+  },
   agentSourceAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-source.accessor',

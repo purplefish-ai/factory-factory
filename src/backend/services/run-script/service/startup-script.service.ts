@@ -13,6 +13,11 @@ import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants
 import { createLogger } from '@/backend/services/logger.service';
 import type { Project, Workspace } from '@prisma-gen/client';
 import type { RunScriptWorkspaceBridge } from './bridges';
+import {
+  EventSetupError,
+  executeEventStartupScript,
+  type EventStartupScriptOptions,
+} from './event-startup-script';
 
 const logger = createLogger('startup-script');
 
@@ -60,6 +65,43 @@ class StartupScriptService {
       );
     }
     return this.workspaceBridge;
+  }
+
+  async runEventStartupScript(
+    workspace: Workspace,
+    project: Project,
+    options: EventStartupScriptOptions
+  ) {
+    if (!workspace.worktreePath) {
+      throw new EventSetupError('FAILED', 'CONFIRMED', 'Workspace has no worktree path');
+    }
+    await options.assertCurrent();
+    const args = this.buildBashArgs(
+      workspace.worktreePath,
+      project.startupScriptCommand,
+      project.startupScriptPath
+    );
+    if (!args) {
+      return { success: true };
+    }
+    if (!args.args) {
+      throw new EventSetupError('FAILED', 'CONFIRMED', args.error);
+    }
+    if (project.startupScriptPath) {
+      const readable = await this.validateScriptReadable(
+        project.startupScriptPath,
+        workspace.worktreePath
+      );
+      if (!readable.readable) {
+        throw new EventSetupError('FAILED', 'CONFIRMED', readable.error ?? 'Script is unreadable');
+      }
+    }
+    return executeEventStartupScript({
+      ...options,
+      cwd: workspace.worktreePath,
+      args: args.args,
+      timeoutMs: (project.startupScriptTimeout ?? 300) * 1000,
+    });
   }
 
   /**

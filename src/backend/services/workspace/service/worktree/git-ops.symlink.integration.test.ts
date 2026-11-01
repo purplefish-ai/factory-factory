@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -50,8 +50,22 @@ describe('worktree removal through a symlinked base directory', () => {
         await rm(worktreePath, { recursive: true, force: true });
       }
 
+      await expect(
+        gitOpsService.prepareWorktreeCreation({ repoPath, worktreeBasePath }, 'workspace')
+      ).rejects.toThrow(missing === 'worktree-missing' ? 'retained' : 'preexisting');
+      expect((await git('worktree', 'list', '--porcelain')).stdout).toContain(
+        'refs/heads/test-branch'
+      );
+
       if (missing === 'base-link-missing') {
         await rm(worktreeBasePath);
+        await expect(
+          gitOpsService.confirmWorktreeAbsent(
+            worktreePath,
+            { repoPath, worktreeBasePath },
+            await realpath(actualBase)
+          )
+        ).rejects.toMatchObject({ code: 'ENOENT' });
         await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });
         expect((await git('worktree', 'list', '--porcelain')).stdout).toContain(
           'refs/heads/test-branch'
@@ -65,6 +79,16 @@ describe('worktree removal through a symlinked base directory', () => {
       expect((await git('worktree', 'list', '--porcelain')).stdout).not.toContain(
         'refs/heads/test-branch'
       );
+      await expect(
+        gitOpsService.prepareWorktreeCreation({ repoPath, worktreeBasePath }, 'workspace')
+      ).resolves.toEqual({ worktreePath, canonicalBasePath: await realpath(actualBase) });
+      await expect(
+        gitOpsService.confirmWorktreeAbsent(
+          worktreePath,
+          { repoPath, worktreeBasePath },
+          await realpath(actualBase)
+        )
+      ).resolves.toBe(true);
       await expect(
         git('worktree', 'add', path.join(worktreeBasePath, 'replacement'), 'test-branch')
       ).resolves.toBeDefined();

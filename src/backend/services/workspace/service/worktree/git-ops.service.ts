@@ -246,6 +246,44 @@ class GitOpsService {
     }
   }
 
+  /** Absence preflight only: this does not reserve a path or prove later creation ownership. */
+  async prepareWorktreeCreation(project: ProjectPaths, worktreeName: string) {
+    const gitClient = GitClientFactory.forProject(project);
+    const worktreePath = gitClient.getWorktreePath(worktreeName);
+    if (await worktreeEntryExists(worktreePath)) {
+      throw new Error('Refusing event creation at a preexisting worktree path');
+    }
+    // Git creation also ensures this base; retain its identity for later absence inspection.
+    await fs.mkdir(project.worktreeBasePath, { recursive: true });
+    const canonicalBasePath = await fs.realpath(project.worktreeBasePath);
+    if (!(await this.confirmWorktreeAbsent(worktreePath, project, canonicalBasePath))) {
+      throw new Error('Refusing event creation at a retained Git worktree registration');
+    }
+    return { worktreePath, canonicalBasePath };
+  }
+
+  async confirmWorktreeAbsent(
+    worktreePath: string,
+    project: ProjectPaths,
+    expectedCanonicalBase: string
+  ): Promise<boolean> {
+    const gitClient = GitClientFactory.forProject(project);
+    const name = path.basename(worktreePath);
+    if (path.resolve(worktreePath) !== path.resolve(gitClient.getWorktreePath(name))) {
+      throw new Error('Worktree candidate does not match the configured project path');
+    }
+    if (await worktreeEntryExists(worktreePath)) {
+      return false;
+    }
+    const canonicalBase = await fs.realpath(project.worktreeBasePath);
+    if (canonicalBase !== expectedCanonicalBase) {
+      throw new Error('Worktree base identity changed during creation');
+    }
+    const canonicalPath = path.join(canonicalBase, name);
+    const entries = await gitClient.listWorktreesWithBranches();
+    return !entries.some((entry) => path.resolve(entry.path) === canonicalPath);
+  }
+
   async createWorktree(
     project: ProjectPaths,
     worktreeName: string,
@@ -324,3 +362,15 @@ class GitOpsService {
 }
 
 export const gitOpsService = new GitOpsService();
+
+async function worktreeEntryExists(worktreePath: string): Promise<boolean> {
+  try {
+    await fs.lstat(worktreePath);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}

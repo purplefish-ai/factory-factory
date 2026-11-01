@@ -650,8 +650,11 @@ async function createWorktreeForWorkspace(
   });
 }
 
-async function resolveWorkspaceWorktree(input: {
-  workspaceWithProject: WorkspaceWithProject;
+export async function resolveWorkspaceWorktree(input: {
+  workspaceWithProject: Pick<
+    WorkspaceWithProject,
+    'id' | 'name' | 'project' | 'worktreePath' | 'branchName'
+  >;
   worktreeName: string;
   baseBranch: string;
   useExistingBranch: boolean;
@@ -854,7 +857,7 @@ async function runWorkspaceInitialization(
   }
 }
 
-function enqueueWorkspaceInitializationTask<T>(
+export function enqueueWorkspaceInitializationTask<T>(
   workspaceId: string,
   task: () => Promise<T>
 ): Promise<T> {

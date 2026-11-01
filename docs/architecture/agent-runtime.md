@@ -755,6 +755,43 @@ permissions. These APIs neither initialize a provider nor dispatch a prompt;
 observed delivery, setup/restart orchestration and runtime wiring remain
 separate work.
 
+The strict event workspace initializer shares the ordinary initializer's
+per-workspace queue and worktree preparation. It validates the reserved session
+and current run claim, then runs factory setup and project startup scripts
+without the ordinary auto-message or first-IDLE-session path. Workspace writes
+recheck the claim, lease, retained origins and live entities in the workspace
+owner's transaction. An aborted or superseded initializer cannot publish a late
+worktree or READY. The caller owns run linkage, lease renewal and eventual
+initial dispatch; the initializer does not enqueue or send a prompt. No claim
+consumer is wired yet.
+
+State publication revalidates the claim and emits the current row; unrelated
+metadata writes cannot suppress READY, and notification failures cannot undo a
+validated commit. Rejected observer promises are diagnosed without awaiting
+observers or delaying later subscribers. A missing retained READY worktree
+becomes FAILED under the same claim and path fence, preserving its path and
+provenance for inspection. Recovery must not infer safe reinitialization from
+PROVISIONING alone: the future consumer must preserve uncertain physical-work
+evidence and retain capacity until current cleanup proof permits reset.
+Persisted PIDs never grant process ownership.
+
+Event setup has a fifteen-minute deadline. Uncancellable Git work remains owned
+until it drains; timeout does not abandon its promise. Abort and script timeout
+stop the current owned setup process group and distinguish confirmed cleanup
+from UNKNOWN, including while output and PID writes drain after foreground exit.
+Git's absence preflight does not reserve a path or prove ownership of later
+physical work. A successful creation result permits safe cleanup only under a
+fresh durable claim and caller ownership, checked independently of cancellation.
+If creation rejects without that result, remaining disk or registration effects
+are retained as UNKNOWN. CONFIRMED requires positive absence on disk and in Git
+under the unchanged, available canonical base identity. Inspection failure is
+UNKNOWN. Unknown cleanup forbids retry or capacity release. Ordinary nonzero
+script exits still produce READY with a warning, and successful scripts may
+retain background dev servers. Invalid configuration and execution errors return
+explicit failures. Event initialization does not create an unattended terminal
+or send a Linear status update; a user can open a terminal afterward. Ordinary
+interactive, child and periodic initialization retain their policies.
+
 ## Session lifecycle ownership
 
 `SessionLifecycleGate` owns domain startup/stop eligibility. Workspace

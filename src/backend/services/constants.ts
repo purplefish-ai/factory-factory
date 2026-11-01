@@ -10,6 +10,7 @@ export const SERVICE_LIMITS = Object.freeze({
 
 export const SERVICE_TIMEOUT_MS = Object.freeze({
   agentLaunchLease: 60_000,
+  eventWorkspaceSetup: 15 * 60 * 1000,
   claudeCliVersionCheck: 5000,
   claudeCliAuthCheck: 5000,
   codexCliVersionCheck: 5000,
