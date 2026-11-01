@@ -204,6 +204,65 @@ describe('history hydration after provider identity rollover', () => {
     expect(loadCodex.mock.calls.every(([input]) => input.providerSessionId === 'new')).toBe(true);
   });
 
+  it.each([false, true])(
+    'defers tool backfill while streaming (turn starts during history read: %s)',
+    async (startsDuringRead) => {
+      const sessionId = 'history-session';
+      sessionDomainService.resetProviderHistory(sessionId, 'saved');
+      const reply: ChatMessage = {
+        id: `${sessionId}-7`,
+        source: 'agent',
+        order: 7,
+        timestamp: '2026-01-01T00:00:02Z',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Partial reply' }] },
+        },
+      };
+      sessionDomainService.replaceTranscript(sessionId, [reply], { historySource: 'acp_fallback' });
+      if (!startsDuringRead) {
+        sessionDomainService.markRunning(sessionId);
+      }
+      const read = createDeferred<unknown>();
+      loadCodex.mockReturnValueOnce(read.promise);
+      const hydration = hydrateProviderHistoryIfNeeded(sessionId, record('saved'));
+      sessionDomainService.markRunning(sessionId);
+      const history = {
+        status: 'loaded',
+        filePath: '/tmp/fixture.jsonl',
+        history: [
+          {
+            type: 'tool_use',
+            content: '',
+            timestamp: '2026-01-01T00:00:00Z',
+            toolName: 'exec_command',
+            toolId: 'missing-tool',
+            toolInput: { cmd: 'pwd' },
+          },
+          {
+            type: 'tool_result',
+            content: '/tmp',
+            timestamp: '2026-01-01T00:00:01Z',
+            toolId: 'missing-tool',
+          },
+        ],
+      };
+      read.resolve(history);
+      await hydration;
+      expect(sessionDomainService.getTranscriptSnapshot(sessionId)).toEqual([reply]);
+      expect(sessionDomainService.getHistoryHydrationSource(sessionId)).not.toBe('jsonl');
+
+      // A later idle load can safely recover the missing tools.
+      sessionDomainService.markIdle(sessionId, 'alive');
+      loadCodex.mockResolvedValueOnce(history);
+      await hydrateProviderHistoryIfNeeded(sessionId, record('saved'));
+      const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+      expect(transcript).toHaveLength(3);
+      expect(transcript.at(-1)?.id).toBe(reply.id);
+      expect(sessionDomainService.getHistoryHydrationSource(sessionId)).toBe('jsonl');
+    }
+  );
+
   it('backfills new Codex tools into a live transcript and rejects stale tools across rollover', async () => {
     const toolHistory = (id: string) => ({
       status: 'loaded',

@@ -273,6 +273,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionLoadService: createSessionLoadService({
       domain: {
         getTranscriptSnapshot: (id) => services.sessionDomainService.getTranscriptSnapshot(id),
+        getRuntimeSnapshot: (id) => services.sessionDomainService.getRuntimeSnapshot(id),
         createProviderHistoryFence: (id, providerId) =>
           services.sessionDomainService.createProviderHistoryFence(id, providerId),
         isHistoryHydrated: (id) => services.sessionDomainService.isHistoryHydrated(id),

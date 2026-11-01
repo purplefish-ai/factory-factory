@@ -28,6 +28,7 @@ export type ProviderHistoryHydrationDomain = Pick<
   SessionDomainService,
   | 'createProviderHistoryFence'
   | 'getTranscriptSnapshot'
+  | 'getRuntimeSnapshot'
   | 'isHistoryHydrated'
   | 'getHistoryHydrationSource'
   | 'markHistoryHydrated'
@@ -303,6 +304,14 @@ function backfillCodexToolTranscript(
     loadStart: number;
   }
 ): void {
+  // Backfill renumbers transcript orders. An active text block still publishes at
+  // its original order, so replacing it here makes clients reject later deltas.
+  // Check after the asynchronous history read, since a turn may start during it.
+  const { phase } = domain.getRuntimeSnapshot(sessionId);
+  if (phase === 'starting' || phase === 'running' || phase === 'stopping') {
+    return;
+  }
+
   const backfilledTranscript = backfillMissingCodexToolTranscript(
     latestTranscript,
     loadedTranscript

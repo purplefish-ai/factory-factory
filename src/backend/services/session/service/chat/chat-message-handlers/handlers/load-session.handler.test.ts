@@ -65,6 +65,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
     emitDelta: mocks.emitDelta,
     createProviderHistoryFence: () => () => true,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
+    getRuntimeSnapshot: mocks.getRuntimeSnapshot,
     isHistoryHydrated: mocks.isHistoryHydrated,
     getHistoryHydrationSource: mocks.getHistoryHydrationSource,
     canAttemptHistoryHydration: mocks.canAttemptHistoryHydration,
@@ -289,7 +290,6 @@ describe('load application history hydration', () => {
     await vi.waitFor(() => {
       expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1);
     });
-
     mocks.getTranscriptSnapshot.mockReturnValue([
       {
         id: 'msg-during-load',
