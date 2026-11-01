@@ -858,8 +858,9 @@ The transcript follows the main chat's visibility rules: reasoning-only entries
 are hidden, and tool sequences expand to show earlier activity. A child that
 writes only final replies can therefore look like a short result summary even
 when its complete tool history is available. The scroll-to-bottom control
-appears only when content remains below the viewport, independently of reading
-mode.
+appears only in reading mode when content remains below the viewport. The
+content-below measurement is independent of reading intent, so fitting content
+hides the control without resuming automatic following.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
