@@ -14,7 +14,10 @@ flatten the validated record into `conversationSummary` on the shared workspace
 contract. Snapshots carry it through reconciliation and reconnects; global
 search matches summary text and returns a matching snippet. Cards show two
 summary lines; sidebar rows show one focus line. Hovering exposes the full
-summary and update time. Operational status and CI badges remain authoritative.
+summary and update time. Summaries use one short sentence (at most 25 words)
+about current activity or the latest meaningful result, omitting decisions,
+plans, next-step lists, and empty status statements. Operational status and CI
+badges remain authoritative.
 
 The first committed user message queues initial metadata. Completed turns queue
 incremental updates using the original objective, previous summary, and bounded

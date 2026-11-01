@@ -110,7 +110,7 @@ describe('disposable metadata inference', () => {
           persistSession: false,
           settingSources: [],
           strictMcpConfig: true,
-          systemPrompt: expect.stringContaining('current position'),
+          systemPrompt: expect.stringContaining('what is happening in the work now'),
           settings: { disableAllHooks: true },
         }),
       })
