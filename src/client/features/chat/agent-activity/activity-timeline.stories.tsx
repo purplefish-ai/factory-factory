@@ -130,3 +130,28 @@ export const LongCommand: Story = {
     },
   },
 };
+
+export const SelectableMessages: Story = {
+  args: { item: items[0]! },
+  render: (args) => (
+    <div className="mx-auto max-w-3xl space-y-2">
+      <GroupedMessageItemRenderer
+        {...args}
+        item={{
+          id: 'user-prompt',
+          source: 'user',
+          text: 'Select message text to copy it.',
+          order: 0,
+          timestamp: '2026-10-31T12:00:00Z',
+        }}
+      />
+      <GroupedMessageItemRenderer
+        {...args}
+        item={prose(
+          'assistant-reply',
+          'User and assistant messages support native text selection.'
+        )}
+      />
+    </div>
+  ),
+};

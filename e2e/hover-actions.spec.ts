@@ -13,12 +13,11 @@ for (const width of [375, 820]) {
       await page.goto('/__mobile-baseline?surface=hover-actions');
       await expect(
         page.getByRole('button', { name: 'Copy message to clipboard', exact: true })
-      ).toHaveCount(2);
+      ).toHaveCount(0);
       for (const name of [
         'Rename workspace',
         'Archive workspace',
         'Quick Chat',
-        'Copy message to clipboard',
         'Rewind files to before this message',
         'Delete screenshot Home',
         'Close File',
@@ -78,6 +77,12 @@ for (const width of [375, 820]) {
 test('desktop actions reveal on hover and keyboard focus', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/__mobile-baseline?surface=hover-actions');
+  await expect(
+    page.getByRole('button', { name: 'Copy message to clipboard', exact: true })
+  ).toHaveCount(0);
+  for (const text of ['User prompt', 'Assistant response']) {
+    await expect(page.getByText(text, { exact: true })).toBeVisible();
+  }
   const rename = page.getByRole('button', { name: 'Rename workspace' });
   await expect(rename).toHaveCSS('opacity', '0');
   await rename.focus();

@@ -1,14 +1,11 @@
 import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
-import { CopyIcon } from '@phosphor-icons/react/dist/csr/Copy';
 import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/client/features/composer';
-import { runInBackground } from '@/client/lib/background-task';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
-import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/chat-protocol';
+import { isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';
 import { ParentWorkspaceUpdateRenderer } from './message-renderers/parent-workspace-update-renderer';
@@ -32,30 +29,6 @@ import {
  */
 function getMessageText(text: string | undefined): string {
   return text ?? '';
-}
-
-function getAssistantCopyText(message: ChatMessage['message']): string | null {
-  if (!message) {
-    return null;
-  }
-
-  const extracted = extractTextFromMessage(message);
-  if (extracted) {
-    return extracted;
-  }
-
-  if (
-    message.message &&
-    Array.isArray(message.message.content) &&
-    message.message.content.length === 1
-  ) {
-    const firstContent = message.message.content[0];
-    if (firstContent && isThinkingContent(firstContent)) {
-      return firstContent.thinking;
-    }
-  }
-
-  return null;
 }
 
 function isPRUpdateMessage(message: ChatMessage): boolean {
@@ -165,36 +138,6 @@ export const MessageItem = memo(function MessageItem({
         <div className="group relative w-full max-w-full">
           {/* Queued actions reserve a row so they cannot cover message text. */}
           <div className={getUserMessageActionsClassName(isQueued)}>
-            {/* Copy button */}
-            {userText && (
-              <button
-                onClick={() => {
-                  runInBackground(
-                    (async () => {
-                      try {
-                        await navigator.clipboard.writeText(userText);
-                      } catch {
-                        // Silently fail
-                      }
-                    })(),
-                    'Could not copy message'
-                  );
-                }}
-                onMouseDown={(e) => e.preventDefault()}
-                className={cn(
-                  'p-1.5 rounded-md',
-                  'bg-background/90 hover:bg-background',
-                  'border border-border',
-                  'shadow-sm',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                title="Copy to clipboard"
-                type="button"
-                aria-label="Copy message to clipboard"
-              >
-                <CopyIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-              </button>
-            )}
             {/* Rewind button for messages with tracked UUIDs */}
             {userMessageUuid && onRewindToMessage && (
               <button
@@ -274,27 +217,14 @@ export const MessageItem = memo(function MessageItem({
 
   // Claude messages
   if (message.message) {
-    const assistantText = getAssistantCopyText(message.message);
     return (
       <MessageWrapper>
-        {assistantText !== null ? (
-          <div className="group relative">
-            <AssistantMessageRenderer
-              message={message.message}
-              messageId={message.id}
-              resolveWorkspaceFileLink={resolveWorkspaceFileLink}
-              onWorkspaceFileLink={onWorkspaceFileLink}
-            />
-            <CopyMessageButton textContent={assistantText} />
-          </div>
-        ) : (
-          <AssistantMessageRenderer
-            message={message.message}
-            messageId={message.id}
-            resolveWorkspaceFileLink={resolveWorkspaceFileLink}
-            onWorkspaceFileLink={onWorkspaceFileLink}
-          />
-        )}
+        <AssistantMessageRenderer
+          message={message.message}
+          messageId={message.id}
+          resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+          onWorkspaceFileLink={onWorkspaceFileLink}
+        />
       </MessageWrapper>
     );
   }

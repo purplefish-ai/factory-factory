@@ -285,3 +285,9 @@ and `load-session.handler.recovery.test.ts`.
 `src/client/features/chat/reducer/result-dedup.test.ts` covers result
 deduplication across live and replay paths. Consult the current tests for exact
 ordering and recovery contracts rather than inferring guarantees from a diagram.
+
+## Message text selection
+
+User and assistant messages use native text selection for copying on mobile and
+desktop. Message rows have no copy buttons; rewind and queued-message actions
+remain available.
