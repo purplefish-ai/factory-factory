@@ -82,7 +82,8 @@ A transient source error defers waiting work; disabled connections and
 continuity recovery failures cancel it. Malformed non-null source health fails
 closed as invalid stored data. Deferred claims report CAPACITY for confirmed
 capacity limits; source/retry waits report WAITING. Maintenance advances its
-cursor only after the database transaction commits. Claims committed before
+cursor only after the database transaction commits. Expiry and retry gates use
+time captured after acquiring the ledger write lock. Claims committed before
 pause are in-flight work. The defaults remain one active run per definition,
 four globally, 100 waiting per definition and a 24-hour waiting expiry. Overflow
 is terminal for that whole definition/event, including overlapping triggers

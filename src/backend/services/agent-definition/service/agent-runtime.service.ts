@@ -22,10 +22,10 @@ export function recordEvaluation(input: AgentEvaluationInput) {
 export function admitRun(input: AgentAdmissionInput) {
   return agentRunAccessor.admitRun(input);
 }
-export function claimNextRun(now = new Date()) {
+export function claimNextRun(now?: Date) {
   return agentRunClaimAccessor.claimNextRun(now);
 }
 
-export function maintainQueue(now = new Date()) {
+export function maintainQueue(now?: Date) {
   return agentRunClaimAccessor.maintainQueue(now);
 }

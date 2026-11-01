@@ -28,6 +28,13 @@ it('hydrates a bounded candidate page with bulk reads while preserving pair owne
   const first = await fixture.event('first');
   const second = await fixture.event('second');
   await fixture.evaluation(first);
+  const { configService } = await vi.importActual<
+    typeof import('@/backend/services/config.service')
+  >('@/backend/services/config.service');
+  vi.spyOn(configService, 'getAgentRuntimeLimits').mockReturnValue({
+    ...configService.getAgentRuntimeLimits(),
+    evaluationBatchSize: 3,
+  });
   const triggerReads = vi.spyOn(db.prisma.agentTrigger, 'findUnique');
   const eventReads = vi.spyOn(db.prisma.agentEvent, 'findUnique');
   const evaluationReads = vi.spyOn(db.prisma.agentEvaluation, 'findFirst');
@@ -45,7 +52,6 @@ it('hydrates a bounded candidate page with bulk reads while preserving pair owne
     ['trigger-a', first, 'MATCHED'],
     ['trigger-a', second, null],
     ['trigger-b', first, null],
-    ['trigger-b', second, null],
   ]);
   expect(
     triggerReads.mock.calls.length +
@@ -55,4 +61,25 @@ it('hydrates a bounded candidate page with bulk reads while preserving pair owne
   expect(triggerBatches).toHaveBeenCalledOnce();
   expect(eventBatches).toHaveBeenCalledOnce();
   expect(evaluationBatches).toHaveBeenCalledOnce();
+  expect(result.cursor).toEqual({ triggerId: 'trigger-b', eventId: first });
+  const next = await candidates.agentEvaluationCandidatesAccessor.pending(result.cursor);
+  expect(
+    next.candidates.map(({ trigger, event, evaluation }) => [
+      trigger.id,
+      event.id,
+      evaluation?.status ?? null,
+    ])
+  ).toEqual([['trigger-b', second, null]]);
+  expect(next.cursor).toEqual({ triggerId: 'trigger-b', eventId: second });
+  expect(await candidates.agentEvaluationCandidatesAccessor.pending(next.cursor)).toEqual({
+    candidates: [],
+    cursor: null,
+  });
+  const restarted = await candidates.agentEvaluationCandidatesAccessor.pending(null);
+  expect(restarted.candidates.map(({ trigger, event }) => [trigger.id, event.id])).toEqual([
+    ['trigger-a', first],
+    ['trigger-a', second],
+    ['trigger-b', first],
+  ]);
+  expect(restarted.cursor).toEqual(result.cursor);
 });

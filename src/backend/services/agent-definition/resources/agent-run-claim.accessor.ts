@@ -129,16 +129,18 @@ async function maintainInTransaction(tx: Prisma.TransactionClient, now: Date) {
   }
   return queued.at(-1)?.id ?? null;
 }
-async function maintainQueue(now = new Date()) {
-  const cursor = await ledgerTransaction((tx) => maintainInTransaction(tx, now));
+async function maintainQueue(now?: Date) {
+  const cursor = await ledgerTransaction((tx) => maintainInTransaction(tx, now ?? new Date()));
   maintenanceCursor = cursor;
 }
 
 /** The serialized transition to RUNNING is the pause/launch linearization point. */
-async function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
+async function claimNextRun(now?: Date): Promise<AgentClaimResult> {
   const committed = await ledgerTransaction(async (tx) => {
-    const cursor = await maintainInTransaction(tx, now);
-    const result = await claimInTransaction(tx, now);
+    // The operation runs after ledgerTransaction acquires SQLite's write lock.
+    const evaluatedAt = now ?? new Date();
+    const cursor = await maintainInTransaction(tx, evaluatedAt);
+    const result = await claimInTransaction(tx, evaluatedAt);
     return { cursor, result };
   });
   maintenanceCursor = committed.cursor;
