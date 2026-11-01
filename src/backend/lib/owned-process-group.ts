@@ -16,41 +16,32 @@ export async function stopOwnedProcessGroup(
     return 'UNKNOWN';
   }
   const signal = options.signal ?? ((target, value) => process.kill(target, value));
-  const probe = () => {
+  const probe = (allowPermissionUncertainty = false): 'PRESENT' | 'ABSENT' | 'UNCERTAIN' => {
     options.assertOwned?.();
     try {
       signal(-groupPid, 0);
-      return true;
+      return 'PRESENT';
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
-        return false;
-      }
-      throw error;
+      return resolveProbeError(error, allowPermissionUncertainty);
     }
   };
   const timeout = Math.max(1, Math.min(options.timeoutMs ?? 5000, 10_000));
   const deadline = Date.now() + timeout;
   try {
-    if (!probe()) {
+    if (probe() === 'ABSENT') {
       return 'LOCAL_RUNTIME_GROUP_STOPPED';
     }
     options.assertOwned?.();
     signal(-groupPid, 'SIGTERM');
-    let escalated = false;
-    while (probe()) {
-      if (!escalated && Date.now() >= deadline - timeout / 2) {
+    return await waitForGroupDisappearance(
+      probe,
+      () => {
         options.assertOwned?.();
         signal(-groupPid, 'SIGKILL');
-        escalated = true;
-      }
-      if (Date.now() >= deadline) {
-        return probe() ? 'UNKNOWN' : 'LOCAL_RUNTIME_GROUP_STOPPED';
-      }
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, Math.min(20, Math.max(1, deadline - Date.now())))
-      );
-    }
-    return 'LOCAL_RUNTIME_GROUP_STOPPED';
+      },
+      deadline,
+      timeout
+    );
   } catch {
     return 'UNKNOWN';
   }
@@ -61,4 +52,45 @@ function ownedGroupPid(handle: OwnedProcessGroup, platform: NodeJS.Platform): nu
   return platform !== 'win32' && pid !== undefined && pid > 1 && pid === handle.child.pid
     ? pid
     : undefined;
+}
+
+function resolveProbeError(
+  error: unknown,
+  allowPermissionUncertainty: boolean
+): 'ABSENT' | 'UNCERTAIN' {
+  if (error instanceof Error && 'code' in error) {
+    if (error.code === 'ESRCH') {
+      return 'ABSENT';
+    }
+    if (allowPermissionUncertainty && error.code === 'EPERM') {
+      return 'UNCERTAIN';
+    }
+  }
+  throw error;
+}
+
+async function waitForGroupDisappearance(
+  probe: (allowPermissionUncertainty: boolean) => 'PRESENT' | 'ABSENT' | 'UNCERTAIN',
+  escalate: () => void,
+  deadline: number,
+  timeout: number
+): Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'> {
+  let escalated = false;
+  while (true) {
+    // A post-signal EPERM is uncertainty, never disappearance or permission to escalate.
+    const state = probe(true);
+    if (state === 'ABSENT') {
+      return 'LOCAL_RUNTIME_GROUP_STOPPED';
+    }
+    if (state === 'PRESENT' && !escalated && Date.now() >= deadline - timeout / 2) {
+      escalate();
+      escalated = true;
+    }
+    if (Date.now() >= deadline) {
+      return probe(true) === 'ABSENT' ? 'LOCAL_RUNTIME_GROUP_STOPPED' : 'UNKNOWN';
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, Math.min(20, Math.max(1, deadline - Date.now())))
+    );
+  }
 }

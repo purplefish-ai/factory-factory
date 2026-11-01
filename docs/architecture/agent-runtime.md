@@ -1095,17 +1095,19 @@ The targeted `interruptEventInitial` capability records the requested lifecycle
 cause without ordinary user-stop finalization or clearing queued human input.
 Monitoring supplies the exact expected attempt and runtime source; replacement
 or unavailable source blocks the action, including after awaited owner reads.
-Cleanup of a finished initial failure waits for ordinary follow-ups and known
-agent work to finish. Initial dispatch cancellation shares the existing evidence
-deadlines and fences late observations; it does not close global authority.
-Already-started observation writes remain tracked for final session teardown.
-Setup cancellation joins actual Git operations and script cleanup directly, so
-uncancellable Git may outlive the setup deadline while retaining ownership.
-Durable reads and output/PID persistence use the existing bounded evidence
-drain; expiration closes the launch guard permanently. A late read cannot start
-physical work or a new write, and any already-started physical operation still
-drains directly. A settled UNKNOWN setup cleanup has no reusable process-control
-handle in the launcher; missing local state is never used as termination proof.
+Targeted ownership-read failure or timeout fails closed; ordinary explicit stop
+and global shutdown keep their separate physical-cleanup fallback. Cleanup of a
+finished initial failure waits for ordinary follow-ups and known agent work to
+finish. Initial dispatch cancellation shares the existing evidence deadlines and
+fences late observations; it does not close global authority. Already-started
+observation writes remain tracked for final session teardown. Setup cancellation
+joins actual Git operations and script cleanup directly, so uncancellable Git
+may outlive the setup deadline while retaining ownership. Durable reads and
+output/PID persistence use the existing bounded evidence drain; expiration
+closes the launch guard permanently. A late read cannot start physical work or a
+new write, and any already-started physical operation still drains directly. A
+settled UNKNOWN setup cleanup has no reusable process-control handle in the
+launcher; missing local state is never used as termination proof.
 
 The send boundary persists SENDING after session serialization and provider
 configuration readiness. It then rechecks the captured runtime, lifecycle and
@@ -1127,12 +1129,22 @@ separate reconciliation concern. Later human results cannot overwrite it.
 Normal settlement requires the current initial runtime's live tracking window,
 established before its send, and zero in-flight prompts, interactive requests,
 active goals, native children and non-shell agent tasks. Shell/dev-server-only
-work does not retain capacity. Non-archived FF child workspaces conservatively
-retain capacity independently of native tracking. Missing tracking, replay,
-source replacement and restart without live coverage remain unknown; history
-inspection never starts a provider. A terminal failure/cancellation, unexpected
-exit, timeout or workspace removal also needs correlated strict runtime-stop
-evidence. The original four-hour turn deadline uses the durable send timestamp.
+work does not retain capacity. FF child-workspace creation is retained by its
+workspace owner, including through archive and deletion, and holds parent
+capacity independently of native tracking. The current ordinary child lifecycle
+cannot supply positive child-work cleanup proof: archive, deletion, IDLE and a
+successful legacy stop return cannot resolve that hold. Recovery and UI must not
+advertise those operations as resolution; supported positive child cleanup still
+requires implementation before activation. Missing tracking, replay, source
+replacement and restart without live coverage remain unknown; history inspection
+never starts a provider. A newly created event-workspace origin marks complete
+child-history capture in its creation transaction. Historical origins remain
+unknown; importing a matching workspace revokes that coverage even when the
+workspace already exists. Backfilling surviving children retains holds but does
+not certify an empty history. A terminal failure/cancellation, unexpected exit,
+timeout or workspace removal also needs correlated strict runtime-stop evidence.
+The original four-hour turn deadline uses the durable send timestamp. SHUTDOWN
+uncertainty remains reserved for recovery and does not fall through to timeout.
 
 The owner transaction persists the work proof and terminal result together,
 checking worker, send attempt and current source. Settlement linearizes at its
@@ -1150,7 +1162,12 @@ between observations, explicit operator resolution/retry and ledger pruning
 remain activation prerequisites. Monitoring never auto-archives a workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
-LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. Adapter
+LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A
+permission-uncertain probe after a successful owned signal may wait within the
+existing stop deadline, but does not permit escalation or count as absence.
+Initial probe errors, signal errors and lost ownership remain unconfirmed.
+Stopped-work proof also requires the retained stop source to match the original
+source; every new runtime registration invalidates that retained proof. Adapter
 exit, a signal acknowledgment, cancellation acknowledgment, a missing handle or
 an IDLE snapshot is insufficient. Unsupported executable overrides, Windows
 without conclusive tree evidence, and uncertain cleanup report UNKNOWN. Live

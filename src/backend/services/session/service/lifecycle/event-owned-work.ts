@@ -64,6 +64,8 @@ export class EventOwnedWork {
   private covered(window: Window, attempt: InitialAttempt, source: ProviderSource, facts: Facts) {
     return (
       this.windows.get(attempt.sessionId) === window &&
+      // Worker takeover changes the lease, not this physical send. Owner writes
+      // separately fence the current worker; every send identity remains exact.
       isDeepStrictEqual(
         { ...window.attempt, workerGeneration: attempt.workerGeneration },
         attempt
@@ -78,11 +80,13 @@ export class EventOwnedWork {
     const id = window.attempt.sessionId;
     const handle = this.runtime.getClient(id);
     if (stopped) {
-      return !(
-        handle ||
-        window.handle.isRunning() ||
-        this.runtime.hasClientCreationOperation(id) ||
-        this.lifecycle.isSessionStopping(id)
+      return (
+        // No live handle alone cannot exclude a replacement that has already stopped.
+        isDeepStrictEqual(this.runtime.getRuntimeStopSource(id), window.source) &&
+        !handle &&
+        !window.handle.isRunning() &&
+        !this.runtime.hasClientCreationOperation(id) &&
+        !this.lifecycle.isSessionStopping(id)
       );
     }
     return (

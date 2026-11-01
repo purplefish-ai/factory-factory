@@ -85,16 +85,37 @@ async function settlementFor(
   if (!terminal || ((terminal !== 'COMPLETED' || unavailable) && !stopped)) {
     return null;
   }
-  // This write lock also fences new child-workspace persistence until commit.
-  const child = await tx.workspace.findFirst({
-    where: { parentWorkspaceId: run.reservedWorkspaceId, status: { not: 'ARCHIVED' } },
-    select: { id: true },
-  });
-  if (child) {
+  if (!(await childHistoryIsClear(tx, run))) {
     return null;
   }
   const status = terminal === 'COMPLETED' && result.pullRequests.length ? 'PR_CREATED' : terminal;
   return { evidence, proof, status };
+}
+/** The write lock serializes child creation and its retained origin before settlement. */
+async function childHistoryIsClear(tx: Prisma.TransactionClient, run: Run): Promise<boolean> {
+  const workspaceId = run.reservedWorkspaceId;
+  if (!workspaceId) {
+    return false;
+  }
+  const origin = await tx.workspaceLaunchOrigin.findUnique({ where: { runId: run.id } });
+  if (
+    origin?.childHistoryVersion !== 1 ||
+    origin.workspaceId !== workspaceId ||
+    origin.projectId !== run.agentDefinition.projectId
+  ) {
+    return false;
+  }
+  const child = await tx.workspace.findFirst({
+    where: { parentWorkspaceId: workspaceId },
+    select: { id: true },
+  });
+  if (child) {
+    return false;
+  }
+  return !(await tx.workspaceChildOrigin.findFirst({
+    where: { parentWorkspaceId: workspaceId },
+    select: { childWorkspaceId: true },
+  }));
 }
 function assertAttempt(run: Run, expected: InitialAttempt) {
   const current = initialAttemptSchema.parse({
