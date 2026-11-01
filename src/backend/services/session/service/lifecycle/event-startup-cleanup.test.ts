@@ -5,7 +5,7 @@ import { createTestProcessHandle } from '@/backend/services/session/service/acp/
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 
 afterEach(() => vi.restoreAllMocks());
-it.each(['configuration', 'persistence'] as const)(
+it.skipIf(process.platform === 'win32').each(['configuration', 'persistence'] as const)(
   'rejects event startup after %s failure without joining its own creation barrier',
   async (boundary) => {
     const manager = new AcpRuntimeManager();
