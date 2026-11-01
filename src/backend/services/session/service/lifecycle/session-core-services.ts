@@ -15,6 +15,7 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
+import { EventOwnedWork } from './event-owned-work';
 import { eventSessionAuthority } from './event-session-authority';
 import { ProviderUsageService } from './provider-usage.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
@@ -120,6 +121,11 @@ export type SessionPromptService = Pick<
 export const sessionLifecycleGate = new SessionLifecycleGate({
   isRuntimeStopInProgress: (sessionId) => acpRuntimeManager.isStopInProgress(sessionId),
 });
+export const eventOwnedWork = new EventOwnedWork(
+  acpRuntimeManager,
+  sessionLifecycleGate,
+  sessionDomainService
+);
 
 export const sessionNotificationDeliveryService = new SessionNotificationDeliveryService({
   notificationPort: workspaceNotificationService,
@@ -140,6 +146,7 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
 });
 
 const sessionPromptCoordinator = new SessionService({
+  ownedWork: eventOwnedWork,
   eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
   sessionDomainService,

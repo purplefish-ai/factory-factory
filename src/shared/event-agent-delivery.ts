@@ -12,6 +12,7 @@ export {
   type RuntimeStopEvidence,
 } from './acp-protocol/runtime-observation';
 import { eventAgentExecutionSchema, eventLaunchIdentifierSchema as id } from './event-agent-launch';
+import { eventWorkProofSchema } from './event-agent-work';
 
 export const initialAttemptSchema = z.strictObject({
   runId: id,
@@ -22,6 +23,11 @@ export const initialAttemptSchema = z.strictObject({
   attemptGeneration: z.number().int().positive(),
 });
 export type InitialAttempt = z.infer<typeof initialAttemptSchema>;
+export type ExpectedEventRuntime = {
+  attempt: InitialAttempt;
+  source: ProviderSource;
+  assertCurrent(): void;
+};
 export const initialOutcomeSchema = z
   .strictObject({
     source: providerSourceSchema,
@@ -40,6 +46,7 @@ export const initialDeliveryEvidenceSchema = z.strictObject({
   source: providerSourceSchema.optional(),
   outcome: initialOutcomeSchema.optional(),
   stop: runtimeStopEvidenceSchema.optional(),
+  work: eventWorkProofSchema.optional(),
 });
 export type InitialDeliveryEvidence = z.infer<typeof initialDeliveryEvidenceSchema>;
 export const initialDeliveryFenceSchema = z.strictObject({

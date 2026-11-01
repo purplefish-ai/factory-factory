@@ -39,6 +39,13 @@ export class AcpObservedStop {
   has(id: string): boolean {
     return this.eventOwnedHandles.has(id) || this.spawnedGroups.has(id);
   }
+  getSource(id: string): ProviderSource | null {
+    const handle = this.eventOwnedHandles.get(id);
+    if (!this.canStopTarget(id, handle)) {
+      return null;
+    }
+    return handle ? this.source(handle) : (this.observedStops.get(id)?.source ?? null);
+  }
   registerSpawn(
     id: string,
     child: ChildProcess,

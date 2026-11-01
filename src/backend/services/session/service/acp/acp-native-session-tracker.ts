@@ -103,6 +103,8 @@ export class AcpNativeSessionTracker {
   private readonly abandonedSessions = new Set<string>();
   private available = false;
   private replayingHistory = false;
+  private workRevision = 0;
+  private coverageGeneration = 0;
   private preserveReplayShellTasks = false;
   private readonly children = new Map<string, ChildSession>();
   private readonly activeTasks = new Map<
@@ -127,6 +129,8 @@ export class AcpNativeSessionTracker {
   }
 
   beginHistoryReplay(preserveShellTasks = false): void {
+    this.coverageGeneration++;
+    this.workRevision++;
     this.stopControls.clear();
     this.replayingHistory = true;
     this.preserveReplayShellTasks = preserveShellTasks;
@@ -159,6 +163,8 @@ export class AcpNativeSessionTracker {
 
   /** Discards abandoned load replay before a replacement session starts publishing. */
   resetSession(): void {
+    this.coverageGeneration++;
+    this.workRevision++;
     if (this.rootSessionId) {
       this.abandonedSessions.add(this.rootSessionId);
     }
@@ -196,6 +202,17 @@ export class AcpNativeSessionTracker {
         (child) => child.summary.status === 'running'
       ).length,
       activeGoals: this.activeGoals.size,
+    };
+  }
+
+  /** Live tracking facts, separate from presentation defaults during history replay. */
+  getWorkObservation() {
+    return {
+      revision: this.workRevision,
+      coverageGeneration: this.coverageGeneration,
+      replaying: this.replayingHistory,
+      rootSessionId: this.rootSessionId,
+      work: this.getBackgroundWork(),
     };
   }
 
@@ -647,6 +664,7 @@ export class AcpNativeSessionTracker {
   }
 
   private publishActivity(): void {
+    this.workRevision++;
     if (this.replayingHistory) {
       return;
     }

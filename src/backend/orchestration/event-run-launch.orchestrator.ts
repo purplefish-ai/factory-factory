@@ -1,3 +1,4 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import { eventRunLaunch, type EventLaunchClaim } from '@/backend/services/agent-definition';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import {
@@ -134,6 +135,9 @@ class EventRunLaunch {
     if (error instanceof EventInitialDispatchInterrupted) {
       cleanup = error.cleanup;
     } else if (this.stage === 'STARTUP') {
+      if (await this.handedOff()) {
+        return;
+      }
       const evidence = await interruptEventInitial(
         this.claim.reservedSessionId,
         this.signal.aborted ? 'SHUTDOWN' : 'TIMEOUT'
@@ -146,6 +150,21 @@ class EventRunLaunch {
       cleanup,
       ...classifyEventPreparationFailure(error),
     });
+  }
+  private async handedOff(): Promise<boolean> {
+    try {
+      const current = await eventRunLaunch.read(this.claim);
+      // Never relabel a prior USER_STOP/exit or immutable result as cleanup TIMEOUT.
+      if (!current.delivery.evidence?.stop && current.delivery.state !== 'FINISHED') {
+        return false;
+      }
+    } catch (error) {
+      if (!(error instanceof ApplicationError && error.code === 'CONFLICT')) {
+        throw error;
+      }
+    }
+    this.physicalStage(false);
+    return true;
   }
 }
 function initialText(run: Run) {

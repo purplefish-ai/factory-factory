@@ -1,7 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { PromptRequest, SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import type {
+  PromptRequest,
+  PromptResponse,
+  SessionConfigOption,
+} from '@agentclientprotocol/sdk/unstable';
 import { vi } from 'vitest';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -11,7 +15,8 @@ import { deferred } from './event-delivery.test-support';
 export function fakeEventProvider(
   Handle: typeof AcpProcessHandle,
   options: AcpClientOptions,
-  beforePrompt: () => Promise<void> = async () => undefined
+  beforePrompt: () => Promise<void> = async () => undefined,
+  tracker?: ConstructorParameters<typeof AcpProcessHandle>[0]['nativeSessionTracker']
 ) {
   const child = Object.assign(new EventEmitter(), {
     pid: undefined,
@@ -28,7 +33,7 @@ export function fakeEventProvider(
       return true;
     }),
   });
-  const response = deferred<{ stopReason: 'end_turn' | 'cancelled' }>();
+  const response = deferred<PromptResponse>();
   const called = deferred<void>();
   const connection = {
     prompt: vi.fn(async (_input: PromptRequest) => {
@@ -53,7 +58,9 @@ export function fakeEventProvider(
     child: unsafeCoerce<ChildProcess>(child),
     connection: unsafeCoerce<ConstructorParameters<typeof Handle>[0]['connection']>(connection),
     agentCapabilities: {},
+    nativeSessionTracker: tracker,
   });
+  tracker?.setRootSessionId(handle.acpSessionId);
   const choices = (id: string, category: string, values: string[]): SessionConfigOption => ({
     id,
     name: id,
@@ -74,5 +81,17 @@ export function fakeEventProvider(
     choices('reasoning_effort', 'thought_level', ['low', 'high']),
     choices('collaboration_mode', 'collaboration_mode', ['default', 'plan']),
   ];
-  return { handle, child, connection, called: called.promise, response, options };
+  return {
+    handle,
+    child,
+    connection,
+    called: called.promise,
+    response,
+    options,
+    update: (update: Record<string, unknown>) =>
+      tracker?.onRawMessage({
+        method: 'session/update',
+        params: { sessionId: handle.acpSessionId, update },
+      }),
+  };
 }

@@ -10,6 +10,7 @@ import {
   type InitialDeliveryFence,
   type ProviderSource,
   type RuntimeStopEvidence,
+  type ExpectedEventRuntime,
 } from '@/shared/event-agent-delivery';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
 import { EventSessionFenceError } from './event-session-fence-error';
@@ -33,6 +34,10 @@ export class EventSessionAuthority {
   constructor(private readonly findOrigin: (id: string) => Promise<EventSessionOrigin | null>) {}
   configure(owner: InitialDeliveryOwnerPort): void {
     this.owner = owner;
+  }
+  /** Monitoring shares the final session observation drain and closure epoch. */
+  observeOwnedWork<T>(operation: (assertCurrent: () => void) => Promise<T>): Promise<T> {
+    return this.observe(operation);
   }
   async read(
     sessionId: string,
@@ -196,11 +201,22 @@ export class EventSessionAuthority {
   recordStop(
     sessionId: string,
     evidence: RuntimeStopEvidence,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    expected?: ExpectedEventRuntime
   ): Promise<void> {
     return this.observe(async (assertCurrent) => {
       const fence = await this.read(sessionId, assertCurrent);
       if (!(fence && this.owner)) {
+        blocked();
+      }
+      expected?.assertCurrent();
+      if (
+        expected &&
+        !(
+          isDeepStrictEqual(fence.attempt, expected.attempt) &&
+          isDeepStrictEqual(fence.evidence?.source, expected.source)
+        )
+      ) {
         blocked();
       }
       assertCurrent();
