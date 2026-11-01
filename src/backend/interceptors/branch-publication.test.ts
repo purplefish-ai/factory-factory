@@ -129,7 +129,9 @@ it.each(['git', 'database'] as const)(
     const interceptor = createBranchNamingInterceptor();
     try {
       if (failure === 'git') {
-        mocks.git.mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'failed' });
+        mocks.git
+          .mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'failed' })
+          .mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'fallback failed' });
       } else {
         mocks.persist.mockRejectedValueOnce(new Error('rollback'));
       }

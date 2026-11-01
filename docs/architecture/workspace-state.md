@@ -22,11 +22,12 @@ recent human/assistant text. Tools, reasoning, images, and repository
 instructions are excluded. A jobRunner job checks pending work every ten
 seconds, coalesces turns per workspace, and limits inference to once per two
 minutes. Pending final updates run after the cooldown without requiring another
-message. Newer turns invalidate in-flight results; persisted request IDs reject
-superseded writes. Provider failures retain existing summaries and back off up
-to ten minutes. Shutdown aborts inference and drains the job. Pending requests
-are process-local; after restart, new conversation activity queues another
-update.
+message. Newer completed turns invalidate in-flight results; unfinished
+follow-ups preserve the pending completed-turn snapshot. Persisted request IDs
+reject superseded writes. Provider failures retain existing summaries and back
+off up to ten minutes. Shutdown aborts inference and drains the job. Pending
+requests are process-local; after restart, new conversation activity queues
+another update.
 
 Helpers use the conversation's provider and account: Luna with low reasoning for
 Codex, Haiku for Claude. They use short custom instructions, no working-session

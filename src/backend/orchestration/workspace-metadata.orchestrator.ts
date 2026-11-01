@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { buildWorkspaceMetadataInput } from '@/backend/prompts/workspace-metadata';
+import {
+  buildWorkspaceMetadataInput,
+  metadataMessageId,
+} from '@/backend/prompts/workspace-metadata';
 import { SERVICE_INTERVAL_MS, SERVICE_LIMITS } from '@/backend/services/constants';
 import { type JobRunner, jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -91,16 +94,8 @@ export class WorkspaceMetadataOrchestrator {
     this.initialSessions.clear();
   }
 
-  private skipInitial(sessionId: string, initialOnly: boolean, sequence: number): boolean {
-    if (!(initialOnly && this.initialSessions.has(sessionId))) {
-      return false;
-    }
-    const workspaceId = this.initialSessions.get(sessionId);
-    if (workspaceId) {
-      this.latestSchedules.set(workspaceId, { sequence, at: this.now() });
-      this.pending.delete(workspaceId);
-    }
-    return true;
+  private skipInitial(sessionId: string, initialOnly: boolean): boolean {
+    return initialOnly && this.initialSessions.has(sessionId);
   }
 
   private rememberSession(sessionId: string, workspaceId: string | null) {
@@ -113,9 +108,20 @@ export class WorkspaceMetadataOrchestrator {
     }
   }
 
+  private preservesCompletedTurn(workspaceId: string, initialOnly: boolean) {
+    return initialOnly && this.pending.get(workspaceId)?.initialOnly === false;
+  }
+
+  private queueFull(workspaceId: string) {
+    return (
+      !this.pending.has(workspaceId) &&
+      this.pending.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
+    );
+  }
+
   async schedule(sessionId: string, initialOnly = false): Promise<void> {
     const sequence = ++this.sequence;
-    if (this.skipInitial(sessionId, initialOnly, sequence)) {
+    if (this.skipInitial(sessionId, initialOnly)) {
       return;
     }
     if (initialOnly) {
@@ -131,14 +137,14 @@ export class WorkspaceMetadataOrchestrator {
         return;
       }
       this.rememberSession(sessionId, session.workspaceId);
+      if (this.preservesCompletedTurn(session.workspaceId, initialOnly)) {
+        return;
+      }
       const history = snapshot ?? this.dependencies.history(sessionId);
       if (!history.some((m) => m.type === 'user')) {
         return;
       }
-      if (
-        !this.pending.has(session.workspaceId) &&
-        this.pending.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
-      ) {
+      if (this.queueFull(session.workspaceId)) {
         return;
       }
       // Capture text now; later events replace this entry and invalidate in-flight inference.
@@ -264,14 +270,27 @@ export class WorkspaceMetadataOrchestrator {
     if (signal.aborted || this.stopped || this.pending.get(workspaceId) !== entry) {
       return;
     }
-    const current = buildWorkspaceMetadataInput(this.dependencies.history(entry.sessionId), null);
-    if (current.sourceMessageId && current.sourceMessageId !== input.sourceMessageId) {
-      // A follow-up arrived during inference; its completion will queue another update.
+    if (!this.hasCapturedSource(entry.sessionId, input.sourceMessageId)) {
+      // Rewritten history invalidates the snapshot; appended unfinished turns do not.
       this.discard(workspaceId, entry);
       return;
     }
     await this.acceptResult(workspace, entry, requestId, result, input.sourceMessageId, signal);
     this.discard(workspaceId, entry);
+  }
+
+  private hasCapturedSource(sessionId: string, sourceMessageId: string): boolean {
+    const history = this.dependencies.history(sessionId);
+    if (history.length === 0) {
+      return true;
+    }
+    for (let index = history.length - 1; index >= 0; index--) {
+      const message = history[index];
+      if (message && metadataMessageId(message) === sourceMessageId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async acceptResult(

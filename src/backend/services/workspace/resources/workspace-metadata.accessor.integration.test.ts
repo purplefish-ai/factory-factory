@@ -43,6 +43,7 @@ it('rolls back summaries and names invalidated while acceptance is in progress',
     sourceSessionId: 's',
     sourceMessageId: 'm',
     generatedAt: new Date(),
+    // Permit the entry guard, then invalidate at the post-write guard to exercise rollback.
     isCurrent: () => ++checks === 1,
   });
   expect(accepted).toBeNull();

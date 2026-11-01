@@ -47,6 +47,48 @@ function setup() {
 }
 const signal = () => new AbortController().signal;
 describe('workspace metadata orchestration', () => {
+  it('rejects results when provider recovery replaces the captured transcript', async () => {
+    const { service, dependencies, history, result } = setup();
+    let resolve!: (value: typeof result) => void;
+    dependencies.generate.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        })
+    );
+    await service.schedule('s');
+    const work = service.run(signal());
+    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    history.splice(0, history.length, {
+      type: 'user',
+      content: 'A replacement conversation',
+      timestamp: 'new',
+    });
+    resolve(result);
+    await work;
+    expect(dependencies.accept).not.toHaveBeenCalled();
+  });
+
+  it('preserves a completed snapshot when another session starts an unfinished follow-up', async () => {
+    const { service, dependencies, history, advance } = setup();
+    await service.schedule('s');
+    await service.run(signal());
+    history.push({ type: 'user', content: 'Completed follow-up', timestamp: '2' });
+    await service.schedule('s');
+    dependencies.findSession.mockResolvedValue({
+      id: 'other',
+      workspaceId: 'w',
+      provider: 'CODEX',
+      codexAccountId: 'account',
+    });
+    await service.schedule('other', true);
+    advance(120_000);
+    await service.run(signal());
+    expect(dependencies.accept).toHaveBeenCalledTimes(2);
+    expect(dependencies.accept).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceSessionId: 's' })
+    );
+  });
   it('keeps newer activity when asynchronous session lookups resolve out of order', async () => {
     const { service, dependencies, history } = setup();
     let resolve!: (value: {
@@ -238,7 +280,7 @@ describe('workspace metadata orchestration', () => {
     expect(dependencies.reserve).not.toHaveBeenCalled();
   });
 
-  it('avoids transcript and database work on subsequent initial-message notifications while invalidating pending work', async () => {
+  it('avoids redundant initial-message work without dropping a completed turn summary', async () => {
     const { service, dependencies, history, result, advance } = setup();
     await service.schedule('s', true);
     await service.run(signal());
@@ -262,6 +304,25 @@ describe('workspace metadata orchestration', () => {
     expect(dependencies.findSession).not.toHaveBeenCalled();
     resolve(result);
     await work;
-    expect(dependencies.accept).not.toHaveBeenCalled();
+    expect(dependencies.accept).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the completed-turn snapshot when an appended follow-up never completes', async () => {
+    const { service, dependencies, history, advance } = setup();
+    await service.schedule('s');
+    await service.run(signal());
+    history.push({ type: 'user', content: 'Completed follow-up', timestamp: '2' });
+    await service.schedule('s');
+    history.push({ type: 'user', content: 'Unfinished follow-up', timestamp: '3' });
+    await service.schedule('s', true);
+    advance(120_000);
+    await service.run(signal());
+    expect(dependencies.accept).toHaveBeenCalledTimes(2);
+    expect(dependencies.generate.mock.calls[1]?.[0].input.messages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ content: 'Completed follow-up' })])
+    );
+    expect(JSON.stringify(dependencies.generate.mock.calls[1]?.[0].input)).not.toContain(
+      'Unfinished follow-up'
+    );
   });
 });
