@@ -1,12 +1,14 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
-import { configService } from '@/backend/services/config.service';
 import { agentSourceHealthSchema } from '@/shared/agent-runtime';
 import type { AgentGitHubSourcePort } from '@/shared/agent-source';
 import { agentGithubCursorSchema } from '@/shared/agent-source-state';
 
 export class AgentSourcePollService {
-  constructor(private readonly source: AgentGitHubSourcePort) {}
+  constructor(
+    private readonly source: AgentGitHubSourcePort,
+    private readonly getPagesPerCycle: () => number
+  ) {}
 
   private async repository(
     target: Awaited<ReturnType<typeof agentSourceAccessor.listTargets>>[number],
@@ -132,7 +134,7 @@ export class AgentSourcePollService {
         }
         continue;
       }
-      if (reads >= configService.getAgentRuntimeLimits().githubPagesPerCycle) {
+      if (reads >= this.getPagesPerCycle()) {
         return;
       }
       const pageNumber = cursor.scan?.nextPage ?? 1;

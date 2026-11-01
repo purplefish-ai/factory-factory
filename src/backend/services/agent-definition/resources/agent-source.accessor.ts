@@ -1,4 +1,3 @@
-import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
   agentEventOrderInputSchema,
@@ -24,6 +23,17 @@ import {
 } from './agent-source-queries';
 import { capturePage, discontinuity, newScan, resumeScan, verifyPage } from './agent-source-scan';
 type Tx = Prisma.TransactionClient;
+function requiresRecovery(state: { health: unknown } | null) {
+  return (
+    state?.health != null &&
+    agentSourceHealthSchema.parse(state.health).state === 'RECOVERY_REQUIRED'
+  );
+}
+function assertOperational(state: { health: unknown } | null) {
+  if (requiresRecovery(state)) {
+    discontinuity();
+  }
+}
 function health(
   state: 'READY' | 'CATCHING_UP' | 'ERROR' | 'RECOVERY_REQUIRED',
   reasonCode: string | null = null
@@ -64,13 +74,8 @@ async function prepareBaseline(connectionId: string, headEventId: string | null)
   const id = await ledgerTransaction(async (tx) => {
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
+    assertOperational(state);
     const cursor = state?.cursor ? agentGithubCursorSchema.parse(state.cursor) : null;
-    if (
-      state?.health &&
-      agentSourceHealthSchema.parse(state.health).state === 'RECOVERY_REQUIRED'
-    ) {
-      discontinuity();
-    }
     if (!cursor) {
       await initializeSource(tx, connectionId, headEventId, state?.lastSourceOrder ?? 0);
     }
@@ -95,22 +100,29 @@ async function prepareBaseline(connectionId: string, headEventId: string | null)
   return result;
 }
 async function setFailure(connectionId: string, reasonCode: string, recovery = false) {
-  await prisma.agentSourceState.upsert({
-    where: { connectionId },
-    create: {
-      connectionId,
-      isReady: false,
-      health: health(recovery ? 'RECOVERY_REQUIRED' : 'ERROR', reasonCode),
-    },
-    update: {
-      isReady: false,
-      health: health(recovery ? 'RECOVERY_REQUIRED' : 'ERROR', reasonCode),
-    },
+  await ledgerTransaction(async (tx) => {
+    const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
+    if (requiresRecovery(state)) {
+      return;
+    }
+    await tx.agentSourceState.upsert({
+      where: { connectionId },
+      create: {
+        connectionId,
+        isReady: false,
+        health: health(recovery ? 'RECOVERY_REQUIRED' : 'ERROR', reasonCode),
+      },
+      update: {
+        isReady: false,
+        health: health(recovery ? 'RECOVERY_REQUIRED' : 'ERROR', reasonCode),
+      },
+    });
   });
 }
 async function resume(connectionId: string) {
   await ledgerTransaction(async (tx) => {
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
+    assertOperational(state);
     if (!state?.cursor) {
       return;
     }
@@ -168,6 +180,7 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
   await ledgerTransaction(async (tx) => {
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
+    assertOperational(state);
     const cursor = agentGithubCursorSchema.parse(state.cursor);
     if (!beginPage(cursor, requestPage, page)) {
       await assertRequiredBaselines(tx, connectionId, [], cursor.committedHeadEventId);
@@ -205,7 +218,12 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
     });
     await tx.agentSourceState.update({
       where: { connectionId },
-      data: { cursor, isReady: true, health: health('CATCHING_UP'), lastObservedAt: new Date() },
+      data: {
+        cursor: agentGithubCursorSchema.parse(cursor),
+        isReady: true,
+        health: health('CATCHING_UP'),
+        lastObservedAt: new Date(),
+      },
     });
   });
 }
@@ -218,6 +236,8 @@ async function resolveBaselines(
   previousBoundaryEventId: string | null
 ) {
   // A control head inherits the ordinal of the latest executable event at/before it.
+  // afterHeadEventId makes missing evidence due; it does not exclude an exact
+  // head witness from a scan that was already in flight during preparation.
   const baselineRows = await tx.agentSourceBaseline.findMany({
     where: { connectionId, sourceOrder: null },
   });
@@ -243,6 +263,7 @@ async function resolveBaselines(
 async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?: string[]) {
   await assertTarget(tx, connectionId);
   const state = await tx.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
+  assertOperational(state);
   const cursor = agentGithubCursorSchema.parse(state.cursor);
   const scan = cursor.scan;
   if (scan?.phase !== 'FINALIZE') {
@@ -292,7 +313,7 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
   await tx.agentSourceState.update({
     where: { connectionId },
     data: {
-      cursor,
+      cursor: agentGithubCursorSchema.parse(cursor),
       lastSourceOrder,
       isReady: true,
       health: health(cursor.scan ? 'CATCHING_UP' : 'READY'),

@@ -23,6 +23,7 @@ export function newScan(head: string, boundary: string | null): AgentSourceScan 
     resumeIds: [],
     overlapOffset: null,
     verifyResumeCount: 0,
+    verifySeekingOverlap: false,
   };
 }
 
@@ -32,7 +33,16 @@ export function resumeScan(scan: AgentSourceScan): AgentSourceScan {
     return { ...scan, nextPage: scan.resumePage, overlapOffset: 0 };
   }
   if (scan.phase === 'VERIFY') {
-    return { ...scan, nextPage: scan.resumePage, verifiedCount: scan.verifyResumeCount };
+    // Searching for the fixed head can itself span a cycle after a large prepend.
+    if (scan.verifiedCount === 0 && scan.nextPage > 1) {
+      return scan;
+    }
+    return {
+      ...scan,
+      nextPage: scan.resumePage,
+      verifiedCount: scan.verifyResumeCount,
+      verifySeekingOverlap: scan.verifyResumeCount > 0,
+    };
   }
   return scan;
 }
@@ -168,6 +178,32 @@ function invalidSkippedIdentity(expected: string[], identity: string, verifiedCo
   return position > verifiedCount || (verifiedCount > 0 && position < 0);
 }
 
+/** Unknown identities before a resumed overlap may be a shifted head prefix.
+ * Re-prove the interval from its fixed head instead of trusting or ignoring them.
+ */
+function rewindShiftedOverlap(
+  scan: AgentSourceScan,
+  expected: string[],
+  page: AgentIssueEventPage
+) {
+  if (!scan.verifySeekingOverlap) {
+    return false;
+  }
+  scan.verifySeekingOverlap = false;
+  const anchor = page.events.findIndex(
+    (item) => item.providerEventId === expected[scan.verifiedCount]
+  );
+  const prefix = anchor < 0 ? page.events : page.events.slice(0, anchor);
+  if (!prefix.some((item) => !expected.includes(item.providerEventId))) {
+    return false;
+  }
+  scan.nextPage = 1;
+  scan.resumePage = 1;
+  scan.verifiedCount = 0;
+  scan.verifyResumeCount = 0;
+  return true;
+}
+
 /** Second ordered traversal detects observed changes, without claiming an API snapshot. */
 export function verifyPage(
   scan: AgentSourceScan,
@@ -177,6 +213,9 @@ export function verifyPage(
   const expected = entries.map((item) => item.providerEventId);
   if (scan.previousBoundaryEventId !== null) {
     expected.push(scan.previousBoundaryEventId);
+  }
+  if (rewindShiftedOverlap(scan, expected, page)) {
+    return;
   }
   const before = scan.verifiedCount;
   if (verifyEntries(scan, expected, page)) {

@@ -7,7 +7,7 @@ CREATE TABLE "AgentSourcePage" (
     "phase" TEXT NOT NULL,
     "requestPage" INTEGER NOT NULL,
     "nextPage" INTEGER,
-    "sourceOrder" INTEGER,
+    "sourceOrder" INTEGER CHECK ("sourceOrder" IS NULL OR ("sourceOrder" >= 0 AND "sourceOrder" <= 2147483647)),
     "evidence" JSONB NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "AgentSourcePage_connectionId_fkey" FOREIGN KEY ("connectionId") REFERENCES "AgentSourceState" ("connectionId") ON DELETE CASCADE ON UPDATE CASCADE
@@ -19,7 +19,7 @@ CREATE TABLE "AgentSourceBaseline" (
     "connectionId" TEXT NOT NULL,
     "headEventId" TEXT,
     "afterHeadEventId" TEXT,
-    "sourceOrder" INTEGER,
+    "sourceOrder" INTEGER CHECK ("sourceOrder" IS NULL OR ("sourceOrder" >= 0 AND "sourceOrder" <= 2147483647)),
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "AgentSourceBaseline_connectionId_fkey" FOREIGN KEY ("connectionId") REFERENCES "AgentSourceState" ("connectionId") ON DELETE CASCADE ON UPDATE CASCADE
 );

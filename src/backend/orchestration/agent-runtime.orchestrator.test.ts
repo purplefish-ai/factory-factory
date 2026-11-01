@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { jobRunner } from '@/backend/services/job-runner.service';
-import { createAgentRuntime } from './agent-runtime.orchestrator';
+import { createAgentRuntimeLifecycle as createAgentRuntime } from './agent-runtime.orchestrator';
 
 afterEach(async () => {
   await jobRunner.stopAll();

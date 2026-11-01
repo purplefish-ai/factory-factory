@@ -154,3 +154,56 @@ it('does not spawn a process for an already-aborted source read', async () => {
   ).rejects.toThrow();
   expect(execFile).not.toHaveBeenCalled();
 });
+
+it.each(['identity', 'events'] as const)(
+  'aborts an in-flight %s read through its received process signal',
+  async (kind) => {
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.mocked(execFile).mockImplementation(((
+      _command: string,
+      _args: string[],
+      options: { signal?: AbortSignal }
+    ) => {
+      return new Promise<{ stdout: string; stderr: string }>((_resolve, reject) => {
+        if (!options.signal) {
+          reject(new Error('Read did not receive cancellation'));
+          return;
+        }
+        options.signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('Aborted', 'AbortError')),
+          { once: true }
+        );
+        entered();
+      });
+    }) as never);
+    const controller = new AbortController();
+    const pending =
+      kind === 'identity'
+        ? githubCLIService.getAgentRepositoryIdentity('org/repo', controller.signal)
+        : githubCLIService.listAgentIssueEvents(
+            { repository: 'org/repo', repositoryId: '123', page: 1, perPage: 100 },
+            controller.signal
+          );
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await started;
+    controller.abort();
+    await rejected;
+    expect(execFile).toHaveBeenCalledOnce();
+  }
+);
+
+it('rejects out-of-range provider page requests before spawning gh', async () => {
+  await expect(
+    githubCLIService.listAgentIssueEvents({
+      repository: 'org/repo',
+      repositoryId: '123',
+      page: 2_147_483_648,
+      perPage: 100,
+    })
+  ).rejects.toThrow();
+  expect(execFile).not.toHaveBeenCalled();
+});

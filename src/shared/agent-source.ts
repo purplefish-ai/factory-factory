@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentEventPayloadSchema } from './agent-runtime';
+import { agentSourcePageNumberSchema } from './agent-source-state';
 
 const id = z.string().min(1).max(256);
 export const agentIssueEventPageSchema = z
@@ -7,7 +8,7 @@ export const agentIssueEventPageSchema = z
     events: z
       .array(z.strictObject({ providerEventId: id, payload: agentEventPayloadSchema.nullable() }))
       .max(100),
-    nextPage: z.number().int().positive().nullable(),
+    nextPage: agentSourcePageNumberSchema.nullable(),
   })
   .refine(
     (page) =>

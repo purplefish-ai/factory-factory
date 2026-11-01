@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentIssueEventPageSchema, type AgentIssueEventRequest } from '@/shared/agent-source';
+import { agentSourcePageNumberSchema } from '@/shared/agent-source-state';
 import { githubIssuePreviewInputSchema } from '@/shared/github-issue-preview';
 
 const id = z.string().min(1).max(256);
@@ -85,7 +86,7 @@ function nextPage(headers: string, input: AgentIssueEventRequest) {
 export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: Read) {
   githubIssuePreviewInputSchema.shape.repo.parse(input.repository);
   id.parse(input.repositoryId);
-  z.number().int().positive().parse(input.page);
+  agentSourcePageNumberSchema.parse(input.page);
   z.literal(100).parse(input.perPage);
   const result = await read([
     'api',

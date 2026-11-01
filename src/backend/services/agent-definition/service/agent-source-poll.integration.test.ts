@@ -41,7 +41,7 @@ beforeEach(async () => {
 });
 const label = (id: string) => ({ providerEventId: id, payload: fixture.github(id).payload });
 function service() {
-  return new runtime.AgentSourcePollService(port);
+  return new runtime.AgentSourcePollService(port, () => 10);
 }
 async function baseline() {
   return await service().prepareBaseline(fixture.connectionId, new AbortController().signal);
@@ -146,8 +146,9 @@ it('persists ten-page budget progress across restarts, verifies before chunk fin
 it('fails closed when an already captured interval changes during verification', async () => {
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
-  feed = [...Array.from({ length: 1100 }, (_, i) => label(`e-${i}`)), ...feed];
+  feed = [...Array.from({ length: 701 }, (_, i) => label(`e-${i}`)), ...feed];
   await cycle();
+  expect(await state()).toMatchObject({ cursor: { scan: { phase: 'VERIFY' } } });
   feed.splice(30, 1);
   for (let i = 0; i < 4; i++) {
     await cycle();
@@ -309,7 +310,7 @@ it('retains the cursor on cancellation and exposes a sanitized rate-limit health
   });
 });
 
-it('resolves a prepared head even when a newer interval commits before the preparation write', async () => {
+it('resolves a prepared head after a newer interval commits and its event rows are pruned', async () => {
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
   feed.unshift(label('H'));
@@ -319,6 +320,7 @@ it('resolves a prepared head even when a newer interval commits before the prepa
     port.listIssueEvents = original;
     feed.unshift(label('H2'));
     await cycle();
+    await db.prisma.agentEvent.deleteMany();
     return observed;
   };
   expect((await baseline()).boundary).toEqual({
@@ -327,6 +329,36 @@ it('resolves a prepared head even when a newer interval commits before the prepa
     sourceOrder: 1,
   });
   expect((await state()).lastSourceOrder).toBe(2);
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+});
+
+it('resolves a same-head baseline from its active scan while a newer head waits for the next interval', async () => {
+  feed = [{ providerEventId: 'B', payload: null }];
+  await baseline();
+  feed = [...Array.from({ length: 701 }, (_, i) => label(`h-${i}`)), ...feed];
+  await cycle();
+  expect(await state()).toMatchObject({
+    cursor: { scan: { phase: 'VERIFY', fixedHeadEventId: 'h-0', previousBoundaryEventId: 'B' } },
+  });
+  const same = await baseline();
+  expect(
+    await db.prisma.agentSourceBaseline.findUniqueOrThrow({ where: { id: same.id } })
+  ).toMatchObject({ headEventId: 'h-0', afterHeadEventId: 'h-0', sourceOrder: null });
+  feed.unshift(label('N'));
+  const newer = await baseline();
+  await cycle();
+  expect((await service().getBaseline(fixture.connectionId, same.id))?.boundary).toEqual({
+    provider: 'GITHUB',
+    headEventId: 'h-0',
+    sourceOrder: 701,
+  });
+  expect((await service().getBaseline(fixture.connectionId, newer.id))?.boundary).toBeNull();
+  await cycle();
+  expect((await service().getBaseline(fixture.connectionId, newer.id))?.boundary).toEqual({
+    provider: 'GITHUB',
+    headEventId: 'N',
+    sourceOrder: 702,
+  });
 });
 
 it('sanitizes baseline preparation failures and persists readiness failure', async () => {

@@ -318,7 +318,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     slackConnectionService,
     agentProposalService,
     agentAuthoring: createAgentAuthoring(() => services),
-    agentRuntime: createAgentRuntime(),
+    agentRuntime: createAgentRuntime(() => services),
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,

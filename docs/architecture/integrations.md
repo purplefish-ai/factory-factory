@@ -344,17 +344,26 @@ repository identity on each cycle, including after repository renames. Paused
 authoring remains inert: only active triggers or explicit starting activations
 on non-archived projects are source targets.
 
+Runtime composition resolves GitHub reads and page limits from the owning
+application graph. Incomplete project paths are omitted from a shared source; if
+no complete path remains, the source is unavailable. Complete paths resolving to
+a different repository identity still require recovery.
+
 `AgentSourcePage` retains immutable page identities, captured event references,
 and completed interval high water. Capture, event insertion and continuation
 commit in one transaction. Capture and a second ordered verification traversal
 share the ten-page cycle budget, resume with persisted overlap, and keep the
-original head fixed. New head events wait for the next interval. Missing anchors
-or observed sequence changes stop intake with `RECOVERY_REQUIRED`; no cursor is
-silently reset. GitHub's offset pages are not a snapshot, so these checks detect
-observed discontinuity rather than guarantee lossless capture under arbitrary
-provider deletion or reordering. Finalization requires verified durable scan
-evidence and commits each oldest-first chunk with its progress before another
-interval can start.
+original head fixed. When new head events move a resumed verification overlap,
+verification rechecks from the fixed head rather than ignoring unknown middle
+items. These reads share the same cycle budget. New head events wait for the
+next interval. Missing anchors or observed sequence changes stop intake with
+`RECOVERY_REQUIRED`; no cursor is silently reset. Recovery health and its
+original reason remain a durable fence: normal failures, baseline preparation
+and late page/chunk writes cannot clear or advance it. GitHub's offset pages are
+not a snapshot, so these checks detect observed discontinuity rather than
+guarantee lossless capture under arbitrary provider deletion or reordering.
+Finalization requires verified durable scan evidence and commits each
+oldest-first chunk with its progress before another interval can start.
 
 `AgentSourcePollService.prepareBaseline(connectionId, signal)` requires an
 active or starting source and returns a baseline ID plus a nullable boundary. An

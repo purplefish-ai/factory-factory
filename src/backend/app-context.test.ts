@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+const runtimeWiring = vi.hoisted(() => ({ create: vi.fn<(getServices: () => unknown) => void>() }));
 vi.mock('./orchestration/agent-runtime.orchestrator', () => ({
-  createAgentRuntime: () => ({ start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) }),
+  createAgentRuntime: (getServices: () => unknown) => {
+    runtimeWiring.create(getServices);
+    return { start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) };
+  },
 }));
 import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
@@ -13,6 +17,11 @@ import {
 import { serverInstanceService } from './services/server-instance.service';
 
 describe('createApplication', () => {
+  it('binds agent intake to its own application service graph', () => {
+    const { services } = createDefaultApplicationDependencies();
+    const getServices = runtimeWiring.create.mock.lastCall?.[0];
+    expect(getServices?.()).toBe(services);
+  });
   it('binds accepted rename to each application service graph without sharing its queue or publication target', async () => {
     const first = createDefaultApplicationDependencies();
     const second = createDefaultApplicationDependencies();

@@ -50,10 +50,10 @@ export async function listTargets(tx: Tx = prisma) {
     repositoryId: connection.externalId.replace(/^gh:/, ''),
     repositories: [
       ...new Set(
-        connection.triggers.map(({ agentDefinition: { project } }) =>
+        connection.triggers.flatMap(({ agentDefinition: { project } }) =>
           project.githubOwner && project.githubRepo
-            ? `${project.githubOwner}/${project.githubRepo}`
-            : ''
+            ? [`${project.githubOwner}/${project.githubRepo}`]
+            : []
         )
       ),
     ],

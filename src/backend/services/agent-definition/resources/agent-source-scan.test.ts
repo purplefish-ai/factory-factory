@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { agentIssueEventPageSchema } from '@/shared/agent-source';
+import { agentSourceScanSchema } from '@/shared/agent-source-state';
 import { newScan, verifyPage } from './agent-source-scan';
 
 it('rejects an unknown feed item between previously verified pages', () => {
@@ -20,6 +22,23 @@ it('rejects an unknown feed item between previously verified pages', () => {
       }
     )
   ).toThrow();
+});
+
+it.each(['nextPage', 'resumePage', 'observationCount'])(
+  'bounds persisted %s to the database integer range',
+  (field) => {
+    expect(
+      agentSourceScanSchema.safeParse({ ...newScan('H', 'B'), [field]: 2_147_483_647 }).success
+    ).toBe(true);
+    expect(
+      agentSourceScanSchema.safeParse({ ...newScan('H', 'B'), [field]: 2_147_483_648 }).success
+    ).toBe(false);
+  }
+);
+it('rejects provider continuation outside the database page range', () => {
+  expect(agentIssueEventPageSchema.safeParse({ events: [], nextPage: 2_147_483_648 }).success).toBe(
+    false
+  );
 });
 
 it('requires the verified empty-baseline interval to reach the actual feed end', () => {

@@ -1,20 +1,22 @@
 import { z } from 'zod';
 
 const id = z.string().min(1).max(256);
-const index = z.number().int().nonnegative();
+const index = z.number().int().nonnegative().max(2_147_483_647);
+export const agentSourcePageNumberSchema = z.number().int().positive().max(2_147_483_647);
 export const agentSourceScanSchema = z.strictObject({
   id,
   fixedHeadEventId: id,
   previousBoundaryEventId: id.nullable(),
   phase: z.enum(['CAPTURE', 'VERIFY', 'FINALIZE']),
-  nextPage: z.number().int().positive(),
+  nextPage: agentSourcePageNumberSchema,
   observationCount: index,
   verifiedCount: index,
   finalizedCount: index,
-  resumePage: z.number().int().positive(),
+  resumePage: agentSourcePageNumberSchema,
   resumeIds: z.array(id).max(100),
   overlapOffset: index.nullable(),
   verifyResumeCount: index,
+  verifySeekingOverlap: z.boolean().default(false),
 });
 export const agentGithubCursorSchema = z.strictObject({
   version: z.literal(1),
