@@ -151,20 +151,44 @@ export const agentEvaluationSnapshotSchema = z.strictObject({
   executionConfig: agentResolvedExecutionConfigSchema,
   input: agentRunInputSchema,
 });
-export const agentEvaluationInputSchema = z.strictObject({
-  eventId: id,
-  agentDefinitionId: id,
-  triggerId: id,
-  definitionRevision: revision,
-  triggerRevision: agentTriggerRevisionSchema,
-  activationGeneration: generation,
-  status: agentEvaluationStatusSchema,
-  reasonCode,
-  explanation: z.string().max(2000),
-  executionConfig: agentResolvedExecutionConfigSchema,
+
+// Invalid/unresolved configuration is retained as data only, never usable for admission.
+export const agentEvaluationFailureSnapshotSchema = z.strictObject({
+  version: z.literal(1),
+  kind: z.literal('NON_DISPATCHING'),
+  definition: z.strictObject({
+    name: z.string(),
+    instructions: z.string(),
+    isEnabled: z.boolean(),
+    executionConfig: z.json(),
+  }),
+  trigger: z.json(),
   input: agentRunInputSchema,
-  classifier: agentClassifierIdentitySchema.optional(),
 });
+
+export const agentEvaluationInputSchema = z
+  .strictObject({
+    eventId: id,
+    agentDefinitionId: id,
+    triggerId: id,
+    definitionRevision: revision,
+    triggerRevision: agentTriggerRevisionSchema,
+    activationGeneration: generation,
+    status: agentEvaluationStatusSchema,
+    reasonCode,
+    explanation: z.string().max(2000),
+    executionConfig: agentExecutionConfigSchema,
+    input: agentRunInputSchema,
+    classifier: agentClassifierIdentitySchema.optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (
+      input.status === 'MATCHED' &&
+      !agentResolvedExecutionConfigSchema.safeParse(input.executionConfig).success
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Matches require resolved execution settings' });
+    }
+  });
 export const agentAdmissionInputSchema = z.strictObject({
   evaluationId: id,
   definitionRevision: revision,
@@ -183,6 +207,8 @@ export const agentRuntimeReasonSchema = z.enum([
   'DEFINITION_DISABLED',
   'TRIGGER_DISABLED',
   'CONNECTION_UNAVAILABLE',
+  'SOURCE_RECOVERY_REQUIRED',
+  'UNSUPPORTED_TRIGGER',
   'PROJECT_ARCHIVED',
   'EVENT_EXPIRED',
   'INVALID_STORED_DATA',
@@ -249,3 +275,6 @@ export type AgentRuntimeReason = z.infer<typeof agentRuntimeReasonSchema>;
 export type AgentEventPayload = z.infer<typeof agentEventPayloadSchema>;
 
 export type AgentActivationBoundary = z.infer<typeof agentActivationBoundarySchema>;
+
+export type AgentExecutionConfig = z.infer<typeof agentExecutionConfigSchema>;
+export type AgentResolvedExecutionConfig = z.infer<typeof agentResolvedExecutionConfigSchema>;

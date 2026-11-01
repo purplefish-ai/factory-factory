@@ -854,7 +854,9 @@ model AgentEvaluation {
   status                AgentEvaluationStatus
   reasonCode            String
   explanation           String
-  configurationSnapshot Json // agentEvaluationSnapshotSchema
+  attemptCount          Int                   @default(1)
+  nextAttemptAt         DateTime?
+  configurationSnapshot Json // agentEvaluationSnapshotSchema or agentEvaluationFailureSnapshotSchema
   classifier            Json? // agentClassifierIdentitySchema
   runId                 String?
   run                   AgentRun?             @relation(fields: [runId, agentDefinitionId, eventId], references: [id, agentDefinitionId, eventId], onDelete: NoAction, onUpdate: NoAction)

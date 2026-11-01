@@ -30,12 +30,14 @@ export type AgentEvaluationAvgAggregateOutputType = {
   definitionRevision: number | null
   triggerRevision: number | null
   activationGeneration: number | null
+  attemptCount: number | null
 }
 
 export type AgentEvaluationSumAggregateOutputType = {
   definitionRevision: number | null
   triggerRevision: number | null
   activationGeneration: number | null
+  attemptCount: number | null
 }
 
 export type AgentEvaluationMinAggregateOutputType = {
@@ -50,6 +52,8 @@ export type AgentEvaluationMinAggregateOutputType = {
   status: $Enums.AgentEvaluationStatus | null
   reasonCode: string | null
   explanation: string | null
+  attemptCount: number | null
+  nextAttemptAt: Date | null
   runId: string | null
   expiresAt: Date | null
   createdAt: Date | null
@@ -68,6 +72,8 @@ export type AgentEvaluationMaxAggregateOutputType = {
   status: $Enums.AgentEvaluationStatus | null
   reasonCode: string | null
   explanation: string | null
+  attemptCount: number | null
+  nextAttemptAt: Date | null
   runId: string | null
   expiresAt: Date | null
   createdAt: Date | null
@@ -86,6 +92,8 @@ export type AgentEvaluationCountAggregateOutputType = {
   status: number
   reasonCode: number
   explanation: number
+  attemptCount: number
+  nextAttemptAt: number
   configurationSnapshot: number
   classifier: number
   runId: number
@@ -100,12 +108,14 @@ export type AgentEvaluationAvgAggregateInputType = {
   definitionRevision?: true
   triggerRevision?: true
   activationGeneration?: true
+  attemptCount?: true
 }
 
 export type AgentEvaluationSumAggregateInputType = {
   definitionRevision?: true
   triggerRevision?: true
   activationGeneration?: true
+  attemptCount?: true
 }
 
 export type AgentEvaluationMinAggregateInputType = {
@@ -120,6 +130,8 @@ export type AgentEvaluationMinAggregateInputType = {
   status?: true
   reasonCode?: true
   explanation?: true
+  attemptCount?: true
+  nextAttemptAt?: true
   runId?: true
   expiresAt?: true
   createdAt?: true
@@ -138,6 +150,8 @@ export type AgentEvaluationMaxAggregateInputType = {
   status?: true
   reasonCode?: true
   explanation?: true
+  attemptCount?: true
+  nextAttemptAt?: true
   runId?: true
   expiresAt?: true
   createdAt?: true
@@ -156,6 +170,8 @@ export type AgentEvaluationCountAggregateInputType = {
   status?: true
   reasonCode?: true
   explanation?: true
+  attemptCount?: true
+  nextAttemptAt?: true
   configurationSnapshot?: true
   classifier?: true
   runId?: true
@@ -263,6 +279,8 @@ export type AgentEvaluationGroupByOutputType = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount: number
+  nextAttemptAt: Date | null
   configurationSnapshot: runtime.JsonValue
   classifier: runtime.JsonValue | null
   runId: string | null
@@ -306,6 +324,8 @@ export type AgentEvaluationWhereInput = {
   status?: Prisma.EnumAgentEvaluationStatusFilter<"AgentEvaluation"> | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFilter<"AgentEvaluation"> | string
   explanation?: Prisma.StringFilter<"AgentEvaluation"> | string
+  attemptCount?: Prisma.IntFilter<"AgentEvaluation"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentEvaluation"> | Date | string | null
   configurationSnapshot?: Prisma.JsonFilter<"AgentEvaluation">
   classifier?: Prisma.JsonNullableFilter<"AgentEvaluation">
   runId?: Prisma.StringNullableFilter<"AgentEvaluation"> | string | null
@@ -330,6 +350,8 @@ export type AgentEvaluationOrderByWithRelationInput = {
   status?: Prisma.SortOrder
   reasonCode?: Prisma.SortOrder
   explanation?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrderInput | Prisma.SortOrder
   configurationSnapshot?: Prisma.SortOrder
   classifier?: Prisma.SortOrderInput | Prisma.SortOrder
   runId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -358,6 +380,8 @@ export type AgentEvaluationWhereUniqueInput = Prisma.AtLeast<{
   status?: Prisma.EnumAgentEvaluationStatusFilter<"AgentEvaluation"> | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFilter<"AgentEvaluation"> | string
   explanation?: Prisma.StringFilter<"AgentEvaluation"> | string
+  attemptCount?: Prisma.IntFilter<"AgentEvaluation"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentEvaluation"> | Date | string | null
   configurationSnapshot?: Prisma.JsonFilter<"AgentEvaluation">
   classifier?: Prisma.JsonNullableFilter<"AgentEvaluation">
   runId?: Prisma.StringNullableFilter<"AgentEvaluation"> | string | null
@@ -382,6 +406,8 @@ export type AgentEvaluationOrderByWithAggregationInput = {
   status?: Prisma.SortOrder
   reasonCode?: Prisma.SortOrder
   explanation?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrderInput | Prisma.SortOrder
   configurationSnapshot?: Prisma.SortOrder
   classifier?: Prisma.SortOrderInput | Prisma.SortOrder
   runId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -410,6 +436,8 @@ export type AgentEvaluationScalarWhereWithAggregatesInput = {
   status?: Prisma.EnumAgentEvaluationStatusWithAggregatesFilter<"AgentEvaluation"> | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringWithAggregatesFilter<"AgentEvaluation"> | string
   explanation?: Prisma.StringWithAggregatesFilter<"AgentEvaluation"> | string
+  attemptCount?: Prisma.IntWithAggregatesFilter<"AgentEvaluation"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentEvaluation"> | Date | string | null
   configurationSnapshot?: Prisma.JsonWithAggregatesFilter<"AgentEvaluation">
   classifier?: Prisma.JsonNullableWithAggregatesFilter<"AgentEvaluation">
   runId?: Prisma.StringNullableWithAggregatesFilter<"AgentEvaluation"> | string | null
@@ -426,6 +454,8 @@ export type AgentEvaluationCreateInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -449,6 +479,8 @@ export type AgentEvaluationUncheckedCreateInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -465,6 +497,8 @@ export type AgentEvaluationUpdateInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -488,6 +522,8 @@ export type AgentEvaluationUncheckedUpdateInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -508,6 +544,8 @@ export type AgentEvaluationCreateManyInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -524,6 +562,8 @@ export type AgentEvaluationUpdateManyMutationInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -543,6 +583,8 @@ export type AgentEvaluationUncheckedUpdateManyInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -581,6 +623,8 @@ export type AgentEvaluationCountOrderByAggregateInput = {
   status?: Prisma.SortOrder
   reasonCode?: Prisma.SortOrder
   explanation?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
   configurationSnapshot?: Prisma.SortOrder
   classifier?: Prisma.SortOrder
   runId?: Prisma.SortOrder
@@ -593,6 +637,7 @@ export type AgentEvaluationAvgOrderByAggregateInput = {
   definitionRevision?: Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
 }
 
 export type AgentEvaluationMaxOrderByAggregateInput = {
@@ -607,6 +652,8 @@ export type AgentEvaluationMaxOrderByAggregateInput = {
   status?: Prisma.SortOrder
   reasonCode?: Prisma.SortOrder
   explanation?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
   runId?: Prisma.SortOrder
   expiresAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -625,6 +672,8 @@ export type AgentEvaluationMinOrderByAggregateInput = {
   status?: Prisma.SortOrder
   reasonCode?: Prisma.SortOrder
   explanation?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
   runId?: Prisma.SortOrder
   expiresAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -635,6 +684,7 @@ export type AgentEvaluationSumOrderByAggregateInput = {
   definitionRevision?: Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
 }
 
 export type AgentEvaluationCreateNestedManyWithoutAgentDefinitionInput = {
@@ -817,6 +867,8 @@ export type AgentEvaluationCreateWithoutAgentDefinitionInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -838,6 +890,8 @@ export type AgentEvaluationUncheckedCreateWithoutAgentDefinitionInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -886,6 +940,8 @@ export type AgentEvaluationScalarWhereInput = {
   status?: Prisma.EnumAgentEvaluationStatusFilter<"AgentEvaluation"> | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFilter<"AgentEvaluation"> | string
   explanation?: Prisma.StringFilter<"AgentEvaluation"> | string
+  attemptCount?: Prisma.IntFilter<"AgentEvaluation"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentEvaluation"> | Date | string | null
   configurationSnapshot?: Prisma.JsonFilter<"AgentEvaluation">
   classifier?: Prisma.JsonNullableFilter<"AgentEvaluation">
   runId?: Prisma.StringNullableFilter<"AgentEvaluation"> | string | null
@@ -902,6 +958,8 @@ export type AgentEvaluationCreateWithoutTriggerInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -922,6 +980,8 @@ export type AgentEvaluationUncheckedCreateWithoutTriggerInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -963,6 +1023,8 @@ export type AgentEvaluationCreateWithoutRunInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -983,6 +1045,8 @@ export type AgentEvaluationUncheckedCreateWithoutRunInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -1023,6 +1087,8 @@ export type AgentEvaluationCreateWithoutEventInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -1043,6 +1109,8 @@ export type AgentEvaluationUncheckedCreateWithoutEventInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -1087,6 +1155,8 @@ export type AgentEvaluationCreateManyAgentDefinitionInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -1103,6 +1173,8 @@ export type AgentEvaluationUpdateWithoutAgentDefinitionInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1124,6 +1196,8 @@ export type AgentEvaluationUncheckedUpdateWithoutAgentDefinitionInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1143,6 +1217,8 @@ export type AgentEvaluationUncheckedUpdateManyWithoutAgentDefinitionInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1161,6 +1237,8 @@ export type AgentEvaluationCreateManyTriggerInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -1177,6 +1255,8 @@ export type AgentEvaluationUpdateWithoutTriggerInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1197,6 +1277,8 @@ export type AgentEvaluationUncheckedUpdateWithoutTriggerInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1215,6 +1297,8 @@ export type AgentEvaluationUncheckedUpdateManyWithoutTriggerInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1233,6 +1317,8 @@ export type AgentEvaluationCreateManyRunInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt: Date | string
@@ -1248,6 +1334,8 @@ export type AgentEvaluationUpdateWithoutRunInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1268,6 +1356,8 @@ export type AgentEvaluationUncheckedUpdateWithoutRunInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1285,6 +1375,8 @@ export type AgentEvaluationUncheckedUpdateManyWithoutRunInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1302,6 +1394,8 @@ export type AgentEvaluationCreateManyEventInput = {
   status: $Enums.AgentEvaluationStatus
   reasonCode: string
   explanation: string
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
   configurationSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: string | null
@@ -1318,6 +1412,8 @@ export type AgentEvaluationUpdateWithoutEventInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1338,6 +1434,8 @@ export type AgentEvaluationUncheckedUpdateWithoutEventInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1356,6 +1454,8 @@ export type AgentEvaluationUncheckedUpdateManyWithoutEventInput = {
   status?: Prisma.EnumAgentEvaluationStatusFieldUpdateOperationsInput | $Enums.AgentEvaluationStatus
   reasonCode?: Prisma.StringFieldUpdateOperationsInput | string
   explanation?: Prisma.StringFieldUpdateOperationsInput | string
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   configurationSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   classifier?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   runId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1378,6 +1478,8 @@ export type AgentEvaluationSelect<ExtArgs extends runtime.Types.Extensions.Inter
   status?: boolean
   reasonCode?: boolean
   explanation?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
   configurationSnapshot?: boolean
   classifier?: boolean
   runId?: boolean
@@ -1402,6 +1504,8 @@ export type AgentEvaluationSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
   status?: boolean
   reasonCode?: boolean
   explanation?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
   configurationSnapshot?: boolean
   classifier?: boolean
   runId?: boolean
@@ -1426,6 +1530,8 @@ export type AgentEvaluationSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
   status?: boolean
   reasonCode?: boolean
   explanation?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
   configurationSnapshot?: boolean
   classifier?: boolean
   runId?: boolean
@@ -1450,6 +1556,8 @@ export type AgentEvaluationSelectScalar = {
   status?: boolean
   reasonCode?: boolean
   explanation?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
   configurationSnapshot?: boolean
   classifier?: boolean
   runId?: boolean
@@ -1458,7 +1566,7 @@ export type AgentEvaluationSelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentEvaluationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "eventId" | "connectionId" | "agentDefinitionId" | "triggerId" | "definitionRevision" | "triggerRevision" | "activationGeneration" | "status" | "reasonCode" | "explanation" | "configurationSnapshot" | "classifier" | "runId" | "expiresAt" | "createdAt" | "updatedAt", ExtArgs["result"]["agentEvaluation"]>
+export type AgentEvaluationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "eventId" | "connectionId" | "agentDefinitionId" | "triggerId" | "definitionRevision" | "triggerRevision" | "activationGeneration" | "status" | "reasonCode" | "explanation" | "attemptCount" | "nextAttemptAt" | "configurationSnapshot" | "classifier" | "runId" | "expiresAt" | "createdAt" | "updatedAt", ExtArgs["result"]["agentEvaluation"]>
 export type AgentEvaluationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   event?: boolean | Prisma.AgentEventDefaultArgs<ExtArgs>
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
@@ -1498,6 +1606,8 @@ export type $AgentEvaluationPayload<ExtArgs extends runtime.Types.Extensions.Int
     status: $Enums.AgentEvaluationStatus
     reasonCode: string
     explanation: string
+    attemptCount: number
+    nextAttemptAt: Date | null
     configurationSnapshot: runtime.JsonValue
     classifier: runtime.JsonValue | null
     runId: string | null
@@ -1942,6 +2052,8 @@ export interface AgentEvaluationFieldRefs {
   readonly status: Prisma.FieldRef<"AgentEvaluation", 'AgentEvaluationStatus'>
   readonly reasonCode: Prisma.FieldRef<"AgentEvaluation", 'String'>
   readonly explanation: Prisma.FieldRef<"AgentEvaluation", 'String'>
+  readonly attemptCount: Prisma.FieldRef<"AgentEvaluation", 'Int'>
+  readonly nextAttemptAt: Prisma.FieldRef<"AgentEvaluation", 'DateTime'>
   readonly configurationSnapshot: Prisma.FieldRef<"AgentEvaluation", 'Json'>
   readonly classifier: Prisma.FieldRef<"AgentEvaluation", 'Json'>
   readonly runId: Prisma.FieldRef<"AgentEvaluation", 'String'>

@@ -104,3 +104,42 @@ it('expires queued work after 24 hours with an explicit durable reason', async (
     reasonCode: 'QUEUE_EXPIRED',
   });
 });
+
+it('defers a transient source error without cancelling admitted work and resumes after recovery', async () => {
+  await admit(await event());
+  await db.prisma.agentSourceState.update({
+    where: { connectionId: fixture.connectionId },
+    data: {
+      isReady: false,
+      health: { state: 'ERROR', reasonCode: 'RATE_LIMIT', updatedAt: new Date().toISOString() },
+    },
+  });
+  expect(await runtime.claimNextRun()).toMatchObject({ status: 'DEFERRED' });
+  expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({ status: 'QUEUED' });
+  await db.prisma.agentSourceState.update({
+    where: { connectionId: fixture.connectionId },
+    data: {
+      isReady: true,
+      health: { state: 'READY', reasonCode: null, updatedAt: new Date().toISOString() },
+    },
+  });
+  expect(await runtime.claimNextRun()).toMatchObject({ status: 'CLAIMED' });
+});
+it('cancels a continuity failure even when readiness is accidentally true', async () => {
+  await admit(await event());
+  await db.prisma.agentSourceState.update({
+    where: { connectionId: fixture.connectionId },
+    data: {
+      health: {
+        state: 'RECOVERY_REQUIRED',
+        reasonCode: 'MISSING_BOUNDARY',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  });
+  expect(await runtime.claimNextRun()).toMatchObject({ status: 'DEFERRED' });
+  expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({
+    status: 'CANCELLED',
+    reasonCode: 'SOURCE_RECOVERY_REQUIRED',
+  });
+});

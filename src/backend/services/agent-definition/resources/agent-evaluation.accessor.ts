@@ -1,11 +1,14 @@
+import { configService } from '@/backend/services/config.service';
 import {
   agentEvaluationInputSchema,
+  agentEvaluationFailureSnapshotSchema,
   agentEvaluationSnapshotSchema,
   agentEventPayloadSchema,
   type AgentEvaluationInput,
   type AgentEvaluationResult,
+  type AgentRuntimeReason,
 } from '@/shared/agent-runtime';
-import type { AgentEvent, Prisma } from '@prisma-gen/client';
+import type { AgentEvent, AgentEvaluation, Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
   rawTriggerInput,
@@ -43,6 +46,22 @@ function evaluationFence(
   return null;
 }
 function evaluationSnapshot(input: Evaluation, event: AgentEvent, trigger: RuntimeTrigger) {
+  if (input.status !== 'MATCHED') {
+    const snapshot = {
+      version: 1,
+      kind: 'NON_DISPATCHING',
+      definition: {
+        name: trigger.agentDefinition.name,
+        instructions: trigger.agentDefinition.instructions,
+        isEnabled: trigger.agentDefinition.isEnabled,
+        executionConfig: trigger.agentDefinition.executionConfig,
+      },
+      trigger: rawTriggerInput(trigger),
+      input: { ...input.input, eventId: event.id },
+    };
+    agentEvaluationFailureSnapshotSchema.parse(snapshot);
+    return { success: true as const, data: snapshot };
+  }
   const definition = trigger.agentDefinition;
   return agentEvaluationSnapshotSchema.safeParse({
     definition: {
@@ -62,7 +81,8 @@ async function persistEvaluation(
   input: Evaluation,
   event: AgentEvent,
   trigger: RuntimeTrigger,
-  snapshot: ReturnType<typeof agentEvaluationSnapshotSchema.parse>
+  snapshot: Prisma.InputJsonObject,
+  nextAttemptAt: Date | null
 ) {
   const run =
     input.status === 'MATCHED'
@@ -84,6 +104,7 @@ async function persistEvaluation(
       definitionRevision: input.definitionRevision,
       triggerRevision: input.triggerRevision,
       activationGeneration: input.activationGeneration,
+      nextAttemptAt,
       status: input.status,
       reasonCode: input.reasonCode,
       explanation: input.explanation,
@@ -95,23 +116,24 @@ async function persistEvaluation(
   });
 }
 
-async function recordEvaluation(value: AgentEvaluationInput): Promise<AgentEvaluationResult> {
+export type EvaluationAttempt = {
+  now?: Date;
+  retryable?: boolean;
+  retryAfterMs?: number;
+  expectedAttemptCount?: number;
+};
+async function recordEvaluation(
+  value: AgentEvaluationInput,
+  attempt: EvaluationAttempt = {}
+): Promise<AgentEvaluationResult> {
   const input = agentEvaluationInputSchema.parse(value);
+  const now = attempt.now ?? new Date();
   return await ledgerTransaction(async (tx) => {
-    const event = await tx.agentEvent.findUnique({ where: { id: input.eventId } });
-    const trigger = await tx.agentTrigger.findUnique({
-      where: { id: input.triggerId },
-      include: runtimeTriggerInclude,
-    });
-    if (!(event && trigger)) {
-      return { status: 'REJECTED', reason: 'NOT_FOUND' };
+    const context = await evaluationContext(tx, input);
+    if ('reason' in context) {
+      return { status: 'REJECTED', reason: context.reason };
     }
-    if (
-      trigger.agentDefinitionId !== input.agentDefinitionId ||
-      event.connectionId !== trigger.connectionId
-    ) {
-      return { status: 'REJECTED', reason: 'OWNERSHIP_MISMATCH' };
-    }
+    const { event, trigger } = context;
     const existing = await tx.agentEvaluation.findUnique({
       where: {
         eventId_triggerId_definitionRevision_triggerRevision_activationGeneration: {
@@ -123,7 +145,7 @@ async function recordEvaluation(value: AgentEvaluationInput): Promise<AgentEvalu
         },
       },
     });
-    if (existing) {
+    if (existing && !canRetry(existing, attempt, now)) {
       return { status: 'DUPLICATE', evaluationId: existing.id };
     }
     const fence = evaluationFence(input, event, trigger);
@@ -133,16 +155,66 @@ async function recordEvaluation(value: AgentEvaluationInput): Promise<AgentEvalu
     const prior = await tx.agentEvaluation.findFirst({
       where: { eventId: event.id, triggerId: trigger.id },
     });
-    if (prior) {
+    if (prior && !existing) {
       return { status: 'REJECTED', reason: 'STALE_EVENT_COHORT' };
     }
     const snapshot = evaluationSnapshot(input, event, trigger);
     if (!snapshot.success) {
       return { status: 'REJECTED', reason: 'INVALID_STORED_DATA' };
     }
-    const evaluation = await persistEvaluation(tx, input, event, trigger, snapshot.data);
+    const attemptCount = (existing?.attemptCount ?? 0) + 1;
+    const nextAttemptAt = retryAt(input, attempt, attemptCount, now);
+    const evaluation = existing
+      ? await tx.agentEvaluation.update({
+          where: { id: existing.id },
+          data: {
+            status: input.status,
+            reasonCode: input.reasonCode,
+            explanation: input.explanation,
+            configurationSnapshot: snapshot.data,
+            attemptCount,
+            nextAttemptAt,
+          },
+        })
+      : await persistEvaluation(tx, input, event, trigger, snapshot.data, nextAttemptAt);
     return { status: 'RECORDED', evaluationId: evaluation.id };
   });
 }
 
 export const agentEvaluationAccessor = { recordEvaluation };
+
+function canRetry(existing: AgentEvaluation, attempt: EvaluationAttempt, now: Date) {
+  return (
+    existing.status === 'ERROR' &&
+    existing.nextAttemptAt !== null &&
+    existing.nextAttemptAt <= now &&
+    existing.attemptCount === attempt.expectedAttemptCount
+  );
+}
+function retryAt(input: Evaluation, attempt: EvaluationAttempt, attemptCount: number, now: Date) {
+  const delay = configService.getAgentRuntimeLimits().retryDelaysMs[attemptCount - 1];
+  return input.status === 'ERROR' && attempt.retryable && delay !== undefined
+    ? new Date(now.getTime() + Math.max(delay, attempt.retryAfterMs ?? 0))
+    : null;
+}
+
+async function evaluationContext(
+  tx: Prisma.TransactionClient,
+  input: Evaluation
+): Promise<{ event: AgentEvent; trigger: RuntimeTrigger } | { reason: AgentRuntimeReason }> {
+  const event = await tx.agentEvent.findUnique({ where: { id: input.eventId } });
+  const trigger = await tx.agentTrigger.findUnique({
+    where: { id: input.triggerId },
+    include: runtimeTriggerInclude,
+  });
+  if (!(event && trigger)) {
+    return { reason: 'NOT_FOUND' };
+  }
+  if (
+    trigger.agentDefinitionId !== input.agentDefinitionId ||
+    event.connectionId !== trigger.connectionId
+  ) {
+    return { reason: 'OWNERSHIP_MISMATCH' };
+  }
+  return { event, trigger };
+}

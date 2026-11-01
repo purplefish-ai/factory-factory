@@ -41,3 +41,68 @@ it('paces completed source polls at sixty seconds without overlap', async () => 
   expect(pollCycle).toHaveBeenCalledTimes(2);
   await runtime.stop();
 });
+
+it('runs evaluation and maintenance every five seconds without claiming when no launcher is wired', async () => {
+  vi.useFakeTimers();
+  const evaluations: number[] = [];
+  const maintenance: number[] = [];
+  const runtime = createAgentRuntime(
+    { pollCycle: async () => undefined },
+    {
+      evaluatePendingEvents: () => {
+        evaluations.push(Date.now());
+        return Promise.resolve();
+      },
+      maintainQueue: () => {
+        maintenance.push(Date.now());
+        return Promise.resolve();
+      },
+      claimNextRun: () => Promise.reject(new Error('Must not claim without a consumer')),
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(evaluations).toHaveLength(3);
+  expect(maintenance).toHaveLength(3);
+  await runtime.stop();
+});
+it('hands a committed claim to its consumer and drains it during shutdown', async () => {
+  vi.useFakeTimers();
+  let received = false;
+  let finished = false;
+  let release = () => {
+    /* assigned when the consumer starts */
+  };
+  const runtime = createAgentRuntime(
+    { pollCycle: async () => undefined },
+    {
+      evaluatePendingEvents: async () => undefined,
+      maintainQueue: async () => undefined,
+      claimNextRun: async () => ({
+        status: 'CLAIMED',
+        runId: 'run',
+        workerGeneration: 1,
+        attemptGeneration: 1,
+        reservedWorkspaceId: 'workspace',
+        reservedSessionId: 'session',
+        initialMessageId: 'message',
+      }),
+      consumeClaim: async (claim) => {
+        expect(claim.runId).toBe('run');
+        received = true;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        finished = true;
+      },
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(received).toBe(true);
+  const stopping = runtime.stop();
+  expect(finished).toBe(false);
+  release();
+  await stopping;
+  expect(finished).toBe(true);
+});

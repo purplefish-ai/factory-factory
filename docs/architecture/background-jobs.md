@@ -4,12 +4,12 @@ Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
 sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, the
-periodic-task poll, GitHub agent source intake, and workspace metadata updates.
-Each owning service or orchestrator registers its job and exposes thin
-`start()`/`stop()` delegates. GitHub agent intake registers through
-`createAgentRuntime()` in the agent-runtime orchestrator; its poll service owns
-neither registration nor lifecycle methods. These delegates are the injection
-seam `server.ts` and `server.upgrade.test.ts` use.
+periodic-task poll, GitHub agent source intake, event evaluation/admission, and
+workspace metadata updates. Each owning service or orchestrator registers its
+job and exposes thin `start()`/`stop()` delegates. GitHub agent intake registers
+through `createAgentRuntime()` in the agent-runtime orchestrator; its poll
+service owns neither registration nor lifecycle methods. These delegates are the
+injection seam `server.ts` and `server.upgrade.test.ts` use.
 
 ## Pacing
 
@@ -66,6 +66,37 @@ between capture and verification. Its GitHub port uses the existing CLI budget
 and cancellation signal. Shutdown stops and drains this intake before stopping
 provider sessions or disconnecting the database. This job does not evaluate
 events, activate saved triggers, or launch workspaces.
+
+The `agent-event-evaluation` job runs immediately, then waits five seconds after
+completion. It evaluates at most 100 durable event/trigger candidates per cycle,
+rotating past deferred decisions. GitHub matching supports only `labeled` and
+matches the added label. Semantic and actor filters fail closed; SCHEDULE stays
+with PeriodicTask. STARTING generations remain held until activation owns their
+completion, cancellation, or expiry. Terminal decisions are not replayed under
+new revisions or generations.
+
+Queue maintenance rotates through bounded batches even when all active slots are
+occupied. Claims choose FIFO heads of unsaturated definitions and serialize
+revision, generation, activation, readiness and capacity checks with pause/edit.
+A transient source error defers waiting work; disabled connections and
+continuity recovery failures cancel it. Claims committed before pause are
+in-flight work. The defaults remain one active run per definition, four
+globally, 100 waiting per definition and a 24-hour waiting expiry. Overflow is
+terminal for that whole definition/event, including overlapping triggers
+evaluated later.
+
+Evaluation retries persist their attempt count and next time: three retries at
+30 seconds, two minutes and ten minutes, extended by Retry-After when needed.
+Permanent configuration failures do not retry. The winning evaluation's used
+retries transfer into AgentRun.attemptCount; the initial launch claim increments
+it to the successful evaluation attempt number. Provisioning must continue that
+same budget rather than start another four attempts. Non-dispatching decisions
+retain an explicitly marked configuration snapshot that admission cannot use.
+
+The runtime has an optional injected launch-claim consumer. Until a launcher is
+wired, evaluation/admission and queue maintenance run but no run is claimed. A
+wired consumer owns settlement of every committed claim and shutdown drains that
+consumer before runtime dependencies stop.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule

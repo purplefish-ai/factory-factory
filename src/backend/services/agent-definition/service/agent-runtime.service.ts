@@ -22,6 +22,10 @@ export function recordEvaluation(input: AgentEvaluationInput) {
 export function admitRun(input: AgentAdmissionInput) {
   return agentRunAccessor.admitRun(input);
 }
-export function claimNextRun() {
-  return agentRunClaimAccessor.claimNextRun();
+export function claimNextRun(now = new Date()) {
+  return agentRunClaimAccessor.claimNextRun(now);
+}
+
+export function maintainQueue(now = new Date()) {
+  return agentRunClaimAccessor.maintainQueue(now);
 }

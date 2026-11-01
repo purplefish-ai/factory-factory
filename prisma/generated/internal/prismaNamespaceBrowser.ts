@@ -561,6 +561,8 @@ export const AgentEvaluationScalarFieldEnum = {
   status: 'status',
   reasonCode: 'reasonCode',
   explanation: 'explanation',
+  attemptCount: 'attemptCount',
+  nextAttemptAt: 'nextAttemptAt',
   configurationSnapshot: 'configurationSnapshot',
   classifier: 'classifier',
   runId: 'runId',
