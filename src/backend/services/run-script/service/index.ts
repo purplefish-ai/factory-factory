@@ -30,3 +30,5 @@ export {
   type StartupScriptResult,
   startupScriptService,
 } from './startup-script.service';
+
+export { EventSetupError, type EventStartupScriptOptions } from './event-startup-script';

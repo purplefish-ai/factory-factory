@@ -755,6 +755,26 @@ permissions. These APIs neither initialize a provider nor dispatch a prompt;
 observed delivery, setup/restart orchestration and runtime wiring remain
 separate work.
 
+The strict event workspace initializer shares the ordinary initializer's
+per-workspace queue and worktree preparation. It validates the reserved session
+and current run claim, then runs factory setup and project startup scripts
+without the ordinary auto-message or first-IDLE-session path. Workspace writes
+recheck the claim, lease, retained origins and live entities in the workspace
+owner's transaction. An aborted or superseded initializer cannot publish a late
+worktree or READY. The caller owns run linkage, lease renewal and eventual
+initial dispatch; the initializer does not enqueue or send a prompt. No claim
+consumer is wired yet.
+
+Event setup has a fifteen-minute deadline. Uncancellable Git work remains owned
+until it drains; timeout does not abandon its promise. Abort and script timeout
+stop the current owned setup process group and distinguish confirmed cleanup
+from UNKNOWN. Unknown cleanup forbids retry or capacity release. Ordinary
+nonzero script exits still produce READY with a warning, and successful scripts
+may retain background dev servers. Invalid configuration and execution errors
+return explicit failures. Event initialization does not create an unattended
+terminal or send a Linear status update; a user can open a terminal afterward.
+Ordinary interactive, child and periodic initialization retain their policies.
+
 ## Session lifecycle ownership
 
 `SessionLifecycleGate` owns domain startup/stop eligibility. Workspace

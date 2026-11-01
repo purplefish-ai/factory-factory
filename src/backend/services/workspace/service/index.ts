@@ -70,3 +70,8 @@ export {
 } from './worktree/worktree-lifecycle.service';
 
 export type { EventWorkspaceSource } from './lifecycle/event-workspace-source';
+export {
+  eventWorkspaceInitService,
+  EventWorkspaceFenceError,
+  type EventWorkspaceClaim,
+} from './lifecycle/event-workspace-init.service';
