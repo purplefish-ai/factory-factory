@@ -65,7 +65,7 @@ describe('workspace metadata input', () => {
     expect(input.messages).toHaveLength(2);
     expect(JSON.stringify(input)).not.toContain('private reasoning');
     expect(WORKSPACE_METADATA_INSTRUCTIONS).toContain('untrusted data');
-    expect(WORKSPACE_METADATA_INSTRUCTIONS).toContain('current position');
+    expect(WORKSPACE_METADATA_INSTRUCTIONS).toContain('what is happening in the work now');
   });
 
   it('rejects unsafe branch suggestions and oversized model output', () => {

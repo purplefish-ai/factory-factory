@@ -6,7 +6,7 @@ export const WORKSPACE_METADATA_INSTRUCTIONS = `Generate display metadata for a 
 Return only JSON matching the supplied schema.
 title: a concrete readable topic, at most 7 words. Keep the previous title stable.
 branch: a concise lowercase kebab-case topic, no prefix. Keep the previous branch stable.
-summary: at most 40 words describing the work's current position: objective, latest meaningful progress, and blocker or next step. Describe the work, not who said what. Do not recap approvals or say "the user asked". Distinguish proposals and requested actions from completed work. Never invent completion, test results, or implementation. Prefer durable work context over conversational housekeeping.
+summary: one short sentence, at most 25 words, describing what is happening in the work now. Focus on the current activity or latest meaningful result. Omit decisions, approvals, plans, and next-step lists. Omit empty status statements such as "no implementation progress" or "no next steps". When work has not started, describe the task itself without calling out the lack of progress. Describe the work, not who said what; do not say "the user asked". Distinguish requested actions from completed work. Never invent completion, test results, or implementation. Condense any previous summary to follow these rules.
 sidebarSummary: at most 10 words describing the current focus.
 Respect currentName when a previous summary exists; manual names are authoritative. Names and branches change only if the actual topic has changed or the user explicitly chooses a different name. The application decides whether to accept naming suggestions.`;
 
