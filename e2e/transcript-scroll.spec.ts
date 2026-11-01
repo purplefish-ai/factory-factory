@@ -361,7 +361,8 @@ test('reading clamped to the bottom by rewind does not resume following', async 
   await expect(jump).toBeVisible();
   await page.getByRole('button', { name: 'Rewind', exact: true }).click();
   await expect(viewport.locator('[data-transcript-key="m-1"]')).toBeAttached();
-  await expect(jump).toBeVisible();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await expect(jump).toBeHidden();
   const top = await viewport.evaluate((element) => element.scrollTop);
   await page.getByRole('button', { name: 'Append burst', exact: true }).click();
   await expect.poll(() => gap(viewport)).toBeGreaterThan(100);

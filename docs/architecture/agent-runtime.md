@@ -854,6 +854,13 @@ tool cards and joins consecutive assistant text chunks before rendering
 Markdown. Tool, reasoning, non-text content, and provider message-ID changes end
 the text sequence, preserving separate replies and tool ordering.
 
+The transcript follows the main chat's visibility rules: reasoning-only entries
+are hidden, and tool sequences expand to show earlier activity. A child that
+writes only final replies can therefore look like a short result summary even
+when its complete tool history is available. The scroll-to-bottom control
+appears only when content remains below the viewport, independently of reading
+mode.
+
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
 Factory.

@@ -225,3 +225,25 @@ it.each([
     ).toBe(!active);
   }
 );
+
+it('hides scroll to bottom for a short transcript opened in reading mode', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = mountRoot(host);
+  flushSync(() =>
+    root.render(
+      <ChatTranscript
+        {...display}
+        loadingSession={false}
+        scroll={{
+          identity: 'short-reading',
+          active: true,
+          ready: true,
+          initialIntent: 'reading',
+          initialPosition: null,
+        }}
+      />
+    )
+  );
+  expect(host.textContent).not.toContain('Scroll to bottom');
+});

@@ -37,7 +37,7 @@ function TranscriptInstance({
     (props.running || autonomousTurn) &&
     (props.work?.promptInFlight !== false || autonomousTurn);
   const layout = useTranscriptLayout(display, Boolean(header));
-  const { engine, totalSize, state, jumpToLatest } = useTranscriptScroll(
+  const { engine, totalSize, state, hasContentBelow, jumpToLatest } = useTranscriptScroll(
     viewport,
     layout.keys,
     scroll
@@ -62,7 +62,7 @@ function TranscriptInstance({
             contentClassName={contentClassName}
           />
         </div>
-        {state.intent === 'reading' && scroll.ready && (
+        {state.intent === 'reading' && scroll.ready && hasContentBelow && (
           <div className="absolute bottom-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
             <Button
               variant="secondary"
