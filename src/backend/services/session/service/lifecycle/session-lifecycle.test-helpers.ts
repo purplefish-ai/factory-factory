@@ -14,6 +14,7 @@ import { SessionStatus, WorkspaceStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type { EventSessionAuthority } from './event-session-authority';
 import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -43,6 +44,7 @@ export type LifecycleTestWorkspace = NonNullable<
 >;
 
 export type LifecycleHarnessOverrides = {
+  eventAuthority?: EventSessionAuthority;
   session?: Partial<AgentSessionRecord>;
   workspace?: Partial<LifecycleTestWorkspace>;
   getSessionById?: SessionRepository['getSessionById'];
@@ -792,6 +794,7 @@ export function createLifecycleHarness(
   );
   const runtimeExitCoordinator = new SessionRuntimeExitCoordinator(
     unsafeCoerce({
+      eventAuthority: overrides.eventAuthority,
       repository,
       sessionDomainService,
       sessionPermissionService: notificationService,
@@ -806,6 +809,7 @@ export function createLifecycleHarness(
   let service: SessionLifecycleService;
   const terminationCoordinator = new SessionTerminationCoordinator(
     unsafeCoerce({
+      eventAuthority: overrides.eventAuthority,
       repository,
       retryService,
       runtimeManager,
@@ -821,6 +825,7 @@ export function createLifecycleHarness(
   );
   const startupCoordinator = new SessionStartupCoordinator(
     unsafeCoerce({
+      eventAuthority: overrides.eventAuthority,
       hydrateProviderHistory: async () => undefined,
       repository,
       contextService,

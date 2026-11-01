@@ -18,6 +18,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export class AcpProcessHandle {
+  /** Live ownership only; never restored from persisted PID metadata. */
+  ownedProcessGroup?: number;
+  eventLifecycleGeneration?: number;
+  unsupportedProcessOverride?: boolean;
   readonly connection: AcpConnection;
   readonly child: ChildProcess;
   readonly permissionBridge?: AcpPermissionBridge;

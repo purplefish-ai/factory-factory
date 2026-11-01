@@ -7,6 +7,7 @@ import {
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
+import { EventInitialDispatcher } from '@/backend/services/session/service/dispatch/event-initial-dispatch';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
@@ -14,6 +15,7 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
+import { eventSessionAuthority } from './event-session-authority';
 import { ProviderUsageService } from './provider-usage.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { sessionAcpEnvironment, sessionContextService } from './session-lifecycle-external-ports';
@@ -83,6 +85,7 @@ export const providerUsageService = new ProviderUsageService({
 });
 
 export const sessionConfigService = new SessionConfigService({
+  eventAuthority: eventSessionAuthority,
   codexModelCatalogService,
   repository: sessionRepository,
   runtimeManager: acpRuntimeManager,
@@ -137,6 +140,7 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
 });
 
 const sessionPromptCoordinator = new SessionService({
+  eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
   acpEventProcessor,
@@ -155,6 +159,7 @@ const sessionProviderIdentityService = new SessionProviderIdentityService({
 });
 
 const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
+  eventAuthority: eventSessionAuthority,
   providerIdentityService: sessionProviderIdentityService,
   repository: sessionRepository,
   sessionDomainService,
@@ -172,6 +177,7 @@ const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
 let sessionLifecycleServiceInstance: SessionLifecycleService;
 
 const sessionTerminationCoordinator = new SessionTerminationCoordinator({
+  eventAuthority: eventSessionAuthority,
   repository: sessionRepository,
   retryService: sessionRetryService,
   runtimeManager: acpRuntimeManager,
@@ -189,6 +195,7 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
 });
 
 const sessionStartupCoordinator = new SessionStartupCoordinator({
+  eventAuthority: eventSessionAuthority,
   hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   repository: sessionRepository,
   contextService: sessionContextService,
@@ -217,3 +224,13 @@ sessionLifecycleServiceInstance = new SessionLifecycleService({
 });
 
 export { sessionLifecycleServiceInstance as sessionLifecycleService };
+
+const initialDispatcher = new EventInitialDispatcher({
+  authority: eventSessionAuthority,
+  start: (id, permit) =>
+    sessionLifecycleServiceInstance.getOrCreateSessionClient(id, { eventInitial: permit }),
+  send: (id, text, permit) => sessionPromptCoordinator.sendInitialSessionMessage(id, text, permit),
+  commit: (id, message) => sessionDomainService.commitSentUserMessage(id, message),
+});
+/** Dormant owner API: orchestration supplies the durable port before launching event work. */
+export const dispatchAgentInitialPrompt = initialDispatcher.dispatch.bind(initialDispatcher);

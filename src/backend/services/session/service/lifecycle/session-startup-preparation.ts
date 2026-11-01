@@ -1,6 +1,8 @@
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, PermissionPreset } from '@/backend/services/session/service/acp';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import type { EventAgentExecution } from '@/shared/event-agent-launch';
+import { pinEventExecution } from './event-session-startup';
 import { SessionStartupTargetError } from './session-permission-policy';
 import { restorePRResumeConfig } from './session-pr-resume-config';
 import { captureSessionStartupIntent } from './session-startup-intent';
@@ -8,6 +10,7 @@ import type { SessionConfigService } from './session.config.service';
 import type { SessionRepository } from './session.repository';
 
 export type SessionStartupPreparationOptions = {
+  eventExecution?: EventAgentExecution;
   resumePolicy?: 'allow_fallback' | 'require_existing';
   model?: string;
   reasoningEffort?: string | null;
@@ -43,7 +46,8 @@ export async function prepareSessionStartup(
   try {
     const record = await deps.repository.getSessionById(sessionId);
     deps.assertCurrent();
-    const session = requireCurrentStartupRecord(record, handle);
+    const current = requireCurrentStartupRecord(record, handle);
+    const session = pinEventExecution(current, options.eventExecution);
     const desired = captureSessionStartupIntent(session);
     await deps.config.applyStartupModel(sessionId, handle, options.model ?? session.model);
     await deps.checkCurrent();

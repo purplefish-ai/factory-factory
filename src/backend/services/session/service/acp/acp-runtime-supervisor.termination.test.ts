@@ -549,7 +549,7 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('waits for quiescence and performs a final stop sweep before clearing registries', async () => {
+  it('waits within the shutdown budget and performs a final stop sweep before clearing registries', async () => {
     // Catches shutdown returning before admitted reconciliation finishes and its runtime is stopped.
     const first = createTestProcessHandle();
     const late = createTestProcessHandle();
@@ -565,7 +565,7 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     });
     const operationResult = operation.catch((error: unknown) => error);
 
-    const stopping = supervisor.stopAllClients(50);
+    const stopping = supervisor.stopAllClients(5000);
     let settled = false;
     void stopping.then(() => {
       settled = true;

@@ -397,7 +397,7 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
     expect(harness.lifecycleGate.isSessionStopping('session-fenced')).toBe(false);
   });
 
-  it('releases reservations if shutdown lifecycle error reporting fails', async () => {
+  it('attempts physical cleanup and releases reservations if shutdown lifecycle error reporting fails', async () => {
     const recordingFailure = new Error('lifecycle error reporting failed');
     const harness = createShutdownHarness(['session-active', 'session-pending']);
     harness.lifecycleEventService.record.mockRejectedValue(new Error('event failed'));
@@ -407,7 +407,7 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
 
     await expect(harness.coordinator.stopAllClients()).rejects.toBe(recordingFailure);
 
-    expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
+    expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(false);
     expect(harness.lifecycleGate.isSessionStopping('session-pending')).toBe(false);
   });
@@ -812,4 +812,149 @@ it('stops the runtime even when persisting the user delivery pause fails', async
   } finally {
     pause.mockRestore();
   }
+});
+
+it('does not publish stopped/idle when event runtime termination is uncertain', async () => {
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: async () => true,
+    invalidate: vi.fn(),
+    read: async () => ({ evidence: null }),
+    recordStop: vi.fn(async () => undefined),
+  };
+  const stopAndQuiesceObserved = vi.fn(async () => ({
+    version: 1 as const,
+    cause: 'USER_STOP' as const,
+    source: null,
+    status: 'UNKNOWN' as const,
+    observedAt: new Date().toISOString(),
+  }));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await expect(coordinator.stopSession(base.session.id, { reason: 'USER_STOP' })).rejects.toThrow();
+  expect(base.lifecycleEventService.record).not.toHaveBeenCalled();
+  expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
+  expect(base.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
+  expect(authority.recordStop).toHaveBeenCalledWith(
+    base.session.id,
+    expect.objectContaining({ status: 'UNKNOWN' }),
+    expect.any(AbortSignal)
+  );
+});
+it('does not report an event stop successful when durable stop evidence fails', async () => {
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: async () => true,
+    invalidate: vi.fn(),
+    read: async () => ({ evidence: null }),
+    recordStop: () => Promise.reject(new Error('durability failed')),
+  };
+  const stopAndQuiesceObserved = vi.fn(async () => ({
+    version: 1 as const,
+    cause: 'USER_STOP' as const,
+    source: null,
+    status: 'LOCAL_RUNTIME_GROUP_STOPPED' as const,
+    observedAt: new Date().toISOString(),
+  }));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await expect(coordinator.stopSession(base.session.id, { reason: 'USER_STOP' })).rejects.toThrow(
+    'durability failed'
+  );
+  expect(base.lifecycleEventService.record).not.toHaveBeenCalled();
+  expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
+});
+
+it('attempts physical cleanup if event ownership lookup is unavailable', async () => {
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: () => Promise.reject(new Error('owner unavailable')),
+    invalidate: vi.fn(),
+  };
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+  });
+  await expect(coordinator.stopSession(base.session.id)).rejects.toThrow('owner unavailable');
+  expect(base.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith(base.session.id);
+  expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
+});
+
+it('attempts strict physical cleanup if the durable event fence read fails', async () => {
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: async () => true,
+    invalidate: vi.fn(),
+    read: () => Promise.reject(new Error('fence unavailable')),
+    recordStop: () => Promise.reject(new Error('write unavailable')),
+  };
+  const stopAndQuiesceObserved = vi.fn(async () => ({
+    version: 1 as const,
+    cause: 'USER_STOP' as const,
+    status: 'LOCAL_RUNTIME_GROUP_STOPPED' as const,
+    source: null,
+    observedAt: new Date().toISOString(),
+  }));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await expect(coordinator.stopSession(base.session.id)).rejects.toThrow('write unavailable');
+  expect(stopAndQuiesceObserved).toHaveBeenCalledWith(base.session.id, 'SYSTEM_STOP', undefined);
+  expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
+});
+
+it('bounds observation drain and still attempts global physical cleanup on shutdown', async () => {
+  vi.useFakeTimers();
+  const base = createTerminationHarness();
+  const authority = { drain: () => new Promise<void>(() => undefined) };
+  base.runtimeManager.beginShutdown.mockReturnValue([]);
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+  });
+  try {
+    const stopped = expect(coordinator.stopAllClients()).rejects.toThrow(
+      'Event operation timed out'
+    );
+    await vi.advanceTimersByTimeAsync(5001);
+    await stopped;
+    expect(base.runtimeManager.stopAllClients).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it('reports a rejected physical stop with a constant diagnostic and retains UNKNOWN', async () => {
+  logger.warn.mockClear();
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: async () => true,
+    invalidate: vi.fn(),
+    read: async () => null,
+    recordStop: vi.fn(async () => undefined),
+  };
+  const stopAndQuiesceObserved = vi.fn().mockRejectedValue(new Error('provider credential secret'));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await expect(coordinator.stopSession(base.session.id)).rejects.toThrow('unconfirmed');
+  expect(logger.warn).toHaveBeenCalledWith(
+    'Event physical stop failed; termination remains unconfirmed',
+    { sessionId: base.session.id }
+  );
+  expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('secret');
+  expect(authority.recordStop).toHaveBeenCalledWith(
+    base.session.id,
+    expect.objectContaining({ status: 'UNKNOWN' }),
+    expect.any(AbortSignal)
+  );
 });

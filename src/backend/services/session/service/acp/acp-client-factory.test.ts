@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
   loadSession: vi.fn(),
   newSession: vi.fn(),
+  setSessionConfigOption: vi.fn(),
   ndJsonStream: vi.fn(),
   connections: [] as Array<{
     toClient: (agent: unknown) => unknown;
@@ -44,6 +45,7 @@ vi.mock('./acp-connection', () => ({
       initialize: mocks.initialize,
       loadSession: mocks.loadSession,
       newSession: mocks.newSession,
+      setSessionConfigOption: mocks.setSessionConfigOption,
     };
   },
 }));
@@ -781,5 +783,78 @@ describe('AcpClientFactory', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it.each(['initialize', 'session', 'config', 'abort'] as const)(
+    'retains strict cleanup uncertainty after event %s failure',
+    async (phase) => {
+      const child = setupSuccessfulSpawn();
+      const stopSignal = createSignal();
+      if (phase === 'initialize') {
+        mocks.initialize.mockRejectedValueOnce(new Error('handshake failed'));
+      }
+      if (phase === 'session') {
+        mocks.newSession.mockRejectedValueOnce(new Error('session failed'));
+      }
+      if (phase === 'config') {
+        mocks.newSession.mockResolvedValueOnce({
+          sessionId: 'native',
+          configOptions: CONFIG_OPTIONS.map((option) =>
+            option.id === 'model' ? { ...option, currentValue: 'other' } : option
+          ),
+        });
+        mocks.setSessionConfigOption.mockRejectedValueOnce(new Error('model configuration failed'));
+      }
+      if (phase === 'abort') {
+        mocks.initialize.mockReturnValueOnce(new Promise(() => undefined));
+      }
+      const cleanup = vi.fn().mockResolvedValue('UNKNOWN');
+      const onOwnedProcessSpawned = vi.fn(() => {
+        if (phase === 'abort') {
+          queueMicrotask(() => stopSignal.reject(new Error('stop requested')));
+        }
+        return cleanup;
+      });
+      await expect(
+        new AcpClientFactory().createClient({
+          ...createParams({
+            options: defaultOptions({
+              ownedProcessGroup: true,
+              ...(phase === 'config' ? { model: 'sonnet' } : {}),
+            }),
+            stopSignal,
+          }),
+          onOwnedProcessSpawned,
+        })
+      ).rejects.toThrow('Event runtime startup cleanup is unconfirmed');
+      expect(onOwnedProcessSpawned).toHaveBeenCalledWith(
+        child,
+        process.platform === 'win32' ? undefined : child.pid,
+        false
+      );
+      if (phase === 'config') {
+        expect(mocks.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: 'native',
+          configId: 'model',
+          value: 'sonnet',
+        });
+      }
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(child.kill).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves definitive event spawn failure without claiming cleanup of an unknown process', async () => {
+    const child = setupSuccessfulSpawn();
+    Object.defineProperty(child, 'pid', { value: undefined });
+    mocks.initialize.mockReturnValueOnce(new Promise(() => undefined));
+    const cleanup = vi.fn(async () => 'UNKNOWN' as const);
+    const pending = new AcpClientFactory().createClient({
+      ...createParams({ options: defaultOptions({ ownedProcessGroup: true }) }),
+      onOwnedProcessSpawned: () => cleanup,
+    });
+    const rejected = expect(pending).rejects.toThrow('ENOENT');
+    child.emit('error', Object.assign(new Error('ENOENT executable missing'), { code: 'ENOENT' }));
+    await rejected;
+    expect(cleanup).not.toHaveBeenCalled();
   });
 });

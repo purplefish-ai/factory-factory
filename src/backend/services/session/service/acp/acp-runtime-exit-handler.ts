@@ -36,3 +36,17 @@ export function dispatchAcpRuntimeExit(
     }
   });
 }
+
+/** Current-incarnation group cleanup precedes durable exit observation, even when that observation fails. */
+export async function dispatchExitAfterCleanup(
+  handlers: AcpRuntimeEventHandlers,
+  event: AcpRuntimeExitEvent,
+  cleanup: () => Promise<void>
+): Promise<void> {
+  if (!event.managed) {
+    await cleanup().catch(() => {
+      logger.warn('Event exit runtime cleanup is unconfirmed', { sessionId: event.sessionId });
+    });
+  }
+  await dispatchAcpRuntimeExit(handlers, event);
+}

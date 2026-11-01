@@ -49,3 +49,8 @@ export function buildStoredConfigProjection(
         };
   return { capabilities, configOptions };
 }
+
+export type SessionConfigReadContext = {
+  catalog?: Promise<CodexModelCatalogEntry[] | null>;
+  retirements: number;
+};

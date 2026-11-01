@@ -85,3 +85,41 @@ it('rejects deferred edits when the runtime exits without waiting for its prompt
   expect(await edit).toBe(rejectConfiguration.mock.calls[0]?.[0]);
   expect(applied).toBe(false);
 });
+
+it('rejects fenced configuration before invoking a provider mutation', async () => {
+  const operation = vi.fn(async () => undefined);
+  const queue = new SessionConfigMutationQueue(
+    { getClient: () => undefined, isStopInProgress: () => false },
+    () => undefined,
+    () => Promise.reject(new Error('initial fenced'))
+  );
+  await expect(queue.run('session', operation)).rejects.toThrow('initial fenced');
+  expect(operation).not.toHaveBeenCalled();
+});
+it.each([false, true])(
+  'publishes correction for a fence after prompt wait=%s without mutation',
+  async (wait) => {
+    const { manager } = createManagerTestHarness();
+    setupSuccessfulSpawn();
+    const handle = await manager.getOrCreateClient(
+      'session',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    let fenced = !wait;
+    handle.isPromptInFlight = wait;
+    const allowed = vi.fn(() => (fenced ? Promise.reject(new Error('fenced')) : Promise.resolve()));
+    const correction = vi.fn();
+    const operation = vi.fn(async () => undefined);
+    const queue = new SessionConfigMutationQueue(manager, correction, allowed);
+    const pending = expect(queue.run('session', operation)).rejects.toThrow('fenced');
+    await vi.waitFor(() => expect(allowed).toHaveBeenCalledOnce());
+    fenced = true;
+    handle.isPromptInFlight = false;
+    await pending;
+    expect(allowed).toHaveBeenCalledTimes(wait ? 2 : 1);
+    expect(operation).not.toHaveBeenCalled();
+    expect(correction).toHaveBeenCalledWith('session', handle.configOptions);
+  }
+);

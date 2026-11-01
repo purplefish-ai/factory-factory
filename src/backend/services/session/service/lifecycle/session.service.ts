@@ -8,6 +8,8 @@ import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
+import { withEventEvidenceDeadline } from './event-evidence-deadline';
+import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import { schedulePRDiscovery } from './session-pr-discovery.service';
@@ -19,6 +21,7 @@ const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 export type SessionServiceDependencies = {
+  eventAuthority?: EventSessionAuthority;
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   acpEventProcessor: AcpEventProcessor;
@@ -31,6 +34,7 @@ export type SessionServiceDependencies = {
 };
 
 export class SessionService {
+  private readonly eventAuthority?: EventSessionAuthority;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
   private readonly acpEventProcessor: AcpEventProcessor;
@@ -45,6 +49,7 @@ export class SessionService {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
 
   constructor(options: SessionServiceDependencies) {
+    this.eventAuthority = options.eventAuthority;
     this.runtimeManager = options.runtimeManager;
     this.sessionDomainService = options.sessionDomainService;
     this.acpEventProcessor = options.acpEventProcessor;
@@ -60,10 +65,15 @@ export class SessionService {
     this.workspaceBridge = bridges.workspace;
   }
 
-  steerSessionMessage(
+  async steerSessionMessage(
     sessionId: string,
     content: string | AgentContentItem[]
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
+    const generation = this.lifecycleGate.getGeneration(sessionId);
+    if (this.eventAuthority) {
+      await this.eventAuthority.assertOrdinary(sessionId);
+    }
+    this.assertPromptGeneration(sessionId, generation);
     const client = this.runtimeManager.getClient(sessionId);
     const prompt =
       typeof content === 'string'
@@ -72,14 +82,19 @@ export class SessionService {
     return this.runtimeManager.steerSession(sessionId, prompt);
   }
 
-  sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
+  async sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
+    const generation = this.lifecycleGate.getGeneration(sessionId);
+    if (this.eventAuthority) {
+      await this.eventAuthority.assertOrdinary(sessionId);
+    }
+    this.assertPromptGeneration(sessionId, generation);
     const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
       const prompt: ContentBlock[] =
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt)
+      return this.sendAcpMessage(sessionId, prompt, generation)
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
@@ -146,8 +161,48 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  private sendAcpMessage(sessionId: string, prompt: ContentBlock[]): Promise<string> {
-    return this.withSerializedAcpPrompt(sessionId, () => this.executeAcpMessage(sessionId, prompt));
+  private sendAcpMessage(
+    sessionId: string,
+    prompt: ContentBlock[],
+    generation: number
+  ): Promise<string> {
+    return this.withSerializedAcpPrompt(sessionId, async () => {
+      if (this.eventAuthority) {
+        await this.eventAuthority.assertOrdinary(sessionId);
+      }
+      this.assertPromptGeneration(sessionId, generation);
+      return this.executeAcpMessage(sessionId, prompt);
+    });
+  }
+
+  private assertPromptGeneration(sessionId: string, generation: number): void {
+    if (
+      !this.lifecycleGate.isGenerationCurrent(sessionId, generation) ||
+      this.lifecycleGate.isSessionStopping(sessionId)
+    ) {
+      throw new DOMException('Session lifecycle changed before prompt dispatch', 'AbortError');
+    }
+  }
+
+  async sendInitialSessionMessage(
+    sessionId: string,
+    text: string,
+    permit: EventInitialPermit
+  ): Promise<void> {
+    if (!this.eventAuthority || permit.attempt.sessionId !== sessionId) {
+      throw new Error('Initial authority missing');
+    }
+    const generation = this.lifecycleGate.getGeneration(sessionId);
+    await this.withSerializedAcpPrompt(sessionId, async () => {
+      await this.eventAuthority?.assertStartup(sessionId, permit);
+      if (
+        !this.lifecycleGate.isGenerationCurrent(sessionId, generation) ||
+        this.lifecycleGate.isSessionStopping(sessionId)
+      ) {
+        throw new Error('Initial session lifecycle changed');
+      }
+      await this.executeAcpMessage(sessionId, [{ type: 'text', text }], permit);
+    });
   }
 
   private withSerializedAcpPrompt<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
@@ -190,7 +245,11 @@ export class SessionService {
     return limiter;
   }
 
-  private async executeAcpMessage(sessionId: string, prompt: ContentBlock[]): Promise<string> {
+  private async executeAcpMessage(
+    sessionId: string,
+    prompt: ContentBlock[],
+    permit?: EventInitialPermit
+  ): Promise<string> {
     const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let workspaceActivityGeneration: number | undefined;
@@ -213,11 +272,8 @@ export class SessionService {
     }
 
     try {
-      const result = await this.runtimeManager.sendPrompt(
-        sessionId,
-        prompt,
-        DEFAULT_USER_PROMPT_TIMEOUT_MS
-      );
+      const observed = this.initialObservation(sessionId, stopGeneration, permit);
+      const result = await this.sendRuntimePrompt(sessionId, prompt, observed);
       promptCompleted = true;
       this.completeSuccessfulPromptTurn({
         sessionId,
@@ -226,6 +282,9 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
+      await this.stopTimedOutInitial(sessionId, error, permit).catch(() => {
+        logger.warn('Initial prompt timeout cleanup is unconfirmed', { sessionId });
+      });
       promptError = error;
       promptErrorSet = true;
       if (this.shouldRecordPromptFailure(sessionId, stopGeneration, error)) {
@@ -254,6 +313,61 @@ export class SessionService {
         this.schedulePRDiscoveryAfterTurn(workspaceId, promptCompleted);
         this.promptTurnCompletionService.schedule(sessionId);
       }
+    }
+  }
+
+  private sendRuntimePrompt(
+    sessionId: string,
+    prompt: ContentBlock[],
+    observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt
+  ) {
+    return observed
+      ? this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS, observed)
+      : this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS);
+  }
+
+  private initialObservation(
+    sessionId: string,
+    generation: number,
+    permit?: EventInitialPermit
+  ):
+    | import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt
+    | undefined {
+    const authority = this.eventAuthority;
+    if (!(permit && authority)) {
+      return undefined;
+    }
+    return {
+      lifecycleGeneration: generation,
+      createObservation: (source, assertRuntime) =>
+        authority.observation(permit, source, () => {
+          assertRuntime();
+          if (
+            !this.lifecycleGate.isGenerationCurrent(sessionId, generation) ||
+            this.lifecycleGate.isSessionStopping(sessionId)
+          ) {
+            throw new Error('Initial lifecycle changed');
+          }
+        }),
+    };
+  }
+  private async stopTimedOutInitial(
+    sessionId: string,
+    error: unknown,
+    permit?: EventInitialPermit
+  ): Promise<void> {
+    if (permit && error instanceof PromptTimeoutError && this.eventAuthority) {
+      const cancellation = new AbortController();
+      const fence = await withEventEvidenceDeadline(this.eventAuthority.read(sessionId)).catch(
+        () => null
+      );
+      const stop = await withEventEvidenceDeadline(
+        this.runtimeManager.stopAndQuiesceObserved(sessionId, 'TIMEOUT', fence?.evidence?.source)
+      );
+      await withEventEvidenceDeadline(
+        this.eventAuthority.recordStop(sessionId, stop, cancellation.signal),
+        () => cancellation.abort()
+      );
     }
   }
 

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { EventSessionAuthority } from './event-session-authority';
+import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionService, type SessionServiceDependencies } from './session.service';
 
-function harness(supportsImages = true) {
+function harness(supportsImages = true, eventAuthority?: EventSessionAuthority) {
   const runtime = {
     getClient: () => ({ supportsImages: () => supportsImages }),
     steerSession: vi.fn().mockResolvedValue({ outcome: 'injected' }),
@@ -18,21 +20,19 @@ function harness(supportsImages = true) {
   };
   const domain = { setRuntimeSnapshot: vi.fn() };
   const completion = { schedule: vi.fn() };
+  const lifecycleGate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
   const service = new SessionService(
     unsafeCoerce<SessionServiceDependencies>({
+      eventAuthority,
       runtimeManager: runtime,
       sessionDomainService: domain,
       acpEventProcessor: processor,
       promptTurnCompletionService: completion,
       lifecycleEventService: { record: vi.fn() },
-      lifecycleGate: {
-        getGeneration: () => 0,
-        isGenerationCurrent: () => true,
-        isSessionStopping: () => false,
-      },
+      lifecycleGate,
     })
   );
-  return { service, runtime, processor, domain, completion };
+  return { service, runtime, processor, domain, completion, lifecycleGate };
 }
 
 const image: AgentContentItem = {
@@ -108,3 +108,54 @@ describe('SessionService steering conversion', () => {
     expect(completion.schedule).toHaveBeenCalledExactlyOnceWith('session');
   });
 });
+
+it.each(['send', 'steer'] as const)(
+  'blocks direct ordinary %s before observer restoration',
+  async (mode) => {
+    const authority = new EventSessionAuthority(async () => ({
+      runId: 'run',
+      execution: {
+        version: 1,
+        provider: 'CLAUDE',
+        model: 'sonnet',
+        reasoningEffort: null,
+        codexAccountId: null,
+        startupModePreset: 'non_interactive',
+        accessMode: 'bypassPermissions',
+        planModeEnabled: false,
+      },
+    }));
+    const h = harness(true, authority);
+    await expect(
+      mode === 'send'
+        ? h.service.sendSessionMessage('session', 'human')
+        : h.service.steerSessionMessage('session', 'human')
+    ).rejects.toThrow();
+    expect(h.runtime.sendPrompt).not.toHaveBeenCalled();
+    expect(h.runtime.steerSession).not.toHaveBeenCalled();
+  }
+);
+
+it.each(['send', 'steer'] as const)(
+  'rejects stale ordinary %s when stop races durable ownership lookup',
+  async (mode) => {
+    let finishLookup!: () => void;
+    const authority = new EventSessionAuthority(
+      () =>
+        new Promise((resolve) => {
+          finishLookup = () => resolve(null);
+        })
+    );
+    const h = harness(true, authority);
+    const pending =
+      mode === 'send'
+        ? h.service.sendSessionMessage('session', 'old input')
+        : h.service.steerSessionMessage('session', 'old input');
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    h.lifecycleGate.reserveStop('session')?.release();
+    finishLookup();
+    await rejected;
+    expect(h.runtime.sendPrompt).not.toHaveBeenCalled();
+    expect(h.runtime.steerSession).not.toHaveBeenCalled();
+  }
+);

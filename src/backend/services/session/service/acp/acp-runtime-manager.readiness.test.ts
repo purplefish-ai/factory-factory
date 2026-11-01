@@ -287,3 +287,82 @@ it('rejects a concurrent prompt and stops the candidate when explicit startup ac
   expect(manager.getClient('session-1')).toBeUndefined();
   expect(mockPrompt).not.toHaveBeenCalled();
 });
+
+it('observes SENDING only after readiness and rejects configuration reintroduced during persistence', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session-1',
+    { ...defaultOptions(), deferPromptReadiness: true },
+    defaultHandlers(),
+    defaultContext()
+  );
+  const sending = vi.fn(() => {
+    handle.deferPromptReadiness();
+    handle.beginConfiguration();
+    return Promise.resolve();
+  });
+  const observed = {
+    lifecycleGeneration: 7,
+    createObservation: vi.fn((_source, assertCurrent) => ({
+      assertCurrent,
+      beforeSend: sending,
+      outcome: async () => undefined,
+      ambiguous: async () => undefined,
+    })),
+  };
+  const pending = manager
+    .sendPrompt('session-1', [{ type: 'text', text: 'initial' }], undefined, observed)
+    .catch((error) => error);
+  await Promise.resolve();
+  expect(sending).not.toHaveBeenCalled();
+  handle.completeConfiguration();
+  expect(await pending).toBeInstanceOf(Error);
+  expect(mockPrompt).not.toHaveBeenCalled();
+  expect(observed.createObservation).toHaveBeenCalledWith(
+    expect.objectContaining({
+      providerSessionId: 'provider-session-123',
+      lifecycleGeneration: 7,
+      runtimeIncarnationId: expect.any(String),
+    }),
+    expect.any(Function)
+  );
+});
+
+it('does not treat generic or repeated provider activity as initial prompt acceptance or outcome', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const response = createDeferred<{ stopReason: 'end_turn' }>();
+  mockPrompt.mockReturnValue(response.promise);
+  await manager.getOrCreateClient(
+    'session-1',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  const beforeSend = vi.fn(async () => undefined);
+  const outcome = vi.fn(async () => undefined);
+  const pending = manager.sendPrompt('session-1', [{ type: 'text', text: 'task' }], undefined, {
+    lifecycleGeneration: 1,
+    createObservation: (_source, assertCurrent) => ({
+      assertCurrent,
+      beforeSend,
+      outcome,
+      ambiguous: async () => undefined,
+    }),
+  });
+  await vi.waitFor(() => expect(mockPrompt).toHaveBeenCalledOnce());
+  const activity = () =>
+    factory.mock.calls[0]?.[0].handlers.onAcpEvent?.('session-1', {
+      type: 'acp_session_update',
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'task' } },
+    });
+  activity();
+  activity();
+  expect(beforeSend).toHaveBeenCalledOnce();
+  expect(outcome).not.toHaveBeenCalled();
+  response.resolve({ stopReason: 'end_turn' });
+  await pending;
+  activity();
+  expect(outcome).toHaveBeenCalledExactlyOnceWith({ stopReason: 'end_turn', result: 'COMPLETED' });
+});

@@ -4,6 +4,7 @@ import type { SessionInitPolicyBridge } from '@/backend/services/session/service
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
@@ -881,6 +882,9 @@ export class SessionDispatchService {
   }
 
   private async evaluateDispatchGate(dbSessionId: string): Promise<DispatchGateResult> {
+    if (this.dependencies.eventAuthority) {
+      await this.dependencies.eventAuthority.assertOrdinary(dbSessionId);
+    }
     const session = await sessionDataService.findAgentSessionById(dbSessionId);
     if (!session) {
       return {
@@ -917,6 +921,10 @@ export class SessionDispatchService {
     try {
       return await this.evaluateDispatchGate(dbSessionId);
     } catch (error) {
+      if (error instanceof EventSessionFenceError) {
+        logger.debug('[Chat WS] Initial delivery holds queued messages', { dbSessionId });
+        return { policy: 'blocked', permanent: false, reason: error.message };
+      }
       logger.error('[Chat WS] Failed to evaluate dispatch gate', {
         dbSessionId,
         error: error instanceof Error ? error.message : String(error),

@@ -8,7 +8,8 @@ export class SessionConfigMutationQueue {
 
   constructor(
     private readonly runtime: Pick<AcpRuntimeManager, 'getClient' | 'isStopInProgress'>,
-    private readonly publishCorrection: (sessionId: string, options: SessionConfigOption[]) => void
+    private readonly publishCorrection: (sessionId: string, options: SessionConfigOption[]) => void,
+    private readonly assertAllowed?: (sessionId: string) => Promise<void>
   ) {}
 
   async run<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
@@ -17,12 +18,14 @@ export class SessionConfigMutationQueue {
     const update = prior
       .catch(() => undefined)
       .then(async () => {
-        if (handle && this.runtime.getClient(sessionId) !== handle) {
-          throw new Error('Session runtime changed before configuration update');
-        }
         try {
+          await this.assertAllowed?.(sessionId);
+          if (handle && this.runtime.getClient(sessionId) !== handle) {
+            throw new Error('Session runtime changed before configuration update');
+          }
           if (handle) {
             await handle.promptComplete;
+            await this.assertAllowed?.(sessionId);
             return await withConfiguredAcpHandle(this.runtime, sessionId, handle, operation);
           } else {
             return await operation();

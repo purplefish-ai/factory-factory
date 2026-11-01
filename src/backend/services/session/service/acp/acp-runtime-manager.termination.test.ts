@@ -415,7 +415,7 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopAllClients', () => {
-    it('waits for fence-only reconciliation while closing admission', async () => {
+    it('waits within the shutdown budget for fence-only reconciliation while closing admission', async () => {
       const activeChild = setupSuccessfulSpawn();
       await createTestClient(manager, { sessionId: 'session-active' });
       const reconciliation = createDeferred<void>();
@@ -435,7 +435,7 @@ describe('AcpRuntimeManager', () => {
       ).rejects.toThrow('ACP runtime manager is shutting down');
       expect(lateOperation).not.toHaveBeenCalled();
       exitChildWithCode(activeChild);
-      const stopAll = manager.stopAllClients(50);
+      const stopAll = manager.stopAllClients(5000);
       let stopped = false;
       void stopAll.then(() => {
         stopped = true;

@@ -11,6 +11,7 @@ import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection, type AcpConnection } from './acp-connection';
 import { applyAcpStartupModel } from './acp-model-selection';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
+import { stopOwnedRuntimeGroup } from './acp-owned-group';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata, AcpStartupSignal } from './acp-runtime-contracts';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
@@ -51,6 +52,11 @@ export type CreateAcpClientParams = {
   stopSignal: AcpStartupSignal;
   shouldDispatchRuntimeError(child: ChildProcess): boolean;
   discardFailedResumeReplay?(): void;
+  onOwnedProcessSpawned?(
+    child: ChildProcess,
+    group: number | undefined,
+    unsupported: boolean
+  ): () => Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'>;
 };
 
 function resolveSpawnCommand(options: AcpClientOptions): SpawnCommand {
@@ -99,24 +105,36 @@ export class AcpClientFactory {
       workingDir: options.workingDir,
     });
 
+    const runtimeEnv =
+      isCodex && options.codexAccountContext
+        ? options.codexAccountContext.env
+        : this.childProcessEnvProvider();
+    const ownsGroup = options.ownedProcessGroup === true && process.platform !== 'win32';
     const child = spawn(spawnCommand.command, spawnCommand.args, {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
-        ...(isCodex && options.codexAccountContext
-          ? options.codexAccountContext.env
-          : this.childProcessEnvProvider()),
+        ...runtimeEnv,
         BROWSER: 'none',
         ELECTRON_RUN_AS_NODE: '1',
         ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true', DISABLE_MCP_CONFIG_FILTERING: 'true' } : {}),
       },
-      detached: false,
+      detached: ownsGroup,
     });
 
+    const cleanupOwned = registerOwnedSpawn(params, child, ownsGroup, runtimeEnv);
+
+    let spawned = child.pid !== undefined;
+    let spawnFailed = false;
+    child.once('spawn', () => {
+      spawned = true;
+    });
     let startupErrorListener: ((error: unknown) => void) | null = null;
     const startupError = new Promise<never>((_resolve, reject) => {
-      startupErrorListener = (error: unknown) =>
+      startupErrorListener = (error: unknown) => {
+        spawnFailed = isDefinitiveSpawnFailure(spawned, child);
         reject(createAcpSpawnError(spawnCommand.commandLabel, error));
+      };
       child.once('error', startupErrorListener);
     });
     const startupErrorSettled = startupError.catch(() => undefined);
@@ -260,6 +278,7 @@ export class AcpClientFactory {
         agentCapabilities,
         supportsSteering: supportsAcpSteering(initResult._meta),
       });
+      registerOwnedGroup(handle, ownsGroup, options, runtimeEnv);
       handle.configOptions =
         options.purpose === 'browse'
           ? sessionInfo.configOptions
@@ -282,7 +301,14 @@ export class AcpClientFactory {
             ]);
       return handle;
     } catch (error) {
-      await cleanupFailedAcpClientCreation(child, sessionId);
+      await cleanupEventRuntimeFailure(
+        child,
+        sessionId,
+        options.ownedProcessGroup === true,
+        error,
+        cleanupOwned,
+        spawnFailed
+      );
       throw error;
     } finally {
       if (startupErrorListener) {
@@ -472,4 +498,63 @@ export async function cleanupFailedAcpClientCreation(
     sessionId,
     pid: child.pid,
   });
+}
+
+function registerOwnedGroup(
+  handle: AcpProcessHandle,
+  owned: boolean,
+  options: AcpClientOptions,
+  env: NodeJS.ProcessEnv
+): void {
+  if (!options.ownedProcessGroup) {
+    return;
+  }
+  handle.ownedProcessGroup = owned ? handle.child.pid : undefined;
+  handle.eventLifecycleGeneration = options.eventLifecycleGeneration;
+  handle.unsupportedProcessOverride = Boolean(
+    options.adapterBinaryPath || env.CLAUDE_CODE_EXECUTABLE
+  );
+}
+async function cleanupEventRuntimeFailure(
+  child: ChildProcess,
+  sessionId: string,
+  owned: boolean,
+  error: unknown,
+  cleanup?: () => Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'>,
+  spawnFailed = false
+): Promise<void> {
+  if (!owned) {
+    return await cleanupFailedAcpClientCreation(child, sessionId);
+  }
+  if (spawnFailed) {
+    return;
+  }
+  if (
+    (await (cleanup?.() ??
+      stopOwnedRuntimeGroup({
+        child,
+        ownedProcessGroup: process.platform === 'win32' ? undefined : child.pid,
+      }))) !== 'LOCAL_RUNTIME_GROUP_STOPPED'
+  ) {
+    throw new Error('Event runtime startup cleanup is unconfirmed', { cause: error });
+  }
+}
+
+function registerOwnedSpawn(
+  params: CreateAcpClientParams,
+  child: ChildProcess,
+  ownsGroup: boolean,
+  env: NodeJS.ProcessEnv
+) {
+  return params.options.ownedProcessGroup
+    ? params.onOwnedProcessSpawned?.(
+        child,
+        ownsGroup ? child.pid : undefined,
+        Boolean(params.options.adapterBinaryPath || env.CLAUDE_CODE_EXECUTABLE)
+      )
+    : undefined;
+}
+
+function isDefinitiveSpawnFailure(spawned: boolean, child: ChildProcess): boolean {
+  return !spawned && child.pid === undefined;
 }

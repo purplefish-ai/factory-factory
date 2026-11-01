@@ -24,11 +24,17 @@ it('allows ACP model selection to use the shared model matching contract', async
   expect((await checkImport('src/shared/acp-protocol/model-selection.ts')).exitCode).toBe(0);
 });
 
-it.each(['src/shared/acp-protocol/unrelated.ts', 'src/backend/services/config.service.ts'])(
-  'keeps ACP imports of %s blocked',
-  async (target) => {
-    const result = await checkImport(target);
-    expect(result.exitCode).toBeGreaterThan(0);
-    expect(result.output).toContain('acp-no-external-imports');
-  }
-);
+it('allows only the transport-neutral runtime evidence contract', async () => {
+  expect((await checkImport('src/shared/acp-protocol/runtime-observation.ts')).exitCode).toBe(0);
+});
+
+it.each([
+  'src/shared/acp-protocol/unrelated.ts',
+  'src/shared/event-agent-delivery.ts',
+  'src/backend/services/agent-definition/index.ts',
+  'src/backend/services/config.service.ts',
+])('keeps ACP imports of %s blocked', async (target) => {
+  const result = await checkImport(target);
+  expect(result.exitCode).toBeGreaterThan(0);
+  expect(result.output).toContain('acp-no-external-imports');
+});

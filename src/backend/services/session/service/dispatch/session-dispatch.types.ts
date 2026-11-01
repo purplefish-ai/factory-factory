@@ -50,6 +50,7 @@ export interface SessionDispatchLifecycleDependencies {
 
 /** Method-level capabilities supplied by the session composition root. */
 export interface SessionDispatchDependencies {
+  eventAuthority?: { assertOrdinary(sessionId: string): Promise<void> };
   runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
   configService: Pick<
     SessionConfigService,

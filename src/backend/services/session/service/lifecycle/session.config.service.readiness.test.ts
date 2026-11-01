@@ -5,11 +5,12 @@ import {
   createDeferred,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { EventSessionAuthority } from './event-session-authority';
 import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 
-function setup() {
+function setup(eventAuthority?: Pick<EventSessionAuthority, 'assertOrdinary'>) {
   const handle = createTestProcessHandle({ providerSessionId: 'thread' });
   handle.configOptions = [
     {
@@ -61,6 +62,7 @@ function setup() {
   const repository = { getSessionById: vi.fn().mockResolvedValue(session), updateSession: vi.fn() };
   const domain = { emitDelta: vi.fn() };
   const service = new SessionConfigService({
+    eventAuthority,
     runtimeManager: unsafeCoerce(runtime),
     repository: unsafeCoerce(repository),
     codexModelCatalogService: { getModels: vi.fn() },
@@ -297,3 +299,32 @@ describe('public native config readiness', () => {
     expect(h.runtime.setSessionMode).toHaveBeenCalledOnce();
   });
 });
+
+it.each(['model', 'generic', 'reasoning'] as const)(
+  'fences public %s mutations while ordinary mutations retain behavior',
+  async (kind) => {
+    let fenced = true;
+    const h = setup({
+      assertOrdinary: () =>
+        fenced ? Promise.reject(new Error('initial fenced')) : Promise.resolve(),
+    });
+    const edit = () =>
+      kind === 'model'
+        ? h.service.setSessionModel('session', 'second')
+        : kind === 'generic'
+          ? h.service.setSessionConfigOption('session', 'mode', 'read-only')
+          : h.service.setSessionReasoningEffort('session', 'high');
+    await expect(edit()).rejects.toThrow('initial fenced');
+    expect(h.runtime.setSessionModel).not.toHaveBeenCalled();
+    expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
+    expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.repository.updateSession).not.toHaveBeenCalled();
+    fenced = false;
+    await edit();
+    expect(
+      h.runtime.setSessionModel.mock.calls.length +
+        h.runtime.setSessionMode.mock.calls.length +
+        h.runtime.setConfigOption.mock.calls.length
+    ).toBe(1);
+  }
+);

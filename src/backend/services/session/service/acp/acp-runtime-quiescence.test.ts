@@ -221,3 +221,44 @@ describe('AcpRuntimeQuiescence', () => {
     await stopping;
   });
 });
+it('serializes multiple observed waiters and preserves the active barrier for ordinary joiners', async () => {
+  const q = new AcpRuntimeQuiescence({ stopClient: async () => undefined });
+  const first = createDeferred<void>();
+  const second = createDeferred<void>();
+  const third = createDeferred<void>();
+  const calls: string[] = [];
+  const a = q.runObservedStop('s', async () => {
+    calls.push('first');
+    await first.promise;
+    return true;
+  });
+  const b = q.runObservedStop(
+    's',
+    async () => {
+      calls.push('second');
+      await second.promise;
+      return false;
+    },
+    () => {
+      throw new Error('unconfirmed');
+    }
+  );
+  const c = q.runObservedStop('s', async () => {
+    calls.push('third');
+    await third.promise;
+    return true;
+  });
+  first.resolve();
+  await a;
+  await vi.waitFor(() => expect(calls).toEqual(['first', 'second']));
+  const joined = expect(q.stopAndQuiesce('s')).rejects.toThrow('unconfirmed');
+  second.resolve();
+  await b;
+  await joined;
+  await vi.waitFor(() => expect(calls).toEqual(['first', 'second', 'third']));
+  await expect(
+    q.runClientCreationOperation('s', 'active', async () => undefined)
+  ).rejects.toThrow();
+  third.resolve();
+  await c;
+});

@@ -9,6 +9,7 @@ import type { SessionDispatchStartOptions } from '@/backend/services/session/ser
 import { projectSessionStartupOptions } from '@/backend/services/session/service/dispatch/session-startup-options';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
+import { eventSessionAuthority } from './event-session-authority';
 import {
   acpEventProcessor,
   claudeModelCatalogService,
@@ -45,6 +46,7 @@ export {
 };
 
 export const sessionDispatchService = new SessionDispatchService({
+  eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
   configService: sessionConfigService,
   promptService: sessionService,
