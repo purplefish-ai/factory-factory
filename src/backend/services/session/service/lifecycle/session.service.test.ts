@@ -18,6 +18,10 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
   getCurrentProcessEnv: () => ({ ...process.env }),
 }));
+// These legacy session fixtures have no retained event owner; event fencing has separate coverage.
+vi.mock('@/backend/services/session/resources/agent-session-launch-origin.accessor', () => ({
+  agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
+}));
 vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
@@ -837,13 +841,11 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
     const firstSend = sessionService.sendSessionMessage('session-queued-stop', 'first');
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     const secondSend = sessionService.sendSessionMessage('session-queued-stop', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     await sessionLifecycleService.stopSession('session-queued-stop');
     await secondRejection;
@@ -865,8 +867,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
     const firstSend = sessionService.sendSessionMessage('session-restarted-after-stop', 'first');
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     await sessionLifecycleService.stopSession('session-restarted-after-stop');
 
@@ -874,9 +875,7 @@ describe('SessionService', () => {
       'session-restarted-after-stop',
       'after restart'
     );
-    await Promise.resolve();
-
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2));
     await expect(restartedSend).resolves.toBeUndefined();
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
@@ -971,13 +970,11 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
 
     const firstSend = sessionService.sendSessionMessage('session-runtime-exit', 'first');
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     const secondSend = sessionService.sendSessionMessage('session-runtime-exit', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: session.id, exitCode: 1 });
     await secondRejection;
@@ -1098,20 +1095,17 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
     const firstSend = sessionService.sendSessionMessage('session-active-stop', 'first');
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     const secondSend = sessionService.sendSessionMessage('session-active-stop', 'second');
     const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1));
 
     await sessionLifecycleService.stopSession('session-active-stop');
     await secondRejection;
 
     const thirdSend = sessionService.sendSessionMessage('session-active-stop', 'third');
-    await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2));
 
     thirdPrompt.resolve({ stopReason: 'end_turn' });
     await expect(thirdSend).resolves.toBeUndefined();
@@ -2133,7 +2127,7 @@ describe('SessionService', () => {
       vi.mocked(acpRuntimeManager.stopClient).mockReturnValue(runtimeStop.promise);
 
       const sendPromise = sessionService.sendSessionMessage('session-1', 'hello');
-      await Promise.resolve();
+      await vi.waitFor(() => expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledOnce());
 
       const stopPromise = sessionLifecycleService.stopSession('session-1');
       await vi.waitFor(() => {

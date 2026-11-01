@@ -289,11 +289,12 @@ describe('SessionService prompt coordination', () => {
       const harness = createPromptService();
       const { service, runtimeManager, workspaceBridge } = harness;
       runtimeManager.sendPrompt.mockResolvedValueOnce({ stopReason: 'end_turn' });
-      if (scenario === 'stopping') {
-        harness.isSessionStopping.mockReturnValue(true);
-      }
-      if (scenario === 'stale') {
-        harness.isGenerationCurrent.mockReturnValue(false);
+      if (scenario === 'stopping' || scenario === 'stale') {
+        runtimeManager.sendPrompt.mockReset().mockImplementationOnce(() => {
+          harness.isSessionStopping.mockReturnValue(scenario === 'stopping');
+          harness.isGenerationCurrent.mockReturnValue(scenario !== 'stale');
+          return Promise.resolve({ stopReason: 'end_turn' });
+        });
       }
       if (scenario === 'unowned') {
         harness.acpEventProcessor.getWorkspaceId.mockReturnValue(undefined);

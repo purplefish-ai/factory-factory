@@ -2,7 +2,12 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
+import type {
+  ProviderSource,
+  RuntimeStopEvidence,
+} from '@/shared/acp-protocol/runtime-observation';
 import { type AcpClientFactory, cleanupFailedAcpClientCreation } from './acp-client-factory';
+import { AcpObservedStop } from './acp-observed-stop';
 import type { AcpProcessHandle } from './acp-process-handle';
 import type {
   AcpActiveProcessSnapshot,
@@ -11,11 +16,8 @@ import type {
   AcpRuntimeMetadata,
   AcpStartupSignal,
 } from './acp-runtime-contracts';
-import type {
-  AcpRuntimeEvent,
-  AcpRuntimeEventHandlers,
-  AcpRuntimePurpose,
-} from './acp-runtime-events';
+import { isConversationActivity } from './acp-runtime-events';
+import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
   type AcpClientCreationOperation,
@@ -36,6 +38,7 @@ export type AcpRuntimeSupervisorDependencies = {
 export class AcpRuntimeSupervisor {
   private readonly clientFactory: Pick<AcpClientFactory, 'createClient'>;
   private readonly cancelPrompt: AcpRuntimeSupervisorDependencies['cancelPrompt'];
+  private readonly observedStop: AcpObservedStop;
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly observedEmptyProviderSessions = new Map<
     string,
@@ -63,7 +66,31 @@ export class AcpRuntimeSupervisor {
     this.clientFactory = dependencies.clientFactory;
     this.cancelPrompt = dependencies.cancelPrompt;
     this.quiescence = new AcpRuntimeQuiescence({
-      stopClient: (sessionId) => this.stopClient(sessionId),
+      stopClient: async (sessionId) => {
+        if (this.observedStop.has(sessionId)) {
+          const result = await this.observedStop.stopObservedRuntime(sessionId, 'SYSTEM_STOP');
+          if (result.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
+            throw new Error('Event runtime stop is unconfirmed');
+          }
+        } else {
+          await this.stopClient(sessionId);
+        }
+      },
+    });
+    this.observedStop = new AcpObservedStop(this.quiescence, {
+      getHandle: (id) => this.sessions.get(id),
+      getMetadata: (handle) => this.runtimeMetadata.get(handle.child),
+      beginStop: (id) => {
+        this.stopGenerations.set(id, this.getStopGeneration(id) + 1);
+        this.beginSessionStop(id);
+      },
+      endStop: (id) => {
+        this.stoppingInProgress.delete(id);
+      },
+      markManaged: (child) => {
+        this.managedStopChildren.add(child);
+      },
+      removeStopped: (id, handle) => this.removeStoppedHandle(id, handle),
     });
   }
 
@@ -134,6 +161,14 @@ export class AcpRuntimeSupervisor {
     return this.quiescence.stopAndQuiesce(sessionId);
   }
 
+  stopAndQuiesceObserved(
+    sessionId: string,
+    cause: RuntimeStopEvidence['cause'],
+    expected?: ProviderSource
+  ): Promise<RuntimeStopEvidence> {
+    return this.observedStop.stopAndQuiesceObserved(sessionId, cause, expected);
+  }
+
   async getOrCreateClient(
     sessionId: string,
     options: AcpClientOptions,
@@ -141,6 +176,9 @@ export class AcpRuntimeSupervisor {
     context: AcpRuntimeContext
   ): Promise<AcpProcessHandle> {
     guardExit(sessionId);
+    if (this.observedStop.has(sessionId) && !this.sessions.has(sessionId)) {
+      throw new Error('Previous event runtime group requires confirmed cleanup');
+    }
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
     }
@@ -203,6 +241,14 @@ export class AcpRuntimeSupervisor {
     });
   }
 
+  getRuntimeIncarnation(sessionId: string, handle: AcpProcessHandle): string {
+    const runtime = this.runtimeMetadata.get(handle.child);
+    if (!runtime || this.sessions.get(sessionId) !== handle) {
+      throw new Error('Runtime incarnation is no longer current');
+    }
+    return runtime.incarnationId;
+  }
+
   isCurrentHandle(sessionId: string, handle: AcpProcessHandle): boolean {
     return this.sessions.get(sessionId) === handle;
   }
@@ -210,6 +256,7 @@ export class AcpRuntimeSupervisor {
   beginShutdown(): string[] {
     const sessionIds = new Set([
       ...this.sessions.keys(),
+      ...this.observedStop.ids(),
       ...this.pendingCreation.keys(),
       ...this.creationLocks.keys(),
       ...this.quiescence.getTrackedSessionIds(),
@@ -229,6 +276,13 @@ export class AcpRuntimeSupervisor {
   }
 
   stopClient(sessionId: string): Promise<void> {
+    if (this.observedStop.has(sessionId)) {
+      return this.stopAndQuiesceObserved(sessionId, 'SYSTEM_STOP').then((evidence) => {
+        if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
+          throw new Error('Event runtime stop is unconfirmed');
+        }
+      });
+    }
     const existingStop = this.stopOperations.get(sessionId);
     if (existingStop !== undefined) {
       logger.debug('ACP session stop already in progress', { sessionId });
@@ -491,6 +545,8 @@ export class AcpRuntimeSupervisor {
       const handle = await this.clientFactory.createClient({
         sessionId,
         options,
+        onOwnedProcessSpawned: (child, group, unsupported) =>
+          this.observedStop.registerSpawn(sessionId, child, group, unsupported),
         handlers: runtimeHandlers,
         metadata,
         shutdownSignal,
@@ -504,16 +560,17 @@ export class AcpRuntimeSupervisor {
             !this.isCreationCancelled(sessionId, stopGeneration) &&
             this.sessions.get(sessionId)?.child === child),
       });
+      this.runtimeMetadata.set(handle.child, metadata);
+      this.observedStop.register(sessionId, handle, options.ownedProcessGroup);
       startupHandle = handle;
       this.deferActiveConfiguration(handle, options);
       startupActive = false;
       const cancellation =
         startupError ?? this.getCreationCancellationError(sessionId, stopGeneration);
       if (cancellation) {
-        await cleanupFailedAcpClientCreation(handle.child, sessionId);
+        await this.cleanupInstalledCandidate(sessionId, handle, metadata);
         throw cancellation;
       }
-
       const assertCurrent = () => {
         if (startupError) {
           throw startupError;
@@ -542,12 +599,10 @@ export class AcpRuntimeSupervisor {
           });
           assertCurrent();
         } catch (error) {
-          await (startupCleanup ?? cleanupFailedAcpClientCreation(handle.child, sessionId));
+          await (startupCleanup ?? this.cleanupInstalledCandidate(sessionId, handle, metadata));
           throw error;
         }
       }
-
-      this.runtimeMetadata.set(handle.child, metadata);
       this.sessions.set(sessionId, handle);
       if (handle.sessionCreationOutcome.kind === 'new') {
         this.observedEmptyProviderSessions.set(sessionId, {
@@ -608,7 +663,9 @@ export class AcpRuntimeSupervisor {
       this.clearCurrentRuntime(sessionId, metadata);
     }
     this.managedStopChildren.add(handle.child);
-    await cleanupFailedAcpClientCreation(handle.child, sessionId);
+    if (!(await this.observedStop.cleanupCandidate(sessionId, handle))) {
+      await cleanupFailedAcpClientCreation(handle.child, sessionId);
+    }
   }
 
   private createStopRequestedError(sessionId: string): Error {
@@ -895,7 +952,7 @@ export class AcpRuntimeSupervisor {
 
   private async stopCurrentClients(timeoutMs: number): Promise<unknown[]> {
     const results = await Promise.allSettled(
-      [...this.sessions.keys()].map((sessionId) =>
+      [...new Set([...this.sessions.keys(), ...this.observedStop.ids()])].map((sessionId) =>
         raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
       )
     );
@@ -940,22 +997,4 @@ export class AcpRuntimeSupervisor {
     this.shutdownWaiters.clear();
     this.sessionStopWaiters.clear();
   }
-}
-
-function isConversationActivity(event: AcpRuntimeEvent): boolean {
-  if (event.type === 'acp_session_update') {
-    return [
-      'user_message_chunk',
-      'agent_message_chunk',
-      'agent_thought_chunk',
-      'tool_call',
-      'tool_call_update',
-      'plan',
-    ].includes(event.update.sessionUpdate);
-  }
-  return (
-    (event.type === 'acp_task_status_changed' && event.active) ||
-    event.type === 'acp_subagents_changed' ||
-    event.type === 'acp_subagent_tool_update'
-  );
 }

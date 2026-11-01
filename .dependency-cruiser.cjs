@@ -304,7 +304,7 @@ module.exports = {
       name: 'acp-no-external-imports',
       severity: 'error',
       comment:
-        'ACP internals must stay isolated from app code; only ACP internals, the logger service, question/sub-agent wire contracts, the shared model-selection contract, the pure Codex usage normalizer, owned native Codex launch/cleanup helpers, the configured Node exec path, and the shared session-update translator are allowed.',
+        'ACP internals must stay isolated from app code; only ACP internals, the logger service, question/sub-agent wire contracts, the shared model-selection and runtime-observation contracts, the pure Codex usage normalizer, owned native Codex launch/cleanup helpers, the configured Node exec path, and the shared session-update translator are allowed.',
       from: {
         path: '^src/backend/services/session/service/acp/',
         pathNot: '^src/backend/services/session/service/acp/.*\\.test\\.ts$',
@@ -312,7 +312,7 @@ module.exports = {
       to: {
         path: '^src/',
         pathNot:
-          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/backend/lib/codex-usage-normalizer\\.ts$|^src/backend/lib/owned-codex-command\\.ts$|^src/backend/lib/node-runtime\\.ts$|^src/backend/lib/owned-process-cleanup\\.ts$|^src/shared/acp-protocol/subagents.ts$|^src/shared/acp-protocol/question-input\\.ts$|^src/shared/acp-protocol/model-selection\\.ts$|^src/shared/acp-protocol/session-update-translator\\.ts$',
+          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/backend/lib/codex-usage-normalizer\\.ts$|^src/backend/lib/owned-codex-command\\.ts$|^src/backend/lib/node-runtime\\.ts$|^src/backend/lib/owned-process-cleanup\\.ts$|^src/shared/acp-protocol/subagents.ts$|^src/shared/acp-protocol/question-input\\.ts$|^src/shared/acp-protocol/runtime-observation\\.ts$|^src/shared/acp-protocol/model-selection\\.ts$|^src/shared/acp-protocol/session-update-translator\\.ts$',
       },
     },
     {

@@ -13,6 +13,7 @@ import {
   SessionStatus,
 } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type { EventSessionAuthority } from './event-session-authority';
 import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -25,6 +26,7 @@ import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 
 type RuntimeExitCoordinatorDependencies = {
+  eventAuthority?: EventSessionAuthority;
   providerIdentityService: Pick<SessionProviderIdentityService, 'reconcile'>;
   repository: Pick<SessionRepository, 'getSessionById' | 'updateSession'>;
   sessionDomainService: Pick<SessionDomainService, 'markError' | 'markProcessExit'>;
@@ -97,6 +99,12 @@ export class SessionRuntimeExitCoordinator {
       if (event.purpose === 'browse') {
         this.dependencies.acpEventProcessor.clearSessionState(event.sessionId);
         return;
+      }
+      if (!deliberate) {
+        await this.dependencies.eventAuthority?.observeUnexpectedExit(
+          event.sessionId,
+          event.incarnationId
+        );
       }
       if (!deliberate && event.exitCode !== 0) {
         try {

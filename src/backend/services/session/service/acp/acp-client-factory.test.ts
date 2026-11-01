@@ -782,4 +782,43 @@ describe('AcpClientFactory', () => {
       vi.useRealTimers();
     }
   });
+  it.each(['initialize', 'session', 'config', 'abort'] as const)(
+    'retains strict cleanup uncertainty after event %s failure',
+    async (phase) => {
+      const child = setupSuccessfulSpawn();
+      const stopSignal = createSignal();
+      if (phase === 'initialize') {
+        mocks.initialize.mockRejectedValueOnce(new Error('handshake failed'));
+      }
+      if (phase === 'session') {
+        mocks.newSession.mockRejectedValueOnce(new Error('session failed'));
+      }
+      if (phase === 'config') {
+        mocks.newSession.mockResolvedValueOnce({ sessionId: 'native', configOptions: [] });
+      }
+      if (phase === 'abort') {
+        mocks.initialize.mockReturnValueOnce(new Promise(() => undefined));
+      }
+      const cleanup = vi.fn().mockResolvedValue('UNKNOWN');
+      const onOwnedProcessSpawned = vi.fn(() => {
+        if (phase === 'abort') {
+          queueMicrotask(() => stopSignal.reject(new Error('stop requested')));
+        }
+        return cleanup;
+      });
+      await expect(
+        new AcpClientFactory().createClient({
+          ...createParams({ options: defaultOptions({ ownedProcessGroup: true }), stopSignal }),
+          onOwnedProcessSpawned,
+        })
+      ).rejects.toThrow('Event runtime startup cleanup is unconfirmed');
+      expect(onOwnedProcessSpawned).toHaveBeenCalledWith(
+        child,
+        process.platform === 'win32' ? undefined : child.pid,
+        false
+      );
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(child.kill).not.toHaveBeenCalled();
+    }
+  );
 });

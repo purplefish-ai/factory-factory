@@ -96,3 +96,21 @@ export type AcpRuntimeEvent =
   | AcpSubagentsChangedEvent
   | AcpSubagentToolUpdateEvent
   | AcpTaskStatusChangedEvent;
+
+export function isConversationActivity(event: AcpRuntimeEvent): boolean {
+  if (event.type === 'acp_session_update') {
+    return [
+      'user_message_chunk',
+      'agent_message_chunk',
+      'agent_thought_chunk',
+      'tool_call',
+      'tool_call_update',
+      'plan',
+    ].includes(event.update.sessionUpdate);
+  }
+  return (
+    (event.type === 'acp_task_status_changed' && event.active) ||
+    event.type === 'acp_subagents_changed' ||
+    event.type === 'acp_subagent_tool_update'
+  );
+}

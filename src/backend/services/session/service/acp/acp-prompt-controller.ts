@@ -24,6 +24,17 @@ export type AcpPromptRuntimePort = {
   stopClient(sessionId: string): Promise<void>;
 };
 
+/** Transport-neutral durable boundary; full RPC completion is terminal, never early acceptance. */
+export type AcpPromptObservation = {
+  assertCurrent(): void;
+  beforeSend(): Promise<void>;
+  outcome(result: {
+    stopReason: string;
+    result: 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  }): Promise<void>;
+  ambiguous(): Promise<void>;
+};
+
 export class AcpPromptController {
   constructor(private readonly runtime: AcpPromptRuntimePort) {}
 
@@ -31,47 +42,50 @@ export class AcpPromptController {
     sessionId: string,
     handle: AcpProcessHandle,
     prompt: ContentBlock[],
-    timeoutMs?: number
+    timeoutMs?: number,
+    observation?: AcpPromptObservation
   ): Promise<{ stopReason: string }> {
-    handle.isPromptInFlight = true;
+    let sendingRecorded = false;
+    let terminalRecorded = false;
     try {
+      if (observation) {
+        observation.assertCurrent();
+        await observation.beforeSend();
+        sendingRecorded = true;
+        observation.assertCurrent();
+      }
+      handle.isPromptInFlight = true;
       const promptPromise = handle.connection.prompt({
         sessionId: handle.acpSessionId,
         prompt,
       });
 
-      let result: { stopReason: string };
-      if (timeoutMs != null && timeoutMs > 0) {
-        result = await new Promise<{ stopReason: string }>((resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new PromptTimeoutError(sessionId, timeoutMs)),
-            timeoutMs
-          );
-          promptPromise.then(
-            (response) => {
-              clearTimeout(timer);
-              resolve(response);
-            },
-            (error) => {
-              clearTimeout(timer);
-              reject(error);
-            }
-          );
-        });
-      } else {
-        result = await promptPromise;
-      }
+      const result = await awaitPromptResponse(promptPromise, sessionId, timeoutMs);
 
       // ACP v1 can resolve with end_turn even after a terminal provider error.
       // Only the negotiated failure metadata distinguishes that from success.
       const failure = promptFailureSchema.safeParse(result);
-      if (failure.success && failure.data._meta.jetbrains.air.sessionFailure.severity === 'error') {
+      const failed =
+        failure.success && failure.data._meta.jetbrains.air.sessionFailure.severity === 'error';
+      if (observation) {
+        observation.assertCurrent();
+        await observation.outcome({
+          stopReason: result.stopReason,
+          result: promptOutcome(failed, result.stopReason),
+        });
+        terminalRecorded = true;
+      }
+      if (failed) {
         throw new Error(failure.data._meta.jetbrains.air.sessionFailure.title);
       }
       handle.isPromptInFlight = false;
       return { stopReason: result.stopReason };
     } catch (error) {
-      if (error instanceof PromptTimeoutError) {
+      if (observation && sendingRecorded && !terminalRecorded) {
+        // Failed evidence writes must not release the initial-delivery fence.
+        await observation.ambiguous().catch(() => undefined);
+      }
+      if (error instanceof PromptTimeoutError && !observation) {
         await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
       }
       handle.isPromptInFlight = false;
@@ -150,4 +164,31 @@ export class AcpPromptController {
     });
     return false;
   }
+}
+
+async function awaitPromptResponse(
+  prompt: Promise<{ stopReason: string }>,
+  sessionId: string,
+  timeoutMs?: number
+): Promise<{ stopReason: string }> {
+  if (timeoutMs == null || timeoutMs <= 0) {
+    return await prompt;
+  }
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new PromptTimeoutError(sessionId, timeoutMs)), timeoutMs);
+    prompt.then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function promptOutcome(failed: boolean, reason: string): 'FAILED' | 'CANCELLED' | 'COMPLETED' {
+  return failed ? 'FAILED' : reason === 'cancelled' ? 'CANCELLED' : 'COMPLETED';
 }

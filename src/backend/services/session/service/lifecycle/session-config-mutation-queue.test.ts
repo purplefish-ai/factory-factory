@@ -85,3 +85,14 @@ it('rejects deferred edits when the runtime exits without waiting for its prompt
   expect(await edit).toBe(rejectConfiguration.mock.calls[0]?.[0]);
   expect(applied).toBe(false);
 });
+
+it('rejects fenced configuration before invoking a provider mutation', async () => {
+  const operation = vi.fn(async () => undefined);
+  const queue = new SessionConfigMutationQueue(
+    { getClient: () => undefined, isStopInProgress: () => false },
+    () => undefined,
+    () => Promise.reject(new Error('initial fenced'))
+  );
+  await expect(queue.run('session', operation)).rejects.toThrow('initial fenced');
+  expect(operation).not.toHaveBeenCalled();
+});

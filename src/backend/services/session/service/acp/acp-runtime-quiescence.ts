@@ -95,6 +95,34 @@ export class AcpRuntimeQuiescence {
     return quiescenceOperation;
   }
 
+  async runObservedStop<T>(sessionId: string, stop: () => Promise<T>): Promise<T[]> {
+    const existing = this.quiescenceOperations.get(sessionId);
+    if (existing !== undefined) {
+      await existing.catch(() => undefined);
+    }
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.quiescenceOperations.set(sessionId, barrier);
+    const creations = [...(this.creationRecords.get(sessionId) ?? [])].map(
+      ({ barrier }) => barrier
+    );
+    try {
+      const results = [await stop()];
+      await Promise.all(creations);
+      if (creations.length) {
+        results.push(await stop());
+      }
+      return results;
+    } finally {
+      release();
+      if (this.quiescenceOperations.get(sessionId) === barrier) {
+        this.quiescenceOperations.delete(sessionId);
+      }
+    }
+  }
+
   getTrackedSessionIds(): string[] {
     return [...this.creationRecords.keys()];
   }

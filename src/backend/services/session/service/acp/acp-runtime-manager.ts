@@ -1,4 +1,8 @@
 import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import type {
+  ProviderSource,
+  RuntimeStopEvidence,
+} from '@/shared/acp-protocol/runtime-observation';
 import type { SessionStopTarget } from '@/shared/acp-protocol/subagents';
 import type {
   SubagentBrowseCapability,
@@ -9,6 +13,7 @@ import type {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientFactory } from './acp-client-factory';
 import type { AcpProcessHandle } from './acp-process-handle';
+import type { AcpPromptObservation } from './acp-prompt-controller';
 import { AcpPromptController } from './acp-prompt-controller';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
@@ -23,6 +28,11 @@ import type { AcpClientOptions } from './types';
 
 export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
 export { AcpBrowseSessionUnavailableError, PromptTimeoutError } from './acp-runtime-errors';
+
+export type ObservedAcpPrompt = {
+  lifecycleGeneration: number;
+  createObservation(source: ProviderSource, assertCurrent: () => void): AcpPromptObservation;
+};
 
 export class AcpRuntimeManager {
   private readonly clientFactory: AcpClientFactory;
@@ -101,6 +111,14 @@ export class AcpRuntimeManager {
     return this.supervisor.runClientCreationOperation(sessionId, purpose, operation);
   }
 
+  stopAndQuiesceObserved(
+    sessionId: string,
+    cause: RuntimeStopEvidence['cause'],
+    expected?: ProviderSource
+  ): Promise<RuntimeStopEvidence> {
+    return this.supervisor.stopAndQuiesceObserved(sessionId, cause, expected);
+  }
+
   stopAndQuiesce(sessionId: string): Promise<void> {
     return this.supervisor.stopAndQuiesce(sessionId);
   }
@@ -166,7 +184,8 @@ export class AcpRuntimeManager {
   async sendPrompt(
     sessionId: string,
     prompt: ContentBlock[],
-    timeoutMs?: number
+    timeoutMs?: number,
+    observed?: ObservedAcpPrompt
   ): Promise<{ stopReason: string }> {
     const handle = this.requireInstalledHandle(sessionId);
     while (handle.configurationReady !== undefined || handle.pendingConfigUpdates !== undefined) {
@@ -180,7 +199,39 @@ export class AcpRuntimeManager {
       throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
     }
     this.supervisor.forgetObservedEmptyProviderSession(sessionId);
-    return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
+    const providerSessionId = handle.acpSessionId;
+    const assertCurrent = () => {
+      if (
+        this.supervisor.getClient(sessionId) !== handle ||
+        this.supervisor.isStopInProgress(sessionId) ||
+        !handle.isRunning() ||
+        handle.acpSessionId !== providerSessionId ||
+        handle.configurationReady !== undefined ||
+        handle.pendingConfigUpdates !== undefined
+      ) {
+        throw new Error('Observed prompt runtime or configuration changed');
+      }
+    };
+    if (observed) {
+      handle.eventLifecycleGeneration = observed.lifecycleGeneration;
+    }
+    const observation = observed?.createObservation(
+      {
+        version: 1,
+        provider: handle.provider,
+        providerSessionId,
+        runtimeIncarnationId: this.supervisor.getRuntimeIncarnation(sessionId, handle),
+        lifecycleGeneration: observed.lifecycleGeneration,
+      },
+      assertCurrent
+    );
+    return await this.promptController.sendPrompt(
+      sessionId,
+      handle,
+      prompt,
+      timeoutMs,
+      observation
+    );
   }
 
   /** Adds input to the active turn while its original prompt keeps owning completion. */

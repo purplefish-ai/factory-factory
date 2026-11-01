@@ -72,6 +72,7 @@ export type AgentInitialDeliveryCountAggregateOutputType = {
   sendAttemptId: number
   messageId: number
   providerTurnId: number
+  evidence: number
   sendingAt: number
   acceptedAt: number
   finishedAt: number
@@ -127,6 +128,7 @@ export type AgentInitialDeliveryCountAggregateInputType = {
   sendAttemptId?: true
   messageId?: true
   providerTurnId?: true
+  evidence?: true
   sendingAt?: true
   acceptedAt?: true
   finishedAt?: true
@@ -229,6 +231,7 @@ export type AgentInitialDeliveryGroupByOutputType = {
   sendAttemptId: string
   messageId: string
   providerTurnId: string | null
+  evidence: runtime.JsonValue | null
   sendingAt: Date | null
   acceptedAt: Date | null
   finishedAt: Date | null
@@ -267,6 +270,7 @@ export type AgentInitialDeliveryWhereInput = {
   sendAttemptId?: Prisma.StringFilter<"AgentInitialDelivery"> | string
   messageId?: Prisma.StringFilter<"AgentInitialDelivery"> | string
   providerTurnId?: Prisma.StringNullableFilter<"AgentInitialDelivery"> | string | null
+  evidence?: Prisma.JsonNullableFilter<"AgentInitialDelivery">
   sendingAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
   acceptedAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
   finishedAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
@@ -283,6 +287,7 @@ export type AgentInitialDeliveryOrderByWithRelationInput = {
   sendAttemptId?: Prisma.SortOrder
   messageId?: Prisma.SortOrder
   providerTurnId?: Prisma.SortOrderInput | Prisma.SortOrder
+  evidence?: Prisma.SortOrderInput | Prisma.SortOrder
   sendingAt?: Prisma.SortOrderInput | Prisma.SortOrder
   acceptedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -302,6 +307,7 @@ export type AgentInitialDeliveryWhereUniqueInput = Prisma.AtLeast<{
   state?: Prisma.EnumAgentDeliveryStateFilter<"AgentInitialDelivery"> | $Enums.AgentDeliveryState
   attemptGeneration?: Prisma.IntFilter<"AgentInitialDelivery"> | number
   providerTurnId?: Prisma.StringNullableFilter<"AgentInitialDelivery"> | string | null
+  evidence?: Prisma.JsonNullableFilter<"AgentInitialDelivery">
   sendingAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
   acceptedAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
   finishedAt?: Prisma.DateTimeNullableFilter<"AgentInitialDelivery"> | Date | string | null
@@ -318,6 +324,7 @@ export type AgentInitialDeliveryOrderByWithAggregationInput = {
   sendAttemptId?: Prisma.SortOrder
   messageId?: Prisma.SortOrder
   providerTurnId?: Prisma.SortOrderInput | Prisma.SortOrder
+  evidence?: Prisma.SortOrderInput | Prisma.SortOrder
   sendingAt?: Prisma.SortOrderInput | Prisma.SortOrder
   acceptedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -341,6 +348,7 @@ export type AgentInitialDeliveryScalarWhereWithAggregatesInput = {
   sendAttemptId?: Prisma.StringWithAggregatesFilter<"AgentInitialDelivery"> | string
   messageId?: Prisma.StringWithAggregatesFilter<"AgentInitialDelivery"> | string
   providerTurnId?: Prisma.StringNullableWithAggregatesFilter<"AgentInitialDelivery"> | string | null
+  evidence?: Prisma.JsonNullableWithAggregatesFilter<"AgentInitialDelivery">
   sendingAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentInitialDelivery"> | Date | string | null
   acceptedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentInitialDelivery"> | Date | string | null
   finishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentInitialDelivery"> | Date | string | null
@@ -355,6 +363,7 @@ export type AgentInitialDeliveryCreateInput = {
   sendAttemptId: string
   messageId: string
   providerTurnId?: string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Date | string | null
   acceptedAt?: Date | string | null
   finishedAt?: Date | string | null
@@ -371,6 +380,7 @@ export type AgentInitialDeliveryUncheckedCreateInput = {
   sendAttemptId: string
   messageId: string
   providerTurnId?: string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Date | string | null
   acceptedAt?: Date | string | null
   finishedAt?: Date | string | null
@@ -385,6 +395,7 @@ export type AgentInitialDeliveryUpdateInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -401,6 +412,7 @@ export type AgentInitialDeliveryUncheckedUpdateInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -416,6 +428,7 @@ export type AgentInitialDeliveryCreateManyInput = {
   sendAttemptId: string
   messageId: string
   providerTurnId?: string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Date | string | null
   acceptedAt?: Date | string | null
   finishedAt?: Date | string | null
@@ -430,6 +443,7 @@ export type AgentInitialDeliveryUpdateManyMutationInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -445,6 +459,7 @@ export type AgentInitialDeliveryUncheckedUpdateManyInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -465,6 +480,7 @@ export type AgentInitialDeliveryCountOrderByAggregateInput = {
   sendAttemptId?: Prisma.SortOrder
   messageId?: Prisma.SortOrder
   providerTurnId?: Prisma.SortOrder
+  evidence?: Prisma.SortOrder
   sendingAt?: Prisma.SortOrder
   acceptedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
@@ -553,6 +569,7 @@ export type AgentInitialDeliveryCreateWithoutRunInput = {
   sendAttemptId: string
   messageId: string
   providerTurnId?: string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Date | string | null
   acceptedAt?: Date | string | null
   finishedAt?: Date | string | null
@@ -567,6 +584,7 @@ export type AgentInitialDeliveryUncheckedCreateWithoutRunInput = {
   sendAttemptId: string
   messageId: string
   providerTurnId?: string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Date | string | null
   acceptedAt?: Date | string | null
   finishedAt?: Date | string | null
@@ -597,6 +615,7 @@ export type AgentInitialDeliveryUpdateWithoutRunInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -611,6 +630,7 @@ export type AgentInitialDeliveryUncheckedUpdateWithoutRunInput = {
   sendAttemptId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   providerTurnId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidence?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   sendingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -628,6 +648,7 @@ export type AgentInitialDeliverySelect<ExtArgs extends runtime.Types.Extensions.
   sendAttemptId?: boolean
   messageId?: boolean
   providerTurnId?: boolean
+  evidence?: boolean
   sendingAt?: boolean
   acceptedAt?: boolean
   finishedAt?: boolean
@@ -644,6 +665,7 @@ export type AgentInitialDeliverySelectCreateManyAndReturn<ExtArgs extends runtim
   sendAttemptId?: boolean
   messageId?: boolean
   providerTurnId?: boolean
+  evidence?: boolean
   sendingAt?: boolean
   acceptedAt?: boolean
   finishedAt?: boolean
@@ -660,6 +682,7 @@ export type AgentInitialDeliverySelectUpdateManyAndReturn<ExtArgs extends runtim
   sendAttemptId?: boolean
   messageId?: boolean
   providerTurnId?: boolean
+  evidence?: boolean
   sendingAt?: boolean
   acceptedAt?: boolean
   finishedAt?: boolean
@@ -676,6 +699,7 @@ export type AgentInitialDeliverySelectScalar = {
   sendAttemptId?: boolean
   messageId?: boolean
   providerTurnId?: boolean
+  evidence?: boolean
   sendingAt?: boolean
   acceptedAt?: boolean
   finishedAt?: boolean
@@ -683,7 +707,7 @@ export type AgentInitialDeliverySelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentInitialDeliveryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "runId" | "state" | "attemptGeneration" | "sendAttemptId" | "messageId" | "providerTurnId" | "sendingAt" | "acceptedAt" | "finishedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["agentInitialDelivery"]>
+export type AgentInitialDeliveryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "runId" | "state" | "attemptGeneration" | "sendAttemptId" | "messageId" | "providerTurnId" | "evidence" | "sendingAt" | "acceptedAt" | "finishedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["agentInitialDelivery"]>
 export type AgentInitialDeliveryInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   run?: boolean | Prisma.AgentRunDefaultArgs<ExtArgs>
 }
@@ -707,6 +731,7 @@ export type $AgentInitialDeliveryPayload<ExtArgs extends runtime.Types.Extension
     sendAttemptId: string
     messageId: string
     providerTurnId: string | null
+    evidence: runtime.JsonValue | null
     sendingAt: Date | null
     acceptedAt: Date | null
     finishedAt: Date | null
@@ -1143,6 +1168,7 @@ export interface AgentInitialDeliveryFieldRefs {
   readonly sendAttemptId: Prisma.FieldRef<"AgentInitialDelivery", 'String'>
   readonly messageId: Prisma.FieldRef<"AgentInitialDelivery", 'String'>
   readonly providerTurnId: Prisma.FieldRef<"AgentInitialDelivery", 'String'>
+  readonly evidence: Prisma.FieldRef<"AgentInitialDelivery", 'Json'>
   readonly sendingAt: Prisma.FieldRef<"AgentInitialDelivery", 'DateTime'>
   readonly acceptedAt: Prisma.FieldRef<"AgentInitialDelivery", 'DateTime'>
   readonly finishedAt: Prisma.FieldRef<"AgentInitialDelivery", 'DateTime'>

@@ -881,6 +881,9 @@ export class SessionDispatchService {
   }
 
   private async evaluateDispatchGate(dbSessionId: string): Promise<DispatchGateResult> {
+    if (this.dependencies.eventAuthority) {
+      await this.dependencies.eventAuthority.assertOrdinary(dbSessionId);
+    }
     const session = await sessionDataService.findAgentSessionById(dbSessionId);
     if (!session) {
       return {

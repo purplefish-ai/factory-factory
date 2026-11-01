@@ -15,6 +15,8 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
+import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
+import { guardEventStartup, pinEventSession } from './event-session-startup';
 import {
   assertSessionAccountBinding,
   resolveSessionCodexContext,
@@ -56,6 +58,7 @@ const logger = createLogger('session');
 export type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 export type GetOrCreateSessionClientOptions = {
+  eventInitial?: EventInitialPermit;
   assertCurrent?: () => Promise<void>;
   resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
@@ -73,6 +76,7 @@ export type StartSessionOptions = {
 };
 
 export type SessionStartupCoordinatorDependencies = {
+  eventAuthority?: EventSessionAuthority;
   accounts?: SessionCodexAccountPort;
   hydrateProviderHistory: SessionStartupHistoryDependencies['hydrateProviderHistory'];
   repository: Pick<
@@ -140,6 +144,7 @@ export class SessionStartupCoordinator {
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    options = await guardEventStartup(this.dependencies.eventAuthority, sessionId, options ?? {});
     await this.dependencies.lifecycleGate.runStartup(sessionId, async (lease) => {
       const stopGeneration = lease.generation;
       const ownership: OwnedStartupRuntime = { shared: false };
@@ -194,6 +199,7 @@ export class SessionStartupCoordinator {
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    await this.dependencies.eventAuthority?.assertOrdinary(sessionId);
     const session = await this.dependencies.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -234,6 +240,8 @@ export class SessionStartupCoordinator {
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
+    options = await guardEventStartup(this.dependencies.eventAuthority, sessionId, options ?? {});
+    const permit = options.eventInitial;
     return await this.dependencies.lifecycleGate.runStartup(sessionId, async (lease) => {
       const stopGeneration = lease.generation;
       const session = await this.dependencies.repository.getSessionById(sessionId);
@@ -241,12 +249,13 @@ export class SessionStartupCoordinator {
         throw new Error(`Session not found: ${sessionId}`);
       }
       this.assertStartupAllowed(sessionId, stopGeneration);
-
-      return await this.getOrCreateFromRecord(session, options ?? {}, lease);
+      const initialSession = pinEventSession(session, permit);
+      return await this.getOrCreateFromRecord(initialSession, options ?? {}, lease);
     });
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
+    await this.dependencies.eventAuthority?.assertOrdinary(sessionId);
     return await this.dependencies.lifecycleGate
       .runStartup(sessionId, async (lease) => {
         const stopGeneration = lease.generation;
@@ -283,7 +292,12 @@ export class SessionStartupCoordinator {
             async (registration) =>
               await this.createAcpClient(
                 sessionId,
-                { purpose: 'browse' },
+                {
+                  purpose: 'browse',
+                  assertCurrent: () =>
+                    this.dependencies.eventAuthority?.assertOrdinary(sessionId) ??
+                    Promise.resolve(),
+                },
                 session,
                 undefined,
                 stopGeneration,
@@ -374,6 +388,7 @@ export class SessionStartupCoordinator {
   private async createAcpClient(
     sessionId: string,
     options: {
+      eventInitial?: EventInitialPermit;
       assertCurrent?: () => Promise<void>;
       model?: string;
       purpose?: 'active' | 'browse';
@@ -431,6 +446,8 @@ export class SessionStartupCoordinator {
     }
 
     const clientOptions: AcpClientOptions = {
+      ownedProcessGroup: await this.dependencies.eventAuthority?.isOwned(sessionId),
+      eventLifecycleGeneration: stopGeneration,
       provider: session.provider,
       codexAccountContext,
       purpose: options.purpose,
@@ -494,7 +511,7 @@ export class SessionStartupCoordinator {
         prepareSessionStartup(
           sessionId,
           configuredHandle,
-          { ...options, permissionPreset },
+          { ...options, permissionPreset, eventExecution: options.eventInitial?.execution },
           {
             repository: this.dependencies.repository,
             config: this.dependencies.sessionConfigService,
@@ -679,7 +696,7 @@ export class SessionStartupCoordinator {
       updatedAt: new Date().toISOString(),
     });
     const resolvedPreset =
-      options.resumePolicy === 'require_existing'
+      options.eventInitial || options.resumePolicy === 'require_existing'
         ? undefined
         : await this.dependencies.contextService.resolvePermissionPreset(session);
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);

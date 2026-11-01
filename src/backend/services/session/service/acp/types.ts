@@ -20,6 +20,9 @@ export interface AcpMcpServerConfig {
 
 export interface AcpClientOptions {
   provider: AcpProvider;
+  /** Trusted session owner policy; never accepted from a public transport. */
+  ownedProcessGroup?: boolean;
+  eventLifecycleGeneration?: number;
   /** Server-resolved immutable profile; never accepted directly from clients. */
   codexAccountContext?: AcpCodexAccountContext;
   /** Whether the adapter is serving an active turn or read-only history browsing. */

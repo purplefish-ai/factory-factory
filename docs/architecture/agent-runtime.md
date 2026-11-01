@@ -1012,3 +1012,55 @@ children, including `subagent_update` capability changes, without changing
 protocol negotiation or claiming support for a separate standard-protocol
 lifecycle. Background-task stopping remains available where AIR advertises
 `canStop`.
+
+## Event initial delivery infrastructure
+
+Event-owned sessions have a retained creation origin and a durable initial
+prompt fence. Orchestration must inject the agent-definition owner's delivery
+port before event startup or recovery. Missing or unavailable authority blocks
+those sessions, including before observers are restored. Ordinary conversations
+keep their existing policy; a durably finished initial delivery permits later
+human turns after restart.
+
+The dormant `dispatchAgentInitialPrompt` API targets the reserved session and
+sends one initial turn using its frozen execution and account binding. Its
+caller supplies a synchronous current-claim guard. Human input stays in the
+ordinary queue during setup and delivery. Queue reset, retry, manual resume,
+steering, direct startup and configuration edits cannot remove the durable
+fence. This infrastructure does not enable an event launch consumer.
+
+The send boundary persists SENDING after session serialization and provider
+configuration readiness. It then rechecks the captured runtime, lifecycle and
+claim before calling the provider. A failed pre-send write prevents invocation;
+failed later evidence writes retain uncertainty. Current ACP v1 provides no
+caller message idempotency key or conclusively correlated early acknowledgment,
+so generic live activity and replay do not mark ACCEPTED. A response to the
+captured prompt RPC records a terminal outcome directly. Local transcript rows
+are display data, never acceptance evidence. Unknown provider history must not
+be treated as proof of non-delivery.
+
+AgentInitialDelivery stores versioned, validated runtime identity, sanitized
+terminal outcome and stop evidence. Every write compares the current run worker
+and delivery attempt. The original run initialMessageId remains unchanged when
+an authorized retry rotates the current delivery identity. Terminal outcome
+alone does not settle the run or release capacity; tracked agent work is a
+separate reconciliation concern. Later human results cannot overwrite it.
+
+Event runtimes use an owned POSIX process group. Strict stop confirms
+LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. Adapter
+exit, a signal acknowledgment, cancellation acknowledgment, a missing handle or
+an IDLE snapshot is insufficient. Unsupported executable overrides, Windows
+without conclusive tree evidence, and uncertain cleanup report UNKNOWN. Live
+ownership is required; persisted PIDs are never used to signal a group after
+restart. Legacy runtime launch and stop behavior is unchanged.
+
+Group disappearance proves local runtime termination for the supported inherited
+provider launch chains. It does not prove that remote or detached owned work is
+quiescent, nor undo earlier external effects. Retry requires local runtime stop
+and resolution of tracked owned work. USER_STOP, shutdown, timeout and
+unexpected exit remain distinct causes. Shutdown interruption preserves
+reconciliation and no-resend semantics instead of inventing a user cancellation.
+Observation writes are awaited before completion; shutdown bounds its drain and
+still attempts physical cleanup when persistence fails or times out. Missing
+durable stop evidence remains an error and cannot authorize retry or capacity
+release.

@@ -16,6 +16,9 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
   getCurrentProcessEnv: () => ({ ...process.env }),
 }));
+vi.mock('@/backend/services/session/resources/agent-session-launch-origin.accessor', () => ({
+  agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
+}));
 vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {

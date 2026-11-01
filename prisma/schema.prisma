@@ -883,6 +883,7 @@ model AgentInitialDelivery {
   sendAttemptId     String             @unique
   messageId         String             @unique
   providerTurnId    String?
+  evidence          Json? // initialDeliveryEvidenceSchema; no transcript or secrets
   sendingAt         DateTime?
   acceptedAt        DateTime?
   finishedAt        DateTime?

@@ -25,13 +25,13 @@ import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import {
   buildCapabilitiesFromConfigOptions,
   getConfigOptionValues,
-  type CodexModelCatalogEntry,
   type SessionProvider,
 } from './session-config-option-helpers';
 import {
   buildStoredConfigProjection,
   type ResolvedSessionConfigProjection,
   type SessionConfigProjection,
+  type SessionConfigReadContext,
 } from './session-config-projection';
 import {
   SessionConfigSnapshotPersistence,
@@ -74,12 +74,9 @@ const logger = createLogger('session');
 const MAX_CONFIG_READ_RETIREMENTS = 3;
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-type SessionConfigReadContext = {
-  catalog?: Promise<CodexModelCatalogEntry[] | null>;
-  retirements: number;
-};
 
 export type SessionConfigServiceDependencies = {
+  eventAuthority?: { assertOrdinary(sessionId: string): Promise<void> };
   repository: SessionRepository;
   runtimeManager: AcpRuntimeManager;
   codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
@@ -132,7 +129,8 @@ export class SessionConfigService {
           type: 'config_options_update',
           configOptions,
         } as SessionDeltaEvent);
-      }
+      },
+      options.eventAuthority?.assertOrdinary.bind(options.eventAuthority)
     );
     this.queuedSettings = new SessionQueuedSettings(this.runtimeManager, (sessionId, operation) =>
       this.configUpdates.run(sessionId, operation)

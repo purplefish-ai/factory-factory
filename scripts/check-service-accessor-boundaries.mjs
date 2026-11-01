@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentPromptAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-prompt.accessor',
+  },
   agentExecutionBindingAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-execution-binding.accessor',

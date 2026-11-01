@@ -3339,6 +3339,7 @@ export const AgentInitialDeliveryScalarFieldEnum = {
   sendAttemptId: 'sendAttemptId',
   messageId: 'messageId',
   providerTurnId: 'providerTurnId',
+  evidence: 'evidence',
   sendingAt: 'sendingAt',
   acceptedAt: 'acceptedAt',
   finishedAt: 'finishedAt',
