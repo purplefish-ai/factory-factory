@@ -47,6 +47,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   client.clear();
+  vi.restoreAllMocks();
 });
 async function mount() {
   await act(() =>
@@ -80,6 +81,7 @@ it('rejects a superseded real QueryObserver refetch that resolves with unchanged
 });
 
 it('drains a fetch started before the new scope and requires a subsequent network read', async () => {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
   const old = deferred();
   const fresh = deferred();
   request.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
@@ -89,6 +91,8 @@ it('drains a fetch started before the new scope and requires a subsequent networ
   await flush();
   expect(container.textContent).toBe('hidden');
   expect(request).toHaveBeenCalledTimes(2);
+  // The freshness contract requires a timestamp newer than the drained read.
+  now.mockReturnValue(1001);
   await act(() => fresh.resolve('current capability'));
   await flush();
   expect(container.textContent).toBe('parent');
