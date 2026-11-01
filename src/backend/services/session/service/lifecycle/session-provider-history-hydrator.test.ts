@@ -204,9 +204,13 @@ describe('history hydration after provider identity rollover', () => {
     expect(loadCodex.mock.calls.every(([input]) => input.providerSessionId === 'new')).toBe(true);
   });
 
-  it.each([false, true])(
-    'defers tool backfill while streaming (turn starts during history read: %s)',
-    async (startsDuringRead) => {
+  it.each(
+    (['starting', 'running', 'stopping'] as const).flatMap((phase) =>
+      [false, true].map((startsDuringRead) => ({ phase, startsDuringRead }))
+    )
+  )(
+    'defers tool backfill in $phase (phase entered during history read: $startsDuringRead)',
+    async ({ phase, startsDuringRead }) => {
       const sessionId = 'history-session';
       sessionDomainService.resetProviderHistory(sessionId, 'saved');
       const reply: ChatMessage = {
@@ -220,13 +224,21 @@ describe('history hydration after provider identity rollover', () => {
         },
       };
       sessionDomainService.replaceTranscript(sessionId, [reply], { historySource: 'acp_fallback' });
+      const enterPhase = () => {
+        sessionDomainService.setRuntimeSnapshot(sessionId, {
+          ...sessionDomainService.getRuntimeSnapshot(sessionId),
+          phase,
+          processState: 'alive',
+        });
+      };
       if (!startsDuringRead) {
-        sessionDomainService.markRunning(sessionId);
+        enterPhase();
       }
       const read = createDeferred<unknown>();
       loadCodex.mockReturnValueOnce(read.promise);
       const hydration = hydrateProviderHistoryIfNeeded(sessionId, record('saved'));
-      sessionDomainService.markRunning(sessionId);
+      enterPhase();
+      expect(sessionDomainService.getRuntimeSnapshot(sessionId).phase).toBe(phase);
       const history = {
         status: 'loaded',
         filePath: '/tmp/fixture.jsonl',
