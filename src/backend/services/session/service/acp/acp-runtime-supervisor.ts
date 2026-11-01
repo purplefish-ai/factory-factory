@@ -25,16 +25,12 @@ import {
   raceWithSoftTimeout,
 } from './acp-runtime-quiescence';
 import { activeProcessSnapshots } from './acp-runtime-snapshot';
+import type { AcpRuntimeSupervisorDependencies } from './acp-runtime-supervisor.contracts';
 import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 const STOP_TIMEOUT_MS = 5000;
 const MAX_STARTUP_EVENTS = 10_000;
-
-export type AcpRuntimeSupervisorDependencies = {
-  clientFactory: Pick<AcpClientFactory, 'createClient'>;
-  cancelPrompt(sessionId: string, handle: AcpProcessHandle): Promise<boolean>;
-};
 
 export class AcpRuntimeSupervisor {
   private readonly clientFactory: Pick<AcpClientFactory, 'createClient'>;

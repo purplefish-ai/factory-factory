@@ -457,3 +457,35 @@ it('does not convert a failed authoritative read into an empty successful worksp
   expect(await row()).toMatchObject({ status: 'RUNNING', completedAt: null });
   expect(provider.connection.prompt).toHaveBeenCalledOnce();
 });
+
+it('rolls back stopped settlement when its lifecycle changes during owner persistence', async () => {
+  const groups = await vi.importActual<
+    typeof import('@/backend/services/session/service/acp/acp-owned-group')
+  >('@/backend/services/session/service/acp/acp-owned-group');
+  vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockResolvedValue('LOCAL_RUNTIME_GROUP_STOPPED');
+  await h.session.sessionLifecycleService.stopSession(h.attempt.sessionId, { reason: 'USER_STOP' });
+  provider.response.resolve({ stopReason: 'cancelled' });
+  await launch;
+  const writes = await vi.importActual<
+    typeof import('@/backend/services/agent-definition/resources/agent-run-settlement-writes')
+  >('@/backend/services/agent-definition/resources/agent-run-settlement-writes');
+  const { sessionLifecycleGate } = await vi.importActual<
+    typeof import('@/backend/services/session/service/lifecycle/session-core-services')
+  >('@/backend/services/session/service/lifecycle/session-core-services');
+  const gate = boundary();
+  const write = writes.writeRunSettlement;
+  vi.spyOn(writes, 'writeRunSettlement').mockImplementation(async (...args) => {
+    await write(...args);
+    await gate.wait();
+  });
+  const settling = observe(h.claim);
+  void settling.catch(() => undefined);
+  await gate.entered;
+  const reservation = sessionLifecycleGate.reserveStop(h.attempt.sessionId);
+  expect(reservation).not.toBeNull();
+  reservation?.release();
+  gate.release();
+  await expect(settling).rejects.toThrow('observation changed');
+  expect(await row()).toMatchObject({ status: 'RUNNING', completedAt: null });
+  expect((await h.read()).evidence?.work).toBeUndefined();
+});
