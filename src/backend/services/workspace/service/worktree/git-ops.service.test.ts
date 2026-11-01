@@ -6,6 +6,8 @@ const mockGetSnapshot = vi.hoisted(() => vi.fn());
 const mockGetStats = vi.hoisted(() => vi.fn());
 const mockPathExists = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
+const mockLstat = vi.hoisted(() => vi.fn());
+const mockMkdir = vi.hoisted(() => vi.fn());
 const mockWarn = vi.hoisted(() => vi.fn());
 const mockRealpath = vi.hoisted(() => vi.fn());
 const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
@@ -34,6 +36,8 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('node:fs/promises', () => ({
+  lstat: (...args: unknown[]) => mockLstat(...args),
+  mkdir: (...args: unknown[]) => mockMkdir(...args),
   rm: (...args: unknown[]) => mockRm(...args),
   realpath: (...args: unknown[]) => mockRealpath(...args),
 }));
@@ -483,5 +487,40 @@ describe('gitOpsService', () => {
       gitOpsService.createWorktree(project, 'w1', 'main', { workspaceName: 'W1' })
     ).rejects.toThrow('create failed');
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
+  });
+});
+
+describe('event creation candidate ownership', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLstat.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    mockRealpath.mockResolvedValue('/real/worktrees');
+    mockGitClient.getWorktreePath.mockReturnValue('/repo/worktrees/w1');
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([]);
+  });
+  it('returns the deterministic candidate only after checking disk and canonical Git registry', async () => {
+    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).resolves.toBe(
+      '/repo/worktrees/w1'
+    );
+    expect(mockLstat).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitClient.listWorktreesWithBranches).toHaveBeenCalledOnce();
+  });
+  it('preserves existing directories and broken symlinks by refusing any lstat entry', async () => {
+    mockLstat.mockResolvedValue({ isSymbolicLink: () => true });
+    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).rejects.toThrow(
+      'preexisting'
+    );
+    expect(mockGitClient.createWorktree).not.toHaveBeenCalled();
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+  it('preserves a registered worktree whose physical path is missing', async () => {
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([{ path: '/real/worktrees/w1' }]);
+    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).rejects.toThrow('retained');
+    expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
+  });
+  it('does not interpret inspection errors as absence', async () => {
+    mockLstat.mockRejectedValue(Object.assign(new Error('denied'), { code: 'EACCES' }));
+    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).rejects.toThrow('denied');
+    expect(mockGitClient.listWorktreesWithBranches).not.toHaveBeenCalled();
   });
 });

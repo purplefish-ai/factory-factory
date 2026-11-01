@@ -1,5 +1,5 @@
+import { stat } from 'node:fs/promises';
 import { toError } from '@/backend/lib/error-utils';
-import { pathExists } from '@/backend/lib/file-helpers';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import {
   FactoryConfigService,
@@ -86,7 +86,12 @@ class EventWorkspaceInitialization {
     try {
       const existing = await this.current();
       if (existing.status === 'READY' && existing.worktreePath) {
-        if (!(await pathExists(existing.worktreePath))) {
+        if (await isWorktreeMissing(existing.worktreePath)) {
+          await eventWorkspaceInitService.invalidateMissingWorktree(
+            this.input.claim,
+            existing.worktreePath,
+            this.check
+          );
           throw new Error('Event worktree is unavailable');
         }
         await this.current();
@@ -118,10 +123,16 @@ class EventWorkspaceInitialization {
     };
   }
   private async provision(workspace: EventWorkspace) {
+    const worktreeName = `workspace-${workspace.id}`;
+    if (!workspace.worktreePath) {
+      const path = await gitOpsService.prepareWorktreeCreation(workspace.project, worktreeName);
+      this.candidate = { path, project: workspace.project };
+      await this.current();
+    }
     // Abort never abandons Git's promise; its late result is owned until cleanup drains.
     const tree = await resolveWorkspaceWorktree({
       workspaceWithProject: workspace,
-      worktreeName: `workspace-${workspace.id}`,
+      worktreeName,
       baseBranch: workspace.project.defaultBranch,
       useExistingBranch: false,
     });
@@ -168,9 +179,19 @@ class EventWorkspaceInitialization {
         assertCurrent: this.current,
         appendOutput: (text) => eventWorkspaceInitService.appendOutput(claim, text, this.check),
         setPid: (pid) => eventWorkspaceInitService.scriptPid(claim, pid, false, this.check),
-        clearPid: (pid) => eventWorkspaceInitService.scriptPid(claim, pid, true),
+        clearPid: (pid) => this.clearScriptPid(pid),
       }
     );
+  }
+  private async clearScriptPid(pid: number) {
+    try {
+      await eventWorkspaceInitService.scriptPid(this.input.claim, pid, true);
+    } catch (error) {
+      if (error instanceof EventWorkspaceFenceError) {
+        this.fenceLost = true;
+      }
+      throw error;
+    }
   }
   private failureStatus(error: Error) {
     if (this.fenceLost || error instanceof EventWorkspaceFenceError) {
@@ -229,4 +250,16 @@ function startupProjects(
     phases.push(project);
   }
   return phases;
+}
+
+async function isWorktreeMissing(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return false;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return true;
+    }
+    throw error;
+  }
 }

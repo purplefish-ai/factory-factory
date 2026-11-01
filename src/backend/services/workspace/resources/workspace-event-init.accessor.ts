@@ -143,6 +143,26 @@ export const workspaceEventInitAccessor = {
       assertCurrent
     );
   },
+  invalidateMissingWorktree(claim: EventWorkspaceClaim, path: string, assertCurrent?: () => void) {
+    return owned(
+      claim,
+      async (tx, row) => {
+        if (row.status !== 'READY' || row.worktreePath !== path) {
+          throw new EventWorkspaceFenceError();
+        }
+        const workspace = await tx.workspace.update({
+          where: { id: row.id },
+          data: {
+            status: 'FAILED',
+            initCompletedAt: new Date(),
+            initErrorMessage: 'Event worktree is unavailable',
+          },
+        });
+        return { previous: row.status, workspace };
+      },
+      assertCurrent
+    );
+  },
   appendOutput(claim: EventWorkspaceClaim, text: string, assertCurrent?: () => void) {
     return owned(
       claim,
@@ -152,7 +172,7 @@ export const workspaceEventInitAccessor = {
         }
         await tx.workspace.update({
           where: { id: row.id },
-          data: { initOutput: `${row.initOutput ?? ''}${text}`.slice(-50 * 1024) },
+          data: { initOutput: boundedOutput(`${row.initOutput ?? ''}${text}`) },
         });
       },
       assertCurrent
@@ -174,3 +194,18 @@ export const workspaceEventInitAccessor = {
     );
   },
 };
+
+/** Preserve the existing UTF-16 storage cap without splitting a Unicode code point. */
+function boundedOutput(text: string) {
+  const limit = 50 * 1024;
+  if (text.length <= limit) {
+    return text;
+  }
+  const marker = '[...truncated...]\n';
+  let tail = text.slice(-(limit - marker.length));
+  const first = tail.charCodeAt(0);
+  if (first >= 0xdc_00 && first <= 0xdf_ff) {
+    tail = tail.slice(1);
+  }
+  return marker + tail;
+}

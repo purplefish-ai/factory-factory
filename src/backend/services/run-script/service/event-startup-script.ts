@@ -37,6 +37,7 @@ export async function executeEventStartupScript(
   let outputError: unknown;
   let stderr = '';
   let settled = false;
+  let finishing = false;
   let stopping: Promise<'CONFIRMED' | 'UNKNOWN'> | undefined;
   let failure: EventSetupError['kind'] | undefined;
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -61,32 +62,34 @@ export async function executeEventStartupScript(
       await input.clearPid(child.pid);
     } catch (cause) {
       outputError ??= cause;
+      stop('FAILED');
     }
   };
   const finish = async (code: number | null, error?: Error) => {
-    if (settled) {
+    if (finishing) {
       return;
     }
+    finishing = true;
+    clearTimeout(drainTimeout);
+    await writes;
+    await clearPid();
+    if (input.signal.aborted) {
+      abort();
+    }
+    const cleanup = stopping !== undefined ? await stopping : 'CONFIRMED';
     settled = true;
     clearTimeout(timeout);
-    clearTimeout(drainTimeout);
     input.signal.removeEventListener('abort', abort);
-    await writes;
-    const cleanup = stopping !== undefined ? await stopping : 'CONFIRMED';
-    await clearPid();
     if (failure || error || outputError) {
       reject(
         new EventSetupError(failure ?? 'FAILED', cleanup, error?.message ?? failureMessage(failure))
       );
     } else {
-      resolve({
-        success: code === 0,
-        ...(code !== 0 ? { errorMessage: stderr || 'Script failed with non-zero exit code' } : {}),
-      });
+      resolve(scriptResult(code, stderr));
     }
   };
   function stop(kind: EventSetupError['kind']) {
-    if (stopping !== undefined) {
+    if (settled || stopping !== undefined) {
       return;
     }
     failure = kind;
@@ -113,7 +116,7 @@ export async function executeEventStartupScript(
         : 'ABORTED'
     );
   const output = (data: Buffer, stream: Readable, errorOutput: boolean) => {
-    if (settled || stopping !== undefined) {
+    if (finishing || stopping !== undefined) {
       return;
     }
     const text = data.toString().slice(-SERVICE_LIMITS.startupScriptOutputTailBytes);
@@ -149,7 +152,6 @@ export async function executeEventStartupScript(
       stop('FAILED');
     }
     // Successful setup may intentionally leave dev servers holding pipes; do not kill them.
-    clearTimeout(timeout);
     if (stopping === undefined) {
       drainTimeout = setTimeout(() => {
         void finish(code);
@@ -166,6 +168,13 @@ export async function executeEventStartupScript(
     abort();
   }
   return result;
+}
+
+function scriptResult(code: number | null, stderr: string) {
+  return {
+    success: code === 0,
+    ...(code !== 0 ? { errorMessage: stderr || 'Script failed with non-zero exit code' } : {}),
+  };
 }
 
 function failureMessage(kind: EventSetupError['kind'] | undefined) {

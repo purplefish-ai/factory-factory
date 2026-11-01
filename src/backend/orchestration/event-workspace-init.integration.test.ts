@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   createIntegrationDatabase,
@@ -16,15 +17,26 @@ let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let init: typeof import('./event-workspace-init.orchestrator').initializeEventWorkspaceWorktree;
 let worktreePath: string;
+const initTasks = new Set<ReturnType<typeof init>>();
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false);
   worktreePath = join(db.tempDir, `workspace-${h.claim.reservedWorkspaceId}`);
   await mkdir(worktreePath);
+  // Controlled Git fixture: the pre-created directory holds test config, not a retained worktree.
+  vi.spyOn(h.workspace.gitOpsService, 'prepareWorktreeCreation').mockResolvedValue(worktreePath);
   const module = await vi.importActual<typeof import('./event-workspace-init.orchestrator')>(
     './event-workspace-init.orchestrator'
   );
-  init = module.initializeEventWorkspaceWorktree;
+  init = (input) => {
+    const task = module.initializeEventWorkspaceWorktree(input);
+    initTasks.add(task);
+    void task.then(
+      () => initTasks.delete(task),
+      () => initTasks.delete(task)
+    );
+    return task;
+  };
   vi.spyOn(h.workspace.gitOpsService, 'ensureBaseBranchExists').mockResolvedValue();
   vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockResolvedValue();
   vi.spyOn(h.workspace.gitOpsService, 'createWorktree').mockResolvedValue({
@@ -37,9 +49,14 @@ beforeEach(async () => {
   vi.spyOn(github.githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('fixture');
 }, 30_000);
 afterEach(async () => {
-  releaseEventBoundaries();
-  vi.restoreAllMocks();
-  await destroyIntegrationDatabase(db);
+  try {
+    releaseEventBoundaries();
+    vi.useRealTimers();
+    await Promise.allSettled([...initTasks]);
+  } finally {
+    vi.restoreAllMocks();
+    await destroyIntegrationDatabase(db);
+  }
 });
 const input = (signal = new AbortController().signal) => ({ claim: h.claim, signal });
 it('initializes the reserved event workspace without default session startup or legacy auto-init', async () => {
@@ -95,8 +112,11 @@ it('drains late Git creation after abort without registering its path or publish
   });
   await creating.entered;
   cancellation.abort();
-  await Promise.resolve();
+  await nextTurn();
   expect(done).toBe(false);
+  expect(
+    await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
+  ).toMatchObject({ status: 'PROVISIONING', worktreePath: null });
   creating.release();
   expect(await task).toMatchObject({ status: 'ABORTED', cleanup: 'CONFIRMED' });
   expect(removed).toHaveBeenCalledWith(worktreePath, expect.any(Object));
@@ -198,8 +218,8 @@ it('returns TIMED_OUT only after an uncancellable Git operation drains at the fi
   expect(h.workspace.gitOpsService.removeWorktree).toHaveBeenCalledOnce();
   expect(
     await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
-  ).not.toMatchObject({ status: 'READY' });
-  vi.useRealTimers();
+  ).toMatchObject({ status: 'PROVISIONING' });
+  // Advancing fifteen minutes also expires the real sixty-second claim lease; no FAILED write is authorized.
 });
 it('retains UNKNOWN cleanup in a failed script result without publishing READY', async () => {
   const script = await vi.importActual<typeof import('@/backend/services/run-script')>(
@@ -266,3 +286,109 @@ it.skipIf(process.platform === 'win32')(
     }
   }
 );
+it.each(['CONFIRMED', 'UNKNOWN'] as const)(
+  'joins cleanup after Git rejects beyond physical creation and returns %s proof',
+  async (cleanup) => {
+    let physicalWorkStarted = false;
+    vi.mocked(h.workspace.gitOpsService.createWorktree).mockImplementation(async () => {
+      await writeFile(join(worktreePath, 'partial-checkout'), 'partial physical work');
+      physicalWorkStarted = true;
+      throw new Error('Git failed after partial worktree creation');
+    });
+    const removing = boundary();
+    vi.mocked(h.workspace.gitOpsService.removeWorktree).mockImplementation(async () => {
+      await removing.wait();
+      if (cleanup === 'UNKNOWN') {
+        throw new Error('Cleanup failed');
+      }
+      await rm(worktreePath, { recursive: true });
+    });
+    let done = false;
+    const task = init(input()).then((result) => {
+      done = true;
+      return result;
+    });
+    try {
+      await vi.waitFor(() => expect(physicalWorkStarted).toBe(true));
+      await vi.waitFor(() => expect(h.workspace.gitOpsService.removeWorktree).toHaveBeenCalled());
+      expect(done).toBe(false);
+      removing.release();
+      expect(await task).toMatchObject({ status: 'FAILED', cleanup });
+      const partial = readFile(join(worktreePath, 'partial-checkout'), 'utf8');
+      if (cleanup === 'CONFIRMED') {
+        await expect(partial).rejects.toMatchObject({ code: 'ENOENT' });
+      } else {
+        await expect(partial).resolves.toBe('partial physical work');
+      }
+      expect(
+        await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
+      ).toMatchObject({ status: 'FAILED', worktreePath: null });
+    } finally {
+      removing.release();
+      await task;
+    }
+  }
+);
+
+it('preserves a retained worktree when strict configuration fails', async () => {
+  await db.prisma.workspace.update({
+    where: { id: h.claim.reservedWorkspaceId },
+    data: { worktreePath },
+  });
+  await writeFile(join(worktreePath, 'factory-factory.json'), '{broken');
+  expect(await init(input())).toMatchObject({ status: 'FAILED' });
+  expect(h.workspace.gitOpsService.prepareWorktreeCreation).not.toHaveBeenCalled();
+  expect(h.workspace.gitOpsService.createWorktree).not.toHaveBeenCalled();
+  expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
+  expect(await readFile(join(worktreePath, 'factory-factory.json'), 'utf8')).toBe('{broken');
+});
+it('never creates or removes a candidate rejected by the Git owner as preexisting', async () => {
+  vi.mocked(h.workspace.gitOpsService.prepareWorktreeCreation).mockRejectedValue(
+    new Error('Preexisting worktree')
+  );
+  expect(await init(input())).toMatchObject({ status: 'FAILED' });
+  expect(h.workspace.gitOpsService.createWorktree).not.toHaveBeenCalled();
+  expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
+});
+
+it('preserves STALE when the durable fence changes only at script PID cleanup', async () => {
+  await writeFile(
+    join(worktreePath, 'factory-factory.json'),
+    JSON.stringify({ scripts: { setup: 'printf cleanup-boundary' } })
+  );
+  const owner = h.workspace.eventWorkspaceInitService;
+  const writePid = owner.scriptPid;
+  const cleanup = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
+    if (args[2]) {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { workerGeneration: { increment: 1 } },
+      });
+    }
+    return writePid(...args);
+  });
+  expect(await init(input())).toMatchObject({ status: 'STALE' });
+  expect(cleanup.mock.calls.some((args) => args[2])).toBe(true);
+  expect(
+    await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
+  ).toMatchObject({ status: 'PROVISIONING' });
+});
+it('invalidates READY with the same missing path without recreating the retained workspace', async () => {
+  expect(await init(input())).toMatchObject({ status: 'READY' });
+  await rm(worktreePath, { recursive: true });
+  expect(await init(input())).toMatchObject({ status: 'FAILED' });
+  expect(
+    await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
+  ).toMatchObject({ status: 'FAILED', worktreePath });
+  expect(h.workspace.gitOpsService.createWorktree).toHaveBeenCalledOnce();
+});
+it('retains a marked Unicode-safe bounded output tail inside the event owner transaction', async () => {
+  const owner = h.workspace.eventWorkspaceInitService;
+  await owner.start(h.claim);
+  await owner.appendOutput(h.claim, `${'😀'.repeat(25_600)}x`);
+  const row = await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId);
+  expect(row?.initOutput?.startsWith('[...truncated...]\n')).toBe(true);
+  expect(Buffer.from(row?.initOutput ?? '').toString('utf8')).toBe(row?.initOutput);
+  expect(row?.initOutput?.length).toBeLessThanOrEqual(50 * 1024);
+  expect(row?.initOutput?.endsWith('😀x')).toBe(true);
+});

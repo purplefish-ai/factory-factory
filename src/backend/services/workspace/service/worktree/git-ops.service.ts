@@ -246,6 +246,32 @@ class GitOpsService {
     }
   }
 
+  /** Event creation owns only a candidate absent from both disk and Git's retained registry. */
+  async prepareWorktreeCreation(project: ProjectPaths, worktreeName: string): Promise<string> {
+    const gitClient = GitClientFactory.forProject(project);
+    const worktreePath = gitClient.getWorktreePath(worktreeName);
+    let existing = false;
+    try {
+      await fs.lstat(worktreePath);
+      existing = true;
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+        throw error;
+      }
+    }
+    if (existing) {
+      throw new Error('Refusing event creation at a preexisting worktree path');
+    }
+    // Git creation also ensures this base; canonicalize it before inspecting retained entries.
+    await fs.mkdir(project.worktreeBasePath, { recursive: true });
+    const canonicalPath = path.join(await fs.realpath(project.worktreeBasePath), worktreeName);
+    const entries = await gitClient.listWorktreesWithBranches();
+    if (entries.some((entry) => path.resolve(entry.path) === canonicalPath)) {
+      throw new Error('Refusing event creation at a retained Git worktree registration');
+    }
+    return worktreePath;
+  }
+
   async createWorktree(
     project: ProjectPaths,
     worktreeName: string,

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 const spawn = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ spawn }));
@@ -94,7 +95,7 @@ it('lets successful background descendants retain pipes without signalling their
   const task = executeEventStartupScript({
     cwd: '/test',
     args: ['-c', 'task'],
-    timeoutMs: 1000,
+    timeoutMs: 5000,
     ...h.ports,
   });
   await vi.advanceTimersByTimeAsync(0);
@@ -150,4 +151,95 @@ it('treats an externally signalled setup exit as failure, not an ordinary nonzer
   h.child.emit('exit', null, 'SIGTERM');
   h.child.emit('close', null, 'SIGTERM');
   expect(await task).toMatchObject({ kind: 'FAILED' });
+});
+it.each(['output', 'pid'] as const)(
+  'keeps cancellation owned while %s persistence drains after foreground close',
+  async (phase) => {
+    const h = setup();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = phase === 'output' ? h.ports.appendOutput : h.ports.clearPid;
+    write.mockImplementation(() => pending.then(() => undefined));
+    const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('unconfirmed'), { code: 'EPERM' });
+    });
+    let done = false;
+    const task = executeEventStartupScript({
+      cwd: '/test',
+      args: ['-c', 'task'],
+      timeoutMs: 10_000,
+      ...h.ports,
+    })
+      .catch((error: unknown) => error)
+      .then((result) => {
+        done = true;
+        return result;
+      });
+    try {
+      await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+      if (phase === 'output') {
+        h.child.stdout.write('pending output');
+        await vi.waitFor(() => expect(write).toHaveBeenCalled());
+      }
+      h.child.emit('exit', 0, null);
+      h.child.emit('close', 0, null);
+      await vi.waitFor(() => expect(write).toHaveBeenCalled());
+      h.controller.abort();
+      await nextTurn();
+      expect(done).toBe(false);
+      release();
+      expect(await task).toMatchObject({ kind: 'ABORTED', cleanup: 'UNKNOWN' });
+      if (process.platform !== 'win32') {
+        expect(signals).toHaveBeenCalledWith(-4321, 0);
+      }
+      expect(h.child.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      release();
+      await task;
+    }
+  }
+);
+it('keeps the deadline active while output persistence drains after foreground close', async () => {
+  vi.useFakeTimers();
+  const h = setup();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.ports.appendOutput.mockImplementation(() => pending.then(() => undefined));
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw Object.assign(new Error('gone'), { code: 'ESRCH' });
+  });
+  let done = false;
+  const task = executeEventStartupScript({
+    cwd: '/test',
+    args: ['-c', 'task'],
+    timeoutMs: 100,
+    ...h.ports,
+  })
+    .catch((error: unknown) => error)
+    .then((result) => {
+      done = true;
+      return result;
+    });
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    h.child.stdout.write('pending output');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.ports.appendOutput).toHaveBeenCalledWith('pending output');
+    h.child.emit('exit', 0, null);
+    h.child.emit('close', 0, null);
+    await vi.advanceTimersByTimeAsync(101);
+    expect(done).toBe(false);
+    release();
+    expect(await task).toMatchObject({
+      kind: 'TIMED_OUT',
+      cleanup: process.platform === 'win32' ? 'UNKNOWN' : 'CONFIRMED',
+    });
+  } finally {
+    release();
+    await task;
+  }
 });

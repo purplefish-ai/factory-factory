@@ -1,3 +1,4 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   boundary,
@@ -63,23 +64,28 @@ beforeEach(async () => {
   });
 }, 30_000);
 afterEach(async () => {
-  releaseEventBoundaries();
-  for (const provider of providers.values()) {
-    provider.response.resolve({ stopReason: 'end_turn' });
+  try {
+    releaseEventBoundaries();
+    for (const provider of providers.values()) {
+      provider.response.resolve({ stopReason: 'end_turn' });
+    }
+    await drainEventFixtureTasks();
+    // No fake host PID/group: UNKNOWN is the honest teardown result, not local-group proof.
+    await fixture?.session.acpRuntimeManager
+      .stopAllClients(10)
+      .catch((error: unknown) =>
+        expect(error).toMatchObject({ message: 'Event runtime stop is unconfirmed' })
+      );
+    expect(process.kill).not.toHaveBeenCalled();
+  } finally {
+    // Allow the controlled child's exit callbacks to finish while SQLite is still live.
+    await nextTurn();
+    fixture?.session.sessionPromptTurnCompletionService.clearAll();
+    fixture?.session.sessionDomainService.clearAllSessions();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    await destroyIntegrationDatabase(db);
   }
-  await drainEventFixtureTasks();
-  // No fake host PID/group: UNKNOWN is the honest teardown result, not local-group proof.
-  await fixture?.session.acpRuntimeManager
-    .stopAllClients(10)
-    .catch((error: unknown) =>
-      expect(error).toMatchObject({ message: 'Event runtime stop is unconfirmed' })
-    );
-  fixture?.session.sessionPromptTurnCompletionService.clearAll();
-  fixture?.session.sessionDomainService.clearAllSessions();
-  expect(process.kill).not.toHaveBeenCalled();
-  vi.restoreAllMocks();
-  vi.useRealTimers();
-  await destroyIntegrationDatabase(db);
 });
 async function setup(provider: 'CLAUDE' | 'CODEX' = 'CLAUDE') {
   fixture = await createEventDeliveryFixture(db, provider);
@@ -227,9 +233,9 @@ it('pre-send transaction failure prevents transport invocation at the actual own
   expect(providers.get(h.attempt.sessionId)!.connection.prompt).not.toHaveBeenCalled();
   expect(await h.read()).toMatchObject({ state: 'PENDING', evidence: null });
 });
-it('progresses another session while the first real initial prompt remains in flight', async () => {
-  const first = await setup();
-  const second = await createEventDeliveryFixture(db);
+it('progresses another CODEX session while the first real initial prompt remains in flight', async () => {
+  const first = await setup('CODEX');
+  const second = await createEventDeliveryFixture(db, 'CODEX');
   const task1 = first.dispatch();
   const p1 = await waitForSend(first.attempt.sessionId);
   const task2 = second.dispatch();

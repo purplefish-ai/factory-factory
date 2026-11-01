@@ -765,15 +765,27 @@ worktree or READY. The caller owns run linkage, lease renewal and eventual
 initial dispatch; the initializer does not enqueue or send a prompt. No claim
 consumer is wired yet.
 
+State publication revalidates the claim and emits the current row; unrelated
+metadata writes cannot suppress READY, and notification failures cannot undo a
+validated commit. A missing retained READY worktree becomes FAILED under the
+same claim and path fence, preserving its path and provenance for inspection.
+Recovery must not infer safe reinitialization from PROVISIONING alone: the
+future consumer must preserve uncertain physical-work evidence and retain
+capacity until current cleanup proof permits reset. Persisted PIDs never grant
+process ownership.
+
 Event setup has a fifteen-minute deadline. Uncancellable Git work remains owned
 until it drains; timeout does not abandon its promise. Abort and script timeout
 stop the current owned setup process group and distinguish confirmed cleanup
-from UNKNOWN. Unknown cleanup forbids retry or capacity release. Ordinary
-nonzero script exits still produce READY with a warning, and successful scripts
-may retain background dev servers. Invalid configuration and execution errors
-return explicit failures. Event initialization does not create an unattended
-terminal or send a Linear status update; a user can open a terminal afterward.
-Ordinary interactive, child and periodic initialization retain their policies.
+from UNKNOWN, including while output and PID writes drain after foreground exit.
+Git creation tracks a candidate only after rejecting preexisting paths and
+retained registrations; a rejected creation still joins candidate cleanup.
+Unknown cleanup forbids retry or capacity release. Ordinary nonzero script exits
+still produce READY with a warning, and successful scripts may retain background
+dev servers. Invalid configuration and execution errors return explicit
+failures. Event initialization does not create an unattended terminal or send a
+Linear status update; a user can open a terminal afterward. Ordinary
+interactive, child and periodic initialization retain their policies.
 
 ## Session lifecycle ownership
 

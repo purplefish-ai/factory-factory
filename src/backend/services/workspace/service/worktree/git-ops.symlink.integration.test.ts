@@ -50,6 +50,13 @@ describe('worktree removal through a symlinked base directory', () => {
         await rm(worktreePath, { recursive: true, force: true });
       }
 
+      await expect(
+        gitOpsService.prepareWorktreeCreation({ repoPath, worktreeBasePath }, 'workspace')
+      ).rejects.toThrow(missing === 'worktree-missing' ? 'retained' : 'preexisting');
+      expect((await git('worktree', 'list', '--porcelain')).stdout).toContain(
+        'refs/heads/test-branch'
+      );
+
       if (missing === 'base-link-missing') {
         await rm(worktreeBasePath);
         await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });
@@ -65,6 +72,9 @@ describe('worktree removal through a symlinked base directory', () => {
       expect((await git('worktree', 'list', '--porcelain')).stdout).not.toContain(
         'refs/heads/test-branch'
       );
+      await expect(
+        gitOpsService.prepareWorktreeCreation({ repoPath, worktreeBasePath }, 'workspace')
+      ).resolves.toBe(worktreePath);
       await expect(
         git('worktree', 'add', path.join(worktreeBasePath, 'replacement'), 'test-branch')
       ).resolves.toBeDefined();

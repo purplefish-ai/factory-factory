@@ -84,8 +84,10 @@ export async function createEventDeliveryFixture(
           planModeEnabled: false,
         };
   if (execution.codexAccountId) {
-    await db.prisma.codexAccount.create({
-      data: { id: execution.codexAccountId, label: 'Frozen event account', kind: 'MANAGED' },
+    await db.prisma.codexAccount.upsert({
+      where: { id: execution.codexAccountId },
+      update: {},
+      create: { id: execution.codexAccountId, label: 'Frozen event account', kind: 'MANAGED' },
     });
   }
   const project = await db.prisma.project.create({
