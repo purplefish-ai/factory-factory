@@ -32,9 +32,10 @@ let container: HTMLDivElement;
 let viewport: HTMLDivElement;
 let engine: Virtualizer<HTMLDivElement, HTMLDivElement>;
 let width: number;
+let hasContentBelow: boolean;
 
 function Probe() {
-  ({ engine } = useTranscriptScroll(viewport, ['row'], {
+  ({ engine, hasContentBelow } = useTranscriptScroll(viewport, ['row'], {
     identity: 'test',
     active: false,
     ready: true,
@@ -138,4 +139,37 @@ it('waits for remeasurement when a mounted row changes height', () => {
   Object.defineProperty(node, 'offsetHeight', { value: 200 });
   measure(node);
   expect(measured()).toBe(true);
+});
+
+it('tracks content below the viewport through scrolling and layout changes', async () => {
+  let height = 200;
+  let contentHeight = 200;
+  Object.defineProperty(viewport, 'clientHeight', { get: () => height });
+  Object.defineProperty(viewport, 'scrollHeight', { get: () => contentHeight });
+  await act(() => root.render(<Probe />));
+  expect(hasContentBelow).toBe(false);
+
+  contentHeight = 600;
+  await act(() => root.render(<Probe />));
+  expect(hasContentBelow).toBe(true);
+
+  viewport.scrollTop = 400;
+  await act(() => viewport.dispatchEvent(new Event('scroll')));
+  expect(hasContentBelow).toBe(false);
+
+  viewport.scrollTop = 100;
+  await act(() => viewport.dispatchEvent(new Event('scroll')));
+  expect(hasContentBelow).toBe(true);
+
+  height = 600;
+  await act(() => root.render(<Probe />));
+  expect(hasContentBelow).toBe(false);
+
+  height = 200;
+  viewport.scrollTop = 0;
+  await act(() => root.render(<Probe />));
+  expect(hasContentBelow).toBe(true);
+  contentHeight = 200;
+  await act(() => root.render(<Probe />));
+  expect(hasContentBelow).toBe(false);
 });

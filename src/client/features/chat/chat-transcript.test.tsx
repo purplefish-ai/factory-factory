@@ -36,6 +36,7 @@ afterEach(() => {
     unmount(root);
   }
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 const message = {
@@ -223,5 +224,38 @@ it.each([
     expect(
       host.querySelector<HTMLButtonElement>('[data-testid="thinking-footer"] button')?.disabled
     ).toBe(!active);
+  }
+);
+
+it.each([
+  { contentHeight: 200, showsButton: false },
+  { contentHeight: 600, showsButton: true },
+])(
+  'shows scroll to bottom only with content below the viewport: %j',
+  ({ contentHeight, showsButton }) => {
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(contentHeight);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = mountRoot(host);
+    flushSync(() =>
+      root.render(
+        <ChatTranscript
+          {...display}
+          loadingSession={false}
+          scroll={{
+            identity: 'short-reading',
+            active: true,
+            ready: true,
+            initialIntent: 'reading',
+            initialPosition: null,
+          }}
+        />
+      )
+    );
+    const viewport = host.querySelector<HTMLElement>('[data-testid="transcript-viewport"]');
+    expect(viewport?.clientHeight).toBe(400);
+    expect(viewport?.scrollHeight).toBe(contentHeight);
+    expect(host.textContent?.includes('Scroll to bottom')).toBe(showsButton);
   }
 );

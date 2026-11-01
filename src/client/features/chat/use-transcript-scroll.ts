@@ -5,7 +5,7 @@ import {
   useVirtualizer,
   type Virtualizer,
 } from '@tanstack/react-virtual';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
   createTranscriptScrollController,
   type TranscriptScrollController,
@@ -38,6 +38,7 @@ export function useTranscriptScroll(
   const engineRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null);
   const committedTotal = useRef(-1);
   const livePosition = useRef<TranscriptPosition | null>(null);
+  const [hasContentBelow, setHasContentBelow] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [state, setState] = useState<TranscriptScrollState>({
     intent: options.initialIntent,
@@ -213,5 +214,28 @@ export function useTranscriptScroll(
       controller.current?.measurementReady();
     }
   });
-  return { engine, totalSize, state, jumpToLatest: () => controller.current?.jumpToLatest() };
+  const updateContentBelow = useCallback(() => {
+    setHasContentBelow(
+      !!viewport &&
+        viewport.clientHeight > 0 &&
+        viewport.scrollHeight - viewport.clientHeight - Math.max(0, viewport.scrollTop) > 1
+    );
+  }, [viewport]);
+  // Measure the committed DOM after virtual rows resize, expand, or collapse.
+  // Reading intent is independent of geometry and must survive a clamped bottom.
+  useLayoutEffect(updateContentBelow);
+  useLayoutEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    viewport.addEventListener('scroll', updateContentBelow, { passive: true });
+    return () => viewport.removeEventListener('scroll', updateContentBelow);
+  }, [viewport, updateContentBelow]);
+  return {
+    engine,
+    totalSize,
+    state,
+    hasContentBelow,
+    jumpToLatest: () => controller.current?.jumpToLatest(),
+  };
 }

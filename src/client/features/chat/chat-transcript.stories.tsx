@@ -294,3 +294,18 @@ export const QueuedMessageSteering: Story = {
     },
   },
 };
+
+export const ShortReadingTranscript: Story = {
+  parameters: { layout: 'fullscreen' },
+  args: {
+    loadingSession: false,
+    messages: [createAssistantMessage('The focused tests passed.', 1)],
+    scroll: {
+      identity: 'short-reading',
+      active: true,
+      ready: true,
+      initialIntent: 'reading',
+      initialPosition: null,
+    },
+  },
+};
