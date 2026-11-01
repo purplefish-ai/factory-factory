@@ -400,7 +400,11 @@ export class SessionTerminationCoordinator {
       this.dependencies.eventAuthority?.invalidate(session.id);
       await withEventEvidenceDeadline(
         this.dependencies.runtimeManager.stopAndQuiesce(session.id)
-      ).catch(() => undefined);
+      ).catch(() => {
+        logger.warn('Physical runtime cleanup failed after ownership lookup failure', {
+          sessionId: session.id,
+        });
+      });
       throw error;
     }
   }

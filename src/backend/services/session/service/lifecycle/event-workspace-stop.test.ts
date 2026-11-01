@@ -1,6 +1,15 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
+const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => logger,
+  getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
+}));
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 it.each(['reject', 'stall'] as const)(
   'continues workspace cleanup after a %s ownership read',
@@ -92,8 +101,52 @@ it('inactive lookup failure cleans physical ownership without fabricating a reco
   await expect(
     coordinator.stopWorkspaceSessions('workspace', { reason: 'USER_STOP' })
   ).rejects.toThrow('Failed to stop 1');
+  expect(authority.invalidate).toHaveBeenCalledWith(base.session.id);
   expect(base.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith(base.session.id);
   expect(base.lifecycleEventService.record).not.toHaveBeenCalled();
   expect(base.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
   expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
 });
+
+it.each(['reject', 'timeout'] as const)(
+  'reports inactive fallback cleanup %s without leaking failure text',
+  async (failure) => {
+    vi.useFakeTimers();
+    const base = createTerminationHarness();
+    base.repository.getSessionsByWorkspaceId.mockResolvedValue([
+      { ...base.session, status: 'IDLE' },
+    ]);
+    base.runtimeManager.isSessionRunning.mockReturnValue(false);
+    base.runtimeManager.hasClientCreationOperation.mockReturnValue(false);
+    base.runtimeManager.stopAndQuiesce.mockImplementation(() =>
+      failure === 'reject'
+        ? Promise.reject(new Error('credential-bearing secret'))
+        : new Promise<void>(() => undefined)
+    );
+    const authority = {
+      isOwned: vi.fn().mockRejectedValue(new Error('owner unavailable')),
+      invalidate: vi.fn(),
+    };
+    const coordinator = new SessionTerminationCoordinator({
+      ...base,
+      eventAuthority: authority as never,
+    });
+    const stopped = expect(
+      coordinator.stopWorkspaceSessions('workspace', { reason: 'USER_STOP' })
+    ).rejects.toThrow('Failed to stop 1');
+    await vi.runAllTimersAsync();
+    await stopped;
+    expect(authority.invalidate).toHaveBeenCalledWith(base.session.id);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Physical runtime cleanup failed after ownership lookup failure',
+      { sessionId: base.session.id }
+    );
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('secret');
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to stop workspace session',
+      expect.objectContaining({ error: 'owner unavailable' })
+    );
+    expect(base.lifecycleEventService.record).not.toHaveBeenCalled();
+    expect(base.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
+  }
+);
