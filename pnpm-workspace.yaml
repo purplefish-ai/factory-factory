@@ -41,13 +41,11 @@ overrides:
   # v4 accepts xmldom 0.9 and remains loadable by Electron-builder's CJS callers.
   # v5 exposes import-only package exports, which those callers cannot resolve.
   plist: 4.0.0
-  'app-builder-lib>minimatch': '>=10.2.1'
   axios: 1.21.0
   body-parser: 2.4.0
   fast-uri: 4.2.3
   brace-expansion: 5.0.12
   braces: '>=3.0.3'
-  'filelist>minimatch': '>=10.2.1'
   follow-redirects: 1.16.2
   micromatch: '>=4.0.8'
   postcss: 8.5.32
@@ -85,6 +83,11 @@ overrides:
   yaml: 2.9.1
 
   # Security fixes pending upstream dependency range updates.
+  minimatch: 11.0.3
+  # ASAR 4 uses the promise-based glob API; rimraf's callback is patched below.
+  '@electron/asar': 4.3.1
+  glob: 14.0.2
+  joi: 18.3.1
   http-cache-semantics: 4.3.0
   # Mermaid 12 still requests the older vulnerable KaTeX line.
   katex: 0.19.1
@@ -97,3 +100,6 @@ overrides:
 # Remove these local mitigations once upstream publishes fixed releases.
 patchedDependencies:
   braces@3.0.3: patches/braces@3.0.3.patch
+  # Adapt legacy callers to the patched minimatch/glob export and promise APIs.
+  dir-compare@4.2.0: patches/dir-compare@4.2.0.patch
+  rimraf@2.6.3: patches/rimraf@2.6.3.patch
