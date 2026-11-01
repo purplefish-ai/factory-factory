@@ -8,6 +8,11 @@ on:
   merge_group:
     types: [checks_requested]
 
+# Supersede older main-push checks; keep PR and merge-queue runs independent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   checks:
     name: Lint, Type Check, Dependencies & Dead Code
@@ -175,7 +180,7 @@ jobs:
   test:
     name: Test
     needs: test-shards
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

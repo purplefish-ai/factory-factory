@@ -1,24 +1,7 @@
 name: Docker Build
 
 on:
-  merge_group:
-    types: [checks_requested]
-  pull_request:
-    branches: [main]
-    paths:
-      - Dockerfile
-      - .dockerignore
-      - docker-entrypoint.sh
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .pnpmfile.mjs
-      - patches/**
-      - prisma/**
-      - prisma.config.ts
-      - scripts/postinstall.mjs
-      - .github/workflows/docker-build.yml
-      - .github/workflows/docker-publish.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
