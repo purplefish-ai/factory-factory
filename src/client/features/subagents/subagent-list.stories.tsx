@@ -108,6 +108,24 @@ export const MixedExpanded: Story = {
   },
 };
 
+export const ReusedIcons: Story = {
+  args: {
+    state: {
+      kind: 'ready',
+      subagents: [
+        ...completedSubagents,
+        ...activeSubagents.map((agent, index) => ({
+          ...agent,
+          createdAt: minutesAgo(8 - index),
+        })),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Completed · 2' }));
+  },
+};
+
 export const Loading: Story = { args: { state: { kind: 'loading' } } };
 
 export const Unsupported: Story = { args: { state: { kind: 'unsupported' } } };
