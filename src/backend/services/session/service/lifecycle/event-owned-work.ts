@@ -78,7 +78,12 @@ export class EventOwnedWork {
     const id = window.attempt.sessionId;
     const handle = this.runtime.getClient(id);
     if (stopped) {
-      return !(handle || window.handle.isRunning() || this.runtime.hasClientCreationOperation(id));
+      return !(
+        handle ||
+        window.handle.isRunning() ||
+        this.runtime.hasClientCreationOperation(id) ||
+        this.lifecycle.isSessionStopping(id)
+      );
     }
     return (
       handle === window.handle &&
@@ -112,6 +117,9 @@ export class EventOwnedWork {
     ) {
       return null;
     }
+    // A strict stop has advanced beyond the source's original generation. Capture
+    // the current gate generation so later stop/start activity still invalidates it.
+    const lifecycleGeneration = this.lifecycle.getGeneration(attempt.sessionId);
     const promptRevision = window.handle.promptRevision;
     const pendingRevision = window.pendingRevision;
     const assertWorkCurrent = () => {
@@ -139,7 +147,12 @@ export class EventOwnedWork {
       assertWorkCurrent,
       assertCurrent: () => {
         assertWorkCurrent();
-        if (!this.runtimeMatches(window, stopped)) {
+        if (
+          !(
+            this.runtimeMatches(window, stopped) &&
+            this.lifecycle.isGenerationCurrent(attempt.sessionId, lifecycleGeneration)
+          )
+        ) {
           throw new Error('Event owned-work observation changed');
         }
       },
