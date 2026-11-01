@@ -1,13 +1,13 @@
+import { agentEvaluationAccessor } from '@/backend/services/agent-definition/resources/agent-evaluation.accessor';
+import { agentEventAccessor } from '@/backend/services/agent-definition/resources/agent-event.accessor';
+import { agentRunClaimAccessor } from '@/backend/services/agent-definition/resources/agent-run-claim.accessor';
+import { agentRunAccessor } from '@/backend/services/agent-definition/resources/agent-run.accessor';
 import type {
   AgentAdmissionInput,
   AgentEvaluationInput,
   AgentEventInput,
   AgentEventOrderInput,
 } from '@/shared/agent-runtime';
-import { agentEvaluationAccessor } from '../resources/agent-evaluation.accessor';
-import { agentEventAccessor } from '../resources/agent-event.accessor';
-import { agentRunClaimAccessor } from '../resources/agent-run-claim.accessor';
-import { agentRunAccessor } from '../resources/agent-run.accessor';
 
 export function ingestEvent(input: AgentEventInput) {
   return agentEventAccessor.ingestEvent(input);

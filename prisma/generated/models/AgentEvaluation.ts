@@ -915,6 +915,7 @@ export type AgentEvaluationCreateWithoutTriggerInput = {
 export type AgentEvaluationUncheckedCreateWithoutTriggerInput = {
   id?: string
   eventId: string
+  connectionId: string
   definitionRevision: number
   triggerRevision: number
   activationGeneration: number
@@ -1153,6 +1154,7 @@ export type AgentEvaluationUncheckedUpdateManyWithoutAgentDefinitionInput = {
 export type AgentEvaluationCreateManyTriggerInput = {
   id?: string
   eventId: string
+  connectionId: string
   definitionRevision: number
   triggerRevision: number
   activationGeneration: number
@@ -1188,6 +1190,7 @@ export type AgentEvaluationUpdateWithoutTriggerInput = {
 export type AgentEvaluationUncheckedUpdateWithoutTriggerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   eventId?: Prisma.StringFieldUpdateOperationsInput | string
+  connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1205,6 +1208,7 @@ export type AgentEvaluationUncheckedUpdateWithoutTriggerInput = {
 export type AgentEvaluationUncheckedUpdateManyWithoutTriggerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   eventId?: Prisma.StringFieldUpdateOperationsInput | string
+  connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number

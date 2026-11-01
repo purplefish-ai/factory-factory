@@ -169,3 +169,100 @@ it('invalidates only the edited trigger and cancels its unclaimed runs', async (
     reasonCode: 'STALE_REVISION',
   });
 });
+
+it.each(['GITHUB', 'SLACK', 'SCHEDULE'] as const)(
+  'preserves evaluated history when changing a trigger source to %s',
+  async (target) => {
+    const saved = await author();
+    const ownership = { agentDefinitionId: saved.definitionId, triggerId: saved.triggerId };
+    await fixture.admit(await fixture.event('claimed'), ownership);
+    const claim = await runtime.claimNextRun();
+    if (claim.status !== 'CLAIMED') {
+      throw new Error(JSON.stringify(claim));
+    }
+    const claimedBefore = await db.prisma.agentRun.findUniqueOrThrow({
+      where: { id: claim.runId },
+    });
+    await fixture.admit(await fixture.event('waiting'), ownership);
+    for (const status of ['SKIPPED', 'ERROR'] as const) {
+      await fixture.evaluation(await fixture.event(status), { ...ownership, status });
+    }
+    const historyBefore = await db.prisma.agentEvaluation.findMany({
+      where: { triggerId: saved.triggerId },
+      orderBy: { id: 'asc' },
+    });
+    const connection =
+      target === 'SCHEDULE'
+        ? null
+        : await db.prisma.agentConnection.create({
+            data: {
+              provider: target,
+              externalId: target === 'SLACK' ? 'T-second' : 'gh:repo-2',
+              name: 'Second source',
+              credentialsEncrypted: target === 'SLACK' ? 'encrypted' : null,
+            },
+          });
+    const originalTrigger = saved.proposal.specification.triggers[0];
+    if (!originalTrigger) {
+      throw new Error('The saved trigger is missing');
+    }
+    const replacement =
+      target === 'SCHEDULE'
+        ? {
+            id: originalTrigger.id,
+            type: 'SCHEDULE',
+            description: 'Daily',
+            config: { version: 1, cadence: 'DAILY' },
+          }
+        : target === 'SLACK'
+          ? {
+              id: originalTrigger.id,
+              type: 'SLACK_MESSAGE',
+              description: 'Feedback',
+              connectionId: connection?.id,
+              config: { version: 1, channelIds: ['C-second'] },
+            }
+          : {
+              ...originalTrigger,
+              connectionId: connection?.id,
+              config: { version: 1, repositoryIds: ['repo-2'], actions: ['labeled'] },
+            };
+    await service.update({
+      workspaceId: saved.workspaceId,
+      proposalId: saved.proposal.id,
+      revision: 1,
+      specification: { ...saved.proposal.specification, triggers: [replacement] },
+    });
+    expect(
+      await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: saved.triggerId } })
+    ).toMatchObject({
+      connectionId: connection?.id ?? null,
+      isEnabled: false,
+      activationState: 'PAUSED',
+      activationGeneration: 2,
+      triggerRevision: 2,
+    });
+    expect(
+      await db.prisma.agentEvaluation.findMany({
+        where: { triggerId: saved.triggerId },
+        orderBy: { id: 'asc' },
+      })
+    ).toEqual(historyBefore);
+    expect(historyBefore).toHaveLength(4);
+    expect(
+      historyBefore.every((evaluation) => evaluation.connectionId === fixture.connectionId)
+    ).toBe(true);
+    expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: claim.runId } })).toEqual(
+      claimedBefore
+    );
+    expect(
+      await db.prisma.agentRun.findFirstOrThrow({
+        where: { triggerId: saved.triggerId, id: { not: claim.runId } },
+      })
+    ).toMatchObject({
+      status: 'CANCELLED',
+      reasonCode: 'STALE_REVISION',
+      triggerSnapshot: { connectionId: fixture.connectionId },
+    });
+  }
+);

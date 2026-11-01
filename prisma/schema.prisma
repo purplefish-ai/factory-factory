@@ -722,7 +722,6 @@ model AgentTrigger {
   evaluations          AgentEvaluation[]
 
   @@unique([id, agentDefinitionId])
-  @@unique([id, agentDefinitionId, connectionId])
   @@index([agentDefinitionId, isEnabled])
   @@index([connectionId, type, isEnabled])
 }
@@ -816,7 +815,7 @@ model AgentEvaluation {
   agentDefinitionId     String
   agentDefinition       AgentDefinition       @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
   triggerId             String
-  trigger               AgentTrigger          @relation(fields: [triggerId, agentDefinitionId, connectionId], references: [id, agentDefinitionId, connectionId], onDelete: NoAction, onUpdate: NoAction)
+  trigger               AgentTrigger          @relation(fields: [triggerId, agentDefinitionId], references: [id, agentDefinitionId], onDelete: NoAction, onUpdate: NoAction)
   definitionRevision    Int
   triggerRevision       Int
   activationGeneration  Int
@@ -833,7 +832,7 @@ model AgentEvaluation {
 
   @@unique([eventId, triggerId, definitionRevision, triggerRevision, activationGeneration])
   @@index([eventId, connectionId])
-  @@index([triggerId, agentDefinitionId, connectionId])
+  @@index([triggerId, agentDefinitionId])
   @@index([agentDefinitionId, createdAt])
   @@index([runId, agentDefinitionId, eventId])
   @@index([expiresAt])

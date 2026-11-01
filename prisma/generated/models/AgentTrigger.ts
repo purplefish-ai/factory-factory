@@ -319,7 +319,6 @@ export type AgentTriggerOrderByWithRelationInput = {
 export type AgentTriggerWhereUniqueInput = Prisma.AtLeast<{
   id?: string
   id_agentDefinitionId?: Prisma.AgentTriggerIdAgentDefinitionIdCompoundUniqueInput
-  id_agentDefinitionId_connectionId?: Prisma.AgentTriggerIdAgentDefinitionIdConnectionIdCompoundUniqueInput
   AND?: Prisma.AgentTriggerWhereInput | Prisma.AgentTriggerWhereInput[]
   OR?: Prisma.AgentTriggerWhereInput[]
   NOT?: Prisma.AgentTriggerWhereInput | Prisma.AgentTriggerWhereInput[]
@@ -341,7 +340,7 @@ export type AgentTriggerWhereUniqueInput = Prisma.AtLeast<{
   connection?: Prisma.XOR<Prisma.AgentConnectionNullableScalarRelationFilter, Prisma.AgentConnectionWhereInput> | null
   runs?: Prisma.AgentRunListRelationFilter
   evaluations?: Prisma.AgentEvaluationListRelationFilter
-}, "id" | "id_agentDefinitionId" | "id_agentDefinitionId_connectionId">
+}, "id" | "id_agentDefinitionId">
 
 export type AgentTriggerOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -532,12 +531,6 @@ export type AgentTriggerOrderByRelationAggregateInput = {
 export type AgentTriggerIdAgentDefinitionIdCompoundUniqueInput = {
   id: string
   agentDefinitionId: string
-}
-
-export type AgentTriggerIdAgentDefinitionIdConnectionIdCompoundUniqueInput = {
-  id: string
-  agentDefinitionId: string
-  connectionId: string
 }
 
 export type AgentTriggerCountOrderByAggregateInput = {
