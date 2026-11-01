@@ -20,13 +20,28 @@ class SessionProviderResolverImplementation {
     workspace?: Workspace;
   }): Promise<{ provider: SessionProvider; model: string }> {
     const provider = await this.resolveSessionProvider(params);
+    return this.resolveModelDefaults(provider, params.explicitModel);
+  }
+
+  async resolveDefaultsForWorkspaceCreation(
+    explicitProvider?: SessionProvider,
+    explicitModel?: string
+  ): Promise<{ provider: SessionProvider; model: string }> {
+    const provider = await this.resolveProviderForWorkspaceCreation(
+      explicitProvider,
+      explicitModel
+    );
+    return this.resolveModelDefaults(provider, explicitModel);
+  }
+
+  private async resolveModelDefaults(provider: SessionProvider, explicitModel?: string) {
     const settings = await this.dependencies.getModelDefaults();
     const configuredModel =
       provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel;
 
     return {
       provider,
-      model: resolveSessionModelForProvider(params.explicitModel, provider, configuredModel),
+      model: resolveSessionModelForProvider(explicitModel, provider, configuredModel),
     };
   }
 

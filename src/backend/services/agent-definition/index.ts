@@ -16,6 +16,7 @@ export {
   recordEvaluation,
   admitRun,
   claimNextRun,
+  maintainQueue,
 } from './service/agent-runtime.service';
 export * from '@/shared/agent-runtime';
 export {
@@ -35,3 +36,9 @@ export {
   type AgentRunInput,
   type AgentTriggerInput,
 } from '@/shared/schemas/agent-definition.schema';
+
+export { matchAgentEvent } from './service/agent-event-matcher';
+export {
+  AgentEventEvaluationService,
+  type AgentEvaluationPorts,
+} from './service/agent-event-evaluation.service';

@@ -24,6 +24,7 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
 
 export const SERVICE_INTERVAL_MS = Object.freeze({
   agentSourcePoll: 60_000,
+  agentEventEvaluation: 5000,
   workspaceMetadata: 10_000,
   fileLockCleanup: 5 * 60 * 1000,
   ratchetPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure

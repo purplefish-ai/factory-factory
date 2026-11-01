@@ -156,6 +156,25 @@ async function admitRun(value: AgentAdmissionInput): Promise<AdmissionResult> {
       });
       return { status: 'COALESCED', runId: existing.id };
     }
+    const overflowed = await tx.agentEvaluation.findFirst({
+      where: {
+        agentDefinitionId: requested.agentDefinitionId,
+        eventId: requested.eventId,
+        reasonCode: 'QUEUE_OVERFLOW',
+      },
+      select: { id: true },
+    });
+    if (overflowed) {
+      await tx.agentEvaluation.update({
+        where: { id: requested.id },
+        data: {
+          status: 'SKIPPED',
+          reasonCode: 'QUEUE_OVERFLOW',
+          explanation: 'This event already exceeded the waiting-run limit.',
+        },
+      });
+      return { status: 'REJECTED', reason: 'QUEUE_OVERFLOW' };
+    }
     const selected = await firstMatchedEvaluation(tx, requested, trigger);
     if ('reason' in selected) {
       return { status: 'DEFERRED', reason: selected.reason };
@@ -192,6 +211,9 @@ async function admitRun(value: AgentAdmissionInput): Promise<AdmissionResult> {
         triggerId: ownerTrigger.id,
         eventId: owner.eventId,
         idempotencyKey: `event:${owner.eventId}`,
+        // A launch continues the successful evaluation attempt; prior retries consume
+        // the same end-to-end budget. The initial claim increments this counter.
+        attemptCount: owner.attemptCount - 1,
         definitionRevision: owner.definitionRevision,
         triggerRevision: owner.triggerRevision,
         activationGeneration: owner.activationGeneration,

@@ -15,6 +15,10 @@ const ACCESSOR_POLICIES = {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-event.accessor',
   },
+  agentEvaluationCandidatesAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-evaluation-candidates.accessor',
+  },
   agentEvaluationAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-evaluation.accessor',

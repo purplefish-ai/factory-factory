@@ -1,5 +1,6 @@
 import {
   agentActivationBoundarySchema,
+  agentSourceHealthSchema,
   agentEventPayloadSchema,
   type AgentActivationBoundary,
   type AgentEventPayload,
@@ -135,7 +136,10 @@ export function eventEligibility(
     : slackEligibility(trigger, payload, settings.data, boundary.data);
 }
 
-export function runtimeStateReason(trigger: RuntimeTrigger): AgentRuntimeReason | null {
+export function permanentRuntimeStateReason(trigger: RuntimeTrigger): AgentRuntimeReason | null {
+  if (trigger.type === 'SCHEDULE') {
+    return 'UNSUPPORTED_TRIGGER';
+  }
   if (trigger.agentDefinition.project.isArchived) {
     return 'PROJECT_ARCHIVED';
   }
@@ -146,10 +150,25 @@ export function runtimeStateReason(trigger: RuntimeTrigger): AgentRuntimeReason 
     return 'TRIGGER_DISABLED';
   }
   if (
-    !(trigger.connection?.isEnabled && trigger.connection.sourceState?.isReady) ||
+    !trigger.connection?.isEnabled ||
     (trigger.connection.provider === 'SLACK' && !trigger.connection.credentialsEncrypted)
   ) {
     return 'CONNECTION_UNAVAILABLE';
   }
+  const health = agentSourceHealthSchema.safeParse(trigger.connection?.sourceState?.health);
+  if (!health.success && trigger.connection?.sourceState?.health != null) {
+    return 'INVALID_STORED_DATA';
+  }
+  if (health.success && health.data.state === 'RECOVERY_REQUIRED') {
+    return 'SOURCE_RECOVERY_REQUIRED';
+  }
   return null;
+}
+
+export function runtimeStateReason(trigger: RuntimeTrigger): AgentRuntimeReason | null {
+  const permanent = permanentRuntimeStateReason(trigger);
+  if (permanent) {
+    return permanent;
+  }
+  return trigger.connection?.sourceState?.isReady ? null : 'CONNECTION_UNAVAILABLE';
 }

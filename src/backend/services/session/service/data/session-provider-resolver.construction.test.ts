@@ -129,3 +129,24 @@ describe('constructed session provider resolver', () => {
     });
   });
 });
+
+it('resolves creation defaults before a workspace exists, using saved models and validating overrides', async () => {
+  const { service, dependencies } = resolver('CODEX');
+  dependencies.findWorkspace.mockRejectedValue(new Error('No workspace exists yet'));
+  expect(service.resolveDefaultsForWorkspaceCreation).toBeTypeOf('function');
+  expect(await service.resolveDefaultsForWorkspaceCreation()).toEqual({
+    provider: 'CODEX',
+    model: 'gpt-saved',
+  });
+  expect(await service.resolveDefaultsForWorkspaceCreation('CLAUDE')).toEqual({
+    provider: 'CLAUDE',
+    model: 'haiku',
+  });
+  expect(await service.resolveDefaultsForWorkspaceCreation('CLAUDE', 'opus')).toEqual({
+    provider: 'CLAUDE',
+    model: 'opus',
+  });
+  await expect(
+    service.resolveDefaultsForWorkspaceCreation('CLAUDE', 'gpt-wrong')
+  ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+});

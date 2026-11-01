@@ -255,6 +255,16 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
     typeof import('@/backend/services/job-runner.service')
   >('@/backend/services/job-runner.service');
   const graph = {
+    userSettingsQueryService: (
+      await vi.importActual<typeof import('@/backend/services/settings')>(
+        '@/backend/services/settings'
+      )
+    ).userSettingsService,
+    sessionProviderResolverService: (
+      await vi.importActual<typeof import('@/backend/services/session')>(
+        '@/backend/services/session'
+      )
+    ).sessionProviderResolverService,
     githubCLIService: {
       getAgentRepositoryIdentity: (
         _repository: string,

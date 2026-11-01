@@ -345,6 +345,9 @@ function loadAgentRuntimeLimits() {
     waitingPerDefinition: env.AGENT_WAITING_PER_DEFINITION,
     waitingExpiryMs: 24 * 60 * 60 * 1000,
     githubPagesPerCycle: 10,
+    evaluationBatchSize: 100,
+    queueBatchSize: 100,
+    retryDelaysMs: [30_000, 120_000, 600_000],
   };
 }
 
