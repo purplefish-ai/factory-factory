@@ -109,6 +109,7 @@ enum WorkspaceCreationSource {
   RESUME_BRANCH   // Created from existing branch
   GITHUB_ISSUE    // Created from GitHub issue
   LINEAR_ISSUE    // Created from Linear issue
+  EVENT_AGENT     // Created by a durable event agent run
   PERIODIC_TASK   // Created by a periodic task execution
   CHILD_WORKSPACE // Created as a child of another workspace
 }
@@ -755,6 +756,7 @@ model AgentRun {
   result               Json? // agentRunResultSchema; retained independently of the workspace/event
   evaluations          AgentEvaluation[]
   initialDelivery      AgentInitialDelivery?
+  effectiveExecution   Json? // eventAgentExecutionSchema; immutable account and launch binding
   definitionSnapshot   Json // agentDefinitionInputSchema; frozen at admission
   triggerSnapshot      Json? // agentTriggerInputSchema; null for manual runs
   input                Json // agentRunInputSchema; normalized event context, never raw provider payloads
@@ -954,4 +956,21 @@ model WorkspaceNotification {
   @@map("workspace_notifications")
   @@index([workspaceId])
   @@index([workspaceId, deliveredAt])
+}
+
+/// Retained creation evidence; intentionally no cascading entity relations.
+model WorkspaceLaunchOrigin {
+  runId String @id
+  workspaceId String @unique
+  projectId String
+  createdAt DateTime @default(now())
+}
+
+/// Session-owned retained identity and immutable launch intent, never credentials.
+model AgentSessionLaunchOrigin {
+  runId String @id
+  sessionId String @unique
+  workspaceId String
+  execution Json // eventAgentExecutionSchema
+  createdAt DateTime @default(now())
 }

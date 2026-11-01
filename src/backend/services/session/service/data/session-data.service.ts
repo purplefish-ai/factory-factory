@@ -1,4 +1,6 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import { codexAccountService } from '@/backend/services/codex-accounts';
+import { agentSessionLaunchOriginAccessor } from '@/backend/services/session/resources/agent-session-launch-origin.accessor';
 import {
   agentSessionAccessor,
   type AgentSessionRecord as PersistenceAgentSessionRecord,
@@ -19,6 +21,7 @@ import type {
   AgentSessionRecordWithWorkspace,
 } from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
+import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import type { PRTarget } from '@/shared/pr-monitoring';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import {
@@ -62,6 +65,7 @@ function toAgentSessionRecordWithWorkspace(
 export interface SessionDataDependencies {
   providerResolver: Pick<SessionProviderResolverService, 'resolveSessionDefaults'>;
   accounts?: Pick<typeof codexAccountService, 'withAccountReservation'>;
+  eventAccounts?: Pick<typeof codexAccountService, 'getRuntimeContext' | 'getEnabledAccountIds'>;
 }
 
 class SessionDataImplementation {
@@ -85,6 +89,29 @@ class SessionDataImplementation {
     return (await agentSessionAccessor.findByWorkspaceId(workspaceId, filters)).map(
       toAgentSessionRecord
     );
+  }
+
+  /** Caller has frozen the account under its reservation; never allocate or re-enter it here. */
+  async createEventSessionOnce(input: EventSessionCreation): Promise<AgentSessionRecord> {
+    const data = eventSessionCreationSchema.parse(input);
+    if (data.execution.provider === 'CODEX') {
+      const accounts = this.dependencies.eventAccounts ?? codexAccountService;
+      try {
+        if (!(await accounts.getEnabledAccountIds()).includes(data.execution.codexAccountId)) {
+          throw new Error('Account unavailable');
+        }
+        await accounts.getRuntimeContext(data.execution.codexAccountId);
+      } catch {
+        // Provider/authentication errors can contain credentials; expose only this stable contract.
+        throw new ApplicationError('PRECONDITION_FAILED', 'Frozen Codex account is unavailable');
+      }
+    }
+    const metadata = createSessionLaunchMetadata(data.execution);
+    return toAgentSessionRecord(await agentSessionAccessor.createEventOnce(data, metadata ?? {}));
+  }
+
+  findEventSessionOrigin(sessionId: string) {
+    return agentSessionLaunchOriginAccessor.findBySessionId(sessionId);
   }
 
   async createAgentSession(data: {

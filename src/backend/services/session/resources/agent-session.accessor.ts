@@ -1,6 +1,9 @@
 import { prisma } from '@/backend/db';
 import { SessionStatus } from '@/shared/core';
+import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
+import { agentSessionLaunchOriginAccessor } from './agent-session-launch-origin.accessor';
+import { findEventSessionForCreation } from './event-session-creation';
 
 export type AgentSessionRecord = AgentSession;
 
@@ -93,6 +96,10 @@ export interface AgentSessionAccessor {
     data: Omit<UpdateAgentSessionInput, 'providerSessionId'>
   ): Promise<number>;
   rolloverProviderIdentity(id: string, input: ProviderIdentityRolloverInput): Promise<number>;
+  createEventOnce(
+    input: EventSessionCreation,
+    providerMetadata: Prisma.InputJsonValue
+  ): Promise<AgentSessionRecord>;
   create(data: CreateAgentSessionInput): Promise<AgentSessionRecord>;
   createWithinWorkspaceLimit(
     data: CreateLimitedAgentSessionInput
@@ -117,6 +124,31 @@ export interface AgentSessionAccessor {
 class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   /** Serialises per-workspace acquisition to prevent count-then-create races. */
   private readonly workspaceAcquisitionQueue = new Map<string, Promise<unknown>>();
+
+  createEventOnce(input: EventSessionCreation, providerMetadata: Prisma.InputJsonValue) {
+    const data = eventSessionCreationSchema.parse(input);
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE "AgentSession" SET "id" = "id" WHERE 0`;
+      const existing = await findEventSessionForCreation(tx, data);
+      if (existing) {
+        return existing;
+      }
+      const session = await tx.agentSession.create({
+        data: {
+          id: data.id,
+          workspaceId: data.workspaceId,
+          name: 'Agent',
+          workflow: 'event-agent',
+          provider: data.execution.provider,
+          model: data.execution.model,
+          codexAccountId: data.execution.codexAccountId,
+          providerMetadata,
+        },
+      });
+      await agentSessionLaunchOriginAccessor.create(tx, data);
+      return session;
+    });
+  }
 
   async create(data: CreateAgentSessionInput): Promise<AgentSessionRecord> {
     return await prisma.agentSession.create({

@@ -80,7 +80,9 @@ export const ModelName = {
   AgentInitialDelivery: 'AgentInitialDelivery',
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
-  WorkspaceNotification: 'WorkspaceNotification'
+  WorkspaceNotification: 'WorkspaceNotification',
+  WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
+  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -479,6 +481,7 @@ export const AgentRunScalarFieldEnum = {
   expiresAt: 'expiresAt',
   reasonCode: 'reasonCode',
   result: 'result',
+  effectiveExecution: 'effectiveExecution',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',
@@ -639,6 +642,27 @@ export const WorkspaceNotificationScalarFieldEnum = {
 } as const
 
 export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
+
+
+export const WorkspaceLaunchOriginScalarFieldEnum = {
+  runId: 'runId',
+  workspaceId: 'workspaceId',
+  projectId: 'projectId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceLaunchOriginScalarFieldEnum = (typeof WorkspaceLaunchOriginScalarFieldEnum)[keyof typeof WorkspaceLaunchOriginScalarFieldEnum]
+
+
+export const AgentSessionLaunchOriginScalarFieldEnum = {
+  runId: 'runId',
+  sessionId: 'sessionId',
+  workspaceId: 'workspaceId',
+  execution: 'execution',
+  createdAt: 'createdAt'
+} as const
+
+export type AgentSessionLaunchOriginScalarFieldEnum = (typeof AgentSessionLaunchOriginScalarFieldEnum)[keyof typeof AgentSessionLaunchOriginScalarFieldEnum]
 
 
 export const SortOrder = {

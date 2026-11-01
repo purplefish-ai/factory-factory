@@ -375,6 +375,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     schedulerService,
     serverInstanceService,
     sessionDataService: createSessionDataService({
+      eventAccounts: {
+        getRuntimeContext: (id) => services.codexAccountService.getRuntimeContext(id),
+        getEnabledAccountIds: () => services.codexAccountService.getEnabledAccountIds(),
+      },
       accounts: {
         withAccountReservation: (input, operation) =>
           services.codexAccountService.withAccountReservation(input, operation),

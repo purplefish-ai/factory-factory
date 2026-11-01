@@ -42,3 +42,10 @@ export {
   AgentEventEvaluationService,
   type AgentEvaluationPorts,
 } from './service/agent-event-evaluation.service';
+
+export {
+  readEventExecutionBinding,
+  freezeEventExecution,
+  type EventLaunchClaim,
+  type FreezeEventExecutionInput,
+} from './service/agent-execution-binding.service';
