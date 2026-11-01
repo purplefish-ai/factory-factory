@@ -236,27 +236,30 @@ vi.mock('@/client/features/subagents', async () => ({
   useSubagentTimelineMessages: (messages: unknown[]) => ({
     messages,
     error: null,
-    subagents: [
-      {
-        id: 'agent-1',
-        name: 'Review code',
-        status: 'running',
-        createdAt: null,
-        updatedAt: null,
-        completedAt: null,
-        latestActivity: null,
-        resultPreview: null,
-      },
-      {
-        id: 'agent-2',
-        name: 'Finished task',
-        status: 'completed',
-        createdAt: null,
-        updatedAt: null,
-        completedAt: null,
-        latestActivity: null,
-        resultPreview: null,
-      },
-    ],
+    subagentListState: {
+      kind: 'ready',
+      subagents: [
+        {
+          id: 'agent-1',
+          name: 'Review code',
+          status: 'running',
+          createdAt: null,
+          updatedAt: null,
+          completedAt: null,
+          latestActivity: null,
+          resultPreview: null,
+        },
+        {
+          id: 'agent-2',
+          name: 'Finished task',
+          status: 'completed',
+          createdAt: null,
+          updatedAt: null,
+          completedAt: null,
+          latestActivity: null,
+          resultPreview: null,
+        },
+      ],
+    },
   }),
 }));

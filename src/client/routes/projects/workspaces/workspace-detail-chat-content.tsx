@@ -13,7 +13,7 @@ import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   SubagentList,
   type SubagentSelection,
-  type SubagentListItem,
+  type SubagentListState,
   useSubagentTimelineMessages,
 } from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
@@ -157,14 +157,14 @@ function createTranscriptHeader(
   );
 }
 
-function createRunningSubagentList(props: ChatContentProps, subagents: SubagentListItem[]) {
+function createRunningSubagentList(props: ChatContentProps, state: SubagentListState) {
   if (!props.onOpenSubagent) {
     return undefined;
   }
   return (
     <SubagentList
       activeOnly
-      state={subagents.length ? { kind: 'ready', subagents } : { kind: 'loading' }}
+      state={state}
       onSelect={(subagent) => {
         if (props.sessionId) {
           props.onOpenSubagent?.({
@@ -263,7 +263,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         messages={groupedMessages}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
-        runningSubagentList={createRunningSubagentList(props, timeline.subagents)}
+        runningSubagentList={createRunningSubagentList(props, timeline.subagentListState)}
         acpPlan={props.acpPlan}
         running={running}
         work={props.sessionRuntime.work}

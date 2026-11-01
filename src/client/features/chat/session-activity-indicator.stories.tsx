@@ -180,3 +180,26 @@ export const ProcessStopPending: Story = {
     await expect(canvas.getAllByRole('button', { name: /^Stop process:/ })[0]).toBeDisabled();
   },
 };
+
+export const LaterPageFailed: Story = {
+  args: {
+    runningSubagentIconIndices: [],
+    runningSubagentList: (
+      <SubagentList
+        activeOnly
+        onSelect={fn()}
+        state={{
+          kind: 'ready',
+          subagents: [],
+          hasMore: true,
+          error: { message: 'Some sub-agent activity could not be loaded.', onRetry: fn() },
+        }}
+      />
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: '3 sub-agents running' }));
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
