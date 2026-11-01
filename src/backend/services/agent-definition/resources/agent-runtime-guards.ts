@@ -38,17 +38,6 @@ export function triggerRevisions(trigger: RuntimeTrigger): Revisions {
     activationGeneration: trigger.activationGeneration,
   };
 }
-export function triggerSnapshot(trigger: RuntimeTrigger) {
-  return agentTriggerInputSchema.parse({
-    type: trigger.type,
-    description: trigger.description,
-    filterInstructions: trigger.filterInstructions,
-    isEnabled: trigger.isEnabled,
-    connectionId: trigger.connectionId,
-    config: trigger.config,
-  });
-}
-
 /** Exact decimal provider timestamp comparison; local clocks and floating point are not boundaries. */
 function laterTimestamp(value: string, boundary: string) {
   const [valueSeconds = '', valueFraction = ''] = value.split('.');

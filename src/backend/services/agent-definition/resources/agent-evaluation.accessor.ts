@@ -11,7 +11,6 @@ import {
   runtimeTriggerInclude,
   sameRevisions,
   triggerRevisions,
-  triggerSnapshot,
   type RuntimeTrigger,
 } from './agent-runtime-guards';
 
@@ -27,15 +26,15 @@ function evaluationFence(
   if (trigger.activationState === 'STARTING') {
     return { status: 'DEFERRED', reason: 'ACTIVATION_STARTING' };
   }
+  if (event.payloadExpiresAt <= new Date()) {
+    return { status: 'REJECTED', reason: 'EVENT_EXPIRED' };
+  }
   const payload = agentEventPayloadSchema.safeParse(event.payload);
   if (!payload.success) {
     return { status: 'REJECTED', reason: 'INVALID_STORED_DATA' };
   }
   if (payload.data.provider === 'GITHUB' && event.sourceOrder === null) {
     return { status: 'DEFERRED', reason: 'SOURCE_ORDER_PENDING' };
-  }
-  if (event.payloadExpiresAt <= new Date()) {
-    return { status: 'REJECTED', reason: 'EVENT_EXPIRED' };
   }
   if (input.input.eventId !== undefined && input.input.eventId !== event.id) {
     return { status: 'REJECTED', reason: 'OWNERSHIP_MISMATCH' };
@@ -44,14 +43,21 @@ function evaluationFence(
 }
 function evaluationSnapshot(input: Evaluation, event: AgentEvent, trigger: RuntimeTrigger) {
   const definition = trigger.agentDefinition;
-  return agentEvaluationSnapshotSchema.parse({
+  return agentEvaluationSnapshotSchema.safeParse({
     definition: {
       name: definition.name,
       instructions: definition.instructions,
       isEnabled: definition.isEnabled,
       executionConfig: input.executionConfig,
     },
-    trigger: triggerSnapshot(trigger),
+    trigger: {
+      type: trigger.type,
+      description: trigger.description,
+      filterInstructions: trigger.filterInstructions,
+      isEnabled: trigger.isEnabled,
+      connectionId: trigger.connectionId,
+      config: trigger.config,
+    },
     executionConfig: input.executionConfig,
     input: { ...input.input, eventId: event.id },
   });
@@ -61,7 +67,8 @@ async function persistEvaluation(
   tx: Prisma.TransactionClient,
   input: Evaluation,
   event: AgentEvent,
-  trigger: RuntimeTrigger
+  trigger: RuntimeTrigger,
+  snapshot: ReturnType<typeof agentEvaluationSnapshotSchema.parse>
 ) {
   const run =
     input.status === 'MATCHED'
@@ -86,7 +93,7 @@ async function persistEvaluation(
       status: input.status,
       reasonCode: input.reasonCode,
       explanation: input.explanation,
-      configurationSnapshot: evaluationSnapshot(input, event, trigger),
+      configurationSnapshot: snapshot,
       ...(input.classifier ? { classifier: input.classifier } : {}),
       runId: run?.id,
       expiresAt: event.payloadExpiresAt,
@@ -135,7 +142,11 @@ async function recordEvaluation(value: AgentEvaluationInput): Promise<AgentEvalu
     if (prior) {
       return { status: 'REJECTED', reason: 'STALE_EVENT_COHORT' };
     }
-    const evaluation = await persistEvaluation(tx, input, event, trigger);
+    const snapshot = evaluationSnapshot(input, event, trigger);
+    if (!snapshot.success) {
+      return { status: 'REJECTED', reason: 'INVALID_STORED_DATA' };
+    }
+    const evaluation = await persistEvaluation(tx, input, event, trigger, snapshot.data);
     return { status: 'RECORDED', evaluationId: evaluation.id };
   });
 }

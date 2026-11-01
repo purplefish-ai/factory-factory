@@ -50,7 +50,22 @@ it('claims FIFO once and includes provisioning and ambiguous dispatches in defin
     where: { id: oldest.id },
     data: { launchPhase: 'NEEDS_ATTENTION' },
   });
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: oldest.id },
+    data: { state: 'AMBIGUOUS', sendingAt: new Date() },
+  });
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: oldest.id } })).toMatchObject({
+    status: 'RUNNING',
+    launchPhase: 'NEEDS_ATTENTION',
+  });
+  expect(
+    await db.prisma.agentInitialDelivery.findUniqueOrThrow({ where: { runId: oldest.id } })
+  ).toMatchObject({ state: 'AMBIGUOUS' });
   expect(await runtime.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'CAPACITY' });
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: oldest.id },
+    data: { state: 'FINISHED', finishedAt: new Date() },
+  });
   await db.prisma.agentRun.update({
     where: { id: oldest.id },
     data: { status: 'COMPLETED', launchPhase: 'FINISHED' },

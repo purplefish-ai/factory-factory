@@ -421,8 +421,9 @@ phase/outbox schemas and retention fields.
 **Files:** modify `src/backend/services/github/service/github-cli.service.ts`
 and barrel; create `github-cli/agent-issue-events.ts` and tests; create
 `src/backend/services/agent-definition/service/agent-source-poll.service.ts`;
-wire `src/backend/orchestration/agent-runtime.orchestrator.ts`,
-`app-context.ts`, `server.ts`, `services/constants.ts` and configService.
+create `src/backend/orchestration/agent-runtime.orchestrator.ts` and wire it
+into existing `app-context.ts`, `server.ts`, `services/constants.ts` and
+configService.
 
 **Interfaces:** GitHub capsule exposes
 `listAgentIssueEvents({repository, page, perPage: 100}, signal): Promise<AgentIssueEventPage>`

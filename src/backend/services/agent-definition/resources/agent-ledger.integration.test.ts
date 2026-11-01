@@ -4,6 +4,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { Prisma } from '@prisma-gen/client';
 import { createLedgerFixture, executionConfig } from './agent-ledger.test-support';
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
@@ -91,7 +92,18 @@ it('defers unfinalized GitHub events and never compares numerical provider event
 });
 
 it('admits a definition/event exactly once across concurrent delivery and admission retries', async () => {
-  const id = await event();
+  const incoming = github();
+  const deliveries = await Promise.all(
+    Array.from({ length: 3 }, () => runtime.ingestEvent(incoming))
+  );
+  expect(deliveries.filter((delivery) => !delivery.duplicate)).toHaveLength(1);
+  expect(new Set(deliveries.map((delivery) => delivery.eventId)).size).toBe(1);
+  expect(await db.prisma.agentEvent.count()).toBe(1);
+  const id = deliveries[0]?.eventId;
+  if (!id) {
+    throw new Error('Concurrent delivery returned no event');
+  }
+  await runtime.finalizeEventOrder({ connectionId, eventIds: [id] });
   const outcomes = await Promise.all([admit(id), admit(id), admit(id)]);
   expect(outcomes.map((result) => result.status).sort()).toEqual([
     'ADMITTED',
@@ -357,4 +369,60 @@ it('keeps canonical source ordinals monotonic after event identity pruning', asy
   expect(await db.prisma.agentEvent.findUniqueOrThrow({ where: { id } })).toMatchObject({
     sourceOrder: 2,
   });
+});
+
+it('reports expired pruned payloads before attempting stored payload validation', async () => {
+  const id = await event();
+  await db.prisma.agentEvent.update({
+    where: { id },
+    data: { payload: Prisma.DbNull, payloadExpiresAt: new Date(Date.now() - 1) },
+  });
+  expect(await evaluation(id)).toEqual({ status: 'REJECTED', reason: 'EVENT_EXPIRED' });
+  expect(await db.prisma.agentEvaluation.count()).toBe(0);
+});
+
+it.each(['trigger', 'definition'] as const)(
+  'rejects corrupt stored %s snapshots with a typed result',
+  async (target) => {
+    const id = await event();
+    if (target === 'trigger') {
+      await db.prisma.agentTrigger.update({
+        where: { id: triggerId },
+        data: { config: { version: 999 } },
+      });
+    } else {
+      await db.prisma.agentDefinition.update({
+        where: { id: definitionId },
+        data: { instructions: '' },
+      });
+    }
+    expect(await evaluation(id)).toEqual({ status: 'REJECTED', reason: 'INVALID_STORED_DATA' });
+    expect(await db.prisma.agentEvaluation.count()).toBe(0);
+    expect(await db.prisma.agentRun.count()).toBe(0);
+  }
+);
+
+it('enforces the absolute event-age limit at admission even with a future payload deadline', async () => {
+  const incoming = github('ancient');
+  incoming.payload.occurredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+  const captured = await runtime.ingestEvent(incoming);
+  await runtime.finalizeEventOrder({ connectionId, eventIds: [captured.eventId] });
+  await db.prisma.agentEvent.update({
+    where: { id: captured.eventId },
+    data: { payloadExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+  });
+  const decision = await evaluation(captured.eventId);
+  expect(decision.status).toBe('RECORDED');
+  if (!('evaluationId' in decision)) {
+    throw new Error(JSON.stringify(decision));
+  }
+  expect(
+    await runtime.admitRun({
+      evaluationId: decision.evaluationId,
+      definitionRevision: 1,
+      triggerRevision: 1,
+      activationGeneration: 1,
+    })
+  ).toEqual({ status: 'REJECTED', reason: 'EVENT_EXPIRED' });
+  expect(await db.prisma.agentRun.count()).toBe(0);
 });

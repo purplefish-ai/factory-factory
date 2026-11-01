@@ -22,7 +22,7 @@ beforeEach(async () => {
   fixture = await createLedgerFixture(db, runtime);
 });
 
-async function author() {
+async function author(twoTriggers = false) {
   const original = await db.prisma.agentDefinition.findUniqueOrThrow({
     where: { id: fixture.definitionId },
   });
@@ -37,11 +37,23 @@ async function author() {
       executionConfig: { version: 1, provider: 'CLAUDE', model: 'sonnet' },
       triggers: [
         {
+          id: 'first',
           type: 'GITHUB_ISSUE',
           connectionId: fixture.connectionId,
           description: 'Agent label',
           config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
         },
+        ...(twoTriggers
+          ? [
+              {
+                id: 'second',
+                type: 'GITHUB_ISSUE',
+                connectionId: fixture.connectionId,
+                description: 'Independent label',
+                config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
+              },
+            ]
+          : []),
       ],
     },
   });
@@ -54,6 +66,7 @@ async function author() {
   const definitionId = accepted.agentDefinitionId!;
   const trigger = await db.prisma.agentTrigger.findFirstOrThrow({
     where: { agentDefinitionId: definitionId },
+    orderBy: { id: 'asc' },
   });
   await db.prisma.agentDefinition.update({
     where: { id: definitionId },
@@ -140,22 +153,56 @@ it('preserves activation and queued snapshots across a cosmetic name edit', asyn
   expect(await runtime.claimNextRun()).toMatchObject({ status: 'CLAIMED' });
 });
 
-it('invalidates only the edited trigger and cancels its unclaimed runs', async () => {
-  const saved = await author();
-  await fixture.admit(await fixture.event(), {
+it('invalidates only the edited trigger and preserves the other trigger and queued run', async () => {
+  const saved = await author(true);
+  const untouched = await db.prisma.agentTrigger.findFirstOrThrow({
+    where: {
+      agentDefinitionId: saved.definitionId,
+      id: { not: saved.triggerId },
+    },
+  });
+  const untouchedBefore = await db.prisma.agentTrigger.update({
+    where: { id: untouched.id },
+    data: {
+      isEnabled: true,
+      activationState: 'ACTIVE',
+      activationGeneration: 1,
+      activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
+    },
+  });
+  const firstEvent = await fixture.event('first-trigger');
+  await fixture.evaluation(firstEvent, {
+    agentDefinitionId: saved.definitionId,
+    triggerId: untouched.id,
+    status: 'SKIPPED',
+  });
+  await fixture.admit(firstEvent, {
     agentDefinitionId: saved.definitionId,
     triggerId: saved.triggerId,
   });
+  const secondEvent = await fixture.event('second-trigger');
+  await fixture.evaluation(secondEvent, {
+    agentDefinitionId: saved.definitionId,
+    triggerId: saved.triggerId,
+    status: 'SKIPPED',
+  });
+  const secondRun = await fixture.admit(secondEvent, {
+    agentDefinitionId: saved.definitionId,
+    triggerId: untouched.id,
+  });
+  if (secondRun.status !== 'ADMITTED') {
+    throw new Error(JSON.stringify(secondRun));
+  }
+  const runBefore = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: secondRun.runId } });
   await service.update({
     workspaceId: saved.workspaceId,
     proposalId: saved.proposal.id,
     revision: 1,
     specification: {
       ...saved.proposal.specification,
-      triggers: saved.proposal.specification.triggers.map((trigger) => ({
-        ...trigger,
-        filterInstructions: 'Only urgent reports',
-      })),
+      triggers: saved.proposal.specification.triggers.map((trigger) =>
+        trigger.id === 'first' ? { ...trigger, filterInstructions: 'Only urgent reports' } : trigger
+      ),
     },
   });
   expect(
@@ -164,10 +211,16 @@ it('invalidates only the edited trigger and cancels its unclaimed runs', async (
   expect(
     await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: saved.triggerId } })
   ).toMatchObject({ triggerRevision: 2, activationGeneration: 2, isEnabled: false });
-  expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({
-    status: 'CANCELLED',
-    reasonCode: 'STALE_REVISION',
-  });
+  expect(
+    await db.prisma.agentRun.findFirstOrThrow({ where: { triggerId: saved.triggerId } })
+  ).toMatchObject({ status: 'CANCELLED', reasonCode: 'STALE_REVISION' });
+  expect(await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: untouched.id } })).toEqual(
+    untouchedBefore
+  );
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: secondRun.runId } })).toEqual(
+    runBefore
+  );
+  expect(runBefore.status).toBe('QUEUED');
 });
 
 it.each(['GITHUB', 'SLACK', 'SCHEDULE'] as const)(
