@@ -109,6 +109,7 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
         taskType: 'shell',
       });
       const work = {
+        controlRuntimeId: tracker.getControlRuntimeId(),
         promptInFlight: false,
         backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
         runningSubagents: 0,
@@ -145,6 +146,7 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
       });
       expect(domain.getRuntimeSnapshot('db-session-1')).toMatchObject({ activity: 'IDLE' });
       expect(domain.getRuntimeSnapshot('db-session-1').work).toEqual({
+        controlRuntimeId: tracker.getControlRuntimeId(),
         backgroundTasks: [],
         promptInFlight: false,
         runningSubagents: 0,

@@ -10,6 +10,8 @@ export interface TranscriptDisplayProps {
   acpPlan?: AcpPlanState | null;
   running: boolean;
   work?: SessionWorkState;
+  /** Present only while connected to this live session. */
+  controlSessionId?: string;
   onOpenAgents?: () => void;
   runningSubagentIconIndices?: readonly number[];
   subagentTimelineError?: { message: string; onRetry: () => void } | null;

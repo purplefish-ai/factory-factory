@@ -64,6 +64,8 @@ export interface UseChatWebSocketReturn {
    * consumers can tell whether sessionRuntime describes dbSessionId yet.
    */
   runtimeSessionId: string | null;
+  /** Current transport has accepted its own hydration, distinct from retained browsing state. */
+  controlsHydrated: boolean;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -168,6 +170,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
+  const controlHydratedSessionIdRef = useRef<string | null>(null);
   const hydratedSessionIdRef = useRef<string | null>(null);
 
   // Drop the hydration marker when the selected session moves away from the
@@ -179,6 +182,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   useEffect(() => {
     if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
       hydratedSessionIdRef.current = null;
+      controlHydratedSessionIdRef.current = null;
     }
   }, [dbSessionId]);
 
@@ -248,6 +252,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         }
         if (dbSessionId) {
           hydratedSessionIdRef.current = dbSessionId;
+          controlHydratedSessionIdRef.current = dbSessionId;
         }
         if (decision === 'match') {
           currentLoadRequestIdRef.current = null;
@@ -265,6 +270,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
+    controlHydratedSessionIdRef.current = null;
     const hasHydratedSession = dbSessionId !== null && hydratedSessionIdRef.current === dbSessionId;
     clearConnectLoadingTimeout();
     cancelConnectLoadingRef.current = scheduleConnectLoadingStart({
@@ -284,6 +290,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
+    controlHydratedSessionIdRef.current = null;
     chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;
     exhaustedLoadRequestIdRef.current = null;
@@ -330,6 +337,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     messages: chat.messages,
     connected: transport.connected,
     runtimeSessionId: hydratedSessionIdRef.current,
+    controlsHydrated:
+      transport.connected &&
+      controlHydratedSessionIdRef.current === dbSessionId &&
+      dbSessionId !== null,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,

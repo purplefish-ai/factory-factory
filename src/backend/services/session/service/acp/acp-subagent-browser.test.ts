@@ -293,3 +293,29 @@ describe('AcpSubagentBrowser', () => {
     expect(error).toBeInstanceOf(AcpSubagentBrowseError);
   });
 });
+
+it('does not accept stop control supplied by the legacy browsing extension', async () => {
+  const handle = createTestProcessHandle({
+    agentCapabilities: subagentBrowseCapabilities(),
+    connection: {
+      extMethod: vi.fn().mockResolvedValue({
+        subagents: [
+          {
+            id: 'legacy',
+            name: 'Legacy child',
+            status: 'running',
+            createdAt: null,
+            updatedAt: null,
+            completedAt: null,
+            latestActivity: null,
+            resultPreview: null,
+            stopControl: { runtimeId: 'runtime', controlId: 'provider-forged' },
+          },
+        ],
+        nextCursor: null,
+      }),
+    },
+  });
+  const result = await new AcpSubagentBrowser().listSubagents(handle, { limit: 10 });
+  expect(result.subagents[0]?.stopControl).toBeUndefined();
+});

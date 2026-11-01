@@ -46,6 +46,8 @@ it('runs the released adapter with native config, image input and legacy identit
       /* Test signal has no listeners. */
     },
   };
+  const childControls: Array<{ status: string; controllable: boolean }> = [];
+  let observedHandle: AcpProcessHandle | undefined;
   const create = async (resumeProviderSessionId?: string) => {
     const handle = await factory.createClient({
       sessionId: 'contract-session',
@@ -55,7 +57,16 @@ it('runs the released adapter with native config, image input and legacy identit
         sessionId: 'contract-session',
         resumeProviderSessionId,
       },
-      handlers: {},
+      handlers: {
+        onAcpEvent: (_id, event) => {
+          if (event.type === 'acp_subagents_changed') {
+            const child = observedHandle?.nativeSessionTracker?.list({ limit: 10 }).subagents[0];
+            if (child) {
+              childControls.push({ status: child.status, controllable: !!child.stopControl });
+            }
+          }
+        },
+      },
       metadata: { incarnationId: 'contract', purpose: 'active', installed: false },
       shutdownSignal: never,
       stopSignal: never,
@@ -65,6 +76,7 @@ it('runs the released adapter with native config, image input and legacy identit
     return handle;
   };
   const handle = await create();
+  observedHandle = handle;
   expect(handle.supportsImages()).toBe(true);
   expect(handle.configOptions.map((option) => option.id)).toContain('collaboration_mode');
   const updated = await handle.connection.setSessionConfigOption({
@@ -79,11 +91,13 @@ it('runs the released adapter with native config, image input and legacy identit
     handle.connection.prompt({
       sessionId: handle.providerSessionId,
       prompt: [
-        { type: 'text', text: 'Synthetic contract prompt' },
+        { type: 'text', text: 'Synthetic targeted stop contract' },
         { type: 'image', data: 'AA==', mimeType: 'image/png' },
       ],
     })
   ).resolves.toMatchObject({ stopReason: 'end_turn' });
+  expect(childControls).toContainEqual({ status: 'running', controllable: false });
+  expect(childControls).toContainEqual({ status: 'completed', controllable: false });
   const legacy = `sess_${handle.providerSessionId}`;
   const resumed = await create(legacy);
   expect(resumed.providerSessionId).toBe(legacy);

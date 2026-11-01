@@ -4,6 +4,10 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
 import { SubagentIcon } from '@/client/components/subagent-icon';
+import {
+  SessionTargetStopButton,
+  useReconcileSessionTargetStops,
+} from '@/client/features/session-controls';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,6 +30,8 @@ export type SubagentListState =
 export interface SubagentListProps {
   state: SubagentListState;
   selectedSubagentId?: string | null;
+  controlSessionId?: string;
+  controlRuntimeId?: string;
   onSelect: (subagent: SubagentListItem) => void;
 }
 
@@ -89,11 +95,15 @@ function activityPreview(subagent: SubagentListItem): string | null {
 function SubagentRow({
   subagent,
   iconIndex,
+  controlSessionId,
+  controlRuntimeId,
   selected,
   onSelect,
 }: {
   subagent: SubagentListItem;
   iconIndex: number;
+  controlSessionId?: string;
+  controlRuntimeId?: string;
   selected: boolean;
   onSelect: (subagent: SubagentListItem) => void;
 }) {
@@ -101,13 +111,13 @@ function SubagentRow({
   const preview = activityPreview(subagent);
 
   return (
-    <li>
+    <li className="flex items-start">
       <button
         type="button"
         aria-pressed={selected}
         onClick={() => onSelect(subagent)}
         className={cn(
-          'w-full px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
+          'min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
           selected && 'bg-muted'
         )}
       >
@@ -130,6 +140,23 @@ function SubagentRow({
           </div>
         </div>
       </button>
+      {controlSessionId &&
+        isActiveSubagent(subagent) &&
+        subagent.stopControl &&
+        subagent.stopControl.runtimeId === controlRuntimeId && (
+          <div className="pr-2 pt-2">
+            <SessionTargetStopButton
+              key={subagent.stopControl.controlId}
+              sessionId={controlSessionId}
+              itemLabel={displayName(subagent)}
+              target={{
+                kind: 'subagent',
+                id: subagent.id,
+                controlId: subagent.stopControl.controlId,
+              }}
+            />
+          </div>
+        )}
     </li>
   );
 }
@@ -189,7 +216,22 @@ function compareTerminal(left: SubagentListItem, right: SubagentListItem): numbe
   return terminalTimestamp(right) - terminalTimestamp(left) || left.id.localeCompare(right.id);
 }
 
-export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentListProps) {
+export function SubagentList({
+  state,
+  selectedSubagentId,
+  controlSessionId,
+  controlRuntimeId,
+  onSelect,
+}: SubagentListProps) {
+  useReconcileSessionTargetStops(
+    state.kind === 'ready' && !state.hasMore && !state.error ? controlSessionId : undefined,
+    'subagent',
+    state.kind === 'ready'
+      ? state.subagents.filter(
+          (item) => isActiveSubagent(item) && item.stopControl?.runtimeId === controlRuntimeId
+        )
+      : []
+  );
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [, setElapsedTick] = useState(0);
   const groups = useMemo(() => {
@@ -256,6 +298,8 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
             <SubagentRow
               key={subagent.id}
               subagent={subagent}
+              controlSessionId={controlSessionId}
+              controlRuntimeId={controlRuntimeId}
               iconIndex={iconIndices.get(subagent.id) ?? 0}
               selected={selectedSubagentId === subagent.id}
               onSelect={onSelect}
@@ -285,6 +329,8 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
                 <SubagentRow
                   key={subagent.id}
                   subagent={subagent}
+                  controlSessionId={controlSessionId}
+                  controlRuntimeId={controlRuntimeId}
                   iconIndex={iconIndices.get(subagent.id) ?? 0}
                   selected={selectedSubagentId === subagent.id}
                   onSelect={onSelect}

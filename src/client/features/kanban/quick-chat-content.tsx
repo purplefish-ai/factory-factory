@@ -8,6 +8,7 @@ import {
   ChatTranscript,
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
+import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { useSubagentTimelineMessages } from '@/client/features/subagents';
 
 interface QuickChatContentProps {
@@ -55,6 +56,11 @@ export function QuickChatContent({
         acpPlan={chatState.acpPlan}
         running={running}
         work={chatState.sessionRuntime.work}
+        controlSessionId={getLiveSessionControlId(
+          chatState.runtimeSessionId,
+          chatState.connected && chatState.controlsHydrated,
+          chatState.sessionRuntime
+        )}
         startingSession={startingSession}
         loadingSession={loadingSession}
         latestThinking={chatState.latestThinking}

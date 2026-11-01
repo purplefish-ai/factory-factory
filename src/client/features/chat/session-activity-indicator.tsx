@@ -1,6 +1,10 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { SubagentIcon } from '@/client/components/subagent-icon';
+import {
+  SessionTargetStopButton,
+  useReconcileSessionTargetStops,
+} from '@/client/features/session-controls';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
@@ -34,6 +38,7 @@ function getActivityState(work?: SessionWorkState) {
 
 export function SessionActivityIndicator({
   work,
+  controlSessionId,
   latestThinking,
   onOpenAgents,
   showThinking = true,
@@ -42,6 +47,7 @@ export function SessionActivityIndicator({
   showThinking?: boolean;
   runningSubagentIconIndices?: readonly number[];
   work?: SessionWorkState;
+  controlSessionId?: string;
   latestThinking?: string | null;
   onOpenAgents?: () => void;
 }) {
@@ -54,6 +60,7 @@ export function SessionActivityIndicator({
     activeGoals,
     hasBackgroundActivity,
   } = getActivityState(work);
+  useReconcileSessionTargetStops(controlSessionId, 'task', work ? backgroundTasks : undefined);
   if (!(showThinking || hasBackgroundActivity)) {
     return null;
   }
@@ -77,8 +84,25 @@ export function SessionActivityIndicator({
           <CollapsibleContent>
             <ul className="mt-2 space-y-1 max-h-40 overflow-auto">
               {backgroundTasks.map((task) => (
-                <li key={task.id} className="font-mono text-xs whitespace-pre-wrap break-all">
-                  {task.name}
+                <li
+                  key={task.id}
+                  className="flex items-center gap-2 font-mono text-xs whitespace-pre-wrap break-all"
+                >
+                  <span className="min-w-0 flex-1">{task.name}</span>
+                  {controlSessionId &&
+                    task.stopControl &&
+                    task.stopControl.runtimeId === work?.controlRuntimeId && (
+                      <SessionTargetStopButton
+                        key={task.stopControl.controlId}
+                        sessionId={controlSessionId}
+                        itemLabel={task.name}
+                        target={{
+                          kind: 'task',
+                          id: task.id,
+                          controlId: task.stopControl.controlId,
+                        }}
+                      />
+                    )}
                 </li>
               ))}
             </ul>

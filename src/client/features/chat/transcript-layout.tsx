@@ -1,5 +1,6 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
+import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
@@ -82,6 +83,7 @@ export function TranscriptTail({
   queuedPRUpdate?: GroupedMessageItem;
 }) {
   const { work, running, loadingSession, initBanner } = props;
+  useReconcileSessionTargetStops(props.controlSessionId, 'task', work?.backgroundTasks);
   const todoState = useTodoTracker(props.messages, props.acpPlan);
   const background = Boolean(
     work && (work.backgroundTasks.length || work.runningSubagents || work.activeGoals)
@@ -128,6 +130,7 @@ export function TranscriptTail({
       {(running || background) && (
         <SessionActivityIndicator
           work={work}
+          controlSessionId={props.controlSessionId}
           runningSubagentIconIndices={props.runningSubagentIconIndices}
           showThinking={!props.hideThinkingIndicator}
           latestThinking={props.latestThinking}

@@ -6,6 +6,8 @@ export interface AgentsPanelProps {
   sessionId: string | null;
   sessionName: string | null;
   sessionReady: boolean;
+  controlSessionId?: string;
+  controlRuntimeId?: string;
   isParentWorkspace: boolean;
   onOpenSubagent: (selection: SubagentSelection) => void;
 }
@@ -15,6 +17,8 @@ export function AgentsPanel({
   sessionId,
   sessionName,
   sessionReady,
+  controlSessionId,
+  controlRuntimeId,
   isParentWorkspace,
   onOpenSubagent,
 }: AgentsPanelProps) {
@@ -25,6 +29,8 @@ export function AgentsPanel({
         sessionId={sessionId}
         parentSessionName={sessionName}
         enabled={sessionReady}
+        controlSessionId={controlSessionId}
+        controlRuntimeId={controlRuntimeId}
         onSelect={onOpenSubagent}
       />
       {isParentWorkspace && <ChildWorkspacesPanel workspaceId={workspaceId} embedded />}

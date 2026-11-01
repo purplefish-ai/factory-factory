@@ -1,5 +1,33 @@
 import { z } from 'zod';
 
+/** Opaque, live-runtime capability; persisted/display identity never grants control. */
+export const sessionStopControlSchema = z.object({
+  controlId: z.string().min(1),
+  runtimeId: z.string().min(1),
+});
+export type SessionStopControl = z.infer<typeof sessionStopControlSchema>;
+
+export const sessionStopTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('task'), id: z.string().min(1), controlId: z.string().min(1) }),
+  z.object({
+    kind: z.literal('subagent'),
+    id: z.string().min(1),
+    controlId: z.string().min(1),
+  }),
+]);
+export const sessionStopTargetParamsSchema = z.object({
+  sessionId: z.string().min(1),
+  target: sessionStopTargetSchema,
+});
+export type SessionStopTarget = z.infer<typeof sessionStopTargetSchema>;
+
+export interface AcpBackgroundTask {
+  id: string;
+  name: string;
+  kind: 'shell' | 'turn' | 'task';
+  stopControl?: SessionStopControl;
+}
+
 /** Codex ACP uses a generation suffix when an existing child thread resumes. */
 export function getSubagentThreadId(sessionId: string): string {
   return sessionId.replace(/:generation:[1-9]\d*$/, '');
@@ -234,6 +262,7 @@ export const subagentSummarySchema = z
     id: z.string().min(1),
     name: z.string().nullable(),
     status: subagentStatusSchema,
+    stopControl: sessionStopControlSchema.optional(),
     generation: z.number().int().positive().optional(),
     createdAt: z.string().datetime({ offset: true }).nullable(),
     updatedAt: z.string().datetime({ offset: true }).nullable(),
