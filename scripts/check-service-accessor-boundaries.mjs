@@ -7,6 +7,26 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentEventAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-event.accessor',
+  },
+  agentEvaluationAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-evaluation.accessor',
+  },
+  agentRunAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run.accessor',
+  },
+  agentRunClaimAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run-claim.accessor',
+  },
+  agentRevisionAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-revision.accessor',
+  },
   agentProposalAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-proposal.accessor',

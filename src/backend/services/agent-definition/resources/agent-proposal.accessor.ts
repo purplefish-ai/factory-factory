@@ -2,6 +2,7 @@ import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { AgentSpecification } from '@/shared/agent-proposal';
 import type { Prisma } from '@prisma-gen/client';
+import { agentRevisionAccessor } from './agent-revision.accessor';
 
 type Transaction = Prisma.TransactionClient;
 export type ProposalWrite = {
@@ -60,7 +61,7 @@ function ownedTrigger(proposalId: string, trigger: AgentSpecification['triggers'
       'Preserve event IDs from the saved proposal before creating or editing an agent.'
     );
   }
-  return { ...settings, id: `${proposalId}:${id}`, isEnabled: false };
+  return { ...settings, id: `${proposalId}:${id}`, isEnabled: false as const };
 }
 
 export const agentProposalAccessor = {
@@ -161,24 +162,12 @@ export const agentProposalAccessor = {
           'The agent no longer belongs to this workspace project.'
         );
       }
-      await tx.agentDefinition.update({ where: { id: agent.id }, data: definition });
-      // Stable event IDs survive reordering/removal without changing run ownership.
-      for (const trigger of triggers) {
-        const data = ownedTrigger(proposal.id, trigger);
-        const { id } = data;
-        await tx.agentTrigger.upsert({
-          where: { id },
-          create: { ...data, agentDefinitionId: agent.id },
-          update: data,
-        });
-      }
-      await tx.agentTrigger.updateMany({
-        where: {
-          agentDefinitionId: agent.id,
-          id: { notIn: triggers.map((trigger) => ownedTrigger(proposal.id, trigger).id) },
-        },
-        data: { isEnabled: false },
-      });
+      await agentRevisionAccessor.reviseDefinition(
+        tx,
+        agent.id,
+        definition,
+        triggers.map((trigger) => ownedTrigger(proposal.id, trigger))
+      );
       return tx.agentProposal.update({
         where: { id: proposal.id },
         data: { specification: input.specification, sourceNames: input.sourceNames },

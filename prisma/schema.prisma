@@ -169,6 +169,36 @@ enum AgentRunStatus {
 }
 
 
+enum AgentActivationState {
+  PAUSED
+  STARTING
+  ACTIVE
+}
+
+enum AgentEvaluationStatus {
+  MATCHED
+  SKIPPED
+  ERROR
+}
+
+enum AgentLaunchPhase {
+  RESERVED
+  PROVISIONING
+  READY
+  DISPATCHING
+  ACTIVE
+  NEEDS_ATTENTION
+  FINISHED
+}
+
+enum AgentDeliveryState {
+  PENDING
+  SENDING
+  ACCEPTED
+  FINISHED
+  AMBIGUOUS
+}
+
 // Models
 model Project {
   id                String      @id @default(cuid())
@@ -618,18 +648,20 @@ model UserSettings {
 
 /// General agent definitions; legacy PeriodicTask scheduling is migrated separately.
 model AgentDefinition {
-  id String @id @default(cuid())
-  projectId String
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name String
-  instructions String
-  isEnabled Boolean @default(false)
-  executionConfig Json @default("{\"version\":1}") // agentExecutionConfigSchema
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  triggers AgentTrigger[]
-  runs AgentRun[]
-  proposal AgentProposal?
+  id                 String            @id @default(cuid())
+  projectId          String
+  project            Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name               String
+  instructions       String
+  isEnabled          Boolean           @default(false)
+  executionConfig    Json              @default("{\"version\":1}") // agentExecutionConfigSchema
+  definitionRevision Int               @default(1)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  triggers           AgentTrigger[]
+  runs               AgentRun[]
+  proposal           AgentProposal?
+  evaluations        AgentEvaluation[]
 
   @@index([projectId, isEnabled])
 }
@@ -652,63 +684,175 @@ model AgentProposal {
 
 /// Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.
 model AgentConnection {
-  id String @id @default(cuid())
-  provider AgentConnectionProvider
-  externalId String // Slack workspace ID or GitHub installation ID
-  name String
-  isEnabled Boolean @default(true)
+  id                   String                  @id @default(cuid())
+  provider             AgentConnectionProvider
+  externalId           String // Slack workspace ID or repository-scoped gh:<repository-id>
+  name                 String
+  isEnabled            Boolean                 @default(true)
   credentialsEncrypted String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  triggers AgentTrigger[]
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  triggers             AgentTrigger[]
+
+  sourceState AgentSourceState?
+  events      AgentEvent[]
 
   @@unique([provider, externalId])
 }
 
 model AgentTrigger {
-  id String @id @default(cuid())
-  agentDefinitionId String
-  agentDefinition AgentDefinition @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
-  type AgentTriggerType
-  connectionId String?
-  connection AgentConnection? @relation(fields: [connectionId], references: [id], onDelete: Restrict)
-  description String // User's natural-language intent, retained when config is resolved
-  config Json // Versioned configuration, validated with agentTriggerInputSchema
-  filterInstructions String?
-  isEnabled Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  runs AgentRun[]
+  id                   String               @id @default(cuid())
+  agentDefinitionId    String
+  agentDefinition      AgentDefinition      @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  type                 AgentTriggerType
+  connectionId         String?
+  connection           AgentConnection?     @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  description          String // User's natural-language intent, retained when config is resolved
+  config               Json // Versioned configuration, validated with agentTriggerInputSchema
+  filterInstructions   String?
+  isEnabled            Boolean              @default(false)
+  triggerRevision      Int                  @default(1)
+  activationGeneration Int                  @default(0)
+  activationState      AgentActivationState @default(PAUSED)
+  activationBoundary   Json? // agentActivationBoundarySchema
+  pendingActivation    Json? // agentPendingActivationSchema; never enables dispatch
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  runs                 AgentRun[]
+  evaluations          AgentEvaluation[]
 
   @@unique([id, agentDefinitionId])
+  @@unique([id, agentDefinitionId, connectionId])
   @@index([agentDefinitionId, isEnabled])
   @@index([connectionId, type, isEnabled])
 }
 
 model AgentRun {
-  id String @id @default(cuid())
-  agentDefinitionId String
-  agentDefinition AgentDefinition @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
-  triggerId String? // Null for manual runs
+  id                   String                @id @default(cuid())
+  agentDefinitionId    String
+  agentDefinition      AgentDefinition       @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  triggerId            String? // Null for manual runs
   // Composite FK prevents a run from borrowing another agent's trigger.
   // NoAction preserves referenced triggers and allows deleting an entire definition atomically.
-  trigger AgentTrigger? @relation(fields: [triggerId, agentDefinitionId], references: [id, agentDefinitionId], onDelete: NoAction, onUpdate: NoAction)
-  idempotencyKey String // Caller-defined event/group identity, scoped to this definition
-  status AgentRunStatus @default(QUEUED)
-  definitionSnapshot Json // agentDefinitionInputSchema; frozen at admission
-  triggerSnapshot Json? // agentTriggerInputSchema; null for manual runs
-  input Json // agentRunInputSchema; normalized event context, never raw provider payloads
-  workspaceId String? @unique
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  errorMessage String?
-  createdAt DateTime @default(now())
-  startedAt DateTime?
-  completedAt DateTime?
+  trigger              AgentTrigger?         @relation(fields: [triggerId, agentDefinitionId], references: [id, agentDefinitionId], onDelete: NoAction, onUpdate: NoAction)
+  idempotencyKey       String // Caller-defined event/group identity, scoped to this definition
+  status               AgentRunStatus        @default(QUEUED)
+  eventId              String?
+  event                AgentEvent?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  definitionRevision   Int                   @default(1)
+  triggerRevision      Int                   @default(1)
+  activationGeneration Int                   @default(0)
+  launchPhase          AgentLaunchPhase      @default(RESERVED)
+  reservedWorkspaceId  String?               @unique
+  reservedSessionId    String?               @unique
+  initialMessageId     String?               @unique
+  workerGeneration     Int                   @default(0)
+  attemptGeneration    Int                   @default(1)
+  attemptCount         Int                   @default(0)
+  nextAttemptAt        DateTime?
+  leaseExpiresAt       DateTime?
+  expiresAt            DateTime?
+  reasonCode           String?
+  result               Json? // agentRunResultSchema; retained independently of the workspace/event
+  evaluations          AgentEvaluation[]
+  initialDelivery      AgentInitialDelivery?
+  definitionSnapshot   Json // agentDefinitionInputSchema; frozen at admission
+  triggerSnapshot      Json? // agentTriggerInputSchema; null for manual runs
+  input                Json // agentRunInputSchema; normalized event context, never raw provider payloads
+  workspaceId          String?               @unique
+  workspace            Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  errorMessage         String?
+  createdAt            DateTime              @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
 
   @@unique([agentDefinitionId, idempotencyKey])
+  @@unique([agentDefinitionId, eventId])
+  @@unique([id, agentDefinitionId, eventId])
+  @@index([eventId])
   @@index([agentDefinitionId, createdAt])
   @@index([triggerId, agentDefinitionId])
   @@index([status, createdAt])
+}
+
+model AgentSourceState {
+  lastSourceOrder Int @default(0) // Retained beyond event tombstones; canonical API-order high water
+  connectionId   String          @id
+  connection     AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  isReady        Boolean         @default(false)
+  cursor         Json? // agentSourceCursorSchema
+  health         Json? // agentSourceHealthSchema
+  lastObservedAt DateTime?
+  updatedAt      DateTime        @updatedAt
+}
+
+model AgentEvent {
+  id                String            @id @default(cuid())
+  connectionId      String
+  connection        AgentConnection   @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  providerEventId   String
+  sourceOrder       Int?
+  payload           Json? // agentEventPayloadSchema; null after ledger retention
+  occurredAt        DateTime
+  observedAt        DateTime
+  payloadExpiresAt  DateTime
+  identityExpiresAt DateTime
+  createdAt         DateTime          @default(now())
+  evaluations       AgentEvaluation[]
+  runs              AgentRun[]
+
+  @@unique([connectionId, providerEventId])
+  @@unique([connectionId, sourceOrder])
+  @@unique([id, connectionId])
+  @@index([payloadExpiresAt])
+  @@index([identityExpiresAt])
+}
+
+model AgentEvaluation {
+  id                    String                @id @default(cuid())
+  eventId               String
+  connectionId          String
+  event                 AgentEvent            @relation(fields: [eventId, connectionId], references: [id, connectionId], onDelete: Cascade)
+  agentDefinitionId     String
+  agentDefinition       AgentDefinition       @relation(fields: [agentDefinitionId], references: [id], onDelete: Cascade)
+  triggerId             String
+  trigger               AgentTrigger          @relation(fields: [triggerId, agentDefinitionId, connectionId], references: [id, agentDefinitionId, connectionId], onDelete: NoAction, onUpdate: NoAction)
+  definitionRevision    Int
+  triggerRevision       Int
+  activationGeneration  Int
+  status                AgentEvaluationStatus
+  reasonCode            String
+  explanation           String
+  configurationSnapshot Json // agentEvaluationSnapshotSchema
+  classifier            Json? // agentClassifierIdentitySchema
+  runId                 String?
+  run                   AgentRun?             @relation(fields: [runId, agentDefinitionId, eventId], references: [id, agentDefinitionId, eventId], onDelete: NoAction, onUpdate: NoAction)
+  expiresAt             DateTime
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([eventId, triggerId, definitionRevision, triggerRevision, activationGeneration])
+  @@index([eventId, connectionId])
+  @@index([triggerId, agentDefinitionId, connectionId])
+  @@index([agentDefinitionId, createdAt])
+  @@index([runId, agentDefinitionId, eventId])
+  @@index([expiresAt])
+}
+
+model AgentInitialDelivery {
+  id                String             @id @default(cuid())
+  runId             String             @unique
+  run               AgentRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  state             AgentDeliveryState @default(PENDING)
+  attemptGeneration Int                @default(1)
+  sendAttemptId     String             @unique
+  messageId         String             @unique
+  providerTurnId    String?
+  sendingAt         DateTime?
+  acceptedAt        DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model PeriodicTask {

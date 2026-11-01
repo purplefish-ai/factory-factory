@@ -207,6 +207,8 @@ export type AgentConnectionWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   triggers?: Prisma.AgentTriggerListRelationFilter
+  sourceState?: Prisma.XOR<Prisma.AgentSourceStateNullableScalarRelationFilter, Prisma.AgentSourceStateWhereInput> | null
+  events?: Prisma.AgentEventListRelationFilter
 }
 
 export type AgentConnectionOrderByWithRelationInput = {
@@ -219,6 +221,8 @@ export type AgentConnectionOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   triggers?: Prisma.AgentTriggerOrderByRelationAggregateInput
+  sourceState?: Prisma.AgentSourceStateOrderByWithRelationInput
+  events?: Prisma.AgentEventOrderByRelationAggregateInput
 }
 
 export type AgentConnectionWhereUniqueInput = Prisma.AtLeast<{
@@ -235,6 +239,8 @@ export type AgentConnectionWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   triggers?: Prisma.AgentTriggerListRelationFilter
+  sourceState?: Prisma.XOR<Prisma.AgentSourceStateNullableScalarRelationFilter, Prisma.AgentSourceStateWhereInput> | null
+  events?: Prisma.AgentEventListRelationFilter
 }, "id" | "provider_externalId">
 
 export type AgentConnectionOrderByWithAggregationInput = {
@@ -275,6 +281,8 @@ export type AgentConnectionCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
+  sourceState?: Prisma.AgentSourceStateCreateNestedOneWithoutConnectionInput
+  events?: Prisma.AgentEventCreateNestedManyWithoutConnectionInput
 }
 
 export type AgentConnectionUncheckedCreateInput = {
@@ -287,6 +295,8 @@ export type AgentConnectionUncheckedCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
+  sourceState?: Prisma.AgentSourceStateUncheckedCreateNestedOneWithoutConnectionInput
+  events?: Prisma.AgentEventUncheckedCreateNestedManyWithoutConnectionInput
 }
 
 export type AgentConnectionUpdateInput = {
@@ -299,6 +309,8 @@ export type AgentConnectionUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
+  sourceState?: Prisma.AgentSourceStateUpdateOneWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUpdateManyWithoutConnectionNestedInput
 }
 
 export type AgentConnectionUncheckedUpdateInput = {
@@ -311,6 +323,8 @@ export type AgentConnectionUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
+  sourceState?: Prisma.AgentSourceStateUncheckedUpdateOneWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUncheckedUpdateManyWithoutConnectionNestedInput
 }
 
 export type AgentConnectionCreateManyInput = {
@@ -389,6 +403,11 @@ export type AgentConnectionNullableScalarRelationFilter = {
   isNot?: Prisma.AgentConnectionWhereInput | null
 }
 
+export type AgentConnectionScalarRelationFilter = {
+  is?: Prisma.AgentConnectionWhereInput
+  isNot?: Prisma.AgentConnectionWhereInput
+}
+
 export type EnumAgentConnectionProviderFieldUpdateOperationsInput = {
   set?: $Enums.AgentConnectionProvider
 }
@@ -409,6 +428,34 @@ export type AgentConnectionUpdateOneWithoutTriggersNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AgentConnectionUpdateToOneWithWhereWithoutTriggersInput, Prisma.AgentConnectionUpdateWithoutTriggersInput>, Prisma.AgentConnectionUncheckedUpdateWithoutTriggersInput>
 }
 
+export type AgentConnectionCreateNestedOneWithoutSourceStateInput = {
+  create?: Prisma.XOR<Prisma.AgentConnectionCreateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedCreateWithoutSourceStateInput>
+  connectOrCreate?: Prisma.AgentConnectionCreateOrConnectWithoutSourceStateInput
+  connect?: Prisma.AgentConnectionWhereUniqueInput
+}
+
+export type AgentConnectionUpdateOneRequiredWithoutSourceStateNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentConnectionCreateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedCreateWithoutSourceStateInput>
+  connectOrCreate?: Prisma.AgentConnectionCreateOrConnectWithoutSourceStateInput
+  upsert?: Prisma.AgentConnectionUpsertWithoutSourceStateInput
+  connect?: Prisma.AgentConnectionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentConnectionUpdateToOneWithWhereWithoutSourceStateInput, Prisma.AgentConnectionUpdateWithoutSourceStateInput>, Prisma.AgentConnectionUncheckedUpdateWithoutSourceStateInput>
+}
+
+export type AgentConnectionCreateNestedOneWithoutEventsInput = {
+  create?: Prisma.XOR<Prisma.AgentConnectionCreateWithoutEventsInput, Prisma.AgentConnectionUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.AgentConnectionCreateOrConnectWithoutEventsInput
+  connect?: Prisma.AgentConnectionWhereUniqueInput
+}
+
+export type AgentConnectionUpdateOneRequiredWithoutEventsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentConnectionCreateWithoutEventsInput, Prisma.AgentConnectionUncheckedCreateWithoutEventsInput>
+  connectOrCreate?: Prisma.AgentConnectionCreateOrConnectWithoutEventsInput
+  upsert?: Prisma.AgentConnectionUpsertWithoutEventsInput
+  connect?: Prisma.AgentConnectionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentConnectionUpdateToOneWithWhereWithoutEventsInput, Prisma.AgentConnectionUpdateWithoutEventsInput>, Prisma.AgentConnectionUncheckedUpdateWithoutEventsInput>
+}
+
 export type AgentConnectionCreateWithoutTriggersInput = {
   id?: string
   provider: $Enums.AgentConnectionProvider
@@ -418,6 +465,8 @@ export type AgentConnectionCreateWithoutTriggersInput = {
   credentialsEncrypted?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  sourceState?: Prisma.AgentSourceStateCreateNestedOneWithoutConnectionInput
+  events?: Prisma.AgentEventCreateNestedManyWithoutConnectionInput
 }
 
 export type AgentConnectionUncheckedCreateWithoutTriggersInput = {
@@ -429,6 +478,8 @@ export type AgentConnectionUncheckedCreateWithoutTriggersInput = {
   credentialsEncrypted?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  sourceState?: Prisma.AgentSourceStateUncheckedCreateNestedOneWithoutConnectionInput
+  events?: Prisma.AgentEventUncheckedCreateNestedManyWithoutConnectionInput
 }
 
 export type AgentConnectionCreateOrConnectWithoutTriggersInput = {
@@ -456,6 +507,8 @@ export type AgentConnectionUpdateWithoutTriggersInput = {
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sourceState?: Prisma.AgentSourceStateUpdateOneWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUpdateManyWithoutConnectionNestedInput
 }
 
 export type AgentConnectionUncheckedUpdateWithoutTriggersInput = {
@@ -467,6 +520,144 @@ export type AgentConnectionUncheckedUpdateWithoutTriggersInput = {
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sourceState?: Prisma.AgentSourceStateUncheckedUpdateOneWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUncheckedUpdateManyWithoutConnectionNestedInput
+}
+
+export type AgentConnectionCreateWithoutSourceStateInput = {
+  id?: string
+  provider: $Enums.AgentConnectionProvider
+  externalId: string
+  name: string
+  isEnabled?: boolean
+  credentialsEncrypted?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
+  events?: Prisma.AgentEventCreateNestedManyWithoutConnectionInput
+}
+
+export type AgentConnectionUncheckedCreateWithoutSourceStateInput = {
+  id?: string
+  provider: $Enums.AgentConnectionProvider
+  externalId: string
+  name: string
+  isEnabled?: boolean
+  credentialsEncrypted?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
+  events?: Prisma.AgentEventUncheckedCreateNestedManyWithoutConnectionInput
+}
+
+export type AgentConnectionCreateOrConnectWithoutSourceStateInput = {
+  where: Prisma.AgentConnectionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentConnectionCreateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedCreateWithoutSourceStateInput>
+}
+
+export type AgentConnectionUpsertWithoutSourceStateInput = {
+  update: Prisma.XOR<Prisma.AgentConnectionUpdateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedUpdateWithoutSourceStateInput>
+  create: Prisma.XOR<Prisma.AgentConnectionCreateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedCreateWithoutSourceStateInput>
+  where?: Prisma.AgentConnectionWhereInput
+}
+
+export type AgentConnectionUpdateToOneWithWhereWithoutSourceStateInput = {
+  where?: Prisma.AgentConnectionWhereInput
+  data: Prisma.XOR<Prisma.AgentConnectionUpdateWithoutSourceStateInput, Prisma.AgentConnectionUncheckedUpdateWithoutSourceStateInput>
+}
+
+export type AgentConnectionUpdateWithoutSourceStateInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  provider?: Prisma.EnumAgentConnectionProviderFieldUpdateOperationsInput | $Enums.AgentConnectionProvider
+  externalId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUpdateManyWithoutConnectionNestedInput
+}
+
+export type AgentConnectionUncheckedUpdateWithoutSourceStateInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  provider?: Prisma.EnumAgentConnectionProviderFieldUpdateOperationsInput | $Enums.AgentConnectionProvider
+  externalId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
+  events?: Prisma.AgentEventUncheckedUpdateManyWithoutConnectionNestedInput
+}
+
+export type AgentConnectionCreateWithoutEventsInput = {
+  id?: string
+  provider: $Enums.AgentConnectionProvider
+  externalId: string
+  name: string
+  isEnabled?: boolean
+  credentialsEncrypted?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
+  sourceState?: Prisma.AgentSourceStateCreateNestedOneWithoutConnectionInput
+}
+
+export type AgentConnectionUncheckedCreateWithoutEventsInput = {
+  id?: string
+  provider: $Enums.AgentConnectionProvider
+  externalId: string
+  name: string
+  isEnabled?: boolean
+  credentialsEncrypted?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
+  sourceState?: Prisma.AgentSourceStateUncheckedCreateNestedOneWithoutConnectionInput
+}
+
+export type AgentConnectionCreateOrConnectWithoutEventsInput = {
+  where: Prisma.AgentConnectionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentConnectionCreateWithoutEventsInput, Prisma.AgentConnectionUncheckedCreateWithoutEventsInput>
+}
+
+export type AgentConnectionUpsertWithoutEventsInput = {
+  update: Prisma.XOR<Prisma.AgentConnectionUpdateWithoutEventsInput, Prisma.AgentConnectionUncheckedUpdateWithoutEventsInput>
+  create: Prisma.XOR<Prisma.AgentConnectionCreateWithoutEventsInput, Prisma.AgentConnectionUncheckedCreateWithoutEventsInput>
+  where?: Prisma.AgentConnectionWhereInput
+}
+
+export type AgentConnectionUpdateToOneWithWhereWithoutEventsInput = {
+  where?: Prisma.AgentConnectionWhereInput
+  data: Prisma.XOR<Prisma.AgentConnectionUpdateWithoutEventsInput, Prisma.AgentConnectionUncheckedUpdateWithoutEventsInput>
+}
+
+export type AgentConnectionUpdateWithoutEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  provider?: Prisma.EnumAgentConnectionProviderFieldUpdateOperationsInput | $Enums.AgentConnectionProvider
+  externalId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
+  sourceState?: Prisma.AgentSourceStateUpdateOneWithoutConnectionNestedInput
+}
+
+export type AgentConnectionUncheckedUpdateWithoutEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  provider?: Prisma.EnumAgentConnectionProviderFieldUpdateOperationsInput | $Enums.AgentConnectionProvider
+  externalId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
+  sourceState?: Prisma.AgentSourceStateUncheckedUpdateOneWithoutConnectionNestedInput
 }
 
 
@@ -476,10 +667,12 @@ export type AgentConnectionUncheckedUpdateWithoutTriggersInput = {
 
 export type AgentConnectionCountOutputType = {
   triggers: number
+  events: number
 }
 
 export type AgentConnectionCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   triggers?: boolean | AgentConnectionCountOutputTypeCountTriggersArgs
+  events?: boolean | AgentConnectionCountOutputTypeCountEventsArgs
 }
 
 /**
@@ -499,6 +692,13 @@ export type AgentConnectionCountOutputTypeCountTriggersArgs<ExtArgs extends runt
   where?: Prisma.AgentTriggerWhereInput
 }
 
+/**
+ * AgentConnectionCountOutputType without action
+ */
+export type AgentConnectionCountOutputTypeCountEventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AgentEventWhereInput
+}
+
 
 export type AgentConnectionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -510,6 +710,8 @@ export type AgentConnectionSelect<ExtArgs extends runtime.Types.Extensions.Inter
   createdAt?: boolean
   updatedAt?: boolean
   triggers?: boolean | Prisma.AgentConnection$triggersArgs<ExtArgs>
+  sourceState?: boolean | Prisma.AgentConnection$sourceStateArgs<ExtArgs>
+  events?: boolean | Prisma.AgentConnection$eventsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentConnectionCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentConnection"]>
 
@@ -549,6 +751,8 @@ export type AgentConnectionSelectScalar = {
 export type AgentConnectionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "provider" | "externalId" | "name" | "isEnabled" | "credentialsEncrypted" | "createdAt" | "updatedAt", ExtArgs["result"]["agentConnection"]>
 export type AgentConnectionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   triggers?: boolean | Prisma.AgentConnection$triggersArgs<ExtArgs>
+  sourceState?: boolean | Prisma.AgentConnection$sourceStateArgs<ExtArgs>
+  events?: boolean | Prisma.AgentConnection$eventsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentConnectionCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AgentConnectionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -558,6 +762,8 @@ export type $AgentConnectionPayload<ExtArgs extends runtime.Types.Extensions.Int
   name: "AgentConnection"
   objects: {
     triggers: Prisma.$AgentTriggerPayload<ExtArgs>[]
+    sourceState: Prisma.$AgentSourceStatePayload<ExtArgs> | null
+    events: Prisma.$AgentEventPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -963,6 +1169,8 @@ readonly fields: AgentConnectionFieldRefs;
 export interface Prisma__AgentConnectionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   triggers<T extends Prisma.AgentConnection$triggersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentConnection$triggersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentTriggerPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  sourceState<T extends Prisma.AgentConnection$sourceStateArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentConnection$sourceStateArgs<ExtArgs>>): Prisma.Prisma__AgentSourceStateClient<runtime.Types.Result.GetResult<Prisma.$AgentSourceStatePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  events<T extends Prisma.AgentConnection$eventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentConnection$eventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1412,6 +1620,49 @@ export type AgentConnection$triggersArgs<ExtArgs extends runtime.Types.Extension
   take?: number
   skip?: number
   distinct?: Prisma.AgentTriggerScalarFieldEnum | Prisma.AgentTriggerScalarFieldEnum[]
+}
+
+/**
+ * AgentConnection.sourceState
+ */
+export type AgentConnection$sourceStateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentSourceState
+   */
+  select?: Prisma.AgentSourceStateSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentSourceState
+   */
+  omit?: Prisma.AgentSourceStateOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentSourceStateInclude<ExtArgs> | null
+  where?: Prisma.AgentSourceStateWhereInput
+}
+
+/**
+ * AgentConnection.events
+ */
+export type AgentConnection$eventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentEvent
+   */
+  select?: Prisma.AgentEventSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentEvent
+   */
+  omit?: Prisma.AgentEventOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentEventInclude<ExtArgs> | null
+  where?: Prisma.AgentEventWhereInput
+  orderBy?: Prisma.AgentEventOrderByWithRelationInput | Prisma.AgentEventOrderByWithRelationInput[]
+  cursor?: Prisma.AgentEventWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AgentEventScalarFieldEnum | Prisma.AgentEventScalarFieldEnum[]
 }
 
 /**

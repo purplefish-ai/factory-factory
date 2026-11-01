@@ -8,8 +8,19 @@ export const agentProposalService = new AgentProposalService();
 export { SlackConnectionService } from './service/slack-connection.service';
 export const slackConnectionService = new SlackConnectionService(cryptoService);
 
-// Provider listeners and dispatch are not implemented here.
+// Durable primitives only; no source listener, activation or execution worker is started.
 export {
+  ingestEvent,
+  finalizeEventOrder,
+  recordEvaluation,
+  admitRun,
+  claimNextRun,
+} from './service/agent-runtime.service';
+export * from '@/shared/agent-runtime';
+export {
+  agentActivationGenerationSchema,
+  agentDefinitionRevisionSchema,
+  agentTriggerRevisionSchema,
   agentConnectionInputSchema,
   agentConnectionProviderSchema,
   agentDefinitionInputSchema,

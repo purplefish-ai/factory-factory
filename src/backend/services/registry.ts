@@ -24,6 +24,10 @@ export const prismaModelNames = [
   'AgentTrigger',
   'AgentRun',
   'AgentProposal',
+  'AgentSourceState',
+  'AgentEvent',
+  'AgentEvaluation',
+  'AgentInitialDelivery',
 ] as const;
 
 export type PrismaModelName = (typeof prismaModelNames)[number];
@@ -108,7 +112,17 @@ type ServiceDefinition = {
 export const serviceRegistry = {
   'agent-definition': {
     dependsOn: [],
-    ownsModels: ['AgentDefinition', 'AgentConnection', 'AgentTrigger', 'AgentRun', 'AgentProposal'],
+    ownsModels: [
+      'AgentDefinition',
+      'AgentConnection',
+      'AgentTrigger',
+      'AgentRun',
+      'AgentProposal',
+      'AgentSourceState',
+      'AgentEvent',
+      'AgentEvaluation',
+      'AgentInitialDelivery',
+    ],
   },
   'codex-accounts': { dependsOn: [], ownsModels: ['CodexAccount'] },
   search: { dependsOn: ['workspace', 'session'], ownsModels: [] },

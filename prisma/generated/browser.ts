@@ -164,6 +164,26 @@ export type AgentTrigger = Prisma.AgentTriggerModel
  */
 export type AgentRun = Prisma.AgentRunModel
 /**
+ * Model AgentSourceState
+ * 
+ */
+export type AgentSourceState = Prisma.AgentSourceStateModel
+/**
+ * Model AgentEvent
+ * 
+ */
+export type AgentEvent = Prisma.AgentEventModel
+/**
+ * Model AgentEvaluation
+ * 
+ */
+export type AgentEvaluation = Prisma.AgentEvaluationModel
+/**
+ * Model AgentInitialDelivery
+ * 
+ */
+export type AgentInitialDelivery = Prisma.AgentInitialDeliveryModel
+/**
  * Model PeriodicTask
  * 
  */

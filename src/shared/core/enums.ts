@@ -172,3 +172,38 @@ export const AgentRunStatus = {
   CANCELLED: 'CANCELLED',
 } as const;
 export type AgentRunStatus = (typeof AgentRunStatus)[keyof typeof AgentRunStatus];
+
+export const AgentActivationState = {
+  PAUSED: 'PAUSED',
+  STARTING: 'STARTING',
+  ACTIVE: 'ACTIVE',
+} as const;
+export type AgentActivationState = (typeof AgentActivationState)[keyof typeof AgentActivationState];
+
+export const AgentEvaluationStatus = {
+  MATCHED: 'MATCHED',
+  SKIPPED: 'SKIPPED',
+  ERROR: 'ERROR',
+} as const;
+export type AgentEvaluationStatus =
+  (typeof AgentEvaluationStatus)[keyof typeof AgentEvaluationStatus];
+
+export const AgentLaunchPhase = {
+  RESERVED: 'RESERVED',
+  PROVISIONING: 'PROVISIONING',
+  READY: 'READY',
+  DISPATCHING: 'DISPATCHING',
+  ACTIVE: 'ACTIVE',
+  NEEDS_ATTENTION: 'NEEDS_ATTENTION',
+  FINISHED: 'FINISHED',
+} as const;
+export type AgentLaunchPhase = (typeof AgentLaunchPhase)[keyof typeof AgentLaunchPhase];
+
+export const AgentDeliveryState = {
+  PENDING: 'PENDING',
+  SENDING: 'SENDING',
+  ACCEPTED: 'ACCEPTED',
+  FINISHED: 'FINISHED',
+  AMBIGUOUS: 'AMBIGUOUS',
+} as const;
+export type AgentDeliveryState = (typeof AgentDeliveryState)[keyof typeof AgentDeliveryState];
