@@ -29,5 +29,6 @@ it.each(['user', 'assistant', 'thinking'] as const)(
     const html = renderToStaticMarkup(createElement(MessageItem, { message }));
     expect(html).toContain(text);
     expect(html).not.toContain('Copy message to clipboard');
+    expect(html).not.toContain('Copy to clipboard');
   }
 );
