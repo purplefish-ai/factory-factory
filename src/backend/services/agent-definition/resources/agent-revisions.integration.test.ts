@@ -237,8 +237,19 @@ it.each(['GITHUB', 'SLACK', 'SCHEDULE'] as const)(
       where: { id: claim.runId },
     });
     await fixture.admit(await fixture.event('waiting'), ownership);
-    for (const status of ['SKIPPED', 'ERROR'] as const) {
-      await fixture.evaluation(await fixture.event(status), { ...ownership, status });
+    for (const decision of [
+      {
+        status: 'SKIPPED',
+        reasonCode: 'FILTER_SKIPPED',
+        explanation: 'This event did not match the trigger.',
+      },
+      {
+        status: 'ERROR',
+        reasonCode: 'EVALUATION_FAILED',
+        explanation: 'Evaluation failed before a match decision.',
+      },
+    ] as const) {
+      await fixture.evaluation(await fixture.event(decision.status), { ...ownership, ...decision });
     }
     const historyBefore = await db.prisma.agentEvaluation.findMany({
       where: { triggerId: saved.triggerId },

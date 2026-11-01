@@ -38,6 +38,18 @@ export function triggerRevisions(trigger: RuntimeTrigger): Revisions {
     activationGeneration: trigger.activationGeneration,
   };
 }
+/** Raw durable fields: each consumer validates this projection with its boundary schema. */
+export function rawTriggerInput(trigger: RuntimeTrigger) {
+  return {
+    type: trigger.type,
+    description: trigger.description,
+    filterInstructions: trigger.filterInstructions,
+    isEnabled: trigger.isEnabled,
+    connectionId: trigger.connectionId,
+    config: trigger.config,
+  };
+}
+
 /** Exact decimal provider timestamp comparison; local clocks and floating point are not boundaries. */
 function laterTimestamp(value: string, boundary: string) {
   const [valueSeconds = '', valueFraction = ''] = value.split('.');
@@ -104,14 +116,7 @@ export function eventEligibility(
   }
   const parsed = agentEventPayloadSchema.safeParse(event.payload);
   const boundary = agentActivationBoundarySchema.safeParse(trigger.activationBoundary);
-  const settings = agentTriggerInputSchema.safeParse({
-    type: trigger.type,
-    description: trigger.description,
-    filterInstructions: trigger.filterInstructions,
-    isEnabled: trigger.isEnabled,
-    connectionId: trigger.connectionId,
-    config: trigger.config,
-  });
+  const settings = agentTriggerInputSchema.safeParse(rawTriggerInput(trigger));
   if (!(parsed.success && boundary.success && settings.success)) {
     return 'INVALID_STORED_DATA';
   }

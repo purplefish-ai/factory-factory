@@ -20,6 +20,9 @@ let gate:
   | {
       winner: 'claim' | 'edit';
       acquired: ReturnType<typeof signal>;
+      contenderRequested: ReturnType<typeof signal>;
+      winnerLocked: boolean;
+      contenderRequests: number;
       release: ReturnType<typeof signal>;
     }
   | undefined;
@@ -30,12 +33,16 @@ beforeAll(async () => {
   const observed = db.prisma.$extends({
     query: {
       $allOperations: async ({ model, operation, args, query }) => {
-        const result = await query(args);
         const selected = gate;
-        const isClaim = operation === '$executeRaw';
-        const isEdit = model === 'AgentProposal' && operation === 'updateMany';
-        if (selected && (selected.winner === 'claim' ? isClaim : isEdit)) {
-          gate = undefined;
+        const write =
+          operation === '$executeRaw'
+            ? 'claim'
+            : model === 'AgentProposal' && operation === 'updateMany'
+              ? 'edit'
+              : null;
+        const result = await query(args);
+        if (selected && write === selected.winner && !selected.winnerLocked) {
+          selected.winnerLocked = true;
           selected.acquired.resolve();
           await selected.release.promise;
         }
@@ -43,7 +50,25 @@ beforeAll(async () => {
       },
     },
   });
-  vi.doMock('@/backend/db', () => ({ prisma: observed }));
+  const queued = new Proxy(observed, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (property !== '$transaction') {
+        return value;
+      }
+      return (...args: unknown[]) => {
+        // Delegate unchanged before signaling: the contender has reached Prisma's real queue.
+        const request = Reflect.apply(value, target, args);
+        const selected = gate;
+        if (selected?.winnerLocked) {
+          selected.contenderRequests += 1;
+          selected.contenderRequested.resolve();
+        }
+        return request;
+      };
+    },
+  });
+  vi.doMock('@/backend/db', () => ({ prisma: queued }));
   runtime = await vi.importActual<typeof import('../index')>('../index');
 }, 30_000);
 afterAll(async () => {
@@ -134,6 +159,9 @@ it.each(['claim', 'edit'] as const)(
     const held = {
       winner,
       acquired: signal(),
+      contenderRequested: signal(),
+      winnerLocked: false,
+      contenderRequests: 0,
       release: signal(),
     };
     gate = held;
@@ -151,10 +179,18 @@ it.each(['claim', 'edit'] as const)(
         contenderSettled = true;
         return result;
       });
-      await Promise.resolve();
+      await Promise.race([
+        held.contenderRequested.promise,
+        second.then(() => {
+          throw new Error('The contender bypassed its transaction-queue observation');
+        }),
+      ]);
+      expect(held.winnerLocked).toBe(true);
+      expect(held.contenderRequests).toBe(1);
       expect(contenderSettled).toBe(false);
       held.release.resolve();
       const outcomes = await Promise.all([first, second]);
+      gate = undefined;
       const claim = outcomes[winner === 'claim' ? 0 : 1];
       expect(claim).toMatchObject(
         winner === 'claim'
@@ -162,6 +198,9 @@ it.each(['claim', 'edit'] as const)(
           : { status: 'DEFERRED', reason: 'EMPTY' }
       );
       const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: saved.runId } });
+      expect(run.definitionSnapshot).toEqual(saved.frozen.definitionSnapshot);
+      expect(run.triggerSnapshot).toEqual(saved.frozen.triggerSnapshot);
+      expect(run.input).toEqual(saved.frozen.input);
       expect(run).toMatchObject({
         status: winner === 'claim' ? 'RUNNING' : 'CANCELLED',
         definitionRevision: 1,

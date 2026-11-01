@@ -8,6 +8,7 @@ import {
 import type { AgentEvent, Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
+  rawTriggerInput,
   runtimeTriggerInclude,
   sameRevisions,
   triggerRevisions,
@@ -50,14 +51,7 @@ function evaluationSnapshot(input: Evaluation, event: AgentEvent, trigger: Runti
       isEnabled: definition.isEnabled,
       executionConfig: input.executionConfig,
     },
-    trigger: {
-      type: trigger.type,
-      description: trigger.description,
-      filterInstructions: trigger.filterInstructions,
-      isEnabled: trigger.isEnabled,
-      connectionId: trigger.connectionId,
-      config: trigger.config,
-    },
+    trigger: rawTriggerInput(trigger),
     executionConfig: input.executionConfig,
     input: { ...input.input, eventId: event.id },
   });
