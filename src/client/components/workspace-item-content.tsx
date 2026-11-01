@@ -8,6 +8,20 @@ import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
+function ConversationFocus({ summary }: { summary: ServerWorkspace['conversationSummary'] }) {
+  if (!summary) {
+    return null;
+  }
+  return (
+    <p
+      className="pl-[calc(0.5rem+8px)] truncate text-[11px] text-muted-foreground"
+      title={`${summary.summary}\nSummary updated ${new Date(summary.generatedAt).toLocaleString()}`}
+    >
+      {summary.sidebarSummary}
+    </p>
+  );
+}
+
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
   if (creationSource === 'PERIODIC_TASK') {
     return (
@@ -95,6 +109,7 @@ export function WorkspaceItemContent({
         <CreationSourceIcon creationSource={workspace.creationSource} />
         <span className="truncate text-sm">{workspace.name}</span>
       </div>
+      <ConversationFocus summary={workspace.conversationSummary} />
       {hasMetaRow && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground min-w-0">
           <span className="flex items-center gap-1 min-w-0 truncate">

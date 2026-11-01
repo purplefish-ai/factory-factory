@@ -38,6 +38,7 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
 import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
+import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadata.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
@@ -100,6 +101,8 @@ import {
   sessionRepository,
   sessionService,
   voiceNarrationService,
+  generateWorkspaceMetadata,
+  sessionInterceptorBridge,
 } from './services/session';
 import { userSettingsService } from './services/settings';
 import { terminalService, terminalSessionService } from './services/terminal';
@@ -474,6 +477,32 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       }),
   };
 
+  if (configService.getWorkspaceMetadataConfig().enabled) {
+    services.workspaceMetadata = new WorkspaceMetadataOrchestrator({
+      findSession: async (id) => {
+        const session = await services.sessionDataService.findAgentSessionById(id);
+        return session ? { ...session, codexAccountId: session.codexAccountId ?? null } : null;
+      },
+      history: (id) => sessionInterceptorBridge.getSessionConversationHistory(id, ''),
+      findWorkspace: (id) => services.workspaceDataService.findById(id),
+      reserve: (id, requestId) => services.workspaceDataService.reserveMetadata(id, requestId),
+      accept: (input) => services.workspaceDataService.acceptMetadata(input),
+      generate: generateWorkspaceMetadata,
+      publish: (workspace, projectId, conversationSummary) => {
+        services.workspaceSnapshotStore.publishAcceptedName(
+          workspace.id,
+          workspace.name,
+          workspace.updatedAt.getTime()
+        );
+        services.workspaceSnapshotStore.upsert(
+          workspace.id,
+          { projectId, conversationSummary },
+          'metadata:generated',
+          Date.now()
+        );
+      },
+    });
+  }
   eventCollector = createEventCollectorOrchestrator(services);
 
   return {
@@ -523,6 +552,7 @@ export function createApplication(
 }
 
 export async function disposeApplication(application: Application): Promise<void> {
+  await application.services.workspaceMetadata?.stop();
   await application.services.codexAccountService.shutdown();
   application.lifecycle.eventCollector.stop();
   await application.lifecycle.snapshotReconciliation.stop();

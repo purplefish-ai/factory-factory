@@ -132,6 +132,7 @@ function nextCoalescerTimestamp(): number {
 type Logger = Pick<ReturnType<typeof createLogger>, 'debug' | 'error' | 'info' | 'warn'>;
 
 export type EventCollectorDependencies = {
+  workspaceMetadata?: { schedule(sessionId: string, initialOnly?: boolean): Promise<void> };
   chatEventForwarderService: typeof chatEventForwarderService;
   computePendingRequestType: typeof computePendingRequestType;
   createLogger(component: string): Logger;
@@ -924,11 +925,18 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     );
   };
   dependencies.sessionDomainService.on('runtime_changed', runtimeChangedHandler);
+  const userMessageCommittedHandler = ({ sessionId }: { sessionId: string }) => {
+    void dependencies.workspaceMetadata?.schedule(sessionId, true);
+  };
+  dependencies.sessionDomainService.on('user_message_committed', userMessageCommittedHandler);
+  state.teardownListeners.push(() =>
+    dependencies.sessionDomainService.off('user_message_committed', userMessageCommittedHandler)
+  );
   state.teardownListeners.push(() =>
     dependencies.sessionDomainService.off('runtime_changed', runtimeChangedHandler)
   );
 
-  state.logger.info('Event collector started with 14 event subscriptions');
+  state.logger.info('Event collector started');
 }
 
 // ---------------------------------------------------------------------------

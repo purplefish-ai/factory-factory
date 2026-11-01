@@ -1,5 +1,48 @@
 # Workspace State
 
+## Conversation names and summaries
+
+New prompt-created workspaces mark their initial name as generated. A disposable
+small-model helper can replace that title once. Manual rename clears the marker;
+metadata acceptance rechecks it in the same transaction, so manual edits win
+even while inference is pending. Explicit titles, issue names, and resumed
+branches retain their names.
+
+`WorkspaceMetadata` stores the first title/branch suggestion, the latest card
+and sidebar summaries, generation time, and source session/message cursor. Reads
+flatten the validated record into `conversationSummary` on the shared workspace
+contract. Snapshots carry it through reconciliation and reconnects; global
+search matches summary text and returns a matching snippet. Cards show two
+summary lines; sidebar rows show one focus line. Hovering exposes the full
+summary and update time. Operational status and CI badges remain authoritative.
+
+The first committed user message queues initial metadata. Completed turns queue
+incremental updates using the original objective, previous summary, and bounded
+recent human/assistant text. Tools, reasoning, images, and repository
+instructions are excluded. A jobRunner job checks pending work every ten
+seconds, coalesces turns per workspace, and limits inference to once per two
+minutes. Pending final updates run after the cooldown without requiring another
+message. Newer user messages invalidate pending initial metadata; unfinished
+follow-ups preserve the pending completed-turn snapshot. Newer completed turns
+replace that snapshot and invalidate its in-flight results. Persisted request
+IDs reject superseded writes. Provider failures retain existing summaries and
+back off up to ten minutes. Shutdown aborts inference and drains the job.
+Pending requests are process-local; after restart, new conversation activity
+queues another update.
+
+Helpers use the conversation's provider and account: Luna with low reasoning for
+Codex, Haiku for Claude. They use short custom instructions, no working-session
+context, no tools/MCP, and no persistent provider session. Calls time out after
+45 seconds. Workspace launch, chat dispatch, and publication never wait on them.
+The saved branch suggestion feeds the existing pre-push/pre-PR renamer while the
+branch is still marked auto-generated, with deterministic naming as fallback. A
+local naming collision adds a short workspace suffix.
+
+Environment controls: `WORKSPACE_METADATA_ENABLED` (default `true`),
+`WORKSPACE_METADATA_CODEX_MODEL` (default `gpt-6-luna`), and
+`WORKSPACE_METADATA_CLAUDE_MODEL` (default `haiku`). These are provider-native
+calls using existing authentication; they consume the account's usage allowance.
+
 Several workspace concerns were split out of the `Workspace` table into 1:1 side
 tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot

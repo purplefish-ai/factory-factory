@@ -34,6 +34,7 @@ const SnapshotFieldGroupSchema = z.enum([
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
 
 export const WorkspaceSnapshotMetadataSchema = WorkspaceSummarySchema.pick({
+  conversationSummary: true,
   defaultSessionProvider: true,
   worktreePath: true,
   initErrorMessage: true,

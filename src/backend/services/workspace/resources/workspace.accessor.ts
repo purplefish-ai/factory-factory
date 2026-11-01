@@ -32,6 +32,7 @@ import type { RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/co
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { Prisma, Workspace, WorkspacePRDiscovery } from '@prisma-gen/client';
+import { projectConversationSummary } from './workspace-metadata.accessor';
 import {
   type PrAggregatePersistenceResult,
   type PrObservationPersistenceInput,
@@ -109,13 +110,17 @@ interface FindByProjectIdFilters {
 }
 
 /** Flatten side-table inputs at the read boundary; Ratchet state is derived, never stored. */
-type Flattened<T> = Omit<T, 'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count'> &
+type Flattened<T> = Omit<
+  T,
+  'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count' | 'conversationMetadata'
+> &
   WorkspaceRatchetFields &
   WorkspacePRFields &
   WorkspaceRunScriptFields & {
     ratchetState: RatchetState;
     prs: WorkspacePullRequest[];
     prSummary: WorkspacePRSummary;
+    conversationSummary: ReturnType<typeof projectConversationSummary>;
   };
 
 function flatten<
@@ -125,12 +130,22 @@ function flatten<
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
     _count?: { prEvents: number };
+    conversationMetadata?: Parameters<typeof projectConversationSummary>[0];
   },
 >(row: T): Flattened<T> {
-  const { prMonitoring, prs = [], prDiscovery, runScript, _count, ...rest } = row;
+  const {
+    prMonitoring,
+    prs = [],
+    prDiscovery,
+    runScript,
+    _count,
+    conversationMetadata,
+    ...rest
+  } = row;
   const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
   return {
     ...rest,
+    conversationSummary: projectConversationSummary(conversationMetadata),
     ...ratchetFields,
     ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled),
     ...flattenPRDiscovery(prDiscovery),
@@ -140,6 +155,7 @@ function flatten<
 
 /** Included on every read that has to reproduce the old flat workspace shape. */
 const sideTables = {
+  conversationMetadata: true,
   prMonitoring: true,
   prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,

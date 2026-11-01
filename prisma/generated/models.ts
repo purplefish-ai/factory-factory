@@ -11,6 +11,7 @@
 export type * from './models/Project'
 export type * from './models/DecisionLog'
 export type * from './models/Workspace'
+export type * from './models/WorkspaceMetadata'
 export type * from './models/WorkspacePR'
 export type * from './models/WorkspacePRMonitoring'
 export type * from './models/WorkspacePRDedicatedSession'

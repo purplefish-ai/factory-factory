@@ -109,7 +109,11 @@ export const ConfigEnvSchema = z.object({
   PR_DISCOVERY_REPOSITORY_LIMIT: PositiveIntEnvSchema.catch(10),
   DEBUG_CHAT_WS: z.preprocess(parseBoolean, z.boolean()).catch(false),
   EVENT_COMPRESSION_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
-  BRANCH_RENAME_MESSAGE_THRESHOLD: PositiveIntEnvSchema.catch(2),
+  WORKSPACE_METADATA_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
+  WORKSPACE_METADATA_CODEX_MODEL: z
+    .preprocess(toTrimmedString, z.string().min(1))
+    .catch('gpt-6-luna'),
+  WORKSPACE_METADATA_CLAUDE_MODEL: z.preprocess(toTrimmedString, z.string().min(1)).catch('haiku'),
   npm_package_version: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
 });
 

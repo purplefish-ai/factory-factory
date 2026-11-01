@@ -54,6 +54,7 @@ export const ModelName = {
   Project: 'Project',
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
+  WorkspaceMetadata: 'WorkspaceMetadata',
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
   WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
@@ -154,6 +155,21 @@ export const WorkspaceScalarFieldEnum = {
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspaceMetadataScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  requestId: 'requestId',
+  title: 'title',
+  branch: 'branch',
+  summary: 'summary',
+  sidebarSummary: 'sidebarSummary',
+  generatedAt: 'generatedAt',
+  sourceSessionId: 'sourceSessionId',
+  sourceMessageId: 'sourceMessageId'
+} as const
+
+export type WorkspaceMetadataScalarFieldEnum = (typeof WorkspaceMetadataScalarFieldEnum)[keyof typeof WorkspaceMetadataScalarFieldEnum]
 
 
 export const WorkspacePRScalarFieldEnum = {

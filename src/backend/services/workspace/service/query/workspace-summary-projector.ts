@@ -26,6 +26,7 @@ export function projectWorkspaceSummary(
     id: w.id,
     projectId: w.projectId,
     name: w.name,
+    ...(w.conversationSummary !== undefined ? { conversationSummary: w.conversationSummary } : {}),
     status: w.status,
     defaultSessionProvider: w.defaultSessionProvider,
     createdAt: w.createdAt,

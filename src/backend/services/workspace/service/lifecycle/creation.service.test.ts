@@ -26,6 +26,7 @@ describe('WorkspaceCreationService', () => {
   let mockLogger: Logger;
 
   const mockWorkspace: WorkspaceWithRatchet = {
+    conversationSummary: null,
     id: 'ws-123',
     projectId: 'proj-1',
     name: 'Test Workspace',

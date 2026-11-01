@@ -65,6 +65,15 @@ type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
 const toISOString = (date: Date | null): string | null => (date ? date.toISOString() : null);
 const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
 
+function exportedConversationMetadata(workspace: WorkspaceForExport) {
+  const metadata = workspace.conversationMetadata;
+  if (!metadata) {
+    return null;
+  }
+  const { workspaceId: _workspaceId, generatedAt, ...fields } = metadata;
+  return { ...fields, generatedAt: toISOString(generatedAt) };
+}
+
 function exportedPRFields(workspace: WorkspaceForExport) {
   const fields = workspacePrSnapshotService.projectCollection(
     workspace.prs,
@@ -266,6 +275,14 @@ async function importWorkspaces(
           workspace.creationMetadata != null
             ? (workspace.creationMetadata as Prisma.InputJsonValue)
             : undefined,
+        conversationMetadata: workspace.conversationMetadata
+          ? {
+              create: {
+                ...workspace.conversationMetadata,
+                generatedAt: parseDate(workspace.conversationMetadata.generatedAt),
+              },
+            }
+          : undefined,
         initErrorMessage: workspace.initErrorMessage,
         initOutput: workspace.initOutput,
         initStartedAt: parseDate(workspace.initStartedAt),
@@ -525,6 +542,7 @@ class DataBackupService {
         })),
         workspaces: workspaces.map((w) => ({
           ...exportPRBackupState(w),
+          conversationMetadata: exportedConversationMetadata(w),
           id: w.id,
           projectId: w.projectId,
           parentWorkspaceId: w.parentWorkspaceId,

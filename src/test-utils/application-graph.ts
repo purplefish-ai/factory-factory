@@ -109,7 +109,14 @@ vi.mock('@/backend/services/codex-accounts', () => ({
   },
 }));
 vi.mock('@/backend/services/config.service', () => ({
-  configService: { getDebugConfig: () => ({ chatWebSocket: false }) },
+  configService: {
+    getDebugConfig: () => ({ chatWebSocket: false }),
+    getWorkspaceMetadataConfig: () => ({
+      enabled: false,
+      codexModel: 'gpt-6-luna',
+      claudeModel: 'haiku',
+    }),
+  },
 }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/agent-definition', () => ({
@@ -400,7 +407,7 @@ const fakeSystemConfig = {
   wsLogsEnabled: false,
   runScriptProxyEnabled: false,
   compression: { enabled: false },
-  branchRenameMessageThreshold: 5,
+  workspaceMetadata: { enabled: false, codexModel: 'gpt-6-luna', claudeModel: 'haiku' },
   appVersion: 'test',
 };
 

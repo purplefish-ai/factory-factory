@@ -156,8 +156,8 @@ interface SystemConfig {
   // Event compression settings
   compression: CompressionConfig;
 
-  // Conversation rename settings
-  branchRenameMessageThreshold: number;
+  // Workspace metadata settings
+  workspaceMetadata: { enabled: boolean; codexModel: string; claudeModel: string };
 
   // App version
   appVersion: string;
@@ -322,8 +322,12 @@ function loadSystemConfig(): SystemConfig {
       enabled: env.EVENT_COMPRESSION_ENABLED,
     },
 
-    // Conversation rename settings
-    branchRenameMessageThreshold: env.BRANCH_RENAME_MESSAGE_THRESHOLD,
+    // Workspace metadata settings
+    workspaceMetadata: {
+      enabled: env.WORKSPACE_METADATA_ENABLED,
+      codexModel: env.WORKSPACE_METADATA_CODEX_MODEL,
+      claudeModel: env.WORKSPACE_METADATA_CLAUDE_MODEL,
+    },
 
     // App version
     appVersion: env.npm_package_version ?? '0.1.0',
@@ -609,11 +613,8 @@ class ConfigService {
     return this.config.frontendStaticPath;
   }
 
-  /**
-   * Get branch rename message threshold
-   */
-  getBranchRenameMessageThreshold(): number {
-    return this.config.branchRenameMessageThreshold;
+  getWorkspaceMetadataConfig() {
+    return { ...this.config.workspaceMetadata };
   }
 
   /**

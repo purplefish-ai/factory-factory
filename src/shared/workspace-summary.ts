@@ -27,6 +27,7 @@ import {
   WORKSPACE_STATUS_REASON_CODES,
   WORKSPACE_STATUS_REASON_TONES,
 } from '@/shared/workspace-status-reason';
+import { WorkspaceConversationSummarySchema } from './workspace-conversation-summary';
 
 const SessionRuntimeLastExitSchema = z.object({
   code: z.number().nullable(),
@@ -71,6 +72,7 @@ export const WorkspaceStatusReasonSchema = z.object({
 
 /** Flat board/sidebar contract. */
 export const WorkspaceSummarySchema = z.object({
+  conversationSummary: WorkspaceConversationSummarySchema.nullable().optional(),
   id: z.string(),
   projectId: z.string(),
   name: z.string(),

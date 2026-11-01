@@ -90,8 +90,20 @@ const exportedProjectSchema = z.object({
   updatedAt: z.string(),
 });
 
+const exportedWorkspaceMetadataSchema = z.object({
+  requestId: z.string(),
+  title: z.string().nullable(),
+  branch: z.string().nullable(),
+  summary: z.string().nullable(),
+  sidebarSummary: z.string().nullable(),
+  generatedAt: z.iso.datetime().nullable(),
+  sourceSessionId: z.string().nullable(),
+  sourceMessageId: z.string().nullable(),
+});
+
 // Zod strips retired mode/autoIteration fields from old backups at this boundary.
 const exportedWorkspaceSchema = z.object({
+  conversationMetadata: exportedWorkspaceMetadataSchema.nullable().optional(),
   prs: z.array(prAssociationBackupSchema).optional().default([]),
   prDiscovery: prDiscoveryBackupSchema.nullable().optional().default(null),
   prMonitoring: prMonitoringBackupSchema.nullable().optional().default(null),

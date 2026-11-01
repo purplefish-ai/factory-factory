@@ -9,6 +9,42 @@ import {
   type EventCollectorDependencies,
 } from './event-collector.orchestrator';
 
+it('schedules initial metadata once per committed user message and removes its listener on stop', () => {
+  const sessionEvents = new EventEmitter();
+  const schedule = vi.fn().mockResolvedValue(undefined);
+  const dependencies = unsafeCoerce<EventCollectorDependencies>({
+    createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+    prSnapshotService: new EventEmitter(),
+    workspaceActivityService: new EventEmitter(),
+    workspaceStateMachine: new EventEmitter(),
+    ratchetService: new EventEmitter(),
+    runScriptStateMachine: new EventEmitter(),
+    sessionDomainService: sessionEvents,
+    workspaceDataService: { subscribeAcceptedBranch: () => vi.fn() },
+    workspaceSnapshotStore: { getAllWorkspaceIds: () => [] },
+    workspaceMetadata: { schedule },
+  });
+  const collector = createEventCollectorOrchestrator(dependencies);
+  try {
+    collector.start();
+    collector.start();
+    sessionEvents.emit('user_message_committed', { sessionId: 'session' });
+    expect(schedule).toHaveBeenCalledExactlyOnceWith('session', true);
+
+    collector.stop();
+    expect(sessionEvents.listenerCount('user_message_committed')).toBe(0);
+    sessionEvents.emit('user_message_committed', { sessionId: 'stopped-session' });
+    expect(schedule).toHaveBeenCalledTimes(1);
+
+    collector.start();
+    sessionEvents.emit('user_message_committed', { sessionId: 'restarted-session' });
+    expect(schedule).toHaveBeenCalledTimes(2);
+    expect(schedule).toHaveBeenLastCalledWith('restarted-session', true);
+  } finally {
+    collector.stop();
+  }
+});
+
 it.each(['PROVISIONING', 'READY', 'FAILED'] as const)(
   'publishes committed metadata on %s without extra I/O',
   (status) => {

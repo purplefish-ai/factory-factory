@@ -400,6 +400,7 @@ export const ModelName = {
   Project: 'Project',
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
+  WorkspaceMetadata: 'WorkspaceMetadata',
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
   WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
@@ -435,7 +436,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -658,6 +659,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspaceMetadata: {
+      payload: Prisma.$WorkspaceMetadataPayload<ExtArgs>
+      fields: Prisma.WorkspaceMetadataFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceMetadataFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceMetadataFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceMetadataFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceMetadataFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceMetadataFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceMetadataCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceMetadataCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceMetadataCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceMetadataDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceMetadataUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceMetadataDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceMetadataUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceMetadataUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceMetadataUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMetadataPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceMetadataAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceMetadata>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceMetadataGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceMetadataGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceMetadataCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceMetadataCountAggregateOutputType> | number
         }
       }
     }
@@ -2244,6 +2319,21 @@ export const WorkspaceScalarFieldEnum = {
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
 
 
+export const WorkspaceMetadataScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  requestId: 'requestId',
+  title: 'title',
+  branch: 'branch',
+  summary: 'summary',
+  sidebarSummary: 'sidebarSummary',
+  generatedAt: 'generatedAt',
+  sourceSessionId: 'sourceSessionId',
+  sourceMessageId: 'sourceMessageId'
+} as const
+
+export type WorkspaceMetadataScalarFieldEnum = (typeof WorkspaceMetadataScalarFieldEnum)[keyof typeof WorkspaceMetadataScalarFieldEnum]
+
+
 export const WorkspacePRScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -2981,6 +3071,7 @@ export type GlobalOmitConfig = {
   project?: Prisma.ProjectOmit
   decisionLog?: Prisma.DecisionLogOmit
   workspace?: Prisma.WorkspaceOmit
+  workspaceMetadata?: Prisma.WorkspaceMetadataOmit
   workspacePR?: Prisma.WorkspacePROmit
   workspacePRMonitoring?: Prisma.WorkspacePRMonitoringOmit
   workspacePRDedicatedSession?: Prisma.WorkspacePRDedicatedSessionOmit

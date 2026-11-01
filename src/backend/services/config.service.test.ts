@@ -84,6 +84,24 @@ describe('configService environment accessors', () => {
     expect(configService.getShellPath()).toBe('/bin/bash');
   });
 
+  it('returns a defensive copy of workspace metadata configuration', () => {
+    process.env.WORKSPACE_METADATA_ENABLED = 'true';
+    process.env.WORKSPACE_METADATA_CODEX_MODEL = 'metadata-codex';
+    process.env.WORKSPACE_METADATA_CLAUDE_MODEL = 'metadata-claude';
+    configService.reload();
+
+    const metadata = configService.getWorkspaceMetadataConfig();
+    metadata.enabled = false;
+    metadata.codexModel = 'changed';
+    metadata.claudeModel = 'changed';
+
+    expect(configService.getWorkspaceMetadataConfig()).toEqual({
+      enabled: true,
+      codexModel: 'metadata-codex',
+      claudeModel: 'metadata-claude',
+    });
+  });
+
   it('reads migrations path from validated config', () => {
     process.env.MIGRATIONS_PATH = '/tmp/migrations';
     configService.reload();
@@ -159,7 +177,6 @@ describe('configService environment accessors', () => {
     process.env.TRUSTED_LOCAL_CIDRS = '172.17.0.1/32, 172.18.0.0/16';
     process.env.TRUST_PROXY_HEADERS = 'true';
     process.env.DISABLE_CORS_CHECKS = 'true';
-    process.env.BRANCH_RENAME_MESSAGE_THRESHOLD = '4';
     process.env.EVENT_COMPRESSION_ENABLED = 'false';
     process.env.WEB_CONCURRENCY = '3';
     process.env.npm_package_version = '9.9.9';
@@ -184,7 +201,6 @@ describe('configService environment accessors', () => {
     expect(configService.isRunScriptProxyEnabled()).toBe(true);
     expect(configService.isWsLogsEnabled()).toBe(true);
     expect(configService.getWebConcurrency()).toBe(3);
-    expect(configService.getBranchRenameMessageThreshold()).toBe(4);
     expect(configService.getAppVersion()).toBe('9.9.9');
     expect(configService.getDatabasePath()).toBe('/tmp/custom.db');
     expect(configService.getDatabasePathFromEnv()).toBe('/tmp/custom.db');

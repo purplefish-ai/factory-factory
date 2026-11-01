@@ -58,6 +58,11 @@ import type {
 } from './workspace-init.orchestrator';
 import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-launch.orchestrator';
 export type BridgeServices = PRMonitoringServices & {
+  workspaceMetadata?: {
+    schedule(sessionId: string, initialOnly?: boolean): Promise<void>;
+    start(): void;
+    stop(): Promise<void>;
+  };
   chatEventForwarderService: typeof chatEventForwarderService;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
@@ -233,11 +238,12 @@ export function configureDomainBridges(services: BridgeServices): void {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),
     },
   });
-  sessionPromptTurnCompletionService.setHandler((sessionId) =>
-    sessionDispatchService.tryDispatchNextMessage(sessionId, {
+  sessionPromptTurnCompletionService.setHandler((sessionId) => {
+    void services.workspaceMetadata?.schedule(sessionId);
+    return sessionDispatchService.tryDispatchNextMessage(sessionId, {
       bypassTurnInProgressBackoff: true,
-    })
-  );
+    });
+  });
 
   // === Run-script domain bridges ===
   startupScriptService.configure({

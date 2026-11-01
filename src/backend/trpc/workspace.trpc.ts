@@ -54,6 +54,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       type: z.literal('MANUAL'),
       projectId: z.string(),
       name: z.string().min(1),
+      nameIsGenerated: z.boolean().optional(),
       description: z.string().optional(),
       branchName: z.string().optional(),
       ratchetEnabled: z.boolean().optional(),

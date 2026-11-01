@@ -178,6 +178,7 @@ const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['lastActivityAt'] as const;
 const GIT_FIELDS = ['gitStats'] as const;
 const METADATA_FIELDS = [
+  'conversationSummary',
   'defaultSessionProvider',
   'worktreePath',
   'initErrorMessage',
@@ -287,7 +288,7 @@ function snapshotFieldValuesEqual(
   left: WorkspaceSnapshotEntry[SnapshotField],
   right: WorkspaceSnapshotEntry[SnapshotField]
 ): boolean {
-  if (field === 'prMonitoring') {
+  if (field === 'prMonitoring' || field === 'conversationSummary') {
     return isDeepStrictEqual(left, right);
   }
   if (field === 'gitStats') {
@@ -540,8 +541,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       FIELD_GROUP_MAPPINGS.every(
         ({ group, fields }) =>
           group === 'git' ||
-          // Older complete summaries can omit this optional launch hint.
-          fields.every((field) => field === 'defaultSessionProvider' || hydrated.has(field))
+          // Older complete summaries can omit optional launch/generated metadata.
+          fields.every(
+            (field) =>
+              field === 'defaultSessionProvider' ||
+              field === 'conversationSummary' ||
+              hydrated.has(field)
+          )
       ) &&
       WorkspaceSnapshotEntrySchema.safeParse({ ...entry, summaryVersion: 1 }).success;
     const versionChanged = entry.summaryVersion !== (complete ? 1 : undefined);

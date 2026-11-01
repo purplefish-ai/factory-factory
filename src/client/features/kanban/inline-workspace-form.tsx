@@ -404,6 +404,7 @@ export function InlineWorkspaceForm({
       projectId,
       name,
       initialPrompt: trimmedPrompt || undefined,
+      nameIsGenerated: Boolean(trimmedPrompt),
       initialAttachments: attachments.length > 0 ? attachments : undefined,
       ratchetEnabled,
       ...launchSelection.creationDefaults,

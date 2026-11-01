@@ -1,9 +1,9 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { getNodeExecPath } from '@/backend/lib/node-runtime';
 import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { terminateCatalogProcess, withTimeout } from './acp-runtime-spawn';
+import { spawnClaudeCodeProcess } from './claude-code-process';
 import { normalizeClaudePlanUsage, type PlanUsageReading } from './provider-usage-normalizer';
 
 /** Read the native /usage control API without submitting an inference turn. */
@@ -34,19 +34,7 @@ export async function fetchClaudePlanUsage(): Promise<PlanUsageReading> {
       mcpServers: {},
       env: { ...getCurrentProcessEnv(), ELECTRON_RUN_AS_NODE: '1' },
       spawnClaudeCodeProcess: (options) => {
-        const args = options.args.map((argument) =>
-          argument.replace(/\.asar([/\\])/g, '.asar.unpacked$1')
-        );
-        const providerProcess = spawn(
-          options.command === 'node' ? getNodeExecPath() : options.command,
-          args,
-          {
-            cwd: options.cwd,
-            env: options.env,
-            signal: options.signal,
-            stdio: ['pipe', 'pipe', 'pipe'],
-          }
-        );
+        const providerProcess = spawnClaudeCodeProcess(options);
         child = providerProcess;
         return providerProcess;
       },

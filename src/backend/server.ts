@@ -432,6 +432,7 @@ export function createServer(application: Application, requestedPort?: number): 
         indexHtmlReloadInterval = null;
       }
       await interceptors.stop();
+      await services.workspaceMetadata?.stop();
 
       await closeWebSocketServer();
       disposeChatTransportForApplication(application);
@@ -525,6 +526,7 @@ export function createServer(application: Application, requestedPort?: number): 
         await runStartupReconciliation();
 
         snapshotReconciliation.start();
+        services.workspaceMetadata?.start();
 
         logger.info('Backend server started', {
           port: actualPort,
