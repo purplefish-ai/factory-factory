@@ -277,7 +277,14 @@ export const SubagentTimelineRecoveryWithTasks: Story = {
 };
 
 export const QueuedMessageSteering: Story = {
-  parameters: { layout: 'padded' },
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story: 'Queued messages use a steering wheel icon for the Steer action.',
+      },
+    },
+  },
   render: (args) => <StartupPreview {...args} />,
   args: {
     messages: [startupMessage],
