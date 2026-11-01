@@ -317,11 +317,15 @@ export class SessionTerminationCoordinator {
 
   private async isEventOwnedForStop(
     sessionId: string,
-    authority: EventSessionAuthority
+    authority: EventSessionAuthority,
+    allowPhysicalFallback: boolean
   ): Promise<boolean> {
     try {
       return await withEventEvidenceDeadline(authority.isOwned(sessionId));
     } catch (error) {
+      if (!allowPhysicalFallback) {
+        throw error;
+      }
       authority.invalidate(sessionId);
       // The supervisor retains live group ownership independently of the database.
       // Failure still rejects the stop: physical cleanup cannot manufacture durable proof.
@@ -364,7 +368,7 @@ export class SessionTerminationCoordinator {
     const cancellation = new AbortController();
     try {
       const evidence = await withEventEvidenceDeadline(
-        this.performEventStop(sessionId, cause, cancellation.signal, expected),
+        this.performEventStop(sessionId, cause, cancellation.signal, expected, false),
         () => cancellation.abort(),
         10_000
       );
@@ -381,14 +385,22 @@ export class SessionTerminationCoordinator {
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
     signal: AbortSignal,
-    expected?: ExpectedEventRuntime
+    expected?: ExpectedEventRuntime,
+    allowPhysicalFallback = true
   ): Promise<RuntimeStopEvidence | null> {
     const authority = this.dependencies.eventAuthority;
-    if (!(authority && (await this.isEventOwnedForStop(sessionId, authority)))) {
+    if (
+      !(authority && (await this.isEventOwnedForStop(sessionId, authority, allowPhysicalFallback)))
+    ) {
       return null;
     }
     signal.throwIfAborted();
-    const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch(() => null);
+    const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch((error) => {
+      if (!allowPhysicalFallback) {
+        throw error;
+      }
+      return null;
+    });
     signal.throwIfAborted();
     this.assertExpectedRuntime(sessionId, expected);
     if (

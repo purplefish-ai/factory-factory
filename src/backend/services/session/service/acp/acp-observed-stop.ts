@@ -70,10 +70,11 @@ export class AcpObservedStop {
     return async () => (await this.stopObservedRuntime(id, 'SYSTEM_STOP')).status;
   }
   register(id: string, handle: AcpProcessHandle, owned: boolean | undefined): void {
+    this.spawnedGroups.delete(id);
+    this.eventOwnedHandles.delete(id);
+    this.observedStops.delete(id);
     if (owned) {
-      this.spawnedGroups.delete(id);
       this.eventOwnedHandles.set(id, handle);
-      this.observedStops.delete(id);
     }
   }
   async cleanupUnexpectedExit(id: string, incarnationId: string): Promise<void> {
@@ -230,6 +231,9 @@ export class AcpObservedStop {
     this.port.markManaged(handle.child);
     attemptUnprovenDirectStop(handle);
     const status = await stopOwnedRuntimeGroup(handle, { assertOwned });
+    if (!this.canStopTarget(sessionId, handle, expected)) {
+      return unknown;
+    }
     const evidence: RuntimeStopEvidence = {
       ...unknown,
       source,

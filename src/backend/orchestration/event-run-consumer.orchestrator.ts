@@ -64,7 +64,9 @@ export function createEventRunConsumer() {
       physicalDone: Promise.resolve(),
       release: () => {
         owned.revoked = true;
-        tasks.delete(claim.runId);
+        if (tasks.get(claim.runId) === owned) {
+          tasks.delete(claim.runId);
+        }
         signal.removeEventListener('abort', abort);
       },
     };
@@ -96,6 +98,9 @@ export function createEventRunConsumer() {
       .then(
         () => {
           owned.launched = true;
+          if (owned.revoked) {
+            owned.release();
+          }
         },
         (error: unknown) => {
           // Failed persistence keeps the committed claim tracked; maintenance/shutdown retries disposition.
@@ -170,6 +175,13 @@ export function createEventRunConsumer() {
         open = false;
       });
       check();
+      // The durable lease is recoverable later if admission filled during adoption.
+      if (
+        tasks.has(adopted.claim.runId) ||
+        tasks.size >= configService.getAgentRuntimeLimits().activeGlobal
+      ) {
+        return;
+      }
       await consumeClaim(adopted.claim, signal, true);
     } catch {
       logger.warn('Event observation adoption requires recovery', { runId: claim.runId });

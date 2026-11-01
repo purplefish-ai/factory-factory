@@ -60,6 +60,7 @@ export function fakeEventProvider(
     agentCapabilities: {},
     nativeSessionTracker: tracker,
   });
+  handle.eventLifecycleGeneration = options.eventLifecycleGeneration;
   tracker?.setRootSessionId(handle.acpSessionId);
   const choices = (id: string, category: string, values: string[]): SessionConfigOption => ({
     id,

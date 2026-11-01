@@ -525,6 +525,7 @@ export class AcpNativeSessionTracker {
       return;
     }
     const value = parsed.data;
+    this.workRevision++;
     this.appendTurn(child, value);
     this.updateSummary(child.summary, value);
     this.changed(child.summary.id, 'updated');

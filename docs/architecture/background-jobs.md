@@ -109,7 +109,9 @@ drain. Application disposal also drains sessions before account dependencies.
 
 That same launch-maintenance owner observes initial outcomes and tracked work,
 retaining leases after the initial response until settlement. Expired
-observation ownership can be adopted without a send or retry-budget charge. Its
+observation ownership can be adopted without a send or retry-budget charge;
+local capacity is checked again after the adoption await. A revoked launch that
+later finishes releases only its own local owner, never a replacement. Its
 bounded pages report malformed rows separately and advance by the last inspected
 row, so bad data cannot hide later valid work. Missing live work coverage
 retains capacity after restart. Already-started failed dispositions and

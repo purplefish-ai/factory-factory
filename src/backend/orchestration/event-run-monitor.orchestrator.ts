@@ -110,7 +110,7 @@ function interruptionCause(
   workspaceStatus?: string
 ) {
   const evidence = run.delivery.evidence;
-  if (!evidence?.source) {
+  if (!evidence?.source || evidence.stop?.cause === 'SHUTDOWN') {
     return null;
   }
   if (workspaceStatus === 'ARCHIVED' || workspaceStatus === 'ARCHIVING') {
@@ -122,7 +122,7 @@ function interruptionCause(
   if (evidence.outcome) {
     return evidence.outcome.result === 'COMPLETED' ? null : 'SYSTEM_STOP';
   }
-  if (evidence.stop && evidence.stop.cause !== 'SHUTDOWN') {
+  if (evidence.stop) {
     return evidence.stop.cause;
   }
   if (
