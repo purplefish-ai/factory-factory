@@ -3,7 +3,6 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { MessageItem } from '@/client/features/chat/agent-activity/agent-activity';
-import { CopyMessageButton } from '@/client/features/chat/agent-activity/copy-message-button';
 import { QueuedMessages } from '@/client/features/chat/queued-messages';
 import { KanbanCard } from '@/client/features/kanban/kanban-card';
 import { baseWorkspace } from '@/client/features/kanban/kanban-card.story-fixtures';
@@ -79,10 +78,18 @@ export function HoverActionsFixture() {
               onOpenQuickChat={() => undefined}
               onRename={async () => undefined}
             />
-            <div className="group relative min-h-16 border p-4">
-              Assistant response
-              <CopyMessageButton textContent="Assistant response" />
-            </div>
+            <MessageItem
+              message={{
+                id: 'assistant',
+                source: 'agent',
+                message: {
+                  type: 'assistant',
+                  message: { role: 'assistant', content: 'Assistant response' },
+                },
+                timestamp: '2026-01-01',
+                order: 0,
+              }}
+            />
             <MessageItem
               message={{
                 id: 'user',
