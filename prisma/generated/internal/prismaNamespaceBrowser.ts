@@ -73,6 +73,8 @@ export const ModelName = {
   AgentTrigger: 'AgentTrigger',
   AgentRun: 'AgentRun',
   AgentSourceState: 'AgentSourceState',
+  AgentSourcePage: 'AgentSourcePage',
+  AgentSourceBaseline: 'AgentSourceBaseline',
   AgentEvent: 'AgentEvent',
   AgentEvaluation: 'AgentEvaluation',
   AgentInitialDelivery: 'AgentInitialDelivery',
@@ -501,6 +503,34 @@ export const AgentSourceStateScalarFieldEnum = {
 } as const
 
 export type AgentSourceStateScalarFieldEnum = (typeof AgentSourceStateScalarFieldEnum)[keyof typeof AgentSourceStateScalarFieldEnum]
+
+
+export const AgentSourcePageScalarFieldEnum = {
+  id: 'id',
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  ordinal: 'ordinal',
+  phase: 'phase',
+  requestPage: 'requestPage',
+  nextPage: 'nextPage',
+  sourceOrder: 'sourceOrder',
+  evidence: 'evidence',
+  createdAt: 'createdAt'
+} as const
+
+export type AgentSourcePageScalarFieldEnum = (typeof AgentSourcePageScalarFieldEnum)[keyof typeof AgentSourcePageScalarFieldEnum]
+
+
+export const AgentSourceBaselineScalarFieldEnum = {
+  id: 'id',
+  connectionId: 'connectionId',
+  headEventId: 'headEventId',
+  afterHeadEventId: 'afterHeadEventId',
+  sourceOrder: 'sourceOrder',
+  createdAt: 'createdAt'
+} as const
+
+export type AgentSourceBaselineScalarFieldEnum = (typeof AgentSourceBaselineScalarFieldEnum)[keyof typeof AgentSourceBaselineScalarFieldEnum]
 
 
 export const AgentEventScalarFieldEnum = {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { agentSourceScanSchema } from './agent-source-state';
 import {
   AgentActivationState,
   AgentDeliveryState,
@@ -121,13 +122,7 @@ export const agentSourceCursorSchema = z.discriminatedUnion('provider', [
     version: z.literal(1),
     provider: z.literal('GITHUB'),
     committedHeadEventId: id.nullable(),
-    scan: z
-      .strictObject({
-        fixedHeadEventId: id,
-        previousBoundaryEventId: id.nullable(),
-        nextPage: revision,
-      })
-      .nullable(),
+    scan: agentSourceScanSchema.nullable(),
   }),
   z.strictObject({
     version: z.literal(1),

@@ -425,6 +425,7 @@ export function createServer(application: Application, requestedPort?: number): 
     }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
+      await services.agentRuntime?.stop();
 
       clearInterval(heartbeatInterval);
       if (indexHtmlReloadInterval !== null) {
@@ -544,6 +545,7 @@ export function createServer(application: Application, requestedPort?: number): 
         schedulerService.start();
         await ratchetService.start();
         periodicTaskService.start();
+        services.agentRuntime?.start();
         startupComplete = true;
 
         logger.info('Server endpoints available', {

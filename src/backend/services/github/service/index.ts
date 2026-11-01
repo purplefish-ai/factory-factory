@@ -3,6 +3,7 @@
 // Consumers should import from '@/backend/services/github' only.
 
 // --- GitHub CLI auth check ---
+export type { AgentIssueEventPage, AgentIssueEventRequest } from '@/shared/agent-source';
 export { type AuthCheckResult, checkGithubAuth } from './github-cli/auth-check';
 // --- Adversarial-review code review posting ---
 export {

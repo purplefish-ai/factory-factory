@@ -1,8 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
+import type { AgentIssueEventRequest } from '@/shared/agent-source';
 import type { CIStatus, PRState } from '@/shared/core';
 import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
+import { getAgentRepositoryIdentity, listAgentIssueEvents } from './github-cli/agent-issue-events';
 import { getAgentRepository } from './github-cli/agent-sources';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import {
@@ -62,6 +64,16 @@ type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSig
  * and read-only calls benefit from in-flight deduplication (singleflight).
  */
 class GitHubCLIService {
+  getAgentRepositoryIdentity(repository: string, signal?: AbortSignal) {
+    return getAgentRepositoryIdentity(repository, (args) =>
+      this.exec(args, { signal, maxBuffer: GH_MAX_BUFFER_BYTES.agentSources })
+    );
+  }
+  listAgentIssueEvents(input: AgentIssueEventRequest, signal?: AbortSignal) {
+    return listAgentIssueEvents(input, (args) =>
+      this.exec(args, { signal, maxBuffer: GH_MAX_BUFFER_BYTES.agentSources })
+    );
+  }
   getAgentRepository(repository: string) {
     return getAgentRepository(repository, (args) =>
       this.exec(args, { maxBuffer: GH_MAX_BUFFER_BYTES.agentSources })

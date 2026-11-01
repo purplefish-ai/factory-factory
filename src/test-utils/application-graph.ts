@@ -480,6 +480,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     slackConnectionService,
     agentProposalService,
     agentAuthoring: createAgentAuthoring((): ApplicationServices => services),
+    agentRuntime: { start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) },
     dataBackupService,
     decisionLogQueryService: decisionLogService,
     metadataSearchService,

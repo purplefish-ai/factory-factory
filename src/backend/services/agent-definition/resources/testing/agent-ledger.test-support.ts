@@ -1,4 +1,7 @@
+import { vi } from 'vitest';
 import type { IntegrationDatabase } from '@/backend/testing/integration-db';
+import { agentEventPayloadSchema } from '@/shared/agent-runtime';
+import { agentGithubCursorSchema } from '@/shared/agent-source-state';
 
 export const executionConfig = {
   version: 1 as const,
@@ -8,8 +11,11 @@ export const executionConfig = {
 
 export async function createLedgerFixture(
   db: IntegrationDatabase,
-  runtime: typeof import('../index')
+  runtime: typeof import('@/backend/services/agent-definition')
 ) {
+  const { agentSourceAccessor } = await vi.importActual<
+    typeof import('@/backend/services/agent-definition/resources/agent-source.accessor')
+  >('@/backend/services/agent-definition/resources/agent-source.accessor');
   await db.prisma.agentDefinition.deleteMany();
   await db.prisma.agentEvent.deleteMany();
   await db.prisma.agentConnection.deleteMany();
@@ -21,7 +27,8 @@ export async function createLedgerFixture(
       slug: crypto.randomUUID(),
       repoPath: '/repo',
       worktreeBasePath: '/worktrees',
-      githubRepo: 'org/repo',
+      githubOwner: 'org',
+      githubRepo: 'repo',
     },
   });
   const definition = await db.prisma.agentDefinition.create({
@@ -93,8 +100,37 @@ export async function createLedgerFixture(
   }
   async function event(id = 'event-1') {
     const result = await runtime.ingestEvent(github(id));
-    await runtime.finalizeEventOrder({ connectionId, eventIds: [result.eventId] });
+    await finalize({ connectionId, eventIds: [result.eventId] });
     return result.eventId;
+  }
+  async function finalize(input: { connectionId: string; eventIds: string[] }) {
+    const state = await db.prisma.agentSourceState.findUnique({ where: { connectionId } });
+    if (!state?.cursor) {
+      await agentSourceAccessor.prepareBaseline(connectionId, null);
+    }
+    const current = await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
+    const boundary = agentGithubCursorSchema.parse(current.cursor).committedHeadEventId;
+    const rows = await db.prisma.agentEvent.findMany({ where: { id: { in: input.eventIds } } });
+    const events = input.eventIds
+      .slice()
+      .reverse()
+      .map((id) => {
+        const row = rows.find((item) => item.id === id);
+        if (!row) {
+          throw new Error('Test event missing');
+        }
+        return {
+          providerEventId: row.providerEventId,
+          payload: agentEventPayloadSchema.parse(row.payload),
+        };
+      });
+    const page = {
+      events: [...events, ...(boundary ? [{ providerEventId: boundary, payload: null }] : [])],
+      nextPage: null,
+    };
+    await agentSourceAccessor.savePage(connectionId, 1, page);
+    await agentSourceAccessor.savePage(connectionId, 1, page);
+    return await runtime.finalizeEventOrder(input);
   }
   function evaluation(eventId: string, overrides: Record<string, unknown> = {}) {
     return runtime.recordEvaluation({
@@ -125,5 +161,15 @@ export async function createLedgerFixture(
     });
   }
 
-  return { definitionId, connectionId, triggerId, github, event, evaluation, admit, secondTrigger };
+  return {
+    definitionId,
+    connectionId,
+    triggerId,
+    github,
+    event,
+    finalize,
+    evaluation,
+    admit,
+    secondTrigger,
+  };
 }

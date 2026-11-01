@@ -3,12 +3,13 @@ import { AgentProposalService } from './service/agent-proposal.service';
 import { SlackConnectionService } from './service/slack-connection.service';
 
 export { AgentProposalService } from './service/agent-proposal.service';
+export { AgentSourcePollService } from './service/agent-source-poll.service';
 export const agentProposalService = new AgentProposalService();
 
 export { SlackConnectionService } from './service/slack-connection.service';
 export const slackConnectionService = new SlackConnectionService(cryptoService);
 
-// Durable primitives only; no source listener, activation or execution worker is started.
+// Durable primitives and injectable source intake; no activation or execution worker starts here.
 export {
   ingestEvent,
   finalizeEventOrder,

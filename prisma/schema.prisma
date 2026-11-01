@@ -783,6 +783,38 @@ model AgentSourceState {
   health         Json? // agentSourceHealthSchema
   lastObservedAt DateTime?
   updatedAt      DateTime        @updatedAt
+  pages          AgentSourcePage[]
+  baselines      AgentSourceBaseline[]
+}
+
+/// Immutable ordered feed/control identities. PR and unsupported content is never retained.
+model AgentSourcePage {
+  id String @id @default(cuid())
+  connectionId String
+  source AgentSourceState @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
+  scanId String
+  ordinal Int
+  phase String
+  requestPage Int
+  nextPage Int?
+  sourceOrder Int? // Finalized interval high water; retained after event pruning
+  evidence Json // agentSourcePageEvidenceSchema
+  createdAt DateTime @default(now())
+
+  @@unique([connectionId, scanId, ordinal])
+}
+
+/// Prepared provider head; an ordinal is assigned only after all older captured events.
+model AgentSourceBaseline {
+  id String @id @default(cuid())
+  connectionId String
+  source AgentSourceState @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
+  headEventId String?
+  afterHeadEventId String? // The next interval must witness this prepared head
+  sourceOrder Int?
+  createdAt DateTime @default(now())
+
+  @@index([connectionId, sourceOrder])
 }
 
 model AgentEvent {

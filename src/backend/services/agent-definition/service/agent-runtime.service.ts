@@ -2,6 +2,7 @@ import { agentEvaluationAccessor } from '@/backend/services/agent-definition/res
 import { agentEventAccessor } from '@/backend/services/agent-definition/resources/agent-event.accessor';
 import { agentRunClaimAccessor } from '@/backend/services/agent-definition/resources/agent-run-claim.accessor';
 import { agentRunAccessor } from '@/backend/services/agent-definition/resources/agent-run.accessor';
+import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
 import type {
   AgentAdmissionInput,
   AgentEvaluationInput,
@@ -13,7 +14,7 @@ export function ingestEvent(input: AgentEventInput) {
   return agentEventAccessor.ingestEvent(input);
 }
 export function finalizeEventOrder(input: AgentEventOrderInput) {
-  return agentEventAccessor.finalizeEventOrder(input);
+  return agentSourceAccessor.finalizeEventOrder(input);
 }
 export function recordEvaluation(input: AgentEvaluationInput) {
   return agentEvaluationAccessor.recordEvaluation(input);
