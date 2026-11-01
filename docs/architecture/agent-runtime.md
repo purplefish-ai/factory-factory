@@ -1067,12 +1067,38 @@ those sessions, including before observers are restored. Ordinary conversations
 keep their existing policy; a durably finished initial delivery permits later
 human turns after restart.
 
-The dormant `dispatchAgentInitialPrompt` API targets the reserved session and
-sends one initial turn using its frozen execution and account binding. Its
-caller supplies a synchronous current-claim guard. Human input stays in the
-ordinary queue during setup and delivery. Queue reset, retry, manual resume,
-steering, direct startup and configuration edits cannot remove the durable
-fence. This infrastructure does not enable an event launch consumer.
+The `dispatchAgentInitialPrompt` API targets the reserved session and sends one
+initial turn using its frozen execution and account binding. Its caller supplies
+a synchronous current-claim guard. Human input stays in the ordinary queue
+during setup and delivery. Queue reset, retry, manual resume, steering, direct
+startup and configuration edits cannot remove the durable fence. The event
+launcher freezes execution, creates and links the reserved workspace/session,
+then uses strict owned initialization before this API. Saved agents remain
+unactivatable until monitoring, operator recovery and UI gates exist.
+
+AgentRun.launchPreparation is a versioned physical-operation marker. A null or
+SAFE marker with PENDING delivery can resume with the same identities. SETUP or
+STARTUP is persisted before physical work; only a successful setup or confirmed
+cleanup makes it safe again. Hard restart in those operations produces held
+preparation/cleanup uncertainty, not delivery ambiguity: PENDING still proves
+that the initial task was unsent. Marker-before-effect and cleanup-before-marker
+crash windows can conservatively require operator resolution. Existing script
+PID/output and capacity are retained while cleanup is uncertain; persisted PIDs
+are never signalled. Git cleanup requires positive filesystem and canonical
+registration absence even when the legacy removal promise resolves.
+
+The targeted `interruptEventInitial` capability uses SHUTDOWN/TIMEOUT evidence
+without ordinary user-stop finalization or clearing queued human input. Initial
+dispatch cancellation shares the existing evidence deadlines and fences late
+observations; it does not close global authority. Already-started observation
+writes remain tracked for final session teardown. Setup cancellation joins
+actual Git operations and script cleanup directly, so uncancellable Git may
+outlive the setup deadline while retaining ownership. Durable reads and
+output/PID persistence use the existing bounded evidence drain; expiration
+closes the launch guard permanently. A late read cannot start physical work or a
+new write, and any already-started physical operation still drains directly. A
+settled UNKNOWN setup cleanup has no reusable process-control handle in the
+launcher; missing local state is never used as termination proof.
 
 The send boundary persists SENDING after session serialization and provider
 configuration readiness. It then rechecks the captured runtime, lifecycle and

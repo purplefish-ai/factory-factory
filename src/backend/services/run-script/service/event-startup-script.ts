@@ -19,6 +19,8 @@ export type EventStartupScriptOptions = {
   appendOutput(text: string): Promise<void>;
   setPid(pid: number): Promise<void>;
   clearPid(pid: number): Promise<void>;
+  retainPid?(pid: number): Promise<void>;
+  physicalStage?(active: boolean): void;
 };
 /** Event-only execution: foreground work is joined; cancellation requires owned-group proof. */
 export async function executeEventStartupScript(
@@ -32,6 +34,7 @@ export async function executeEventStartupScript(
     env: { ...configService.getChildProcessEnv(), WORKSPACE_PATH: input.cwd },
     detached: process.platform !== 'win32',
   });
+  input.physicalStage?.(true);
   const group = { child, ownedProcessGroup: process.platform !== 'win32' ? child.pid : undefined };
   let writes = Promise.resolve();
   let outputError: unknown;
@@ -71,12 +74,16 @@ export async function executeEventStartupScript(
     }
     finishing = true;
     clearTimeout(drainTimeout);
+    if (stopping === undefined) {
+      input.physicalStage?.(false);
+    }
     await writes;
     await clearPid();
     if (input.signal.aborted) {
       abort();
     }
     const cleanup = stopping !== undefined ? await stopping : 'CONFIRMED';
+    await retainUncertainPid(cleanup, child.pid, input);
     settled = true;
     clearTimeout(timeout);
     input.signal.removeEventListener('abort', abort);
@@ -93,6 +100,7 @@ export async function executeEventStartupScript(
       return;
     }
     failure = kind;
+    input.physicalStage?.(true);
     stopping = Promise.resolve().then(async () => {
       const proof = await stopOwnedProcessGroup(group);
       if (proof === 'UNKNOWN') {
@@ -107,7 +115,10 @@ export async function executeEventStartupScript(
         ? ('CONFIRMED' as const)
         : ('UNKNOWN' as const);
     });
-    void stopping.then(() => finish(null));
+    void stopping.then(() => {
+      input.physicalStage?.(false);
+      return finish(null);
+    });
   }
   const abort = () =>
     stop(
@@ -185,4 +196,15 @@ function failureMessage(kind: EventSetupError['kind'] | undefined) {
     return 'Event setup script aborted';
   }
   return 'Event setup script failed';
+}
+
+async function retainUncertainPid(
+  cleanup: 'CONFIRMED' | 'UNKNOWN',
+  pid: number | undefined,
+  input: EventStartupScriptOptions
+) {
+  if (cleanup === 'UNKNOWN' && pid !== undefined) {
+    // A cleared foreground PID is not proof its owned descendants stopped.
+    await input.retainPid?.(pid).catch(() => undefined);
+  }
 }

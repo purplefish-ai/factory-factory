@@ -47,10 +47,9 @@ export function boundary() {
 }
 
 /** Real source capture/admission and creation; linkage is only a fixture precondition until4c2. */
-export async function createEventDeliveryFixture(
+export async function createEventAdmissionFixture(
   db: IntegrationDatabase,
-  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE',
-  ready = true
+  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
 ) {
   const owner = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
     '@/backend/services/agent-definition'
@@ -188,12 +187,25 @@ export async function createEventDeliveryFixture(
     triggerRevision: 1,
     activationGeneration: 1,
   });
+  return { owner, workspace, session, execution, project, input };
+}
+
+export async function createEventDeliveryFixture(
+  db: IntegrationDatabase,
+  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE',
+  ready = true,
+  unprepared = false
+) {
+  const { owner, workspace, session, execution, project, input } =
+    await createEventAdmissionFixture(db, provider);
   const claim = await owner.claimNextRun();
   if (claim.status !== 'CLAIMED') {
     throw new Error(`Claim failed: ${JSON.stringify(claim)}`);
   }
   const binding = await owner.readEventExecutionBinding(claim);
-  await owner.freezeEventExecution({ claim, ...binding, execution });
+  if (!unprepared) {
+    await owner.freezeEventExecution({ claim, ...binding, execution });
+  }
   const source = {
     type: 'EVENT_AGENT' as const,
     ...claim,
@@ -217,19 +229,21 @@ export async function createEventDeliveryFixture(
   const creation = new workspace.WorkspaceCreationService({
     logger: createLogger('event-fixture'),
   });
-  await creation.createEventWorkspaceOnce(workspaceSource);
-  await session.sessionDataService.createEventSessionOnce({
-    id: claim.reservedSessionId,
-    workspaceId: claim.reservedWorkspaceId,
-    runId: claim.runId,
-    execution,
-  });
-  // Explicit fixture precondition. Production create→link→setup ordering belongs to4c2.
-  await db.prisma.agentRun.update({
-    where: { id: claim.runId },
-    data: { workspaceId: claim.reservedWorkspaceId },
-  });
-  if (ready) {
+  if (!unprepared) {
+    await creation.createEventWorkspaceOnce(workspaceSource);
+    await session.sessionDataService.createEventSessionOnce({
+      id: claim.reservedSessionId,
+      workspaceId: claim.reservedWorkspaceId,
+      runId: claim.runId,
+      execution,
+    });
+    // Explicit fixture precondition. Production create→link→setup ordering belongs to4c2.
+    await db.prisma.agentRun.update({
+      where: { id: claim.runId },
+      data: { workspaceId: claim.reservedWorkspaceId },
+    });
+  }
+  if (ready && !unprepared) {
     await workspace.workspaceStateMachine.startProvisioning(claim.reservedWorkspaceId);
     await workspace.workspaceRunScriptService.registerInitializedWorktree(
       claim.reservedWorkspaceId,

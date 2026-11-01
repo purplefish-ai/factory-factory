@@ -253,4 +253,27 @@ describe('createApplication', () => {
     expect(application.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
     expect(application.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
   });
+
+  it('drains initial-session observations before disposing account dependencies', async () => {
+    const dependencies = createFakeApplicationGraph('event-disposal');
+    const calls: string[] = [];
+    let release!: () => void;
+    dependencies.services.sessionLifecycleService.stopAllClients = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          calls.push('sessions');
+          release = resolve;
+        })
+    );
+    dependencies.services.codexAccountService.shutdown = vi.fn(() => {
+      calls.push('accounts');
+      return Promise.resolve();
+    });
+    const pending = disposeApplication(createApplication(dependencies));
+    await vi.waitFor(() => expect(calls).toContain('sessions'));
+    expect(calls).toEqual(['sessions']);
+    release();
+    await pending;
+    expect(calls).toEqual(['sessions', 'accounts']);
+  });
 });

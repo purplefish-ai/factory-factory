@@ -562,6 +562,8 @@ export function createApplication(
 export async function disposeApplication(application: Application): Promise<void> {
   await application.services.agentRuntime?.stop();
   await application.services.workspaceMetadata?.stop();
+  // Server-construction failure has no server cleanup owner to drain session observations.
+  await application.services.sessionLifecycleService.stopAllClients();
   await application.services.codexAccountService.shutdown();
   application.lifecycle.eventCollector.stop();
   await application.lifecycle.snapshotReconciliation.stop();

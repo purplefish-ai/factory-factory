@@ -757,6 +757,7 @@ model AgentRun {
   evaluations          AgentEvaluation[]
   initialDelivery      AgentInitialDelivery?
   effectiveExecution   Json? // eventAgentExecutionSchema; immutable account and launch binding
+  launchPreparation    Json? // eventLaunchPreparationSchema; safe boundary vs owned physical work
   definitionSnapshot   Json // agentDefinitionInputSchema; frozen at admission
   triggerSnapshot      Json? // agentTriggerInputSchema; null for manual runs
   input                Json // agentRunInputSchema; normalized event context, never raw provider payloads

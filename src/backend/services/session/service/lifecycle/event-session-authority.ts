@@ -151,14 +151,23 @@ export class EventSessionAuthority {
     };
     return {
       assertCurrent,
-      beforeSend: () => this.observe(() => owner.beforeSend(permit.attempt, source)),
+      beforeSend: () =>
+        this.observe(() => {
+          assertCurrent();
+          return owner.beforeSend(permit.attempt, source);
+        }),
       outcome: (outcome) =>
         this.observe(() => {
           assertCurrent();
           // Validation occurs in the owning API; unknown provider reasons stay ambiguous.
           return owner.outcome(permit.attempt, initialOutcomeSchema.parse({ source, ...outcome }));
         }),
-      ambiguous: () => this.observe(() => owner.ambiguous(permit.attempt)),
+      ambiguous: () =>
+        this.observe(() => {
+          // A closed launch lifetime cannot initiate a late projection write.
+          this.attemptGuards.get(permit)?.();
+          return owner.ambiguous(permit.attempt);
+        }),
     };
   }
   observeUnexpectedExit(sessionId: string, incarnationId: string): Promise<void> {

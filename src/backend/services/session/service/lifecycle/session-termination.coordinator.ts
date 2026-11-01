@@ -338,17 +338,47 @@ export class SessionTerminationCoordinator {
       this.performEventStop(sessionId, cause, cancellation.signal),
       () => cancellation.abort(),
       10_000
-    );
+    ).then((evidence) => {
+      if (!evidence) {
+        return false;
+      }
+      if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
+        throw new Error('Event runtime termination is unconfirmed');
+      }
+      return true;
+    });
+  }
+
+  /** Targeted initial-task interruption; never clears human queues or closes global authority. */
+  async interruptEventInitial(
+    sessionId: string,
+    cause: 'SHUTDOWN' | 'TIMEOUT'
+  ): Promise<RuntimeStopEvidence> {
+    const reservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+    const cancellation = new AbortController();
+    try {
+      const evidence = await withEventEvidenceDeadline(
+        this.performEventStop(sessionId, cause, cancellation.signal),
+        () => cancellation.abort(),
+        10_000
+      );
+      if (!evidence) {
+        throw new Error('Event initial session ownership is unavailable');
+      }
+      return evidence;
+    } finally {
+      reservation?.release();
+    }
   }
 
   private async performEventStop(
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
     signal: AbortSignal
-  ): Promise<boolean> {
+  ): Promise<RuntimeStopEvidence | null> {
     const authority = this.dependencies.eventAuthority;
     if (!(authority && (await this.isEventOwnedForStop(sessionId, authority)))) {
-      return false;
+      return null;
     }
     signal.throwIfAborted();
     authority.invalidate(sessionId);
@@ -375,10 +405,7 @@ export class SessionTerminationCoordinator {
       : unknown;
     signal.throwIfAborted();
     await authority.recordStop(sessionId, { ...evidence, cause }, signal);
-    if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
-      throw new Error('Event runtime termination is unconfirmed');
-    }
-    return true;
+    return evidence;
   }
 
   private async workspaceStopOptions(

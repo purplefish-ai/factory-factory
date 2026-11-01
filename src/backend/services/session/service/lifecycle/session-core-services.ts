@@ -226,6 +226,7 @@ sessionLifecycleServiceInstance = new SessionLifecycleService({
 export { sessionLifecycleServiceInstance as sessionLifecycleService };
 
 const initialDispatcher = new EventInitialDispatcher({
+  interrupt: (id, cause) => sessionTerminationCoordinator.interruptEventInitial(id, cause),
   authority: eventSessionAuthority,
   start: (id, permit) =>
     sessionLifecycleServiceInstance.getOrCreateSessionClient(id, { eventInitial: permit }),
@@ -234,3 +235,6 @@ const initialDispatcher = new EventInitialDispatcher({
 });
 /** Dormant owner API: orchestration supplies the durable port before launching event work. */
 export const dispatchAgentInitialPrompt = initialDispatcher.dispatch.bind(initialDispatcher);
+export const interruptEventInitial = sessionTerminationCoordinator.interruptEventInitial.bind(
+  sessionTerminationCoordinator
+);

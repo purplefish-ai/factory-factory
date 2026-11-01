@@ -18,10 +18,12 @@ function setup() {
   const controller = new AbortController();
   const ports = {
     signal: controller.signal,
+    physicalStage: vi.fn(),
     assertCurrent: vi.fn(async () => undefined),
     appendOutput: vi.fn(async () => undefined),
     setPid: vi.fn(async () => undefined),
     clearPid: vi.fn(async () => undefined),
+    retainPid: vi.fn(async () => undefined),
   };
   return { child, controller, ports };
 }
@@ -75,6 +77,8 @@ it('returns UNKNOWN on timeout when cleanup cannot prove process disappearance',
   }).catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(6000);
   expect(await task).toMatchObject({ kind: 'TIMED_OUT', cleanup: 'UNKNOWN' });
+  expect(h.ports.retainPid).toHaveBeenCalledWith(4321);
+  expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
   if (process.platform !== 'win32') {
     expect(signal).toHaveBeenCalledWith(-4321, 'SIGKILL');
   }
@@ -189,6 +193,7 @@ it.each(['output', 'pid'] as const)(
       h.controller.abort();
       await nextTurn();
       expect(done).toBe(false);
+      expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
       release();
       expect(await task).toMatchObject({ kind: 'ABORTED', cleanup: 'UNKNOWN' });
       if (process.platform !== 'win32') {

@@ -15,6 +15,7 @@ import {
   gitOpsService,
   type EventWorkspaceClaim,
 } from '@/backend/services/workspace';
+import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
 import {
   enqueueWorkspaceInitializationTask,
   resolveWorkspaceWorktree,
@@ -26,6 +27,7 @@ export type EventWorkspaceInitializationResult =
       status: 'FAILED' | 'ABORTED' | 'TIMED_OUT' | 'STALE';
       cleanup: 'CONFIRMED' | 'UNKNOWN';
       reason: string;
+      failure: ReturnType<typeof classifyEventPreparationFailure>;
     };
 export type EventWorkspaceInitializationInput = {
   claim: EventWorkspaceClaim;
@@ -33,6 +35,10 @@ export type EventWorkspaceInitializationInput = {
   /** Caller owns live-task fencing; owner transactions independently check durable generation. */
   assertCurrent?: () => void;
   beforeReady?: () => Promise<void>;
+  /** Actual physical operations only; durable reads/publication are separately bounded. */
+  physicalStage?: (active: boolean) => void;
+  /** Original durable setup deadline; a READY worktree needs no physical setup retry. */
+  deadlineAt?: number;
 };
 type EventWorkspace = Awaited<ReturnType<typeof eventWorkspaceInitService.read>>;
 type Worktree = Awaited<ReturnType<typeof resolveWorkspaceWorktree>>;
@@ -49,7 +55,7 @@ export function initializeEventWorkspaceWorktree(
 class EventWorkspaceInitialization {
   private readonly timeout = new AbortController();
   private readonly signal: AbortSignal;
-  private readonly timer: ReturnType<typeof setTimeout>;
+  private timer: ReturnType<typeof setTimeout>;
   private fenceLost = false;
   private candidate?: {
     path: string;
@@ -81,7 +87,9 @@ class EventWorkspaceInitialization {
   private current = async (check = this.check) => {
     check();
     try {
-      return await eventWorkspaceInitService.read(this.input.claim, check);
+      const workspace = await eventWorkspaceInitService.read(this.input.claim, check);
+      check();
+      return workspace;
     } catch (error) {
       if (error instanceof EventWorkspaceFenceError) {
         this.fenceLost = true;
@@ -103,6 +111,18 @@ class EventWorkspaceInitialization {
         }
         await this.current();
         return this.ready(existing.initErrorMessage ?? undefined);
+      }
+      if (this.input.deadlineAt !== undefined) {
+        clearTimeout(this.timer);
+        const remaining = this.input.deadlineAt - Date.now();
+        const expire = () =>
+          this.timeout.abort(new DOMException('Event setup timed out', 'TimeoutError'));
+        if (remaining <= 0) {
+          expire();
+        } else {
+          this.timer = setTimeout(expire, remaining);
+        }
+        this.check();
       }
       await eventWorkspaceInitService.start(this.input.claim, this.check);
       const workspace = await this.current();
@@ -129,10 +149,21 @@ class EventWorkspaceInitialization {
       ...(warning ? { warning } : {}),
     };
   }
+  private async physical<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertOwned();
+    this.input.physicalStage?.(true);
+    try {
+      return await operation();
+    } finally {
+      this.input.physicalStage?.(false);
+    }
+  }
   private async provision(workspace: EventWorkspace) {
     const worktreeName = `workspace-${workspace.id}`;
     if (!workspace.worktreePath) {
-      const prepared = await gitOpsService.prepareWorktreeCreation(workspace.project, worktreeName);
+      const prepared = await this.physical(() =>
+        gitOpsService.prepareWorktreeCreation(workspace.project, worktreeName)
+      );
       this.candidate = {
         path: prepared.worktreePath,
         canonicalBasePath: prepared.canonicalBasePath,
@@ -142,12 +173,14 @@ class EventWorkspaceInitialization {
       await this.current();
     }
     // Abort never abandons Git's promise; its late result is owned until cleanup drains.
-    const tree = await resolveWorkspaceWorktree({
-      workspaceWithProject: workspace,
-      worktreeName,
-      baseBranch: workspace.project.defaultBranch,
-      useExistingBranch: false,
-    });
+    const tree = await this.physical(() =>
+      resolveWorkspaceWorktree({
+        workspaceWithProject: workspace,
+        worktreeName,
+        baseBranch: workspace.project.defaultBranch,
+        useExistingBranch: false,
+      })
+    );
     if (tree.created && this.candidate) {
       this.candidate = { ...this.candidate, path: tree.worktreePath, owned: true };
     }
@@ -188,16 +221,20 @@ class EventWorkspaceInitialization {
       project,
       {
         signal: this.signal,
+        physicalStage: this.input.physicalStage,
         assertCurrent: this.current,
         appendOutput: (text) => eventWorkspaceInitService.appendOutput(claim, text, this.check),
         setPid: (pid) => eventWorkspaceInitService.scriptPid(claim, pid, false, this.check),
         clearPid: (pid) => this.clearScriptPid(pid),
+        retainPid: (pid) =>
+          eventWorkspaceInitService.scriptPid(claim, pid, false, this.assertOwned),
       }
     );
   }
   private async clearScriptPid(pid: number) {
     try {
-      await eventWorkspaceInitService.scriptPid(this.input.claim, pid, true);
+      this.assertOwned();
+      await eventWorkspaceInitService.scriptPid(this.input.claim, pid, true, this.assertOwned);
     } catch (error) {
       if (error instanceof EventWorkspaceFenceError) {
         this.fenceLost = true;
@@ -218,18 +255,33 @@ class EventWorkspaceInitialization {
     return 'FAILED';
   }
   private async failed(cause: unknown): Promise<EventWorkspaceInitializationResult> {
+    try {
+      this.assertOwned();
+    } catch {
+      this.fenceLost = true;
+    }
     const initialCleanup = cause instanceof EventSetupError ? cause.cleanup : 'CONFIRMED';
     const cleanup = await this.cleanupCandidate(initialCleanup);
     const error = toError(cause);
     const status = this.failureStatus(error);
-    if (status !== 'STALE') {
+    if (status !== 'STALE' && cleanup === 'CONFIRMED') {
       try {
-        await eventWorkspaceInitService.finish(this.input.claim, 'FAILED', error.message);
+        await eventWorkspaceInitService.finish(
+          this.input.claim,
+          'FAILED',
+          error.message,
+          this.assertOwned
+        );
       } catch {
         /* A superseded/deleted owner must not be overwritten. */
       }
     }
-    return { status, cleanup, reason: error.message.slice(0, 2000) };
+    return {
+      status,
+      cleanup,
+      reason: error.message.slice(0, 2000),
+      failure: classifyEventPreparationFailure(cause),
+    };
   }
   private async cleanupCandidate(cleanup: Cleanup): Promise<Cleanup> {
     if (!this.candidate || this.registered) {
@@ -253,8 +305,15 @@ class EventWorkspaceInitialization {
         await this.current(this.assertOwned);
         return absent ? cleanup : 'UNKNOWN';
       }
-      await gitOpsService.removeWorktree(this.candidate.path, this.candidate.project);
-      return cleanup;
+      const candidate = this.candidate;
+      await this.physical(() => gitOpsService.removeWorktree(candidate.path, candidate.project));
+      const absent = await gitOpsService.confirmWorktreeAbsent(
+        this.candidate.path,
+        this.candidate.project,
+        this.candidate.canonicalBasePath
+      );
+      await this.current(this.assertOwned);
+      return absent ? cleanup : 'UNKNOWN';
     } catch {
       return 'UNKNOWN';
     }

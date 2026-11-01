@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile, lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -26,7 +26,7 @@ beforeEach(async () => {
   // Controlled Git fixture: the pre-created directory holds test config, not a retained worktree.
   vi.spyOn(h.workspace.gitOpsService, 'prepareWorktreeCreation').mockResolvedValue({
     worktreePath,
-    canonicalBasePath: db.tempDir,
+    canonicalBasePath: await realpath(db.tempDir),
   });
   const module = await vi.importActual<typeof import('./event-workspace-init.orchestrator')>(
     './event-workspace-init.orchestrator'
@@ -41,7 +41,25 @@ beforeEach(async () => {
     return task;
   };
   vi.spyOn(h.workspace.gitOpsService, 'ensureBaseBranchExists').mockResolvedValue();
-  vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockResolvedValue();
+  vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockImplementation(async (path) => {
+    await rm(path, { recursive: true, force: true });
+  });
+  vi.spyOn(h.workspace.gitOpsService, 'confirmWorktreeAbsent').mockImplementation(
+    async (path, project, expected) => {
+      if ((await realpath(project.worktreeBasePath)) !== expected) {
+        throw new Error('Changed canonical base');
+      }
+      try {
+        await lstat(path);
+        return false;
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+          return true;
+        }
+        throw error;
+      }
+    }
+  );
   vi.spyOn(h.workspace.gitOpsService, 'createWorktree').mockResolvedValue({
     worktreePath,
     branchName: 'event-test',
@@ -62,6 +80,22 @@ afterEach(async () => {
   }
 });
 const input = (signal = new AbortController().signal) => ({ claim: h.claim, signal });
+it('requires positive canonical absence after owned removal resolves', async () => {
+  const cancellation = new AbortController();
+  vi.mocked(h.workspace.gitOpsService.createWorktree).mockImplementation(() => {
+    cancellation.abort();
+    return Promise.resolve({ worktreePath, branchName: 'owned' });
+  });
+  const proof = vi
+    .spyOn(h.workspace.gitOpsService, 'confirmWorktreeAbsent')
+    .mockRejectedValue(new Error('Canonical base is unavailable'));
+  expect(await init(input(cancellation.signal))).toMatchObject({
+    status: 'ABORTED',
+    cleanup: 'UNKNOWN',
+  });
+  expect(h.workspace.gitOpsService.removeWorktree).toHaveBeenCalledOnce();
+  expect(proof).toHaveBeenCalledWith(worktreePath, expect.any(Object), await realpath(db.tempDir));
+});
 it('initializes the reserved event workspace without default session startup or legacy auto-init', async () => {
   const linearContext =
     await vi.importActual<typeof import('./linear-config.helper')>('./linear-config.helper');
@@ -106,7 +140,7 @@ it('drains late Git creation after abort without registering its path or publish
     await creating.wait();
     return { worktreePath, branchName: 'event-test' };
   });
-  const removed = vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockResolvedValue();
+  const removed = vi.mocked(h.workspace.gitOpsService.removeWorktree);
   const cancellation = new AbortController();
   let done = false;
   const task = init(input(cancellation.signal)).then((result) => {
@@ -466,7 +500,11 @@ it.each(['absent', 'inspection-failed'] as const)(
         status: 'FAILED',
         cleanup: proof === 'absent' ? 'CONFIRMED' : 'UNKNOWN',
       });
-      expect(checked).toHaveBeenCalledWith(worktreePath, expect.any(Object), db.tempDir);
+      expect(checked).toHaveBeenCalledWith(
+        worktreePath,
+        expect.any(Object),
+        await realpath(db.tempDir)
+      );
       expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
     } finally {
       inspection.release();
