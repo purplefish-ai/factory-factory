@@ -540,7 +540,10 @@ export function InlineWorkspaceForm({
             variant="ghost"
             size="sm"
             className="h-7 text-xs whitespace-nowrap"
-            onClick={onCancel}
+            onClick={() => {
+              runInBackground(recovery.discardDraft(), 'Could not clear canceled task');
+              onCancel();
+            }}
             disabled={isBusy}
           >
             Cancel
