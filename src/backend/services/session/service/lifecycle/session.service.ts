@@ -8,6 +8,7 @@ import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
+import { withEventEvidenceDeadline } from './event-evidence-deadline';
 import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -281,7 +282,9 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
-      await this.stopTimedOutInitial(sessionId, error, permit);
+      await this.stopTimedOutInitial(sessionId, error, permit).catch(() => {
+        logger.warn('Initial prompt timeout cleanup is unconfirmed', { sessionId });
+      });
       promptError = error;
       promptErrorSet = true;
       if (this.shouldRecordPromptFailure(sessionId, stopGeneration, error)) {
@@ -354,13 +357,17 @@ export class SessionService {
     permit?: EventInitialPermit
   ): Promise<void> {
     if (permit && error instanceof PromptTimeoutError && this.eventAuthority) {
-      const fence = await this.eventAuthority.read(sessionId).catch(() => null);
-      const stop = await this.runtimeManager.stopAndQuiesceObserved(
-        sessionId,
-        'TIMEOUT',
-        fence?.evidence?.source
+      const cancellation = new AbortController();
+      const fence = await withEventEvidenceDeadline(this.eventAuthority.read(sessionId)).catch(
+        () => null
       );
-      await this.eventAuthority.recordStop(sessionId, stop);
+      const stop = await withEventEvidenceDeadline(
+        this.runtimeManager.stopAndQuiesceObserved(sessionId, 'TIMEOUT', fence?.evidence?.source)
+      );
+      await withEventEvidenceDeadline(
+        this.eventAuthority.recordStop(sessionId, stop, cancellation.signal),
+        () => cancellation.abort()
+      );
     }
   }
 

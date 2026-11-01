@@ -101,10 +101,13 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
       if (!deliberate) {
-        await this.dependencies.eventAuthority?.observeUnexpectedExit(
-          event.sessionId,
-          event.incarnationId
-        );
+        await this.dependencies.eventAuthority
+          ?.observeUnexpectedExit(event.sessionId, event.incarnationId)
+          .catch(() => {
+            logger.warn('Unexpected-exit evidence persistence failed', {
+              sessionId: event.sessionId,
+            });
+          });
       }
       if (!deliberate && event.exitCode !== 0) {
         try {

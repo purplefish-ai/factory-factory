@@ -13,6 +13,7 @@ import {
 import type { RuntimeStopEvidence } from '@/shared/event-agent-delivery';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
+import { withEventEvidenceDeadline } from './event-evidence-deadline';
 import type { EventSessionAuthority } from './event-session-authority';
 import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type {
@@ -151,14 +152,14 @@ export class SessionTerminationCoordinator {
     const stopErrors: unknown[] = [];
 
     for (const session of sessions) {
-      const stopOptions = await this.workspaceStopOptions(
-        session,
-        options?.reason ?? 'SYSTEM_STOP'
-      );
-      if (!stopOptions) {
-        continue;
-      }
       try {
+        const stopOptions = await this.workspaceStopOptions(
+          session,
+          options?.reason ?? 'SYSTEM_STOP'
+        );
+        if (!stopOptions) {
+          continue;
+        }
         await this.stopSession(session.id, stopOptions);
       } catch (error) {
         logger.error('Failed to stop workspace session', {
@@ -197,7 +198,8 @@ export class SessionTerminationCoordinator {
         }
       }
       await withEventEvidenceDeadline(
-        this.dependencies.eventAuthority?.drain() ?? Promise.resolve()
+        this.dependencies.eventAuthority?.drain() ?? Promise.resolve(),
+        () => this.dependencies.eventAuthority?.close?.()
       );
       if (eventErrors.length) {
         throw eventErrors[0];
@@ -327,30 +329,49 @@ export class SessionTerminationCoordinator {
     }
   }
 
-  private async stopEventRuntime(
+  private stopEventRuntime(
     sessionId: string,
     cause: RuntimeStopEvidence['cause']
+  ): Promise<boolean> {
+    const cancellation = new AbortController();
+    return withEventEvidenceDeadline(
+      this.performEventStop(sessionId, cause, cancellation.signal),
+      () => cancellation.abort(),
+      10_000
+    );
+  }
+
+  private async performEventStop(
+    sessionId: string,
+    cause: RuntimeStopEvidence['cause'],
+    signal: AbortSignal
   ): Promise<boolean> {
     const authority = this.dependencies.eventAuthority;
     if (!(authority && (await this.isEventOwnedForStop(sessionId, authority)))) {
       return false;
     }
+    signal.throwIfAborted();
     authority.invalidate(sessionId);
     const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch(() => null);
+    signal.throwIfAborted();
+    const unknown: RuntimeStopEvidence = {
+      version: 1,
+      cause,
+      source: null,
+      status: 'UNKNOWN',
+      observedAt: new Date().toISOString(),
+    };
     const evidence = this.dependencies.runtimeManager.stopAndQuiesceObserved
-      ? await this.dependencies.runtimeManager.stopAndQuiesceObserved(
-          sessionId,
-          cause,
-          fence?.evidence?.source
-        )
-      : {
-          version: 1 as const,
-          cause,
-          source: null,
-          status: 'UNKNOWN' as const,
-          observedAt: new Date().toISOString(),
-        };
-    await withEventEvidenceDeadline(authority.recordStop(sessionId, { ...evidence, cause }));
+      ? await withEventEvidenceDeadline(
+          this.dependencies.runtimeManager.stopAndQuiesceObserved(
+            sessionId,
+            cause,
+            fence?.state === 'FINISHED' ? undefined : fence?.evidence?.source
+          )
+        ).catch(() => unknown)
+      : unknown;
+    signal.throwIfAborted();
+    await authority.recordStop(sessionId, { ...evidence, cause }, signal);
     if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
       throw new Error('Event runtime termination is unconfirmed');
     }
@@ -362,9 +383,20 @@ export class SessionTerminationCoordinator {
     reason: SessionStopReason
   ): Promise<StopSessionOptions | null> {
     const options = this.getWorkspaceSessionStopOptions(session, reason);
-    return (
-      options ?? ((await this.dependencies.eventAuthority?.isOwned(session.id)) ? { reason } : null)
-    );
+    if (options) {
+      return options;
+    }
+    try {
+      return (await withEventEvidenceDeadline(
+        this.dependencies.eventAuthority?.isOwned(session.id) ?? Promise.resolve(false)
+      ))
+        ? { reason }
+        : null;
+    } catch (error) {
+      // Retain lookup uncertainty even if a later read recovers, while attempting owned cleanup.
+      await this.stopSession(session.id, { reason }).catch(() => undefined);
+      throw error;
+    }
   }
 
   private getWorkspaceSessionStopOptions(
@@ -517,19 +549,5 @@ export class SessionTerminationCoordinator {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-}
-
-async function withEventEvidenceDeadline<T>(operation: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('Event stop evidence timed out')), 5000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
   }
 }

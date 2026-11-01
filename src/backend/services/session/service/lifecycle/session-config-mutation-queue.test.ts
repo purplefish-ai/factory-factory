@@ -96,3 +96,30 @@ it('rejects fenced configuration before invoking a provider mutation', async () 
   await expect(queue.run('session', operation)).rejects.toThrow('initial fenced');
   expect(operation).not.toHaveBeenCalled();
 });
+it.each([false, true])(
+  'publishes correction for a fence after prompt wait=%s without mutation',
+  async (wait) => {
+    const { manager } = createManagerTestHarness();
+    setupSuccessfulSpawn();
+    const handle = await manager.getOrCreateClient(
+      'session',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    let fenced = !wait;
+    handle.isPromptInFlight = wait;
+    const allowed = vi.fn(() => (fenced ? Promise.reject(new Error('fenced')) : Promise.resolve()));
+    const correction = vi.fn();
+    const operation = vi.fn(async () => undefined);
+    const queue = new SessionConfigMutationQueue(manager, correction, allowed);
+    const pending = expect(queue.run('session', operation)).rejects.toThrow('fenced');
+    await vi.waitFor(() => expect(allowed).toHaveBeenCalledOnce());
+    fenced = true;
+    handle.isPromptInFlight = false;
+    await pending;
+    expect(allowed).toHaveBeenCalledTimes(wait ? 2 : 1);
+    expect(operation).not.toHaveBeenCalled();
+    expect(correction).toHaveBeenCalledWith('session', handle.configOptions);
+  }
+);

@@ -34,7 +34,8 @@ function enqueue(id: string) {
 
 function harness(
   policy: 'allowed' | 'manual_resume' = 'allowed',
-  notifications?: SessionNotificationDeliveryService
+  notifications?: SessionNotificationDeliveryService,
+  eventAuthority?: { assertOrdinary(id: string): Promise<void> }
 ) {
   let generation = 0;
   const sendSessionMessage = vi
@@ -63,6 +64,7 @@ function harness(
     complete: vi.fn().mockResolvedValue(undefined),
   };
   const dispatcher = new SessionDispatchService({
+    eventAuthority,
     runtimeManager,
     configService: {
       resolveQueuedMessageSettings,
@@ -881,4 +883,26 @@ it('retains timed-out steering without automatically restarting and resending it
   // The claim is released so a later user-triggered delivery can proceed.
   await h.dispatcher.tryDispatchNextMessage('session');
   expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected');
+});
+
+it('a real busy retry timer rechecks the event fence before dequeue or startup', async () => {
+  vi.useFakeTimers();
+  let fenced = false;
+  const h = harness('allowed', undefined, {
+    assertOrdinary: () => (fenced ? Promise.reject(new Error('fenced')) : Promise.resolve()),
+  });
+  h.sendSessionMessage.mockRejectedValueOnce(
+    new Error('A turn is already in progress for this session')
+  );
+  const message = enqueue('retry');
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  const dequeue = vi.spyOn(sessionDomainService, 'dequeueNext');
+  fenced = true;
+  h.startup.getSessionClient.mockReturnValue(undefined);
+  await vi.advanceTimersByTimeAsync(1001);
+  expect(dequeue).not.toHaveBeenCalled();
+  expect(h.startup.getOrCreateSessionClient).not.toHaveBeenCalled();
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  expect(sessionDomainService.peekNextMessage('session')).toBe(message);
 });

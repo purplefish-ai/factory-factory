@@ -28,13 +28,15 @@ it('returns UNKNOWN when SIGKILL never yields confirmed disappearance', async ()
   handle.ownedProcessGroup = 12_345;
   vi.useFakeTimers();
   try {
+    const signal = vi.fn();
     const pending = stopOwnedRuntimeGroup(handle, {
-      signal: () => undefined,
+      signal,
       platform: 'darwin',
       timeoutMs: 100,
     });
     await vi.runAllTimersAsync();
     expect(await pending).toBe('UNKNOWN');
+    expect(signal).toHaveBeenCalledWith(-12_345, 'SIGKILL');
   } finally {
     vi.useRealTimers();
   }
@@ -60,4 +62,19 @@ it('does not interpret EPERM or other probing errors as disappearance', async ()
       timeoutMs: 1,
     })
   ).toBe('UNKNOWN');
+});
+it('attempts KILL even when the event loop resumes beyond the deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    const handle = createTestProcessHandle();
+    handle.ownedProcessGroup = handle.child.pid;
+    const signal = vi.fn();
+    const stopping = stopOwnedRuntimeGroup(handle, { signal, platform: 'darwin', timeoutMs: 100 });
+    vi.setSystemTime(Date.now() + 200);
+    await vi.runAllTimersAsync();
+    expect(await stopping).toBe('UNKNOWN');
+    expect(signal).toHaveBeenCalledWith(-handle.child.pid!, 'SIGKILL');
+  } finally {
+    vi.useRealTimers();
+  }
 });

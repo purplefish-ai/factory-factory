@@ -10,20 +10,15 @@ export async function stopOwnedRuntimeGroup(
     assertOwned?: () => void;
   } = {}
 ): Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'> {
-  const pid = handle.ownedProcessGroup;
-  if (
-    (options.platform ?? process.platform) === 'win32' ||
-    !pid ||
-    pid <= 1 ||
-    pid !== handle.child.pid
-  ) {
+  const groupPid = ownedGroupPid(handle, options.platform ?? process.platform);
+  if (!groupPid) {
     return 'UNKNOWN';
   }
   const signal = options.signal ?? ((target, value) => process.kill(target, value));
   const probe = () => {
     options.assertOwned?.();
     try {
-      signal(-pid, 0);
+      signal(-groupPid, 0);
       return true;
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
@@ -39,16 +34,16 @@ export async function stopOwnedRuntimeGroup(
       return 'LOCAL_RUNTIME_GROUP_STOPPED';
     }
     options.assertOwned?.();
-    signal(-pid, 'SIGTERM');
+    signal(-groupPid, 'SIGTERM');
     let escalated = false;
     while (probe()) {
-      if (Date.now() >= deadline) {
-        return 'UNKNOWN';
-      }
       if (!escalated && Date.now() >= deadline - timeout / 2) {
         options.assertOwned?.();
-        signal(-pid, 'SIGKILL');
+        signal(-groupPid, 'SIGKILL');
         escalated = true;
+      }
+      if (Date.now() >= deadline) {
+        return probe() ? 'UNKNOWN' : 'LOCAL_RUNTIME_GROUP_STOPPED';
       }
       await new Promise<void>((resolve) =>
         setTimeout(resolve, Math.min(20, Math.max(1, deadline - Date.now())))
@@ -58,4 +53,14 @@ export async function stopOwnedRuntimeGroup(
   } catch {
     return 'UNKNOWN';
   }
+}
+
+function ownedGroupPid(
+  handle: Pick<AcpProcessHandle, 'child' | 'ownedProcessGroup'>,
+  platform: NodeJS.Platform
+): number | undefined {
+  const pid = handle.ownedProcessGroup;
+  return platform !== 'win32' && pid !== undefined && pid > 1 && pid === handle.child.pid
+    ? pid
+    : undefined;
 }

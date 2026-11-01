@@ -36,6 +36,7 @@ export type AcpPromptObservation = {
 };
 
 export class AcpPromptController {
+  private readonly pendingObserved = new WeakMap<AcpProcessHandle, { cancelled: boolean }>();
   constructor(private readonly runtime: AcpPromptRuntimePort) {}
 
   async sendPrompt(
@@ -45,6 +46,10 @@ export class AcpPromptController {
     timeoutMs?: number,
     observation?: AcpPromptObservation
   ): Promise<{ stopReason: string }> {
+    const pending = { cancelled: false };
+    if (observation) {
+      this.pendingObserved.set(handle, pending);
+    }
     let sendingRecorded = false;
     let terminalRecorded = false;
     try {
@@ -53,6 +58,10 @@ export class AcpPromptController {
         await observation.beforeSend();
         sendingRecorded = true;
         observation.assertCurrent();
+        if (pending.cancelled) {
+          throw new Error('Prompt cancelled before send');
+        }
+        this.pendingObserved.delete(handle);
       }
       handle.isPromptInFlight = true;
       const promptPromise = handle.connection.prompt({
@@ -83,13 +92,23 @@ export class AcpPromptController {
     } catch (error) {
       if (observation && sendingRecorded && !terminalRecorded) {
         // Failed evidence writes must not release the initial-delivery fence.
-        await observation.ambiguous().catch(() => undefined);
+        await observation.ambiguous().catch(() => {
+          logger.warn('Initial delivery ambiguity persistence failed', { sessionId });
+        });
       }
       if (error instanceof PromptTimeoutError && !observation) {
         await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
       }
       handle.isPromptInFlight = false;
       throw error;
+    } finally {
+      this.releasePending(handle, pending);
+    }
+  }
+
+  private releasePending(handle: AcpProcessHandle, pending: { cancelled: boolean }): void {
+    if (this.pendingObserved.get(handle) === pending) {
+      this.pendingObserved.delete(handle);
     }
   }
 
@@ -99,6 +118,12 @@ export class AcpPromptController {
       return false;
     }
 
+    const pending = this.pendingObserved.get(handle);
+    if (pending) {
+      pending.cancelled = true;
+      handle.permissionBridge?.cancelAll();
+      return true;
+    }
     if (!handle.isPromptInFlight) {
       return false;
     }

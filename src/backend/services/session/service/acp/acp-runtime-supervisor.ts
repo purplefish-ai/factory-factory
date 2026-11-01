@@ -18,12 +18,13 @@ import type {
 } from './acp-runtime-contracts';
 import { isConversationActivity } from './acp-runtime-events';
 import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
-import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
+import { createExitFence, guardExit, dispatchExitAfterCleanup } from './acp-runtime-exit-handler';
 import {
   type AcpClientCreationOperation,
   AcpRuntimeQuiescence,
   raceWithSoftTimeout,
 } from './acp-runtime-quiescence';
+import { activeProcessSnapshots } from './acp-runtime-snapshot';
 import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
@@ -68,10 +69,7 @@ export class AcpRuntimeSupervisor {
     this.quiescence = new AcpRuntimeQuiescence({
       stopClient: async (sessionId) => {
         if (this.observedStop.has(sessionId)) {
-          const result = await this.observedStop.stopObservedRuntime(sessionId, 'SYSTEM_STOP');
-          if (result.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
-            throw new Error('Event runtime stop is unconfirmed');
-          }
+          await this.observedStop.stopCurrentRuntime(sessionId);
         } else {
           await this.stopClient(sessionId);
         }
@@ -87,6 +85,7 @@ export class AcpRuntimeSupervisor {
       endStop: (id) => {
         this.stoppingInProgress.delete(id);
       },
+      quiesced: (id) => this.clearStopGenerationIfIdle(id),
       markManaged: (child) => {
         this.managedStopChildren.add(child);
       },
@@ -99,7 +98,9 @@ export class AcpRuntimeSupervisor {
   }
 
   isStopInProgress(sessionId: string): boolean {
-    return this.stoppingInProgress.has(sessionId);
+    return (
+      this.stoppingInProgress.has(sessionId) || this.quiescence.isObservedStopInProgress(sessionId)
+    );
   }
 
   getClient(sessionId: string): AcpProcessHandle | undefined {
@@ -154,7 +155,9 @@ export class AcpRuntimeSupervisor {
     if (this.isShuttingDown) {
       return Promise.reject(this.createShutdownError(sessionId));
     }
-    return this.quiescence.runClientCreationOperation(sessionId, purpose, operation);
+    return this.quiescence
+      .runClientCreationOperation(sessionId, purpose, operation)
+      .finally(() => this.clearStopGenerationIfIdle(sessionId));
   }
 
   stopAndQuiesce(sessionId: string): Promise<void> {
@@ -182,7 +185,7 @@ export class AcpRuntimeSupervisor {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
     }
-    if (this.stopOperations.has(sessionId) || this.stoppingInProgress.has(sessionId)) {
+    if (this.stopOperations.has(sessionId) || this.isStopInProgress(sessionId)) {
       throw this.createStopRequestedError(sessionId);
     }
 
@@ -277,11 +280,7 @@ export class AcpRuntimeSupervisor {
 
   stopClient(sessionId: string): Promise<void> {
     if (this.observedStop.has(sessionId)) {
-      return this.stopAndQuiesceObserved(sessionId, 'SYSTEM_STOP').then((evidence) => {
-        if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
-          throw new Error('Event runtime stop is unconfirmed');
-        }
-      });
+      return this.observedStop.stopCurrentRuntime(sessionId);
     }
     const existingStop = this.stopOperations.get(sessionId);
     if (existingStop !== undefined) {
@@ -307,7 +306,7 @@ export class AcpRuntimeSupervisor {
         failures.push(...(await this.stopCurrentClients(timeoutMs)));
       });
       await this.captureShutdownFailure(failures, () => this.waitForPendingCreations(timeoutMs));
-      await this.captureShutdownFailure(failures, () => this.quiescence.waitForAll());
+      await this.captureShutdownFailure(failures, () => this.quiescence.waitForAll(timeoutMs));
       await this.captureShutdownFailure(failures, async () => {
         failures.push(...(await this.stopCurrentClients(timeoutMs)));
       });
@@ -347,17 +346,7 @@ export class AcpRuntimeSupervisor {
   }
 
   getAllActiveProcesses(): AcpActiveProcessSnapshot[] {
-    return [...this.sessions].map(([sessionId, handle]) => {
-      const isRunning = handle.isRunning();
-      return {
-        sessionId,
-        pid: handle.getPid(),
-        status: isRunning ? 'running' : 'stopped',
-        isRunning,
-        isPromptInFlight: handle.isPromptInFlight,
-        provider: handle.provider,
-      };
-    });
+    return activeProcessSnapshots(this.sessions);
   }
 
   private acquireCreationLock(sessionId: string): ReturnType<typeof pLimit> {
@@ -701,7 +690,14 @@ export class AcpRuntimeSupervisor {
   }
 
   private clearStopGenerationIfIdle(sessionId: string): void {
-    if (!(this.creationLocks.has(sessionId) || this.stopOperations.has(sessionId))) {
+    if (
+      !(
+        this.creationLocks.has(sessionId) ||
+        this.stopOperations.has(sessionId) ||
+        this.quiescence.isObservedStopInProgress(sessionId) ||
+        this.quiescence.getTrackedSessionIds().includes(sessionId)
+      )
+    ) {
       this.stopGenerations.delete(sessionId);
     }
   }
@@ -778,12 +774,16 @@ export class AcpRuntimeSupervisor {
       this.pendingCreation.delete(sessionId);
       const [exitHandling, releaseExitHandling] = createExitFence();
       this.exitHandling.set(sessionId, exitHandling);
-      void dispatchAcpRuntimeExit(handlers, {
-        sessionId,
-        exitCode: code,
-        incarnationId: runtime.incarnationId,
-        ...classification,
-      }).finally(() => {
+      void dispatchExitAfterCleanup(
+        handlers,
+        {
+          sessionId,
+          exitCode: code,
+          incarnationId: runtime.incarnationId,
+          ...classification,
+        },
+        () => this.observedStop.cleanupUnexpectedExit(sessionId, runtime.incarnationId)
+      ).finally(() => {
         if (this.exitHandling.get(sessionId) === exitHandling) {
           this.exitHandling.delete(sessionId);
         }
@@ -953,7 +953,7 @@ export class AcpRuntimeSupervisor {
   private async stopCurrentClients(timeoutMs: number): Promise<unknown[]> {
     const results = await Promise.allSettled(
       [...new Set([...this.sessions.keys(), ...this.observedStop.ids()])].map((sessionId) =>
-        raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
+        this.observedStop.stopWithDeadline(sessionId, timeoutMs, () => this.stopClient(sessionId))
       )
     );
     return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));

@@ -840,7 +840,8 @@ it('does not publish stopped/idle when event runtime termination is uncertain', 
   expect(base.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
   expect(authority.recordStop).toHaveBeenCalledWith(
     base.session.id,
-    expect.objectContaining({ status: 'UNKNOWN' })
+    expect.objectContaining({ status: 'UNKNOWN' }),
+    expect.any(AbortSignal)
   );
 });
 it('does not report an event stop successful when durable stop evidence fails', async () => {

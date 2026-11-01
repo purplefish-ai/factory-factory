@@ -2,7 +2,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpProcessHandle, PermissionPreset } from '@/backend/services/session/service/acp';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
-import { createSessionLaunchMetadata } from './session-launch-settings';
+import { pinEventExecution } from './event-session-startup';
 import { SessionStartupTargetError } from './session-permission-policy';
 import { restorePRResumeConfig } from './session-pr-resume-config';
 import { captureSessionStartupIntent } from './session-startup-intent';
@@ -47,7 +47,7 @@ export async function prepareSessionStartup(
     const record = await deps.repository.getSessionById(sessionId);
     deps.assertCurrent();
     const current = requireCurrentStartupRecord(record, handle);
-    const session = pinExecution(current, options.eventExecution);
+    const session = pinEventExecution(current, options.eventExecution);
     const desired = captureSessionStartupIntent(session);
     await deps.config.applyStartupModel(sessionId, handle, options.model ?? session.model);
     await deps.checkCurrent();
@@ -133,17 +133,4 @@ function requireCurrentStartupRecord(
     throw new Error('Session runtime changed during startup intent preparation');
   }
   return session;
-}
-
-function pinExecution(
-  current: AgentSessionRecord,
-  execution?: EventAgentExecution
-): AgentSessionRecord {
-  return execution
-    ? {
-        ...current,
-        model: execution.model,
-        providerMetadata: createSessionLaunchMetadata(execution) ?? {},
-      }
-    : current;
 }

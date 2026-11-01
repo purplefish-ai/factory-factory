@@ -56,7 +56,11 @@ export const agentPromptAccessor: InitialDeliveryOwnerPort = {
       include: { initialDelivery: true },
     });
     const delivery = run?.initialDelivery;
-    if (!(run && delivery) || run.reservedSessionId !== sessionId) {
+    if (
+      !(run && delivery) ||
+      run.reservedSessionId !== sessionId ||
+      delivery.attemptGeneration !== run.attemptGeneration
+    ) {
       conflict();
     }
     return initialDeliveryFenceSchema.parse({
@@ -138,7 +142,10 @@ export const agentPromptAccessor: InitialDeliveryOwnerPort = {
       if (delivery.state === 'FINISHED') {
         return;
       }
-      if (!['SENDING', 'ACCEPTED', 'AMBIGUOUS'].includes(delivery.state)) {
+      if (
+        run.status !== 'RUNNING' ||
+        !['SENDING', 'ACCEPTED', 'AMBIGUOUS'].includes(delivery.state)
+      ) {
         conflict();
       }
       await tx.agentInitialDelivery.update({

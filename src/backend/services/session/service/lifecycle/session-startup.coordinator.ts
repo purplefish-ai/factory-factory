@@ -16,7 +16,11 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
-import { guardEventStartup, pinEventSession } from './event-session-startup';
+import {
+  guardEventStartup,
+  pinEventSession,
+  requestsStartupCleanup,
+} from './event-session-startup';
 import {
   assertSessionAccountBinding,
   resolveSessionCodexContext,
@@ -186,7 +190,7 @@ export class SessionStartupCoordinator {
 
         logger.info('Session started', { sessionId, provider: session.provider });
       } catch (error) {
-        if (options?.assertCurrent && this.canFinishOwnedStartup(sessionId, ownership)) {
+        if (requestsStartupCleanup(options) && this.canFinishOwnedStartup(sessionId, ownership)) {
           await this.dependencies.stopSession(sessionId, {
             reason: 'SYSTEM_STOP',
             recordLifecycleEvent: false,
@@ -735,7 +739,7 @@ export class SessionStartupCoordinator {
           });
           return { handle, resolvedPreset, dispatchableNotificationCount };
         } catch (error) {
-          if (options.assertCurrent) {
+          if (requestsStartupCleanup(options)) {
             await this.cleanupFailedClientCreation(
               sessionId,
               session.workflow,

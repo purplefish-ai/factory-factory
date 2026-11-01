@@ -1,3 +1,5 @@
+const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
 import { expect, it, vi } from 'vitest';
 import { AcpPromptController } from './acp-prompt-controller';
 import { createTestProcessHandle } from './acp-runtime-manager.test-helpers';
@@ -96,4 +98,36 @@ it('records terminal provider failure as sanitized outcome before throwing', asy
   await expect(h.send()).rejects.toThrow();
   expect(h.observation.outcome).toHaveBeenCalledWith({ stopReason: 'end_turn', result: 'FAILED' });
   expect(h.calls).toEqual(['sending', 'outcome']);
+});
+it('soft cancel during durable beforeSend prevents the later provider invocation', async () => {
+  const h = harness();
+  let release!: () => void;
+  h.observation.beforeSend.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+  const pending = h.send();
+  const rejected = expect(pending).rejects.toThrow('cancelled before send');
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  expect(await h.controller.cancelPrompt('session', h.handle)).toBe(true);
+  release();
+  await rejected;
+  expect(h.handle.connection.prompt).not.toHaveBeenCalled();
+  expect(h.observation.ambiguous).toHaveBeenCalledOnce();
+  expect(h.handle.isPromptInFlight).toBe(false);
+});
+
+it('reports failed ambiguity persistence without leaking exceptions or replacing the prompt error', async () => {
+  const h = harness();
+  const original = new Error('provider credential-bearing payload');
+  vi.mocked(h.handle.connection.prompt).mockRejectedValue(original);
+  h.observation.ambiguous.mockRejectedValue(new Error('database secret'));
+  await expect(h.send()).rejects.toBe(original);
+  expect(logger.warn).toHaveBeenCalledWith('Initial delivery ambiguity persistence failed', {
+    sessionId: 'session',
+  });
+  expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('secret');
+  expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('credential');
 });

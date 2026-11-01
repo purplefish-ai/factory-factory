@@ -22,11 +22,17 @@ export const initialAttemptSchema = z.strictObject({
   attemptGeneration: z.number().int().positive(),
 });
 export type InitialAttempt = z.infer<typeof initialAttemptSchema>;
-export const initialOutcomeSchema = z.strictObject({
-  source: providerSourceSchema,
-  stopReason: z.enum(['end_turn', 'max_tokens', 'max_turn_requests', 'refusal', 'cancelled']),
-  result: z.enum(['COMPLETED', 'FAILED', 'CANCELLED']),
-});
+export const initialOutcomeSchema = z
+  .strictObject({
+    source: providerSourceSchema,
+    stopReason: z.enum(['end_turn', 'max_tokens', 'max_turn_requests', 'refusal', 'cancelled']),
+    result: z.enum(['COMPLETED', 'FAILED', 'CANCELLED']),
+  })
+  .refine(
+    ({ result, stopReason }) =>
+      result === 'FAILED' || (result === 'CANCELLED') === (stopReason === 'cancelled'),
+    'Inconsistent terminal outcome'
+  );
 export type InitialOutcome = z.infer<typeof initialOutcomeSchema>;
 export const initialDeliveryEvidenceSchema = z.strictObject({
   version: z.literal(1),

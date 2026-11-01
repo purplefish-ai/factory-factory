@@ -4,13 +4,15 @@ import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
 import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
 import { AcpEventProcessor } from './acp-event-processor';
+import type { EventSessionAuthority } from './event-session-authority';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionService } from './session.service';
 
-function createPromptService() {
+function createPromptService(eventAuthority?: EventSessionAuthority) {
   const runtimeManager = {
     getClient: vi.fn().mockReturnValue({ supportsImages: () => true }),
     sendPrompt: vi.fn(),
+    stopAndQuiesceObserved: vi.fn(),
     isSessionWorking: vi.fn().mockReturnValue(false),
   };
   const sessionDomainService = {
@@ -44,6 +46,7 @@ function createPromptService() {
     resetPRDiscoveryBackoff: vi.fn(async () => true),
   };
   const service = new SessionService({
+    eventAuthority,
     runtimeManager: runtimeManager as never,
     sessionDomainService: sessionDomainService as never,
     acpEventProcessor: acpEventProcessor as never,
@@ -152,6 +155,7 @@ function createLifecyclePromptHarness() {
     isSessionWorking: vi.fn().mockReturnValue(true),
     isSessionPromptInFlight: vi.fn().mockReturnValue(true),
     sendPrompt: vi.fn(),
+    stopAndQuiesceObserved: vi.fn(),
   };
   const sessionDomainService = new SessionDomainService();
   const lifecycleEvents = new Map<string, Record<string, unknown>>();
@@ -710,3 +714,67 @@ describe('SessionService prompt coordination', () => {
     });
   });
 });
+
+it.each(['stop', 'evidence', 'read-timeout'] as const)(
+  'preserves initial prompt timeout and bookkeeping after %s cleanup failure',
+  async (phase) => {
+    vi.useFakeTimers();
+    const authority = {
+      assertStartup: vi.fn(async () => undefined),
+      read: vi.fn(() =>
+        phase === 'read-timeout' ? new Promise<null>(() => undefined) : Promise.resolve(null)
+      ),
+      recordStop: vi.fn().mockRejectedValue(new Error('persistence failed')),
+    };
+    const h = createPromptService(authority as never);
+    const timeout = new PromptTimeoutError('session-1', 100);
+    h.runtimeManager.sendPrompt.mockRejectedValue(timeout);
+    h.runtimeManager.stopAndQuiesceObserved.mockImplementation(() =>
+      phase === 'stop'
+        ? Promise.reject(new Error('stop failed'))
+        : Promise.resolve({
+            version: 1,
+            cause: 'TIMEOUT',
+            status: 'UNKNOWN',
+            source: null,
+            observedAt: new Date().toISOString(),
+          })
+    );
+    try {
+      const pending = expect(
+        h.service.sendInitialSessionMessage('session-1', 'initial', {
+          attempt: {
+            runId: 'run',
+            sessionId: 'session-1',
+            messageId: 'message',
+            sendAttemptId: 'send',
+            workerGeneration: 1,
+            attemptGeneration: 1,
+          },
+          execution: {
+            version: 1,
+            provider: 'CLAUDE',
+            model: 'sonnet',
+            reasoningEffort: null,
+            codexAccountId: null,
+            startupModePreset: 'non_interactive',
+            accessMode: 'bypassPermissions',
+            planModeEnabled: false,
+          },
+        })
+      ).rejects.toBe(timeout);
+      await vi.runAllTimersAsync();
+      await pending;
+      expect(h.runtimeManager.stopAndQuiesceObserved).toHaveBeenCalledOnce();
+      expect(h.lifecycleEventService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: 'PROMPT_TIMEOUT' })
+      );
+      expect(h.sessionDomainService.setRuntimeSnapshot).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({ phase: 'error' })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+);

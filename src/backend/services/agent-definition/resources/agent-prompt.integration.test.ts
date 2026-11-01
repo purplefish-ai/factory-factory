@@ -197,3 +197,39 @@ it('records a later human runtime stop without changing the original initial out
   expect(fence.evidence?.stop?.source).toEqual(laterSource);
   expect(fence.state).toBe('FINISHED');
 });
+it.each(['COMPLETED', 'CANCELLED'] as const)(
+  'rejects inconsistent %s terminal evidence',
+  async (result) => {
+    const attempt = await setup();
+    await runtime.agentInitialDelivery.beforeSend(attempt, source);
+    await expect(
+      runtime.agentInitialDelivery.outcome(attempt, {
+        source,
+        result,
+        stopReason: result === 'COMPLETED' ? 'cancelled' : 'end_turn',
+      })
+    ).rejects.toThrow();
+    expect(
+      (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
+    ).toBe('SENDING');
+  }
+);
+it('rejects ambiguous callbacks after run settlement', async () => {
+  const attempt = await setup();
+  await runtime.agentInitialDelivery.beforeSend(attempt, source);
+  await db.prisma.agentRun.update({ where: { id: attempt.runId }, data: { status: 'CANCELLED' } });
+  await expect(runtime.agentInitialDelivery.ambiguous(attempt)).rejects.toThrow();
+  expect(
+    (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
+  ).toBe('SENDING');
+});
+it('rejects inconsistent stored delivery generation before startup', async () => {
+  const attempt = await setup();
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: attempt.runId },
+    data: { attemptGeneration: attempt.attemptGeneration + 1 },
+  });
+  await expect(
+    runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)
+  ).rejects.toThrow();
+});

@@ -124,10 +124,17 @@ export class AcpClientFactory {
 
     const cleanupOwned = registerOwnedSpawn(params, child, ownsGroup, runtimeEnv);
 
+    let spawned = child.pid !== undefined;
+    let spawnFailed = false;
+    child.once('spawn', () => {
+      spawned = true;
+    });
     let startupErrorListener: ((error: unknown) => void) | null = null;
     const startupError = new Promise<never>((_resolve, reject) => {
-      startupErrorListener = (error: unknown) =>
+      startupErrorListener = (error: unknown) => {
+        spawnFailed = isDefinitiveSpawnFailure(spawned, child);
         reject(createAcpSpawnError(spawnCommand.commandLabel, error));
+      };
       child.once('error', startupErrorListener);
     });
     const startupErrorSettled = startupError.catch(() => undefined);
@@ -299,7 +306,8 @@ export class AcpClientFactory {
         sessionId,
         options.ownedProcessGroup === true,
         error,
-        cleanupOwned
+        cleanupOwned,
+        spawnFailed
       );
       throw error;
     } finally {
@@ -512,10 +520,14 @@ async function cleanupEventRuntimeFailure(
   sessionId: string,
   owned: boolean,
   error: unknown,
-  cleanup?: () => Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'>
+  cleanup?: () => Promise<'LOCAL_RUNTIME_GROUP_STOPPED' | 'UNKNOWN'>,
+  spawnFailed = false
 ): Promise<void> {
   if (!owned) {
     return await cleanupFailedAcpClientCreation(child, sessionId);
+  }
+  if (spawnFailed) {
+    return;
   }
   if (
     (await (cleanup?.() ??
@@ -541,4 +553,8 @@ function registerOwnedSpawn(
         Boolean(params.options.adapterBinaryPath || env.CLAUDE_CODE_EXECUTABLE)
       )
     : undefined;
+}
+
+function isDefinitiveSpawnFailure(spawned: boolean, child: ChildProcess): boolean {
+  return !spawned && child.pid === undefined;
 }

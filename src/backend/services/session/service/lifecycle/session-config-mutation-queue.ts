@@ -18,11 +18,11 @@ export class SessionConfigMutationQueue {
     const update = prior
       .catch(() => undefined)
       .then(async () => {
-        await this.assertAllowed?.(sessionId);
-        if (handle && this.runtime.getClient(sessionId) !== handle) {
-          throw new Error('Session runtime changed before configuration update');
-        }
         try {
+          await this.assertAllowed?.(sessionId);
+          if (handle && this.runtime.getClient(sessionId) !== handle) {
+            throw new Error('Session runtime changed before configuration update');
+          }
           if (handle) {
             await handle.promptComplete;
             await this.assertAllowed?.(sessionId);

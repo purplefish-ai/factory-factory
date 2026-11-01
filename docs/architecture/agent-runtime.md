@@ -1064,3 +1064,19 @@ Observation writes are awaited before completion; shutdown bounds its drain and
 still attempts physical cleanup when persistence fails or times out. Missing
 durable stop evidence remains an error and cannot authorize retry or capacity
 release.
+
+Event stop separates immediate owned-runtime termination from creation and
+observation draining. Startup failure cleanup never waits for its own creation
+registration. Stop and shutdown drains have deadlines: stalled creation remains
+fenced, uncertainty is retained, and cleanup proceeds for remaining sessions.
+Unexpected adapter exit attempts cleanup of its current owned group even when
+durable exit observation fails. Definitive spawn failure before any process is
+created preserves the spawn error; a missing PID alone is not that proof.
+
+Observation draining tracks complete read/write operations and waits for all
+settled results. A timed-out drain closes its observation epoch so late reads or
+writes cannot initiate another owner write. Already-started database operations
+may finish; shutdown does not claim they were rolled back. Durable failure does
+not suppress best-effort physical cleanup. A soft cancellation while the
+pre-send write is pending prevents the subsequent provider invocation and keeps
+uncertain persisted delivery fenced.

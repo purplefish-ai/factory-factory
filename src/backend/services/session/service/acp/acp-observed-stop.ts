@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   ProviderSource,
   RuntimeStopEvidence,
@@ -6,7 +7,7 @@ import type {
 import { stopOwnedRuntimeGroup } from './acp-owned-group';
 import type { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeMetadata } from './acp-runtime-contracts';
-import type { AcpRuntimeQuiescence } from './acp-runtime-quiescence';
+import { raceWithSoftTimeout, type AcpRuntimeQuiescence } from './acp-runtime-quiescence';
 
 export class AcpObservedStop {
   private readonly spawnedGroups = new Map<
@@ -23,6 +24,7 @@ export class AcpObservedStop {
       getMetadata(handle: AcpProcessHandle): AcpRuntimeMetadata | undefined;
       beginStop(id: string): void;
       endStop(id: string): void;
+      quiesced?(id: string): void;
       markManaged(child: ChildProcess): void;
       removeStopped(id: string, handle: AcpProcessHandle): void;
     }
@@ -45,6 +47,15 @@ export class AcpObservedStop {
       unsupportedProcessOverride: unsupported,
     });
     this.observedStops.delete(id);
+    let spawned = child.pid !== undefined;
+    child.once('spawn', () => {
+      spawned = true;
+    });
+    child.once('error', () => {
+      if (!spawned && child.pid === undefined && this.spawnedGroups.get(id)?.child === child) {
+        this.spawnedGroups.delete(id);
+      }
+    });
     return async () => (await this.stopObservedRuntime(id, 'SYSTEM_STOP')).status;
   }
   register(id: string, handle: AcpProcessHandle, owned: boolean | undefined): void {
@@ -52,6 +63,17 @@ export class AcpObservedStop {
       this.spawnedGroups.delete(id);
       this.eventOwnedHandles.set(id, handle);
       this.observedStops.delete(id);
+    }
+  }
+  async cleanupUnexpectedExit(id: string, incarnationId: string): Promise<void> {
+    const handle = this.eventOwnedHandles.get(id);
+    if (!handle || this.port.getMetadata(handle)?.incarnationId !== incarnationId) {
+      return;
+    }
+    try {
+      await this.stopObservedRuntime(id, 'UNEXPECTED_EXIT');
+    } finally {
+      this.port.quiesced?.(id);
     }
   }
   async cleanupCandidate(id: string, handle: AcpProcessHandle): Promise<boolean> {
@@ -64,6 +86,18 @@ export class AcpObservedStop {
     }
     return true;
   }
+  /** Physical stop only: safe inside the caller's registered creation operation. */
+  async stopCurrentRuntime(sessionId: string): Promise<void> {
+    try {
+      const evidence = await this.stopObservedRuntime(sessionId, 'SYSTEM_STOP');
+      if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
+        throw new Error('Event runtime stop is unconfirmed');
+      }
+    } finally {
+      this.port.quiesced?.(sessionId);
+    }
+  }
+
   stopAndQuiesceObserved(
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
@@ -73,12 +107,32 @@ export class AcpObservedStop {
     if (existing) {
       return existing;
     }
-    const operation = this.quiescence
-      .runObservedStop(sessionId, () => this.stopObservedRuntime(sessionId, cause, expected))
+    const drain = this.quiescence
+      .runObservedStop(
+        sessionId,
+        () => this.stopObservedRuntime(sessionId, cause, expected),
+        (results) => {
+          if (results.some((result) => result.status === 'UNKNOWN')) {
+            throw new Error('Event runtime stop is unconfirmed');
+          }
+        }
+      )
       .then(
         (results) =>
           results.find((result) => result.status === 'UNKNOWN') ??
           results[results.length - 1] ?? {
+            version: 1 as const,
+            cause,
+            source: null,
+            status: 'UNKNOWN' as const,
+            observedAt: new Date().toISOString(),
+          }
+      )
+      .finally(() => this.port.quiesced?.(sessionId));
+    const operation = raceWithSoftTimeout(drain, 5000)
+      .then(
+        (result) =>
+          result ?? {
             version: 1 as const,
             cause,
             source: null,
@@ -91,13 +145,23 @@ export class AcpObservedStop {
     return operation;
   }
 
+  async stopWithDeadline(id: string, timeoutMs: number, stop: () => Promise<void>): Promise<void> {
+    const owned = this.has(id);
+    const stopped = await raceWithSoftTimeout(
+      stop().then(() => true),
+      timeoutMs
+    );
+    if (owned && !stopped) {
+      throw new Error('Event runtime stop timed out');
+    }
+  }
+
   async stopObservedRuntime(
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
     expected?: ProviderSource
   ): Promise<RuntimeStopEvidence> {
-    this.port.beginStop(sessionId);
-    const handle = this.eventOwnedHandles.get(sessionId) ?? this.port.getHandle(sessionId);
+    const handle = this.eventOwnedHandles.get(sessionId);
     const unknown: RuntimeStopEvidence = {
       version: 1,
       cause,
@@ -105,40 +169,29 @@ export class AcpObservedStop {
       status: 'UNKNOWN',
       observedAt: new Date().toISOString(),
     };
+    if (!this.canStopTarget(sessionId, handle, expected)) {
+      return unknown;
+    }
+    this.port.beginStop(sessionId);
     try {
       if (!handle && this.spawnedGroups.has(sessionId)) {
         return await this.stopSpawn(sessionId, unknown);
       }
       if (!handle) {
         const previous = this.observedStops.get(sessionId);
-        return previous &&
-          (!expected || previous.source?.runtimeIncarnationId === expected.runtimeIncarnationId)
+        return previous && (!expected || isDeepStrictEqual(previous.source, expected))
           ? { ...previous, cause }
           : unknown;
       }
-      const metadata = this.port.getMetadata(handle);
-      const source: ProviderSource | null =
-        metadata && handle.eventLifecycleGeneration !== undefined
-          ? {
-              version: 1,
-              provider: handle.provider,
-              providerSessionId: handle.acpSessionId,
-              runtimeIncarnationId: metadata.incarnationId,
-              lifecycleGeneration: handle.eventLifecycleGeneration,
-            }
-          : null;
+      const source = this.source(handle);
+      const assertOwned = () => {
+        if (!this.canStopTarget(sessionId, handle, expected)) {
+          throw new Error('Runtime ownership changed');
+        }
+      };
       this.port.markManaged(handle.child);
       attemptUnprovenDirectStop(handle);
-      const status = await stopOwnedRuntimeGroup(handle, {
-        assertOwned: () => {
-          if (
-            this.eventOwnedHandles.get(sessionId) !== handle ||
-            (Boolean(this.port.getHandle(sessionId)) && this.port.getHandle(sessionId) !== handle)
-          ) {
-            throw new Error('Runtime ownership changed');
-          }
-        },
-      });
+      const status = await stopOwnedRuntimeGroup(handle, { assertOwned });
       const evidence: RuntimeStopEvidence = {
         ...unknown,
         source,
@@ -155,12 +208,45 @@ export class AcpObservedStop {
       this.port.endStop(sessionId);
     }
   }
+  private canStopTarget(
+    id: string,
+    handle: AcpProcessHandle | undefined,
+    expected?: ProviderSource
+  ): boolean {
+    const current = this.port.getHandle(id);
+    if (current && current !== handle) {
+      return false;
+    }
+    if (!handle) {
+      return !(expected && this.spawnedGroups.has(id));
+    }
+    return (
+      this.eventOwnedHandles.get(id) === handle &&
+      (!expected || isDeepStrictEqual(this.source(handle), expected))
+    );
+  }
+  private source(handle: AcpProcessHandle): ProviderSource | null {
+    const metadata = this.port.getMetadata(handle);
+    if (!metadata || handle.eventLifecycleGeneration === undefined) {
+      return null;
+    }
+    return {
+      version: 1,
+      provider: handle.provider,
+      providerSessionId: handle.acpSessionId,
+      runtimeIncarnationId: metadata.incarnationId,
+      lifecycleGeneration: handle.eventLifecycleGeneration,
+    };
+  }
   private async stopSpawn(
     sessionId: string,
     unknown: RuntimeStopEvidence
   ): Promise<RuntimeStopEvidence> {
     const spawn = this.spawnedGroups.get(sessionId);
     if (!spawn) {
+      return unknown;
+    }
+    if (this.port.getHandle(sessionId)) {
       return unknown;
     }
     this.port.markManaged(spawn.child);

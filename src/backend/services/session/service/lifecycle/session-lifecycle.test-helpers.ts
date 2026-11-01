@@ -787,7 +787,6 @@ export function createLifecycleHarness(
       sessionDomainService,
       closedSessionPersistenceService: { persistClosedSession: vi.fn(async () => undefined) },
       lifecycleEventService,
-      eventAuthority: overrides.eventAuthority,
       hydrateProviderHistory: async () => undefined,
       runtimeManager,
       countViewers: () => 0,
@@ -795,6 +794,7 @@ export function createLifecycleHarness(
   );
   const runtimeExitCoordinator = new SessionRuntimeExitCoordinator(
     unsafeCoerce({
+      eventAuthority: overrides.eventAuthority,
       repository,
       sessionDomainService,
       sessionPermissionService: notificationService,
@@ -809,6 +809,7 @@ export function createLifecycleHarness(
   let service: SessionLifecycleService;
   const terminationCoordinator = new SessionTerminationCoordinator(
     unsafeCoerce({
+      eventAuthority: overrides.eventAuthority,
       repository,
       retryService,
       runtimeManager,

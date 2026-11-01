@@ -27,7 +27,7 @@ it.each(['start', 'get', 'browse', 'restart'] as const)(
           : mode === 'browse'
             ? h.service.ensureSubagentBrowseSession(h.session.id)
             : h.service.restartSession(h.session.id);
-    await call.catch(() => undefined);
+    await expect(call).rejects.toThrow('Event initial delivery is fenced');
     expect(h.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   }
 );
