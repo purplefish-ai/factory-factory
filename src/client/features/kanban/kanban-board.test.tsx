@@ -202,12 +202,12 @@ describe('KanbanBoard', () => {
       }).catch(() => undefined);
       act(() => root.render(createElement(KanbanBoard)));
       expect(container.querySelector('input')).toBeNull();
-      click('Resume draft');
+      click('New Task');
       expect(container.querySelector('input')).not.toBeNull();
       click('Cancel creation');
       act(() => root.render(createElement(KanbanBoard)));
       expect(container.querySelector('input')).toBeNull();
-      expect(container.textContent).toContain('Resume draft');
+      expect(container.textContent).toContain('New Task');
     }
   );
 
@@ -240,7 +240,7 @@ describe('KanbanBoard', () => {
   it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
     mocks.isMobile = mobile;
     act(() => root.render(createElement(KanbanBoard)));
-    click(mobile ? 'New Task' : 'New Workspace');
+    click('New Task');
     click('Complete creation');
     mocks.workspaces = mocks.workspaces.map((workspace) =>
       workspace.id === 'new-task'
@@ -288,7 +288,7 @@ describe('KanbanBoard', () => {
   it('keeps the desktop board visible after creation', () => {
     mocks.isMobile = false;
     void act(() => root.render(createElement(KanbanBoard)));
-    click('New Workspace');
+    click('New Task');
     click('Complete creation');
     expect(container.querySelector('[data-column="WORKING"]')?.textContent).toContain('New task');
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(

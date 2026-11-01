@@ -373,9 +373,7 @@ it('preserves an in-memory draft and allows clearing its text while disk storage
     first.textarea.dispatchEvent(new Event('input', { bubbles: true }));
   });
   actFlushSync(() =>
-    [...first.container.querySelectorAll('button')]
-      .find((button) => button.textContent === 'Cancel')
-      ?.click()
+    first.textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   );
   actFlushSync(() => first.root.unmount());
   const second = renderForm();

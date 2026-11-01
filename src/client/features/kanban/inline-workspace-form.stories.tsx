@@ -191,7 +191,7 @@ function WorkspaceCreationPreviewSession({
             />
           ) : (
             <Button variant="outline" onClick={() => setOpen(true)}>
-              New Workspace
+              New Task
             </Button>
           )}
         </div>
@@ -405,13 +405,13 @@ export const PeriodicSubmissionSuccess: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New Task' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('Retained periodic review');
     const launch = canvas.getByRole('button', { name: 'Create Agent' });
     await waitFor(() => expect(launch).toBeEnabled());
     await userEvent.click(launch);
     // This close uses onCancel, which only runs after periodic success cleanup.
-    await expect(await canvas.findByRole('button', { name: 'New Workspace' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'New Task' })).toBeVisible();
     await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
     const persisted = await new Promise<unknown>((resolve, reject) => {
       const request = indexedDB.open(
@@ -431,9 +431,24 @@ export const PeriodicSubmissionSuccess: Story = {
       };
     });
     await expect(persisted).toBeUndefined();
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New Task' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('');
     // Pending ownership must also be released so another task can launch.
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
+  },
+};
+
+export const CancelRestoredDraft: Story = {
+  ...RestoredDraft,
+  args: { ...RestoredDraft.args, startCollapsed: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'New Task' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Cancel' })).toBeEnabled());
+    await expect(canvas.getByRole('textbox')).not.toHaveValue('');
+    await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'New Task' }));
+    await expect(await canvas.findByRole('textbox')).toHaveValue('');
     await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
   },
 };
