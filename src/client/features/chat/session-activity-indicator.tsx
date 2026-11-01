@@ -1,5 +1,6 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import type { ReactNode } from 'react';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -40,7 +41,7 @@ export function SessionActivityIndicator({
   work,
   controlSessionId,
   latestThinking,
-  onOpenAgents,
+  runningSubagentList,
   showThinking = true,
   runningSubagentIconIndices = [],
 }: {
@@ -49,7 +50,7 @@ export function SessionActivityIndicator({
   work?: SessionWorkState;
   controlSessionId?: string;
   latestThinking?: string | null;
-  onOpenAgents?: () => void;
+  runningSubagentList?: ReactNode;
 }) {
   const {
     backgroundTasks,
@@ -110,15 +111,12 @@ export function SessionActivityIndicator({
         </Collapsible>
       )}
       {!!runningSubagents && (
-        <div>
+        <Collapsible defaultOpen={false}>
           <span role="status" aria-label="Sub-agent activity" className="sr-only">
             {subagentLabel}
           </span>
-          <button
+          <CollapsibleTrigger
             type="button"
-            onClick={onOpenAgents}
-            disabled={!onOpenAgents}
-            title="Open Sessions panel"
             className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
@@ -129,10 +127,17 @@ export function SessionActivityIndicator({
             <span>{subagentLabel}</span>
             <CaretRightIcon
               aria-hidden="true"
-              className="h-3.5 w-3.5 shrink-0 opacity-50 transition-opacity group-enabled:group-hover:opacity-100"
+              className="h-3.5 w-3.5 shrink-0 opacity-50 transition-transform group-data-[state=open]:rotate-90"
             />
-          </button>
-        </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 max-h-64 overflow-y-auto rounded-md border">
+              {runningSubagentList ?? (
+                <p className="p-3 text-sm text-muted-foreground">Loading sub-agents…</p>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
       {activeGoals > 0 && (
         <p className="text-sm text-muted-foreground" role="status">

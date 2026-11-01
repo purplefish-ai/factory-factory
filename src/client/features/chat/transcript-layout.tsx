@@ -134,7 +134,7 @@ export function TranscriptTail({
           runningSubagentIconIndices={props.runningSubagentIconIndices}
           showThinking={!props.hideThinkingIndicator}
           latestThinking={props.latestThinking}
-          onOpenAgents={props.onOpenAgents}
+          runningSubagentList={props.runningSubagentList}
         />
       )}
       {queuedPRUpdate && (

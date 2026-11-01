@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import type { ChatMessage } from '@/lib/chat-protocol';
+import { SubagentList } from './subagent-list';
 import type { getNextSubagentPageParam } from './subagent-pagination';
 import type { SubagentListItem, SubagentListResult } from './types';
 import { useSubagentTimelineMessages } from './use-subagent-timeline-messages';
@@ -74,16 +75,25 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 let projectedMessages: ChatMessage[] = [];
 let runningIconIndices: number[] | undefined;
 let timelineError: { message: string; onRetry: () => void } | null = null;
-type HarnessProps = { sessionId: string | null; enabled: boolean; rawMessages?: ChatMessage[] };
-function Harness({ sessionId, enabled, rawMessages = EMPTY_MESSAGES }: HarnessProps) {
-  const { messages, error, runningSubagentIconIndices } = useSubagentTimelineMessages(
-    rawMessages,
-    sessionId,
-    enabled
-  );
+type HarnessProps = {
+  sessionId: string | null;
+  enabled: boolean;
+  rawMessages?: ChatMessage[];
+  list?: boolean;
+};
+function Harness({ sessionId, enabled, rawMessages = EMPTY_MESSAGES, list = false }: HarnessProps) {
+  const { messages, error, runningSubagentIconIndices, subagentListState } =
+    useSubagentTimelineMessages(rawMessages, sessionId, enabled);
   runningIconIndices = runningSubagentIconIndices;
   timelineError = error;
   projectedMessages = messages;
+  if (list) {
+    return createElement(SubagentList, {
+      state: subagentListState,
+      activeOnly: true,
+      onSelect: () => undefined,
+    });
+  }
   return createElement('div', null, messages.map((item) => item.text).join(','));
 }
 function createHarness(props: HarnessProps) {
@@ -224,4 +234,42 @@ it('withholds running icons on query errors even when cached pages have no next 
   mocks.error = null;
   harness.render({ sessionId: 'parent', enabled: true });
   expect(runningIconIndices).toEqual([0]);
+});
+
+it('deduplicates overlapping provider pages before rendering active rows', () => {
+  mocks.pagesBySession.set('parent', [
+    { supported: true, subagents: [agent], nextCursor: 'next' },
+    { supported: true, subagents: [agent, { ...agent, id: 'b', name: 'Build' }], nextCursor: null },
+  ]);
+  mocks.pageParams = [null, 'next'];
+  const harness = createHarness({ sessionId: 'parent', enabled: true, list: true });
+  expect(harness.container.querySelectorAll('li')).toHaveLength(2);
+});
+
+it('shows pagination and recovery when loaded pages contain only completed agents', () => {
+  mocks.pagesBySession.set('parent', [
+    { supported: true, subagents: [{ ...agent, status: 'completed' }], nextCursor: 'next' },
+  ]);
+  const harness = createHarness({ sessionId: 'parent', enabled: true, list: true });
+  expect(harness.container.textContent).toContain('Load more');
+  expect(harness.container.querySelectorAll('li')).toHaveLength(0);
+  mocks.error = new Error('Request failed');
+  harness.render({ sessionId: 'parent', enabled: true, list: true });
+  expect(harness.container.textContent).toContain('Some sub-agent activity could not be loaded.');
+  const retry = [...harness.container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Retry'
+  );
+  expect(retry).toBeDefined();
+  retry?.click();
+  expect(mocks.refetch).toHaveBeenCalledOnce();
+  mocks.error = null;
+  mocks.pagesBySession.set('parent', [
+    { supported: true, subagents: [{ ...agent, status: 'completed' }], nextCursor: 'next' },
+    { supported: true, subagents: [{ ...agent, id: 'b', name: 'Build' }], nextCursor: null },
+  ]);
+  mocks.pageParams = [null, 'next'];
+  harness.render({ sessionId: 'parent', enabled: true, list: true });
+  expect(harness.container.textContent).toContain('Build');
+  expect(harness.container.textContent).not.toContain('Retry');
+  expect(harness.container.textContent).not.toContain('Load more');
 });

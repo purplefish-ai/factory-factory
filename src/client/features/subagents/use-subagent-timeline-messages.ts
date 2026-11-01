@@ -2,10 +2,44 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/lib/chat-protocol';
+import type { SubagentListState } from './subagent-list';
 import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
 import { isActiveSubagent } from './subagent-status';
 import { createSubagentTimelineEvents, mergeSubagentTimeline } from './subagent-timeline';
+import type { SubagentListItem, SubagentListResult } from './types';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
+
+function collectSubagents(pages: SubagentListResult[] = []): SubagentListItem[] {
+  const byId = new Map<string, SubagentListItem>();
+  for (const page of pages) {
+    if (page.supported) {
+      for (const subagent of page.subagents) {
+        if (!byId.has(subagent.id)) {
+          byId.set(subagent.id, subagent);
+        }
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
+function getListState(
+  pages: SubagentListResult[] | undefined,
+  subagents: SubagentListItem[],
+  error: { message: string; onRetry: () => void } | null,
+  pagination: Pick<
+    Extract<SubagentListState, { kind: 'ready' }>,
+    'hasMore' | 'loadingMore' | 'onLoadMore'
+  >
+): SubagentListState {
+  if (pages?.some((page) => !page.supported)) {
+    return { kind: 'unsupported' };
+  }
+  if (!pages?.length) {
+    return error ? { kind: 'error', ...error } : { kind: 'loading' };
+  }
+  return { kind: 'ready', subagents, ...pagination, error: error ?? undefined };
+}
 
 /** Share the Sessions panel's provider query and live invalidations. */
 export function useSubagentTimelineMessages(
@@ -47,7 +81,7 @@ export function useSubagentTimelineMessages(
     if (!sessionId || pages?.some((page) => !page.supported)) {
       return [];
     }
-    return pages?.flatMap((page) => (page.supported ? page.subagents : [])) ?? [];
+    return collectSubagents(pages);
   }, [pages, sessionId]);
   const events = useMemo(() => createSubagentTimelineEvents(subagents), [subagents]);
   const runningSubagentIconIndices = useMemo(() => {
@@ -63,5 +97,18 @@ export function useSubagentTimelineMessages(
     () => mergeSubagentTimeline(messages, events),
     [messages, events]
   );
-  return { messages: timelineMessages, error, runningSubagentIconIndices };
+  const subagentListState = getListState(pages, subagents, error, {
+    hasMore: hasNextPage,
+    loadingMore: isFetching,
+    onLoadMore: () => {
+      void fetchNextPage();
+    },
+  });
+  return {
+    messages: timelineMessages,
+    error,
+    runningSubagentIconIndices,
+    subagents,
+    subagentListState,
+  };
 }

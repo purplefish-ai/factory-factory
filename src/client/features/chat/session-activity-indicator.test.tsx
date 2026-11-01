@@ -47,7 +47,7 @@ describe('SessionActivityIndicator', () => {
   it.each([
     [1, '1 sub-agent running'],
     [2, '2 sub-agents running'],
-  ] as const)('opens Agents from the %s running sub-agent label', (runningSubagents, label) => {
+  ] as const)('expands running sub-agents from the %s label', (runningSubagents, label) => {
     const onOpenAgents = vi.fn();
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -56,7 +56,11 @@ describe('SessionActivityIndicator', () => {
         root.render(
           <SessionActivityIndicator
             work={{ promptInFlight: false, backgroundTasks: [], runningSubagents, activeGoals: 0 }}
-            onOpenAgents={onOpenAgents}
+            runningSubagentList={
+              <button type="button" onClick={onOpenAgents}>
+                Review code
+              </button>
+            }
           />
         )
       );
@@ -64,9 +68,17 @@ describe('SessionActivityIndicator', () => {
       expect(button?.textContent).toBe(label);
       expect(button?.closest('[role="status"], [aria-live]')).toBeNull();
       expect(container.querySelector('[role="status"]')?.textContent).toBe(label);
-      button?.click();
-      expect(button?.title).toBe('Open Sessions panel');
+      expect(container.textContent).not.toContain('Review code');
+      flushSync(() => button?.click());
+      expect(button?.getAttribute('aria-expanded')).toBe('true');
+      expect(onOpenAgents).not.toHaveBeenCalled();
+      const agent = [...container.querySelectorAll('button')].find(
+        (row) => row.textContent === 'Review code'
+      );
+      agent?.click();
       expect(onOpenAgents).toHaveBeenCalledOnce();
+      flushSync(() => button?.click());
+      expect(container.textContent).not.toContain('Review code');
     } finally {
       flushSync(() => root.unmount());
     }

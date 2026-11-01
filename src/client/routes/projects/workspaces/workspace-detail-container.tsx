@@ -308,6 +308,8 @@ export function WorkspaceDetailContainer() {
     resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
     onWorkspaceFileLink: handleWorkspaceFileLink,
     onOpenAgents: handleOpenAgents,
+    onOpenSubagent: openSubagentTab,
+    parentSessionName: sessions?.find((session) => session.id === selectedDbSessionId)?.name,
     messages,
     sessionStatus,
     sessionRuntime,
