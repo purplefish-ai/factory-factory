@@ -218,6 +218,7 @@ export const agentRuntimeReasonSchema = z.enum([
   'QUEUE_OVERFLOW',
   'QUEUE_EXPIRED',
   'CAPACITY',
+  'WAITING',
   'EMPTY',
 ]);
 const rejection = { reason: agentRuntimeReasonSchema };

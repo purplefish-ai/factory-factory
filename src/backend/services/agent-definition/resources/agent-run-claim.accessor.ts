@@ -127,36 +127,47 @@ async function maintainInTransaction(tx: Prisma.TransactionClient, now: Date) {
       await cancelQueued(tx, run.id, invalid, now);
     }
   }
-  maintenanceCursor = queued.at(-1)?.id ?? null;
+  return queued.at(-1)?.id ?? null;
 }
-function maintainQueue(now = new Date()) {
-  return ledgerTransaction((tx) => maintainInTransaction(tx, now));
+async function maintainQueue(now = new Date()) {
+  const cursor = await ledgerTransaction((tx) => maintainInTransaction(tx, now));
+  maintenanceCursor = cursor;
 }
 
 /** The serialized transition to RUNNING is the pause/launch linearization point. */
-function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
-  return ledgerTransaction(async (tx) => {
-    await maintainInTransaction(tx, now);
-    const limits = configService.getAgentRuntimeLimits();
-    const active = await tx.agentRun.groupBy({
-      by: ['agentDefinitionId'],
-      where: { status: 'RUNNING' },
-      _count: true,
-    });
-    const totalActive = active.reduce((sum, row) => sum + row._count, 0);
-    if (totalActive >= limits.activeGlobal) {
-      return { status: 'DEFERRED', reason: 'CAPACITY' };
-    }
-    // Filter temporary eligibility BEFORE the bounded page so deferred heads
-    // cannot hide ready definitions. The FIFO check still sees every older run.
-    const blocked = active
-      .filter((row) => row._count >= limits.activePerDefinition)
-      .map((row) => row.agentDefinitionId);
-    const excluded = blocked.length
-      ? Prisma.sql`AND r.agentDefinitionId NOT IN (${Prisma.join(blocked)})`
-      : Prisma.empty;
-    const heads = z.array(z.object({ id: z.string() })).parse(
-      await tx.$queryRaw`
+async function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
+  const committed = await ledgerTransaction(async (tx) => {
+    const cursor = await maintainInTransaction(tx, now);
+    const result = await claimInTransaction(tx, now);
+    return { cursor, result };
+  });
+  maintenanceCursor = committed.cursor;
+  return committed.result;
+}
+async function claimInTransaction(
+  tx: Prisma.TransactionClient,
+  now: Date
+): Promise<AgentClaimResult> {
+  const limits = configService.getAgentRuntimeLimits();
+  const active = await tx.agentRun.groupBy({
+    by: ['agentDefinitionId'],
+    where: { status: 'RUNNING' },
+    _count: true,
+  });
+  const totalActive = active.reduce((sum, row) => sum + row._count, 0);
+  if (totalActive >= limits.activeGlobal) {
+    return { status: 'DEFERRED', reason: 'CAPACITY' };
+  }
+  // Filter temporary eligibility BEFORE the bounded page so deferred heads
+  // cannot hide ready definitions. The FIFO check still sees every older run.
+  const blocked = active
+    .filter((row) => row._count >= limits.activePerDefinition)
+    .map((row) => row.agentDefinitionId);
+  const excluded = blocked.length
+    ? Prisma.sql`AND r.agentDefinitionId NOT IN (${Prisma.join(blocked)})`
+    : Prisma.empty;
+  const heads = z.array(z.object({ id: z.string() })).parse(
+    await tx.$queryRaw`
       SELECT r.id FROM AgentRun r
       JOIN AgentTrigger t ON t.id = r.triggerId
       JOIN AgentConnection c ON c.id = t.connectionId
@@ -170,58 +181,64 @@ function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
           AND older.status = 'QUEUED' AND older.eventId IS NOT NULL
           AND (older.createdAt < r.createdAt OR (older.createdAt = r.createdAt AND older.id < r.id)))
       ORDER BY r.createdAt, r.id LIMIT ${limits.queueBatchSize}`
-    );
-    const queued = await tx.agentRun.findMany({
-      where: {
-        id: { in: heads.map((run) => run.id) },
-        status: 'QUEUED',
-        eventId: { not: null },
-        agentDefinitionId: { notIn: blocked },
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-        AND: [{ OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] }],
-        trigger: {
-          type: { not: 'SCHEDULE' },
-          isEnabled: true,
-          activationState: 'ACTIVE',
-          connection: { isEnabled: true, sourceState: { isReady: true } },
-        },
+  );
+  const queued = await tx.agentRun.findMany({
+    where: {
+      id: { in: heads.map((run) => run.id) },
+      status: 'QUEUED',
+      eventId: { not: null },
+      agentDefinitionId: { notIn: blocked },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      AND: [{ OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] }],
+      trigger: {
+        type: { not: 'SCHEDULE' },
+        isEnabled: true,
+        activationState: 'ACTIVE',
+        connection: { isEnabled: true, sourceState: { isReady: true } },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: limits.queueBatchSize,
-      include: { event: true, initialDelivery: true },
-    });
-    for (const run of queued) {
-      const invalid = await queueInvalidReason(tx, run, now);
-      if (invalid) {
-        await cancelQueued(tx, run.id, invalid, now);
-        continue;
-      }
-      const claimed = await tx.agentRun.update({
-        where: { id: run.id },
-        data: {
-          status: 'RUNNING',
-          launchPhase: 'PROVISIONING',
-          startedAt: now,
-          workerGeneration: { increment: 1 },
-          attemptCount: { increment: 1 },
-          leaseExpiresAt: new Date(now.getTime() + SERVICE_TIMEOUT_MS.agentLaunchLease),
-        },
-      });
-      return agentClaimResultSchema.parse({
-        status: 'CLAIMED',
-        runId: run.id,
-        workerGeneration: claimed.workerGeneration,
-        attemptGeneration: run.attemptGeneration,
-        reservedWorkspaceId: run.reservedWorkspaceId,
-        reservedSessionId: run.reservedSessionId,
-        initialMessageId: run.initialMessageId,
-      });
-    }
-    const waiting = await tx.agentRun.findFirst({
-      where: { status: 'QUEUED', eventId: { not: null } },
-      select: { id: true },
-    });
-    return { status: 'DEFERRED', reason: waiting ? 'CAPACITY' : 'EMPTY' };
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: limits.queueBatchSize,
+    include: { event: true, initialDelivery: true },
   });
+  for (const run of queued) {
+    const invalid = await queueInvalidReason(tx, run, now);
+    if (invalid) {
+      await cancelQueued(tx, run.id, invalid, now);
+      continue;
+    }
+    const claimed = await tx.agentRun.update({
+      where: { id: run.id },
+      data: {
+        status: 'RUNNING',
+        launchPhase: 'PROVISIONING',
+        startedAt: now,
+        workerGeneration: { increment: 1 },
+        attemptCount: { increment: 1 },
+        leaseExpiresAt: new Date(now.getTime() + SERVICE_TIMEOUT_MS.agentLaunchLease),
+      },
+    });
+    return agentClaimResultSchema.parse({
+      status: 'CLAIMED',
+      runId: run.id,
+      workerGeneration: claimed.workerGeneration,
+      attemptGeneration: run.attemptGeneration,
+      reservedWorkspaceId: run.reservedWorkspaceId,
+      reservedSessionId: run.reservedSessionId,
+      initialMessageId: run.initialMessageId,
+    });
+  }
+  const waiting = await tx.agentRun.findFirst({
+    where: { status: 'QUEUED', eventId: { not: null } },
+    select: { id: true },
+  });
+  if (!waiting) {
+    return { status: 'DEFERRED', reason: 'EMPTY' };
+  }
+  const unsaturated = await tx.agentRun.findFirst({
+    where: { status: 'QUEUED', eventId: { not: null }, agentDefinitionId: { notIn: blocked } },
+    select: { id: true },
+  });
+  return { status: 'DEFERRED', reason: unsaturated ? 'WAITING' : 'CAPACITY' };
 }
 export const agentRunClaimAccessor = { claimNextRun, maintainQueue };

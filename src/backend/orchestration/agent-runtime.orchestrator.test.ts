@@ -46,6 +46,11 @@ it('runs evaluation and maintenance every five seconds without claiming when no 
   vi.useFakeTimers();
   const evaluations: number[] = [];
   const maintenance: number[] = [];
+  const startedAt = Date.now();
+  const claimNextRun = vi.fn(async () => ({
+    status: 'DEFERRED' as const,
+    reason: 'EMPTY' as const,
+  }));
   const runtime = createAgentRuntime(
     { pollCycle: async () => undefined },
     {
@@ -57,14 +62,15 @@ it('runs evaluation and maintenance every five seconds without claiming when no 
         maintenance.push(Date.now());
         return Promise.resolve();
       },
-      claimNextRun: () => Promise.reject(new Error('Must not claim without a consumer')),
+      claimNextRun,
     }
   );
   runtime.start();
   await vi.advanceTimersByTimeAsync(10_000);
-  expect(evaluations).toHaveLength(3);
-  expect(maintenance).toHaveLength(3);
+  expect(evaluations).toEqual([startedAt, startedAt + 5000, startedAt + 10_000]);
+  expect(maintenance).toEqual([startedAt, startedAt + 5000, startedAt + 10_000]);
   await runtime.stop();
+  expect(claimNextRun).not.toHaveBeenCalled();
 });
 it('hands a committed claim to its consumer and drains it during shutdown', async () => {
   vi.useFakeTimers();

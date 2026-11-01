@@ -79,10 +79,13 @@ Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize
 revision, generation, activation, readiness and capacity checks with pause/edit.
 A transient source error defers waiting work; disabled connections and
-continuity recovery failures cancel it. Claims committed before pause are
-in-flight work. The defaults remain one active run per definition, four
-globally, 100 waiting per definition and a 24-hour waiting expiry. Overflow is
-terminal for that whole definition/event, including overlapping triggers
+continuity recovery failures cancel it. Malformed non-null source health fails
+closed as invalid stored data. Deferred claims report CAPACITY for confirmed
+capacity limits; source/retry waits report WAITING. Maintenance advances its
+cursor only after the database transaction commits. Claims committed before
+pause are in-flight work. The defaults remain one active run per definition,
+four globally, 100 waiting per definition and a 24-hour waiting expiry. Overflow
+is terminal for that whole definition/event, including overlapping triggers
 evaluated later.
 
 Evaluation retries persist their attempt count and next time: three retries at

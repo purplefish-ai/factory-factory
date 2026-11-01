@@ -32,14 +32,29 @@ async function pending(cursor: EvaluationCursor | null) {
       ${after}
     ORDER BY t.id, e.id LIMIT ${configService.getAgentRuntimeLimits().evaluationBatchSize}`
   );
+  const [triggers, events, evaluations] = await Promise.all([
+    prisma.agentTrigger.findMany({
+      where: { id: { in: [...new Set(rows.map((row) => row.triggerId))] } },
+      include: runtimeTriggerInclude,
+    }),
+    prisma.agentEvent.findMany({
+      where: { id: { in: [...new Set(rows.map((row) => row.eventId))] } },
+    }),
+    prisma.agentEvaluation.findMany({ where: { OR: rows } }),
+  ]);
+  const triggersById = new Map(triggers.map((trigger) => [trigger.id, trigger]));
+  const eventsById = new Map(events.map((event) => [event.id, event]));
+  const evaluationsByPair = new Map(
+    evaluations.map((evaluation) => [
+      JSON.stringify([evaluation.triggerId, evaluation.eventId]),
+      evaluation,
+    ])
+  );
   const candidates = [];
   for (const row of rows) {
-    const trigger = await prisma.agentTrigger.findUnique({
-      where: { id: row.triggerId },
-      include: runtimeTriggerInclude,
-    });
-    const event = await prisma.agentEvent.findUnique({ where: { id: row.eventId } });
-    const evaluation = await prisma.agentEvaluation.findFirst({ where: row });
+    const trigger = triggersById.get(row.triggerId);
+    const event = eventsById.get(row.eventId);
+    const evaluation = evaluationsByPair.get(JSON.stringify([row.triggerId, row.eventId])) ?? null;
     if (trigger && event) {
       candidates.push({ trigger, event, evaluation });
     }
@@ -65,7 +80,7 @@ async function settleUnavailable(evaluationId: string, now: Date) {
     await tx.agentEvaluation.update({
       where: { id: evaluationId },
       data: {
-        status: 'SKIPPED',
+        status: reason === 'INVALID_STORED_DATA' ? 'ERROR' : 'SKIPPED',
         reasonCode: reason,
         nextAttemptAt: null,
         explanation: 'The pending decision is no longer eligible for execution.',

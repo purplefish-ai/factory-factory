@@ -252,3 +252,38 @@ it('resolves provider-specific saved defaults and preserves explicit execution o
     })
   ).toEqual({ version: 1, provider: 'CLAUDE', model: 'sonnet', reasoningEffort: 'low' });
 });
+
+it.each(['new', 'pending'] as const)(
+  'records invalid stored source health as ERROR for a %s decision',
+  async (state) => {
+    const eventId = await fixture.event();
+    if (state === 'pending') {
+      await fixture.evaluation(eventId);
+    }
+    await db.prisma.agentSourceState.update({
+      where: { connectionId: fixture.connectionId },
+      data: { health: { state: 'broken' } },
+    });
+    await evaluator().evaluatePendingEvents(signal());
+    expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+      status: 'ERROR',
+      reasonCode: 'INVALID_STORED_DATA',
+      nextAttemptAt: null,
+    });
+    expect(await db.prisma.agentRun.count()).toBe(0);
+  }
+);
+it('records corrupt activation data as ERROR when settling a pending decision', async () => {
+  const eventId = await fixture.event();
+  await fixture.evaluation(eventId);
+  await db.prisma.agentTrigger.update({
+    where: { id: fixture.triggerId },
+    data: { activationBoundary: { provider: 'GITHUB' } },
+  });
+  await evaluator().evaluatePendingEvents(signal());
+  expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+    status: 'ERROR',
+    reasonCode: 'INVALID_STORED_DATA',
+    nextAttemptAt: null,
+  });
+});

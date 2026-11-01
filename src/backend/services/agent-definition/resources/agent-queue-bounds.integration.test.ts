@@ -117,7 +117,7 @@ it('does not launch a later run while its definition FIFO head is deferred', asy
     where: { id: first },
     data: { nextAttemptAt: new Date(Date.now() + 60_000) },
   });
-  expect(await runtime.claimNextRun()).toMatchObject({ status: 'DEFERRED' });
+  expect(await runtime.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'WAITING' });
   expect(await db.prisma.agentRun.count({ where: { status: 'RUNNING' } })).toBe(0);
 });
 it('does not revive an overflowed definition/event through a later matching trigger', async () => {
@@ -165,4 +165,32 @@ it('claims a ready definition beyond a page of future-due FIFO heads', async () 
     status: 'CLAIMED',
     runId: first,
   });
+});
+
+it('reprocesses rolled-back maintenance before moving to the next batch', async () => {
+  await smallBatch();
+  const first = await queue('expired-a');
+  const second = await queue('expired-b');
+  const ready = await otherDefinition('ready-after-rollback');
+  await db.prisma.agentRun.updateMany({
+    where: { id: { in: [first, second] } },
+    data: { expiresAt: new Date(0) },
+  });
+  await db.prisma.$executeRawUnsafe(
+    "CREATE TRIGGER reject_test_claim BEFORE UPDATE OF status ON AgentRun WHEN NEW.status = 'RUNNING' BEGIN SELECT RAISE(ABORT, 'Injected claim failure'); END"
+  );
+  try {
+    await expect(runtime.claimNextRun()).rejects.toMatchObject({ code: 'P2003' });
+    expect(
+      await db.prisma.agentRun.count({ where: { id: { in: [first, second] }, status: 'QUEUED' } })
+    ).toBe(2);
+  } finally {
+    await db.prisma.$executeRawUnsafe('DROP TRIGGER reject_test_claim');
+  }
+  expect(await runtime.claimNextRun()).toMatchObject({ status: 'CLAIMED', runId: ready });
+  expect(
+    await db.prisma.agentRun.count({
+      where: { id: { in: [first, second] }, status: 'CANCELLED', reasonCode: 'QUEUE_EXPIRED' },
+    })
+  ).toBe(2);
 });

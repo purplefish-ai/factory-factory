@@ -117,3 +117,12 @@ it.each([
     reasonCode: 'UNSUPPORTED_MESSAGE',
   });
 });
+
+it('fails closed for a labeled event when the configuration also requests unsupported actions', () => {
+  expect(
+    runtime.matchAgentEvent(github, {
+      ...trigger,
+      config: { ...trigger.config, actions: ['opened', 'labeled'] },
+    })
+  ).toMatchObject({ status: 'SKIPPED', reasonCode: 'UNSUPPORTED_ACTION' });
+});

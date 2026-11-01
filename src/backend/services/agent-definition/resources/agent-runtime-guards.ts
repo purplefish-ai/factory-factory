@@ -156,6 +156,9 @@ export function permanentRuntimeStateReason(trigger: RuntimeTrigger): AgentRunti
     return 'CONNECTION_UNAVAILABLE';
   }
   const health = agentSourceHealthSchema.safeParse(trigger.connection?.sourceState?.health);
+  if (!health.success && trigger.connection?.sourceState?.health != null) {
+    return 'INVALID_STORED_DATA';
+  }
   if (health.success && health.data.state === 'RECOVERY_REQUIRED') {
     return 'SOURCE_RECOVERY_REQUIRED';
   }

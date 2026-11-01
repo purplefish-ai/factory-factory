@@ -114,7 +114,7 @@ it('defers a transient source error without cancelling admitted work and resumes
       health: { state: 'ERROR', reasonCode: 'RATE_LIMIT', updatedAt: new Date().toISOString() },
     },
   });
-  expect(await runtime.claimNextRun()).toMatchObject({ status: 'DEFERRED' });
+  expect(await runtime.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'WAITING' });
   expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({ status: 'QUEUED' });
   await db.prisma.agentSourceState.update({
     where: { connectionId: fixture.connectionId },
@@ -141,5 +141,20 @@ it('cancels a continuity failure even when readiness is accidentally true', asyn
   expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({
     status: 'CANCELLED',
     reasonCode: 'SOURCE_RECOVERY_REQUIRED',
+  });
+});
+
+it('fails closed on malformed non-null source health at admission and claim', async () => {
+  await admit(await event('queued'));
+  const pending = await event('pending');
+  await db.prisma.agentSourceState.update({
+    where: { connectionId: fixture.connectionId },
+    data: { isReady: true, health: { state: 'RECOVERY_REQUIRED' } },
+  });
+  expect(await admit(pending)).toEqual({ status: 'REJECTED', reason: 'INVALID_STORED_DATA' });
+  expect(await runtime.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'EMPTY' });
+  expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({
+    status: 'CANCELLED',
+    reasonCode: 'INVALID_STORED_DATA',
   });
 });

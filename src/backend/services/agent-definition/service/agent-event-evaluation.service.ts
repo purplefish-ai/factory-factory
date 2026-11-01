@@ -110,7 +110,7 @@ export class AgentEventEvaluationService {
     const unavailable = permanentRuntimeStateReason(trigger);
     if (unavailable) {
       Object.assign(decision, {
-        status: 'SKIPPED',
+        status: unavailable === 'INVALID_STORED_DATA' ? 'ERROR' : 'SKIPPED',
         reasonCode: unavailable,
         explanation: 'Runtime eligibility prevents execution.',
       });
