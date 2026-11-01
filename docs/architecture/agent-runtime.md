@@ -753,8 +753,8 @@ Event sessions use `event-agent` and explicit `non_interactive` intent, with
 ratchet disabled at workspace creation. They do not inherit periodic Codex YOLO
 permissions. These APIs neither initialize a provider nor dispatch a prompt; the
 consumer composes strict setup/restart and observed initial dispatch around
-them. Task5 monitoring/operator recovery and Task6 activation/native validation
-remain prerequisites for enabling saved agents.
+them. Monitoring and operator recovery, plus activation and native capability
+validation, remain prerequisites for enabling saved agents.
 
 The strict event workspace initializer shares the ordinary initializer's
 per-workspace queue and worktree preparation. It validates the reserved session
@@ -1083,12 +1083,12 @@ cleanup makes it safe again. Hard restart in those operations with PENDING
 delivery produces held preparation/cleanup uncertainty: PENDING still proves
 that the initial task was unsent. Once delivery is SENDING or ACCEPTED, recovery
 retains delivery uncertainty and never automatically resends, even if STARTUP
-remains marked. FINISHED initial outcomes remain immutable for Task5 settlement.
-Marker-before-effect and cleanup-before-marker crash windows can conservatively
-require operator resolution. Existing script PID/output and capacity are
-retained while cleanup is uncertain; persisted PIDs are never signalled. Git
-cleanup requires positive filesystem and canonical registration absence even
-when the legacy removal promise resolves.
+remains marked. FINISHED initial outcomes remain immutable for later run
+settlement. Marker-before-effect and cleanup-before-marker crash windows can
+conservatively require operator resolution. Existing script PID/output and
+capacity are retained while cleanup is uncertain; persisted PIDs are never
+signalled. Git cleanup requires positive filesystem and canonical registration
+absence even when the legacy removal promise resolves.
 
 The targeted `interruptEventInitial` capability uses SHUTDOWN/TIMEOUT evidence
 without ordinary user-stop finalization or clearing queued human input. Initial

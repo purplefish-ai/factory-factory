@@ -1,7 +1,16 @@
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rm, writeFile, lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+const scriptProcess = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: scriptProcess.spawn,
+}));
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -19,6 +28,8 @@ let init: typeof import('./event-workspace-init.orchestrator').initializeEventWo
 let worktreePath: string;
 const initTasks = new Set<ReturnType<typeof init>>();
 beforeEach(async () => {
+  const native = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  scriptProcess.spawn.mockReset().mockImplementation(native.spawn);
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false);
   worktreePath = join(db.tempDir, `workspace-${h.claim.reservedWorkspaceId}`);
@@ -425,6 +436,71 @@ it('never creates or removes a candidate rejected by the Git owner as preexistin
   expect(await init(input())).toMatchObject({ status: 'FAILED' });
   expect(h.workspace.gitOpsService.createWorktree).not.toHaveBeenCalled();
   expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
+});
+
+it('returns STALE when confirmed abort cleanup reaches the durable PID-clear fence', async () => {
+  await writeFile(
+    join(worktreePath, 'factory-factory.json'),
+    JSON.stringify({ scripts: { setup: 'controlled-script' } })
+  );
+  const child = Object.assign(new EventEmitter(), {
+    pid: 12_345,
+    exitCode: null,
+    signalCode: null,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn(),
+  });
+  scriptProcess.spawn.mockReturnValue(unsafeCoerce<ChildProcess>(child));
+  const cleanup = boundary();
+  const groups = await vi.importActual<typeof import('@/backend/lib/owned-process-group')>(
+    '@/backend/lib/owned-process-group'
+  );
+  const stop = vi.spyOn(groups, 'stopOwnedProcessGroup').mockImplementation(async () => {
+    await cleanup.wait();
+    return 'LOCAL_RUNTIME_GROUP_STOPPED';
+  });
+  const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw new Error('No host signals');
+  });
+  const owner = h.workspace.eventWorkspaceInitService;
+  const writePid = owner.scriptPid;
+  const pidWrites = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
+    if (args[2]) {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { workerGeneration: { increment: 1 } },
+      });
+    }
+    return writePid(...args);
+  });
+  const publication = vi.spyOn(owner, 'finish');
+  const cancellation = new AbortController();
+  const task = init(input(cancellation.signal));
+  const workspace = () => h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId);
+  try {
+    await vi.waitFor(async () =>
+      expect(await workspace()).toMatchObject({ status: 'PROVISIONING', initScriptPid: 12_345 })
+    );
+    cancellation.abort();
+    await cleanup.entered;
+    expect(pidWrites.mock.calls.filter((args) => args[2])).toHaveLength(0);
+    cleanup.release();
+    expect(await task).toMatchObject({ status: 'STALE', cleanup: 'CONFIRMED' });
+    expect(pidWrites.mock.calls.filter((args) => args[2])).toHaveLength(1);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(await workspace()).toMatchObject({
+      status: 'PROVISIONING',
+      initScriptPid: 12_345,
+      initCompletedAt: null,
+    });
+    expect(publication).not.toHaveBeenCalled();
+    expect(signals).not.toHaveBeenCalled();
+  } finally {
+    cancellation.abort();
+    cleanup.release();
+    await task;
+  }
 });
 
 it('preserves STALE when the durable fence changes at READY PID-clearing publication', async () => {
