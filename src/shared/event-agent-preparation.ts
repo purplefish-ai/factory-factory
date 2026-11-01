@@ -10,7 +10,7 @@ export type EventLaunchPreparation = z.infer<typeof eventLaunchPreparationSchema
 
 const transientCode = z.object({
   code: z.enum(['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EBUSY', 'SQLITE_BUSY']),
-  retryAfterMs: z.number().finite().nonnegative().optional(),
+  retryAfterMs: z.unknown().optional(),
 });
 /** Known transport/busy failures only. Human diagnostic text never controls retries. */
 export function classifyEventPreparationFailure(error: unknown): {
@@ -18,12 +18,9 @@ export function classifyEventPreparationFailure(error: unknown): {
   retryAfterMs?: number;
 } {
   const transient = transientCode.safeParse(error);
-  return transient.success
-    ? {
-        category: 'TRANSIENT',
-        ...(transient.data.retryAfterMs !== undefined
-          ? { retryAfterMs: transient.data.retryAfterMs }
-          : {}),
-      }
-    : { category: 'UNKNOWN' };
+  if (!transient.success) {
+    return { category: 'UNKNOWN' };
+  }
+  const hint = z.number().finite().nonnegative().safeParse(transient.data.retryAfterMs);
+  return { category: 'TRANSIENT', ...(hint.success ? { retryAfterMs: hint.data } : {}) };
 }

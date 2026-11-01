@@ -3,14 +3,18 @@ import type { Readable } from 'node:stream';
 import { stopOwnedProcessGroup } from '@/backend/lib/owned-process-group';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
+import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
 
 export class EventSetupError extends Error {
+  readonly failure: ReturnType<typeof classifyEventPreparationFailure>;
   constructor(
     readonly kind: 'FAILED' | 'ABORTED' | 'TIMED_OUT',
     readonly cleanup: 'CONFIRMED' | 'UNKNOWN',
-    message: string
+    message: string,
+    cause?: unknown
   ) {
-    super(message);
+    super(message, { cause });
+    this.failure = classifyEventPreparationFailure(cause);
   }
 }
 export type EventStartupScriptOptions = {
@@ -19,7 +23,6 @@ export type EventStartupScriptOptions = {
   appendOutput(text: string): Promise<void>;
   setPid(pid: number): Promise<void>;
   clearPid(pid: number): Promise<void>;
-  retainPid?(pid: number): Promise<void>;
   physicalStage?(active: boolean): void;
 };
 /** Event-only execution: foreground work is joined; cancellation requires owned-group proof. */
@@ -78,19 +81,21 @@ export async function executeEventStartupScript(
       input.physicalStage?.(false);
     }
     await writes;
-    await clearPid();
     if (input.signal.aborted) {
       abort();
     }
     const cleanup = stopping !== undefined ? await stopping : 'CONFIRMED';
-    await retainUncertainPid(cleanup, child.pid, input);
+    // Successful foreground completion is published by the initializer's guarded READY write.
+    // Only immutable group-stop proof permits clearing here; UNKNOWN preserves the original PID.
+    if (stopping !== undefined && cleanup === 'CONFIRMED') {
+      await clearPid();
+    }
     settled = true;
     clearTimeout(timeout);
     input.signal.removeEventListener('abort', abort);
-    if (failure || error || outputError) {
-      reject(
-        new EventSetupError(failure ?? 'FAILED', cleanup, error?.message ?? failureMessage(failure))
-      );
+    const failed = scriptFailure(failure, error, outputError, cleanup);
+    if (failed) {
+      reject(failed);
     } else {
       resolve(scriptResult(code, stderr));
     }
@@ -198,13 +203,18 @@ function failureMessage(kind: EventSetupError['kind'] | undefined) {
   return 'Event setup script failed';
 }
 
-async function retainUncertainPid(
-  cleanup: 'CONFIRMED' | 'UNKNOWN',
-  pid: number | undefined,
-  input: EventStartupScriptOptions
+function scriptFailure(
+  kind: EventSetupError['kind'] | undefined,
+  error: Error | undefined,
+  outputError: unknown,
+  cleanup: 'CONFIRMED' | 'UNKNOWN'
 ) {
-  if (cleanup === 'UNKNOWN' && pid !== undefined) {
-    // A cleared foreground PID is not proof its owned descendants stopped.
-    await input.retainPid?.(pid).catch(() => undefined);
-  }
+  return kind || error || outputError
+    ? new EventSetupError(
+        kind ?? 'FAILED',
+        cleanup,
+        error?.message ?? failureMessage(kind),
+        outputError ?? error
+      )
+    : null;
 }

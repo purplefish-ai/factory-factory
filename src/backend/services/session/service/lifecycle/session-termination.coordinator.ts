@@ -355,6 +355,9 @@ export class SessionTerminationCoordinator {
     cause: 'SHUTDOWN' | 'TIMEOUT'
   ): Promise<RuntimeStopEvidence> {
     const reservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
+    if (!reservation) {
+      throw new Error('Event stop confirmation is pending');
+    }
     const cancellation = new AbortController();
     try {
       const evidence = await withEventEvidenceDeadline(
@@ -367,7 +370,7 @@ export class SessionTerminationCoordinator {
       }
       return evidence;
     } finally {
-      reservation?.release();
+      reservation.release();
     }
   }
 

@@ -226,8 +226,6 @@ class EventWorkspaceInitialization {
         appendOutput: (text) => eventWorkspaceInitService.appendOutput(claim, text, this.check),
         setPid: (pid) => eventWorkspaceInitService.scriptPid(claim, pid, false, this.check),
         clearPid: (pid) => this.clearScriptPid(pid),
-        retainPid: (pid) =>
-          eventWorkspaceInitService.scriptPid(claim, pid, false, this.assertOwned),
       }
     );
   }
@@ -280,7 +278,8 @@ class EventWorkspaceInitialization {
       status,
       cleanup,
       reason: error.message.slice(0, 2000),
-      failure: classifyEventPreparationFailure(cause),
+      failure:
+        cause instanceof EventSetupError ? cause.failure : classifyEventPreparationFailure(cause),
     };
   }
   private async cleanupCandidate(cleanup: Cleanup): Promise<Cleanup> {

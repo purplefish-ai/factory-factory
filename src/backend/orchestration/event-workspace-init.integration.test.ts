@@ -427,24 +427,24 @@ it('never creates or removes a candidate rejected by the Git owner as preexistin
   expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
 });
 
-it('preserves STALE when the durable fence changes only at script PID cleanup', async () => {
+it('preserves STALE when the durable fence changes at READY PID-clearing publication', async () => {
   await writeFile(
     join(worktreePath, 'factory-factory.json'),
     JSON.stringify({ scripts: { setup: 'printf cleanup-boundary' } })
   );
   const owner = h.workspace.eventWorkspaceInitService;
-  const writePid = owner.scriptPid;
-  const cleanup = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
-    if (args[2]) {
+  const finish = owner.finish;
+  const cleanup = vi.spyOn(owner, 'finish').mockImplementation(async (...args) => {
+    if (args[1] === 'READY') {
       await db.prisma.agentRun.update({
         where: { id: h.claim.runId },
         data: { workerGeneration: { increment: 1 } },
       });
     }
-    return writePid(...args);
+    return finish(...args);
   });
   expect(await init(input())).toMatchObject({ status: 'STALE' });
-  expect(cleanup.mock.calls.some((args) => args[2])).toBe(true);
+  expect(cleanup.mock.calls.some((args) => args[1] === 'READY')).toBe(true);
   expect(
     await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
   ).toMatchObject({ status: 'PROVISIONING' });

@@ -77,12 +77,62 @@ it('returns UNKNOWN on timeout when cleanup cannot prove process disappearance',
   }).catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(6000);
   expect(await task).toMatchObject({ kind: 'TIMED_OUT', cleanup: 'UNKNOWN' });
-  expect(h.ports.retainPid).toHaveBeenCalledWith(4321);
+  expect(h.ports.clearPid).not.toHaveBeenCalled();
+  expect(h.ports.retainPid).not.toHaveBeenCalled();
   expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
   if (process.platform !== 'win32') {
     expect(signal).toHaveBeenCalledWith(-4321, 'SIGKILL');
   }
 });
+it.each(['reject', 'stall'] as const)(
+  'retains the original PID throughout UNKNOWN cleanup when replacement persistence would %s',
+  async (mode) => {
+    vi.useFakeTimers();
+    const h = setup();
+    let storedPid: number | null = null;
+    const history: Array<number | null> = [];
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.ports.setPid.mockImplementation(() => {
+      storedPid = h.child.pid;
+      history.push(storedPid);
+      return Promise.resolve(undefined);
+    });
+    h.ports.clearPid.mockImplementation(() => {
+      storedPid = null;
+      history.push(storedPid);
+      return Promise.resolve(undefined);
+    });
+    h.ports.retainPid.mockImplementation(() =>
+      mode === 'reject'
+        ? Promise.reject(new Error('Persistence unavailable'))
+        : pending.then(() => undefined)
+    );
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    const task = executeEventStartupScript({
+      cwd: '/test',
+      args: ['-c', 'task'],
+      timeoutMs: 100,
+      ...h.ports,
+    }).catch((error: unknown) => error);
+    try {
+      await vi.advanceTimersByTimeAsync(101);
+      expect(storedPid).toBe(4321);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(storedPid).toBe(4321);
+      expect(history).toEqual([4321]);
+      expect(h.ports.clearPid).not.toHaveBeenCalled();
+      expect(h.ports.retainPid).not.toHaveBeenCalled();
+      expect(await task).toMatchObject({ cleanup: 'UNKNOWN' });
+    } finally {
+      release();
+      await task;
+    }
+  }
+);
+
 it('does not spawn when the current claim check fails', async () => {
   const h = setup();
   spawn.mockClear();
@@ -164,7 +214,7 @@ it.each(['output', 'pid'] as const)(
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const write = phase === 'output' ? h.ports.appendOutput : h.ports.clearPid;
+    const write = phase === 'output' ? h.ports.appendOutput : h.ports.setPid;
     write.mockImplementation(() => pending.then(() => undefined));
     const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('unconfirmed'), { code: 'EPERM' });

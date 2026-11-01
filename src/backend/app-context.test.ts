@@ -254,6 +254,34 @@ describe('createApplication', () => {
     expect(application.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
   });
 
+  it('attempts ordered disposal after rejection and preserves subsequent errors', async () => {
+    const dependencies = createFakeApplicationGraph('rejected-disposal');
+    const sessionFailure = new Error('session stop failed');
+    const accountFailure = new Error('account cleanup failed');
+    let rejectSessions!: (error: Error) => void;
+    const calls: string[] = [];
+    dependencies.services.sessionLifecycleService.stopAllClients = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          calls.push('sessions');
+          rejectSessions = reject;
+        })
+    );
+    dependencies.services.codexAccountService.shutdown = vi.fn(() => {
+      calls.push('accounts');
+      return Promise.reject(accountFailure);
+    });
+    const application = createApplication(dependencies);
+    const result = disposeApplication(application).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(calls).toEqual(['sessions']));
+    rejectSessions(sessionFailure);
+    expect(await result).toMatchObject({ errors: [sessionFailure, accountFailure] });
+    expect(calls).toEqual(['sessions', 'accounts']);
+    expect(application.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
+    expect(application.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(application.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
+  });
+
   it('drains initial-session observations before disposing account dependencies', async () => {
     const dependencies = createFakeApplicationGraph('event-disposal');
     const calls: string[] = [];

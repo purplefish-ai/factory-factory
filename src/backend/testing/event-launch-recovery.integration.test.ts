@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createEventDeliveryFixture } from '@/backend/orchestration/testing/event-delivery.test-support';
 import {
   createIntegrationDatabase,
@@ -13,6 +13,8 @@ beforeEach(async () => {
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
 }, 30_000);
 afterEach(async () => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   await destroyIntegrationDatabase(db);
 });
 const row = () => db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
@@ -34,16 +36,21 @@ it('takes over safe durable-only work without spending a retry or accepting old 
   await h.owner.eventRunLaunch.renew(recovered[0]!.claim);
 });
 it.each(['SETUP', 'STARTUP'] as const)(
-  'holds crashed %s work as unsent preparation uncertainty, preserving script evidence',
+  'holds crashed %s work as unsent preparation uncertainty, preserving preparation metadata',
   async (state) => {
-    await h.owner.eventRunLaunch.preparation(h.claim, state);
+    if (state === 'STARTUP') {
+      await h.owner.eventRunLaunch.preparation(h.claim, 'SETUP');
+      await h.owner.eventRunLaunch.preparation(h.claim, 'SAFE');
+    }
+    const preparation = await h.owner.eventRunLaunch.preparation(h.claim, state);
+    expect(preparation.setupStartedAt).not.toBeNull();
     await expire();
     expect(await h.owner.eventRunLaunch.recover([], 4)).toHaveLength(0);
     expect(await row()).toMatchObject({
       status: 'RUNNING',
       launchPhase: 'NEEDS_ATTENTION',
       reasonCode: 'PREPARATION_CLEANUP_UNCERTAIN',
-      launchPreparation: { state: 'UNKNOWN' },
+      launchPreparation: { state: 'UNKNOWN', setupStartedAt: preparation.setupStartedAt },
     });
     expect(
       await db.prisma.agentInitialDelivery.findUnique({ where: { runId: h.claim.runId } })
@@ -148,10 +155,14 @@ it('unknown cleanup never releases capacity or schedules retry', async () => {
 });
 
 it('does not overwrite a physical-work marker with a duplicate setup entry', async () => {
-  await h.owner.eventRunLaunch.preparation(h.claim, 'SETUP');
+  const preparation = await h.owner.eventRunLaunch.preparation(h.claim, 'SETUP');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + 1000);
   await expect(h.owner.eventRunLaunch.preparation(h.claim, 'SETUP')).rejects.toThrow(
     'no longer current'
   );
+  expect((await row()).launchPreparation).toEqual(preparation);
+  vi.useRealTimers();
 });
 
 it('permits observation-only adoption of finished initial work without rotating the send identity', async () => {
@@ -178,7 +189,7 @@ it('permits observation-only adoption of finished initial work without rotating 
     },
     attemptCount: 1,
   });
-  expect((await h.owner.eventRunLaunch.list())[0]?.claim).toEqual(adopted.claim);
+  expect((await h.owner.eventRunLaunch.list()).runs[0]?.claim).toEqual(adopted.claim);
   await expect(
     h.owner.eventRunLaunch.dispose(h.claim, {
       kind: 'FAILED',
@@ -186,4 +197,97 @@ it('permits observation-only adoption of finished initial work without rotating 
       category: 'UNKNOWN',
     })
   ).rejects.toThrow('no longer current');
+});
+
+it.each(['definition', 'preparation', 'evidence', 'missing delivery'] as const)(
+  'isolates invalid %s facts without poisoning valid observation rows',
+  async (invalid) => {
+    const other = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+    if (invalid === 'definition') {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { definitionSnapshot: { secret: 'must not leak' } },
+      });
+    }
+    if (invalid === 'preparation') {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { launchPreparation: { secret: 'must not leak' } },
+      });
+    }
+    if (invalid === 'evidence') {
+      await db.prisma.agentInitialDelivery.update({
+        where: { runId: h.claim.runId },
+        data: { evidence: { secret: 'must not leak' } },
+      });
+    }
+    if (invalid === 'missing delivery') {
+      await db.prisma.agentInitialDelivery.delete({ where: { runId: h.claim.runId } });
+    }
+    const before = await db.prisma.agentRun.findMany({
+      include: { initialDelivery: true },
+      orderBy: { id: 'asc' },
+    });
+    const page = await h.owner.eventRunLaunch.list();
+    expect(page.runs.map((run) => run.claim.runId)).toEqual([other.claim.runId]);
+    expect(page.invalid).toEqual([
+      {
+        runId: h.claim.runId,
+        workerGeneration: h.claim.workerGeneration,
+        attemptGeneration: h.claim.attemptGeneration,
+        reason: 'INVALID_STORED_DATA',
+      },
+    ]);
+    expect(page.nextCursor).toBe(before.at(-1)?.id);
+    expect(
+      await db.prisma.agentRun.findMany({
+        include: { initialDelivery: true },
+        orderBy: { id: 'asc' },
+      })
+    ).toEqual(before);
+    expect(await db.prisma.agentRun.count({ where: { status: 'RUNNING' } })).toBe(2);
+  }
+);
+
+it('advances bounded all-invalid observation pages and supports repeat traversal without changing facts', async () => {
+  const second = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+  const third = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+  await db.prisma.agentRun.updateMany({
+    where: { id: { in: [h.claim.runId, second.claim.runId] } },
+    data: { definitionSnapshot: {} },
+  });
+  const { configService } = await vi.importActual<
+    typeof import('@/backend/services/config.service')
+  >('@/backend/services/config.service');
+  const limits = configService.getAgentRuntimeLimits();
+  const bounded = vi
+    .spyOn(configService, 'getAgentRuntimeLimits')
+    .mockReturnValue({ ...limits, queueBatchSize: 2 });
+  const before = await db.prisma.agentRun.findMany({
+    include: { initialDelivery: true },
+    orderBy: { id: 'asc' },
+  });
+  try {
+    const first = await h.owner.eventRunLaunch.list();
+    expect(first.runs).toEqual([]);
+    expect(first.invalid).toHaveLength(2);
+    expect(first.nextCursor).toBe(second.claim.runId);
+    const next = await h.owner.eventRunLaunch.list(first.nextCursor ?? undefined);
+    expect(next.runs.map((run) => run.claim.runId)).toEqual([third.claim.runId]);
+    expect(next.nextCursor).toBe(third.claim.runId);
+    expect(await h.owner.eventRunLaunch.list(next.nextCursor ?? undefined)).toEqual({
+      runs: [],
+      invalid: [],
+      nextCursor: null,
+    });
+    expect(await h.owner.eventRunLaunch.list()).toEqual(first);
+    expect(
+      await db.prisma.agentRun.findMany({
+        include: { initialDelivery: true },
+        orderBy: { id: 'asc' },
+      })
+    ).toEqual(before);
+  } finally {
+    bounded.mockRestore();
+  }
 });

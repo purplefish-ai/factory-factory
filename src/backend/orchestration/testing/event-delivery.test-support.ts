@@ -46,7 +46,7 @@ export function boundary() {
   };
 }
 
-/** Real source capture/admission and creation; linkage is only a fixture precondition until4c2. */
+/** Real source capture, evaluation and admission only; no workspace/session creation or linkage. */
 export async function createEventAdmissionFixture(
   db: IntegrationDatabase,
   provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'

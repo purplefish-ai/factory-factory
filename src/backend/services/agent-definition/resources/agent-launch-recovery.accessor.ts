@@ -133,8 +133,15 @@ export const agentLaunchRecoveryAccessor = {
       await tx.agentRun.update({ where: { id: run.id }, data: { leaseExpiresAt } });
       return leaseExpiresAt;
     }),
-  dispose: (claim: EventLaunchClaim, input: EventLaunchDisposition) =>
-    ledgerTransaction(async (tx) => disposeLaunch(tx, await currentLaunch(tx, claim), input)),
+  dispose: (claim: EventLaunchClaim, input: EventLaunchDisposition, assertCurrent?: () => void) => {
+    assertCurrent?.();
+    return ledgerTransaction(async (tx) => {
+      const run = await currentLaunch(tx, claim);
+      assertCurrent?.();
+      await disposeLaunch(tx, run, input);
+      assertCurrent?.();
+    });
+  },
   /** Includes held and ACTIVE/FINISHED records for the Task5 observation owner. */
   list: (after?: string) =>
     ledgerTransaction(async (tx) => {
@@ -144,7 +151,26 @@ export const agentLaunchRecoveryAccessor = {
         take: configService.getAgentRuntimeLimits().queueBatchSize,
         include,
       });
-      return rows.map(snapshot);
+      const runs: ReturnType<typeof snapshot>[] = [];
+      const invalid: Array<{
+        runId: string;
+        workerGeneration: number;
+        attemptGeneration: number;
+        reason: 'INVALID_STORED_DATA';
+      }> = [];
+      for (const run of rows) {
+        try {
+          runs.push(snapshot(run));
+        } catch {
+          invalid.push({
+            runId: run.id,
+            workerGeneration: run.workerGeneration,
+            attemptGeneration: run.attemptGeneration,
+            reason: 'INVALID_STORED_DATA',
+          });
+        }
+      }
+      return { runs, invalid, nextCursor: rows.at(-1)?.id ?? null };
     }),
   recover: async (excluded: string[], available: number) => {
     const committed = await ledgerTransaction(async (tx) => {

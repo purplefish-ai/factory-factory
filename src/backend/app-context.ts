@@ -560,14 +560,27 @@ export function createApplication(
 }
 
 export async function disposeApplication(application: Application): Promise<void> {
-  await application.services.agentRuntime?.stop();
-  await application.services.workspaceMetadata?.stop();
-  // Server-construction failure has no server cleanup owner to drain session observations.
-  await application.services.sessionLifecycleService.stopAllClients();
-  await application.services.codexAccountService.shutdown();
-  application.lifecycle.eventCollector.stop();
-  await application.lifecycle.snapshotReconciliation.stop();
-  application.services.workspaceGitStateService.stop();
+  // Preserve dependency order while retaining failures from every independent cleanup attempt.
+  const failures: unknown[] = [];
+  const cleanup = [
+    () => application.services.agentRuntime?.stop(),
+    () => application.services.workspaceMetadata?.stop(),
+    () => application.services.sessionLifecycleService.stopAllClients(),
+    () => application.services.codexAccountService.shutdown(),
+    () => application.lifecycle.eventCollector.stop(),
+    () => application.lifecycle.snapshotReconciliation.stop(),
+    () => application.services.workspaceGitStateService.stop(),
+  ];
+  for (const dispose of cleanup) {
+    try {
+      await dispose();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) {
+    throw new AggregateError(failures, 'Application disposal failed');
+  }
 }
 
 export type AppContext = Application;

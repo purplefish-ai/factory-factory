@@ -721,14 +721,14 @@ reconnect, recipient, and failure contracts.
 
 ## Event creation ownership
 
-Event execution is not wired to a launch consumer yet. The dormant
-`createEventWorkspaceOnce` and `createEventSessionOnce` APIs accept reserved IDs
-from an admitted event run. They create their entity and retained launch origin
-in one transaction. Workspace origins survive workspace, run and project
-removal; session origins survive session and workspace removal. A retained
-origin without its live entity blocks recreation, including deletion before run
-linkage. Archived workspaces and projects also block creation/reuse. Generic
-interactive, child and periodic creation keeps its existing behavior.
+The durable event launch consumer composes `createEventWorkspaceOnce` and
+`createEventSessionOnce` with reserved IDs from an admitted event run. They
+create their entity and retained launch origin in one transaction. Workspace
+origins survive workspace, run and project removal; session origins survive
+session and workspace removal. A retained origin without its live entity blocks
+recreation, including deletion before run linkage. Archived workspaces and
+projects also block creation/reuse. Generic interactive, child and periodic
+creation keeps its existing behavior.
 
 The agent-definition owner exposes `readEventExecutionBinding` and
 `freezeEventExecution`. Freeze checks the current worker/attempt, lease,
@@ -737,23 +737,24 @@ execution without changing admitted snapshots. The original reserved message ID
 stays fixed; a later explicit retry can rotate the delivery's message ID and
 send-attempt ID. Generation checks fence earlier callers.
 
-Future launch orchestration must select a Codex account under
-`withAccountReservation`, freeze its ID before session insertion, and use that
-same ID on recovery or fail. Session creation validates that exact account via
-the application graph's account service without selecting Auto or entering a
-second reservation. Disabled, missing or unauthenticated frozen accounts do not
-fall back. Origins store account IDs and a strict versioned execution intent,
-never credentials. The first session insert checks the run's frozen execution
-and reserved workspace/session/project identity in its transaction through a
-narrow read-only integrity check. Session reuse compares that original intent
-rather than mutable model/launch metadata. Initial dispatch must later pin the
-origin's settings even if a human has changed ordinary conversation settings.
+Launch orchestration selects a Codex account under `withAccountReservation`,
+freezes its ID before session insertion, and uses that same ID on recovery or
+fails. Session creation validates that exact account via the application graph's
+account service without selecting Auto or entering a second reservation.
+Disabled, missing or unauthenticated frozen accounts do not fall back. Origins
+store account IDs and a strict versioned execution intent, never credentials.
+The first session insert checks the run's frozen execution and reserved
+workspace/session/project identity in its transaction through a narrow read-only
+integrity check. Session reuse compares that original intent rather than mutable
+model/launch metadata. Initial dispatch pins the origin's settings even if a
+human has changed ordinary conversation settings.
 
 Event sessions use `event-agent` and explicit `non_interactive` intent, with
 ratchet disabled at workspace creation. They do not inherit periodic Codex YOLO
-permissions. These APIs neither initialize a provider nor dispatch a prompt;
-observed delivery, setup/restart orchestration and runtime wiring remain
-separate work.
+permissions. These APIs neither initialize a provider nor dispatch a prompt; the
+consumer composes strict setup/restart and observed initial dispatch around
+them. Task5 monitoring/operator recovery and Task6 activation/native validation
+remain prerequisites for enabling saved agents.
 
 The strict event workspace initializer shares the ordinary initializer's
 per-workspace queue and worktree preparation. It validates the reserved session
@@ -762,8 +763,7 @@ without the ordinary auto-message or first-IDLE-session path. Workspace writes
 recheck the claim, lease, retained origins and live entities in the workspace
 owner's transaction. An aborted or superseded initializer cannot publish a late
 worktree or READY. The caller owns run linkage, lease renewal and eventual
-initial dispatch; the initializer does not enqueue or send a prompt. No claim
-consumer is wired yet.
+initial dispatch; the initializer does not enqueue or send a prompt.
 
 State publication revalidates the claim and emits the current row; unrelated
 metadata writes cannot suppress READY, and notification failures cannot undo a
@@ -771,9 +771,9 @@ validated commit. Rejected observer promises are diagnosed without awaiting
 observers or delaying later subscribers. A missing retained READY worktree
 becomes FAILED under the same claim and path fence, preserving its path and
 provenance for inspection. Recovery must not infer safe reinitialization from
-PROVISIONING alone: the future consumer must preserve uncertain physical-work
-evidence and retain capacity until current cleanup proof permits reset.
-Persisted PIDs never grant process ownership.
+PROVISIONING alone: the consumer preserves uncertain physical-work evidence and
+retains capacity until current cleanup proof permits reset. Persisted PIDs never
+grant process ownership.
 
 Event setup has a fifteen-minute deadline. Uncancellable Git work remains owned
 until it drains; timeout does not abandon its promise. Abort and script timeout
@@ -1079,13 +1079,16 @@ unactivatable until monitoring, operator recovery and UI gates exist.
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or
 STARTUP is persisted before physical work; only a successful setup or confirmed
-cleanup makes it safe again. Hard restart in those operations produces held
-preparation/cleanup uncertainty, not delivery ambiguity: PENDING still proves
-that the initial task was unsent. Marker-before-effect and cleanup-before-marker
-crash windows can conservatively require operator resolution. Existing script
-PID/output and capacity are retained while cleanup is uncertain; persisted PIDs
-are never signalled. Git cleanup requires positive filesystem and canonical
-registration absence even when the legacy removal promise resolves.
+cleanup makes it safe again. Hard restart in those operations with PENDING
+delivery produces held preparation/cleanup uncertainty: PENDING still proves
+that the initial task was unsent. Once delivery is SENDING or ACCEPTED, recovery
+retains delivery uncertainty and never automatically resends, even if STARTUP
+remains marked. FINISHED initial outcomes remain immutable for Task5 settlement.
+Marker-before-effect and cleanup-before-marker crash windows can conservatively
+require operator resolution. Existing script PID/output and capacity are
+retained while cleanup is uncertain; persisted PIDs are never signalled. Git
+cleanup requires positive filesystem and canonical registration absence even
+when the legacy removal promise resolves.
 
 The targeted `interruptEventInitial` capability uses SHUTDOWN/TIMEOUT evidence
 without ordinary user-stop finalization or clearing queued human input. Initial

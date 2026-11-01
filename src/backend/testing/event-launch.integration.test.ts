@@ -1,8 +1,16 @@
-import { execFile } from 'node:child_process';
+import { execFile, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdir, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+const scriptProcess = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: scriptProcess.spawn,
+}));
 import {
   createEventAdmissionFixture,
   createEventDeliveryFixture,
@@ -24,6 +32,10 @@ const execFileAsync = promisify(execFile);
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   providers.clear();
+  scriptProcess.spawn.mockReset();
+  const nativeProcess =
+    await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  scriptProcess.spawn.mockImplementation(nativeProcess.spawn);
   tasks.length = 0;
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
   vi.spyOn(process, 'kill').mockImplementation(() => {
@@ -387,6 +399,134 @@ it('fences invocation when lease renewal fails during the committed SENDING obse
   expect(await h.read()).toMatchObject({ state: 'AMBIGUOUS' });
 });
 
+it('preserves composed PID and output at the UNKNOWN cleanup boundary without reconstructing evidence', async () => {
+  await db.prisma.project.updateMany({ data: { startupScriptCommand: 'controlled-script' } });
+  const child = Object.assign(new EventEmitter(), {
+    pid: 12_345,
+    exitCode: null,
+    signalCode: null,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn(),
+  });
+  scriptProcess.spawn.mockReturnValue(unsafeCoerce<ChildProcess>(child));
+  const groups = await vi.importActual<typeof import('@/backend/lib/owned-process-group')>(
+    '@/backend/lib/owned-process-group'
+  );
+  const cleanup = boundary();
+  vi.spyOn(groups, 'stopOwnedProcessGroup').mockImplementation(async () => {
+    await cleanup.wait();
+    return 'UNKNOWN';
+  });
+  const originalPidWrite = h.workspace.eventWorkspaceInitService.scriptPid;
+  let sets = 0;
+  const pidWrites = vi
+    .spyOn(h.workspace.eventWorkspaceInitService, 'scriptPid')
+    .mockImplementation((...args) => {
+      if (!args[2] && ++sets > 1) {
+        return Promise.reject(new Error('Cannot reconstruct PID evidence'));
+      }
+      return originalPidWrite(...args);
+    });
+  const { launchEventRun } = await vi.importActual<
+    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
+  >('@/backend/orchestration/event-run-launch.orchestrator');
+  const cancellation = new AbortController();
+  const task = launchEventRun(h.claim, cancellation.signal);
+  tasks.push(task);
+  const workspace = () =>
+    db.prisma.workspace.findUnique({ where: { id: h.claim.reservedWorkspaceId } });
+  try {
+    await vi.waitFor(async () =>
+      expect(await workspace()).toMatchObject({ initScriptPid: 12_345 })
+    );
+    child.stdout.write('Persistent setup output');
+    await vi.waitFor(async () =>
+      expect(await workspace()).toMatchObject({ initOutput: 'Persistent setup output' })
+    );
+    cancellation.abort();
+    await cleanup.entered;
+    expect(await workspace()).toMatchObject({
+      initScriptPid: 12_345,
+      initOutput: 'Persistent setup output',
+    });
+    cleanup.release();
+    await task;
+    expect(await workspace()).toMatchObject({
+      initScriptPid: 12_345,
+      initOutput: 'Persistent setup output',
+      status: 'PROVISIONING',
+    });
+    expect(pidWrites.mock.calls.map((args) => args[2])).toEqual([false]);
+    expect(await h.owner.eventRunLaunch.recover([], 4)).toEqual([]);
+    expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
+      status: 'RUNNING',
+      launchPhase: 'NEEDS_ATTENTION',
+    });
+  } finally {
+    cancellation.abort();
+    cleanup.release();
+    await task;
+  }
+});
+
+it.each([
+  ['LOCAL_RUNTIME_GROUP_STOPPED', 'ECONNRESET', 'PROVISIONING_RETRY'],
+  ['UNKNOWN', 'ECONNRESET', 'PREPARATION_CLEANUP_UNCERTAIN'],
+  ['LOCAL_RUNTIME_GROUP_STOPPED', 'UNRECOGNIZED', 'PROVISIONING_FAILED'],
+] as const)(
+  'preserves typed output failure through %s cleanup for code %s',
+  async (cleanup, code, reasonCode) => {
+    await db.prisma.project.updateMany({ data: { startupScriptCommand: 'controlled-script' } });
+    const child = Object.assign(new EventEmitter(), {
+      pid: 12_345,
+      exitCode: null,
+      signalCode: null,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(),
+    });
+    scriptProcess.spawn.mockReturnValue(unsafeCoerce<ChildProcess>(child));
+    const groups = await vi.importActual<typeof import('@/backend/lib/owned-process-group')>(
+      '@/backend/lib/owned-process-group'
+    );
+    const stopped = vi.spyOn(groups, 'stopOwnedProcessGroup').mockResolvedValue(cleanup);
+    const output = vi
+      .spyOn(h.workspace.eventWorkspaceInitService, 'appendOutput')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Persistence transport failed'), { code, retryAfterMs: 90_000 })
+      );
+    const { launchEventRun } = await vi.importActual<
+      typeof import('@/backend/orchestration/event-run-launch.orchestrator')
+    >('@/backend/orchestration/event-run-launch.orchestrator');
+    const before = Date.now();
+    const task = launchEventRun(h.claim, new AbortController().signal);
+    tasks.push(task);
+    await vi.waitFor(async () =>
+      expect(
+        await db.prisma.workspace.findUnique({ where: { id: h.claim.reservedWorkspaceId } })
+      ).toMatchObject({ initScriptPid: 12_345 })
+    );
+    child.stdout.write('failure boundary');
+    await task;
+    expect(output).toHaveBeenCalledOnce();
+    expect(stopped).toHaveBeenCalledOnce();
+    const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
+    expect(run).toMatchObject({
+      reasonCode,
+      attemptCount: 1,
+      reservedWorkspaceId: h.claim.reservedWorkspaceId,
+      reservedSessionId: h.claim.reservedSessionId,
+    });
+    if (reasonCode === 'PROVISIONING_RETRY') {
+      expect(run.nextAttemptAt!.getTime()).toBeGreaterThanOrEqual(before + 90_000);
+    } else {
+      expect(run.nextAttemptAt).toBeNull();
+    }
+    expect(providers.size).toBe(0);
+  }
+);
+
 it('retains existing setup PID and output when cleanup is unknown and recovery does not rerun scripts', async () => {
   await db.prisma.project.updateMany({
     data: { startupScriptCommand: 'controlled-unknown-script' },
@@ -437,12 +577,85 @@ it('honors typed transient Retry-After from setup without resetting identity or 
     status: 'RUNNING',
     attemptCount: 1,
     reasonCode: 'PROVISIONING_RETRY',
+    reservedWorkspaceId: h.claim.reservedWorkspaceId,
+    reservedSessionId: h.claim.reservedSessionId,
+    initialMessageId: h.claim.initialMessageId,
   });
+  expect(h.workspace.gitOpsService.prepareWorktreeCreation).toHaveBeenCalledOnce();
+  expect(
+    await db.prisma.agentInitialDelivery.findUnique({ where: { runId: h.claim.runId } })
+  ).toMatchObject({ messageId: h.attempt.messageId, sendAttemptId: h.attempt.sendAttemptId });
   expect(run.nextAttemptAt!.getTime()).toBeGreaterThanOrEqual(before + 90_000);
   expect(await db.prisma.workspace.count()).toBe(1);
   expect(await db.prisma.agentSession.count()).toBe(1);
   expect(providers.size).toBe(0);
 });
+
+it.each(['stall', 'reject'] as const)(
+  'bounds failed-claim shutdown when the first disposition will %s and accounts for the next claim',
+  async (mode) => {
+    const other = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+    const gate = boundary();
+    vi.spyOn(h.owner.eventRunLaunch, 'read').mockRejectedValue(
+      new Error('Initial owner read failed')
+    );
+    const dispose = h.owner.eventRunLaunch.dispose;
+    const dispositions = vi
+      .spyOn(h.owner.eventRunLaunch, 'dispose')
+      .mockImplementation(async (...args) => {
+        if (args[0].runId === h.claim.runId) {
+          if (mode === 'reject') {
+            throw new Error('Disposition unavailable');
+          }
+          await gate.wait();
+        }
+        return dispose(...args);
+      });
+    const { createEventRunConsumer } = await vi.importActual<
+      typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/event-run-consumer.orchestrator');
+    const consumer = createEventRunConsumer();
+    await consumer.consumeClaim(h.claim, new AbortController().signal);
+    await consumer.consumeClaim(other.claim, new AbortController().signal);
+    await consumer.drain();
+    vi.useFakeTimers();
+    let stopped = false;
+    let stopError: unknown;
+    const stopping = consumer.stop().then(
+      () => {
+        stopped = true;
+      },
+      (error) => {
+        stopError = error;
+      }
+    );
+    try {
+      await vi.waitFor(() => expect(dispositions).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(stopped).toBe(true);
+      expect(stopError).toBeUndefined();
+      gate.release();
+      await consumer.drain();
+      expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
+        status: 'RUNNING',
+        launchPhase: 'PROVISIONING',
+      });
+      expect(
+        await db.prisma.agentRun.findUnique({ where: { id: other.claim.runId } })
+      ).toMatchObject({
+        status: 'RUNNING',
+        launchPhase: 'NEEDS_ATTENTION',
+        reasonCode: 'PREPARATION_CLEANUP_UNCERTAIN',
+      });
+      expect(providers.size).toBe(0);
+    } finally {
+      gate.release();
+      vi.useRealTimers();
+      await stopping;
+      await consumer.drain();
+    }
+  }
+);
 
 it('bounds shutdown behind a stalled durable handoff read and fences all later writes', async () => {
   const gate = boundary();

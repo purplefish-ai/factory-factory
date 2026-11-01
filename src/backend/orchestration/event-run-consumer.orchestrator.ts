@@ -101,7 +101,7 @@ export function createEventRunConsumer() {
   const maintainOwned = async (owned: OwnedTask) => {
     try {
       owned.leaseUntil = (await eventRunLaunch.renew(owned.claim)).getTime();
-      if (owned.failed) {
+      if (owned.failed && !closing) {
         await eventRunLaunch.dispose(owned.claim, {
           kind: 'FAILED',
           cleanup: 'UNKNOWN',
@@ -150,6 +150,33 @@ export function createEventRunConsumer() {
       }
       await Promise.all(
         [...tasks.values()].map(async (owned) => {
+          // Include failed-claim persistence in the same tracked lifetime, independently per claim.
+          owned.task = owned.task
+            .then(async () => {
+              if (!owned.failed || owned.revoked) {
+                return;
+              }
+              await eventRunLaunch.dispose(
+                owned.claim,
+                {
+                  kind: 'SHUTDOWN',
+                  cleanup: 'UNKNOWN',
+                  category: 'UNKNOWN',
+                },
+                () => {
+                  if (owned.revoked) {
+                    throw new Error('Event shutdown disposition closed');
+                  }
+                }
+              );
+              owned.release();
+            })
+            .catch(() => {
+              owned.revoked = true;
+              logger.warn('Event shutdown disposition remains unresolved', {
+                runId: owned.claim.runId,
+              });
+            });
           // Never abandon setup/Git. Provider interruption owns its existing evidence deadlines.
           await owned.physicalDone;
           await withEventEvidenceDeadline(owned.task, () => {
@@ -163,16 +190,6 @@ export function createEventRunConsumer() {
           await owned.physicalDone;
         })
       );
-
-      for (const owned of tasks.values()) {
-        if (owned.failed && !owned.revoked) {
-          await eventRunLaunch.dispose(owned.claim, {
-            kind: 'SHUTDOWN',
-            cleanup: 'UNKNOWN',
-            category: 'UNKNOWN',
-          });
-        }
-      }
     },
   };
 }
