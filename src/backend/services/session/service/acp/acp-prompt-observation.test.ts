@@ -131,3 +131,31 @@ it('reports failed ambiguity persistence without leaking exceptions or replacing
   expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('secret');
   expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('credential');
 });
+it('an older pending send cannot remove a newer cancellation token', async () => {
+  const h = harness();
+  let first!: () => void;
+  let second!: () => void;
+  h.observation.beforeSend
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          first = resolve;
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          second = resolve;
+        })
+    );
+  const older = h.send();
+  const newer = h.send();
+  const newerResult = newer.catch((error: unknown) => error);
+  first();
+  await older;
+  const cancelled = await h.controller.cancelPrompt('session', h.handle);
+  second();
+  expect(await newerResult).toBeInstanceOf(Error);
+  expect(cancelled).toBe(true);
+  expect(h.handle.connection.prompt).toHaveBeenCalledOnce();
+});

@@ -1080,3 +1080,9 @@ may finish; shutdown does not claim they were rolled back. Durable failure does
 not suppress best-effort physical cleanup. A soft cancellation while the
 pre-send write is pending prevents the subsequent provider invocation and keeps
 uncertain persisted delivery fenced.
+
+Concurrent cleanup callers share compatible physical stop work for the current
+owned runtime; each caller retains its own stop cause. A caller's timeout does
+not release physical stop fencing while termination is still running. Queued
+quiescence callers recheck the active barrier before taking ownership, and
+creation-internal cleanup continues to use the nonjoining physical primitive.

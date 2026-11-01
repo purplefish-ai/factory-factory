@@ -61,7 +61,7 @@ export class AcpPromptController {
         if (pending.cancelled) {
           throw new Error('Prompt cancelled before send');
         }
-        this.pendingObserved.delete(handle);
+        this.releasePending(handle, pending);
       }
       handle.isPromptInFlight = true;
       const promptPromise = handle.connection.prompt({

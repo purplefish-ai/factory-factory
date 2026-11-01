@@ -694,7 +694,7 @@ export class AcpRuntimeSupervisor {
       !(
         this.creationLocks.has(sessionId) ||
         this.stopOperations.has(sessionId) ||
-        this.quiescence.isObservedStopInProgress(sessionId) ||
+        this.isStopInProgress(sessionId) ||
         this.quiescence.getTrackedSessionIds().includes(sessionId)
       )
     ) {

@@ -40,7 +40,7 @@ it.each(['reject', 'stall'] as const)(
   }
 );
 it.each(['SENDING', 'FINISHED'] as const)(
-  'targets initial source only while %s delivery is unresolved',
+  'selects the expected runtime source for %s delivery',
   async (state) => {
     const base = createTerminationHarness();
     const source = {
@@ -76,3 +76,24 @@ it.each(['SENDING', 'FINISHED'] as const)(
     );
   }
 );
+it('inactive lookup failure cleans physical ownership without fabricating a recovered ordinary user stop', async () => {
+  const base = createTerminationHarness();
+  base.repository.getSessionsByWorkspaceId.mockResolvedValue([{ ...base.session, status: 'IDLE' }]);
+  base.runtimeManager.isSessionRunning.mockReturnValue(false);
+  base.runtimeManager.hasClientCreationOperation.mockReturnValue(false);
+  const authority = {
+    isOwned: vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValue(false),
+    invalidate: vi.fn(),
+  };
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+  });
+  await expect(
+    coordinator.stopWorkspaceSessions('workspace', { reason: 'USER_STOP' })
+  ).rejects.toThrow('Failed to stop 1');
+  expect(base.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith(base.session.id);
+  expect(base.lifecycleEventService.record).not.toHaveBeenCalled();
+  expect(base.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
+  expect(base.repository.updateSessionIfStatus).not.toHaveBeenCalled();
+});

@@ -16,6 +16,10 @@ export class AcpObservedStop {
   >();
   private readonly eventOwnedHandles = new Map<string, AcpProcessHandle>();
   private readonly observedStops = new Map<string, RuntimeStopEvidence>();
+  private readonly physicalStops = new Map<
+    string,
+    { child: ChildProcess | undefined; operation: Promise<RuntimeStopEvidence> }
+  >();
   private readonly strictStops = new Map<string, Promise<RuntimeStopEvidence>>();
   constructor(
     private readonly quiescence: AcpRuntimeQuiescence,
@@ -67,13 +71,16 @@ export class AcpObservedStop {
   }
   async cleanupUnexpectedExit(id: string, incarnationId: string): Promise<void> {
     const handle = this.eventOwnedHandles.get(id);
-    if (!handle || this.port.getMetadata(handle)?.incarnationId !== incarnationId) {
+    if (
+      !handle ||
+      this.port.getMetadata(handle)?.incarnationId !== incarnationId ||
+      !this.canStopTarget(id, handle)
+    ) {
       return;
     }
-    try {
-      await this.stopObservedRuntime(id, 'UNEXPECTED_EXIT');
-    } finally {
-      this.port.quiesced?.(id);
+    const evidence = await this.stopObservedRuntime(id, 'UNEXPECTED_EXIT');
+    if (evidence.status === 'UNKNOWN') {
+      throw new Error('Event exit runtime cleanup is unconfirmed');
     }
   }
   async cleanupCandidate(id: string, handle: AcpProcessHandle): Promise<boolean> {
@@ -88,13 +95,9 @@ export class AcpObservedStop {
   }
   /** Physical stop only: safe inside the caller's registered creation operation. */
   async stopCurrentRuntime(sessionId: string): Promise<void> {
-    try {
-      const evidence = await this.stopObservedRuntime(sessionId, 'SYSTEM_STOP');
-      if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
-        throw new Error('Event runtime stop is unconfirmed');
-      }
-    } finally {
-      this.port.quiesced?.(sessionId);
+    const evidence = await this.stopObservedRuntime(sessionId, 'SYSTEM_STOP');
+    if (evidence.status !== 'LOCAL_RUNTIME_GROUP_STOPPED') {
+      throw new Error('Event runtime stop is unconfirmed');
     }
   }
 
@@ -103,9 +106,12 @@ export class AcpObservedStop {
     cause: RuntimeStopEvidence['cause'],
     expected?: ProviderSource
   ): Promise<RuntimeStopEvidence> {
+    if (!this.canStopTarget(sessionId, this.eventOwnedHandles.get(sessionId), expected)) {
+      return Promise.resolve(unknownStop(cause));
+    }
     const existing = this.strictStops.get(sessionId);
     if (existing) {
-      return existing;
+      return existing.then((evidence) => ({ ...evidence, cause }));
     }
     const drain = this.quiescence
       .runObservedStop(
@@ -162,51 +168,73 @@ export class AcpObservedStop {
     expected?: ProviderSource
   ): Promise<RuntimeStopEvidence> {
     const handle = this.eventOwnedHandles.get(sessionId);
-    const unknown: RuntimeStopEvidence = {
-      version: 1,
-      cause,
-      source: null,
-      status: 'UNKNOWN',
-      observedAt: new Date().toISOString(),
-    };
+    const child = handle?.child ?? this.spawnedGroups.get(sessionId)?.child;
+    if (!this.canStopTarget(sessionId, handle, expected)) {
+      return unknownStop(cause);
+    }
+    const pending = this.physicalStops.get(sessionId);
+    if (pending) {
+      return !child || pending.child === child
+        ? pending.operation.then((evidence) => ({ ...evidence, cause }))
+        : unknownStop(cause);
+    }
+    const operation = Promise.resolve()
+      .then(() => this.performPhysicalStop(sessionId, child, cause, expected))
+      .finally(() => {
+        if (this.physicalStops.get(sessionId)?.operation === operation) {
+          this.physicalStops.delete(sessionId);
+          this.port.endStop(sessionId);
+          this.port.quiesced?.(sessionId);
+        }
+      });
+    this.physicalStops.set(sessionId, { child, operation });
+    this.port.beginStop(sessionId);
+    return await operation;
+  }
+  private async performPhysicalStop(
+    sessionId: string,
+    child: ChildProcess | undefined,
+    cause: RuntimeStopEvidence['cause'],
+    expected?: ProviderSource
+  ): Promise<RuntimeStopEvidence> {
+    const handle = this.eventOwnedHandles.get(sessionId);
+    const unknown = unknownStop(cause);
+    if ((handle?.child ?? this.spawnedGroups.get(sessionId)?.child) !== child) {
+      return unknown;
+    }
     if (!this.canStopTarget(sessionId, handle, expected)) {
       return unknown;
     }
-    this.port.beginStop(sessionId);
-    try {
-      if (!handle && this.spawnedGroups.has(sessionId)) {
-        return await this.stopSpawn(sessionId, unknown);
-      }
-      if (!handle) {
-        const previous = this.observedStops.get(sessionId);
-        return previous && (!expected || isDeepStrictEqual(previous.source, expected))
-          ? { ...previous, cause }
-          : unknown;
-      }
-      const source = this.source(handle);
-      const assertOwned = () => {
-        if (!this.canStopTarget(sessionId, handle, expected)) {
-          throw new Error('Runtime ownership changed');
-        }
-      };
-      this.port.markManaged(handle.child);
-      attemptUnprovenDirectStop(handle);
-      const status = await stopOwnedRuntimeGroup(handle, { assertOwned });
-      const evidence: RuntimeStopEvidence = {
-        ...unknown,
-        source,
-        status: handle.unsupportedProcessOverride || !source ? 'UNKNOWN' : status,
-        observedAt: new Date().toISOString(),
-      };
-      if (status === 'LOCAL_RUNTIME_GROUP_STOPPED') {
-        this.port.removeStopped(sessionId, handle);
-        this.eventOwnedHandles.delete(sessionId);
-        this.observedStops.set(sessionId, evidence);
-      }
-      return evidence;
-    } finally {
-      this.port.endStop(sessionId);
+    if (!handle && this.spawnedGroups.has(sessionId)) {
+      return await this.stopSpawn(sessionId, unknown);
     }
+    if (!handle) {
+      const previous = this.observedStops.get(sessionId);
+      return previous && (!expected || isDeepStrictEqual(previous.source, expected))
+        ? { ...previous, cause }
+        : unknown;
+    }
+    const source = this.source(handle);
+    const assertOwned = () => {
+      if (!this.canStopTarget(sessionId, handle, expected)) {
+        throw new Error('Runtime ownership changed');
+      }
+    };
+    this.port.markManaged(handle.child);
+    attemptUnprovenDirectStop(handle);
+    const status = await stopOwnedRuntimeGroup(handle, { assertOwned });
+    const evidence: RuntimeStopEvidence = {
+      ...unknown,
+      source,
+      status: handle.unsupportedProcessOverride || !source ? 'UNKNOWN' : status,
+      observedAt: new Date().toISOString(),
+    };
+    if (status === 'LOCAL_RUNTIME_GROUP_STOPPED') {
+      this.port.removeStopped(sessionId, handle);
+      this.eventOwnedHandles.delete(sessionId);
+      this.observedStops.set(sessionId, evidence);
+    }
+    return evidence;
   }
   private canStopTarget(
     id: string,
@@ -218,7 +246,7 @@ export class AcpObservedStop {
       return false;
     }
     if (!handle) {
-      return !(expected && this.spawnedGroups.has(id));
+      return !expected || isDeepStrictEqual(this.observedStops.get(id)?.source, expected);
     }
     return (
       this.eventOwnedHandles.get(id) === handle &&
@@ -282,4 +310,14 @@ function attemptUnprovenDirectStop(handle: {
       /* Best effort only; never proof. */
     }
   }
+}
+
+function unknownStop(cause: RuntimeStopEvidence['cause']): RuntimeStopEvidence {
+  return {
+    version: 1,
+    cause,
+    source: null,
+    status: 'UNKNOWN',
+    observedAt: new Date().toISOString(),
+  };
 }

@@ -47,23 +47,57 @@ function harness() {
     source,
     observedAt: new Date().toISOString(),
   };
+  const secondSource = {
+    ...source,
+    providerSessionId: 'native-second',
+    runtimeIncarnationId: 'runtime-second',
+  };
+  const secondAttempt = {
+    ...state.attempt,
+    runId: 'run-second',
+    sessionId: 'second',
+    messageId: 'message-second',
+    sendAttemptId: 'send-second',
+  };
+  const states = new Map<string, InitialDeliveryFence>([
+    ['reserved', state],
+    [
+      'second',
+      {
+        ...state,
+        attempt: secondAttempt,
+        evidence: { version: 1, attempt: secondAttempt, source: secondSource },
+      },
+    ],
+  ]);
+  const stateFor = (id: string) => {
+    const value = states.get(id);
+    if (!value) {
+      throw new Error('Missing test session');
+    }
+    return value;
+  };
+  const stopFor = (id: string): RuntimeStopEvidence => ({
+    ...stop,
+    source: stateFor(id).evidence?.source ?? null,
+  });
   const owner = {
-    readFence: vi.fn(async () => state),
+    readFence: vi.fn(async (_runId: string, id: string) => stateFor(id)),
     beforeSend: vi.fn(async () => undefined),
     outcome: vi.fn(async () => undefined),
     ambiguous: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
   };
-  const authority = new EventSessionAuthority(async () => ({
-    runId: 'run',
-    execution: state.execution,
+  const authority = new EventSessionAuthority(async (id) => ({
+    runId: stateFor(id).attempt.runId,
+    execution: stateFor(id).execution,
   }));
   authority.configure(owner);
   const base = createTerminationHarness();
   const runtimeManager = {
     ...base.runtimeManager,
     beginShutdown: vi.fn(() => ['reserved']),
-    stopAndQuiesceObserved: vi.fn((_id: string) => Promise.resolve(stop)),
+    stopAndQuiesceObserved: vi.fn((id: string) => Promise.resolve(stopFor(id))),
     stopAllClients: vi.fn(async () => undefined),
   };
   const coordinator = new SessionTerminationCoordinator({
@@ -71,7 +105,7 @@ function harness() {
     runtimeManager,
     eventAuthority: authority,
   });
-  return { authority, owner, state, stop, runtimeManager, coordinator };
+  return { authority, owner, state, stop, stateFor, stopFor, runtimeManager, coordinator };
 }
 it('tracks the complete stop observation, including the durable fence read, until drain finishes', async () => {
   const h = harness();
@@ -149,7 +183,7 @@ it('moves on to remaining sessions and global cleanup when a registered creation
   );
   h.runtimeManager.beginShutdown.mockReturnValue(['reserved', 'second']);
   h.runtimeManager.stopAndQuiesceObserved.mockImplementation((id: string) =>
-    quiescence.runObservedStop(id, async () => h.stop).then((stops) => stops[0]!)
+    quiescence.runObservedStop(id, async () => h.stopFor(id)).then((stops) => stops[0]!)
   );
   let result: unknown = 'pending';
   const shutdown = h.coordinator.stopAllClients().then(
@@ -170,6 +204,14 @@ it('moves on to remaining sessions and global cleanup when a registered creation
     expect(h.owner.stop).toHaveBeenCalledWith(
       h.state.attempt,
       expect.objectContaining({ status: 'UNKNOWN', cause: 'SHUTDOWN' })
+    );
+    expect(h.owner.stop).toHaveBeenCalledWith(
+      h.stateFor('second').attempt,
+      expect.objectContaining({
+        status: 'LOCAL_RUNTIME_GROUP_STOPPED',
+        source: h.stopFor('second').source,
+        cause: 'SHUTDOWN',
+      })
     );
     expect(h.runtimeManager.stopAllClients).toHaveBeenCalledOnce();
     await expect(

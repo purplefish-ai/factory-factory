@@ -78,3 +78,26 @@ it('attempts KILL even when the event loop resumes beyond the deadline', async (
     vi.useRealTimers();
   }
 });
+it('confirms disappearance from the final probe after overdue KILL', async () => {
+  vi.useFakeTimers();
+  try {
+    const handle = createTestProcessHandle();
+    handle.ownedProcessGroup = handle.child.pid;
+    let killed = false;
+    const signal = vi.fn((_pid: number, value: NodeJS.Signals | 0) => {
+      if (value === 'SIGKILL') {
+        killed = true;
+      }
+      if (value === 0 && killed) {
+        missing();
+      }
+    });
+    const stopping = stopOwnedRuntimeGroup(handle, { signal, platform: 'darwin', timeoutMs: 100 });
+    vi.setSystemTime(Date.now() + 200);
+    await vi.runAllTimersAsync();
+    expect(await stopping).toBe('LOCAL_RUNTIME_GROUP_STOPPED');
+    expect(signal.mock.calls.map(([, value]) => value)).toEqual([0, 'SIGTERM', 0, 0, 'SIGKILL', 0]);
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -10,7 +10,7 @@ export async function withEventEvidenceDeadline<T>(
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           onTimeout?.();
-          reject(new Error('Event stop evidence timed out'));
+          reject(new Error('Event operation timed out'));
         }, timeoutMs);
       }),
     ]);

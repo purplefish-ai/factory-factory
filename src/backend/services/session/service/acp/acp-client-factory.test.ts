@@ -842,19 +842,19 @@ describe('AcpClientFactory', () => {
       expect(child.kill).not.toHaveBeenCalled();
     }
   );
-});
 
-it('preserves definitive event spawn failure without claiming cleanup of an unknown process', async () => {
-  const child = setupSuccessfulSpawn();
-  Object.defineProperty(child, 'pid', { value: undefined });
-  mocks.initialize.mockReturnValueOnce(new Promise(() => undefined));
-  const cleanup = vi.fn(async () => 'UNKNOWN' as const);
-  const pending = new AcpClientFactory().createClient({
-    ...createParams({ options: defaultOptions({ ownedProcessGroup: true }) }),
-    onOwnedProcessSpawned: () => cleanup,
+  it('preserves definitive event spawn failure without claiming cleanup of an unknown process', async () => {
+    const child = setupSuccessfulSpawn();
+    Object.defineProperty(child, 'pid', { value: undefined });
+    mocks.initialize.mockReturnValueOnce(new Promise(() => undefined));
+    const cleanup = vi.fn(async () => 'UNKNOWN' as const);
+    const pending = new AcpClientFactory().createClient({
+      ...createParams({ options: defaultOptions({ ownedProcessGroup: true }) }),
+      onOwnedProcessSpawned: () => cleanup,
+    });
+    const rejected = expect(pending).rejects.toThrow('ENOENT');
+    child.emit('error', Object.assign(new Error('ENOENT executable missing'), { code: 'ENOENT' }));
+    await rejected;
+    expect(cleanup).not.toHaveBeenCalled();
   });
-  const rejected = expect(pending).rejects.toThrow('ENOENT');
-  child.emit('error', Object.assign(new Error('ENOENT executable missing'), { code: 'ENOENT' }));
-  await rejected;
-  expect(cleanup).not.toHaveBeenCalled();
 });

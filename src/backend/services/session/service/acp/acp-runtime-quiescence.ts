@@ -120,9 +120,8 @@ export class AcpRuntimeQuiescence {
     stop: () => Promise<T>,
     assertResults?: (results: T[]) => void
   ): Promise<T[]> {
-    const existing = this.quiescenceOperations.get(sessionId);
-    if (existing !== undefined) {
-      await existing.catch(() => undefined);
+    while (this.quiescenceOperations.has(sessionId)) {
+      await this.quiescenceOperations.get(sessionId)?.catch(() => undefined);
     }
     let release!: () => void;
     let reject!: (error: unknown) => void;

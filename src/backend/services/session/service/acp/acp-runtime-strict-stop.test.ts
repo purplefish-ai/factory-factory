@@ -189,8 +189,10 @@ it.skipIf(process.platform === 'win32')(
       }
       return true;
     });
+    let cleanupCompletedAtObservation = false;
     const onRuntimeExit = vi.fn(() => {
-      expect(signal).toHaveBeenCalledWith(-12_345, 'SIGTERM');
+      cleanupCompletedAtObservation =
+        !live && signal.mock.calls.some(([pid, value]) => pid === -12_345 && value === 'SIGTERM');
       return Promise.reject(new Error('durable observation unavailable'));
     });
     await manager.getOrCreateClient(
@@ -201,6 +203,7 @@ it.skipIf(process.platform === 'win32')(
     );
     handle.child.emit('exit', 1);
     await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    expect(cleanupCompletedAtObservation).toBe(true);
     expect(await manager.stopAndQuiesceObserved('exit', 'USER_STOP')).toMatchObject({
       status: 'LOCAL_RUNTIME_GROUP_STOPPED',
     });

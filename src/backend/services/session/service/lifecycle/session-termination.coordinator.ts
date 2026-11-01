@@ -368,7 +368,10 @@ export class SessionTerminationCoordinator {
             cause,
             fence?.state === 'FINISHED' ? undefined : fence?.evidence?.source
           )
-        ).catch(() => unknown)
+        ).catch(() => {
+          logger.warn('Event physical stop failed; termination remains unconfirmed', { sessionId });
+          return unknown;
+        })
       : unknown;
     signal.throwIfAborted();
     await authority.recordStop(sessionId, { ...evidence, cause }, signal);
@@ -394,7 +397,10 @@ export class SessionTerminationCoordinator {
         : null;
     } catch (error) {
       // Retain lookup uncertainty even if a later read recovers, while attempting owned cleanup.
-      await this.stopSession(session.id, { reason }).catch(() => undefined);
+      this.dependencies.eventAuthority?.invalidate(session.id);
+      await withEventEvidenceDeadline(
+        this.dependencies.runtimeManager.stopAndQuiesce(session.id)
+      ).catch(() => undefined);
       throw error;
     }
   }

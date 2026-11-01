@@ -922,7 +922,7 @@ it('bounds observation drain and still attempts global physical cleanup on shutd
   });
   try {
     const stopped = expect(coordinator.stopAllClients()).rejects.toThrow(
-      'Event stop evidence timed out'
+      'Event operation timed out'
     );
     await vi.advanceTimersByTimeAsync(5001);
     await stopped;
@@ -930,4 +930,31 @@ it('bounds observation drain and still attempts global physical cleanup on shutd
   } finally {
     vi.useRealTimers();
   }
+});
+it('reports a rejected physical stop with a constant diagnostic and retains UNKNOWN', async () => {
+  logger.warn.mockClear();
+  const base = createTerminationHarness();
+  const authority = {
+    isOwned: async () => true,
+    invalidate: vi.fn(),
+    read: async () => null,
+    recordStop: vi.fn(async () => undefined),
+  };
+  const stopAndQuiesceObserved = vi.fn().mockRejectedValue(new Error('provider credential secret'));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority as never,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await expect(coordinator.stopSession(base.session.id)).rejects.toThrow('unconfirmed');
+  expect(logger.warn).toHaveBeenCalledWith(
+    'Event physical stop failed; termination remains unconfirmed',
+    { sessionId: base.session.id }
+  );
+  expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('secret');
+  expect(authority.recordStop).toHaveBeenCalledWith(
+    base.session.id,
+    expect.objectContaining({ status: 'UNKNOWN' }),
+    expect.any(AbortSignal)
+  );
 });
