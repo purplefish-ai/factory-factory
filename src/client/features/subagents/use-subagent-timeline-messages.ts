@@ -63,5 +63,5 @@ export function useSubagentTimelineMessages(
     () => mergeSubagentTimeline(messages, events),
     [messages, events]
   );
-  return { messages: timelineMessages, error, runningSubagentIconIndices };
+  return { messages: timelineMessages, error, runningSubagentIconIndices, subagents };
 }

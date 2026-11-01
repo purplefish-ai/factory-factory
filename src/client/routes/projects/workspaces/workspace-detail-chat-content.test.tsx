@@ -157,6 +157,43 @@ describe('ChatContent message queue wording', () => {
 });
 
 describe('ChatContent transcript ownership', () => {
+  it('opens an active sub-agent transcript directly from the chat list', () => {
+    const onOpenSubagent = vi.fn();
+    const props = {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      parentSessionName: 'Main chat',
+      onOpenSubagent,
+      messages: [],
+      queuedMessages: [],
+      sessionStatus: { phase: 'ready' },
+      sessionRuntime: createInitialSessionRuntimeState(),
+      chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+      pendingRequest: { type: 'none' },
+      pendingMessages: new Map(),
+      inputRef: createRef(),
+    } as unknown as ChatContentProps;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      const list = transcript.mock.lastCall?.[0].runningSubagentList;
+      flushSync(() => root.render(list));
+      expect(container.textContent).toContain('Review code');
+      expect(container.textContent).not.toContain('Finished task');
+      container.querySelector<HTMLButtonElement>('li button')?.click();
+      expect(onOpenSubagent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentSessionId: 'session-1',
+          parentSessionName: 'Main chat',
+          subagent: expect.objectContaining({ id: 'agent-1' }),
+        })
+      );
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('delegates its scroll lifecycle to the shared transcript', () => {
     const transcriptScroll = {
       identity: 'workspace-1/main/session-1',
@@ -190,6 +227,36 @@ describe('ChatContent transcript ownership', () => {
   });
 });
 
-vi.mock('@/client/features/subagents', () => ({
-  useSubagentTimelineMessages: (messages: unknown[]) => ({ messages, error: null }),
+vi.mock('@/client/features/subagents', async () => ({
+  SubagentList: (
+    await vi.importActual<typeof import('@/client/features/subagents/subagent-list')>(
+      '@/client/features/subagents/subagent-list'
+    )
+  ).SubagentList,
+  useSubagentTimelineMessages: (messages: unknown[]) => ({
+    messages,
+    error: null,
+    subagents: [
+      {
+        id: 'agent-1',
+        name: 'Review code',
+        status: 'running',
+        createdAt: null,
+        updatedAt: null,
+        completedAt: null,
+        latestActivity: null,
+        resultPreview: null,
+      },
+      {
+        id: 'agent-2',
+        name: 'Finished task',
+        status: 'completed',
+        createdAt: null,
+        updatedAt: null,
+        completedAt: null,
+        latestActivity: null,
+        resultPreview: null,
+      },
+    ],
+  }),
 }));

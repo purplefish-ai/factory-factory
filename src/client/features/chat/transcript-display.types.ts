@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
@@ -13,6 +14,7 @@ export interface TranscriptDisplayProps {
   /** Present only while connected to this live session. */
   controlSessionId?: string;
   onOpenAgents?: () => void;
+  runningSubagentList?: ReactNode;
   runningSubagentIconIndices?: readonly number[];
   subagentTimelineError?: { message: string; onRetry: () => void } | null;
   startingSession: boolean;

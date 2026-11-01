@@ -351,6 +351,11 @@ requires explicit consent; it never opens a URL automatically. Cancellation
 resolves pending permissions and elicitations as cancelled and dismisses their
 prompts.
 
+In the main chat, the running sub-agent count expands an inline list of active
+sub-agents. Selecting one opens its transcript tab directly. Completed
+sub-agents remain available in the Sessions panel and do not appear in the
+inline list.
+
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and
 permissions remain routed through the owning parent. Child tool calls also reach

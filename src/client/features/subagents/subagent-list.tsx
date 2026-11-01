@@ -29,6 +29,7 @@ export type SubagentListState =
 
 export interface SubagentListProps {
   state: SubagentListState;
+  activeOnly?: boolean;
   selectedSubagentId?: string | null;
   controlSessionId?: string;
   controlRuntimeId?: string;
@@ -222,6 +223,7 @@ export function SubagentList({
   controlSessionId,
   controlRuntimeId,
   onSelect,
+  activeOnly = false,
 }: SubagentListProps) {
   useReconcileSessionTargetStops(
     state.kind === 'ready' && !state.hasMore && !state.error ? controlSessionId : undefined,
@@ -308,7 +310,7 @@ export function SubagentList({
         </ul>
       )}
 
-      {groups.terminal.length > 0 && (
+      {!activeOnly && groups.terminal.length > 0 && (
         <div className={cn(groups.active.length > 0 && 'border-t')}>
           <button
             type="button"

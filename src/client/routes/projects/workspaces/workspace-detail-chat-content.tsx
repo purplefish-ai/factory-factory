@@ -10,7 +10,12 @@ import {
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
-import { useSubagentTimelineMessages } from '@/client/features/subagents';
+import {
+  SubagentList,
+  type SubagentSelection,
+  type SubagentListItem,
+  useSubagentTimelineMessages,
+} from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
@@ -25,6 +30,8 @@ export interface ChatContentProps {
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenAgents?: () => void;
+  onOpenSubagent?: (selection: SubagentSelection) => void;
+  parentSessionName?: string | null;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   acpPlan?: ReturnType<typeof useChatWebSocket>['acpPlan'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
@@ -150,6 +157,27 @@ function createTranscriptHeader(
   );
 }
 
+function createRunningSubagentList(props: ChatContentProps, subagents: SubagentListItem[]) {
+  if (!props.onOpenSubagent) {
+    return undefined;
+  }
+  return (
+    <SubagentList
+      activeOnly
+      state={subagents.length ? { kind: 'ready', subagents } : { kind: 'loading' }}
+      onSelect={(subagent) => {
+        if (props.sessionId) {
+          props.onOpenSubagent?.({
+            parentSessionId: props.sessionId,
+            parentSessionName: props.parentSessionName?.trim() || 'Untitled session',
+            subagent,
+          });
+        }
+      }}
+    />
+  );
+}
+
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
@@ -235,6 +263,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         messages={groupedMessages}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
+        runningSubagentList={createRunningSubagentList(props, timeline.subagents)}
         acpPlan={props.acpPlan}
         running={running}
         work={props.sessionRuntime.work}

@@ -48,6 +48,29 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
+  it('shows only active agents in chat and removes them when they finish', () => {
+    const active = subagent({ id: 'active', name: 'Review code' });
+    const finished = subagent({ id: 'finished', name: 'Done task', status: 'completed' });
+    const onSelect = vi.fn();
+    render({ state: { kind: 'ready', subagents: [finished, active] }, activeOnly: true, onSelect });
+    expect(container.textContent).toContain('Review code');
+    expect(container.textContent).not.toContain('Done task');
+    expect(container.textContent).not.toContain('Completed');
+    void act(() =>
+      container
+        .querySelector('li button')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    );
+    expect(onSelect).toHaveBeenCalledWith(active);
+    render({
+      state: { kind: 'ready', subagents: [finished, { ...active, status: 'completed' }] },
+      activeOnly: true,
+      onSelect,
+    });
+    expect(container.querySelector('li')).toBeNull();
+    expect(container.textContent).not.toContain('Completed');
+  });
+
   it('uses distinct botanical icons for simultaneous sub-agents', () => {
     render({
       state: {
