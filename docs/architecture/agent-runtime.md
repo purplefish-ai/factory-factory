@@ -1126,6 +1126,34 @@ an authorized retry rotates the current delivery identity. Terminal outcome
 alone does not settle the run or release capacity; tracked agent work is a
 separate reconciliation concern. Later human results cannot overwrite it.
 
+The dormant runtime exposes transport-neutral inspection and explicit RESOLVE,
+ABANDON and RETRY actions. Every action checks project, run, worker generation,
+attempt generation and current message/send identities. The consumer permanently
+fences the matching initial operation, including admission awaiting a durable
+read, before targeted cleanup. This does not abort into a second untargeted stop
+or revoke a replacement. Active human follow-ups block recovery cleanup.
+
+Resolution requires correlated strict local stop plus a current stopped-work
+window and complete child-history coverage. RESOLVE retains the RUNNING slot for
+a later decision; ABANDON closes it with an explicit decision separate from the
+provider outcome. RETRY retains capacity continuously and preserves the run,
+workspace, session, frozen account/input, original initialMessageId,
+setupStartedAt and inherited attemptCount, including an exhausted budget. It
+rotates only the current send identities and attemptGeneration, reuses the READY
+worktree without rerunning setup, and replaces the consumer's old operation.
+Deleted or unavailable resources block retry. Known child work, unknown child
+history and settled UNKNOWN setup cleanup have no supported recovery action.
+
+Saved resolution JSON does not restore lost live coverage. Both a later action
+and the rotated attempt's startup require the old stopped-work window to remain
+valid. A restart between rotation and startup can therefore leave the new
+attempt unsent and blocked. Ordinary startup/send remains allowed after a
+finished initial turn, but invalidates prior proof; a pending retry uses the
+existing durable initial-delivery fence. Only an independently resolved previous
+attempt permits a new tracking window after history replay. Recovery uses the
+same final synchronous proof check and asynchronous engine-commit limitation as
+settlement.
+
 Normal settlement requires the current initial runtime's live tracking window,
 established before its send, and zero in-flight prompts, interactive requests,
 active goals, native children and non-shell agent tasks. Shell/dev-server-only
@@ -1158,8 +1186,9 @@ Observed PR links are unioned into bounded run results while work remains held.
 Successful quiescent work becomes PR_CREATED when links exist; failed or
 cancelled initial work preserves its outcome and links. These sampled links
 survive workspace deletion. Lossless capture of attachments created and deleted
-between observations, explicit operator resolution/retry and ledger pruning
-remain activation prerequisites. Monitoring never auto-archives a workspace.
+between observations, ledger pruning, trusted-local operator transport/UI and
+child-work support remain activation prerequisites. Monitoring never
+auto-archives a workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A

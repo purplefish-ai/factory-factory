@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { eventRunLaunch, type EventLaunchClaim } from '@/backend/services/agent-definition';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
@@ -6,6 +7,7 @@ import {
   EventInitialDispatchInterrupted,
   interruptEventInitial,
 } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
 import { createEventLaunchResources } from './event-run-resources.orchestrator';
 import {
@@ -64,7 +66,19 @@ class EventRunLaunch {
     this.check();
     await eventRunLaunch.link(this.claim);
     this.check();
-    if (!(await this.initialize())) {
+    const manualRetry = run.delivery.evidence?.resolution?.action === 'RETRY';
+    if (manualRetry) {
+      const workspace = await workspaceDataService.findById(this.claim.reservedWorkspaceId);
+      this.check();
+      if (
+        workspace?.status !== 'READY' ||
+        !workspace.worktreePath ||
+        !(await stat(workspace.worktreePath)).isDirectory()
+      ) {
+        throw new Error('Completed event preparation is unavailable');
+      }
+      this.check();
+    } else if (!(await this.initialize())) {
       return;
     }
     this.check();

@@ -1,14 +1,21 @@
+import { isDeepStrictEqual } from 'node:util';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
   agentInitialDelivery,
   eventRunLaunch,
+  eventRunRecovery,
   type EventLaunchClaim,
 } from '@/backend/services/agent-definition';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { eventSessionAuthority, withEventEvidenceDeadline } from '@/backend/services/session';
+import {
+  eventRunRecoveryInputSchema,
+  type EventRunRecoveryInput,
+} from '@/shared/event-agent-recovery';
 import { launchEventRun } from './event-run-launch.orchestrator';
 import { observeEventRun } from './event-run-monitor.orchestrator';
+import { inspectEventRun, resolveEventRun } from './event-run-recovery.orchestrator';
 
 const logger = createLogger('event-run-consumer');
 type OwnedTask = {
@@ -21,6 +28,8 @@ type OwnedTask = {
   failed: boolean;
   launched: boolean;
   physicalDone: Promise<void>;
+  recovering: boolean;
+  launchCancelled: boolean;
   release(): void;
 };
 
@@ -37,7 +46,7 @@ export function createEventRunConsumer() {
   ): Promise<void> => {
     const existing = tasks.get(claim.runId);
     if (existing) {
-      if (existing.claim.workerGeneration !== claim.workerGeneration) {
+      if (!isDeepStrictEqual(existing.claim, claim)) {
         return Promise.reject(new Error('Event owner replacement requires drain'));
       }
       return Promise.resolve();
@@ -62,9 +71,11 @@ export function createEventRunConsumer() {
       failed: false,
       launched: false,
       physicalDone: Promise.resolve(),
+      recovering: false,
+      launchCancelled: false,
       release: () => {
         owned.revoked = true;
-        if (tasks.get(claim.runId) === owned) {
+        if (!owned.recovering && tasks.get(claim.runId) === owned) {
           tasks.delete(claim.runId);
         }
         signal.removeEventListener('abort', abort);
@@ -117,6 +128,9 @@ export function createEventRunConsumer() {
     return Promise.resolve();
   };
   const maintainOwned = async (owned: OwnedTask) => {
+    if (owned.recovering) {
+      return;
+    }
     const check = () => {
       if (owned.revoked) {
         throw new Error('Event maintenance observation closed');
@@ -157,7 +171,9 @@ export function createEventRunConsumer() {
       });
     } catch {
       owned.revoked = true;
-      owned.controller.abort();
+      if (!owned.launchCancelled) {
+        owned.controller.abort();
+      }
       if (owned.failed || owned.launched) {
         owned.release();
       }
@@ -210,8 +226,113 @@ export function createEventRunConsumer() {
       await adoptObservation(run.claim, signal);
     }
   };
+  const reserveRecovery = async (input: EventRunRecoveryInput) => {
+    let context = eventRunRecoveryInputSchema.parse(input);
+    // Verify user scope before cancelling any local operation.
+    const inspection = await eventRunRecovery.inspect(context);
+    let leaseUntil = inspection.run.leaseExpiresAt?.getTime() ?? 0;
+    if (closing) {
+      return { status: 'BLOCKED' as const, reason: 'OWNER_CLOSED' };
+    }
+    let owned = tasks.get(context.claim.runId);
+    if (!owned) {
+      if (inspection.run.leaseExpiresAt && inspection.run.leaseExpiresAt.getTime() > Date.now()) {
+        return { status: 'BLOCKED' as const, reason: 'OTHER_OWNER' };
+      }
+      const adopted = await eventRunLaunch.adopt(context.claim, () => {
+        if (closing) {
+          throw new Error('Recovery closed');
+        }
+      });
+      leaseUntil = adopted.leaseExpiresAt?.getTime() ?? 0;
+      context = {
+        ...context,
+        claim: adopted.claim,
+        attempt: { ...context.attempt, workerGeneration: adopted.claim.workerGeneration },
+      };
+      await consumeClaim(context.claim, new AbortController().signal, true);
+      owned = tasks.get(context.claim.runId);
+    }
+    if (!owned || owned.recovering || !isDeepStrictEqual(owned.claim, context.claim)) {
+      return { status: 'BLOCKED' as const, reason: 'OWNER_CHANGED' };
+    }
+    const reservation = owned;
+    reservation.recovering = true;
+    reservation.revoked = true;
+    reservation.launchCancelled = true;
+    // No await: fence both pending authority admission and an already-active permit.
+    // Do not abort into the dispatcher's independent stop path before targeted cleanup.
+    eventSessionAuthority.cancelInitial(context.attempt);
+    if (input.attempt.workerGeneration !== context.attempt.workerGeneration) {
+      eventSessionAuthority.cancelInitial(input.attempt);
+    }
+    return { status: 'OWNED' as const, context, owned, leaseUntil };
+  };
+  const finishRecovery = async (
+    reservation: OwnedTask,
+    claim: EventLaunchClaim,
+    abandoned: boolean
+  ) => {
+    reservation.recovering = false;
+    // Pending physical work stays tracked until its actual operation exits.
+    if (!(reservation.launched || reservation.failed)) {
+      return;
+    }
+    const replaceObserver = !(closing || abandoned) && tasks.get(claim.runId) === reservation;
+    reservation.release();
+    if (replaceObserver) {
+      await consumeClaim(claim, new AbortController().signal, true);
+    }
+  };
   return {
     consumeClaim,
+    inspectRun: inspectEventRun,
+    async resolveAmbiguousRun(input: EventRunRecoveryInput) {
+      const reserved = await reserveRecovery(input);
+      if (reserved.status === 'BLOCKED') {
+        return reserved;
+      }
+      const { context, owned, leaseUntil } = reserved;
+      const reservation = owned;
+      let open = true;
+      let abandoned = false;
+      const check = () => {
+        if (
+          !open ||
+          closing ||
+          Date.now() >= leaseUntil ||
+          tasks.get(context.claim.runId) !== reservation ||
+          !reservation.recovering
+        ) {
+          throw new Error('Recovery ownership closed');
+        }
+      };
+      try {
+        await withEventEvidenceDeadline(reservation.maintenance.catch(() => undefined));
+        check();
+        const operation = resolveEventRun(context, check);
+        reservation.maintenance = operation.then(
+          () => undefined,
+          () => undefined
+        );
+        const result = await withEventEvidenceDeadline(operation, () => {
+          open = false;
+        });
+        check();
+        abandoned = result.status === 'ABANDONED';
+        if (result.status === 'RETRIED') {
+          reservation.recovering = false;
+          reservation.release();
+          await consumeClaim(result.claim, new AbortController().signal);
+        }
+        return result;
+      } catch {
+        return { status: 'BLOCKED' as const, reason: 'PROOF_OR_OWNERSHIP_UNAVAILABLE' };
+      } finally {
+        open = false;
+        await finishRecovery(reservation, context.claim, abandoned);
+      }
+    },
     canClaim: () => !closing && tasks.size < configService.getAgentRuntimeLimits().activeGlobal,
     async maintain(signal: AbortSignal) {
       await Promise.all([...tasks.values()].map(maintainOwned));
@@ -243,7 +364,9 @@ export function createEventRunConsumer() {
     async stop() {
       closing = true;
       for (const owned of tasks.values()) {
-        owned.controller.abort();
+        if (!owned.launchCancelled) {
+          owned.controller.abort();
+        }
       }
       await Promise.all(
         [...tasks.values()].map(async (owned) => {

@@ -6,6 +6,7 @@ import type {
   InitialAttempt,
   ProviderSource,
   RuntimeStopEvidence,
+  EventRunResolution,
 } from '@/shared/event-agent-delivery';
 import type { EventWorkProof } from '@/shared/event-agent-work';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -19,6 +20,7 @@ type Window = {
   handle: AcpProcessHandle;
   coverageGeneration: number;
   pendingRevision: number;
+  initialPromptRevision: number;
 };
 
 /** Per-attempt observation ownership. Replayed/missing zeroes never grant coverage. */
@@ -40,14 +42,30 @@ export class EventOwnedWork {
   forget(sessionId: string): void {
     this.windows.delete(sessionId);
   }
-  begin(attempt: InitialAttempt, source: ProviderSource): void {
+  /** Saved decisions are not restart certificates: the exact old window must survive. */
+  assertRetryReady(attempt: InitialAttempt, previous: EventRunResolution): void {
+    const old = previous.attempt;
+    const observation = this.observe(old, previous.work.source, previous.stop);
+    if (
+      previous.action !== 'RETRY' ||
+      previous.work.mode !== 'STOPPED' ||
+      old.runId !== attempt.runId ||
+      old.sessionId !== attempt.sessionId ||
+      old.attemptGeneration + 1 !== attempt.attemptGeneration ||
+      observation?.proof.mode !== 'STOPPED'
+    ) {
+      throw new Error('Previous work proof is unavailable');
+    }
+    observation.assertCurrent();
+  }
+  begin(attempt: InitialAttempt, source: ProviderSource, resolvedPreviousWork = false): void {
     this.forget(attempt.sessionId);
     const handle = this.runtime.getClient(attempt.sessionId);
     const facts = handle?.nativeSessionTracker?.getWorkObservation();
     if (
       !(handle && facts) ||
       facts.replaying ||
-      facts.coverageGeneration !== 0 ||
+      (facts.coverageGeneration !== 0 && !resolvedPreviousWork) ||
       facts.rootSessionId !== source.providerSessionId ||
       !isDeepStrictEqual(this.runtime.getRuntimeSource(attempt.sessionId), source)
     ) {
@@ -59,7 +77,31 @@ export class EventOwnedWork {
       handle,
       coverageGeneration: facts.coverageGeneration,
       pendingRevision: 0,
+      initialPromptRevision: handle.promptRevision,
     });
+  }
+  /** Explicit recovery may stop initial work, never a later active human prompt. */
+  stopGuard(attempt: InitialAttempt, source: ProviderSource): (() => void) | null {
+    const window = this.windows.get(attempt.sessionId);
+    const facts = window?.handle.nativeSessionTracker?.getWorkObservation();
+    if (!(window && facts && this.covered(window, attempt, source, facts))) {
+      return null;
+    }
+    const revision = window.handle.promptRevision;
+    // begin() precedes the initial prompt's start/end transitions. Later human
+    // prompts advance beyond those two revisions and may not be interrupted here.
+    if (revision > window.initialPromptRevision + 1 && !this.idle(window, facts, false)) {
+      return null;
+    }
+    const lastAllowedRevision = Math.max(revision, window.initialPromptRevision + 2);
+    return () => {
+      if (
+        this.windows.get(attempt.sessionId) !== window ||
+        window.handle.promptRevision > lastAllowedRevision
+      ) {
+        throw new Error('Initial work was replaced by another prompt');
+      }
+    };
   }
   private covered(window: Window, attempt: InitialAttempt, source: ProviderSource, facts: Facts) {
     return (

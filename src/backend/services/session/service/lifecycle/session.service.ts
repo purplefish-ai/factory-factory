@@ -344,7 +344,7 @@ export class SessionService {
     return {
       lifecycleGeneration: generation,
       createObservation: (source, assertRuntime) => {
-        this.ownedWork?.begin(permit.attempt, source);
+        this.ownedWork?.begin(permit.attempt, source, Boolean(permit.previousResolution));
         return authority.observation(permit, source, () => {
           assertRuntime();
           if (
