@@ -1074,7 +1074,8 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents remain
-unactivatable until monitoring, operator recovery and UI gates exist.
+unactivatable until operator recovery, lossless predelete result capture,
+retention, native capability validation and UI gates exist.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or
@@ -1090,18 +1091,21 @@ capacity are retained while cleanup is uncertain; persisted PIDs are never
 signalled. Git cleanup requires positive filesystem and canonical registration
 absence even when the legacy removal promise resolves.
 
-The targeted `interruptEventInitial` capability uses SHUTDOWN/TIMEOUT evidence
-without ordinary user-stop finalization or clearing queued human input. Initial
-dispatch cancellation shares the existing evidence deadlines and fences late
-observations; it does not close global authority. Already-started observation
-writes remain tracked for final session teardown. Setup cancellation joins
-actual Git operations and script cleanup directly, so uncancellable Git may
-outlive the setup deadline while retaining ownership. Durable reads and
-output/PID persistence use the existing bounded evidence drain; expiration
-closes the launch guard permanently. A late read cannot start physical work or a
-new write, and any already-started physical operation still drains directly. A
-settled UNKNOWN setup cleanup has no reusable process-control handle in the
-launcher; missing local state is never used as termination proof.
+The targeted `interruptEventInitial` capability records the requested lifecycle
+cause without ordinary user-stop finalization or clearing queued human input.
+Monitoring supplies the exact expected attempt and runtime source; replacement
+or unavailable source blocks the action, including after awaited owner reads.
+Cleanup of a finished initial failure waits for ordinary follow-ups and known
+agent work to finish. Initial dispatch cancellation shares the existing evidence
+deadlines and fences late observations; it does not close global authority.
+Already-started observation writes remain tracked for final session teardown.
+Setup cancellation joins actual Git operations and script cleanup directly, so
+uncancellable Git may outlive the setup deadline while retaining ownership.
+Durable reads and output/PID persistence use the existing bounded evidence
+drain; expiration closes the launch guard permanently. A late read cannot start
+physical work or a new write, and any already-started physical operation still
+drains directly. A settled UNKNOWN setup cleanup has no reusable process-control
+handle in the launcher; missing local state is never used as termination proof.
 
 The send boundary persists SENDING after session serialization and provider
 configuration readiness. It then rechecks the captured runtime, lifecycle and
@@ -1119,6 +1123,31 @@ and delivery attempt. The original run initialMessageId remains unchanged when
 an authorized retry rotates the current delivery identity. Terminal outcome
 alone does not settle the run or release capacity; tracked agent work is a
 separate reconciliation concern. Later human results cannot overwrite it.
+
+Normal settlement requires the current initial runtime's live tracking window,
+established before its send, and zero in-flight prompts, interactive requests,
+active goals, native children and non-shell agent tasks. Shell/dev-server-only
+work does not retain capacity. Non-archived FF child workspaces conservatively
+retain capacity independently of native tracking. Missing tracking, replay,
+source replacement and restart without live coverage remain unknown; history
+inspection never starts a provider. A terminal failure/cancellation, unexpected
+exit, timeout or workspace removal also needs correlated strict runtime-stop
+evidence. The original four-hour turn deadline uses the durable send timestamp.
+
+The owner transaction persists the work proof and terminal result together,
+checking worker, send attempt and current source. Settlement linearizes at its
+final synchronous live-token validation after all awaited reads and mutations.
+Observed work/source/lifecycle changes before that check roll back the write.
+The database engine's asynchronous commit remains a gap: this is a contract for
+supported FF-tracked work, not universal containment of future native activity
+or remote effects. Tracker updates continue normally throughout persistence.
+
+Observed PR links are unioned into bounded run results while work remains held.
+Successful quiescent work becomes PR_CREATED when links exist; failed or
+cancelled initial work preserves its outcome and links. These sampled links
+survive workspace deletion. Lossless capture of attachments created and deleted
+between observations, explicit operator resolution/retry and ledger pruning
+remain activation prerequisites. Monitoring never auto-archives a workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. Adapter

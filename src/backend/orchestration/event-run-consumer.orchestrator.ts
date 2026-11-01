@@ -8,15 +8,18 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { eventSessionAuthority, withEventEvidenceDeadline } from '@/backend/services/session';
 import { launchEventRun } from './event-run-launch.orchestrator';
+import { observeEventRun } from './event-run-monitor.orchestrator';
 
 const logger = createLogger('event-run-consumer');
 type OwnedTask = {
   claim: EventLaunchClaim;
   controller: AbortController;
   task: Promise<void>;
+  maintenance: Promise<void>;
   leaseUntil: number;
   revoked: boolean;
   failed: boolean;
+  launched: boolean;
   physicalDone: Promise<void>;
   release(): void;
 };
@@ -26,7 +29,12 @@ export function createEventRunConsumer() {
   eventSessionAuthority.configure(agentInitialDelivery);
   const tasks = new Map<string, OwnedTask>();
   let closing = false;
-  const consumeClaim = (claim: EventLaunchClaim, signal: AbortSignal): Promise<void> => {
+  let observationCursor: string | undefined;
+  const consumeClaim = (
+    claim: EventLaunchClaim,
+    signal: AbortSignal,
+    observationOnly = false
+  ): Promise<void> => {
     const existing = tasks.get(claim.runId);
     if (existing) {
       if (existing.claim.workerGeneration !== claim.workerGeneration) {
@@ -48,11 +56,14 @@ export function createEventRunConsumer() {
       claim,
       controller,
       task: Promise.resolve(),
+      maintenance: Promise.resolve(),
       leaseUntil: 0,
       revoked: false,
       failed: false,
+      launched: false,
       physicalDone: Promise.resolve(),
       release: () => {
+        owned.revoked = true;
         tasks.delete(claim.runId);
         signal.removeEventListener('abort', abort);
       },
@@ -78,11 +89,13 @@ export function createEventRunConsumer() {
       .then(async () => {
         const current = await eventRunLaunch.read(claim);
         owned.leaseUntil = current.leaseExpiresAt?.getTime() ?? 0;
-        await launchEventRun(claim, controller.signal, assertOwned, physicalStage);
+        if (!observationOnly) {
+          await launchEventRun(claim, controller.signal, assertOwned, physicalStage);
+        }
       })
       .then(
         () => {
-          owned.release();
+          owned.launched = true;
         },
         (error: unknown) => {
           // Failed persistence keeps the committed claim tracked; maintenance/shutdown retries disposition.
@@ -99,31 +112,97 @@ export function createEventRunConsumer() {
     return Promise.resolve();
   };
   const maintainOwned = async (owned: OwnedTask) => {
-    try {
-      owned.leaseUntil = (await eventRunLaunch.renew(owned.claim)).getTime();
-      if (owned.failed && !closing) {
-        await eventRunLaunch.dispose(owned.claim, {
-          kind: 'FAILED',
-          cleanup: 'UNKNOWN',
-          category: 'UNKNOWN',
-        });
-        owned.release();
+    const check = () => {
+      if (owned.revoked) {
+        throw new Error('Event maintenance observation closed');
       }
+    };
+    const operation = async () => {
+      check();
+      owned.leaseUntil = (await eventRunLaunch.renew(owned.claim, check)).getTime();
+      check();
+      if (owned.failed && !closing) {
+        await eventRunLaunch.dispose(
+          owned.claim,
+          {
+            kind: 'FAILED',
+            cleanup: 'UNKNOWN',
+            category: 'UNKNOWN',
+          },
+          check
+        );
+        check();
+        owned.release();
+      } else if (!closing) {
+        const result = await observeEventRun(owned.claim, () => {
+          check();
+          if (Date.now() >= owned.leaseUntil) {
+            throw new Error('Event observation lease expired');
+          }
+        });
+        if (result === 'SETTLED') {
+          owned.release();
+        }
+      }
+    };
+    owned.maintenance = operation();
+    try {
+      await withEventEvidenceDeadline(owned.maintenance, () => {
+        owned.revoked = true;
+      });
     } catch {
       owned.revoked = true;
       owned.controller.abort();
-      if (owned.failed) {
+      if (owned.failed || owned.launched) {
         owned.release();
       }
+    }
+  };
+  const adoptObservation = async (claim: EventLaunchClaim, signal: AbortSignal) => {
+    let open = true;
+    const check = () => {
+      if (!open || closing || signal.aborted) {
+        throw new Error('Event observation adoption closed');
+      }
+    };
+    try {
+      const adopted = await withEventEvidenceDeadline(eventRunLaunch.adopt(claim, check), () => {
+        open = false;
+      });
+      check();
+      await consumeClaim(adopted.claim, signal, true);
+    } catch {
+      logger.warn('Event observation adoption requires recovery', { runId: claim.runId });
+    }
+  };
+  const canObserve = (run: Awaited<ReturnType<typeof eventRunLaunch.read>>) =>
+    !tasks.has(run.claim.runId) &&
+    tasks.size < configService.getAgentRuntimeLimits().activeGlobal &&
+    (!run.leaseExpiresAt || run.leaseExpiresAt.getTime() <= Date.now()) &&
+    (run.delivery.state !== 'PENDING' || run.phase === 'NEEDS_ATTENTION');
+  const adoptObservers = async (signal: AbortSignal) => {
+    const page = await withEventEvidenceDeadline(eventRunLaunch.list(observationCursor)).catch(
+      () => null
+    );
+    if (!page) {
+      return;
+    }
+    observationCursor = page.nextCursor ?? undefined;
+    for (const run of page.runs) {
+      if (closing || signal.aborted) {
+        return;
+      }
+      if (!canObserve(run)) {
+        continue;
+      }
+      await adoptObservation(run.claim, signal);
     }
   };
   return {
     consumeClaim,
     canClaim: () => !closing && tasks.size < configService.getAgentRuntimeLimits().activeGlobal,
     async maintain(signal: AbortSignal) {
-      for (const owned of tasks.values()) {
-        await maintainOwned(owned);
-      }
+      await Promise.all([...tasks.values()].map(maintainOwned));
       if (closing || signal.aborted) {
         return;
       }
@@ -136,9 +215,15 @@ export function createEventRunConsumer() {
       for (const run of recovered) {
         await consumeClaim(run.claim, signal);
       }
+      if (closing || signal.aborted) {
+        return;
+      }
+      await adoptObservers(signal);
     },
     async drain() {
-      await Promise.all([...tasks.values()].map((owned) => owned.task));
+      await Promise.allSettled(
+        [...tasks.values()].flatMap((owned) => [owned.task, owned.maintenance])
+      );
     },
     closeAdmission() {
       closing = true;
@@ -151,7 +236,7 @@ export function createEventRunConsumer() {
       await Promise.all(
         [...tasks.values()].map(async (owned) => {
           // Include failed-claim persistence in the same tracked lifetime, independently per claim.
-          owned.task = owned.task
+          owned.task = Promise.allSettled([owned.task, owned.maintenance])
             .then(async () => {
               if (!owned.failed || owned.revoked) {
                 return;

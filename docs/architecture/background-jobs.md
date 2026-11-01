@@ -107,13 +107,23 @@ aborts and joins owned setup, and interrupts initial provider work before
 session and database teardown. Session teardown retains the final observation
 drain. Application disposal also drains sessions before account dependencies.
 
+That same launch-maintenance owner observes initial outcomes and tracked work,
+retaining leases after the initial response until settlement. Expired
+observation ownership can be adopted without a send or retry-budget charge. Its
+bounded pages report malformed rows separately and advance by the last inspected
+row, so bad data cannot hide later valid work. Missing live work coverage
+retains capacity after restart. Already-started failed dispositions and
+monitoring operations share the existing evidence deadline; expiry closes their
+guard so late continuations cannot start another write. Physical setup/stop
+ownership still drains through its original owner.
+
 Provisioning retries retain RUNNING capacity, frozen snapshots, identities and
 account; they never return to the authoring-sensitive QUEUED state. Retry-After
 extends the remaining shared retry delay. Only typed transient failures retry.
 The original fifteen-minute setup deadline is retained across safe retries.
-Unknown cleanup keeps capacity and forbids retry. Public activation and ongoing
-run settlement remain separate prerequisites; saved agents cannot yet be
-enabled.
+Unknown cleanup keeps capacity and forbids retry. Explicit operator recovery,
+predelete result capture, retention and activation capability/UI validation
+remain prerequisites; saved agents cannot yet be enabled.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule

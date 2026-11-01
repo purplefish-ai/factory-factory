@@ -171,6 +171,9 @@ export class AcpRuntimeSupervisor {
   ): Promise<RuntimeStopEvidence> {
     return this.observedStop.stopAndQuiesceObserved(sessionId, cause, expected);
   }
+  getRuntimeStopSource(sessionId: string): ProviderSource | null {
+    return this.observedStop.getSource(sessionId);
+  }
 
   async getOrCreateClient(
     sessionId: string,

@@ -51,3 +51,4 @@ export {
 } from './service/agent-execution-binding.service';
 export { agentInitialDelivery } from './service/agent-initial-delivery.service';
 export { eventRunLaunch } from './service/agent-launch.service';
+export { AgentRunMonitorService } from './service/agent-run-monitor.service';
