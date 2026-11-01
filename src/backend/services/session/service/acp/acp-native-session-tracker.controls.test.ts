@@ -219,5 +219,10 @@ it('retains cancel on omitted patch fields but withdraws an explicitly replaced 
       sessionId: 'child',
       capabilities: { cancel: {} },
     });
+    expect(tracker.list({ limit: 20 }).subagents[0]?.stopControl).toBeDefined();
+    expect(tracker.resolveStopTarget(childTarget(tracker))).toEqual({
+      kind: 'subagent',
+      sessionId: 'child',
+    });
   }
 });
