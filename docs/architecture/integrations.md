@@ -308,16 +308,51 @@ history but retains its workspaces. Deleting a workspace clears its run link
 without deleting run history. Editing definitions or triggers does not rewrite
 stored snapshots; future run writers must keep them immutable.
 
-This foundation does not implement OAuth installation flows, event reception,
-classification, event evaluation history, launch dispatch, retries, or schedule
-admission. The execution pipeline will need a durable event/evaluation ledger
-before provider events can be acknowledged and replayed safely. Logical
-export/import does not yet include these tables; use a database-file backup if
-testing them directly.
+The agent-definition capsule also owns the durable event runtime foundation:
+`AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
+Its barrel exports `ingestEvent`, `finalizeEventOrder`, `recordEvaluation`,
+`admitRun` and `claimNextRun`. These are persistence primitives; no listener,
+activation API, launch worker or automatic execution starts from them.
 
-Runs currently retain status and workspace linkage, not separate PR/result
-metadata. When implementing execution/history, decide which results must survive
-workspace deletion rather than relying exclusively on workspace-owned PR rows.
+Events use the immutable `(connectionId, providerEventId)` identity and bounded,
+versioned GitHub/Slack payload schemas. Evaluations retain their definition and
+trigger revisions, activation generation, decision and validated snapshots.
+Admission checks current ownership, revisions, readiness and provider boundaries
+in a serialized transaction. One definition/event produces one run; the first
+matching trigger in stable ID order owns its context, and an earlier unresolved
+or errored evaluation blocks later admission. Claiming a run reserves capacity
+and fences subsequent worker writes with a generation. Provisioning and
+uncertain running deliveries continue to occupy capacity.
+
+GitHub `sourceOrder` is a canonical connection ordinal established from provider
+API order after a complete fixed-head interval is captured. It is never arrival
+order or a numeric provider ID comparison. Newly captured events remain
+unfinalized until then. Finalization accepts oldest-first chunks of at most
+1,000 new events, rejects mixed finalized/unfinalized chunks, and supports
+idempotent retries of a wholly finalized chunk. The source state's
+`lastSourceOrder` survives event pruning. Activation must finalize all events
+older than its provider head before recording that boundary's ordinal. A head
+can be a PR or unsupported control event with no executable event row, including
+an ordinal of zero. Slack compares exact provider timestamp strings against
+verified per-channel boundaries.
+
+Defaults are one active run per definition, four globally, 100 waiting runs per
+definition and 24-hour waiting expiry. The first three limits are configurable
+through `AGENT_ACTIVE_PER_DEFINITION`, `AGENT_ACTIVE_GLOBAL` and
+`AGENT_WAITING_PER_DEFINITION`. Queue overflow and expiry produce durable
+reasons. Instruction/execution edits advance the definition revision, pause
+triggers and cancel unclaimed runs. Trigger edits do the same for that trigger;
+cosmetic name edits preserve activation. Work claimed before an edit keeps its
+frozen settings.
+
+The ledger records 30-day text/evaluation and 90-day identity retention
+boundaries. Automatic admission rejects events older than 30 days even if they
+are newly observed. Cleanup workers are a separate implementation step. Frozen
+run input and provider conversations have separate lifetimes, so ledger pruning
+does not erase all source text. Compact run results and PR links survive
+workspace and event deletion. Logical export/import still excludes the agent
+tables and credentials; the complete supported backup is the database file
+together with `encryption.key`.
 
 ### Conversational creation
 

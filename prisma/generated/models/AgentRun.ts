@@ -20,8 +20,28 @@ export type AgentRunModel = runtime.Types.Result.DefaultSelection<Prisma.$AgentR
 
 export type AggregateAgentRun = {
   _count: AgentRunCountAggregateOutputType | null
+  _avg: AgentRunAvgAggregateOutputType | null
+  _sum: AgentRunSumAggregateOutputType | null
   _min: AgentRunMinAggregateOutputType | null
   _max: AgentRunMaxAggregateOutputType | null
+}
+
+export type AgentRunAvgAggregateOutputType = {
+  definitionRevision: number | null
+  triggerRevision: number | null
+  activationGeneration: number | null
+  workerGeneration: number | null
+  attemptGeneration: number | null
+  attemptCount: number | null
+}
+
+export type AgentRunSumAggregateOutputType = {
+  definitionRevision: number | null
+  triggerRevision: number | null
+  activationGeneration: number | null
+  workerGeneration: number | null
+  attemptGeneration: number | null
+  attemptCount: number | null
 }
 
 export type AgentRunMinAggregateOutputType = {
@@ -30,6 +50,21 @@ export type AgentRunMinAggregateOutputType = {
   triggerId: string | null
   idempotencyKey: string | null
   status: $Enums.AgentRunStatus | null
+  eventId: string | null
+  definitionRevision: number | null
+  triggerRevision: number | null
+  activationGeneration: number | null
+  launchPhase: $Enums.AgentLaunchPhase | null
+  reservedWorkspaceId: string | null
+  reservedSessionId: string | null
+  initialMessageId: string | null
+  workerGeneration: number | null
+  attemptGeneration: number | null
+  attemptCount: number | null
+  nextAttemptAt: Date | null
+  leaseExpiresAt: Date | null
+  expiresAt: Date | null
+  reasonCode: string | null
   workspaceId: string | null
   errorMessage: string | null
   createdAt: Date | null
@@ -43,6 +78,21 @@ export type AgentRunMaxAggregateOutputType = {
   triggerId: string | null
   idempotencyKey: string | null
   status: $Enums.AgentRunStatus | null
+  eventId: string | null
+  definitionRevision: number | null
+  triggerRevision: number | null
+  activationGeneration: number | null
+  launchPhase: $Enums.AgentLaunchPhase | null
+  reservedWorkspaceId: string | null
+  reservedSessionId: string | null
+  initialMessageId: string | null
+  workerGeneration: number | null
+  attemptGeneration: number | null
+  attemptCount: number | null
+  nextAttemptAt: Date | null
+  leaseExpiresAt: Date | null
+  expiresAt: Date | null
+  reasonCode: string | null
   workspaceId: string | null
   errorMessage: string | null
   createdAt: Date | null
@@ -56,6 +106,22 @@ export type AgentRunCountAggregateOutputType = {
   triggerId: number
   idempotencyKey: number
   status: number
+  eventId: number
+  definitionRevision: number
+  triggerRevision: number
+  activationGeneration: number
+  launchPhase: number
+  reservedWorkspaceId: number
+  reservedSessionId: number
+  initialMessageId: number
+  workerGeneration: number
+  attemptGeneration: number
+  attemptCount: number
+  nextAttemptAt: number
+  leaseExpiresAt: number
+  expiresAt: number
+  reasonCode: number
+  result: number
   definitionSnapshot: number
   triggerSnapshot: number
   input: number
@@ -68,12 +134,45 @@ export type AgentRunCountAggregateOutputType = {
 }
 
 
+export type AgentRunAvgAggregateInputType = {
+  definitionRevision?: true
+  triggerRevision?: true
+  activationGeneration?: true
+  workerGeneration?: true
+  attemptGeneration?: true
+  attemptCount?: true
+}
+
+export type AgentRunSumAggregateInputType = {
+  definitionRevision?: true
+  triggerRevision?: true
+  activationGeneration?: true
+  workerGeneration?: true
+  attemptGeneration?: true
+  attemptCount?: true
+}
+
 export type AgentRunMinAggregateInputType = {
   id?: true
   agentDefinitionId?: true
   triggerId?: true
   idempotencyKey?: true
   status?: true
+  eventId?: true
+  definitionRevision?: true
+  triggerRevision?: true
+  activationGeneration?: true
+  launchPhase?: true
+  reservedWorkspaceId?: true
+  reservedSessionId?: true
+  initialMessageId?: true
+  workerGeneration?: true
+  attemptGeneration?: true
+  attemptCount?: true
+  nextAttemptAt?: true
+  leaseExpiresAt?: true
+  expiresAt?: true
+  reasonCode?: true
   workspaceId?: true
   errorMessage?: true
   createdAt?: true
@@ -87,6 +186,21 @@ export type AgentRunMaxAggregateInputType = {
   triggerId?: true
   idempotencyKey?: true
   status?: true
+  eventId?: true
+  definitionRevision?: true
+  triggerRevision?: true
+  activationGeneration?: true
+  launchPhase?: true
+  reservedWorkspaceId?: true
+  reservedSessionId?: true
+  initialMessageId?: true
+  workerGeneration?: true
+  attemptGeneration?: true
+  attemptCount?: true
+  nextAttemptAt?: true
+  leaseExpiresAt?: true
+  expiresAt?: true
+  reasonCode?: true
   workspaceId?: true
   errorMessage?: true
   createdAt?: true
@@ -100,6 +214,22 @@ export type AgentRunCountAggregateInputType = {
   triggerId?: true
   idempotencyKey?: true
   status?: true
+  eventId?: true
+  definitionRevision?: true
+  triggerRevision?: true
+  activationGeneration?: true
+  launchPhase?: true
+  reservedWorkspaceId?: true
+  reservedSessionId?: true
+  initialMessageId?: true
+  workerGeneration?: true
+  attemptGeneration?: true
+  attemptCount?: true
+  nextAttemptAt?: true
+  leaseExpiresAt?: true
+  expiresAt?: true
+  reasonCode?: true
+  result?: true
   definitionSnapshot?: true
   triggerSnapshot?: true
   input?: true
@@ -149,6 +279,18 @@ export type AgentRunAggregateArgs<ExtArgs extends runtime.Types.Extensions.Inter
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: AgentRunAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: AgentRunSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: AgentRunMinAggregateInputType
@@ -179,6 +321,8 @@ export type AgentRunGroupByArgs<ExtArgs extends runtime.Types.Extensions.Interna
   take?: number
   skip?: number
   _count?: AgentRunCountAggregateInputType | true
+  _avg?: AgentRunAvgAggregateInputType
+  _sum?: AgentRunSumAggregateInputType
   _min?: AgentRunMinAggregateInputType
   _max?: AgentRunMaxAggregateInputType
 }
@@ -189,6 +333,22 @@ export type AgentRunGroupByOutputType = {
   triggerId: string | null
   idempotencyKey: string
   status: $Enums.AgentRunStatus
+  eventId: string | null
+  definitionRevision: number
+  triggerRevision: number
+  activationGeneration: number
+  launchPhase: $Enums.AgentLaunchPhase
+  reservedWorkspaceId: string | null
+  reservedSessionId: string | null
+  initialMessageId: string | null
+  workerGeneration: number
+  attemptGeneration: number
+  attemptCount: number
+  nextAttemptAt: Date | null
+  leaseExpiresAt: Date | null
+  expiresAt: Date | null
+  reasonCode: string | null
+  result: runtime.JsonValue | null
   definitionSnapshot: runtime.JsonValue
   triggerSnapshot: runtime.JsonValue | null
   input: runtime.JsonValue
@@ -198,6 +358,8 @@ export type AgentRunGroupByOutputType = {
   startedAt: Date | null
   completedAt: Date | null
   _count: AgentRunCountAggregateOutputType | null
+  _avg: AgentRunAvgAggregateOutputType | null
+  _sum: AgentRunSumAggregateOutputType | null
   _min: AgentRunMinAggregateOutputType | null
   _max: AgentRunMaxAggregateOutputType | null
 }
@@ -226,6 +388,22 @@ export type AgentRunWhereInput = {
   triggerId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   idempotencyKey?: Prisma.StringFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  eventId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  definitionRevision?: Prisma.IntFilter<"AgentRun"> | number
+  triggerRevision?: Prisma.IntFilter<"AgentRun"> | number
+  activationGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFilter<"AgentRun"> | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  reservedSessionId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  initialMessageId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  workerGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptCount?: Prisma.IntFilter<"AgentRun"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  leaseExpiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  expiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  result?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -236,6 +414,9 @@ export type AgentRunWhereInput = {
   completedAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
   agentDefinition?: Prisma.XOR<Prisma.AgentDefinitionScalarRelationFilter, Prisma.AgentDefinitionWhereInput>
   trigger?: Prisma.XOR<Prisma.AgentTriggerNullableScalarRelationFilter, Prisma.AgentTriggerWhereInput> | null
+  event?: Prisma.XOR<Prisma.AgentEventNullableScalarRelationFilter, Prisma.AgentEventWhereInput> | null
+  evaluations?: Prisma.AgentEvaluationListRelationFilter
+  initialDelivery?: Prisma.XOR<Prisma.AgentInitialDeliveryNullableScalarRelationFilter, Prisma.AgentInitialDeliveryWhereInput> | null
   workspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
 }
 
@@ -245,6 +426,22 @@ export type AgentRunOrderByWithRelationInput = {
   triggerId?: Prisma.SortOrderInput | Prisma.SortOrder
   idempotencyKey?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  eventId?: Prisma.SortOrderInput | Prisma.SortOrder
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  launchPhase?: Prisma.SortOrder
+  reservedWorkspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
+  reservedSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
+  initialMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  leaseExpiresAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  expiresAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  reasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
+  result?: Prisma.SortOrderInput | Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -255,13 +452,21 @@ export type AgentRunOrderByWithRelationInput = {
   completedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   agentDefinition?: Prisma.AgentDefinitionOrderByWithRelationInput
   trigger?: Prisma.AgentTriggerOrderByWithRelationInput
+  event?: Prisma.AgentEventOrderByWithRelationInput
+  evaluations?: Prisma.AgentEvaluationOrderByRelationAggregateInput
+  initialDelivery?: Prisma.AgentInitialDeliveryOrderByWithRelationInput
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
 }
 
 export type AgentRunWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  reservedWorkspaceId?: string
+  reservedSessionId?: string
+  initialMessageId?: string
   workspaceId?: string
   agentDefinitionId_idempotencyKey?: Prisma.AgentRunAgentDefinitionIdIdempotencyKeyCompoundUniqueInput
+  agentDefinitionId_eventId?: Prisma.AgentRunAgentDefinitionIdEventIdCompoundUniqueInput
+  id_agentDefinitionId_eventId?: Prisma.AgentRunIdAgentDefinitionIdEventIdCompoundUniqueInput
   AND?: Prisma.AgentRunWhereInput | Prisma.AgentRunWhereInput[]
   OR?: Prisma.AgentRunWhereInput[]
   NOT?: Prisma.AgentRunWhereInput | Prisma.AgentRunWhereInput[]
@@ -269,6 +474,19 @@ export type AgentRunWhereUniqueInput = Prisma.AtLeast<{
   triggerId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   idempotencyKey?: Prisma.StringFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  eventId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  definitionRevision?: Prisma.IntFilter<"AgentRun"> | number
+  triggerRevision?: Prisma.IntFilter<"AgentRun"> | number
+  activationGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFilter<"AgentRun"> | $Enums.AgentLaunchPhase
+  workerGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptCount?: Prisma.IntFilter<"AgentRun"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  leaseExpiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  expiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  result?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -278,8 +496,11 @@ export type AgentRunWhereUniqueInput = Prisma.AtLeast<{
   completedAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
   agentDefinition?: Prisma.XOR<Prisma.AgentDefinitionScalarRelationFilter, Prisma.AgentDefinitionWhereInput>
   trigger?: Prisma.XOR<Prisma.AgentTriggerNullableScalarRelationFilter, Prisma.AgentTriggerWhereInput> | null
+  event?: Prisma.XOR<Prisma.AgentEventNullableScalarRelationFilter, Prisma.AgentEventWhereInput> | null
+  evaluations?: Prisma.AgentEvaluationListRelationFilter
+  initialDelivery?: Prisma.XOR<Prisma.AgentInitialDeliveryNullableScalarRelationFilter, Prisma.AgentInitialDeliveryWhereInput> | null
   workspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
-}, "id" | "workspaceId" | "agentDefinitionId_idempotencyKey">
+}, "id" | "reservedWorkspaceId" | "reservedSessionId" | "initialMessageId" | "workspaceId" | "agentDefinitionId_idempotencyKey" | "agentDefinitionId_eventId" | "id_agentDefinitionId_eventId">
 
 export type AgentRunOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -287,6 +508,22 @@ export type AgentRunOrderByWithAggregationInput = {
   triggerId?: Prisma.SortOrderInput | Prisma.SortOrder
   idempotencyKey?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  eventId?: Prisma.SortOrderInput | Prisma.SortOrder
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  launchPhase?: Prisma.SortOrder
+  reservedWorkspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
+  reservedSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
+  initialMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  leaseExpiresAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  expiresAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  reasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
+  result?: Prisma.SortOrderInput | Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -296,8 +533,10 @@ export type AgentRunOrderByWithAggregationInput = {
   startedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   completedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.AgentRunCountOrderByAggregateInput
+  _avg?: Prisma.AgentRunAvgOrderByAggregateInput
   _max?: Prisma.AgentRunMaxOrderByAggregateInput
   _min?: Prisma.AgentRunMinOrderByAggregateInput
+  _sum?: Prisma.AgentRunSumOrderByAggregateInput
 }
 
 export type AgentRunScalarWhereWithAggregatesInput = {
@@ -309,6 +548,22 @@ export type AgentRunScalarWhereWithAggregatesInput = {
   triggerId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   idempotencyKey?: Prisma.StringWithAggregatesFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusWithAggregatesFilter<"AgentRun"> | $Enums.AgentRunStatus
+  eventId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  definitionRevision?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  triggerRevision?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  activationGeneration?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseWithAggregatesFilter<"AgentRun"> | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  reservedSessionId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  initialMessageId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  workerGeneration?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  attemptGeneration?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  attemptCount?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentRun"> | Date | string | null
+  leaseExpiresAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentRun"> | Date | string | null
+  expiresAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentRun"> | Date | string | null
+  reasonCode?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  result?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonWithAggregatesFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
   input?: Prisma.JsonWithAggregatesFilter<"AgentRun">
@@ -323,6 +578,21 @@ export type AgentRunCreateInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -332,6 +602,9 @@ export type AgentRunCreateInput = {
   completedAt?: Date | string | null
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
   trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
   workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
 }
 
@@ -341,6 +614,22 @@ export type AgentRunUncheckedCreateInput = {
   triggerId?: string | null
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -349,12 +638,29 @@ export type AgentRunUncheckedCreateInput = {
   createdAt?: Date | string
   startedAt?: Date | string | null
   completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
 }
 
 export type AgentRunUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -364,6 +670,9 @@ export type AgentRunUpdateInput = {
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
   trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
   workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
 }
 
@@ -373,6 +682,22 @@ export type AgentRunUncheckedUpdateInput = {
   triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -381,6 +706,8 @@ export type AgentRunUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
 }
 
 export type AgentRunCreateManyInput = {
@@ -389,6 +716,22 @@ export type AgentRunCreateManyInput = {
   triggerId?: string | null
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -403,6 +746,21 @@ export type AgentRunUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -418,6 +776,22 @@ export type AgentRunUncheckedUpdateManyInput = {
   triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -448,12 +822,39 @@ export type AgentRunAgentDefinitionIdIdempotencyKeyCompoundUniqueInput = {
   idempotencyKey: string
 }
 
+export type AgentRunAgentDefinitionIdEventIdCompoundUniqueInput = {
+  agentDefinitionId: string
+  eventId: string
+}
+
+export type AgentRunIdAgentDefinitionIdEventIdCompoundUniqueInput = {
+  id: string
+  agentDefinitionId: string
+  eventId: string
+}
+
 export type AgentRunCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   agentDefinitionId?: Prisma.SortOrder
   triggerId?: Prisma.SortOrder
   idempotencyKey?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  eventId?: Prisma.SortOrder
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  launchPhase?: Prisma.SortOrder
+  reservedWorkspaceId?: Prisma.SortOrder
+  reservedSessionId?: Prisma.SortOrder
+  initialMessageId?: Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
+  leaseExpiresAt?: Prisma.SortOrder
+  expiresAt?: Prisma.SortOrder
+  reasonCode?: Prisma.SortOrder
+  result?: Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -464,12 +865,36 @@ export type AgentRunCountOrderByAggregateInput = {
   completedAt?: Prisma.SortOrder
 }
 
+export type AgentRunAvgOrderByAggregateInput = {
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+}
+
 export type AgentRunMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   agentDefinitionId?: Prisma.SortOrder
   triggerId?: Prisma.SortOrder
   idempotencyKey?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  eventId?: Prisma.SortOrder
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  launchPhase?: Prisma.SortOrder
+  reservedWorkspaceId?: Prisma.SortOrder
+  reservedSessionId?: Prisma.SortOrder
+  initialMessageId?: Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
+  leaseExpiresAt?: Prisma.SortOrder
+  expiresAt?: Prisma.SortOrder
+  reasonCode?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   errorMessage?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -483,11 +908,40 @@ export type AgentRunMinOrderByAggregateInput = {
   triggerId?: Prisma.SortOrder
   idempotencyKey?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  eventId?: Prisma.SortOrder
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  launchPhase?: Prisma.SortOrder
+  reservedWorkspaceId?: Prisma.SortOrder
+  reservedSessionId?: Prisma.SortOrder
+  initialMessageId?: Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+  nextAttemptAt?: Prisma.SortOrder
+  leaseExpiresAt?: Prisma.SortOrder
+  expiresAt?: Prisma.SortOrder
+  reasonCode?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   errorMessage?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
+}
+
+export type AgentRunSumOrderByAggregateInput = {
+  definitionRevision?: Prisma.SortOrder
+  triggerRevision?: Prisma.SortOrder
+  activationGeneration?: Prisma.SortOrder
+  workerGeneration?: Prisma.SortOrder
+  attemptGeneration?: Prisma.SortOrder
+  attemptCount?: Prisma.SortOrder
+}
+
+export type AgentRunScalarRelationFilter = {
+  is?: Prisma.AgentRunWhereInput
+  isNot?: Prisma.AgentRunWhereInput
 }
 
 export type AgentRunCreateNestedOneWithoutWorkspaceInput = {
@@ -610,10 +1064,101 @@ export type EnumAgentRunStatusFieldUpdateOperationsInput = {
   set?: $Enums.AgentRunStatus
 }
 
+export type EnumAgentLaunchPhaseFieldUpdateOperationsInput = {
+  set?: $Enums.AgentLaunchPhase
+}
+
+export type AgentRunCreateNestedManyWithoutEventInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput> | Prisma.AgentRunCreateWithoutEventInput[] | Prisma.AgentRunUncheckedCreateWithoutEventInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEventInput | Prisma.AgentRunCreateOrConnectWithoutEventInput[]
+  createMany?: Prisma.AgentRunCreateManyEventInputEnvelope
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+}
+
+export type AgentRunUncheckedCreateNestedManyWithoutEventInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput> | Prisma.AgentRunCreateWithoutEventInput[] | Prisma.AgentRunUncheckedCreateWithoutEventInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEventInput | Prisma.AgentRunCreateOrConnectWithoutEventInput[]
+  createMany?: Prisma.AgentRunCreateManyEventInputEnvelope
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+}
+
+export type AgentRunUpdateManyWithoutEventNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput> | Prisma.AgentRunCreateWithoutEventInput[] | Prisma.AgentRunUncheckedCreateWithoutEventInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEventInput | Prisma.AgentRunCreateOrConnectWithoutEventInput[]
+  upsert?: Prisma.AgentRunUpsertWithWhereUniqueWithoutEventInput | Prisma.AgentRunUpsertWithWhereUniqueWithoutEventInput[]
+  createMany?: Prisma.AgentRunCreateManyEventInputEnvelope
+  set?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  disconnect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  delete?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  update?: Prisma.AgentRunUpdateWithWhereUniqueWithoutEventInput | Prisma.AgentRunUpdateWithWhereUniqueWithoutEventInput[]
+  updateMany?: Prisma.AgentRunUpdateManyWithWhereWithoutEventInput | Prisma.AgentRunUpdateManyWithWhereWithoutEventInput[]
+  deleteMany?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
+}
+
+export type AgentRunUncheckedUpdateManyWithoutEventNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput> | Prisma.AgentRunCreateWithoutEventInput[] | Prisma.AgentRunUncheckedCreateWithoutEventInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEventInput | Prisma.AgentRunCreateOrConnectWithoutEventInput[]
+  upsert?: Prisma.AgentRunUpsertWithWhereUniqueWithoutEventInput | Prisma.AgentRunUpsertWithWhereUniqueWithoutEventInput[]
+  createMany?: Prisma.AgentRunCreateManyEventInputEnvelope
+  set?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  disconnect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  delete?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  update?: Prisma.AgentRunUpdateWithWhereUniqueWithoutEventInput | Prisma.AgentRunUpdateWithWhereUniqueWithoutEventInput[]
+  updateMany?: Prisma.AgentRunUpdateManyWithWhereWithoutEventInput | Prisma.AgentRunUpdateManyWithWhereWithoutEventInput[]
+  deleteMany?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
+}
+
+export type AgentRunCreateNestedOneWithoutEvaluationsInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEvaluationsInput, Prisma.AgentRunUncheckedCreateWithoutEvaluationsInput>
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEvaluationsInput
+  connect?: Prisma.AgentRunWhereUniqueInput
+}
+
+export type AgentRunUpdateOneWithoutEvaluationsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutEvaluationsInput, Prisma.AgentRunUncheckedCreateWithoutEvaluationsInput>
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutEvaluationsInput
+  upsert?: Prisma.AgentRunUpsertWithoutEvaluationsInput
+  disconnect?: Prisma.AgentRunWhereInput | boolean
+  delete?: Prisma.AgentRunWhereInput | boolean
+  connect?: Prisma.AgentRunWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentRunUpdateToOneWithWhereWithoutEvaluationsInput, Prisma.AgentRunUpdateWithoutEvaluationsInput>, Prisma.AgentRunUncheckedUpdateWithoutEvaluationsInput>
+}
+
+export type AgentRunCreateNestedOneWithoutInitialDeliveryInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedCreateWithoutInitialDeliveryInput>
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutInitialDeliveryInput
+  connect?: Prisma.AgentRunWhereUniqueInput
+}
+
+export type AgentRunUpdateOneRequiredWithoutInitialDeliveryNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedCreateWithoutInitialDeliveryInput>
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutInitialDeliveryInput
+  upsert?: Prisma.AgentRunUpsertWithoutInitialDeliveryInput
+  connect?: Prisma.AgentRunWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentRunUpdateToOneWithWhereWithoutInitialDeliveryInput, Prisma.AgentRunUpdateWithoutInitialDeliveryInput>, Prisma.AgentRunUncheckedUpdateWithoutInitialDeliveryInput>
+}
+
 export type AgentRunCreateWithoutWorkspaceInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -623,6 +1168,9 @@ export type AgentRunCreateWithoutWorkspaceInput = {
   completedAt?: Date | string | null
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
   trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
 }
 
 export type AgentRunUncheckedCreateWithoutWorkspaceInput = {
@@ -631,6 +1179,22 @@ export type AgentRunUncheckedCreateWithoutWorkspaceInput = {
   triggerId?: string | null
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -638,6 +1202,8 @@ export type AgentRunUncheckedCreateWithoutWorkspaceInput = {
   createdAt?: Date | string
   startedAt?: Date | string | null
   completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
 }
 
 export type AgentRunCreateOrConnectWithoutWorkspaceInput = {
@@ -660,6 +1226,21 @@ export type AgentRunUpdateWithoutWorkspaceInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -669,6 +1250,9 @@ export type AgentRunUpdateWithoutWorkspaceInput = {
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
   trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
 }
 
 export type AgentRunUncheckedUpdateWithoutWorkspaceInput = {
@@ -677,6 +1261,22 @@ export type AgentRunUncheckedUpdateWithoutWorkspaceInput = {
   triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -684,12 +1284,29 @@ export type AgentRunUncheckedUpdateWithoutWorkspaceInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
 }
 
 export type AgentRunCreateWithoutAgentDefinitionInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -698,6 +1315,9 @@ export type AgentRunCreateWithoutAgentDefinitionInput = {
   startedAt?: Date | string | null
   completedAt?: Date | string | null
   trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
   workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
 }
 
@@ -706,6 +1326,22 @@ export type AgentRunUncheckedCreateWithoutAgentDefinitionInput = {
   triggerId?: string | null
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -714,6 +1350,8 @@ export type AgentRunUncheckedCreateWithoutAgentDefinitionInput = {
   createdAt?: Date | string
   startedAt?: Date | string | null
   completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
 }
 
 export type AgentRunCreateOrConnectWithoutAgentDefinitionInput = {
@@ -750,6 +1388,22 @@ export type AgentRunScalarWhereInput = {
   triggerId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   idempotencyKey?: Prisma.StringFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  eventId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  definitionRevision?: Prisma.IntFilter<"AgentRun"> | number
+  triggerRevision?: Prisma.IntFilter<"AgentRun"> | number
+  activationGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFilter<"AgentRun"> | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  reservedSessionId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  initialMessageId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  workerGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptGeneration?: Prisma.IntFilter<"AgentRun"> | number
+  attemptCount?: Prisma.IntFilter<"AgentRun"> | number
+  nextAttemptAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  leaseExpiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  expiresAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  result?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -764,6 +1418,21 @@ export type AgentRunCreateWithoutTriggerInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -772,6 +1441,9 @@ export type AgentRunCreateWithoutTriggerInput = {
   startedAt?: Date | string | null
   completedAt?: Date | string | null
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
   workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
 }
 
@@ -779,6 +1451,22 @@ export type AgentRunUncheckedCreateWithoutTriggerInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -787,6 +1475,8 @@ export type AgentRunUncheckedCreateWithoutTriggerInput = {
   createdAt?: Date | string
   startedAt?: Date | string | null
   completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
 }
 
 export type AgentRunCreateOrConnectWithoutTriggerInput = {
@@ -814,11 +1504,414 @@ export type AgentRunUpdateManyWithWhereWithoutTriggerInput = {
   data: Prisma.XOR<Prisma.AgentRunUpdateManyMutationInput, Prisma.AgentRunUncheckedUpdateManyWithoutTriggerInput>
 }
 
+export type AgentRunCreateWithoutEventInput = {
+  id?: string
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
+  trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
+  workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
+}
+
+export type AgentRunUncheckedCreateWithoutEventInput = {
+  id?: string
+  agentDefinitionId: string
+  triggerId?: string | null
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: string | null
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
+}
+
+export type AgentRunCreateOrConnectWithoutEventInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput>
+}
+
+export type AgentRunCreateManyEventInputEnvelope = {
+  data: Prisma.AgentRunCreateManyEventInput | Prisma.AgentRunCreateManyEventInput[]
+}
+
+export type AgentRunUpsertWithWhereUniqueWithoutEventInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  update: Prisma.XOR<Prisma.AgentRunUpdateWithoutEventInput, Prisma.AgentRunUncheckedUpdateWithoutEventInput>
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutEventInput, Prisma.AgentRunUncheckedCreateWithoutEventInput>
+}
+
+export type AgentRunUpdateWithWhereUniqueWithoutEventInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateWithoutEventInput, Prisma.AgentRunUncheckedUpdateWithoutEventInput>
+}
+
+export type AgentRunUpdateManyWithWhereWithoutEventInput = {
+  where: Prisma.AgentRunScalarWhereInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateManyMutationInput, Prisma.AgentRunUncheckedUpdateManyWithoutEventInput>
+}
+
+export type AgentRunCreateWithoutEvaluationsInput = {
+  id?: string
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
+  trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  initialDelivery?: Prisma.AgentInitialDeliveryCreateNestedOneWithoutRunInput
+  workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
+}
+
+export type AgentRunUncheckedCreateWithoutEvaluationsInput = {
+  id?: string
+  agentDefinitionId: string
+  triggerId?: string | null
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: string | null
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedCreateNestedOneWithoutRunInput
+}
+
+export type AgentRunCreateOrConnectWithoutEvaluationsInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutEvaluationsInput, Prisma.AgentRunUncheckedCreateWithoutEvaluationsInput>
+}
+
+export type AgentRunUpsertWithoutEvaluationsInput = {
+  update: Prisma.XOR<Prisma.AgentRunUpdateWithoutEvaluationsInput, Prisma.AgentRunUncheckedUpdateWithoutEvaluationsInput>
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutEvaluationsInput, Prisma.AgentRunUncheckedCreateWithoutEvaluationsInput>
+  where?: Prisma.AgentRunWhereInput
+}
+
+export type AgentRunUpdateToOneWithWhereWithoutEvaluationsInput = {
+  where?: Prisma.AgentRunWhereInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateWithoutEvaluationsInput, Prisma.AgentRunUncheckedUpdateWithoutEvaluationsInput>
+}
+
+export type AgentRunUpdateWithoutEvaluationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
+  trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateWithoutEvaluationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  agentDefinitionId?: Prisma.StringFieldUpdateOperationsInput | string
+  triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
+}
+
+export type AgentRunCreateWithoutInitialDeliveryInput = {
+  id?: string
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutRunsInput
+  trigger?: Prisma.AgentTriggerCreateNestedOneWithoutRunsInput
+  event?: Prisma.AgentEventCreateNestedOneWithoutRunsInput
+  evaluations?: Prisma.AgentEvaluationCreateNestedManyWithoutRunInput
+  workspace?: Prisma.WorkspaceCreateNestedOneWithoutAgentRunInput
+}
+
+export type AgentRunUncheckedCreateWithoutInitialDeliveryInput = {
+  id?: string
+  agentDefinitionId: string
+  triggerId?: string | null
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: string | null
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutRunInput
+}
+
+export type AgentRunCreateOrConnectWithoutInitialDeliveryInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedCreateWithoutInitialDeliveryInput>
+}
+
+export type AgentRunUpsertWithoutInitialDeliveryInput = {
+  update: Prisma.XOR<Prisma.AgentRunUpdateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedUpdateWithoutInitialDeliveryInput>
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedCreateWithoutInitialDeliveryInput>
+  where?: Prisma.AgentRunWhereInput
+}
+
+export type AgentRunUpdateToOneWithWhereWithoutInitialDeliveryInput = {
+  where?: Prisma.AgentRunWhereInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateWithoutInitialDeliveryInput, Prisma.AgentRunUncheckedUpdateWithoutInitialDeliveryInput>
+}
+
+export type AgentRunUpdateWithoutInitialDeliveryInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
+  trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateWithoutInitialDeliveryInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  agentDefinitionId?: Prisma.StringFieldUpdateOperationsInput | string
+  triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+}
+
 export type AgentRunCreateManyAgentDefinitionInput = {
   id?: string
   triggerId?: string | null
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -833,6 +1926,21 @@ export type AgentRunUpdateWithoutAgentDefinitionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -841,6 +1949,9 @@ export type AgentRunUpdateWithoutAgentDefinitionInput = {
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
   workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
 }
 
@@ -849,6 +1960,22 @@ export type AgentRunUncheckedUpdateWithoutAgentDefinitionInput = {
   triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -857,6 +1984,8 @@ export type AgentRunUncheckedUpdateWithoutAgentDefinitionInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
 }
 
 export type AgentRunUncheckedUpdateManyWithoutAgentDefinitionInput = {
@@ -864,6 +1993,22 @@ export type AgentRunUncheckedUpdateManyWithoutAgentDefinitionInput = {
   triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -878,6 +2023,22 @@ export type AgentRunCreateManyTriggerInput = {
   id?: string
   idempotencyKey: string
   status?: $Enums.AgentRunStatus
+  eventId?: string | null
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -892,6 +2053,21 @@ export type AgentRunUpdateWithoutTriggerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -900,6 +2076,9 @@ export type AgentRunUpdateWithoutTriggerInput = {
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
+  event?: Prisma.AgentEventUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
   workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
 }
 
@@ -907,6 +2086,22 @@ export type AgentRunUncheckedUpdateWithoutTriggerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -915,12 +2110,30 @@ export type AgentRunUncheckedUpdateWithoutTriggerInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
 }
 
 export type AgentRunUncheckedUpdateManyWithoutTriggerInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  eventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -931,6 +2144,163 @@ export type AgentRunUncheckedUpdateManyWithoutTriggerInput = {
   completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
+export type AgentRunCreateManyEventInput = {
+  id?: string
+  agentDefinitionId: string
+  triggerId?: string | null
+  idempotencyKey: string
+  status?: $Enums.AgentRunStatus
+  definitionRevision?: number
+  triggerRevision?: number
+  activationGeneration?: number
+  launchPhase?: $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: string | null
+  reservedSessionId?: string | null
+  initialMessageId?: string | null
+  workerGeneration?: number
+  attemptGeneration?: number
+  attemptCount?: number
+  nextAttemptAt?: Date | string | null
+  leaseExpiresAt?: Date | string | null
+  expiresAt?: Date | string | null
+  reasonCode?: string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: string | null
+  errorMessage?: string | null
+  createdAt?: Date | string
+  startedAt?: Date | string | null
+  completedAt?: Date | string | null
+}
+
+export type AgentRunUpdateWithoutEventInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutRunsNestedInput
+  trigger?: Prisma.AgentTriggerUpdateOneWithoutRunsNestedInput
+  evaluations?: Prisma.AgentEvaluationUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUpdateOneWithoutRunNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneWithoutAgentRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateWithoutEventInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  agentDefinitionId?: Prisma.StringFieldUpdateOperationsInput | string
+  triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutRunNestedInput
+  initialDelivery?: Prisma.AgentInitialDeliveryUncheckedUpdateOneWithoutRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateManyWithoutEventInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  agentDefinitionId?: Prisma.StringFieldUpdateOperationsInput | string
+  triggerId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  idempotencyKey?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  launchPhase?: Prisma.EnumAgentLaunchPhaseFieldUpdateOperationsInput | $Enums.AgentLaunchPhase
+  reservedWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  reservedSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initialMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workerGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptGeneration?: Prisma.IntFieldUpdateOperationsInput | number
+  attemptCount?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  leaseExpiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  expiresAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  startedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  completedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+}
+
+
+/**
+ * Count Type AgentRunCountOutputType
+ */
+
+export type AgentRunCountOutputType = {
+  evaluations: number
+}
+
+export type AgentRunCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  evaluations?: boolean | AgentRunCountOutputTypeCountEvaluationsArgs
+}
+
+/**
+ * AgentRunCountOutputType without action
+ */
+export type AgentRunCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentRunCountOutputType
+   */
+  select?: Prisma.AgentRunCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * AgentRunCountOutputType without action
+ */
+export type AgentRunCountOutputTypeCountEvaluationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AgentEvaluationWhereInput
+}
 
 
 export type AgentRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -939,6 +2309,22 @@ export type AgentRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   triggerId?: boolean
   idempotencyKey?: boolean
   status?: boolean
+  eventId?: boolean
+  definitionRevision?: boolean
+  triggerRevision?: boolean
+  activationGeneration?: boolean
+  launchPhase?: boolean
+  reservedWorkspaceId?: boolean
+  reservedSessionId?: boolean
+  initialMessageId?: boolean
+  workerGeneration?: boolean
+  attemptGeneration?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
+  leaseExpiresAt?: boolean
+  expiresAt?: boolean
+  reasonCode?: boolean
+  result?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -949,7 +2335,11 @@ export type AgentRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   completedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
+  evaluations?: boolean | Prisma.AgentRun$evaluationsArgs<ExtArgs>
+  initialDelivery?: boolean | Prisma.AgentRun$initialDeliveryArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
+  _count?: boolean | Prisma.AgentRunCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
 
 export type AgentRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -958,6 +2348,22 @@ export type AgentRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exte
   triggerId?: boolean
   idempotencyKey?: boolean
   status?: boolean
+  eventId?: boolean
+  definitionRevision?: boolean
+  triggerRevision?: boolean
+  activationGeneration?: boolean
+  launchPhase?: boolean
+  reservedWorkspaceId?: boolean
+  reservedSessionId?: boolean
+  initialMessageId?: boolean
+  workerGeneration?: boolean
+  attemptGeneration?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
+  leaseExpiresAt?: boolean
+  expiresAt?: boolean
+  reasonCode?: boolean
+  result?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -968,6 +2374,7 @@ export type AgentRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exte
   completedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
 
@@ -977,6 +2384,22 @@ export type AgentRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exte
   triggerId?: boolean
   idempotencyKey?: boolean
   status?: boolean
+  eventId?: boolean
+  definitionRevision?: boolean
+  triggerRevision?: boolean
+  activationGeneration?: boolean
+  launchPhase?: boolean
+  reservedWorkspaceId?: boolean
+  reservedSessionId?: boolean
+  initialMessageId?: boolean
+  workerGeneration?: boolean
+  attemptGeneration?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
+  leaseExpiresAt?: boolean
+  expiresAt?: boolean
+  reasonCode?: boolean
+  result?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -987,6 +2410,7 @@ export type AgentRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exte
   completedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
 
@@ -996,6 +2420,22 @@ export type AgentRunSelectScalar = {
   triggerId?: boolean
   idempotencyKey?: boolean
   status?: boolean
+  eventId?: boolean
+  definitionRevision?: boolean
+  triggerRevision?: boolean
+  activationGeneration?: boolean
+  launchPhase?: boolean
+  reservedWorkspaceId?: boolean
+  reservedSessionId?: boolean
+  initialMessageId?: boolean
+  workerGeneration?: boolean
+  attemptGeneration?: boolean
+  attemptCount?: boolean
+  nextAttemptAt?: boolean
+  leaseExpiresAt?: boolean
+  expiresAt?: boolean
+  reasonCode?: boolean
+  result?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -1006,20 +2446,26 @@ export type AgentRunSelectScalar = {
   completedAt?: boolean
 }
 
-export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "triggerId" | "idempotencyKey" | "status" | "definitionSnapshot" | "triggerSnapshot" | "input" | "workspaceId" | "errorMessage" | "createdAt" | "startedAt" | "completedAt", ExtArgs["result"]["agentRun"]>
+export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "triggerId" | "idempotencyKey" | "status" | "eventId" | "definitionRevision" | "triggerRevision" | "activationGeneration" | "launchPhase" | "reservedWorkspaceId" | "reservedSessionId" | "initialMessageId" | "workerGeneration" | "attemptGeneration" | "attemptCount" | "nextAttemptAt" | "leaseExpiresAt" | "expiresAt" | "reasonCode" | "result" | "definitionSnapshot" | "triggerSnapshot" | "input" | "workspaceId" | "errorMessage" | "createdAt" | "startedAt" | "completedAt", ExtArgs["result"]["agentRun"]>
 export type AgentRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
+  evaluations?: boolean | Prisma.AgentRun$evaluationsArgs<ExtArgs>
+  initialDelivery?: boolean | Prisma.AgentRun$initialDeliveryArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
+  _count?: boolean | Prisma.AgentRunCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AgentRunIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
 }
 export type AgentRunIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
+  event?: boolean | Prisma.AgentRun$eventArgs<ExtArgs>
   workspace?: boolean | Prisma.AgentRun$workspaceArgs<ExtArgs>
 }
 
@@ -1028,6 +2474,9 @@ export type $AgentRunPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
   objects: {
     agentDefinition: Prisma.$AgentDefinitionPayload<ExtArgs>
     trigger: Prisma.$AgentTriggerPayload<ExtArgs> | null
+    event: Prisma.$AgentEventPayload<ExtArgs> | null
+    evaluations: Prisma.$AgentEvaluationPayload<ExtArgs>[]
+    initialDelivery: Prisma.$AgentInitialDeliveryPayload<ExtArgs> | null
     workspace: Prisma.$WorkspacePayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -1036,6 +2485,22 @@ export type $AgentRunPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     triggerId: string | null
     idempotencyKey: string
     status: $Enums.AgentRunStatus
+    eventId: string | null
+    definitionRevision: number
+    triggerRevision: number
+    activationGeneration: number
+    launchPhase: $Enums.AgentLaunchPhase
+    reservedWorkspaceId: string | null
+    reservedSessionId: string | null
+    initialMessageId: string | null
+    workerGeneration: number
+    attemptGeneration: number
+    attemptCount: number
+    nextAttemptAt: Date | null
+    leaseExpiresAt: Date | null
+    expiresAt: Date | null
+    reasonCode: string | null
+    result: runtime.JsonValue | null
     definitionSnapshot: runtime.JsonValue
     triggerSnapshot: runtime.JsonValue | null
     input: runtime.JsonValue
@@ -1440,6 +2905,9 @@ export interface Prisma__AgentRunClient<T, Null = never, ExtArgs extends runtime
   readonly [Symbol.toStringTag]: "PrismaPromise"
   agentDefinition<T extends Prisma.AgentDefinitionDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentDefinitionDefaultArgs<ExtArgs>>): Prisma.Prisma__AgentDefinitionClient<runtime.Types.Result.GetResult<Prisma.$AgentDefinitionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   trigger<T extends Prisma.AgentRun$triggerArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$triggerArgs<ExtArgs>>): Prisma.Prisma__AgentTriggerClient<runtime.Types.Result.GetResult<Prisma.$AgentTriggerPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  event<T extends Prisma.AgentRun$eventArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$eventArgs<ExtArgs>>): Prisma.Prisma__AgentEventClient<runtime.Types.Result.GetResult<Prisma.$AgentEventPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  evaluations<T extends Prisma.AgentRun$evaluationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$evaluationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentEvaluationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  initialDelivery<T extends Prisma.AgentRun$initialDeliveryArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$initialDeliveryArgs<ExtArgs>>): Prisma.Prisma__AgentInitialDeliveryClient<runtime.Types.Result.GetResult<Prisma.$AgentInitialDeliveryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   workspace<T extends Prisma.AgentRun$workspaceArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$workspaceArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -1475,6 +2943,22 @@ export interface AgentRunFieldRefs {
   readonly triggerId: Prisma.FieldRef<"AgentRun", 'String'>
   readonly idempotencyKey: Prisma.FieldRef<"AgentRun", 'String'>
   readonly status: Prisma.FieldRef<"AgentRun", 'AgentRunStatus'>
+  readonly eventId: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly definitionRevision: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly triggerRevision: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly activationGeneration: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly launchPhase: Prisma.FieldRef<"AgentRun", 'AgentLaunchPhase'>
+  readonly reservedWorkspaceId: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly reservedSessionId: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly initialMessageId: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly workerGeneration: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly attemptGeneration: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly attemptCount: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly nextAttemptAt: Prisma.FieldRef<"AgentRun", 'DateTime'>
+  readonly leaseExpiresAt: Prisma.FieldRef<"AgentRun", 'DateTime'>
+  readonly expiresAt: Prisma.FieldRef<"AgentRun", 'DateTime'>
+  readonly reasonCode: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly result: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly definitionSnapshot: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly triggerSnapshot: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly input: Prisma.FieldRef<"AgentRun", 'Json'>
@@ -1898,6 +3382,68 @@ export type AgentRun$triggerArgs<ExtArgs extends runtime.Types.Extensions.Intern
    */
   include?: Prisma.AgentTriggerInclude<ExtArgs> | null
   where?: Prisma.AgentTriggerWhereInput
+}
+
+/**
+ * AgentRun.event
+ */
+export type AgentRun$eventArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentEvent
+   */
+  select?: Prisma.AgentEventSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentEvent
+   */
+  omit?: Prisma.AgentEventOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentEventInclude<ExtArgs> | null
+  where?: Prisma.AgentEventWhereInput
+}
+
+/**
+ * AgentRun.evaluations
+ */
+export type AgentRun$evaluationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentEvaluation
+   */
+  select?: Prisma.AgentEvaluationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentEvaluation
+   */
+  omit?: Prisma.AgentEvaluationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentEvaluationInclude<ExtArgs> | null
+  where?: Prisma.AgentEvaluationWhereInput
+  orderBy?: Prisma.AgentEvaluationOrderByWithRelationInput | Prisma.AgentEvaluationOrderByWithRelationInput[]
+  cursor?: Prisma.AgentEvaluationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AgentEvaluationScalarFieldEnum | Prisma.AgentEvaluationScalarFieldEnum[]
+}
+
+/**
+ * AgentRun.initialDelivery
+ */
+export type AgentRun$initialDeliveryArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentInitialDelivery
+   */
+  select?: Prisma.AgentInitialDeliverySelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentInitialDelivery
+   */
+  omit?: Prisma.AgentInitialDeliveryOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentInitialDeliveryInclude<ExtArgs> | null
+  where?: Prisma.AgentInitialDeliveryWhereInput
 }
 
 /**

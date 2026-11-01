@@ -14,6 +14,9 @@ const instructions = z.string().trim().min(1);
 export const agentConnectionProviderSchema = z.enum(AgentConnectionProvider);
 export const agentTriggerTypeSchema = z.enum(AgentTriggerType);
 export const agentRunStatusSchema = z.enum(AgentRunStatus);
+export const agentDefinitionRevisionSchema = z.number().int().positive().max(2_147_483_647);
+export const agentTriggerRevisionSchema = z.number().int().positive().max(2_147_483_647);
+export const agentActivationGenerationSchema = z.number().int().nonnegative().max(2_147_483_647);
 
 export const agentExecutionConfigSchema = z
   .strictObject({

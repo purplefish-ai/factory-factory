@@ -280,7 +280,7 @@ for (const operation of ['remove first', 'reorder']) {
     });
     expect(
       await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: slack.id } })
-    ).toMatchObject({ type: 'SLACK_MESSAGE', isEnabled: false });
+    ).toMatchObject({ type: 'SLACK_MESSAGE', isEnabled: operation === 'reorder' });
     expect(
       await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: schedule.id } })
     ).toMatchObject({ type: 'SCHEDULE' });

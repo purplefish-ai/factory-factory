@@ -336,11 +336,21 @@ function loadSystemConfig(): SystemConfig {
   return config;
 }
 
-/**
- * Configuration Service class
- */
+/** Event-agent limits are separate from the public application configuration shape. */
+function loadAgentRuntimeLimits() {
+  const env = ConfigEnvSchema.parse(process.env);
+  return {
+    activePerDefinition: env.AGENT_ACTIVE_PER_DEFINITION,
+    activeGlobal: env.AGENT_ACTIVE_GLOBAL,
+    waitingPerDefinition: env.AGENT_WAITING_PER_DEFINITION,
+    waitingExpiryMs: 24 * 60 * 60 * 1000,
+  };
+}
+
+/** Configuration Service class. */
 class ConfigService {
   private config: SystemConfig;
+  private agentRuntimeLimits = loadAgentRuntimeLimits();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -521,9 +531,12 @@ class ConfigService {
     return this.config.maxSessionsPerWorkspace;
   }
 
-  /**
-   * Get pull request discovery limits
-   */
+  /** Get event-agent concurrency and waiting limits. */
+  getAgentRuntimeLimits() {
+    return { ...this.agentRuntimeLimits };
+  }
+
+  /** Get pull request discovery limits. */
   getPRDiscoveryLimits(): PRDiscoveryLimits {
     return { ...this.config.prDiscovery };
   }
@@ -636,6 +649,7 @@ class ConfigService {
    */
   reload(): void {
     this.config = loadSystemConfig();
+    this.agentRuntimeLimits = loadAgentRuntimeLimits();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }

@@ -72,6 +72,10 @@ export const ModelName = {
   AgentConnection: 'AgentConnection',
   AgentTrigger: 'AgentTrigger',
   AgentRun: 'AgentRun',
+  AgentSourceState: 'AgentSourceState',
+  AgentEvent: 'AgentEvent',
+  AgentEvaluation: 'AgentEvaluation',
+  AgentInitialDelivery: 'AgentInitialDelivery',
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification'
@@ -394,6 +398,7 @@ export const AgentDefinitionScalarFieldEnum = {
   instructions: 'instructions',
   isEnabled: 'isEnabled',
   executionConfig: 'executionConfig',
+  definitionRevision: 'definitionRevision',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -438,6 +443,11 @@ export const AgentTriggerScalarFieldEnum = {
   config: 'config',
   filterInstructions: 'filterInstructions',
   isEnabled: 'isEnabled',
+  triggerRevision: 'triggerRevision',
+  activationGeneration: 'activationGeneration',
+  activationState: 'activationState',
+  activationBoundary: 'activationBoundary',
+  pendingActivation: 'pendingActivation',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -451,6 +461,22 @@ export const AgentRunScalarFieldEnum = {
   triggerId: 'triggerId',
   idempotencyKey: 'idempotencyKey',
   status: 'status',
+  eventId: 'eventId',
+  definitionRevision: 'definitionRevision',
+  triggerRevision: 'triggerRevision',
+  activationGeneration: 'activationGeneration',
+  launchPhase: 'launchPhase',
+  reservedWorkspaceId: 'reservedWorkspaceId',
+  reservedSessionId: 'reservedSessionId',
+  initialMessageId: 'initialMessageId',
+  workerGeneration: 'workerGeneration',
+  attemptGeneration: 'attemptGeneration',
+  attemptCount: 'attemptCount',
+  nextAttemptAt: 'nextAttemptAt',
+  leaseExpiresAt: 'leaseExpiresAt',
+  expiresAt: 'expiresAt',
+  reasonCode: 'reasonCode',
+  result: 'result',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',
@@ -462,6 +488,76 @@ export const AgentRunScalarFieldEnum = {
 } as const
 
 export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typeof AgentRunScalarFieldEnum]
+
+
+export const AgentSourceStateScalarFieldEnum = {
+  lastSourceOrder: 'lastSourceOrder',
+  connectionId: 'connectionId',
+  isReady: 'isReady',
+  cursor: 'cursor',
+  health: 'health',
+  lastObservedAt: 'lastObservedAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentSourceStateScalarFieldEnum = (typeof AgentSourceStateScalarFieldEnum)[keyof typeof AgentSourceStateScalarFieldEnum]
+
+
+export const AgentEventScalarFieldEnum = {
+  id: 'id',
+  connectionId: 'connectionId',
+  providerEventId: 'providerEventId',
+  sourceOrder: 'sourceOrder',
+  payload: 'payload',
+  occurredAt: 'occurredAt',
+  observedAt: 'observedAt',
+  payloadExpiresAt: 'payloadExpiresAt',
+  identityExpiresAt: 'identityExpiresAt',
+  createdAt: 'createdAt'
+} as const
+
+export type AgentEventScalarFieldEnum = (typeof AgentEventScalarFieldEnum)[keyof typeof AgentEventScalarFieldEnum]
+
+
+export const AgentEvaluationScalarFieldEnum = {
+  id: 'id',
+  eventId: 'eventId',
+  connectionId: 'connectionId',
+  agentDefinitionId: 'agentDefinitionId',
+  triggerId: 'triggerId',
+  definitionRevision: 'definitionRevision',
+  triggerRevision: 'triggerRevision',
+  activationGeneration: 'activationGeneration',
+  status: 'status',
+  reasonCode: 'reasonCode',
+  explanation: 'explanation',
+  configurationSnapshot: 'configurationSnapshot',
+  classifier: 'classifier',
+  runId: 'runId',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentEvaluationScalarFieldEnum = (typeof AgentEvaluationScalarFieldEnum)[keyof typeof AgentEvaluationScalarFieldEnum]
+
+
+export const AgentInitialDeliveryScalarFieldEnum = {
+  id: 'id',
+  runId: 'runId',
+  state: 'state',
+  attemptGeneration: 'attemptGeneration',
+  sendAttemptId: 'sendAttemptId',
+  messageId: 'messageId',
+  providerTurnId: 'providerTurnId',
+  sendingAt: 'sendingAt',
+  acceptedAt: 'acceptedAt',
+  finishedAt: 'finishedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type AgentInitialDeliveryScalarFieldEnum = (typeof AgentInitialDeliveryScalarFieldEnum)[keyof typeof AgentInitialDeliveryScalarFieldEnum]
 
 
 export const PeriodicTaskScalarFieldEnum = {
