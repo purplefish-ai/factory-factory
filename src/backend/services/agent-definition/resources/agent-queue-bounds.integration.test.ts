@@ -142,3 +142,27 @@ it('does not revive an overflowed definition/event through a later matching trig
   });
   expect(await db.prisma.agentRun.count({ where: { eventId } })).toBe(0);
 });
+
+it('claims a ready definition beyond a page of future-due FIFO heads', async () => {
+  await smallBatch();
+  const first = await queue('future-a');
+  const second = await otherDefinition('future-b');
+  const ready = await otherDefinition('ready-c');
+  const now = new Date();
+  await db.prisma.agentRun.updateMany({
+    where: { id: { in: [first, second] } },
+    data: { nextAttemptAt: new Date(now.getTime() + 60_000) },
+  });
+
+  expect(await runtime.claimNextRun(now)).toMatchObject({ status: 'CLAIMED', runId: ready });
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: first } })).toMatchObject({
+    status: 'QUEUED',
+  });
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: second } })).toMatchObject({
+    status: 'QUEUED',
+  });
+  expect(await runtime.claimNextRun(new Date(now.getTime() + 60_000))).toMatchObject({
+    status: 'CLAIMED',
+    runId: first,
+  });
+});

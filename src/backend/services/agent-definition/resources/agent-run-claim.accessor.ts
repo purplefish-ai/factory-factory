@@ -147,8 +147,8 @@ function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
     if (totalActive >= limits.activeGlobal) {
       return { status: 'DEFERRED', reason: 'CAPACITY' };
     }
-    // Exclude saturated definitions BEFORE taking the FIFO page, so a busy prefix
-    // cannot starve unrelated definitions. Transiently unreadable sources wait.
+    // Filter temporary eligibility BEFORE the bounded page so deferred heads
+    // cannot hide ready definitions. The FIFO check still sees every older run.
     const blocked = active
       .filter((row) => row._count >= limits.activePerDefinition)
       .map((row) => row.agentDefinitionId);
@@ -164,6 +164,8 @@ function claimNextRun(now = new Date()): Promise<AgentClaimResult> {
       WHERE r.status = 'QUEUED' AND r.eventId IS NOT NULL
         AND t.type != 'SCHEDULE' AND t.isEnabled = 1 AND t.activationState = 'ACTIVE'
         AND c.isEnabled = 1 AND s.isReady = 1 ${excluded}
+        AND (r.nextAttemptAt IS NULL OR r.nextAttemptAt <= ${now})
+        AND (r.expiresAt IS NULL OR r.expiresAt > ${now})
         AND NOT EXISTS (SELECT 1 FROM AgentRun older WHERE older.agentDefinitionId = r.agentDefinitionId
           AND older.status = 'QUEUED' AND older.eventId IS NOT NULL
           AND (older.createdAt < r.createdAt OR (older.createdAt = r.createdAt AND older.id < r.id)))
