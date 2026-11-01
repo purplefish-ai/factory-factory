@@ -217,8 +217,11 @@ export function useWebSocketTransport(
 
     // Close any existing WebSocket in a transitional state (CONNECTING, CLOSING)
     if (wsRef.current) {
-      wsRef.current.close();
+      const previous = wsRef.current;
       wsRef.current = null;
+      setConnected(false);
+      onDisconnectedRef.current?.();
+      previous.close();
     }
 
     // Clear any pending reconnect timeout

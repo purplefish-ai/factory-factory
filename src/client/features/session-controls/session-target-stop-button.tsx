@@ -15,9 +15,11 @@ import {
 export function SessionTargetStopButton({
   sessionId,
   target,
+  itemLabel,
 }: {
   sessionId: string;
   target: SessionStopTarget;
+  itemLabel: string;
 }) {
   const mutation = trpc.session.stopTarget.useMutation();
   const pending = useSyncExternalStore(
@@ -35,7 +37,7 @@ export function SessionTargetStopButton({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0 text-muted-foreground"
-            aria-label={label}
+            aria-label={`${label}: ${itemLabel}`}
             disabled={pending}
             onClick={() => {
               void requestSessionTargetStop(sessionId, target, () =>
@@ -44,7 +46,7 @@ export function SessionTargetStopButton({
             }}
           >
             {pending ? (
-              <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+              <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin" />
             ) : (
               <SquareIcon className="h-3 w-3" weight="fill" />
             )}

@@ -20,6 +20,9 @@ it('exposes a control session only while connected to an installed ready runtime
     getLiveSessionControlId('parent', true, { phase: 'idle', processState: 'stopped' })
   ).toBeUndefined();
   expect(
+    getLiveSessionControlId('parent', true, { phase: 'idle', processState: 'unknown' })
+  ).toBeUndefined();
+  expect(
     getLiveSessionControlId(null, true, { phase: 'idle', processState: 'alive' })
   ).toBeUndefined();
 });

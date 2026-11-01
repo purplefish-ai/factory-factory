@@ -83,7 +83,7 @@ export function TranscriptTail({
   queuedPRUpdate?: GroupedMessageItem;
 }) {
   const { work, running, loadingSession, initBanner } = props;
-  useReconcileSessionTargetStops(props.controlSessionId, 'task', work?.backgroundTasks ?? []);
+  useReconcileSessionTargetStops(props.controlSessionId, 'task', work?.backgroundTasks);
   const todoState = useTodoTracker(props.messages, props.acpPlan);
   const background = Boolean(
     work && (work.backgroundTasks.length || work.runningSubagents || work.activeGoals)

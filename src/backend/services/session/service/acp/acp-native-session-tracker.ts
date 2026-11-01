@@ -290,22 +290,9 @@ export class AcpNativeSessionTracker {
       return true;
     }
     switch (kind) {
-      case 'subagent_update': {
-        const child =
-          typeof update.sessionId === 'string'
-            ? this.children.get(this.childId(update.sessionId))
-            : undefined;
-        if (
-          child &&
-          child.parentSessionId === sessionId &&
-          child.activeSessionId === update.sessionId &&
-          child.summary.status === 'running'
-        ) {
-          this.setChildControl(child, update.capabilities);
-          this.changed(child.summary.id, 'updated');
-        }
+      case 'subagent_update':
+        this.updateChildCapabilities(sessionId, update);
         break;
-      }
       case 'subagent_spawned':
         this.spawn(sessionId, update);
         break;
@@ -466,15 +453,30 @@ export class AcpNativeSessionTracker {
     this.publishActivity();
   }
 
+  private updateChildCapabilities(parentSessionId: string, update: Record<string, unknown>): void {
+    const child =
+      typeof update.sessionId === 'string'
+        ? this.children.get(this.childId(update.sessionId))
+        : undefined;
+    if (
+      child &&
+      child.parentSessionId === parentSessionId &&
+      child.activeSessionId === update.sessionId &&
+      child.summary.status === 'running'
+    ) {
+      if (Object.hasOwn(update, 'capabilities')) {
+        this.setChildControl(child, update.capabilities);
+      }
+      this.changed(child.summary.id, 'updated');
+    }
+  }
+
   private setChildControl(child: ChildSession, capabilities: unknown): void {
     const capability = record(capabilities);
-    if (!(capability && Object.hasOwn(capability, 'cancel'))) {
-      return;
-    }
     this.stopControls.set(
       child.summary.id,
       { kind: 'subagent', sessionId: child.activeSessionId },
-      !this.replayingHistory && !!record(capability.cancel)
+      !this.replayingHistory && !!record(capability?.cancel)
     );
   }
 

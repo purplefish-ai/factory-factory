@@ -33,16 +33,17 @@ export function ProviderSubagentsSection({
     refetchOnMount: 'always',
     getNextPageParam: getNextSubagentPageParam,
   });
+  const error = getSubagentListError(query);
   const freshControlSessionId = useFreshSubagentControls({
     sessionId,
     controlSessionId,
     controlRuntimeId,
     refetch: query.refetch,
     dataUpdatedAt: query.dataUpdatedAt,
-    error: query.error,
+    error,
+    isFetching: query.isFetching,
   });
   const { fetchNextPage, hasNextPage, isFetching } = query;
-  const error = getSubagentListError(query);
   const pageCount = query.data?.pages.length;
   useEffect(() => {
     if (queryEnabled && pageCount && hasNextPage && !isFetching && !error) {

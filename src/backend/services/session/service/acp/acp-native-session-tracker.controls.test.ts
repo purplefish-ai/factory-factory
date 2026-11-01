@@ -63,10 +63,22 @@ describe('native targeted stop ownership', () => {
     expect(tracker.getBackgroundWork().backgroundTasks[0]?.stopControl).toBeUndefined();
     expect(tracker.list({ limit: 20 }).subagents[0]?.stopControl).toBeUndefined();
     tracker.beginHistoryReplay(true);
-    task(tracker);
+    send(tracker, 'root', {
+      sessionUpdate: 'async_task_spawned',
+      asyncTaskId: 'task',
+      taskType: 'shell',
+      canStop: true,
+    });
     child(tracker, 'historical', {});
     tracker.completeHistoryReplay();
+    expect(tracker.getBackgroundWork().backgroundTasks).toHaveLength(1);
     expect(tracker.getBackgroundWork().backgroundTasks[0]?.stopControl).toBeUndefined();
+    send(tracker, 'root', {
+      sessionUpdate: 'async_task_state_update',
+      asyncTaskId: 'task',
+      state: 'completed',
+    });
+    expect(tracker.getBackgroundWork().backgroundTasks).toHaveLength(0);
     expect(tracker.list({ limit: 20 }).subagents.every((item) => !item.stopControl)).toBe(true);
     expect(() =>
       tracker.resolveStopTarget({ kind: 'task', id: '["root","task"]', controlId: 'forged' })
@@ -188,4 +200,24 @@ it('publishes a matching runtime identity and changes it when the native session
   tracker.setRootSessionId('root');
   task(tracker);
   expect(tracker.getControlRuntimeId()).not.toBe(old.runtimeId);
+});
+
+it('retains cancel on omitted patch fields but withdraws an explicitly replaced capability set', () => {
+  const tracker = setup();
+  child(tracker, 'child', {});
+  child(tracker, 'sibling', {});
+  const original = childTarget(tracker);
+  send(tracker, 'root', { sessionUpdate: 'subagent_update', sessionId: 'child', title: 'Renamed' });
+  expect(tracker.resolveStopTarget(original)).toEqual({ kind: 'subagent', sessionId: 'child' });
+  for (const capabilities of [{}, null, { cancel: null }]) {
+    send(tracker, 'root', { sessionUpdate: 'subagent_update', sessionId: 'child', capabilities });
+    expect(tracker.list({ limit: 20 }).subagents[0]?.stopControl).toBeUndefined();
+    expect(() => tracker.resolveStopTarget(original)).toThrow();
+    expect(tracker.list({ limit: 20 }).subagents[1]?.stopControl).toBeDefined();
+    send(tracker, 'root', {
+      sessionUpdate: 'subagent_update',
+      sessionId: 'child',
+      capabilities: { cancel: {} },
+    });
+  }
 });

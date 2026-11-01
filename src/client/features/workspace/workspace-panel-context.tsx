@@ -87,7 +87,9 @@ const CHAT_TAB: MainViewTab = {
 const SubagentSelectionSchema = z.object({
   parentSessionId: z.string().min(1),
   parentSessionName: z.string(),
-  subagent: subagentSummarySchema,
+  subagent: subagentSummarySchema
+    .omit({ stopControl: true })
+    .transform(({ stopControl: _discardedControl, ...snapshot }) => snapshot),
 });
 
 const MainViewTabSchema = z
@@ -229,7 +231,10 @@ function saveTabsToStorage(workspaceId: string, tabs: MainViewTab[]): void {
     return;
   }
   try {
-    localStorage.setItem(`${STORAGE_KEY_TABS_PREFIX}${workspaceId}`, JSON.stringify(tabs));
+    localStorage.setItem(
+      `${STORAGE_KEY_TABS_PREFIX}${workspaceId}`,
+      JSON.stringify(MainViewTabsSchema.parse(tabs))
+    );
   } catch {
     // Ignore storage errors (quota, private browsing, etc.)
   }

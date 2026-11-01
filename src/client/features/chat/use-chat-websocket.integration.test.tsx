@@ -12,8 +12,10 @@ import {
   useChatWebSocket,
   type UseChatWebSocketReturn,
 } from '@/client/features/chat/use-chat-websocket';
+import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { createTrpcClient, trpc } from '@/client/lib/trpc';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { SessionActivityIndicator } from './session-activity-indicator';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, value: true });
 
@@ -117,27 +119,38 @@ function Harness({
   const chat = useChatWebSocket({ dbSessionId: sessionId });
   chatRef.current = chat;
   return (
-    <LeftControls
-      settings={chat.chatSettings}
-      capabilities={chat.chatCapabilities}
-      capabilitiesLoaded={chat.chatCapabilitiesLoaded}
-      acpConfigOptions={chat.acpConfigOptions}
-      onSetConfigOption={chat.setConfigOption}
-      onModelChange={(selectedModel) => chat.updateSettings({ selectedModel })}
-      onReasoningChange={() => undefined}
-      onThinkingChange={() => undefined}
-      onPlanModeChange={() => undefined}
-      running={false}
-      disabled={false}
-      modLabel="⌘"
-      modifierHeld={false}
-      fileInputRef={fileInputRef}
-      onFileSelect={() => undefined}
-      supportedImageTypes={[]}
-      onQuickAction={() => undefined}
-      quickActionsOpen={false}
-      onQuickActionsOpenChange={() => undefined}
-    />
+    <>
+      <SessionActivityIndicator
+        work={chat.sessionRuntime.work}
+        showThinking={false}
+        controlSessionId={getLiveSessionControlId(
+          chat.runtimeSessionId,
+          chat.connected && chat.controlsHydrated,
+          chat.sessionRuntime
+        )}
+      />
+      <LeftControls
+        settings={chat.chatSettings}
+        capabilities={chat.chatCapabilities}
+        capabilitiesLoaded={chat.chatCapabilitiesLoaded}
+        acpConfigOptions={chat.acpConfigOptions}
+        onSetConfigOption={chat.setConfigOption}
+        onModelChange={(selectedModel) => chat.updateSettings({ selectedModel })}
+        onReasoningChange={() => undefined}
+        onThinkingChange={() => undefined}
+        onPlanModeChange={() => undefined}
+        running={false}
+        disabled={false}
+        modLabel="⌘"
+        modifierHeld={false}
+        fileInputRef={fileInputRef}
+        onFileSelect={() => undefined}
+        supportedImageTypes={[]}
+        onQuickAction={() => undefined}
+        quickActionsOpen={false}
+        onQuickActionsOpenChange={() => undefined}
+      />
+    </>
   );
 }
 
@@ -187,6 +200,29 @@ async function mount(initialCapabilities = capabilities) {
           type: 'session_replay_batch',
           loadRequestId,
           replayEvents: [
+            {
+              type: 'session_runtime_snapshot',
+              sessionRuntime: {
+                phase: 'idle',
+                processState: 'alive',
+                activity: 'IDLE',
+                updatedAt: new Date().toISOString(),
+                work: {
+                  controlRuntimeId: 'live-runtime',
+                  promptInFlight: false,
+                  runningSubagents: 0,
+                  activeGoals: 0,
+                  backgroundTasks: [
+                    {
+                      id: 'live-task',
+                      name: 'Live process',
+                      kind: 'shell',
+                      stopControl: { controlId: 'live-control', runtimeId: 'live-runtime' },
+                    },
+                  ],
+                },
+              },
+            },
             { type: 'chat_capabilities', capabilities },
             { type: 'config_options_update', configOptions },
           ],
@@ -379,11 +415,43 @@ it('withholds targeted controls until accepted hydration on every connection', a
   expect(harness.chat.controlsHydrated).toBe(false);
   await harness.hydrate(harness.socket, [modelOption, reasoningOption]);
   expect(harness.chat.controlsHydrated).toBe(true);
+  await act(() =>
+    harness.container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
+  );
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).not.toBeNull();
   await act(() => harness.socket.close());
   expect(harness.chat.controlsHydrated).toBe(false);
   const next = await harness.reconnect();
   expect(harness.chat.connected).toBe(true);
   expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).toBeNull();
   await harness.hydrate(next, [modelOption, reasoningOption]);
   expect(harness.chat.controlsHydrated).toBe(true);
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).not.toBeNull();
+});
+
+it('withdraws hydrated controls while recovery replaces a closing socket before onclose fires', async () => {
+  const harness = await mount();
+  await harness.hydrate(harness.socket, [modelOption, reasoningOption]);
+  await act(() =>
+    harness.container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
+  );
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).not.toBeNull();
+  harness.socket.readyState = 2;
+  vi.spyOn(harness.socket, 'close').mockImplementation(() => {
+    harness.socket.readyState = 3;
+  });
+  await act(() => window.dispatchEvent(new Event('online')));
+  const next = BrowserSocket.sockets.at(-1)!;
+  expect(next).not.toBe(harness.socket);
+  expect(harness.chat.connected).toBe(false);
+  expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).toBeNull();
+  await act(() => next.open());
+  expect(harness.chat.connected).toBe(true);
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).toBeNull();
+  await act(() => harness.socket.onclose?.());
+  expect(harness.chat.connected).toBe(true);
+  await harness.hydrate(next, [modelOption, reasoningOption]);
+  expect(harness.container.querySelector('[aria-label^="Stop process"]')).not.toBeNull();
 });

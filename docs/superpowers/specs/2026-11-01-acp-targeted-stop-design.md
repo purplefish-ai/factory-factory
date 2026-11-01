@@ -8,7 +8,8 @@ subagent through its existing list without interrupting unrelated work.
 - Add a right-aligned, always-visible muted filled-square icon beside each
   controllable background process in the expanded chat activity list and each
   controllable subagent in the Sessions panel. Reuse the composer Stop style.
-- Tooltips and accessible names are `Stop process` and `Stop subagent`.
+- Tooltips are `Stop process` and `Stop subagent`. Accessible names append the
+  row label, such as `Stop process: pnpm test` and `Stop subagent: Researcher`.
 - Clicking immediately requests interruption. The icon becomes a disabled
   spinner while awaiting provider confirmation. Existing status updates own
   completion. Errors use the existing toast and allow retry when still valid.
@@ -34,8 +35,11 @@ remain untouched.
 
 Keep existing replay suppression, generation fencing, permission handling,
 capsule boundaries, and read-only review protections. Record requests pending
-until live completion/capability withdrawal, with bounded failure/retry
-handling.
+until live completion/capability withdrawal, with a 15-second confirmation
+deadline measured from the initial request. Expiration clears only the pending
+request, shows an error toast and permits retry if the current capability
+remains valid; provider work/status is unchanged. Provider acknowledgment has a
+separate 10-second server deadline.
 
 ## Verification
 

@@ -54,8 +54,27 @@ const runningSelection: SubagentSelection = {
     completedAt: null,
     latestActivity: 'Inspecting auth',
     resultPreview: null,
+    stopControl: { controlId: 'live-control', runtimeId: 'live-runtime' },
   },
 };
+
+function IdentityProbe() {
+  const { tabs, openSubagentTab, updateSubagentTab } = useWorkspacePanel();
+  const current = tabs.find((tab) => tab.type === 'subagent')?.subagentSelection;
+  return (
+    <>
+      <button type="button" onClick={() => openSubagentTab(runningSelection)}>
+        Open live
+      </button>
+      <button type="button" onClick={() => updateSubagentTab(runningSelection)}>
+        Refresh live
+      </button>
+      <output>
+        {current?.subagent === runningSelection.subagent ? 'same live object' : 'different object'}
+      </output>
+    </>
+  );
+}
 
 function WorkspacePanelActionsProbe() {
   const { activeTabId, tabs, openTab, openSubagentTab, updateSubagentTab, closeTab, selectTab } =
@@ -265,6 +284,7 @@ describe('WorkspacePanelProvider persistence', () => {
       expect(state.activeTabId).toBe('subagent-session-1-child-1');
     });
 
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).not.toContain('live-control');
     await clickButton(container, 'Complete');
     await vi.waitFor(() => {
       const tab = readProbe(container).tabs.find((candidate) => candidate.type === 'subagent');
@@ -277,12 +297,29 @@ describe('WorkspacePanelProvider persistence', () => {
           }),
         })
       );
-      expect(JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) ?? '[]')).toContainEqual(tab);
+      expect(JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) ?? '[]')).toContainEqual({
+        ...tab,
+        subagentSelection: {
+          ...tab?.subagentSelection,
+          subagent: { ...tab?.subagentSelection?.subagent, stopControl: undefined },
+        },
+      });
+      expect(localStorage.getItem(TABS_STORAGE_KEY)).not.toContain('live-control');
     });
 
     await clickButton(container, 'Close active');
     expect(readProbe(container).activeTabId).toBe('chat');
     expect(readProbe(container).tabs).toHaveLength(1);
+    actFlushSync(() => root.unmount());
+  });
+
+  it('preserves live summary identity while sanitizing the persisted snapshot', async () => {
+    const { container, root } = renderPanel(<IdentityProbe />);
+    await clickButton(container, 'Open live');
+    expect(container.querySelector('output')?.textContent).toBe('same live object');
+    await clickButton(container, 'Refresh live');
+    expect(container.querySelector('output')?.textContent).toBe('same live object');
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).not.toContain('live-control');
     actFlushSync(() => root.unmount());
   });
 
@@ -314,6 +351,9 @@ describe('WorkspacePanelProvider persistence', () => {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, validTab.id);
     const validRender = renderPanel(<WorkspacePanelProbe />);
     await vi.waitFor(() => expect(readProbe(validRender.container).activeTabId).toBe(validTab.id));
+    const restored = readProbe(validRender.container).tabs.find((tab) => tab.id === validTab.id);
+    expect(restored?.subagentSelection?.subagent.stopControl).toBeUndefined();
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).not.toContain('live-control');
     actFlushSync(() => validRender.root.unmount());
 
     localStorage.setItem(

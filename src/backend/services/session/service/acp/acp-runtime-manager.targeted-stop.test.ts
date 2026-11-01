@@ -93,6 +93,56 @@ describe('runtime targeted stopping', () => {
     expect(h.cancel).not.toHaveBeenCalled();
   });
 
+  it('normalizes provider failures without exposing raw transport errors', async () => {
+    const h = await setup();
+    send(h.tracker, {
+      sessionUpdate: 'async_task_spawned',
+      asyncTaskId: 'selected',
+      canStop: true,
+    });
+    const selected = h.tracker.getBackgroundWork().backgroundTasks[0]!;
+    const cause = new Error('raw provider transport details');
+    h.extMethod.mockRejectedValueOnce(cause);
+    await expect(
+      h.manager.stopTarget('session-1', { kind: 'task', id: selected.id, ...selected.stopControl! })
+    ).rejects.toMatchObject({
+      name: 'AcpSubagentBrowseError',
+      code: 'INTERNAL_ERROR',
+      message: 'Unable to stop this item. Refresh and try again.',
+      cause,
+    });
+    expect(h.cancel).not.toHaveBeenCalled();
+    expect(h.process.kill).not.toHaveBeenCalled();
+  });
+
+  it('normalizes unacknowledged stop deadlines without cancelling the parent', async () => {
+    const h = await setup();
+    send(h.tracker, {
+      sessionUpdate: 'subagent_spawned',
+      subagentSessionId: 'selected',
+      name: 'Selected',
+      capabilities: { cancel: {} },
+    });
+    const selected = h.tracker.list({ limit: 10 }).subagents[0]!;
+    vi.useFakeTimers();
+    h.cancel.mockReturnValueOnce(
+      new Promise<void>(() => {
+        /* Provider never acknowledges. */
+      })
+    );
+    const result = h.manager
+      .stopTarget('session-1', { kind: 'subagent', id: selected.id, ...selected.stopControl! })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(result).resolves.toMatchObject({
+      name: 'AcpSubagentBrowseError',
+      code: 'PRECONDITION_FAILED',
+      message: 'The provider did not acknowledge the stop request. Refresh and try again.',
+    });
+    expect(h.process.kill).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('surfaces provider rejection and allows a retry without inventing completion', async () => {
     const h = await setup();
     send(h.tracker, {

@@ -60,7 +60,7 @@ export function SessionActivityIndicator({
     activeGoals,
     hasBackgroundActivity,
   } = getActivityState(work);
-  useReconcileSessionTargetStops(controlSessionId, 'task', backgroundTasks);
+  useReconcileSessionTargetStops(controlSessionId, 'task', work ? backgroundTasks : undefined);
   if (!(showThinking || hasBackgroundActivity)) {
     return null;
   }
@@ -95,6 +95,7 @@ export function SessionActivityIndicator({
                       <SessionTargetStopButton
                         key={task.stopControl.controlId}
                         sessionId={controlSessionId}
+                        itemLabel={task.name}
                         target={{
                           kind: 'task',
                           id: task.id,

@@ -22,26 +22,41 @@ export async function stopAcpTarget(
   }
   // Resolve and dispatch synchronously: no await may reopen a stale-handle race here.
   const dispatch = handle.nativeSessionTracker.resolveStopTarget(parsed.data);
-  const operation =
-    dispatch.kind === 'subagent'
-      ? handle.connection.cancel({ sessionId: dispatch.sessionId })
-      : handle.connection
-          .extMethod('_session/async_task/stop', {
-            sessionId: dispatch.sessionId,
-            asyncTaskId: dispatch.asyncTaskId,
-          })
-          .then((response) => {
-            const result = stopResponseSchema.safeParse(response);
-            if (!(result.success && result.data.stopped)) {
-              throw new AcpSubagentBrowseError(
-                'PRECONDITION_FAILED',
-                'The provider could not stop this process. Refresh and try again.'
-              );
-            }
-          });
-  await withTimeout({
-    promise: operation,
-    timeoutMs: 10_000,
-    description: 'targeted stop request',
-  });
+  try {
+    const operation =
+      dispatch.kind === 'subagent'
+        ? handle.connection.cancel({ sessionId: dispatch.sessionId })
+        : handle.connection
+            .extMethod('_session/async_task/stop', {
+              sessionId: dispatch.sessionId,
+              asyncTaskId: dispatch.asyncTaskId,
+            })
+            .then((response) => {
+              const result = stopResponseSchema.safeParse(response);
+              if (!(result.success && result.data.stopped)) {
+                throw new AcpSubagentBrowseError(
+                  'PRECONDITION_FAILED',
+                  'The provider could not stop this process. Refresh and try again.'
+                );
+              }
+            });
+    await withTimeout({
+      promise: operation,
+      timeoutMs: 10_000,
+      description: 'targeted stop request',
+      timeoutError: new AcpSubagentBrowseError(
+        'PRECONDITION_FAILED',
+        'The provider did not acknowledge the stop request. Refresh and try again.'
+      ),
+    });
+  } catch (error) {
+    if (error instanceof AcpSubagentBrowseError) {
+      throw error;
+    }
+    throw new AcpSubagentBrowseError(
+      'INTERNAL_ERROR',
+      'Unable to stop this item. Refresh and try again.',
+      { cause: error }
+    );
+  }
 }

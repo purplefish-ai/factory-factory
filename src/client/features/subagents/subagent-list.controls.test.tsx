@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // @vitest-environment jsdom
-import { reconcileSessionTargetStops } from '@/client/features/session-controls';
+import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
 import { SubagentList } from './subagent-list';
 import type { SubagentListItem } from './types';
 
@@ -41,7 +41,7 @@ async function render(controlSessionId: string | undefined, subagents = rows) {
   );
 }
 function stops() {
-  return [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="Stop subagent"]')];
+  return [...container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Stop subagent:"]')];
 }
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -52,8 +52,12 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 });
+function ClearPendingStops() {
+  useReconcileSessionTargetStops('parent', 'subagent', []);
+  return null;
+}
 afterEach(async () => {
-  reconcileSessionTargetStops('parent', 'subagent', []);
+  await act(() => root.render(<ClearPendingStops />));
   await act(() => root.unmount());
   container.remove();
   vi.useRealTimers();

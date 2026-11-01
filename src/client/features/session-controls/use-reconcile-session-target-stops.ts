@@ -5,10 +5,10 @@ import { reconcileSessionTargetStops } from './session-target-stop-state';
 export function useReconcileSessionTargetStops(
   sessionId: string | undefined,
   kind: SessionStopTarget['kind'],
-  items: readonly { stopControl?: SessionStopControl }[]
+  items: readonly { stopControl?: SessionStopControl }[] | undefined
 ): void {
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && items) {
       reconcileSessionTargetStops(
         sessionId,
         kind,

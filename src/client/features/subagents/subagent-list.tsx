@@ -148,6 +148,7 @@ function SubagentRow({
             <SessionTargetStopButton
               key={subagent.stopControl.controlId}
               sessionId={controlSessionId}
+              itemLabel={displayName(subagent)}
               target={{
                 kind: 'subagent',
                 id: subagent.id,

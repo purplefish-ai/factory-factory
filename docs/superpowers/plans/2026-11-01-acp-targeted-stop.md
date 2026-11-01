@@ -73,9 +73,3 @@ completion; React adds icon controls to the two existing lists.
       integration tests, Storybook verification, and `pnpm check`; inspect
       unrelated edits.
 - [ ] Self-review and commit the completed implementation with issue reference.
-
-## Execution ruling
-
-The user explicitly approved the design and requested implementation with a
-subagent and a PR. Proceed without an additional plan-approval pause. One agent
-owns this cohesive cross-layer task to avoid competing interface edits.

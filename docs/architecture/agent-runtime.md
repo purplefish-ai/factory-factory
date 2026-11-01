@@ -962,12 +962,17 @@ and retained task ID; child ownership separately fences tasks from superseded
 child generations. Native child interruption requires an explicit
 `capabilities.cancel` and sends `session/cancel` to that child's current ACP
 session ID, preserving the parent and unrelated siblings. No parent-cancellation
-fallback is used.
+fallback is used. Omitted native child patch fields keep their prior values; an
+explicit `capabilities` object replaces the set, and `{}` or `null` withdraws
+control.
 
-The currently installed Claude and Codex adapters select the existing AIR
-sub-agent protocol and advertise no child cancellation capability in that form.
-Their child rows therefore remain browseable without Stop. The tracker accepts
-explicit cancellation metadata for known current native children, including
-`subagent_update` capability changes, without changing protocol negotiation or
-claiming support for a separate standard-protocol lifecycle. Background-task
-stopping remains available where AIR advertises `canStop`.
+The currently installed Claude and Codex adapters select the JetBrains Air (AIR)
+private ACP extension contract, negotiated through
+`clientCapabilities._meta.jetbrains.air` (including `asyncTasks`), for native
+sub-agents and background tasks. They advertise no child cancellation capability
+in that form. Their child rows therefore remain browseable without Stop. The
+tracker accepts explicit cancellation metadata for known current native
+children, including `subagent_update` capability changes, without changing
+protocol negotiation or claiming support for a separate standard-protocol
+lifecycle. Background-task stopping remains available where AIR advertises
+`canStop`.

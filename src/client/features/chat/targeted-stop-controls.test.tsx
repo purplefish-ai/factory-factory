@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @vitest-environment jsdom
-import { reconcileSessionTargetStops } from '@/client/features/session-controls';
+import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
 import { SessionActivityIndicator } from './session-activity-indicator';
 import { TranscriptTail } from './transcript-layout';
 
@@ -50,7 +50,7 @@ async function render(connected = true, currentWork = work) {
   }
 }
 function buttons() {
-  return [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="Stop process"]')];
+  return [...container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Stop process:"]')];
 }
 
 beforeEach(() => {
@@ -62,8 +62,12 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 });
+function ClearPendingStops() {
+  useReconcileSessionTargetStops('parent', 'task', []);
+  return null;
+}
 afterEach(async () => {
-  reconcileSessionTargetStops('parent', 'task', []);
+  await act(() => root.render(<ClearPendingStops />));
   await act(() => root.unmount());
   container.remove();
   vi.useRealTimers();
@@ -73,6 +77,8 @@ describe('background process stop controls', () => {
   it('shows only live supported controls, targets one row, and stays pending after acknowledgment', async () => {
     await render();
     expect(buttons()).toHaveLength(2);
+    expect(buttons()[0]?.getAttribute('aria-label')).toBe('Stop process: One');
+    expect(buttons()[1]?.getAttribute('aria-label')).toBe('Stop process: Two');
     await act(() => buttons()[1]!.click());
     expect(mocks.stop).toHaveBeenCalledExactlyOnceWith({
       sessionId: 'parent',
@@ -80,7 +86,9 @@ describe('background process stop controls', () => {
     });
     expect(buttons()[0]?.disabled).toBe(false);
     expect(buttons()[1]?.disabled).toBe(true);
-    expect(buttons()[1]?.querySelector('.animate-spin')).not.toBeNull();
+    expect(buttons()[1]?.querySelector('svg')?.classList.contains('motion-safe:animate-spin')).toBe(
+      true
+    );
     await render(true, {
       ...work,
       backgroundTasks: work.backgroundTasks.filter((task) => task.id !== 'two'),
@@ -202,4 +210,31 @@ it('cleans pending when the last idle background task completes and TranscriptTa
   await act(() => fail(new Error('Late request failure after live completion')));
   await act(() => vi.advanceTimersByTime(15_000));
   expect(mocks.error).not.toHaveBeenCalled();
+});
+
+it('retains a pending stop while authoritative work is unavailable', async () => {
+  const props = {
+    messages: [],
+    running: false,
+    startingSession: false,
+    loadingSession: false,
+    controlSessionId: 'parent',
+  };
+  const remaining = { ...work, backgroundTasks: [work.backgroundTasks[0]!] };
+  await act(() =>
+    root.render(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
+  );
+  await act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
+  );
+  await act(() => buttons()[0]!.click());
+  await act(() => root.render(<TranscriptTail props={props} hasVisibleMessages={false} />));
+  await act(() =>
+    root.render(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
+  );
+  await act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
+  );
+  expect(buttons()[0]?.disabled).toBe(true);
+  expect(mocks.stop).toHaveBeenCalledTimes(1);
 });

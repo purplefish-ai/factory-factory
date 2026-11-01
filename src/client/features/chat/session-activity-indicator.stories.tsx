@@ -138,7 +138,7 @@ export const ControllableProcesses: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { expanded: false }));
-    await expect(canvas.getAllByRole('button', { name: 'Stop process' })).toHaveLength(2);
+    await expect(canvas.getAllByRole('button', { name: /^Stop process:/ })).toHaveLength(2);
   },
 };
 
@@ -147,7 +147,7 @@ export const ProcessStopPending: Story = {
   play: async (context) => {
     await ControllableProcesses.play?.(context);
     const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getAllByRole('button', { name: 'Stop process' })[0]!);
-    await expect(canvas.getAllByRole('button', { name: 'Stop process' })[0]).toBeDisabled();
+    await userEvent.click(canvas.getAllByRole('button', { name: /^Stop process:/ })[0]!);
+    await expect(canvas.getAllByRole('button', { name: /^Stop process:/ })[0]).toBeDisabled();
   },
 };
