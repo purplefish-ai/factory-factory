@@ -743,9 +743,11 @@ same ID on recovery or fail. Session creation validates that exact account via
 the application graph's account service without selecting Auto or entering a
 second reservation. Disabled, missing or unauthenticated frozen accounts do not
 fall back. Origins store account IDs and a strict versioned execution intent,
-never credentials. Session reuse compares that original intent rather than
-mutable model/launch metadata. Initial dispatch must later pin the origin's
-settings even if a human has changed ordinary conversation settings.
+never credentials. The first session insert checks the run's frozen execution
+and reserved workspace/session/project identity in its transaction through a
+narrow read-only integrity check. Session reuse compares that original intent
+rather than mutable model/launch metadata. Initial dispatch must later pin the
+origin's settings even if a human has changed ordinary conversation settings.
 
 Event sessions use `event-agent` and explicit `non_interactive` intent, with
 ratchet disabled at workspace creation. They do not inherit periodic Codex YOLO

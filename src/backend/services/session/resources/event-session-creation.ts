@@ -38,7 +38,10 @@ export async function findEventSessionForCreation(
   ) {
     throw new ApplicationError('CONFLICT', 'Event session ownership mismatch');
   }
-  await assertEventWorkspaceOwnership(tx, input);
+  const projectId = await assertEventWorkspaceOwnership(tx, input);
+  if (!origin) {
+    await assertFrozenRunBinding(tx, input, projectId);
+  }
   return existing;
 }
 
@@ -73,5 +76,34 @@ async function assertEventWorkspaceOwnership(
     intent.data.reservedSessionId !== input.id
   ) {
     throw new ApplicationError('CONFLICT', 'Event workspace/session ownership mismatch');
+  }
+  return workspace.projectId;
+}
+
+/** A read-only relational integrity check; AgentRun's writer remains agent-definition. */
+async function assertFrozenRunBinding(
+  tx: Prisma.TransactionClient,
+  input: EventSessionCreation,
+  projectId: string
+) {
+  const run = await tx.agentRun.findUnique({
+    where: { id: input.runId },
+    select: {
+      reservedWorkspaceId: true,
+      reservedSessionId: true,
+      effectiveExecution: true,
+      agentDefinition: { select: { projectId: true } },
+    },
+  });
+  const binding = eventAgentExecutionSchema.safeParse(run?.effectiveExecution);
+  if (
+    !run ||
+    run.reservedWorkspaceId !== input.workspaceId ||
+    run.reservedSessionId !== input.id ||
+    run.agentDefinition.projectId !== projectId ||
+    !binding.success ||
+    !isDeepStrictEqual(binding.data, input.execution)
+  ) {
+    throw new ApplicationError('CONFLICT', 'Event session does not match the frozen run binding');
   }
 }

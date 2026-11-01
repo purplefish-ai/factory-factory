@@ -104,9 +104,12 @@ it.each([
   );
   expect(await db.prisma.workspace.count()).toBe(1);
 });
-it('rolls back provenance when active-project insertion is unavailable', async () => {
+it('rejects an archived project before inserting a workspace or origin', async () => {
   await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: true } });
-  await expect(service.createEventWorkspaceOnce(source())).rejects.toThrow();
+  await expect(service.createEventWorkspaceOnce(source())).rejects.toMatchObject({
+    code: 'PRECONDITION_FAILED',
+    message: 'Event workspace project is missing or archived',
+  });
   expect(await db.prisma.workspaceLaunchOrigin.count()).toBe(0);
   expect(await db.prisma.workspace.count()).toBe(0);
 });
@@ -150,4 +153,75 @@ it('retains workspace provenance after its project is deleted', async () => {
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: 'run' } })
   ).toMatchObject({ projectId });
+});
+
+it('maps a missing project to the same stable creation precondition', async () => {
+  await db.prisma.project.delete({ where: { id: projectId } });
+  await expect(service.createEventWorkspaceOnce(source())).rejects.toMatchObject({
+    code: 'PRECONDITION_FAILED',
+    message: 'Event workspace project is missing or archived',
+  });
+  expect(await db.prisma.workspaceLaunchOrigin.count()).toBe(0);
+});
+it.each([
+  undefined,
+  { version: 999 },
+  { version: 1, runId: 'different', reservedSessionId: 'session', initialMessageId: 'message' },
+])(
+  'rejects missing, invalid or foreign metadata before persistence: %j',
+  async (creationMetadata) => {
+    const { workspaceAccessor } = await vi.importActual<
+      typeof import('@/backend/services/workspace/resources/workspace.accessor')
+    >('@/backend/services/workspace/resources/workspace.accessor');
+    await expect(
+      workspaceAccessor.createEventOnce({
+        id: 'workspace',
+        runId: 'run',
+        projectId,
+        name: 'Invalid',
+        creationMetadata,
+      } as never)
+    ).rejects.toThrow(/metadata/i);
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await db.prisma.workspaceLaunchOrigin.count()).toBe(0);
+  }
+);
+it.each([
+  'runId',
+  'projectId',
+  'reservedWorkspaceId',
+  'reservedSessionId',
+  'initialMessageId',
+] as const)('rejects padded source %s before persistence', async (field) => {
+  await expect(
+    service.createEventWorkspaceOnce({ ...source(), [field]: ' padded ' })
+  ).rejects.toThrow(/unpadded/i);
+  expect(await db.prisma.workspace.count()).toBe(0);
+});
+it('rolls back workspace, side tables and origin after an AFTER INSERT origin failure without publishing', async () => {
+  const { workspaceStateMachine, WORKSPACE_CREATED } =
+    await vi.importActual<typeof import('./state-machine.service')>('./state-machine.service');
+  const published: string[] = [];
+  const listener = (event: { workspaceId: string }) => {
+    published.push(event.workspaceId);
+  };
+  workspaceStateMachine.on(WORKSPACE_CREATED, listener);
+  await db.prisma.$executeRawUnsafe(
+    `CREATE TRIGGER reject_workspace_origin AFTER INSERT ON WorkspaceLaunchOrigin BEGIN SELECT RAISE(ABORT, 'injected workspace origin failure'); END`
+  );
+  try {
+    await expect(service.createEventWorkspaceOnce(source())).rejects.toMatchObject({
+      code: 'P2003',
+      meta: { modelName: 'WorkspaceLaunchOrigin' },
+    });
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await db.prisma.workspaceLaunchOrigin.count()).toBe(0);
+    expect(await db.prisma.workspacePRMonitoring.count()).toBe(0);
+    expect(await db.prisma.workspacePRDiscovery.count()).toBe(0);
+    expect(await db.prisma.workspaceRunScript.count()).toBe(0);
+    expect(published).toEqual([]);
+  } finally {
+    await db.prisma.$executeRawUnsafe('DROP TRIGGER reject_workspace_origin');
+    workspaceStateMachine.off(WORKSPACE_CREATED, listener);
+  }
 });

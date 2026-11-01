@@ -1,8 +1,11 @@
 import { z } from 'zod';
-import { eventAgentExecutionSchema } from '@/shared/event-agent-launch';
+import {
+  eventAgentExecutionSchema,
+  eventLaunchIdentifierSchema,
+} from '@/shared/event-agent-launch';
 import { agentRunInputSchema } from '@/shared/schemas/agent-definition.schema';
 
-const identifier = z.string().min(1).max(256);
+const identifier = eventLaunchIdentifierSchema;
 export const eventWorkspaceSourceSchema = z.strictObject({
   type: z.literal('EVENT_AGENT'),
   runId: identifier,

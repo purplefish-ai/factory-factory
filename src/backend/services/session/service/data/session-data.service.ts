@@ -96,13 +96,15 @@ class SessionDataImplementation {
     const data = eventSessionCreationSchema.parse(input);
     if (data.execution.provider === 'CODEX') {
       const accounts = this.dependencies.eventAccounts ?? codexAccountService;
-      if (!(await accounts.getEnabledAccountIds()).includes(data.execution.codexAccountId)) {
-        throw new ApplicationError(
-          'PRECONDITION_FAILED',
-          'Frozen Codex account is disabled or unavailable'
-        );
+      try {
+        if (!(await accounts.getEnabledAccountIds()).includes(data.execution.codexAccountId)) {
+          throw new Error('Account unavailable');
+        }
+        await accounts.getRuntimeContext(data.execution.codexAccountId);
+      } catch {
+        // Provider/authentication errors can contain credentials; expose only this stable contract.
+        throw new ApplicationError('PRECONDITION_FAILED', 'Frozen Codex account is unavailable');
       }
-      await accounts.getRuntimeContext(data.execution.codexAccountId);
     }
     const metadata = createSessionLaunchMetadata(data.execution);
     return toAgentSessionRecord(await agentSessionAccessor.createEventOnce(data, metadata ?? {}));

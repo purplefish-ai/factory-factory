@@ -159,7 +159,11 @@ it('rejects non-running runs and corrupt saved binding without replacing data', 
     where: { id: input.claim.runId },
     data: { effectiveExecution: { version: 999 } },
   });
-  await expect(runtime.freezeEventExecution(input)).rejects.toThrow();
+  await expect(runtime.freezeEventExecution(input)).rejects.toMatchObject({ name: 'ZodError' });
+  expect(
+    (await db.prisma.agentRun.findUniqueOrThrow({ where: { id: input.claim.runId } }))
+      .effectiveExecution
+  ).toEqual({ version: 999 });
   await db.prisma.agentRun.update({ where: { id: input.claim.runId }, data: { status: 'FAILED' } });
   await expect(runtime.freezeEventExecution(input)).rejects.toThrow(/claim/i);
 });

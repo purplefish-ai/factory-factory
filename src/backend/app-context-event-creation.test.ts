@@ -3,13 +3,16 @@ import { createDefaultApplicationDependencies } from './app-context';
 import { codexAccountService } from './services/codex-accounts';
 it('validates frozen event accounts through the current application graph without reserving again', async () => {
   const { services } = createDefaultApplicationDependencies();
+  const validatedAccounts: (string | undefined)[] = [];
   const fallback = vi
     .spyOn(codexAccountService, 'getRuntimeContext')
     .mockRejectedValue(new Error('Wrong singleton'));
   services.codexAccountService = Object.assign({}, services.codexAccountService, {
     getEnabledAccountIds: () => Promise.resolve(['frozen']),
-    getRuntimeContext: (id?: string) =>
-      Promise.reject(new Error(`Graph account unavailable: ${id}`)),
+    getRuntimeContext: (id?: string) => {
+      validatedAccounts.push(id);
+      return Promise.reject(new Error('Private authentication cause'));
+    },
     withAccountReservation: () => {
       throw new Error('Unexpected nested reservation');
     },
@@ -31,7 +34,12 @@ it('validates frozen event accounts through the current application graph withou
           planModeEnabled: false,
         },
       })
-    ).rejects.toThrow('Graph account unavailable: frozen');
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'Frozen Codex account is unavailable',
+    });
+    expect(validatedAccounts).toEqual(['frozen']);
+    expect(fallback).not.toHaveBeenCalled();
   } finally {
     fallback.mockRestore();
   }
