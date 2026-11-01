@@ -111,6 +111,16 @@ merges their reports, and enforces the normal coverage thresholds and critical
 surface checks. Local `pnpm test:coverage` still runs and checks the complete
 suite in one process.
 
+New pushes to `main` cancel older main-push runs of CI and CodeQL. Pull request,
+merge-queue, and scheduled checks run independently. npm publishing and Electron
+release workflows are excluded from this cancellation policy.
+
+Docker images support the optional [Compose deployment](docker-compose.yml). The
+Docker Build and Docker Build & Push workflows run only through GitHub Actions'
+**Run workflow** control. Use Docker Build to validate an image without
+publishing, or Docker Build & Push to publish branch and commit tags to GHCR.
+Docker builds are not part of pull request, merge-queue, or main-push checks.
+
 ## Pull Request Process
 
 1. Fork the repository if needed and create a branch from `main`.

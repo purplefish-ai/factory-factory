@@ -1,13 +1,7 @@
 name: Docker Build & Push
 
 on:
-  push:
-    branches:
-      [
-        main,
-        adeeshaek/docker-build-fails-16-616-executing,
-        adeeshaek/image-seems-failing-default-2026-02,
-      ]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
