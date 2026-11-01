@@ -9,20 +9,24 @@ import {
   saveWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
 
-it('clears canceled instructions and options so reopening uses current user defaults', async () => {
-  await saveWorkspaceCreationDraft(getTestProjectId(), {
-    ...createWorkspaceCreationDraft(),
-    prompt: 'Discard these instructions',
-    mode: 'PERIODIC_TASK',
-    cadence: 'WEEKLY',
-    scheduledTime: '09:30',
-    ratchetEnabled: !mocks.userSettings.ratchetEnabled,
-    ratchetInitialized: true,
-    launchSelection: {
-      provider: 'CODEX',
-      drafts: { CODEX: { model: 'chosen-model', reasoningEffort: 'high', planModeEnabled: true } },
-    },
-  }).catch(() => undefined);
+it('clears canceled instructions and options despite unavailable disk storage', async () => {
+  await expect(
+    saveWorkspaceCreationDraft(getTestProjectId(), {
+      ...createWorkspaceCreationDraft(),
+      prompt: 'Discard these instructions',
+      mode: 'PERIODIC_TASK',
+      cadence: 'WEEKLY',
+      scheduledTime: '09:30',
+      ratchetEnabled: !mocks.userSettings.ratchetEnabled,
+      ratchetInitialized: true,
+      launchSelection: {
+        provider: 'CODEX',
+        drafts: {
+          CODEX: { model: 'chosen-model', reasoningEffort: 'high', planModeEnabled: true },
+        },
+      },
+    })
+  ).rejects.toThrow('could not be saved');
   const first = renderForm();
   expect(first.textarea.value).toBe('Discard these instructions');
   actFlushSync(() =>

@@ -20,6 +20,21 @@ import {
 const onCreate = fn();
 const onCancel = fn();
 
+function readPersistedDraft(projectId: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(WORKSPACE_DRAFT_DATABASE_NAME, WORKSPACE_DRAFT_DATABASE_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readonly');
+      const read = transaction.objectStore(WORKSPACE_DRAFT_STORE_NAME).get(projectId);
+      read.onsuccess = () => resolve(read.result);
+      transaction.oncomplete = () => database.close();
+      transaction.onerror = () => reject(transaction.error);
+    };
+  });
+}
+
 function previewLaunchOptions(input: unknown) {
   const record = typeof input === 'object' && input !== null ? input : {};
   const provider = 'provider' in record && record.provider === 'CLAUDE' ? 'CLAUDE' : 'CODEX';
@@ -413,24 +428,7 @@ export const PeriodicSubmissionSuccess: Story = {
     // This close uses onCancel, which only runs after periodic success cleanup.
     await expect(await canvas.findByRole('button', { name: 'New Task' })).toBeVisible();
     await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
-    const persisted = await new Promise<unknown>((resolve, reject) => {
-      const request = indexedDB.open(
-        WORKSPACE_DRAFT_DATABASE_NAME,
-        WORKSPACE_DRAFT_DATABASE_VERSION
-      );
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const database = request.result;
-        const transaction = database.transaction(WORKSPACE_DRAFT_STORE_NAME, 'readonly');
-        const read = transaction
-          .objectStore(WORKSPACE_DRAFT_STORE_NAME)
-          .get('preview-periodic-success');
-        read.onsuccess = () => resolve(read.result);
-        transaction.oncomplete = () => database.close();
-        transaction.onerror = () => reject(transaction.error);
-      };
-    });
-    await expect(persisted).toBeUndefined();
+    await expect(readPersistedDraft('preview-periodic-success')).resolves.toBeUndefined();
     await userEvent.click(canvas.getByRole('button', { name: 'New Task' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('');
     // Pending ownership must also be released so another task can launch.
@@ -446,9 +444,27 @@ export const CancelRestoredDraft: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'New Task' }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Cancel' })).toBeEnabled());
     await expect(canvas.getByRole('textbox')).not.toHaveValue('');
+    await expect(canvas.getByText('setup-notes.txt')).toBeInTheDocument();
+    // Prove the fixture is on disk before testing deletion, not only in memory.
+    await expect(readPersistedDraft('preview-restored-draft')).resolves.toMatchObject({
+      prompt: expect.stringContaining('Investigate'),
+      attachments: [{ name: 'setup-notes.txt' }],
+      launchSelection: { drafts: { CODEX: { planModeEnabled: true } } },
+    });
     await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+    await waitFor(async () => {
+      await expect(readPersistedDraft('preview-restored-draft')).resolves.toBeUndefined();
+    });
     await userEvent.click(await canvas.findByRole('button', { name: 'New Task' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('');
+    await expect(canvas.queryByText('setup-notes.txt')).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Workspace settings' }));
+    const settings = within(canvasElement.ownerDocument.body).getByRole('dialog', {
+      name: 'Workspace settings',
+    });
+    await waitFor(() =>
+      expect(within(settings).getByRole('button', { name: 'Planning: Off' })).toBeVisible()
+    );
     await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
   },
 };
