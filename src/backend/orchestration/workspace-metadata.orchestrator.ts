@@ -64,7 +64,10 @@ export class WorkspaceMetadataOrchestrator {
   private readonly pending = new Map<string, Pending>();
   private readonly attemptedAt = new Map<string, number>();
   private readonly latestSchedules = new Map<string, { sequence: number; at: number }>();
-  private readonly initialSessions = new Map<string, string | null>();
+  private readonly initialSessions = new Map<
+    string,
+    { workspaceId: string | null; invalidated: boolean }
+  >();
   private sequence = 0;
   private readonly now: () => number;
   private stopped = false;
@@ -95,11 +98,22 @@ export class WorkspaceMetadataOrchestrator {
   }
 
   private skipInitial(sessionId: string, initialOnly: boolean): boolean {
-    return initialOnly && this.initialSessions.has(sessionId);
+    const session = initialOnly ? this.initialSessions.get(sessionId) : undefined;
+    if (!session) {
+      return false;
+    }
+    // Also invalidate an initial schedule whose session lookup has not returned yet.
+    session.invalidated = true;
+    const entry = session.workspaceId ? this.pending.get(session.workspaceId) : undefined;
+    if (session.workspaceId && entry?.initialOnly && entry.sessionId === sessionId) {
+      this.discard(session.workspaceId, entry);
+    }
+    return true;
   }
 
   private rememberSession(sessionId: string, workspaceId: string | null) {
-    this.initialSessions.set(sessionId, workspaceId);
+    const invalidated = this.initialSessions.get(sessionId)?.invalidated ?? false;
+    this.initialSessions.set(sessionId, { workspaceId, invalidated });
     if (this.initialSessions.size > SERVICE_LIMITS.workspaceScopedCacheMaxEntries) {
       const oldest = this.initialSessions.keys().next().value;
       if (oldest) {
@@ -108,8 +122,12 @@ export class WorkspaceMetadataOrchestrator {
     }
   }
 
-  private preservesCompletedTurn(workspaceId: string, initialOnly: boolean) {
-    return initialOnly && this.pending.get(workspaceId)?.initialOnly === false;
+  private skipInitialSnapshot(sessionId: string, workspaceId: string, initialOnly: boolean) {
+    return (
+      initialOnly &&
+      (this.initialSessions.get(sessionId)?.invalidated ||
+        this.pending.get(workspaceId)?.initialOnly === false)
+    );
   }
 
   private queueFull(workspaceId: string) {
@@ -137,7 +155,7 @@ export class WorkspaceMetadataOrchestrator {
         return;
       }
       this.rememberSession(sessionId, session.workspaceId);
-      if (this.preservesCompletedTurn(session.workspaceId, initialOnly)) {
+      if (this.skipInitialSnapshot(sessionId, session.workspaceId, initialOnly)) {
         return;
       }
       const history = snapshot ?? this.dependencies.history(sessionId);
@@ -165,7 +183,7 @@ export class WorkspaceMetadataOrchestrator {
     } catch {
       logger.debug('Could not queue workspace metadata', { sessionId });
     } finally {
-      if (this.initialSessions.get(sessionId) === null) {
+      if (this.initialSessions.get(sessionId)?.workspaceId === null) {
         this.initialSessions.delete(sessionId);
       }
     }

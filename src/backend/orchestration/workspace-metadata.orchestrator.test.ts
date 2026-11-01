@@ -47,6 +47,59 @@ function setup() {
 }
 const signal = () => new AbortController().signal;
 describe('workspace metadata orchestration', () => {
+  it('drops queued initial metadata when another user notification arrives', async () => {
+    const { service, dependencies, history } = setup();
+    await service.schedule('s', true);
+    history.push({ type: 'user', content: 'A different objective', timestamp: '2' });
+    await service.schedule('s', true);
+    await service.run(signal());
+    expect(dependencies.generate).not.toHaveBeenCalled();
+    await service.schedule('s');
+    await service.run(signal());
+    expect(dependencies.accept).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects in-flight initial metadata when another user notification arrives', async () => {
+    const { service, dependencies, history, result } = setup();
+    let resolve!: (value: typeof result) => void;
+    dependencies.generate.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        })
+    );
+    await service.schedule('s', true);
+    const work = service.run(signal());
+    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    history.push({ type: 'user', content: 'A different objective', timestamp: '2' });
+    await service.schedule('s', true);
+    resolve(result);
+    await work;
+    expect(dependencies.accept).not.toHaveBeenCalled();
+    expect(dependencies.publish).not.toHaveBeenCalled();
+  });
+
+  it('invalidates initial metadata while its session lookup is pending', async () => {
+    const { service, dependencies } = setup();
+    const session = await dependencies.findSession('s');
+    let resolve!: (value: typeof session) => void;
+    dependencies.findSession.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        })
+    );
+    const first = service.schedule('s', true);
+    await service.schedule('s', true);
+    resolve(session);
+    await first;
+    await service.run(signal());
+    expect(dependencies.generate).not.toHaveBeenCalled();
+    dependencies.findSession.mockClear();
+    await service.schedule('s', true);
+    expect(dependencies.findSession).not.toHaveBeenCalled();
+  });
+
   it('rejects results when provider recovery replaces the captured transcript', async () => {
     const { service, dependencies, history, result } = setup();
     let resolve!: (value: typeof result) => void;
