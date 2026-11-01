@@ -1,5 +1,5 @@
 import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
-import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
+import { SteeringWheelIcon } from '@phosphor-icons/react/dist/csr/SteeringWheel';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/client/features/composer';
@@ -106,7 +106,7 @@ function QueuedMessageSteerAction({
       type="button"
       aria-label="Steer queued message"
     >
-      <LightningIcon className="h-3.5 w-3.5" />
+      <SteeringWheelIcon className="h-3.5 w-3.5" />
       Steer
     </button>
   );
