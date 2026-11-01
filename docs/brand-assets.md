@@ -64,3 +64,33 @@ from the same gear source as the app and browser icons.
 
 The PNG backgrounds are opaque yellow with square corners. The operating system
 applies its own icon shape. Do not bake rounded corners into PWA exports.
+
+## Repository social preview
+
+[`public/social-preview.svg`](../public/social-preview.svg) is the editable,
+self-contained vector source for the approved repository card. It combines the
+gear, matching Jost Black wordmarks, and a static triangle mesh adapted from the
+website's hero effect. All lettering is outlined, so rendering needs no system
+fonts or external resources. Keep the important content inside an 80-pixel safe
+margin; the decorative mesh extends to the edges.
+
+The card reads “THE SOFTWARE FACTORY FOR YOUR SOFTWARE FACTORY.”, with “FREE &
+OPEN SOURCE” and “FACTORYFACTORY.AI” beneath it. Edit the SVG in a vector editor
+to change the artwork or outlined copy. This card is a separate composition;
+`pnpm brand:generate` does not update it when logo sources change.
+
+Regenerate [`public/social-preview.png`](../public/social-preview.png) with
+ImageMagick 7 and Playwright's Chromium:
+
+```sh
+pnpm exec playwright install chromium
+pnpm brand:generate:social-preview
+```
+
+Alternatively, use an installed Google Chrome with
+`pnpm brand:generate:social-preview --channel=chrome`. The renderer downsamples
+a double-resolution browser capture to an opaque RGB PNG at **1280×640**, strips
+metadata, and rejects images at or above GitHub's 1 MB upload limit.
+
+To use it on GitHub, upload the PNG under the repository's **Settings → General
+→ Social preview**. Committing the image does not update that setting.
