@@ -499,9 +499,10 @@ describe('event creation candidate ownership', () => {
     mockGitClient.listWorktreesWithBranches.mockResolvedValue([]);
   });
   it('returns the deterministic candidate only after checking disk and canonical Git registry', async () => {
-    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).resolves.toBe(
-      '/repo/worktrees/w1'
-    );
+    await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).resolves.toEqual({
+      worktreePath: '/repo/worktrees/w1',
+      canonicalBasePath: '/real/worktrees',
+    });
     expect(mockLstat).toHaveBeenCalledWith('/repo/worktrees/w1');
     expect(mockGitClient.listWorktreesWithBranches).toHaveBeenCalledOnce();
   });
@@ -522,5 +523,33 @@ describe('event creation candidate ownership', () => {
     mockLstat.mockRejectedValue(Object.assign(new Error('denied'), { code: 'EACCES' }));
     await expect(gitOpsService.prepareWorktreeCreation(project, 'w1')).rejects.toThrow('denied');
     expect(mockGitClient.listWorktreesWithBranches).not.toHaveBeenCalled();
+  });
+  it('proves absence only when both disk and canonical Git registration are absent', async () => {
+    await expect(
+      gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
+    ).resolves.toBe(true);
+    expect(mockLstat).toHaveBeenCalled();
+    expect(mockGitClient.listWorktreesWithBranches).toHaveBeenCalled();
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([{ path: '/real/worktrees/w1' }]);
+    await expect(
+      gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
+    ).resolves.toBe(false);
+  });
+  it('refuses absence proof when the canonical base changes or cannot be inspected', async () => {
+    mockRealpath.mockResolvedValue('/different-base');
+    await expect(
+      gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
+    ).rejects.toThrow('identity changed');
+    mockRealpath.mockRejectedValue(Object.assign(new Error('base missing'), { code: 'ENOENT' }));
+    await expect(
+      gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
+    ).rejects.toThrow('base missing');
+    expect(mockGitClient.listWorktreesWithBranches).not.toHaveBeenCalled();
+  });
+  it('refuses absence proof if Git registrations cannot be inspected', async () => {
+    mockGitClient.listWorktreesWithBranches.mockRejectedValue(new Error('Git unavailable'));
+    await expect(
+      gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
+    ).rejects.toThrow('Git unavailable');
   });
 });

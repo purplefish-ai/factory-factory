@@ -6,10 +6,23 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 let db: IntegrationDatabase;
+const warning = vi.fn();
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let accessor: typeof import('@/backend/services/workspace/resources/workspace-event-init.accessor').workspaceEventInitAccessor;
 beforeEach(async () => {
   db = await createIntegrationDatabase();
+  warning.mockClear();
+  const logging = await vi.importActual<typeof import('@/backend/services/logger.service')>(
+    '@/backend/services/logger.service'
+  );
+  const createLogger = logging.createLogger;
+  vi.spyOn(logging, 'createLogger').mockImplementation((component) => {
+    const logger = createLogger(component);
+    if (component === 'event-workspace-init') {
+      vi.spyOn(logger, 'warn').mockImplementation(warning);
+    }
+    return logger;
+  });
   h = await createEventDeliveryFixture(db, 'CLAUDE', false);
   accessor = (
     await vi.importActual<
@@ -78,12 +91,15 @@ it.each(['generation', 'archive', 'delete'] as const)(
   }
 );
 it('does not turn an authority reread error into successful READY', async () => {
+  const observed = vi.fn();
+  h.workspace.workspaceStateMachine.on(h.workspace.WORKSPACE_STATE_CHANGED, observed);
   afterCommit(() => {
     vi.spyOn(accessor, 'read').mockRejectedValue(new Error('Authority unavailable'));
   });
   await expect(h.workspace.eventWorkspaceInitService.finish(h.claim, 'READY')).rejects.toThrow(
     'Authority unavailable'
   );
+  expect(observed).not.toHaveBeenCalled();
 });
 it('isolates each notification subscriber after current READY validation', async () => {
   const observed = vi.fn();
@@ -98,4 +114,48 @@ it('isolates each notification subscriber after current READY validation', async
   expect(h.workspace.workspaceStateMachine.listenerCount(h.workspace.WORKSPACE_STATE_CHANGED)).toBe(
     1
   );
+});
+
+it('consumes an asynchronous observer rejection without exposing its detail or delaying later observers', async () => {
+  const rejection = Promise.reject(new Error('private asynchronous subscriber detail'));
+  // The test owns this rejection even during the RED run; production must attach its own handler.
+  void rejection.catch(() => undefined);
+  h.workspace.workspaceStateMachine.on(
+    h.workspace.WORKSPACE_STATE_CHANGED,
+    (): unknown => rejection
+  );
+  const observed = vi.fn();
+  h.workspace.workspaceStateMachine.once(h.workspace.WORKSPACE_STATE_CHANGED, observed);
+  await expect(
+    h.workspace.eventWorkspaceInitService.finish(h.claim, 'READY')
+  ).resolves.toMatchObject({ status: 'READY' });
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+  expect(warning).toHaveBeenCalledWith('Event workspace notification subscriber failed', {
+    workspaceId: h.claim.reservedWorkspaceId,
+  });
+  expect(observed).toHaveBeenCalledOnce();
+});
+it('never waits for an unresolved observer before later listeners or READY', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.workspace.workspaceStateMachine.on(h.workspace.WORKSPACE_STATE_CHANGED, (): unknown => pending);
+  const observed = vi.fn();
+  h.workspace.workspaceStateMachine.once(h.workspace.WORKSPACE_STATE_CHANGED, observed);
+  let done = false;
+  const task = h.workspace.eventWorkspaceInitService.finish(h.claim, 'READY').then((result) => {
+    done = true;
+    return result;
+  });
+  try {
+    await vi.waitFor(() => expect(done).toBe(true));
+    expect(observed).toHaveBeenCalledOnce();
+    expect(await task).toMatchObject({ status: 'READY' });
+    expect(warning).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await pending;
+    await task;
+  }
 });

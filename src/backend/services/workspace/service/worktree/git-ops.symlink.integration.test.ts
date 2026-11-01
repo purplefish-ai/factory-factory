@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -59,6 +59,13 @@ describe('worktree removal through a symlinked base directory', () => {
 
       if (missing === 'base-link-missing') {
         await rm(worktreeBasePath);
+        await expect(
+          gitOpsService.confirmWorktreeAbsent(
+            worktreePath,
+            { repoPath, worktreeBasePath },
+            await realpath(actualBase)
+          )
+        ).rejects.toMatchObject({ code: 'ENOENT' });
         await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });
         expect((await git('worktree', 'list', '--porcelain')).stdout).toContain(
           'refs/heads/test-branch'
@@ -74,7 +81,14 @@ describe('worktree removal through a symlinked base directory', () => {
       );
       await expect(
         gitOpsService.prepareWorktreeCreation({ repoPath, worktreeBasePath }, 'workspace')
-      ).resolves.toBe(worktreePath);
+      ).resolves.toEqual({ worktreePath, canonicalBasePath: await realpath(actualBase) });
+      await expect(
+        gitOpsService.confirmWorktreeAbsent(
+          worktreePath,
+          { repoPath, worktreeBasePath },
+          await realpath(actualBase)
+        )
+      ).resolves.toBe(true);
       await expect(
         git('worktree', 'add', path.join(worktreeBasePath, 'replacement'), 'test-branch')
       ).resolves.toBeDefined();

@@ -28,11 +28,14 @@ async function publish(
       toStatus: current.status,
       workspace: current,
     };
+    const reportFailure = () =>
+      logger.warn('Event workspace notification subscriber failed', { workspaceId: current.id });
     for (const listener of workspaceStateMachine.rawListeners(WORKSPACE_STATE_CHANGED)) {
       try {
-        listener.call(workspaceStateMachine, event);
+        // Observe failures without letting a stalled observer hold READY or later listeners.
+        void Promise.resolve(listener.call(workspaceStateMachine, event)).catch(reportFailure);
       } catch {
-        logger.warn('Event workspace notification subscriber failed', { workspaceId: current.id });
+        reportFailure();
       }
     }
   }

@@ -13,7 +13,6 @@ import {
   eventWorkspaceInitService,
   EventWorkspaceFenceError,
   gitOpsService,
-  workspaceDataService,
   type EventWorkspaceClaim,
 } from '@/backend/services/workspace';
 import {
@@ -52,7 +51,12 @@ class EventWorkspaceInitialization {
   private readonly signal: AbortSignal;
   private readonly timer: ReturnType<typeof setTimeout>;
   private fenceLost = false;
-  private candidate?: { path: string; project: EventWorkspace['project'] };
+  private candidate?: {
+    path: string;
+    project: EventWorkspace['project'];
+    owned: boolean;
+    canonicalBasePath: string;
+  };
   private registered = false;
   private releaseInitial?: () => void;
   constructor(private readonly input: EventWorkspaceInitializationInput) {
@@ -64,6 +68,9 @@ class EventWorkspaceInitialization {
   }
   private check = () => {
     this.signal.throwIfAborted();
+    this.assertOwned();
+  };
+  private assertOwned = () => {
     try {
       this.input.assertCurrent?.();
     } catch (error) {
@@ -71,10 +78,10 @@ class EventWorkspaceInitialization {
       throw error;
     }
   };
-  private current = async () => {
-    this.check();
+  private current = async (check = this.check) => {
+    check();
     try {
-      return await eventWorkspaceInitService.read(this.input.claim, this.check);
+      return await eventWorkspaceInitService.read(this.input.claim, check);
     } catch (error) {
       if (error instanceof EventWorkspaceFenceError) {
         this.fenceLost = true;
@@ -125,8 +132,13 @@ class EventWorkspaceInitialization {
   private async provision(workspace: EventWorkspace) {
     const worktreeName = `workspace-${workspace.id}`;
     if (!workspace.worktreePath) {
-      const path = await gitOpsService.prepareWorktreeCreation(workspace.project, worktreeName);
-      this.candidate = { path, project: workspace.project };
+      const prepared = await gitOpsService.prepareWorktreeCreation(workspace.project, worktreeName);
+      this.candidate = {
+        path: prepared.worktreePath,
+        canonicalBasePath: prepared.canonicalBasePath,
+        project: workspace.project,
+        owned: false,
+      };
       await this.current();
     }
     // Abort never abandons Git's promise; its late result is owned until cleanup drains.
@@ -136,8 +148,8 @@ class EventWorkspaceInitialization {
       baseBranch: workspace.project.defaultBranch,
       useExistingBranch: false,
     });
-    if (tree.created) {
-      this.candidate = { path: tree.worktreePath, project: workspace.project };
+    if (tree.created && this.candidate) {
+      this.candidate = { ...this.candidate, path: tree.worktreePath, owned: true };
     }
     await this.current();
     const config = await FactoryConfigService.readConfig(tree.worktreePath);
@@ -224,14 +236,23 @@ class EventWorkspaceInitialization {
       return cleanup;
     }
     try {
-      const live = await workspaceDataService.findById(this.input.claim.reservedWorkspaceId);
-      if (live?.worktreePath) {
-        return cleanup;
+      if (this.candidate.owned) {
+        await assertWorktreePathSafe(this.candidate.path, this.candidate.project.worktreeBasePath);
       }
-      if (this.fenceLost) {
+      // Cancellation does not revoke ownership; a takeover or expired lease does.
+      const live = await this.current(this.assertOwned);
+      if (live.worktreePath) {
         return 'UNKNOWN';
       }
-      await assertWorktreePathSafe(this.candidate.path, this.candidate.project.worktreeBasePath);
+      if (!this.candidate.owned) {
+        const absent = await gitOpsService.confirmWorktreeAbsent(
+          this.candidate.path,
+          this.candidate.project,
+          this.candidate.canonicalBasePath
+        );
+        await this.current(this.assertOwned);
+        return absent ? cleanup : 'UNKNOWN';
+      }
       await gitOpsService.removeWorktree(this.candidate.path, this.candidate.project);
       return cleanup;
     } catch {
