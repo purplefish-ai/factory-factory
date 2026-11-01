@@ -10,6 +10,7 @@ import { gitOpsService } from '@/backend/services/workspace/service/worktree/git
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
+import { eventWorkspaceSourceSchema, type EventWorkspaceSource } from './event-workspace-source';
 import { workspaceStateMachine } from './state-machine.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -141,10 +142,38 @@ function hasInitialPrompt(source: { initialPrompt?: string }): source is { initi
 export class WorkspaceCreationService {
   constructor(private readonly deps: WorkspaceCreationDependencies) {}
 
+  async createEventWorkspaceOnce(input: EventWorkspaceSource): Promise<WorkspaceWithRatchet> {
+    const source = eventWorkspaceSourceSchema.parse(input);
+    const result = await workspaceAccessor.createEventOnce({
+      id: source.reservedWorkspaceId,
+      runId: source.runId,
+      projectId: source.projectId,
+      name: source.name,
+      creationSource: 'EVENT_AGENT',
+      defaultSessionProvider: source.execution.provider,
+      githubIssueNumber: source.issue?.number,
+      githubIssueUrl: source.issue?.url,
+      creationMetadata: {
+        version: 1,
+        runId: source.runId,
+        reservedSessionId: source.reservedSessionId,
+        initialMessageId: source.initialMessageId,
+      },
+      ratchetEnabled: false,
+    });
+    if (result.created) {
+      workspaceStateMachine.publishCreated(result.workspace);
+    }
+    return result.workspace;
+  }
+
   /**
    * Create a workspace from a source-discriminated input.
    */
   async create(source: WorkspaceCreationSource): Promise<WorkspaceWithRatchet> {
+    if (String(source.type) === 'EVENT_AGENT') {
+      throw new ApplicationError('INVALID_INPUT', 'Event sources require createEventWorkspaceOnce');
+    }
     this.deps.logger.debug('Creating workspace from source', { sourceType: source.type });
 
     // Validate and prepare creation based on source type

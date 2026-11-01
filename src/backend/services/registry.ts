@@ -2,6 +2,7 @@ export const prismaModelNames = [
   'Project',
   'DecisionLog',
   'Workspace',
+  'WorkspaceLaunchOrigin',
   'WorkspaceMetadata',
   'WorkspacePR',
   'WorkspacePRMonitoring',
@@ -13,6 +14,7 @@ export const prismaModelNames = [
   'WorkspaceNotification',
   'CodexAccount',
   'AgentSession',
+  'AgentSessionLaunchOrigin',
   'SessionLifecycleEvent',
   'TerminalSession',
   'ClosedSession',
@@ -134,6 +136,7 @@ export const serviceRegistry = {
     dependsOn: ['workspace', 'settings', 'terminal', 'github', 'codex-accounts'],
     ownsModels: [
       'AgentSession',
+      'AgentSessionLaunchOrigin',
       'ClosedSession',
       'SessionLifecycleEvent',
       'WorkspacePRDedicatedSession',
@@ -144,6 +147,7 @@ export const serviceRegistry = {
     ownsModels: [
       'Project',
       'Workspace',
+      'WorkspaceLaunchOrigin',
       'WorkspaceMetadata',
       'WorkspacePR',
       'WorkspacePRMonitoring',

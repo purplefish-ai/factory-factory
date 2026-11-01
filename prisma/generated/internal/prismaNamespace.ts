@@ -426,7 +426,9 @@ export const ModelName = {
   AgentInitialDelivery: 'AgentInitialDelivery',
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
-  WorkspaceNotification: 'WorkspaceNotification'
+  WorkspaceNotification: 'WorkspaceNotification',
+  WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
+  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -442,7 +444,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2666,6 +2668,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WorkspaceLaunchOrigin: {
+      payload: Prisma.$WorkspaceLaunchOriginPayload<ExtArgs>
+      fields: Prisma.WorkspaceLaunchOriginFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceLaunchOriginFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceLaunchOriginFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceLaunchOriginFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceLaunchOriginFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceLaunchOriginFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceLaunchOriginCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceLaunchOriginCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceLaunchOriginCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceLaunchOriginDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceLaunchOriginUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceLaunchOriginDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceLaunchOriginUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceLaunchOriginUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceLaunchOriginUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceLaunchOriginPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceLaunchOriginAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceLaunchOrigin>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceLaunchOriginGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceLaunchOriginGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceLaunchOriginCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceLaunchOriginCountAggregateOutputType> | number
+        }
+      }
+    }
+    AgentSessionLaunchOrigin: {
+      payload: Prisma.$AgentSessionLaunchOriginPayload<ExtArgs>
+      fields: Prisma.AgentSessionLaunchOriginFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentSessionLaunchOriginFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentSessionLaunchOriginFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentSessionLaunchOriginFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentSessionLaunchOriginFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        findMany: {
+          args: Prisma.AgentSessionLaunchOriginFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>[]
+        }
+        create: {
+          args: Prisma.AgentSessionLaunchOriginCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        createMany: {
+          args: Prisma.AgentSessionLaunchOriginCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentSessionLaunchOriginCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentSessionLaunchOriginDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        update: {
+          args: Prisma.AgentSessionLaunchOriginUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentSessionLaunchOriginDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentSessionLaunchOriginUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentSessionLaunchOriginUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentSessionLaunchOriginUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSessionLaunchOriginPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentSessionLaunchOriginAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentSessionLaunchOrigin>
+        }
+        groupBy: {
+          args: Prisma.AgentSessionLaunchOriginGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSessionLaunchOriginGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentSessionLaunchOriginCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSessionLaunchOriginCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -3085,6 +3235,7 @@ export const AgentRunScalarFieldEnum = {
   expiresAt: 'expiresAt',
   reasonCode: 'reasonCode',
   result: 'result',
+  effectiveExecution: 'effectiveExecution',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',
@@ -3245,6 +3396,27 @@ export const WorkspaceNotificationScalarFieldEnum = {
 } as const
 
 export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
+
+
+export const WorkspaceLaunchOriginScalarFieldEnum = {
+  runId: 'runId',
+  workspaceId: 'workspaceId',
+  projectId: 'projectId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceLaunchOriginScalarFieldEnum = (typeof WorkspaceLaunchOriginScalarFieldEnum)[keyof typeof WorkspaceLaunchOriginScalarFieldEnum]
+
+
+export const AgentSessionLaunchOriginScalarFieldEnum = {
+  runId: 'runId',
+  sessionId: 'sessionId',
+  workspaceId: 'workspaceId',
+  execution: 'execution',
+  createdAt: 'createdAt'
+} as const
+
+export type AgentSessionLaunchOriginScalarFieldEnum = (typeof AgentSessionLaunchOriginScalarFieldEnum)[keyof typeof AgentSessionLaunchOriginScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -3698,6 +3870,8 @@ export type GlobalOmitConfig = {
   periodicTask?: Prisma.PeriodicTaskOmit
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOmit
   workspaceNotification?: Prisma.WorkspaceNotificationOmit
+  workspaceLaunchOrigin?: Prisma.WorkspaceLaunchOriginOmit
+  agentSessionLaunchOrigin?: Prisma.AgentSessionLaunchOriginOmit
 }
 
 /* Types for Logging */

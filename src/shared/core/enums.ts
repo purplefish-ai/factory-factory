@@ -109,6 +109,7 @@ export const WorkspaceCreationSource = {
   GITHUB_ISSUE: 'GITHUB_ISSUE',
   LINEAR_ISSUE: 'LINEAR_ISSUE',
   PERIODIC_TASK: 'PERIODIC_TASK',
+  EVENT_AGENT: 'EVENT_AGENT',
   CHILD_WORKSPACE: 'CHILD_WORKSPACE',
 } as const;
 export type WorkspaceCreationSource =

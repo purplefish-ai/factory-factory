@@ -1,7 +1,7 @@
 import type { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 
 export function isUnattendedWorkflow(workflow: string): boolean {
-  return workflow === 'periodic-task';
+  return workflow === 'periodic-task' || workflow === 'event-agent';
 }
 
 export function getWorkflowPermissionPreset(

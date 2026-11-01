@@ -1,4 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
 import { prisma } from '@/backend/db';
+import { ApplicationError } from '@/backend/lib/application-error';
 import {
   projectWorkspacePRCollection,
   selectActiveWorkspacePR,
@@ -29,9 +31,11 @@ import type {
   WorkspaceStatusSnapshot,
 } from '@/backend/services/workspace/types';
 import type { RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
+import { eventWorkspaceIdentitySchema } from '@/shared/event-agent-launch';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { Prisma, Workspace, WorkspacePRDiscovery } from '@prisma-gen/client';
+import { workspaceLaunchOriginAccessor } from './workspace-launch-origin.accessor';
 import { projectConversationSummary } from './workspace-metadata.accessor';
 import {
   type PrAggregatePersistenceResult,
@@ -81,6 +85,7 @@ interface CreateWorkspaceInput {
     | 'RESUME_BRANCH'
     | 'GITHUB_ISSUE'
     | 'LINEAR_ISSUE'
+    | 'EVENT_AGENT'
     | 'PERIODIC_TASK'
     | 'CHILD_WORKSPACE';
   creationMetadata?: Prisma.InputJsonValue;
@@ -229,9 +234,17 @@ type WorkspaceWithAgentSessionsAndProject = Flattened<
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
 class WorkspaceAccessor {
-  async create(data: CreateWorkspaceInput): Promise<WorkspaceWithRatchet> {
-    const created = await prisma.workspace.create({
+  create(data: CreateWorkspaceInput): Promise<WorkspaceWithRatchet> {
+    return this.insertWorkspace(data, prisma);
+  }
+
+  private async insertWorkspace(
+    data: CreateWorkspaceInput & { id?: string },
+    tx: Prisma.TransactionClient
+  ) {
+    const created = await tx.workspace.create({
       data: {
+        id: data.id,
         // Keep the active-project condition in the nested write transaction.
         project: { connect: { id: data.projectId, isArchived: false } },
         parentWorkspace: data.parentWorkspaceId
@@ -264,6 +277,66 @@ class WorkspaceAccessor {
       include: sideTables,
     });
     return flatten(created);
+  }
+
+  createEventOnce(data: CreateWorkspaceInput & { id: string; runId: string }) {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE "Workspace" SET "id" = "id" WHERE 0`;
+      const identity = { runId: data.runId, workspaceId: data.id, projectId: data.projectId };
+      const origin = await workspaceLaunchOriginAccessor.find(tx, identity);
+      if (origin) {
+        if (
+          origin.runId !== data.runId ||
+          origin.workspaceId !== data.id ||
+          origin.projectId !== data.projectId
+        ) {
+          throw new ApplicationError('CONFLICT', 'Event workspace ownership mismatch');
+        }
+        return { workspace: await this.reuseEventWorkspace(tx, data), created: false };
+      }
+      const workspace = await this.insertWorkspace(
+        { ...data, creationSource: 'EVENT_AGENT', ratchetEnabled: false },
+        tx
+      );
+      await workspaceLaunchOriginAccessor.create(tx, identity);
+      return { workspace, created: true };
+    });
+  }
+
+  private async reuseEventWorkspace(
+    tx: Prisma.TransactionClient,
+    data: CreateWorkspaceInput & { id: string; runId: string }
+  ) {
+    const existing = await tx.workspace.findUnique({
+      where: { id: data.id },
+      include: { ...sideTables, project: true },
+    });
+    if (!existing) {
+      throw new ApplicationError('PRECONDITION_FAILED', 'Event workspace was deleted');
+    }
+    if (
+      existing.status === 'ARCHIVING' ||
+      existing.status === 'ARCHIVED' ||
+      existing.project.isArchived
+    ) {
+      throw new ApplicationError('PRECONDITION_FAILED', 'Event workspace or project is archived');
+    }
+    if (existing.projectId !== data.projectId || existing.creationSource !== 'EVENT_AGENT') {
+      throw new ApplicationError('CONFLICT', 'Event workspace ownership mismatch');
+    }
+    const originalIdentity = eventWorkspaceIdentitySchema.parse(existing.creationMetadata);
+    if (
+      !isDeepStrictEqual(
+        originalIdentity,
+        eventWorkspaceIdentitySchema.parse(data.creationMetadata)
+      )
+    ) {
+      throw new ApplicationError(
+        'CONFLICT',
+        'Event workspace reserved identity ownership mismatch'
+      );
+    }
+    return flatten(existing);
   }
 
   async findById(id: string): Promise<WorkspaceWithSessions | null> {

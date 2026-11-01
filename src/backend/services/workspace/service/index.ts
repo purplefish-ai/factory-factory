@@ -68,3 +68,5 @@ export {
   assertWorktreePathSafe,
   worktreeLifecycleService,
 } from './worktree/worktree-lifecycle.service';
+
+export type { EventWorkspaceSource } from './lifecycle/event-workspace-source';

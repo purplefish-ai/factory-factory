@@ -7,6 +7,18 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentExecutionBindingAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-execution-binding.accessor',
+  },
+  agentSessionLaunchOriginAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/agent-session-launch-origin.accessor',
+  },
+  workspaceLaunchOriginAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-launch-origin.accessor',
+  },
   agentSourceAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-source.accessor',

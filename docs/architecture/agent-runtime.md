@@ -719,6 +719,40 @@ synchronous live-handle recheck. Load activation uses the supplied application
 graph's dispatcher. See [chat message flow](../chat-message-flow.md) for
 reconnect, recipient, and failure contracts.
 
+## Event creation ownership
+
+Event execution is not wired to a launch consumer yet. The dormant
+`createEventWorkspaceOnce` and `createEventSessionOnce` APIs accept reserved IDs
+from an admitted event run. They create their entity and retained launch origin
+in one transaction. Workspace origins survive workspace, run and project
+removal; session origins survive session and workspace removal. A retained
+origin without its live entity blocks recreation, including deletion before run
+linkage. Archived workspaces and projects also block creation/reuse. Generic
+interactive, child and periodic creation keeps its existing behavior.
+
+The agent-definition owner exposes `readEventExecutionBinding` and
+`freezeEventExecution`. Freeze checks the current worker/attempt, lease,
+reserved IDs and PENDING delivery identity, then stores immutable effective
+execution without changing admitted snapshots. The original reserved message ID
+stays fixed; a later explicit retry can rotate the delivery's message ID and
+send-attempt ID. Generation checks fence earlier callers.
+
+Future launch orchestration must select a Codex account under
+`withAccountReservation`, freeze its ID before session insertion, and use that
+same ID on recovery or fail. Session creation validates that exact account via
+the application graph's account service without selecting Auto or entering a
+second reservation. Disabled, missing or unauthenticated frozen accounts do not
+fall back. Origins store account IDs and a strict versioned execution intent,
+never credentials. Session reuse compares that original intent rather than
+mutable model/launch metadata. Initial dispatch must later pin the origin's
+settings even if a human has changed ordinary conversation settings.
+
+Event sessions use `event-agent` and explicit `non_interactive` intent, with
+ratchet disabled at workspace creation. They do not inherit periodic Codex YOLO
+permissions. These APIs neither initialize a provider nor dispatch a prompt;
+observed delivery, setup/restart orchestration and runtime wiring remain
+separate work.
+
 ## Session lifecycle ownership
 
 `SessionLifecycleGate` owns domain startup/stop eligibility. Workspace

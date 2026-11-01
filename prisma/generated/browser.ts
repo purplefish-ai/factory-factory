@@ -208,3 +208,13 @@ export type PeriodicTaskExecution = Prisma.PeriodicTaskExecutionModel
  * 
  */
 export type WorkspaceNotification = Prisma.WorkspaceNotificationModel
+/**
+ * Model WorkspaceLaunchOrigin
+ * Retained creation evidence; intentionally no cascading entity relations.
+ */
+export type WorkspaceLaunchOrigin = Prisma.WorkspaceLaunchOriginModel
+/**
+ * Model AgentSessionLaunchOrigin
+ * Session-owned retained identity and immutable launch intent, never credentials.
+ */
+export type AgentSessionLaunchOrigin = Prisma.AgentSessionLaunchOriginModel

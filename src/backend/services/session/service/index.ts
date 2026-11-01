@@ -113,3 +113,5 @@ export {
   sessionEventBus,
 } from './session-event-bus';
 export { voiceNarrationService } from './voice/voice-narration.service';
+
+export type { EventAgentExecution, EventSessionCreation } from '@/shared/event-agent-launch';

@@ -4,6 +4,7 @@ import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-wor
 describe('workflow permissions', () => {
   it('recognizes scheduled sessions while legacy sessions use ordinary controls', () => {
     expect(isUnattendedWorkflow('periodic-task')).toBe(true);
+    expect(isUnattendedWorkflow('event-agent')).toBe(true);
     expect(isUnattendedWorkflow('auto-iteration')).toBe(false);
     expect(isUnattendedWorkflow('implement')).toBe(false);
   });
@@ -14,6 +15,12 @@ describe('workflow permissions', () => {
       const settings = { defaultWorkspacePermissions };
       expect(getWorkflowPermissionPreset('periodic-task', 'CODEX', settings)).toBe('YOLO');
       expect(getWorkflowPermissionPreset('periodic-task', 'CLAUDE', settings)).toBe(
+        defaultWorkspacePermissions
+      );
+      expect(getWorkflowPermissionPreset('event-agent', 'CODEX', settings)).toBe(
+        defaultWorkspacePermissions
+      );
+      expect(getWorkflowPermissionPreset('event-agent', 'CLAUDE', settings)).toBe(
         defaultWorkspacePermissions
       );
       expect(getWorkflowPermissionPreset('implement', 'CODEX', settings)).toBe(
