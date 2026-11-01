@@ -134,6 +134,7 @@ it('keeps preview details while becoming idle after a prompt and wakes queued pr
       activity: 'IDLE',
       processState: 'alive',
       work: {
+        controlRuntimeId: tracker.getControlRuntimeId(),
         promptInFlight: false,
         backgroundTasks: [{ id: '["root","preview"]', name: 'pnpm storybook', kind: 'shell' }],
         runningSubagents: 0,

@@ -44,6 +44,8 @@ interface SessionTabsProps {
   sessions: ReturnType<typeof useWorkspaceData>['sessions'];
   selectedDbSessionId: string | null;
   selectedSessionReady: boolean;
+  selectedSessionControlId?: string;
+  selectedSessionControlRuntimeId?: string;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
@@ -232,6 +234,8 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
       selectedSessionId={sessionTabs.selectedDbSessionId}
       selectedSessionName={selectedSessionName}
       selectedSessionReady={sessionTabs.selectedSessionReady}
+      selectedSessionControlId={sessionTabs.selectedSessionControlId}
+      selectedSessionControlRuntimeId={sessionTabs.selectedSessionControlRuntimeId}
       onOpenSubagent={handleOpenSubagent}
     />
   );

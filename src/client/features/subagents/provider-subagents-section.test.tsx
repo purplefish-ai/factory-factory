@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
     isFetchingNextPage: false,
     isFetching: false,
     isLoading: false,
-    refetch: vi.fn(() => Promise.resolve()),
+    refetch: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
   },
   useQuery: vi.fn(),
 }));
@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
+      stopTarget: { useMutation: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }) },
       listSubagents: {
         useQuery: (...args: unknown[]) => {
           mocks.useQuery(...args);
@@ -522,5 +523,104 @@ describe('ProviderSubagentsSection', () => {
       onSelect: vi.fn(),
     });
     expect(container.textContent).not.toContain('Finished audit');
+  });
+  it('keeps cached children browseable while withdrawing controls on disconnect or parent stop', async () => {
+    const child: SubagentListItem = {
+      id: 'child',
+      name: 'Child',
+      status: 'running',
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+      stopControl: { runtimeId: 'runtime', controlId: 'live' },
+    };
+    mocks.queryResult.data = { supported: true, subagents: [child], nextCursor: null };
+    const props = {
+      sessionId: 'parent',
+      parentSessionName: 'Parent',
+      enabled: true,
+      onSelect: vi.fn(),
+    };
+    mocks.queryResult.refetch.mockResolvedValue({ isError: false, data: mocks.queryResult.data });
+    await act(() =>
+      root.render(
+        createElement(ProviderSubagentsSection, {
+          ...props,
+          controlSessionId: 'parent',
+          controlRuntimeId: 'runtime',
+        })
+      )
+    );
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).not.toBeNull();
+    render(props);
+    expect(container.textContent).toContain('Child');
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).toBeNull();
+  });
+  it('fences cached child controls until a successful refresh for the current live runtime', async () => {
+    const child = {
+      id: 'child',
+      name: 'Child',
+      status: 'running',
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+      stopControl: { controlId: 'old-live', runtimeId: 'old-runtime' },
+    };
+    mocks.queryResult.data = { supported: true, subagents: [child], nextCursor: null };
+    const props = {
+      sessionId: 'parent',
+      parentSessionName: 'Parent',
+      enabled: true,
+      onSelect: vi.fn(),
+      controlSessionId: 'parent',
+      controlRuntimeId: 'old-runtime',
+    };
+    let finish!: (result: unknown) => void;
+    mocks.queryResult.refetch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    await act(() => root.render(createElement(ProviderSubagentsSection, props)));
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).toBeNull();
+    await act(() => finish({ isError: false, data: mocks.queryResult.data }));
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).not.toBeNull();
+    await act(() =>
+      root.render(
+        createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
+      )
+    );
+    await act(() =>
+      root.render(
+        createElement(ProviderSubagentsSection, { ...props, controlRuntimeId: 'new-runtime' })
+      )
+    );
+    expect(container.textContent).toContain('Child');
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).toBeNull();
+    await act(() => finish({ isError: true, data: mocks.queryResult.data }));
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).toBeNull();
+    await act(() =>
+      root.render(
+        createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
+      )
+    );
+    mocks.queryResult.data = {
+      supported: true,
+      subagents: [{ ...child, stopControl: { controlId: 'new-live', runtimeId: 'new-runtime' } }],
+      nextCursor: null,
+    };
+    await act(() =>
+      root.render(
+        createElement(ProviderSubagentsSection, { ...props, controlRuntimeId: 'new-runtime' })
+      )
+    );
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).toBeNull();
+    await act(() => finish({ isError: false, data: mocks.queryResult.data }));
+    expect(container.querySelector('button[aria-label="Stop subagent"]')).not.toBeNull();
   });
 });

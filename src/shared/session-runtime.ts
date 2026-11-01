@@ -1,4 +1,5 @@
 import type { SessionStatus } from '@/shared/core';
+import type { AcpBackgroundTask } from './acp-protocol/subagents';
 
 export const SESSION_RUNTIME_PHASES = [
   'loading',
@@ -42,8 +43,9 @@ export interface SessionSummary {
 }
 
 export interface SessionWorkState {
+  controlRuntimeId?: string;
   promptInFlight: boolean;
-  backgroundTasks: { id: string; name: string; kind: 'shell' | 'turn' | 'task' }[];
+  backgroundTasks: AcpBackgroundTask[];
   runningSubagents: number;
   activeGoals: number;
 }

@@ -27,6 +27,8 @@ interface TopPanelAreaProps {
   selectedSessionId: string | null;
   selectedSessionName: string | null;
   selectedSessionReady: boolean;
+  selectedSessionControlId?: string;
+  selectedSessionControlRuntimeId?: string;
   onOpenSubagent: (selection: SubagentSelection) => void;
 }
 
@@ -43,6 +45,8 @@ export function TopPanelArea({
   selectedSessionId,
   selectedSessionName,
   selectedSessionReady,
+  selectedSessionControlId,
+  selectedSessionControlRuntimeId,
   onOpenSubagent,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
@@ -134,6 +138,8 @@ export function TopPanelArea({
             sessionId={selectedSessionId}
             sessionName={selectedSessionName}
             sessionReady={selectedSessionReady}
+            controlSessionId={selectedSessionControlId}
+            controlRuntimeId={selectedSessionControlRuntimeId}
             isParentWorkspace={isParentWorkspace}
             onOpenSubagent={onOpenSubagent}
           />

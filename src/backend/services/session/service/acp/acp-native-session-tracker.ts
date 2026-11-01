@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SessionStopTarget, AcpBackgroundTask } from '@/shared/acp-protocol/subagents';
 import {
   type SubagentListResult,
   type SubagentReadResult,
@@ -10,9 +11,10 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import { normalizeSessionUpdateMessage } from './acp-stream-normalizer';
+import { AcpTargetedStopControls, type AcpStopDispatch } from './acp-targeted-stop-controls';
 
 export interface AcpBackgroundWork {
-  backgroundTasks: { id: string; name: string; kind: 'shell' | 'turn' | 'task' }[];
+  backgroundTasks: AcpBackgroundTask[];
   runningSubagents: number;
   activeGoals: number;
 }
@@ -22,6 +24,7 @@ const spawnedSchema = z.object({
   name: z.string(),
   task: z.string().optional(),
   prompt: z.string().optional(),
+  capabilities: z.object({ cancel: z.record(z.string(), z.unknown()).nullish() }).optional(),
 });
 const stateSchema = z.object({
   subagentSessionId: z.string().min(1),
@@ -29,6 +32,7 @@ const stateSchema = z.object({
 });
 const taskSchema = z.object({
   asyncTaskId: z.string().min(1),
+  canStop: z.boolean().optional(),
   name: z.string().optional(),
   taskType: z.string().optional(),
   state: z.enum(['running', 'paused', 'completed', 'failed', 'stopped']).optional(),
@@ -95,6 +99,7 @@ function pageIndex(cursor: string | null | undefined, fallback: number): number 
 /** Keeps draft native updates out of the released SDK and out of the parent transcript. */
 export class AcpNativeSessionTracker {
   private rootSessionId?: string;
+  private readonly stopControls = new AcpTargetedStopControls();
   private readonly abandonedSessions = new Set<string>();
   private available = false;
   private replayingHistory = false;
@@ -122,6 +127,7 @@ export class AcpNativeSessionTracker {
   }
 
   beginHistoryReplay(preserveShellTasks = false): void {
+    this.stopControls.clear();
     this.replayingHistory = true;
     this.preserveReplayShellTasks = preserveShellTasks;
   }
@@ -159,6 +165,7 @@ export class AcpNativeSessionTracker {
     for (const sessionId of this.children.keys()) {
       this.abandonedSessions.add(sessionId);
     }
+    this.stopControls.clear();
     this.rootSessionId = undefined;
     this.replayingHistory = false;
     this.children.clear();
@@ -184,12 +191,25 @@ export class AcpNativeSessionTracker {
     return {
       backgroundTasks: [...this.activeTasks]
         .filter(([, task]) => task.active)
-        .map(([id, { name, kind }]) => ({ id, name, kind })),
+        .map(([id, { name, kind }]) => ({ id, name, kind, ...this.controlFields('task', id) })),
       runningSubagents: [...this.children.values()].filter(
         (child) => child.summary.status === 'running'
       ).length,
       activeGoals: this.activeGoals.size,
     };
+  }
+
+  getControlRuntimeId(): string {
+    return this.stopControls.runtimeId;
+  }
+
+  resolveStopTarget(target: SessionStopTarget): AcpStopDispatch {
+    return this.stopControls.resolve(target);
+  }
+
+  private controlFields(kind: SessionStopTarget['kind'], id: string) {
+    const stopControl = this.replayingHistory ? undefined : this.stopControls.get(kind, id);
+    return stopControl ? { stopControl } : {};
   }
 
   ownsSession(sessionId: string): boolean {
@@ -249,6 +269,7 @@ export class AcpNativeSessionTracker {
   private consumeLifecycleUpdate(sessionId: string, update: Record<string, unknown>): boolean {
     const kind = update.sessionUpdate;
     const nativeLifecycle =
+      kind === 'subagent_update' ||
       kind === 'subagent_spawned' ||
       kind === 'subagent_state_update' ||
       (typeof kind === 'string' && kind.startsWith('async_task_'));
@@ -269,6 +290,22 @@ export class AcpNativeSessionTracker {
       return true;
     }
     switch (kind) {
+      case 'subagent_update': {
+        const child =
+          typeof update.sessionId === 'string'
+            ? this.children.get(this.childId(update.sessionId))
+            : undefined;
+        if (
+          child &&
+          child.parentSessionId === sessionId &&
+          child.activeSessionId === update.sessionId &&
+          child.summary.status === 'running'
+        ) {
+          this.setChildControl(child, update.capabilities);
+          this.changed(child.summary.id, 'updated');
+        }
+        break;
+      }
       case 'subagent_spawned':
         this.spawn(sessionId, update);
         break;
@@ -303,7 +340,10 @@ export class AcpNativeSessionTracker {
     const offset = input.cursor == null ? 0 : start;
     const end = Math.min(offset + input.limit, children.length);
     return {
-      subagents: children.slice(offset, end).map((child) => ({ ...child.summary })),
+      subagents: children.slice(offset, end).map((child) => ({
+        ...child.summary,
+        ...this.controlFields('subagent', child.summary.id),
+      })),
       nextCursor: end < children.length ? String(end) : null,
     };
   }
@@ -350,7 +390,13 @@ export class AcpNativeSessionTracker {
     const now = this.observationTimestamp();
     const previous = this.children.get(id);
     if (previous) {
-      this.resumeChild(previous, parentSessionId, subagentSessionId, nativeGeneration);
+      this.resumeChild(
+        previous,
+        parentSessionId,
+        subagentSessionId,
+        nativeGeneration,
+        parsed.data.capabilities
+      );
       return;
     }
     const child: ChildSession = {
@@ -384,6 +430,7 @@ export class AcpNativeSessionTracker {
       child.pendingPrompt = true;
     }
     this.children.set(id, child);
+    this.setChildControl(child, parsed.data.capabilities);
     this.changed(id, 'created');
     this.publishActivity();
   }
@@ -392,7 +439,8 @@ export class AcpNativeSessionTracker {
     child: ChildSession,
     parentSessionId: string,
     subagentSessionId: string,
-    nativeGeneration: number
+    nativeGeneration: number,
+    capabilities: unknown
   ): void {
     // The adapter's live router starts its counter over after loading history.
     if (child.replayed && this.callbacks.groupCodexGenerations) {
@@ -403,6 +451,7 @@ export class AcpNativeSessionTracker {
     if (generation <= (child.summary.generation ?? 1)) {
       return;
     }
+    this.stopControls.invalidateSession(child.activeSessionId);
     child.activeSessionId = subagentSessionId;
     child.parentSessionId = parentSessionId;
     child.startNewTurn = true;
@@ -412,8 +461,21 @@ export class AcpNativeSessionTracker {
     child.summary.generation = generation;
     child.summary.completedAt = null;
     child.summary.updatedAt = this.observationTimestamp();
+    this.setChildControl(child, capabilities);
     this.changed(child.summary.id, 'updated');
     this.publishActivity();
+  }
+
+  private setChildControl(child: ChildSession, capabilities: unknown): void {
+    const capability = record(capabilities);
+    if (!(capability && Object.hasOwn(capability, 'cancel'))) {
+      return;
+    }
+    this.stopControls.set(
+      child.summary.id,
+      { kind: 'subagent', sessionId: child.activeSessionId },
+      !this.replayingHistory && !!record(capability.cancel)
+    );
   }
 
   private finish(parentSessionId: string, update: Record<string, unknown>): void {
@@ -432,6 +494,7 @@ export class AcpNativeSessionTracker {
     child.summary.status = parsed.data.state === 'disconnected' ? 'interrupted' : parsed.data.state;
     child.summary.updatedAt = this.observationTimestamp();
     child.summary.completedAt = child.summary.updatedAt;
+    this.stopControls.invalidateSession(child.activeSessionId);
     this.activeGoals.delete(child.summary.id);
     this.changed(child.summary.id, 'completed');
     this.publishActivity();
@@ -532,9 +595,20 @@ export class AcpNativeSessionTracker {
     return this.replayingHistory ? null : new Date().toISOString();
   }
 
+  private isCurrentTaskOwner(sessionId: string): boolean {
+    if (sessionId === this.rootSessionId) {
+      return true;
+    }
+    const child = this.children.get(this.childId(sessionId));
+    return (
+      child?.activeSessionId === sessionId && child.summary.status === 'running' && !child.replayed
+    );
+  }
+
   private trackTask(sessionId: string, update: Record<string, unknown>): void {
     const parsed = taskSchema.safeParse(update);
-    if (!parsed.success) {
+    const rootSessionId = this.rootSessionId;
+    if (!(parsed.success && rootSessionId)) {
       return;
     }
     const key = JSON.stringify([sessionId, parsed.data.asyncTaskId]);
@@ -549,6 +623,23 @@ export class AcpNativeSessionTracker {
       this.activeTasks.set(key, { ...previous, active: false });
     } else if (update.sessionUpdate === 'async_task_state_update' && parsed.data.state) {
       this.activeTasks.delete(key);
+    }
+    const current = this.activeTasks.get(key);
+    if (
+      update.sessionUpdate === 'async_task_spawned' ||
+      parsed.data.canStop !== undefined ||
+      !current?.active
+    ) {
+      this.stopControls.set(
+        key,
+        { kind: 'task', sessionId: rootSessionId, asyncTaskId: parsed.data.asyncTaskId },
+        !this.replayingHistory &&
+          this.isCurrentTaskOwner(sessionId) &&
+          !!current?.active &&
+          parsed.data.canStop === true,
+        update.sessionUpdate === 'async_task_spawned',
+        sessionId
+      );
     }
     this.publishActivity();
   }

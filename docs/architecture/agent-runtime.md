@@ -937,3 +937,37 @@ Electron fatal-error handlers await backend shutdown before quitting. Concurrent
 fatal errors share one shutdown attempt. Cleanup failures and a 30-second
 shutdown deadline are logged before the application exits, so a stalled startup
 cannot hold the fatal-error path open indefinitely.
+
+### Targeted interruption
+
+Expanded background-process rows in chat and controllable sub-agent rows in the
+Sessions panel expose an icon-only Stop action. Each action has its own disabled
+spinner until live provider updates remove the work or withdraw its capability;
+request acknowledgment does not invent completion. Failures use a toast and
+allow retry. Pending attempts and their original deadlines survive list/panel
+remounts, and confirmation waiting is bounded to 15 seconds. Disconnecting hides
+controls, and stopping a row remains separate from selecting its transcript.
+
+The session-scoped `stopTarget` mutation validates an opaque live control ID
+against the current active runtime's native tracker before dispatch. UI
+references also carry the tracker's runtime identity, matched to the live work
+snapshot. Current-connection hydration and a successful child-list refresh gate
+controls after reconnect/runtime replacement; cached rows stay browseable while
+controls wait for current capability data. Controls are renewed for child/task
+generations and withdrawn during history replay, completion and capability
+withdrawal. Browsing extensions and browse-only runtimes cannot grant control. A
+stop never starts or restores a runtime. Background tasks require explicit
+`canStop` and dispatch `_session/async_task/stop` with the root provider session
+and retained task ID; child ownership separately fences tasks from superseded
+child generations. Native child interruption requires an explicit
+`capabilities.cancel` and sends `session/cancel` to that child's current ACP
+session ID, preserving the parent and unrelated siblings. No parent-cancellation
+fallback is used.
+
+The currently installed Claude and Codex adapters select the existing AIR
+sub-agent protocol and advertise no child cancellation capability in that form.
+Their child rows therefore remain browseable without Stop. The tracker accepts
+explicit cancellation metadata for known current native children, including
+`subagent_update` capability changes, without changing protocol negotiation or
+claiming support for a separate standard-protocol lifecycle. Background-task
+stopping remains available where AIR advertises `canStop`.

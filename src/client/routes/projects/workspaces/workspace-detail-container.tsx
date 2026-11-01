@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
+import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   ArchiveGitLockDialog,
   useChatTranscriptPersistence,
@@ -106,6 +107,7 @@ export function WorkspaceDetailContainer() {
     processStatus,
     sessionRuntime,
     runtimeSessionId,
+    controlsHydrated,
     pendingRequest,
     chatSettings,
     chatCapabilities,
@@ -175,6 +177,12 @@ export function WorkspaceDetailContainer() {
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
+  const selectedSessionControlId = getLiveSessionControlId(
+    selectedDbSessionId,
+    connected && controlsHydrated && runtimeSessionId === selectedDbSessionId,
+    sessionRuntime
+  );
+  const selectedSessionControlRuntimeId = sessionRuntime.work?.controlRuntimeId;
   const selectedSessionReady = isProviderSubagentSessionReady(selectedDbSessionId);
   const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
@@ -308,6 +316,7 @@ export function WorkspaceDetailContainer() {
     approvePermission,
     answerQuestion,
     connected,
+    controlsHydrated,
     sendMessage,
     stopChat,
     inputRef,
@@ -378,6 +387,8 @@ export function WorkspaceDetailContainer() {
       sessions,
       selectedDbSessionId,
       selectedSessionReady,
+      selectedSessionControlId,
+      selectedSessionControlRuntimeId,
       sessionSummariesById,
       isDeletingSession: deleteSession.isPending,
       handleSelectSession,
@@ -393,6 +404,8 @@ export function WorkspaceDetailContainer() {
       sessions,
       selectedDbSessionId,
       selectedSessionReady,
+      selectedSessionControlId,
+      selectedSessionControlRuntimeId,
       sessionSummariesById,
       deleteSession.isPending,
       handleSelectSession,

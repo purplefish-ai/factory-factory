@@ -115,7 +115,14 @@ export class AcpSubagentBrowser {
         SUBAGENTS_LIST_METHOD,
         parsedParams.data
       );
-      return subagentListResultSchema.parse(response);
+      const result = subagentListResultSchema.parse(response);
+      return {
+        ...result,
+        subagents: result.subagents.map((item) => {
+          item.stopControl = undefined;
+          return item;
+        }),
+      };
     } catch (error) {
       throw normalizeSubagentBrowseError(error, 'list');
     }

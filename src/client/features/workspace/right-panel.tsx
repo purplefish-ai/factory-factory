@@ -40,6 +40,8 @@ interface RightPanelProps {
   selectedSessionId?: string | null;
   selectedSessionName?: string | null;
   selectedSessionReady?: boolean;
+  selectedSessionControlId?: string;
+  selectedSessionControlRuntimeId?: string;
   onOpenSubagent?: (selection: SubagentSelection) => void;
 }
 
@@ -51,6 +53,8 @@ export const RightPanel = memo(function RightPanel({
   selectedSessionId = null,
   selectedSessionName = null,
   selectedSessionReady = false,
+  selectedSessionControlId,
+  selectedSessionControlRuntimeId,
   onOpenSubagent = () => undefined,
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
@@ -225,6 +229,8 @@ export const RightPanel = memo(function RightPanel({
       selectedSessionId={selectedSessionId}
       selectedSessionName={selectedSessionName}
       selectedSessionReady={selectedSessionReady}
+      selectedSessionControlId={selectedSessionControlId}
+      selectedSessionControlRuntimeId={selectedSessionControlRuntimeId}
       onOpenSubagent={onOpenSubagent}
     />
   );

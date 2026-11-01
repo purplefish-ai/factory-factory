@@ -12,6 +12,7 @@ export function getAcpWorkState(
   return {
     work: {
       promptInFlight: Boolean(promptInFlight),
+      controlRuntimeId: handle.nativeSessionTracker.getControlRuntimeId(),
       ...handle.nativeSessionTracker.getBackgroundWork(),
     },
   };

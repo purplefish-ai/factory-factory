@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn, userEvent, within } from 'storybook/test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { observable } from '@trpc/server/observable';
+import { useState, type ReactNode } from 'react';
+import { expect, fn, userEvent, within } from 'storybook/test';
+import { trpc } from '@/client/lib/trpc';
 import { SubagentList } from './subagent-list';
 import type { SubagentListItem } from './types';
 
@@ -50,6 +54,26 @@ const completedSubagents: SubagentListItem[] = [
     resultPreview: 'Storybook build stopped on a missing icon export.',
   },
 ];
+
+function StopStoryProvider({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
+  const [client] = useState(() =>
+    trpc.createClient({
+      links: [
+        () => () =>
+          observable((observer) => {
+            observer.next({ result: { data: undefined } });
+            observer.complete();
+          }),
+      ],
+    })
+  );
+  return (
+    <trpc.Provider client={client} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </trpc.Provider>
+  );
+}
 
 const meta = {
   title: 'Subagents/SubagentList',
@@ -106,5 +130,41 @@ export const ManySimultaneousAgents: Story = {
         }))
       ),
     },
+  },
+};
+
+export const ControllableSubagents: Story = {
+  args: {
+    controlSessionId: 'live-parent',
+    controlRuntimeId: 'runtime',
+    state: {
+      kind: 'ready',
+      subagents: [
+        { ...activeSubagents[0]!, stopControl: { runtimeId: 'runtime', controlId: 'native-live' } },
+        activeSubagents[1]!,
+        ...completedSubagents,
+      ],
+    },
+  },
+  decorators: [
+    (Story) => (
+      <StopStoryProvider>
+        <Story />
+      </StopStoryProvider>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getAllByRole('button', { name: 'Stop subagent' })
+    ).toHaveLength(1);
+  },
+};
+
+export const SubagentStopPending: Story = {
+  ...ControllableSubagents,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop subagent' }));
+    await expect(canvas.getByRole('button', { name: 'Stop subagent' })).toBeDisabled();
   },
 };

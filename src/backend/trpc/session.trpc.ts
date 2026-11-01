@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
+import { sessionStopTargetParamsSchema } from '@/shared/acp-protocol/subagents';
 import {
   subagentListParamsSchema,
   subagentReadParamsSchema,
@@ -219,6 +220,16 @@ export const sessionRouter = router({
     }
     return session;
   }),
+
+  stopTarget: publicProcedure
+    .input(sessionStopTargetParamsSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await ctx.appContext.services.acpRuntimeManager.stopTarget(input.sessionId, input.target);
+      } catch (error) {
+        throw toSubagentApplicationError(error);
+      }
+    }),
 
   listSubagents: publicProcedure.input(subagentListParamsSchema).query(async ({ ctx, input }) => {
     const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;

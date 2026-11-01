@@ -373,3 +373,17 @@ describe('real chat WebSocket configuration lifecycle', () => {
     expect(trigger()?.getAttribute('aria-busy')).toBe('false');
   });
 });
+
+it('withholds targeted controls until accepted hydration on every connection', async () => {
+  const harness = await mount();
+  expect(harness.chat.controlsHydrated).toBe(false);
+  await harness.hydrate(harness.socket, [modelOption, reasoningOption]);
+  expect(harness.chat.controlsHydrated).toBe(true);
+  await act(() => harness.socket.close());
+  expect(harness.chat.controlsHydrated).toBe(false);
+  const next = await harness.reconnect();
+  expect(harness.chat.connected).toBe(true);
+  expect(harness.chat.controlsHydrated).toBe(false);
+  await harness.hydrate(next, [modelOption, reasoningOption]);
+  expect(harness.chat.controlsHydrated).toBe(true);
+});

@@ -5,12 +5,15 @@ import { SubagentList, type SubagentListState } from './subagent-list';
 import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
 import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem, SubagentSelection } from './types';
+import { useFreshSubagentControls } from './use-fresh-subagent-controls';
 import { useSubagentInvalidation } from './use-subagent-invalidation';
 
 export interface ProviderSubagentsSectionProps {
   sessionId: string | null;
   parentSessionName: string | null;
   enabled: boolean;
+  controlSessionId?: string;
+  controlRuntimeId?: string;
   onSelect: (selection: SubagentSelection) => void;
 }
 
@@ -18,6 +21,8 @@ export function ProviderSubagentsSection({
   sessionId,
   parentSessionName,
   enabled,
+  controlSessionId,
+  controlRuntimeId,
   onSelect,
 }: ProviderSubagentsSectionProps) {
   const requestedQuery = Boolean(sessionId && enabled);
@@ -27,6 +32,14 @@ export function ProviderSubagentsSection({
     enabled: queryEnabled,
     refetchOnMount: 'always',
     getNextPageParam: getNextSubagentPageParam,
+  });
+  const freshControlSessionId = useFreshSubagentControls({
+    sessionId,
+    controlSessionId,
+    controlRuntimeId,
+    refetch: query.refetch,
+    dataUpdatedAt: query.dataUpdatedAt,
+    error: query.error,
   });
   const { fetchNextPage, hasNextPage, isFetching } = query;
   const error = getSubagentListError(query);
@@ -116,7 +129,13 @@ export function ProviderSubagentsSection({
           </span>
         )}
       </div>
-      <SubagentList key={sessionId} state={state} onSelect={handleSelect} />
+      <SubagentList
+        key={sessionId}
+        state={state}
+        onSelect={handleSelect}
+        controlSessionId={freshControlSessionId}
+        controlRuntimeId={controlRuntimeId}
+      />
     </section>
   );
 }

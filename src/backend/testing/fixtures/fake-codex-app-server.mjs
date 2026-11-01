@@ -94,6 +94,32 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       const threadId = request.params.threadId;
       send({ id: request.id, result: { turn } });
       setTimeout(() => {
+        const targetedStopContract = request.params.input?.some(
+          (input) => input.text === 'Synthetic targeted stop contract'
+        );
+        if (targetedStopContract) {
+          send({
+            method: 'item/started',
+            params: {
+              threadId,
+              turnId: turn.id,
+              item: {
+                id: 'child-activity',
+                type: 'subAgentActivity',
+                kind: 'started',
+                agentThreadId: '22222222-2222-4222-8222-222222222222',
+                agentPath: '/root/Worker',
+              },
+            },
+          });
+          send({
+            method: 'turn/completed',
+            params: {
+              threadId: '22222222-2222-4222-8222-222222222222',
+              turn: { id: 'child-turn', status: 'completed', items: [], error: null },
+            },
+          });
+        }
         send({
           method: 'item/started',
           params: {

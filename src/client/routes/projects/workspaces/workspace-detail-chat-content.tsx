@@ -9,6 +9,7 @@ import {
   ChatTranscript,
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
+import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { useSubagentTimelineMessages } from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
@@ -33,6 +34,7 @@ export interface ChatContentProps {
   approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
   answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
   connected: boolean;
+  controlsHydrated?: boolean;
   sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
@@ -236,6 +238,11 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         acpPlan={props.acpPlan}
         running={running}
         work={props.sessionRuntime.work}
+        controlSessionId={getLiveSessionControlId(
+          props.sessionId,
+          props.connected && props.controlsHydrated === true,
+          props.sessionRuntime
+        )}
         startingSession={displayStartingState}
         loadingSession={loadingSession}
         latestThinking={props.latestThinking ?? null}

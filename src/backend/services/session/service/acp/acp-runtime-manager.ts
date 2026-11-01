@@ -1,4 +1,5 @@
 import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import type { SessionStopTarget } from '@/shared/acp-protocol/subagents';
 import type {
   SubagentBrowseCapability,
   SubagentListParams,
@@ -11,11 +12,13 @@ import type { AcpProcessHandle } from './acp-process-handle';
 import { AcpPromptController } from './acp-prompt-controller';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
+import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import type { AcpClientCreationOperation } from './acp-runtime-quiescence';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
 import { AcpSteeringTimeoutError, steerAcpPrompt } from './acp-steering';
 import { AcpSubagentBrowser } from './acp-subagent-browser';
+import { stopAcpTarget } from './acp-targeted-stop';
 import type { AcpClientOptions } from './types';
 
 export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
@@ -102,15 +105,35 @@ export class AcpRuntimeManager {
     return this.supervisor.stopAndQuiesce(sessionId);
   }
 
+  stopTarget(sessionId: string, target: SessionStopTarget): Promise<void> {
+    if (this.supervisor.isStopInProgress(sessionId)) {
+      return Promise.reject(
+        new AcpSubagentBrowseError('PRECONDITION_FAILED', 'The parent session is stopping.')
+      );
+    }
+    return stopAcpTarget(this.supervisor.getClient(sessionId), target);
+  }
+
   getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
     return this.subagentBrowser.getCapability(this.supervisor.getBrowseClient(sessionId));
   }
 
-  listSubagents(
+  async listSubagents(
     sessionId: string,
     input: Omit<SubagentListParams, 'sessionId'>
   ): Promise<SubagentListResult> {
-    return this.subagentBrowser.listSubagents(this.supervisor.getBrowseClient(sessionId), input);
+    const handle = this.supervisor.getBrowseClient(sessionId);
+    const result = await this.subagentBrowser.listSubagents(handle, input);
+    if (
+      !handle ||
+      this.supervisor.getClient(sessionId) !== handle ||
+      this.supervisor.isStopInProgress(sessionId)
+    ) {
+      for (const item of result.subagents) {
+        item.stopControl = undefined;
+      }
+    }
+    return result;
   }
 
   readSubagentTranscript(

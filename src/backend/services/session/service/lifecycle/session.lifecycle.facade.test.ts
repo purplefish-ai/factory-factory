@@ -205,6 +205,7 @@ describe('SessionLifecycleFacade', () => {
       unsafeCoerce({
         isPromptInFlight: false,
         nativeSessionTracker: {
+          getControlRuntimeId: () => 'runtime',
           getBackgroundWork: () => ({
             backgroundTasks: [],
             runningSubagents: 0,
