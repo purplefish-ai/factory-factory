@@ -9,7 +9,6 @@ import {
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import {
   flattenWorkspaceRatchet,
-  pendingPREventWhere,
   type WorkspaceRatchetFields,
   type WorkspaceRatchetRow,
 } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
@@ -40,6 +39,11 @@ import { selectWorkspacePR } from '@/shared/workspace-pr';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
 import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
 import { deleteWorkspace } from './workspace-delete.accessor';
+import {
+  projectWorkspaceFamily,
+  workspaceFamilyInclude,
+  type WorkspaceFamilyFields,
+} from './workspace-family-projection';
 import { withWorkspaceInitGuard } from './workspace-init-guard';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from './workspace-inputs';
 import { workspaceLaunchOriginAccessor } from './workspace-launch-origin.accessor';
@@ -81,8 +85,15 @@ interface FindByProjectIdFilters {
 /** Flatten side-table inputs at the read boundary; Ratchet state is derived, never stored. */
 type Flattened<T> = Omit<
   T,
-  'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count' | 'conversationMetadata'
+  | 'prMonitoring'
+  | 'prs'
+  | 'prDiscovery'
+  | 'runScript'
+  | '_count'
+  | 'conversationMetadata'
+  | 'parentWorkspace'
 > &
+  WorkspaceFamilyFields &
   WorkspaceRatchetFields &
   ReturnType<typeof projectWorkspacePRCollection> &
   WorkspaceRunScriptFields & {
@@ -96,7 +107,8 @@ function flatten<
     prs?: WorkspacePRRow[];
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
-    _count?: { prEvents: number };
+    _count?: { prEvents: number; childWorkspaces?: number };
+    parentWorkspace?: Parameters<typeof projectWorkspaceFamily>[0]['parentWorkspace'];
     conversationMetadata?: Parameters<typeof projectConversationSummary>[0];
   },
 >(row: T): Flattened<T> {
@@ -107,11 +119,13 @@ function flatten<
     runScript,
     _count,
     conversationMetadata,
+    parentWorkspace,
     ...rest
   } = row;
   const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
   return {
     ...rest,
+    ...projectWorkspaceFamily({ parentWorkspace, _count }),
     conversationSummary: projectConversationSummary(conversationMetadata),
     ...ratchetFields,
     ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled),
@@ -127,7 +141,7 @@ const sideTables = {
   prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
   prDiscovery: true,
   runScript: true,
-  _count: { select: { prEvents: { where: pendingPREventWhere } } },
+  ...workspaceFamilyInclude,
 } satisfies Prisma.WorkspaceInclude;
 
 type SideTableInclude = typeof sideTables;

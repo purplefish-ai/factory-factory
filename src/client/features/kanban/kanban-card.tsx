@@ -6,7 +6,6 @@ import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullReques
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, useState } from 'react';
 import { Link } from 'react-router';
@@ -16,6 +15,8 @@ import {
   ConnectedWorkspacePrMenu,
   RatchetToggleButton,
   WorkspaceStatusBadge,
+  WorkspaceFamilyMenu,
+  WorkspaceParentLink,
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { trpc } from '@/client/lib/trpc';
@@ -29,6 +30,7 @@ import type { WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceSummary } from '@/shared/workspace-summary';
 import { KanbanStatusChip } from './kanban-card-status-chip';
+import { useKanbanFamilyHighlight } from './kanban-family-highlight';
 
 /**
  * A card renders one row of the shared project workspace list, so its props
@@ -100,7 +102,7 @@ function IssueAndPullRequestRow({
   return (
     <div
       data-testid="issue-pr-row"
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground min-w-0"
+      className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground min-w-0 [&_button]:pointer-events-auto [&_a]:pointer-events-auto"
     >
       {issue && (
         <button
@@ -246,7 +248,7 @@ function CardTitleIcons({
     workspace.status !== 'PROVISIONING' &&
     onOpenQuickChat;
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div className="relative z-10 flex items-center gap-1.5 shrink-0">
       {onStartEdit && !isArchived && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -348,7 +350,8 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     Boolean(workspace.prs?.length) ||
     !!issue ||
     !!sessionRuntimeError ||
-    workspace.creationSource === 'CHILD_WORKSPACE';
+    workspace.creationSource === 'CHILD_WORKSPACE' ||
+    Boolean(workspace.parentWorkspace || workspace.childWorkspaceCount);
   return {
     showPR,
     issue,
@@ -360,6 +363,36 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   };
 }
 
+function CardFamilyMetadata({
+  workspace,
+  projectSlug,
+}: Pick<KanbanCardProps, 'workspace' | 'projectSlug'>) {
+  return (
+    <>
+      {workspace.parentWorkspace || workspace.childWorkspaceCount ? (
+        <div className="pointer-events-none relative z-10 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          {workspace.parentWorkspace && (
+            <WorkspaceParentLink
+              parent={workspace.parentWorkspace}
+              projectId={workspace.projectId}
+            />
+          )}
+          <WorkspaceFamilyMenu
+            key={workspace.id}
+            workspace={workspace}
+            projectSlug={projectSlug}
+            compact
+          />
+        </div>
+      ) : (
+        workspace.creationSource === 'CHILD_WORKSPACE' && (
+          <p className="text-[11px] text-muted-foreground">Child workspace</p>
+        )
+      )}
+    </>
+  );
+}
+
 export const KanbanCard = memo(function KanbanCard({
   workspace,
   projectSlug,
@@ -369,6 +402,7 @@ export const KanbanCard = memo(function KanbanCard({
   onOpenQuickChat,
   onRename,
 }: KanbanCardProps) {
+  const { highlighted, ...familyEvents } = useKanbanFamilyHighlight(workspace.id);
   const {
     showPR,
     issue,
@@ -396,103 +430,103 @@ export const KanbanCard = memo(function KanbanCard({
   });
 
   return (
-    <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
-      <Card
-        className={cn(
-          'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
-          sessionRuntimeError && 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
-          workspace.isWorking && 'border-brand/50 bg-brand/5',
-          workspace.pendingRequestType &&
-            'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
-          isArchived && 'opacity-60 border-dashed'
-        )}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            {isEditing ? (
-              <input
-                ref={inputRef}
-                readOnly={isSaving}
-                aria-busy={isSaving}
-                aria-label="Workspace name"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    handleCancelRename();
-                  }
-                  e.stopPropagation();
-                }}
-                onBlur={() => void handleSaveRename()}
-                onClick={(e) => {
+    <Card
+      {...familyEvents}
+      data-workspace-id={workspace.id}
+      data-family-highlighted={highlighted || undefined}
+      className={cn(
+        'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
+        sessionRuntimeError && 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
+        workspace.isWorking && 'border-brand/50 bg-brand/5',
+        workspace.pendingRequestType &&
+          'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
+        isArchived && 'opacity-60 border-dashed',
+        highlighted && 'ring-2 ring-violet-500/70 ring-inset'
+      )}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              readOnly={isSaving}
+              aria-busy={isSaving}
+              aria-label="Workspace name"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  e.stopPropagation();
-                }}
-                className="flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
-              />
-            ) : (
-              <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
-                {workspace.creationSource === 'PERIODIC_TASK' && (
-                  <RobotIcon
-                    role="img"
-                    aria-label="Agent workspace"
-                    className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
-                  />
-                )}
-                <span className="min-w-0 line-clamp-2 [overflow-wrap:anywhere]">
-                  {workspace.name}
-                </span>
-              </CardTitle>
-            )}
-            <CardTitleIcons
-              workspace={workspace}
-              ratchetEnabled={ratchetEnabled}
-              isTogglePending={isTogglePending}
-              isArchived={isArchived}
-              sessionRuntimeError={sessionRuntimeError}
-              onToggleRatcheting={onToggleRatcheting}
-              onArchive={onArchive}
-              onOpenQuickChat={onOpenQuickChat}
-              onStartEdit={onRename && !isSaving ? handleStartEdit : undefined}
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleCancelRename();
+                }
+                e.stopPropagation();
+              }}
+              onBlur={() => void handleSaveRename()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              className="relative z-10 flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
             />
-          </div>
-        </CardHeader>
-        {hasMetadata && (
-          <CardContent className="space-y-1">
-            {workspace.conversationSummary && (
-              <p
-                className="line-clamp-2 text-xs text-muted-foreground"
-                title={`${workspace.conversationSummary.summary}\nSummary updated ${new Date(workspace.conversationSummary.generatedAt).toLocaleString()}`}
+          ) : (
+            <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
+              {workspace.creationSource === 'PERIODIC_TASK' && (
+                <RobotIcon
+                  role="img"
+                  aria-label="Agent workspace"
+                  className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
+                />
+              )}
+              <Link
+                to={`/projects/${projectSlug}/workspaces/${workspace.id}`}
+                className="min-w-0 line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
               >
-                {workspace.conversationSummary.summary}
-              </p>
-            )}
-            {workspace.statusReason && <KanbanStatusChip statusReason={workspace.statusReason} />}
-            <IssueAndPullRequestRow workspace={workspace} issue={issue} showPR={showPR} />
-            {showBranch && (
-              <div className="flex items-center">
-                <BranchRow branchName={workspace.branchName} />
-              </div>
-            )}
-            {workspace.creationSource === 'CHILD_WORKSPACE' && (
-              <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
-                <TreeStructureIcon className="h-3 w-3" />
-                <span>Child workspace</span>
-              </div>
-            )}
-            {sessionRuntimeError && (
-              <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
-                <WarningIcon className="h-3 w-3 shrink-0" />
-                <span className="truncate">{sessionRuntimeError}</span>
-              </div>
-            )}
-          </CardContent>
-        )}
-      </Card>
-    </Link>
+                {workspace.name}
+              </Link>
+            </CardTitle>
+          )}
+          <CardTitleIcons
+            workspace={workspace}
+            ratchetEnabled={ratchetEnabled}
+            isTogglePending={isTogglePending}
+            isArchived={isArchived}
+            sessionRuntimeError={sessionRuntimeError}
+            onToggleRatcheting={onToggleRatcheting}
+            onArchive={onArchive}
+            onOpenQuickChat={onOpenQuickChat}
+            onStartEdit={onRename && !isSaving ? handleStartEdit : undefined}
+          />
+        </div>
+      </CardHeader>
+      {hasMetadata && (
+        <CardContent className="space-y-1">
+          {workspace.conversationSummary && (
+            <p
+              className="line-clamp-2 text-xs text-muted-foreground"
+              title={`${workspace.conversationSummary.summary}\nSummary updated ${new Date(workspace.conversationSummary.generatedAt).toLocaleString()}`}
+            >
+              {workspace.conversationSummary.summary}
+            </p>
+          )}
+          {workspace.statusReason && <KanbanStatusChip statusReason={workspace.statusReason} />}
+          <IssueAndPullRequestRow workspace={workspace} issue={issue} showPR={showPR} />
+          {showBranch && (
+            <div className="flex items-center">
+              <BranchRow branchName={workspace.branchName} />
+            </div>
+          )}
+          <CardFamilyMetadata workspace={workspace} projectSlug={projectSlug} />
+          {sessionRuntimeError && (
+            <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
+              <WarningIcon className="h-3 w-3 shrink-0" />
+              <span className="truncate">{sessionRuntimeError}</span>
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 });

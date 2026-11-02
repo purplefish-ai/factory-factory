@@ -204,7 +204,7 @@ function snapshotFieldValuesEqual(
   left: WorkspaceSnapshotEntry[SnapshotField],
   right: WorkspaceSnapshotEntry[SnapshotField]
 ): boolean {
-  if (field === 'prMonitoring' || field === 'conversationSummary') {
+  if (field === 'prMonitoring' || field === 'conversationSummary' || field === 'parentWorkspace') {
     return isDeepStrictEqual(left, right);
   }
   if (field === 'gitStats') {

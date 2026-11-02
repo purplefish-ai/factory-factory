@@ -38,6 +38,25 @@ async function expectOneRow(page: Page) {
   }
 }
 for (const width of [375, 768, 810, 1024, 1280]) {
+  test(`workspace family navigation fits and opens at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 });
+    await page.goto('/__mobile-baseline?surface=header&header=family');
+    const parent = page.getByRole('link', {
+      name: 'Parent workspace: Authentication refactor across several projects',
+    });
+    await expect(parent).toBeVisible();
+    await expect(parent).toHaveAttribute('href', '/projects/api/workspaces/family-parent');
+    expect(
+      await page
+        .locator('.workspace-switcher-label')
+        .evaluate((label) => label.getBoundingClientRect().width)
+    ).toBeGreaterThan(24);
+    await expectOneRow(page);
+    await page.getByRole('button', { name: 'Navigate workspace family' }).click();
+    await expect(page.getByRole('menu')).toContainText('Waiting');
+    await expect(page.getByRole('menu')).toContainText('Working');
+    await expect(page.getByRole('menu').locator('[aria-current="page"]')).toBeVisible();
+  });
   test(`workspace header keeps controls in one row at ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 });
     await page.goto('/__mobile-baseline?surface=header');
