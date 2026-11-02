@@ -11,7 +11,7 @@ afterEach(() => {
   }
 });
 
-function check(chunks: Record<string, string>) {
+function check(chunks: Record<string, string>, sourceModules?: Record<string, string[]> | null) {
   const root = mkdtempSync(join(tmpdir(), 'ff-client-budget-'));
   directories.push(root);
   const assets = join(root, 'dist/client/assets');
@@ -24,6 +24,15 @@ function check(chunks: Record<string, string>) {
   };
   for (const [name, source] of Object.entries(files)) {
     writeFileSync(join(assets, name), source);
+  }
+  if (sourceModules !== null) {
+    writeFileSync(
+      join(assets, 'client-modules.json'),
+      JSON.stringify({
+        version: 1,
+        modules: sourceModules ?? Object.fromEntries(Object.keys(files).map((name) => [name, []])),
+      })
+    );
   }
   return spawnSync(process.execPath, [resolve('scripts/check-client-chunk-budget.mjs')], {
     cwd: root,
@@ -79,4 +88,49 @@ it('fails closed when a static dependency is missing from the build', () => {
   const result = check({ 'index-entry.js': 'export * from "./missing.js";' });
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain('missing.js');
+});
+
+it.each([
+  ['index-entry.js', 'file-viewer.tsx'],
+  ['index-entry.js', 'diff-viewer.tsx'],
+  ['shared.js', 'file-viewer.tsx'],
+  ['shared.js', 'diff-viewer.tsx'],
+])('rejects %s containing source module %s regardless of chunk naming', (chunk, viewer) => {
+  const result = check(
+    {
+      'index-entry.js': chunk === 'shared.js' ? 'import "./shared.js";' : '',
+      'shared.js': '',
+    },
+    {
+      'index-entry.js':
+        chunk === 'index-entry.js' ? [`src/client/features/workspace/${viewer}`] : [],
+      'shared.js': chunk === 'shared.js' ? [`src/client/features/workspace/${viewer}`] : [],
+    }
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(`${viewer} must remain deferred`);
+});
+
+it('allows viewer source modules in dynamically imported shared chunks', () => {
+  const result = check(
+    { 'index-entry.js': 'import("./shared.js");', 'shared.js': '' },
+    { 'index-entry.js': [], 'shared.js': ['src/client/features/workspace/file-viewer.tsx'] }
+  );
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('startup static closure: 1 JS files');
+});
+
+it('fails closed without the source module manifest', () => {
+  const result = check({}, null);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('client-modules.json');
+});
+
+it('fails closed when a static chunk has no source module metadata', () => {
+  const result = check(
+    { 'index-entry.js': 'import "./shared.js";', 'shared.js': '' },
+    { 'index-entry.js': [] }
+  );
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('Missing source module metadata for shared.js');
 });

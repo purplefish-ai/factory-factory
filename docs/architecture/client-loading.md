@@ -27,6 +27,9 @@ bypasses the existing route and viewer lazy imports.
 `pnpm check:client-chunks` checks both individual chunks and a 1,300,000-byte
 startup static closure. It parses the emitted JavaScript imports and re-exports,
 counts each reachable file once, and reports raw bytes plus summed per-file gzip
-bytes. File and diff viewer chunks must remain outside that graph. Dynamic
-imports are excluded. To measure another production build, pass its assets
-directory: `pnpm check:client-chunks /tmp/client-build/assets`.
+bytes. The build also emits `assets/client-modules.json`, which maps each
+JavaScript chunk to its repository-relative source modules. The gate validates
+that manifest and rejects file/diff viewer sources anywhere in the static graph,
+including when folded into the entry or a shared chunk. Missing metadata fails
+closed. Dynamic imports are excluded. To measure another production build, pass
+its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
