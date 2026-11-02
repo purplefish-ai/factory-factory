@@ -324,3 +324,27 @@ it.each(['file', 'directory'])(
     ]);
   }
 );
+
+it('rejects published keyed archive bytes changed after completion while retaining legacy reads', async () => {
+  await persistWindowsArchive();
+  const row = await db.prisma.closedSession.findFirstOrThrow();
+  const path = paths.resolveClosedSessionTranscriptPath(row, null);
+  const original = await fs.readFile(path, 'utf8');
+  await fs.writeFile(path, original.replace('immutable Windows proof', 'corrupt but valid proof'));
+  await expect(service.readTranscript({ ...row, pendingTranscript: null }, path)).rejects.toThrow(
+    'Archive transcript checksum mismatch'
+  );
+  expect(await service.readTranscript({ ...row, pendingTranscript: original }, path)).toBe(
+    original
+  );
+  await expect(
+    service.readTranscript({ ...row, pendingTranscript: 'corrupt DB source' }, path)
+  ).rejects.toThrow('Invalid pending archive proof');
+  expect(
+    await service.readTranscript(
+      { ...row, archiveKey: null, transcriptHash: null, pendingTranscript: null },
+      path
+    )
+  ).toContain('corrupt but valid proof');
+  expect(await db.prisma.closedSession.findUniqueOrThrow({ where: { id: row.id } })).toEqual(row);
+});

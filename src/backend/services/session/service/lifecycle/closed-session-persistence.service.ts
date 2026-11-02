@@ -405,13 +405,24 @@ class ClosedSessionPersistenceService {
   }
 
   async readTranscript(
-    archive: Pick<ClosedSession, 'archiveState' | 'pendingTranscript' | 'transcriptHash'>,
+    archive: Pick<
+      ClosedSession,
+      'archiveKey' | 'archiveState' | 'pendingTranscript' | 'transcriptHash'
+    >,
     path: string
   ): Promise<string> {
     if (archive.archiveState === 'COMPLETE' && archive.pendingTranscript !== null) {
       return this.sourceBytes(archive);
     }
-    return await readFile(path, 'utf-8');
+    const bytes = await readFile(path, 'utf-8');
+    if (
+      archive.archiveKey &&
+      archive.transcriptHash &&
+      archiveDigest(bytes) !== archive.transcriptHash
+    ) {
+      throw new Error('Archive transcript checksum mismatch');
+    }
+    return bytes;
   }
 
   private sourceBytes(

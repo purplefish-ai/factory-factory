@@ -399,9 +399,24 @@ it.each([
 it('keeps a genuinely later provider snapshot distinct after restart', async () => {
   await writeFile(providerFile, `${historyEntry('first')}\n`);
   await close(runtime(true).finalizer);
+  const first = await db.prisma.closedSession.findFirstOrThrow();
+  const originalBytes = await readFile(
+    paths.resolveClosedSessionTranscriptPath(first, null),
+    'utf8'
+  );
   await appendFile(providerFile, `${historyEntry('second')}\n`);
   await close(runtime(false).finalizer);
-  expect(await db.prisma.closedSession.count()).toBe(2);
+  const rows = await db.prisma.closedSession.findMany();
+  expect(rows).toHaveLength(2);
+  const later = rows.find((row) => row.id !== first.id)!;
+  const laterBytes = await readFile(paths.resolveClosedSessionTranscriptPath(later, null), 'utf8');
+  expect(laterBytes).not.toBe(originalBytes);
+  expect(await readFile(paths.resolveClosedSessionTranscriptPath(first, null), 'utf8')).toBe(
+    originalBytes
+  );
+  expect(await db.prisma.closedSession.findUniqueOrThrow({ where: { id: first.id } })).toEqual(
+    first
+  );
 });
 
 it('recovers a real atomic writer exit immediately before rename and removes its staging bytes', async () => {

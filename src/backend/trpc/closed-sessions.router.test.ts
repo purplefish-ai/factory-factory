@@ -221,6 +221,7 @@ it('sanitizes transcript path resolution failures before reading', async () => {
     code: 'INTERNAL_SERVER_ERROR',
     message: 'Failed to read transcript file',
   });
+  expect(mockSessionDataService.readClosedSessionTranscript).not.toHaveBeenCalled();
 });
 
 it('projects archived messages without exposing internal native prompt evidence', async () => {
@@ -261,4 +262,25 @@ it('projects archived messages without exposing internal native prompt evidence'
   expect(transcript.messages[0]?.providerPrompt).toEqual([
     { type: 'text', text: 'private native evidence' },
   ]);
+});
+
+it('returns list metadata without private archive identity, publication state or hash', async () => {
+  const published = {
+    id: 'archive',
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    name: 'Archive',
+    workflow: 'default',
+    provider: 'CLAUDE',
+    model: 'sonnet',
+    transcriptPath: 'owned/file.json',
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    archiveKey: 'private-key',
+    archiveState: 'COMPLETE',
+    transcriptHash: 'private-hash',
+  };
+  mockSessionDataService.findClosedSessionsByWorkspaceId.mockResolvedValue([published]);
+  const { archiveKey: _key, archiveState: _state, transcriptHash: _hash, ...summary } = published;
+  await expect(createCaller().list({ workspaceId: 'workspace' })).resolves.toEqual([summary]);
 });

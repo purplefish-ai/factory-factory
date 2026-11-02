@@ -203,3 +203,21 @@ it.each(['before', 'between', 'after'] as const)(
     );
   }
 );
+
+it.each([
+  { eventTurn: 'event-turn', responseTurn: 'response-turn', count: 2 },
+  { eventTurn: undefined, responseTurn: undefined, count: 1 },
+  { eventTurn: 'same-turn', responseTurn: 'same-turn', count: 1 },
+])(
+  'pairs fallback copies only within compatible turns: $eventTurn/$responseTurn',
+  async ({ eventTurn, responseTurn, count }) => {
+    const users = (
+      await load([event('same', eventTurn), response([text('same'), image('aGk=')], responseTurn)])
+    ).filter((message) => message.type === 'user');
+    expect(users).toHaveLength(count);
+    if (count === 2) {
+      expect(users[0]?.attachments).toBeUndefined();
+    }
+    expect(users.at(-1)?.attachments).toEqual([expect.objectContaining({ data: 'aGk=' })]);
+  }
+);
