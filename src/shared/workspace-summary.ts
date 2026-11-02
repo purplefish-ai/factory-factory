@@ -136,3 +136,17 @@ export function deserializeWorkspaceSummary<T extends WorkspaceSummary>(
 ): Omit<T, 'createdAt'> & { createdAt: Date } {
   return { ...summary, createdAt: new Date(summary.createdAt) };
 }
+
+/** Copy only public summary fields, retaining Date and object identity for HTTP. */
+export function pickWorkspaceSummary<TCreatedAt extends string | Date>(
+  source: WorkspaceSummary<TCreatedAt>
+): WorkspaceSummary<TCreatedAt> {
+  const result: Partial<WorkspaceSummary<TCreatedAt>> = {};
+  for (const field of Object.keys(WorkspaceSummarySchema.shape) as (keyof WorkspaceSummary)[]) {
+    if (source[field] !== undefined) {
+      Object.assign(result, { [field]: source[field] });
+    }
+  }
+  // The schema's complete key inventory is copied above; optional omissions stay absent.
+  return result as WorkspaceSummary<TCreatedAt>;
+}

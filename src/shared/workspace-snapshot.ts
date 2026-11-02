@@ -1,50 +1,13 @@
 import { z } from 'zod';
-import {
-  CIStatus,
-  KanbanColumn,
-  PRState,
-  RatchetState,
-  RunScriptStatus,
-  WorkspaceStatus,
-} from '@/shared/core';
-import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
-import { WORKSPACE_PENDING_REQUEST_TYPES } from '@/shared/workspace-status-reason';
-import {
-  WorkspaceSessionSummarySchema,
-  WorkspaceGitStatsSchema,
-  WorkspaceSidebarStatusSchema,
-  WorkspaceStatusReasonSchema,
-  WorkspaceSummarySchema,
-} from '@/shared/workspace-summary';
+import { WorkspaceSummarySchema } from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
-import { WorkspacePRSelectionSchema, WorkspacePullRequestSchema } from './workspace-pr';
+import { WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
+import { snapshotMetadataMask } from './workspace-projection-fields';
 
-const SnapshotFieldGroupSchema = z.enum([
-  'workspace',
-  'pr',
-  'session',
-  'ratchet',
-  'runScript',
-  'reconciliation',
-  'git',
-  'metadata',
-]);
+export type { SnapshotFieldGroup } from './workspace-projection-fields';
 
-export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
-
-export const WorkspaceSnapshotMetadataSchema = WorkspaceSummarySchema.pick({
-  conversationSummary: true,
-  defaultSessionProvider: true,
-  worktreePath: true,
-  initErrorMessage: true,
-  githubIssueNumber: true,
-  githubIssueUrl: true,
-  linearIssueId: true,
-  linearIssueIdentifier: true,
-  linearIssueUrl: true,
-  creationSource: true,
-});
+export const WorkspaceSnapshotMetadataSchema = WorkspaceSummarySchema.pick(snapshotMetadataMask);
 export type WorkspaceSnapshotMetadata = z.infer<typeof WorkspaceSnapshotMetadataSchema>;
 
 const snapshotMetadataFields = WorkspaceSnapshotMetadataSchema.partial();
@@ -54,27 +17,17 @@ export function projectWorkspaceSnapshotMetadata(source: Partial<WorkspaceSnapsh
 }
 
 const SnapshotEntrySchema = z.object({
-  ...WorkspacePRSelectionSchema.shape,
+  ...WorkspaceSummarySchema.omit({ id: true, ...snapshotMetadataMask }).shape,
   ...WorkspaceSnapshotMetadataSchema.partial().shape,
   workspaceId: z.string(),
-  projectId: z.string(),
   version: z.number(),
   computedAt: z.string(),
   source: z.string(),
-  name: z.string(),
-  status: z.nativeEnum(WorkspaceStatus),
   createdAt: z.string(),
-  branchName: z.string().nullable(),
   prs: z.array(WorkspacePullRequestSchema).optional(),
   prSummary: WorkspacePRSummarySchema.optional(),
-  prUrl: z.string().nullable(),
-  prNumber: z.number().nullable(),
-  prState: z.nativeEnum(PRState),
-  prCiStatus: z.nativeEnum(CIStatus),
   prUpdatedAt: z.string().nullable(),
   hasMergeConflict: z.boolean(),
-  ratchetEnabled: z.boolean(),
-  ratchetState: z.nativeEnum(RatchetState),
   prMonitoring: z
     .object({
       enabled: z.boolean(),
@@ -92,19 +45,7 @@ const SnapshotEntrySchema = z.object({
       pauseReason: null,
       pendingEventCount: 0,
     }),
-  runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
-  isWorking: z.boolean(),
-  pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
-  sessionSummaries: z.array(WorkspaceSessionSummarySchema),
-  gitStats: WorkspaceGitStatsSchema.nullable(),
-  lastActivityAt: z.string().nullable(),
-  sidebarStatus: WorkspaceSidebarStatusSchema,
-  kanbanColumn: z.nativeEnum(KanbanColumn).nullable(),
-  flowPhase: z.enum(WORKSPACE_FLOW_PHASES),
-  ciObservation: z.enum(WORKSPACE_CI_OBSERVATIONS),
-  ratchetButtonAnimated: z.boolean(),
-  statusReason: WorkspaceStatusReasonSchema,
   fieldTimestamps: z.object({
     workspace: z.number(),
     pr: z.number(),
@@ -160,10 +101,18 @@ export const SnapshotRemovedMessageSchema = z.object({
   reviewCount: z.number().int().nonnegative().optional(),
 });
 
+export const SnapshotErrorMessageSchema = z.object({
+  type: z.literal('snapshot_error'),
+  projectId: z.string().optional(),
+  code: z.literal('FRAME_TOO_LARGE'),
+  message: z.string().max(512),
+});
+
 export const SnapshotServerMessageSchema = z.discriminatedUnion('type', [
   SnapshotFullMessageSchema,
   SnapshotChangedMessageSchema,
   SnapshotRemovedMessageSchema,
+  SnapshotErrorMessageSchema,
 ]);
 
 export type SnapshotFullMessage = z.infer<typeof SnapshotFullMessageSchema>;

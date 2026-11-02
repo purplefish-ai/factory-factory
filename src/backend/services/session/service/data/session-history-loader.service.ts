@@ -434,18 +434,25 @@ function isSafeProviderSessionId(providerSessionId: string): boolean {
 
 async function resolveSessionFilePath(
   workingDir: string,
-  providerSessionId: string
+  providerSessionId: string,
+  isCurrent: () => boolean = () => true
 ): Promise<string | null> {
+  if (!isCurrent()) {
+    return null;
+  }
   const fileName = `${providerSessionId}.jsonl`;
   const expectedPath = sessionFilePath(workingDir, providerSessionId);
 
   try {
     await access(expectedPath);
-    return expectedPath;
+    return isCurrent() ? expectedPath : null;
   } catch {
     // Fallback scan across all projects.
   }
 
+  if (!isCurrent()) {
+    return null;
+  }
   const projectsDir = join(getClaudeConfigDir(), 'projects');
   let projectDirs: string[];
   try {
@@ -455,25 +462,39 @@ async function resolveSessionFilePath(
   }
 
   for (const encodedPath of projectDirs) {
-    const projectDir = join(projectsDir, encodedPath);
-    try {
-      const projectStats = await stat(projectDir);
-      if (!projectStats.isDirectory()) {
-        continue;
-      }
-      const candidatePath = join(projectDir, fileName);
-      try {
-        await access(candidatePath);
-        return candidatePath;
-      } catch {
-        // Session file not in this project directory.
-      }
-    } catch {
-      // Ignore unreadable project directories while scanning.
+    if (!isCurrent()) {
+      return null;
+    }
+    const candidate = await findSessionFileInProject(
+      join(projectsDir, encodedPath),
+      fileName,
+      isCurrent
+    );
+    if (candidate) {
+      return candidate;
     }
   }
 
   return null;
+}
+
+async function findSessionFileInProject(
+  projectDir: string,
+  fileName: string,
+  isCurrent: () => boolean
+): Promise<string | null> {
+  try {
+    const projectStats = await stat(projectDir);
+    if (!(isCurrent() && projectStats.isDirectory())) {
+      return null;
+    }
+    const candidatePath = join(projectDir, fileName);
+    await access(candidatePath);
+    return isCurrent() ? candidatePath : null;
+  } catch {
+    // Ignore unreadable directories and projects without this session.
+    return null;
+  }
 }
 
 class ClaudeSessionHistoryLoaderService {
@@ -494,7 +515,11 @@ class ClaudeSessionHistoryLoaderService {
       return { status: 'skipped', reason: 'invalid_provider_session_id' };
     }
 
-    const filePath = await resolveSessionFilePath(params.workingDir, params.providerSessionId);
+    const filePath = await resolveSessionFilePath(
+      params.workingDir,
+      params.providerSessionId,
+      params.isCurrent
+    );
     if (!filePath) {
       return { status: 'not_found' };
     }

@@ -78,7 +78,7 @@ it('delivers and retries a saved merge event when all associations stop backgrou
   vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
   await ratchetService.checkWorkspaceById(workspaceId);
   expect(observe).not.toHaveBeenCalled();
-  expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledWith(sessionId, {
+  expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
     workspaceId,
     prId,
     bindingRevision: 1,

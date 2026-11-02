@@ -17,6 +17,16 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 let db: IntegrationDatabase;
+async function readEvent(id: string) {
+  const row = await db.prisma.workspacePREvent.findUnique({ where: { id } });
+  if (!row) {
+    return null;
+  }
+  return workspacePrEventAccessor.projectEvents(
+    [row],
+    await db.prisma.workspacePRDelivery.findMany()
+  )[0];
+}
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
@@ -53,6 +63,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await db.prisma.workspacePREvent.deleteMany();
+  await db.prisma.workspacePRDelivery.deleteMany();
   await db.prisma.agentSession.update({
     where: { id: 'main' },
     data: {
@@ -106,7 +117,7 @@ it.each(['DISPATCHING', 'PENDING'] as const)(
     await frozen(state);
     expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
     await workspacePrEventAccessor.recoverClaim('frozen', false, identity);
-    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+    expect(await readEvent('event')).toMatchObject({
       state: 'PENDING',
       deliveryId: 'frozen',
       deliveryText: 'exact original message',
@@ -145,10 +156,7 @@ it.each([
     count: 0,
     status: 'identity_mismatch',
   });
-  expect(
-    (await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } }))
-      ?.deliveryProviderSessionId
-  ).toBe('original');
+  expect((await readEvent('event'))?.deliveryProviderSessionId).toBe('original');
   expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
 });
 
@@ -162,17 +170,14 @@ it.each([
     count: 0,
     status: 'identity_mismatch',
   });
-  expect(
-    (await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } }))
-      ?.deliveryProviderSessionId
-  ).toBe('original');
+  expect((await readEvent('event'))?.deliveryProviderSessionId).toBe('original');
   expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
 });
 
 it('acknowledges receipt in the original identity without retrying in the new identity', async () => {
   await frozen();
   await workspacePrEventAccessor.recoverClaim('frozen', true);
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+  expect(await readEvent('event')).toMatchObject({
     state: 'DELIVERED',
     deliveryProviderSessionId: 'original',
   });
@@ -188,7 +193,7 @@ it.each(['DELIVERED', 'CANCELLED'] as const)(
       count: 0,
       status: 'settled',
     });
-    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+    expect(await readEvent('event')).toMatchObject({
       state,
       deliveryProviderSessionId: 'original',
     });

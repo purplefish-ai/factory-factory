@@ -126,6 +126,8 @@ interface SystemConfig {
   // Health check settings
   healthCheckIntervalMs: number;
 
+  websocketMaxFrameBytes: number;
+
   // Session limits
   maxSessionsPerWorkspace: number;
 
@@ -284,6 +286,8 @@ function loadSystemConfig(): SystemConfig {
 
     // Health check settings
     healthCheckIntervalMs: env.HEALTH_CHECK_INTERVAL_MS, // 5 minutes
+
+    websocketMaxFrameBytes: env.WEBSOCKET_MAX_FRAME_BYTES,
 
     // Session limits
     maxSessionsPerWorkspace: env.MAX_SESSIONS_PER_WORKSPACE,
@@ -576,8 +580,13 @@ class ConfigService {
   }
 
   /**
-   * Get debug configuration
+   * Get the validated authoritative frame and logical replay byte budget.
    */
+  getWebSocketConfig(): { maxFrameBytes: number } {
+    return { maxFrameBytes: this.config.websocketMaxFrameBytes };
+  }
+
+  /** Get debug configuration. */
   getDebugConfig(): DebugConfig {
     return { ...this.config.debug };
   }

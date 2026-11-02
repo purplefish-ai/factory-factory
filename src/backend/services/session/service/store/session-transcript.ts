@@ -243,7 +243,9 @@ export async function buildTranscriptFromHistoryCooperatively(
     }
     order = appendHistoryToTranscript(message, index, transcript, order);
     if (
-      ((index + 1) % 8 === 0 || message.content.length > 64 * 1024) &&
+      ((index + 1) % 8 === 0 ||
+        Array.isArray(message.content) ||
+        message.content.length > 64 * 1024) &&
       performance.now() >= budgetUntil
     ) {
       await yieldToEventLoop();

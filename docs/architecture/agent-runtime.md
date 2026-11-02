@@ -28,7 +28,9 @@ particularly large tool results, garbage collection, or host scheduling can
 still exceed the target. This budget improves responsiveness; passive loads
 still await the complete history and can trade throughput for yielding.
 Cancelling one startup consumer leaves a shared, still-current hydration
-available to other consumers.
+available to other consumers. Stopping the session invalidates its shared
+hydration generation before publication; a later startup starts fresh hydration
+instead of joining the superseded preparation.
 
 Cold resumes overlap history hydration with adapter spawning and ACP
 initialization. Provider session loading/creation waits for the history barrier,
@@ -40,15 +42,17 @@ previous independent wait. Passive chat loads continue to await complete history
 hydration.
 
 Replay batches up to 128 KiB retain their existing envelope. Larger batches use
-normal JSON event frames, with base64 fragments only for a single oversized
-event. Complete envelopes stay below 128 KiB, including large tool results and
-images. The client reconstructs the exact batch atomically before applying the
-existing load-request guard; incomplete, malformed, or out-of-order chunks
-cannot publish a partial transcript. Assembly expires after 30 seconds and
-resets on disconnect, session change, or unmount. The transport rejects batches
-above 128 MiB explicitly. Framing bounds each message, rather than reducing
-total replay bytes or adding pagination; the existing renderer transcript window
-and full backend transcript retention still apply.
+normal JSON event frames, with base64 fragments for an oversized event. When
+batch metadata itself cannot fit in a JSON event frame, the entire batch uses
+base64 fragments instead. The client rejects direct replay batches above 128
+KiB; every complete wire envelope stays within that bound, including large tool
+results and images. The client reconstructs the exact batch atomically before
+applying the existing load-request guard; incomplete, malformed, or out-of-order
+chunks cannot publish a partial transcript. Assembly expires after 30 seconds
+and resets on disconnect, session change, or unmount. The transport rejects
+batches above 128 MiB explicitly. Framing bounds each message, rather than
+reducing total replay bytes or adding pagination; the existing renderer
+transcript window and full backend transcript retention still apply.
 
 Upload validation checks the complete JPEG codestream through its end-of-image
 marker and permits trailing metadata, including Samsung screenshot capture

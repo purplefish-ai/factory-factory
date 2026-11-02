@@ -306,7 +306,11 @@ export class ProjectWorkspaceCacheReconciler {
     if (!this.isCurrent(connection)) {
       return false;
     }
-    if (message.type === 'snapshot_full' && message.projectId !== this.projectId) {
+    if (
+      (message.type === 'snapshot_full' ||
+        (message.type === 'snapshot_error' && message.projectId !== undefined)) &&
+      message.projectId !== this.projectId
+    ) {
       return false;
     }
     if (message.type === 'snapshot_changed' && message.entry.projectId !== this.projectId) {
@@ -316,7 +320,7 @@ export class ProjectWorkspaceCacheReconciler {
   }
 
   apply(connection: WorkspaceConnection, message: SnapshotServerMessage): boolean {
-    if (!this.accepts(connection, message)) {
+    if (message.type === 'snapshot_error' || !this.accepts(connection, message)) {
       return false;
     }
     if (message.type === 'snapshot_full') {

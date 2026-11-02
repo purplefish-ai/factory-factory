@@ -58,6 +58,9 @@ export class SessionReplayAssembler {
     if (type !== 'session_replay_chunk') {
       if (type === 'session_replay_batch') {
         this.reset();
+        if (jsonBytes(data) > MAX_REPLAY_FRAME_BYTES) {
+          return null;
+        }
       }
       return data;
     }

@@ -7,6 +7,8 @@ import {
   type SessionReplayEnvelope,
 } from '@/shared/acp-protocol/protocol/replay-frame-schema';
 
+export class SessionReplayLimitError extends Error {}
+
 type ReplayBatch = Extract<WebSocketMessage, { type: 'session_replay_batch' }>;
 type ReplayChunk = Extract<WebSocketMessage, { type: 'session_replay_chunk' }>;
 type EventFrame = Extract<ReplayChunk, { encoding: 'events' }>;
@@ -68,12 +70,15 @@ export function* frameSessionReplay(batch: ReplayBatch): Generator<WebSocketMess
     return;
   }
   if (bytes.length > MAX_REPLAY_BYTES) {
-    throw new Error('Session replay exceeds the 128 MiB transport limit');
+    throw new SessionReplayLimitError('Session replay exceeds the 128 MiB transport limit');
   }
   // Reserve the largest possible index/total envelope before packing events.
   const envelope: SessionReplayEnvelope = {
     type: 'session_replay_chunk',
     replayId: randomUUID(),
+    ...(batch.loadRequestId !== undefined && batch.loadRequestId.length <= 128
+      ? { loadRequestId: batch.loadRequestId }
+      : {}),
     index: MAX_REPLAY_BYTES,
     total: MAX_REPLAY_BYTES,
     byteLength: bytes.length,
