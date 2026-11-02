@@ -133,6 +133,33 @@ it('rejects a chunked replay over the configured budget with its correlated erro
   expect(test.viewer.close).not.toHaveBeenCalled();
 });
 
+it('excludes foreign and duplicate correlated baselines from an active replay backlog', async () => {
+  const test = setup();
+  const replay = batch();
+  for (const frame of frameSessionReplay(replay)) {
+    test.bus.publishToSession('s1', frame);
+  }
+  for (let index = 0; index < 12; index++) {
+    test.bus.publishToSession('s1', {
+      type: 'session_replay_batch',
+      loadRequestId: index % 2 ? 'another-viewer' : 'load-1',
+      permissionMode: 'metadata'.repeat(20_000),
+      replayEvents: [],
+    });
+  }
+  test.bus.publishToSession('s1', delta);
+  expect(test.viewer.close).not.toHaveBeenCalled();
+  for (let guard = 0; test.viewer.writes.length && guard < 100; guard++) {
+    await test.viewer.flush();
+  }
+  const assembler = new SessionReplayAssembler();
+  expect(
+    test.viewer.frames
+      .map((frame) => assembler.accept(JSON.parse(frame)))
+      .filter((value) => value !== null)
+  ).toEqual([replay, delta]);
+});
+
 it.each([false, true])(
   'routes byte-fragmented metadata to its requester (over budget: %s)',
   async (overBudget) => {

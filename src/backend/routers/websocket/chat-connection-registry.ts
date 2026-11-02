@@ -209,7 +209,12 @@ export class ChatConnectionRegistry {
       }
       const active = this.activeReplays.get(ws);
       if (active) {
-        return active.enqueueTail(message, written);
+        return this.enqueueAfterReplay(
+          active,
+          message,
+          written,
+          baseline && payload.loadRequestId !== undefined
+        );
       }
       if (baseline) {
         return this.sendBaseline(ws, message, payload.loadRequestId, written);
@@ -237,6 +242,17 @@ export class ChatConnectionRegistry {
     }
 
     return sent;
+  }
+
+  private enqueueAfterReplay(
+    active: ChatReplayDelivery,
+    message: string,
+    written: () => void,
+    correlatedBaseline: boolean
+  ): boolean {
+    // This viewer already has its authoritative response in progress.
+    // Correlated baselines are retries or belong to another viewer.
+    return !correlatedBaseline && active.enqueueTail(message, written);
   }
 
   private sendBaseline(
