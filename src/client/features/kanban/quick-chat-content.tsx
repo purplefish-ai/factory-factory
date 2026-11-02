@@ -48,6 +48,7 @@ export function QuickChatContent({
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* Messages area */}
       <ChatTranscript
+        sessionId={chatState.runtimeSessionId}
         thinkingInFooter
         workspaceId={workspaceId}
         messages={groupedMessages}

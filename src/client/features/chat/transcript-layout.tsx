@@ -129,6 +129,7 @@ export function TranscriptTail({
       )}
       {(running || background) && (
         <SessionActivityIndicator
+          sessionId={props.sessionId}
           work={work}
           controlSessionId={props.controlSessionId}
           runningSubagentIconIndices={props.runningSubagentIconIndices}

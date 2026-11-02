@@ -31,6 +31,7 @@ describe('QuickChatContent composer and queue controls', () => {
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {
       const chatState = {
+        runtimeSessionId: 'quick-chat-disclosures',
         messages: [],
         queuedMessages: [],
         pendingMessages: new Map(),
@@ -69,6 +70,7 @@ describe('QuickChatContent composer and queue controls', () => {
             />
           )
         );
+        expect(list.mock.lastCall?.[0].sessionId).toBe('quick-chat-disclosures');
         expect(input.mock.lastCall?.[0].placeholder).toBe(placeholder);
         expect(input.mock.lastCall?.[0]).toMatchObject({
           running: true,

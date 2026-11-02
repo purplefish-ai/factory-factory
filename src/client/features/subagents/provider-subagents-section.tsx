@@ -132,6 +132,7 @@ export function ProviderSubagentsSection({
       </div>
       <SubagentList
         key={sessionId}
+        sessionId={sessionId}
         state={state}
         onSelect={handleSelect}
         controlSessionId={freshControlSessionId}
