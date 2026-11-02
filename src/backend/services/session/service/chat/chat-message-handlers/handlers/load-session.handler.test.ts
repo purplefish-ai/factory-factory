@@ -95,6 +95,12 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { createLoadSessionTestHandler } from './load-session.test-helpers';
 
+const expectedHistoryRead = (providerSessionId: string) => ({
+  providerSessionId,
+  workingDir: '/tmp/worktree',
+  isCurrent: expect.any(Function),
+});
+
 describe('load application history hydration', () => {
   const tempDirs: string[] = [];
 
@@ -208,10 +214,9 @@ describe('load application history hydration', () => {
       sessionId: 'session-1',
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
-    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'provider-session-1',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('provider-session-1')
+    );
     expect(mocks.replaceTranscript).toHaveBeenCalledWith(
       'session-1',
       expect.arrayContaining([
@@ -649,10 +654,9 @@ describe('load application history hydration', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'codex-provider-session-from-metadata',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('codex-provider-session-from-metadata')
+    );
     expect(mocks.replaceTranscript).toHaveBeenCalledWith(
       'session-codex-metadata-id',
       expect.arrayContaining([
@@ -694,10 +698,9 @@ describe('load application history hydration', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'codex-provider-session-from-metadata',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('codex-provider-session-from-metadata')
+    );
   });
 
   it('prefers CODEX providerSessionId column over metadata fallback', async () => {
@@ -728,10 +731,9 @@ describe('load application history hydration', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'codex-provider-session-column',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('codex-provider-session-column')
+    );
   });
 
   it('ignores metadata providerSessionId when snapshot provider differs', async () => {
@@ -799,10 +801,9 @@ describe('load application history hydration', () => {
       message: { type: 'load_session', loadRequestId: 'load-codex-1' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'codex-provider-session-1',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('codex-provider-session-1')
+    );
     expect(mocks.replaceTranscript).toHaveBeenCalledWith(
       'session-codex-1',
       expect.arrayContaining([
@@ -917,10 +918,9 @@ describe('load application history hydration', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
-      providerSessionId: 'codex-provider-session-1',
-      workingDir: '/tmp/worktree',
-    });
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith(
+      expectedHistoryRead('codex-provider-session-1')
+    );
     expect(mocks.replaceTranscript).toHaveBeenCalledTimes(1);
     const backfilledTranscript = mocks.replaceTranscript.mock.calls[0]?.[1] ?? [];
     expect(backfilledTranscript).toEqual(

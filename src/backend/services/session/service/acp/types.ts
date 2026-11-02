@@ -22,6 +22,8 @@ export interface AcpClientOptions {
   /** Captured caller authority, checked again after creation serialization. */
   assertCurrent?: () => Promise<void>;
   assertCurrentSync?: () => void;
+  /** Initialize may overlap hydration; provider load/new must wait for this owner barrier. */
+  beforeSessionCreation?: () => Promise<void>;
   provider: AcpProvider;
   /** Trusted session owner policy; never accepted from a public transport. */
   ownedProcessGroup?: boolean;

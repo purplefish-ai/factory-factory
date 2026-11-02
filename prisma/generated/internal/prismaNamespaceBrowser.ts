@@ -622,6 +622,7 @@ export type PeriodicTaskScalarFieldEnum = (typeof PeriodicTaskScalarFieldEnum)[k
 
 
 export const PeriodicTaskExecutionScalarFieldEnum = {
+  launchSnapshot: 'launchSnapshot',
   id: 'id',
   periodicTaskId: 'periodicTaskId',
   workspaceId: 'workspaceId',

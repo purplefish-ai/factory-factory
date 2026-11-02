@@ -32,7 +32,7 @@ function TranscriptMessage({
   return (
     <GroupedMessageItemRenderer
       item={item}
-      onOpenAgents={display.onOpenAgents}
+      onOpenSubagent={display.onOpenSubagent}
       isQueued={queued}
       toolExpansionToken={
         display.workspaceId && isToolSequence(item)

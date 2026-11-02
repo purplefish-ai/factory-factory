@@ -18,6 +18,38 @@ likewise restores user `input_image` data URLs, and images on legacy
 are skipped. Restoration rejects malformed base64 and images above the shared 10
 MiB decoded size limit used for uploads.
 
+Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
+and transcript projection use a 16 ms cooperative target. Projection uses the
+same per-entry builder as synchronous callers and yields between small batches,
+preserving complete content, deterministic IDs, ordering, and timestamps.
+Provider identity checks stop superseded reads and discard unfinished projection
+before publication. A single JSON.parse or projection entry remains atomic;
+particularly large tool results, garbage collection, or host scheduling can
+still exceed the target. This budget improves responsiveness; passive loads
+still await the complete history and can trade throughput for yielding.
+Cancelling one startup consumer leaves a shared, still-current hydration
+available to other consumers.
+
+Cold resumes overlap history hydration with adapter spawning and ACP
+initialization. Provider session loading/creation waits for the history barrier,
+which restores timestamps and establishes replay suppression before provider
+history events can arrive. Stop, shutdown, and initialization failure still
+terminate or fence the candidate before session RPCs. Provider deadlines apply
+to initialization and session creation; the local history barrier retains its
+previous independent wait. Passive chat loads continue to await complete history
+hydration.
+
+Replay batches up to 128 KiB retain their existing envelope. Larger batches use
+normal JSON event frames, with base64 fragments only for a single oversized
+event. Complete envelopes stay below 128 KiB, including large tool results and
+images. The client reconstructs the exact batch atomically before applying the
+existing load-request guard; incomplete, malformed, or out-of-order chunks
+cannot publish a partial transcript. Assembly expires after 30 seconds and
+resets on disconnect, session change, or unmount. The transport rejects batches
+above 128 MiB explicitly. Framing bounds each message, rather than reducing
+total replay bytes or adding pagination; the existing renderer transcript window
+and full backend transcript retention still apply.
+
 Upload validation checks the complete JPEG codestream through its end-of-image
 marker and permits trailing metadata, including Samsung screenshot capture
 information. Truncated image segments and scans remain invalid.
@@ -925,8 +957,9 @@ provider's archived history also clears its task snapshot.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Sessions panel through its session-scoped tracker. Clicking the running
-sub-agent count in the main chat expands an inline list of active sub-agents;
+Sessions panel through its session-scoped tracker. Clicking a single running
+sub-agent in the main chat opens its transcript tab directly, without expanding
+a list. With multiple running sub-agents, the count expands an inline list;
 selecting one opens its transcript tab directly. Completed sub-agents remain in
 Sessions. The inline list deduplicates overlapping provider pages and retains
 pagination and Retry controls when later pages are unavailable. The Sessions
@@ -959,18 +992,18 @@ children without a page reload.
 
 The chat timeline projects provider creation and completion timestamps into
 separate, muted sub-agent start and finish rows. Failure, cancellation, and
-interruption retain their own labels. In workspace-detail chat, these rows open
-the Sessions panel. Both workspace-detail and Quick Chat reconstruct the rows
-from provider metadata when history reloads; unknown timestamps are not
-invented. Native ACP replay without provider timestamps retains sub-agent
-summaries and transcripts for browsing but leaves lifecycle times unknown, so
-reopening a workspace does not append historical starts and finishes as new
-activity. Live native events still use their observation time. If a request
-fails or the provider repeats a pagination cursor, chat keeps known rows visible
-and offers Retry. Adjacent tool activity stays collapsed by default as muted
-summary rows; expanding a summary shows chronological calls with input and
-output available on demand. Failed calls remain visible in the collapsed
-summary.
+interruption retain their own labels. In workspace-detail chat, start and finish
+rows open the corresponding sub-agent transcript tab, including stopped agents.
+Both workspace-detail and Quick Chat reconstruct the rows from provider metadata
+when history reloads; unknown timestamps are not invented. Native ACP replay
+without provider timestamps retains sub-agent summaries and transcripts for
+browsing but leaves lifecycle times unknown, so reopening a workspace does not
+append historical starts and finishes as new activity. Live native events still
+use their observation time. If a request fails or the provider repeats a
+pagination cursor, chat keeps known rows visible and offers Retry. Adjacent tool
+activity stays collapsed by default as muted summary rows; expanding a summary
+shows chronological calls with input and output available on demand. Failed
+calls remain visible in the collapsed summary.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

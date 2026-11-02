@@ -13,7 +13,6 @@ import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   SubagentList,
   type SubagentSelection,
-  type SubagentListState,
   useSubagentTimelineMessages,
 } from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
@@ -31,7 +30,6 @@ export interface ChatContentProps {
   codexAccountId?: string | null;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
-  onOpenAgents?: () => void;
   onOpenSubagent?: (selection: SubagentSelection) => void;
   parentSessionName?: string | null;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
@@ -160,25 +158,38 @@ function createTranscriptHeader(
   );
 }
 
-function createRunningSubagentList(props: ChatContentProps, state: SubagentListState) {
-  if (!props.onOpenSubagent) {
-    return undefined;
-  }
-  return (
-    <SubagentList
-      activeOnly
-      state={state}
-      onSelect={(subagent) => {
-        if (props.sessionId) {
-          props.onOpenSubagent?.({
-            parentSessionId: props.sessionId,
-            parentSessionName: props.parentSessionName?.trim() || 'Untitled session',
-            subagent,
-          });
-        }
-      }}
-    />
+function useSubagentNavigation(
+  props: Pick<ChatContentProps, 'sessionId' | 'parentSessionName' | 'onOpenSubagent'>,
+  timeline: ReturnType<typeof useSubagentTimelineMessages>
+) {
+  const { sessionId, parentSessionName, onOpenSubagent } = props;
+  const handleOpenSubagent = useCallback(
+    (subagentId: string) => {
+      const subagent = timeline.subagents.find((agent) => agent.id === subagentId);
+      if (sessionId && subagent) {
+        onOpenSubagent?.({
+          parentSessionId: sessionId,
+          parentSessionName: parentSessionName?.trim() || 'Untitled session',
+          subagent,
+        });
+      }
+    },
+    [sessionId, parentSessionName, onOpenSubagent, timeline.subagents]
   );
+  const runningSubagents = timeline.subagents.filter((agent) => agent.status === 'running');
+  const singleSubagent = runningSubagents.length === 1 ? runningSubagents[0] : undefined;
+  return {
+    onOpenSubagent: onOpenSubagent ? handleOpenSubagent : undefined,
+    onOpenSingleSubagent:
+      onOpenSubagent && singleSubagent ? () => handleOpenSubagent(singleSubagent.id) : undefined,
+    runningSubagentList: onOpenSubagent ? (
+      <SubagentList
+        activeOnly
+        state={timeline.subagentListState}
+        onSelect={(subagent) => handleOpenSubagent(subagent.id)}
+      />
+    ) : undefined,
+  };
 }
 
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
@@ -194,6 +205,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const groupedMessages = useGroupedChatMessages(timeline.messages, {
     filterDuplicateResults: true,
   });
+  const subagentNavigation = useSubagentNavigation(props, timeline);
   const queuedMessageIds = useMemo(
     () => new Set(props.queuedMessages.map((msg) => msg.id)),
     [props.queuedMessages]
@@ -268,7 +280,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         messages={groupedMessages}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
-        runningSubagentList={createRunningSubagentList(props, timeline.subagentListState)}
+        {...subagentNavigation}
         acpPlan={props.acpPlan}
         running={running}
         work={props.sessionRuntime.work}
@@ -293,7 +305,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
         resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
         onWorkspaceFileLink={props.onWorkspaceFileLink}
-        onOpenAgents={props.onOpenAgents}
         initBanner={props.initBanner}
       />
       <div className="z-20 flex max-h-full min-h-0 flex-col border-t bg-background pb-safe">

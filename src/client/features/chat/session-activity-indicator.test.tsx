@@ -44,9 +44,50 @@ describe('SessionActivityIndicator', () => {
     }
   });
 
+  it('opens a single running sub-agent directly without an expandable list', () => {
+    const onOpenSingleSubagent = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          <SessionActivityIndicator
+            work={{
+              promptInFlight: false,
+              backgroundTasks: [],
+              runningSubagents: 1,
+              activeGoals: 0,
+            }}
+            onOpenSingleSubagent={onOpenSingleSubagent}
+            runningSubagentList={<p>Review code</p>}
+          />
+        )
+      );
+      const button = container.querySelector('button');
+      expect(button?.textContent).toBe('1 sub-agent running');
+      expect(button?.hasAttribute('aria-expanded')).toBe(false);
+      flushSync(() => button?.click());
+      expect(onOpenSingleSubagent).toHaveBeenCalledOnce();
+      expect(container.textContent).not.toContain('Review code');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it('does not expand a single sub-agent while its summary is unavailable', () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToStaticMarkup(
+      <SessionActivityIndicator
+        work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 }}
+      />
+    );
+    expect(container.querySelector('button')?.disabled).toBe(true);
+    expect(container.querySelector('[aria-expanded]')).toBeNull();
+  });
+
   it.each([
-    [1, '1 sub-agent running'],
     [2, '2 sub-agents running'],
+    [3, '3 sub-agents running'],
   ] as const)('expands running sub-agents from the %s label', (runningSubagents, label) => {
     const onOpenAgents = vi.fn();
     const container = document.createElement('div');

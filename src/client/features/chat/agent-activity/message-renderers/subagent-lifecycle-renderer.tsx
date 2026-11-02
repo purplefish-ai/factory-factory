@@ -4,10 +4,10 @@ import { cn } from '@/lib/utils';
 
 export function SubagentLifecycleRenderer({
   message,
-  onOpenAgents,
+  onOpenSubagent,
 }: {
   message: ChatMessage;
-  onOpenAgents?: () => void;
+  onOpenSubagent?: (subagentId: string) => void;
 }) {
   const text = message.message?.text ?? message.text ?? 'Sub-agent';
   const failed = message.message?.status === 'failed';
@@ -19,11 +19,12 @@ export function SubagentLifecycleRenderer({
   );
   const className =
     'flex max-w-full items-center gap-2 py-1 text-left text-sm text-muted-foreground';
-  return onOpenAgents ? (
+  const subagentId = message.subagentId;
+  return onOpenSubagent && subagentId ? (
     <button
       type="button"
-      title="Open Sessions panel"
-      onClick={onOpenAgents}
+      title="Open sub-agent tab"
+      onClick={() => onOpenSubagent(subagentId)}
       className={cn(
         className,
         'rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
