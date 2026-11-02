@@ -1,11 +1,18 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import { workspaceMetadataAccessor } from '@/backend/services/workspace/resources/workspace-metadata.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import type { WorkspaceDeletionCapture } from '@/backend/services/workspace/types';
 import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { AcceptedBranchPublisher, type AcceptedWorkspaceBranch } from './accepted-branch';
 
 class WorkspaceDataService {
+  private deletionCapture: WorkspaceDeletionCapture | null = null;
+
+  configureDeletionCapture(capture: WorkspaceDeletionCapture) {
+    this.deletionCapture = capture;
+  }
   reserveMetadata(workspaceId: string, requestId: string) {
     return workspaceMetadataAccessor.reserve(workspaceId, requestId);
   }
@@ -103,7 +110,13 @@ class WorkspaceDataService {
   }
 
   delete(id: string): Promise<Workspace> {
-    return workspaceAccessor.delete(id);
+    if (!this.deletionCapture) {
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        'Workspace deletion result capture is unavailable'
+      );
+    }
+    return workspaceAccessor.delete(id, this.deletionCapture);
   }
 }
 

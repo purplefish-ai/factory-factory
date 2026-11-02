@@ -258,6 +258,14 @@ export interface PRAggregateGuard {
 }
 
 class WorkspacePRAccessor {
+  /** Detached associations also retain results until the workspace cascade. */
+  listForDeletion(tx: Prisma.TransactionClient, workspaceId: string) {
+    return tx.workspacePR.findMany({
+      where: { workspaceId },
+      select: { url: true, number: true },
+      orderBy: { id: 'asc' },
+    });
+  }
   /** Matches casing variants and reports each association under the requested URL. */
   async findReviewRequestAssociations(urls: string[]) {
     const suffixes = [...new Set(urls.map(prUrlSuffix))];

@@ -52,6 +52,7 @@ import { setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 import type { reconciliationService } from './reconciliation.service';
 import { listVisibleReviewRequests } from './review-requests.orchestrator';
+import { captureWorkspaceRunResults } from './workspace-deletion.orchestrator';
 import type {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
@@ -134,6 +135,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceStateMachine,
   } = services;
   const logger = createLogger('domain-bridges');
+  workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);

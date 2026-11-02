@@ -7,6 +7,14 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentRunResultsAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run-results.accessor',
+  },
+  deleteWorkspace: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-delete.accessor',
+  },
   workspaceChildOriginAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-child-origin.accessor',

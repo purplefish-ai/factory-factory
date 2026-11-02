@@ -121,6 +121,15 @@ match associations case-insensitively on host, owner and repository, so a URL
 casing variant reuses the existing association instead of creating another.
 Duplicate associations stored before this matching are not merged.
 
+Before workspace deletion cascades these associations, the workspace owner reads
+attached and detached rows under a SQLite write lock. Orchestration composes the
+agent owner's compact result union in that same transaction before the Workspace
+delete. A failed capture aborts deletion; attachments committed before the final
+read are retained, while later attachments cannot commit against the removed
+workspace. Run results retain at most 20 validated PR links independently of
+workspace lifetime, preserving existing summaries and terminal outcomes. This
+capture does not settle agent work or archive the workspace.
+
 Branch discovery only matches the workspace branch, so PR detection also
 attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR creation.
 This covers native sub-agents, which may push another branch from their own
