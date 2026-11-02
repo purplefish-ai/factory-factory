@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AcpEventProcessor } from '@/backend/services/session/service/lifecycle/acp-event-processor';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { AcpEventProcessor } from '../lifecycle/acp-event-processor';
-import { SessionDomainService } from '../session-domain.service';
 import { AcpClientFactory } from './acp-client-factory';
 import type { AcpClientCallbacks } from './acp-connection';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
@@ -60,8 +60,12 @@ vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ FROM_DEFAULT_PROVIDER: 'yes' }),
 }));
 
-vi.mock('../logging/acp-trace-logger.service', () => ({ acpTraceLogger: { log: vi.fn() } }));
-vi.mock('../logging/session-file-logger.service', () => ({ sessionFileLogger: { log: vi.fn() } }));
+vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
+  acpTraceLogger: { log: vi.fn() },
+}));
+vi.mock('@/backend/services/session/service/logging/session-file-logger.service', () => ({
+  sessionFileLogger: { log: vi.fn() },
+}));
 
 type MockChildProcess = EventEmitter & {
   pid: number;
@@ -129,10 +133,7 @@ function createSignal(): RejectableSignal {
   return { promise, dispose: vi.fn(), reject: rejectSignal };
 }
 
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve(value: T): void;
-} {
+function createDeferred<T>() {
   let resolvePromise!: (value: T) => void;
   const promise = new Promise<T>((resolve) => {
     resolvePromise = resolve;
@@ -221,9 +222,8 @@ describe('AcpClientFactory', () => {
   it.each(['active', 'browse'] as const)(
     'resumes large hydrated history for %s without overflowing startup or duplicating messages',
     async (purpose) => {
-      setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }), {
-        loadSession: true,
-      });
+      const child = createMockChildProcess({ exitAfterSigterm: true });
+      setupSuccessfulSpawn(child, { loadSession: true });
       const supervisor = new AcpRuntimeSupervisor({
         clientFactory: new AcpClientFactory(),
         cancelPrompt: async () => false,
