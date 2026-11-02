@@ -23,6 +23,7 @@ import type {
 } from '@prisma-gen/client';
 
 export type RetentionReason =
+  | 'RECOVERY_DEPENDENCY'
   | 'ACTIVE_RUN'
   | 'UNRESOLVED_DECISION'
   | 'ACTIVATION_DEPENDENCY'

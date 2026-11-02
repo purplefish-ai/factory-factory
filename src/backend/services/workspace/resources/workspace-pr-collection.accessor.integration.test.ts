@@ -563,3 +563,61 @@ it.each<{
     expect(project).not.toHaveProperty('prMonitoring');
   }
 );
+
+it('separates selected facts from collection facts and reselects after detach or recreation', async () => {
+  const row = await workspace('selected-facts');
+  await db.prisma.workspacePR.createMany({
+    data: [
+      {
+        id: 'selected-a',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/101',
+        number: 101,
+        state: 'APPROVED',
+        reviewState: 'APPROVED',
+        ciStatus: 'SUCCESS',
+      },
+      {
+        id: 'selected-b',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/102',
+        number: 102,
+        state: 'CHANGES_REQUESTED',
+        reviewState: 'CHANGES_REQUESTED',
+        ciStatus: 'FAILURE',
+        hasMergeConflict: true,
+      },
+    ],
+  });
+  const expected = {
+    selectedPrId: 'selected-a',
+    selectedPr: {
+      id: 'selected-a',
+      number: 101,
+      state: 'APPROVED',
+      reviewState: 'APPROVED',
+      ciStatus: 'SUCCESS',
+      hasMergeConflict: false,
+    },
+    prSummary: { state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true },
+    prUrl: 'https://github.com/org/repo/pull/101',
+    prNumber: 101,
+    prState: 'OPEN',
+    prCiStatus: 'FAILURE',
+  };
+  expect(await workspaceAccessor.findById(row.id)).toMatchObject(expected);
+  expect(await workspaceRatchetAccessor.findSnapshotProjection(row.id)).toMatchObject(expected);
+  await workspacePrAccessor.detach({ workspaceId: row.id, prId: 'selected-a' });
+  expect(await workspaceAccessor.findById(row.id)).toMatchObject({
+    selectedPrId: 'selected-b',
+    selectedPr: { number: 102 },
+  });
+  await db.prisma.workspacePR.delete({ where: { id: 'selected-a' } });
+  const recreated = await workspacePrAccessor.attach(
+    row.id,
+    'https://github.com/org/repo/pull/101'
+  );
+  const current = await workspaceAccessor.findById(row.id);
+  const firstId = [recreated.prId, 'selected-b'].sort()[0];
+  expect(current).toMatchObject({ selectedPrId: firstId, selectedPr: { id: firstId } });
+});

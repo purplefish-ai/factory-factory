@@ -3,8 +3,6 @@ import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
   projectWorkspacePRCollection,
-  selectActiveWorkspacePR,
-  type WorkspacePRFields,
   type WorkspacePRRow,
   type WorkspacePRWriteFields,
   workspacePrAccessor,
@@ -38,8 +36,7 @@ import {
   type EventWorkspaceIdentity,
 } from '@/shared/event-agent-launch';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
-import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import { selectWorkspacePR } from '@/shared/workspace-pr';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
 import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
 import { deleteWorkspace } from './workspace-delete.accessor';
@@ -87,11 +84,9 @@ type Flattened<T> = Omit<
   'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count' | 'conversationMetadata'
 > &
   WorkspaceRatchetFields &
-  WorkspacePRFields &
+  ReturnType<typeof projectWorkspacePRCollection> &
   WorkspaceRunScriptFields & {
     ratchetState: RatchetState;
-    prs: WorkspacePullRequest[];
-    prSummary: WorkspacePRSummary;
     conversationSummary: ReturnType<typeof projectConversationSummary>;
   };
 
@@ -169,7 +164,7 @@ type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
   'prs' | 'prDiscovery' | 'prMonitoring'
 > &
-  WorkspacePRFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
+  Omit<ReturnType<typeof projectWorkspacePRCollection>, 'ratchetState'>;
 
 function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>
@@ -395,18 +390,19 @@ class WorkspaceAccessor {
         prs: {
           where: { detachedAt: null },
           orderBy: { id: 'asc' },
-          select: { url: true, number: true, state: true },
+          select: { id: true, url: true, number: true, state: true },
         },
       },
     });
     if (!row) {
       return null;
     }
+    const selectedPr = selectWorkspacePR(row.prs);
     return {
       status: row.status,
       initCompletedAt: row.initCompletedAt,
-      prUrl: selectActiveWorkspacePR(row.prs)?.url ?? null,
-      prNumber: selectActiveWorkspacePR(row.prs)?.number ?? null,
+      prUrl: selectedPr?.url ?? null,
+      prNumber: selectedPr?.number ?? null,
     };
   }
 
@@ -418,12 +414,12 @@ class WorkspaceAccessor {
         prs: {
           where: { detachedAt: null },
           orderBy: { id: 'asc' },
-          select: { url: true, state: true },
+          select: { id: true, url: true, state: true },
         },
       },
     });
     return row
-      ? { branchName: row.branchName, prUrl: selectActiveWorkspacePR(row.prs)?.url ?? null }
+      ? { branchName: row.branchName, prUrl: selectWorkspacePR(row.prs)?.url ?? null }
       : null;
   }
 

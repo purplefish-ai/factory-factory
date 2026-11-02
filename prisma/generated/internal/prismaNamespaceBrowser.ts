@@ -488,6 +488,7 @@ export const AgentRunScalarFieldEnum = {
   result: 'result',
   effectiveExecution: 'effectiveExecution',
   launchPreparation: 'launchPreparation',
+  contextExpiredAt: 'contextExpiredAt',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',

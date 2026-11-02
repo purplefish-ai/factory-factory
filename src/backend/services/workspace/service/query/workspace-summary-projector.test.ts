@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { projectWorkspaceSummary } from '@/backend/services/workspace/service/query/workspace-summary-projector';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import { WorkspaceSummarySchema, serializeWorkspaceSummary } from '@/shared/workspace-summary';
 
 function source() {
   return {
@@ -130,5 +133,57 @@ describe('HTTP workspace summary projector', () => {
     }
     expect(row.prs).toBe(workspace.prs);
     expect(row).not.toHaveProperty('detailOnlySecret');
+  });
+});
+
+it('includes explicit null selection in an HTTP summary without PRs', () => {
+  expect(
+    projectWorkspaceSummary(source(), {
+      sessionSummaries: [],
+      pendingRequestType: null,
+      derivedState,
+      gitStats: null,
+      lastActivityAt: null,
+    })
+  ).toMatchObject({ selectedPrId: null, selectedPr: null });
+});
+
+it('serializes HTTP selected state, CI and reviews independently of collection status', () => {
+  const a: WorkspacePullRequest = {
+    id: 'a',
+    url: 'https://github.com/o/r/pull/1',
+    number: 1,
+    title: null,
+    headRefName: null,
+    baseRefName: null,
+    state: 'APPROVED',
+    reviewState: 'APPROVED',
+    ciStatus: 'SUCCESS',
+    hasMergeConflict: false,
+    syncedAt: null,
+  };
+  const b: WorkspacePullRequest = {
+    ...a,
+    id: 'b',
+    number: 2,
+    state: 'CHANGES_REQUESTED',
+    reviewState: 'CHANGES_REQUESTED',
+    ciStatus: 'FAILURE',
+  };
+  const prs = [b, a];
+  const row = projectWorkspaceSummary(
+    { ...source(), prs, prSummary: deriveWorkspacePRSummary(prs, true) },
+    {
+      sessionSummaries: [],
+      pendingRequestType: null,
+      derivedState,
+      gitStats: null,
+      lastActivityAt: null,
+    }
+  );
+  expect(WorkspaceSummarySchema.parse(serializeWorkspaceSummary(row))).toMatchObject({
+    selectedPrId: 'a',
+    selectedPr: a,
+    prSummary: { state: 'OPEN', ciStatus: 'FAILURE' },
   });
 });

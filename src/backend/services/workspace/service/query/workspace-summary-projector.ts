@@ -1,5 +1,6 @@
 import type { WorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type { SessionSummary } from '@/shared/session-runtime';
+import { deriveWorkspacePRSelection } from '@/shared/workspace-pr';
 import { type WorkspaceSummary } from '@/shared/workspace-summary';
 
 type WorkspaceSummarySource = Omit<
@@ -34,6 +35,7 @@ export function projectWorkspaceSummary(
     worktreePath: w.worktreePath,
     initErrorMessage: w.initErrorMessage,
     prs: w.prs,
+    ...deriveWorkspacePRSelection(w.prs),
     prSummary: w.prSummary,
     prUrl: w.prUrl,
     prNumber: w.prNumber,

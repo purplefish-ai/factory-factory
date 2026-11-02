@@ -3,11 +3,12 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
+import { getWorkspacePRReviewTarget } from '@/client/lib/workspace-selected-pr';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
-import { hasVisiblePullRequest, isWorkspaceClosed, isWorkspaceMerged } from './utils';
+import { isWorkspaceClosed, isWorkspaceMerged } from './utils';
 
 export function AdversarialReviewButton({
   workspace,
@@ -36,20 +37,25 @@ export function AdversarialReviewButton({
     },
   });
 
+  const { pr: selectedPr, associationId } = getWorkspacePRReviewTarget(workspace);
   if (
-    !(workspace.worktreePath && hasVisiblePullRequest(workspace)) ||
-    isWorkspaceMerged(workspace) ||
-    isWorkspaceClosed(workspace)
+    !(workspace.worktreePath && selectedPr?.number) ||
+    selectedPr.state === 'NONE' ||
+    selectedPr.state === 'MERGED' ||
+    selectedPr.state === 'CLOSED' ||
+    (!associationId && (isWorkspaceMerged(workspace) || isWorkspaceClosed(workspace)))
   ) {
     return null;
   }
+  const startReview = () =>
+    trigger.mutate({
+      workspaceId,
+      ...(associationId ? { prId: associationId } : {}),
+    });
 
   if (renderAsMenuItem) {
     return (
-      <DropdownMenuItem
-        onSelect={() => trigger.mutate({ workspaceId })}
-        disabled={trigger.isPending}
-      >
+      <DropdownMenuItem onSelect={startReview} disabled={trigger.isPending}>
         {trigger.isPending ? (
           <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
@@ -69,7 +75,7 @@ export function AdversarialReviewButton({
           className="h-6 w-6 md:h-8 md:w-8"
           aria-label="Start adversarial review"
           disabled={trigger.isPending}
-          onClick={() => trigger.mutate({ workspaceId })}
+          onClick={startReview}
         >
           {trigger.isPending ? (
             <SpinnerGapIcon className="h-3 w-3 animate-spin md:h-4 md:w-4" />

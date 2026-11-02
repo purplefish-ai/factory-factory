@@ -38,6 +38,8 @@ describe('WorkspaceCreationService', () => {
     creationSource: 'MANUAL',
     creationMetadata: null,
     prs: [],
+    selectedPrId: null,
+    selectedPr: null,
     prSummary: deriveWorkspacePRSummary([], true),
     prUrl: null,
     prDiscoveryLastCheckedAt: null,

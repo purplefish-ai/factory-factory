@@ -337,7 +337,8 @@ with configured triggers cannot be deleted. A trigger with run history must be
 paused rather than deleted. Deleting a definition cascades its triggers and run
 history but retains its workspaces. Deleting a workspace clears its run link
 without deleting run history. Editing definitions or triggers does not rewrite
-stored snapshots; future run writers must keep them immutable.
+stored snapshots; launch writers keep them frozen. Opt-in terminal context
+expiry is the sole maintenance exception, using a validated expired state.
 
 The agent-definition capsule also owns the durable event runtime foundation:
 `AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
@@ -431,7 +432,53 @@ before identity deletion; retained run event links become null. Source high
 water, cursor, recovery health, proof pages and baselines remain unchanged.
 Automatic admission independently rejects events older than 30 days, including
 replays after tombstones expire. Frozen run input and provider conversations
-have separate lifetimes, so ledger pruning does not erase all source text.
+have separate lifetimes, so ledger pruning does not erase all source text. Run
+context defaults to indefinite retention. Setting
+`AGENT_RUN_CONTEXT_RETENTION_DAYS` to a positive whole number (at most 365000)
+opts into expiry measured from `completedAt`; absent, blank or invalid values
+retain context. Existing evaluation maintenance inspects one additional rotating
+page of at most 100 run candidates per cycle. It acquires the ledger write lock
+before sampling policy/time and rechecking terminal status, finished launch,
+retry/lease, source/evaluation, delivery and child-work dependencies. Active,
+uncertain, malformed or recovery-dependent rows remain intact; expiry never
+retries or resends provider effects. Batch metrics contain counts and bounded
+reason codes, without context or run identifiers.
+
+`AgentLedgerRetentionService.inspectRunContexts({ retentionDays?, after? }, signal)`
+previews one bounded page in a read-only transaction. Omit `retentionDays` to
+inspect the configured policy (default retain); supply prospective positive days
+to preview eligibility without enabling deletion. The result contains eligible
+and retained-reason counts, an independent next cursor, and logical UTF-8 byte
+impact for snapshot JSON plus diagnostic text. A positive `eligibleDelta` means
+growth; a negative value means reduction. This excludes SQLite/file overhead and
+is not a physical disk-space guarantee. Inspection neither updates rows nor
+advances the maintenance cursor. An exhausted inspection page is empty with a
+null cursor; only maintenance wraps to revisit retained candidates. Its snapshot
+is advisory: pruning independently rechecks eligibility under the ledger write
+lock. Byte serialization is confined to inspection rather than added to the
+destructive maintenance lock scope.
+
+A disposable mixed fixture measures lookup counts/timings and the observed
+write-lock scope without production data. Reproduce it with
+`pnpm test src/backend/services/agent-definition/resources/agent-run-context-retention.integration.test.ts -t "bounds a mixed fixture preview" --maxWorkers=1 --reporter=verbose --silent=false`.
+The fixture validates predicted versus actual logical byte change, read-only
+inspection, the 100-row bound, and cursor independence; its wall times are
+observations under the current host load, not production benchmarks or SLAs.
+
+Eligible expiry replaces `definitionSnapshot`, `triggerSnapshot` and `input`
+together with `{ version: 1, state: "EXPIRED", expiredAt }`, clears copied
+`errorMessage` diagnostics, and sets `contextExpiredAt` in the same transaction.
+`storedAgentRunContextSchema` validates the retained or fully expired state;
+launch input schemas continue to require complete executable snapshots. History
+reports context availability separately from the compact result/initial outcome.
+Run identity, status, revisions, result/PR links, execution binding, delivery
+proof, and retained workspace/session/child origins remain unchanged. Provider
+conversations, evaluation snapshots, source payloads and live authoring settings
+have their own lifetimes; run expiry is not a promise to erase all source text.
+The additive migration marks no existing contexts expired and needs no backfill.
+Logical recovery readers must preserve the expired representation and timestamp;
+expired context is historical data and cannot authorize a launch.
+
 Compact run results and PR links survive workspace and event deletion. Logical
 export/import still excludes the agent tables and credentials; the complete
 supported backup is the database file together with `encryption.key`.

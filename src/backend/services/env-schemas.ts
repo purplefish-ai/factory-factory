@@ -105,6 +105,17 @@ export const ConfigEnvSchema = z.object({
   FF_NODE_EXEC_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   HEALTH_CHECK_INTERVAL_MS: PositiveIntEnvSchema.catch(300_000),
   MAX_SESSIONS_PER_WORKSPACE: PositiveIntEnvSchema.catch(5),
+  AGENT_RUN_CONTEXT_RETENTION_DAYS: z
+    .preprocess(
+      toTrimmedString,
+      z
+        .string()
+        .regex(/^[1-9]\d*$/)
+        .transform(Number)
+        .pipe(z.number().int().max(365_000))
+    )
+    .optional()
+    .catch(undefined),
   AGENT_ACTIVE_PER_DEFINITION: PositiveIntEnvSchema.catch(1),
   AGENT_ACTIVE_GLOBAL: PositiveIntEnvSchema.catch(4),
   AGENT_WAITING_PER_DEFINITION: PositiveIntEnvSchema.catch(100),
