@@ -424,13 +424,23 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       id: 'workspace-notification-notif-parent',
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
-    // Duplicate at the head of the queue, a regular message behind it.
-    mockSessionDomainService.peekNextMessage
-      .mockReturnValueOnce(notificationMessage)
-      .mockReturnValue(queuedMessage);
-    mockNotificationDeliveryService.claimForDispatch
-      .mockReturnValueOnce({ status: 'duplicate' })
-      .mockReturnValue({ status: 'not_notification' });
+    // Reads are stable; only the actual duplicate-removal operation advances the queue.
+    let removed = false;
+    mockSessionDomainService.peekNextMessage.mockImplementation(() =>
+      removed ? queuedMessage : notificationMessage
+    );
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() =>
+      removed ? [queuedMessage] : [notificationMessage, queuedMessage]
+    );
+    mockNotificationDeliveryService.removeDuplicateFromQueue.mockImplementationOnce(() => {
+      removed = true;
+      return true;
+    });
+    mockNotificationDeliveryService.claimForDispatch.mockImplementation((_id, messageId) =>
+      messageId === notificationMessage.id
+        ? { status: 'duplicate' }
+        : { status: 'not_notification' }
+    );
 
     await sessionDispatchService.tryDispatchNextMessage('s1');
 
