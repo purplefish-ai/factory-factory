@@ -1065,8 +1065,10 @@ Both queued prompts and native steering persist an uncertainty fence before
 provider submission. A failure after possible provider acceptance leaves a
 durable ambiguous wake instead of replaying it automatically, including after
 restart. The inbox exposes an explicit **Retry mail notification** action with
-notice that it may notify the agent again. Only that explicit action clears
-ambiguous delivery for retry; reading mail and acknowledging selected IDs remain
+notice that it may notify the agent again. Unresolved delivery uncertainty
+requires that explicit action. A valid late provider reply proving no injection
+can instead disarm its exact claim and resume normal recovery under the current
+session and workspace guards. Reading mail and acknowledging selected IDs remain
 independent. Explicit startup assignments always precede recovered mail signals.
 
 Max workspace depth is 1 — children cannot have child workspaces.

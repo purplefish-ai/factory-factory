@@ -294,60 +294,60 @@ describe('durable workspace mailbox', () => {
     expect(await mail.settleWake(claims[0]!)).toBe(false);
     expect(await mail.settleWake(retry!)).toBe(true);
   });
-});
 
-it('uses the highest actionable revision for wakes and permits scoped idempotent ACK repair', async () => {
-  const id = await workspace();
-  const first = await send(id, 'actionable');
-  await send(id, 'quiet', { kind: 'PROGRESS' });
-  const wake = await mail.claimWake({ workspaceId: id });
-  expect(wake?.revision).toBe(first.revision);
-  await mail.settleWake(wake!);
-  await mail.ackMail({ workspaceId: id, ids: [first.id], throughRevision: 1 });
-  // Legacy state may have settled a wake including a later quiet revision.
-  await state.client!.workspaceMailState.update({
-    where: { workspaceId: id },
-    data: { notifiedRevision: 2 },
+  it('uses the highest actionable revision for wakes and permits scoped idempotent ACK repair', async () => {
+    const id = await workspace();
+    const first = await send(id, 'actionable');
+    await send(id, 'quiet', { kind: 'PROGRESS' });
+    const wake = await mail.claimWake({ workspaceId: id });
+    expect(wake?.revision).toBe(first.revision);
+    await mail.settleWake(wake!);
+    await mail.ackMail({ workspaceId: id, ids: [first.id], throughRevision: 1 });
+    // Legacy state may have settled a wake including a later quiet revision.
+    await state.client!.workspaceMailState.update({
+      where: { workspaceId: id },
+      data: { notifiedRevision: 2 },
+    });
+    await send(id, 'new actionable');
+    expect(await mail.claimWake({ workspaceId: id })).toBeNull();
+    expect(
+      await mail.ackMail({ workspaceId: id, ids: [first.id], throughRevision: 2 })
+    ).toMatchObject({ acknowledged: 0 });
+    expect((await mail.claimWake({ workspaceId: id }))?.revision).toBe(3);
   });
-  await send(id, 'new actionable');
-  expect(await mail.claimWake({ workspaceId: id })).toBeNull();
-  expect(
-    await mail.ackMail({ workspaceId: id, ids: [first.id], throughRevision: 2 })
-  ).toMatchObject({ acknowledged: 0 });
-  expect((await mail.claimWake({ workspaceId: id }))?.revision).toBe(3);
-});
 
-it('durably quarantines ambiguous wake claims across expiry until explicit retry', async () => {
-  const id = await workspace();
-  await send(id);
-  const wake = (await mail.claimWake({ workspaceId: id }))!;
-  expect(await mail.quarantineWake(wake)).toBe(true);
-  expect(await mail.disarmWake({ ...wake, claimId: 'stale-attempt' })).toBe(false);
-  expect(await mail.disarmWake(wake)).toBe(true);
-  expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
-  expect(await mail.quarantineWake(wake)).toBe(true);
-  await state.client!.workspaceMailState.update({
-    where: { workspaceId: id },
-    data: { claimedAt: new Date(Date.now() - 31_000) },
+  it('durably quarantines ambiguous wake claims across expiry until explicit retry', async () => {
+    const id = await workspace();
+    await send(id);
+    const wake = (await mail.claimWake({ workspaceId: id }))!;
+    expect(await mail.quarantineWake(wake)).toBe(true);
+    expect(await mail.disarmWake({ ...wake, claimId: 'stale-attempt' })).toBe(false);
+    expect(await mail.disarmWake(wake)).toBe(true);
+    expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
+    expect(await mail.quarantineWake(wake)).toBe(true);
+    await state.client!.workspaceMailState.update({
+      where: { workspaceId: id },
+      data: { claimedAt: new Date(Date.now() - 31_000) },
+    });
+    expect(await mail.claimWake({ workspaceId: id })).toBeNull();
+    expect(await mail.nextWakeRetryAt({ workspaceId: id })).toBeNull();
+    expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(true);
+    expect(await mail.retryWake({ workspaceId: id })).toBe(true);
+    const retry = (await mail.claimWake({ workspaceId: id }))!;
+    expect(retry.claimId).not.toBe(wake.claimId);
+    expect(await mail.settleWake(wake)).toBe(false);
+    expect(await mail.quarantineWake(wake)).toBe(false);
+    expect(await mail.settleWake(retry)).toBe(true);
+    expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
   });
-  expect(await mail.claimWake({ workspaceId: id })).toBeNull();
-  expect(await mail.nextWakeRetryAt({ workspaceId: id })).toBeNull();
-  expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(true);
-  expect(await mail.retryWake({ workspaceId: id })).toBe(true);
-  const retry = (await mail.claimWake({ workspaceId: id }))!;
-  expect(retry.claimId).not.toBe(wake.claimId);
-  expect(await mail.settleWake(wake)).toBe(false);
-  expect(await mail.quarantineWake(wake)).toBe(false);
-  expect(await mail.settleWake(retry)).toBe(true);
-  expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
-});
 
-it('settles a late provider receipt only while its exact ambiguous wake still owns the claim', async () => {
-  const id = await workspace();
-  await send(id);
-  const wake = (await mail.claimWake({ workspaceId: id }))!;
-  await mail.quarantineWake(wake);
-  expect(await mail.settleWake(wake)).toBe(true);
-  expect(await mail.retryWake({ workspaceId: id })).toBe(false);
-  expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
+  it('settles a late provider receipt only while its exact ambiguous wake still owns the claim', async () => {
+    const id = await workspace();
+    await send(id);
+    const wake = (await mail.claimWake({ workspaceId: id }))!;
+    await mail.quarantineWake(wake);
+    expect(await mail.settleWake(wake)).toBe(true);
+    expect(await mail.retryWake({ workspaceId: id })).toBe(false);
+    expect((await mail.listMail({ workspaceId: id })).wakeAmbiguous).toBe(false);
+  });
 });

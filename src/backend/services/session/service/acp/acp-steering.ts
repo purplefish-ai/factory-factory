@@ -32,7 +32,7 @@ export function supportsAcpSteering(initializeMeta: unknown): boolean {
 export async function steerAcpPrompt(
   handle: AcpProcessHandle,
   prompt: ContentBlock[],
-  options?: { onLateInjected?: () => Promise<void> }
+  options?: { onLateInjected?: () => Promise<void>; onLateNotInjected?: () => Promise<void> }
 ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
   if (!handle.supportsSteering) {
     throw new AcpSteeringNotSentError(
@@ -53,12 +53,19 @@ export async function steerAcpPrompt(
       timeoutError: new AcpSteeringTimeoutError(),
     });
   } catch (error) {
-    if (error instanceof AcpSteeringTimeoutError && options?.onLateInjected) {
+    if (
+      error instanceof AcpSteeringTimeoutError &&
+      (options?.onLateInjected || options?.onLateNotInjected)
+    ) {
       void operation
         .then(async (late) => {
           const parsed = steeringResponseSchema.safeParse(late);
-          if (parsed.success && parsed.data.outcome === 'injected') {
-            await options.onLateInjected?.();
+          if (parsed.success) {
+            if (parsed.data.outcome === 'injected') {
+              await options.onLateInjected?.();
+            } else {
+              await options.onLateNotInjected?.();
+            }
           }
         })
         .catch((error) => {

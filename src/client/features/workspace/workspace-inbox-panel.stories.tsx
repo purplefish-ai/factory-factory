@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import {
   ackMailInputSchema,
@@ -76,12 +76,9 @@ const messages: WorkspaceMailSummary[] = [
     taskRevision: 2,
   },
 ];
-function reportBody(scenario: Scenario, offset: number) {
-  if (offset > 0) {
-    return '\n\nThe remaining checks passed. The review is complete.';
-  }
+function reportBody(scenario: Scenario) {
   if (scenario === 'long-report') {
-    return `The first section covers workspace permissions and background tasks.\n\n${'All workspace permission checks passed. '.repeat(70)}`;
+    return `The first section covers workspace permissions and background tasks.\n\n${'All workspace permission checks passed. '.repeat(230)}\n\nThe remaining checks passed. The review is complete.`;
   }
   return 'Please review the authentication choice before implementation continues.\n\nThe existing identity provider supports the required roles. Keeping one sign-in flow will make account administration easier.';
 }
@@ -114,16 +111,28 @@ function createResponses(scenario: Scenario) {
       };
     },
     'workspace.readMail': (input) => {
-      const { ids, offset } = readMailInputSchema.parse(input);
-      for (const id of ids) {
-        readIds.add(id);
-      }
-      const body = reportBody(scenario, offset);
-      const nextOffset = scenario === 'long-report' && offset === 0 ? 2800 : null;
+      const { ids, offset, maxChars } = readMailInputSchema.parse(input);
+      const fullBody = reportBody(scenario);
+      let remaining = maxChars;
       return {
         items: summaries()
           .filter((mail) => ids.includes(mail.id))
-          .map((mail) => ({ ...mail, body, offset, nextOffset })),
+          .map((mail) => {
+            const start = Math.min(offset, fullBody.length);
+            const body = fullBody.slice(start, start + remaining);
+            remaining -= body.length;
+            if (body.length > 0) {
+              readIds.add(mail.id);
+            }
+            const end = start + body.length;
+            return {
+              ...mail,
+              readAt: readIds.has(mail.id) ? receivedAt : mail.readAt,
+              body,
+              offset: start,
+              nextOffset: end < fullBody.length ? end : null,
+            };
+          }),
         revision: 4,
       };
     },
@@ -282,15 +291,12 @@ export const RetryNotification: Story = {
   args: { scenario: 'ambiguous' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      await canvas.findByText(
-        'Delivery could not be confirmed. Retrying may notify the agent again.'
-      )
-    ).toBeVisible();
+    const banner = await canvas.findByText(
+      'Delivery could not be confirmed. Retrying may notify the agent again.'
+    );
+    await expect(banner).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Retry mail notification' }));
-    await expect(
-      canvas.queryByRole('button', { name: 'Retry mail notification' })
-    ).not.toBeInTheDocument();
+    await waitFor(() => expect(banner).not.toBeInTheDocument());
   },
 };
 export const RetryNotificationFailure: Story = {

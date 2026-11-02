@@ -335,7 +335,13 @@ export class SessionNotificationDeliveryService {
     const { wake } = owned;
     return {
       arm: async () => (await this.notificationPort.quarantineWake?.(wake)) ?? false,
-      disarm: async () => (await this.notificationPort.disarmWake?.(wake)) ?? false,
+      disarm: async () => {
+        const disarmed = (await this.notificationPort.disarmWake?.(wake)) ?? false;
+        if (disarmed && this.mailWakes.get(messageId)?.wake.claimId === wake.claimId) {
+          this.ambiguousSignals.delete(messageId);
+        }
+        return disarmed;
+      },
       accept: async () => {
         const settled = (await this.notificationPort.settleWake?.(wake)) ?? false;
         if (settled && this.mailWakes.get(messageId)?.wake.claimId === wake.claimId) {

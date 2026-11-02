@@ -10,10 +10,10 @@ export const workspaceMailKindSchema = z.enum([
 ]);
 export type WorkspaceMailKind = z.infer<typeof workspaceMailKindSchema>;
 export const workspaceMailSendMetadataSchema = z.object({
-  subject: z.string().trim().max(200).optional(),
+  subject: z.string().trim().min(1).max(200).optional(),
   kind: workspaceMailKindSchema.optional(),
   taskKey: z.string().trim().min(1).max(200).optional(),
-  taskRevision: z.number().int().nonnegative().optional(),
+  taskRevision: z.number().int().nonnegative().max(2_147_483_647).optional(),
 });
 export type WorkspaceMailSendMetadata = z.infer<typeof workspaceMailSendMetadataSchema>;
 const workspaceId = z.string().min(1);

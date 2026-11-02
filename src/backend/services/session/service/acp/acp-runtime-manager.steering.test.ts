@@ -417,4 +417,46 @@ describe('ACP runtime steering', () => {
       vi.useRealTimers();
     }
   });
+
+  it.each(['promptRequired', 'invalid', 'rejected'] as const)(
+    'handles late %s without canceling the active turn or inventing receipt evidence',
+    async (outcome) => {
+      const { manager, handle, pending, prompt } = await runningSession();
+      const receipt = createDeferred<unknown>();
+      mockExtMethod.mockReturnValue(receipt.promise);
+      const onLateNotInjected = vi.fn(async () => undefined);
+      const onLateInjected = vi.fn(async () => undefined);
+      vi.useFakeTimers();
+      try {
+        const steering = manager
+          .steerSession('session', input, {
+            preserveRuntimeOnTimeout: true,
+            onLateInjected,
+            onLateNotInjected,
+          })
+          .catch((error: unknown) => error);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(await steering).toBeInstanceOf(AcpSteeringTimeoutError);
+        if (outcome === 'rejected') {
+          receipt.reject(new Error('late transport failure'));
+        } else {
+          receipt.resolve(
+            outcome === 'promptRequired'
+              ? { outcome: 'promptRequired', reason: 'noRunningTurn' }
+              : { outcome: 'promptRequired', reason: 'untrusted' }
+          );
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        expect(onLateNotInjected).toHaveBeenCalledTimes(outcome === 'promptRequired' ? 1 : 0);
+        expect(onLateInjected).not.toHaveBeenCalled();
+        expect(handle.connection.close).not.toHaveBeenCalled();
+        expect(mockCancel).not.toHaveBeenCalled();
+        expect(handle.isPromptInFlight).toBe(true);
+        pending.resolve({ stopReason: 'end_turn' });
+        await prompt;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
 });

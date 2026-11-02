@@ -115,7 +115,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                 className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 onClick={() => setSelected(item)}
               >
-                <div className="flex items-start justify-between gap-2">
+                <span className="flex items-start justify-between gap-2">
                   <span className={cn('break-words text-sm', isUnread(item) && 'font-semibold')}>
                     {item.subject || 'Workspace message'}
                   </span>
@@ -124,18 +124,13 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                       Unread
                     </span>
                   )}
-                </div>
+                </span>
                 <MailMetadata mail={item} />
-                <p className="line-clamp-2 break-words text-xs text-muted-foreground">
+                <span className="line-clamp-2 break-words text-xs text-muted-foreground">
                   {item.preview}
-                </p>
+                </span>
                 {item.acknowledgedAt && (
-                  <p className="text-xs text-muted-foreground">Acknowledged</p>
-                )}
-                {item.supersededAt && (
-                  <p className="text-xs text-muted-foreground">
-                    A newer progress update is available
-                  </p>
+                  <span className="block text-xs text-muted-foreground">Acknowledged</span>
                 )}
               </button>
             </li>

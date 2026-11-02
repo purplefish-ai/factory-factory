@@ -8,6 +8,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import { WorkspaceInboxPanel } from './workspace-inbox-panel';
+import inboxStory from './workspace-inbox-panel.stories';
 
 const summary = {
   id: 'mail-1',
@@ -112,6 +113,10 @@ describe('WorkspaceInboxPanel', () => {
     expect(container.textContent).toContain('Completion');
     expect(container.textContent).not.toContain('Full report body');
     expect(container.textContent).not.toContain('Retry mail notification');
+    const message = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Review ready')
+    );
+    expect(message?.querySelector('div, p')).toBeNull();
     expect(requests).toEqual([
       {
         path: 'workspace.listMail',
@@ -339,6 +344,22 @@ describe('WorkspaceInboxPanel', () => {
       offset: 5,
       maxChars: 8192,
     });
+  });
+  it('shows the long-report story in bounded contiguous chunks', async () => {
+    const InboxStory = inboxStory.component;
+    act(() => root.render(<InboxStory scenario="long-report" />));
+    await waitForText('Review ready');
+    await click('Review ready');
+    await waitForText('The first section covers');
+    const first = container.querySelector('.whitespace-pre-wrap')?.textContent ?? '';
+    expect(first.length).toBe(8192);
+    expect(container.textContent).not.toContain('The remaining checks passed.');
+    await click('Read more');
+    await waitForText('The remaining checks passed.');
+    const full = container.querySelector('.whitespace-pre-wrap')?.textContent ?? '';
+    expect(full.startsWith(first)).toBe(true);
+    expect(full.match(/All workspace permission checks passed\. /g)).toHaveLength(230);
+    expect(full.endsWith('The remaining checks passed. The review is complete.')).toBe(true);
   });
   it('loads older summaries only after asking for the next page', async () => {
     respond = (path, input) => {

@@ -18,7 +18,11 @@ interface SteeringPorts {
   send(
     sessionId: string,
     content: string | AgentContentItem[],
-    options?: { preserveRuntimeOnTimeout?: boolean; onLateInjected?: () => Promise<void> }
+    options?: {
+      preserveRuntimeOnTimeout?: boolean;
+      onLateInjected?: () => Promise<void>;
+      onLateNotInjected?: () => Promise<void>;
+    }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }>;
   dispatch(sessionId: string): Promise<void>;
 }
@@ -137,15 +141,24 @@ export class SessionQueuedSteering {
     // Persist before the RPC: a crash or uncertain failure must never leave an
     // expiring ordinary claim that can replay accepted native input.
     const commitLateMessage = domain.captureLateMessageCommit(sessionId, message);
+    const isStoreCurrent = domain.captureStoreGuard(sessionId);
     if (!(await mail.receipt.arm())) {
       throw new AcpSteeringNotSentError('Mail wake attempt no longer owns its durable claim');
     }
+    let finishAttempt!: () => void;
+    const attemptSettled = new Promise<void>((resolve) => {
+      finishAttempt = resolve;
+    });
     try {
       if (!isCurrent()) {
         throw new AcpSteeringNotSentError('Session stopped before steering');
       }
       const result = await this.ports.send(sessionId, content, {
         preserveRuntimeOnTimeout: true,
+        onLateNotInjected: async () => {
+          await attemptSettled;
+          await this.recoverLateUnsentMailSignal(sessionId, mail, isCurrent, isStoreCurrent);
+        },
         onLateInjected: () =>
           this.acceptLateMailSignal(
             sessionId,
@@ -166,18 +179,37 @@ export class SessionQueuedSteering {
         mail.receipt.quarantine();
       }
       throw error;
+    } finally {
+      finishAttempt();
     }
   }
 
-  private async disarmMailAttempt(mail: MailSteering): Promise<void> {
+  private async disarmMailAttempt(mail: MailSteering): Promise<boolean> {
     try {
-      if (!(await mail.receipt.disarm())) {
+      const disarmed = await mail.receipt.disarm();
+      if (!disarmed) {
         mail.receipt.quarantine();
       }
+      return disarmed;
     } catch (error) {
       mail.receipt.quarantine();
       throw error;
     }
+  }
+
+  private async recoverLateUnsentMailSignal(
+    sessionId: string,
+    mail: MailSteering,
+    isCurrent: () => boolean,
+    isStoreCurrent: () => boolean
+  ): Promise<void> {
+    if (!((await this.disarmMailAttempt(mail)) && isCurrent() && isStoreCurrent())) {
+      return;
+    }
+    if (!((await this.ports.isAllowed(sessionId)) && isCurrent() && isStoreCurrent())) {
+      return;
+    }
+    await this.requestLateDispatch(sessionId);
   }
 
   private async acceptLateMailSignal(
@@ -199,11 +231,15 @@ export class SessionQueuedSteering {
       newState: MessageState.COMMITTED,
     });
     if (isCurrent()) {
-      if (this.isPending(sessionId)) {
-        this.lateRecoveryRequested.add(sessionId);
-      } else {
-        await this.ports.dispatch(sessionId);
-      }
+      await this.requestLateDispatch(sessionId);
+    }
+  }
+
+  private async requestLateDispatch(sessionId: string): Promise<void> {
+    if (this.isPending(sessionId)) {
+      this.lateRecoveryRequested.add(sessionId);
+    } else {
+      await this.ports.dispatch(sessionId);
     }
   }
 

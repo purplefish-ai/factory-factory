@@ -41,6 +41,21 @@ const image: AgentContentItem = {
 };
 
 describe('SessionService steering conversion', () => {
+  it('forwards mail timeout preservation and late receipts unchanged to the runtime', async () => {
+    const { service, runtime } = harness();
+    const options = {
+      preserveRuntimeOnTimeout: true,
+      onLateInjected: vi.fn(async () => undefined),
+      onLateNotInjected: vi.fn(async () => undefined),
+    };
+    await service.steerSessionMessage('session', 'Workspace mail signal', options);
+    expect(runtime.steerSession).toHaveBeenCalledExactlyOnceWith(
+      'session',
+      [{ type: 'text', text: 'Workspace mail signal' }],
+      options
+    );
+    expect(runtime.steerSession.mock.calls[0]?.[2]).toBe(options);
+  });
   it('converts string steering into a text block without starting another prompt', async () => {
     const { service, runtime, processor } = harness();
 

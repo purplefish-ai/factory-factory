@@ -265,7 +265,11 @@ export class AcpRuntimeManager {
   async steerSession(
     sessionId: string,
     prompt: ContentBlock[],
-    options?: { preserveRuntimeOnTimeout?: boolean; onLateInjected?: () => Promise<void> }
+    options?: {
+      preserveRuntimeOnTimeout?: boolean;
+      onLateInjected?: () => Promise<void>;
+      onLateNotInjected?: () => Promise<void>;
+    }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
     const handle = this.supervisor.getInstalledHandle(sessionId);
     if (!handle?.isPromptInFlight) {

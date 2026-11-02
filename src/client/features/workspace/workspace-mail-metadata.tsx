@@ -12,7 +12,7 @@ const kindLabels: Record<WorkspaceMailKind, string> = {
 
 export function MailMetadata({ mail }: { mail: WorkspaceMailSummary }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
       <span className={cn(mail.kind === 'BLOCKER' && 'text-destructive')}>
         {kindLabels[mail.kind]}
       </span>
@@ -27,6 +27,6 @@ export function MailMetadata({ mail }: { mail: WorkspaceMailSummary }) {
           minute: '2-digit',
         })}
       </time>
-    </div>
+    </span>
   );
 }

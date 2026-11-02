@@ -8,6 +8,25 @@ import {
 } from './workspace-mail';
 
 describe('workspace mail bounds', () => {
+  it.each(['progress', 'PROGRES'])('rejects invalid mail kind %s', (kind) => {
+    expect(workspaceMailSendMetadataSchema.safeParse({ kind }).success).toBe(false);
+  });
+  it('bounds task revisions to the Prisma integer range', () => {
+    expect(workspaceMailSendMetadataSchema.parse({ taskRevision: 2_147_483_647 })).toEqual({
+      taskRevision: 2_147_483_647,
+    });
+    expect(workspaceMailSendMetadataSchema.safeParse({ taskRevision: 2_147_483_648 }).success).toBe(
+      false
+    );
+  });
+  it('allows omitted subjects and trims nonblank subjects while rejecting empty subjects', () => {
+    expect(workspaceMailSendMetadataSchema.parse({})).toEqual({});
+    expect(workspaceMailSendMetadataSchema.parse({ subject: ' Ready ' })).toEqual({
+      subject: 'Ready',
+    });
+    expect(workspaceMailSendMetadataSchema.safeParse({ subject: '' }).success).toBe(false);
+    expect(workspaceMailSendMetadataSchema.safeParse({ subject: ' \t ' }).success).toBe(false);
+  });
   it('defaults bounded list and read operations and rejects oversized IDs/budgets', () => {
     expect(listMailInputSchema.parse({ workspaceId: 'w' }).limit).toBe(20);
     expect(readMailInputSchema.parse({ workspaceId: 'w', ids: ['a'] })).toMatchObject({

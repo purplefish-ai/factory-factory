@@ -492,6 +492,32 @@ describe('workspaceChildrenRouter', () => {
 });
 
 describe('workspace inbox routes', () => {
+  it.each(['sendMessageToParent', 'sendMessageToChild'] as const)(
+    'validates Prisma task revision bounds before %s delivery',
+    async (method) => {
+      mockFindByIdWithProject.mockImplementation(async (id: string) =>
+        id === 'child-1' ? child : parent
+      );
+      mockDeliverWorkspaceNotification.mockResolvedValue({ delivered: false });
+      const { caller } = createCaller();
+      const input = {
+        parentWorkspaceId: 'parent-1',
+        childWorkspaceId: 'child-1',
+        message: 'Report',
+      };
+      await expect(caller[method]({ ...input, taskRevision: 2_147_483_648 })).rejects.toMatchObject(
+        {
+          code: 'BAD_REQUEST',
+        }
+      );
+      expect(mockFindByIdWithProject).not.toHaveBeenCalled();
+      expect(mockDeliverWorkspaceNotification).not.toHaveBeenCalled();
+      await caller[method]({ ...input, taskRevision: 2_147_483_647 });
+      expect(mockDeliverWorkspaceNotification).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ taskRevision: 2_147_483_647 })
+      );
+    }
+  );
   it('rejects inbox previews and bodies from an untrusted client', async () => {
     mockListMail.mockClear();
     mockReadMail.mockClear();
@@ -621,9 +647,10 @@ it('requires explicit trusted retry before recovering an ambiguous mail wake', a
   await expect(caller.retryMailWake({ workspaceId: 'recipient' })).resolves.toEqual({
     retried: true,
   });
-  expect(mockRetryWake).toHaveBeenCalledWith({ workspaceId: 'recipient' });
-  expect(mockRecoverWorkspaceMail).toHaveBeenCalledWith('recipient');
+  expect(mockRetryWake).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'recipient' });
+  expect(mockRecoverWorkspaceMail).toHaveBeenCalledExactlyOnceWith('recipient');
   mockRetryWake.mockClear();
+  mockRecoverWorkspaceMail.mockClear();
   const untrusted = createCaller({
     remoteAddress: '203.0.113.10',
     origin: 'https://attacker.example',
@@ -633,6 +660,7 @@ it('requires explicit trusted retry before recovering an ambiguous mail wake', a
     'trusted local Factory Factory client'
   );
   expect(mockRetryWake).not.toHaveBeenCalled();
+  expect(mockRecoverWorkspaceMail).not.toHaveBeenCalled();
 });
 
 it('does not notify again when there is no ambiguous mail wake to retry', async () => {

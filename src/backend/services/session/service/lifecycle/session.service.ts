@@ -77,7 +77,11 @@ export class SessionService {
   async steerSessionMessage(
     sessionId: string,
     content: string | AgentContentItem[],
-    options?: { preserveRuntimeOnTimeout?: boolean; onLateInjected?: () => Promise<void> }
+    options?: {
+      preserveRuntimeOnTimeout?: boolean;
+      onLateInjected?: () => Promise<void>;
+      onLateNotInjected?: () => Promise<void>;
+    }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
     if (this.eventAuthority) {

@@ -555,3 +555,40 @@ it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
     expect(response.result.content[0]?.text).toContain('not persisted');
   }
 );
+
+it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
+  'returns a tool error without calling the API for invalid metadata in %s',
+  async (toolName) => {
+    for (const metadata of [{ kind: 'typo' }, { taskRevision: 2_147_483_648 }, { subject: ' ' }]) {
+      const { requestUrl, response } = await callToolWithHttpResponse({
+        status: 200,
+        toolName,
+        parentWorkspaceId: toolName === 'send_message_to_parent' ? 'parent-workspace' : null,
+        toolArguments: { childWorkspaceId: 'child-1', message: 'Report', ...metadata },
+        body: { result: { data: { json: { persisted: true } } } },
+      });
+      expect(requestUrl).toBeUndefined();
+      expect(response.result.isError).toBe(true);
+      expect(response.result.content[0]?.text).toContain('Invalid mail metadata');
+    }
+  }
+);
+
+it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
+  'forwards the maximum Prisma task revision in %s',
+  async (toolName) => {
+    const { requestBody, response } = await callToolWithHttpResponse({
+      status: 200,
+      toolName,
+      parentWorkspaceId: toolName === 'send_message_to_parent' ? 'parent-workspace' : null,
+      toolArguments: {
+        childWorkspaceId: 'child-1',
+        message: 'Report',
+        taskRevision: 2_147_483_647,
+      },
+      body: { result: { data: { json: { persisted: true } } } },
+    });
+    expect(requestBody).toMatchObject({ json: { taskRevision: 2_147_483_647 } });
+    expect(response.result.isError).not.toBe(true);
+  }
+);

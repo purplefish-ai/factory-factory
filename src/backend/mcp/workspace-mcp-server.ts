@@ -227,16 +227,41 @@ async function handleSpawnTool(
   }
 }
 
+function sendMailError(req: JsonRpcRequest, error: string): void {
+  send({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+  });
+}
+
+function parseMailSendMetadata(req: JsonRpcRequest, args: Record<string, unknown>) {
+  const metadata = workspaceMailSendMetadataSchema.safeParse(args);
+  if (metadata.success) {
+    return metadata.data;
+  }
+  const issue = metadata.error.issues[0];
+  sendMailError(
+    req,
+    `Invalid mail metadata: ${issue?.path.join('.') || 'metadata'}: ${issue?.message ?? 'Invalid value'}`
+  );
+  return undefined;
+}
+
 async function handleSendMsgTool(
   req: JsonRpcRequest,
   workspaceId: string,
   args: Record<string, unknown>,
   apiBase: string
 ): Promise<void> {
+  const metadata = parseMailSendMetadata(req, args);
+  if (!metadata) {
+    return;
+  }
   const { result, error } = await callTrpcMutation(apiBase, 'workspace.sendMessageToParent', {
     childWorkspaceId: workspaceId,
     message: args.message,
-    ...workspaceMailSendMetadataSchema.parse(args),
+    ...metadata,
   });
   const mailError =
     error ||
@@ -244,11 +269,7 @@ async function handleSendMsgTool(
       ? undefined
       : 'Mail was not persisted.');
   if (mailError) {
-    send({
-      jsonrpc: '2.0',
-      id: req.id,
-      result: { content: [{ type: 'text', text: `Error: ${mailError}` }], isError: true },
-    });
+    sendMailError(req, mailError);
   } else {
     send({
       jsonrpc: '2.0',
@@ -264,11 +285,15 @@ async function handleSendMsgToChildTool(
   args: Record<string, unknown>,
   apiBase: string
 ): Promise<void> {
+  const metadata = parseMailSendMetadata(req, args);
+  if (!metadata) {
+    return;
+  }
   const { result, error } = await callTrpcMutation(apiBase, 'workspace.sendMessageToChild', {
     parentWorkspaceId: workspaceId,
     childWorkspaceId: args.childWorkspaceId,
     message: args.message,
-    ...workspaceMailSendMetadataSchema.parse(args),
+    ...metadata,
   });
   const mailError =
     error ||
@@ -276,11 +301,7 @@ async function handleSendMsgToChildTool(
       ? undefined
       : 'Mail was not persisted.');
   if (mailError) {
-    send({
-      jsonrpc: '2.0',
-      id: req.id,
-      result: { content: [{ type: 'text', text: `Error: ${mailError}` }], isError: true },
-    });
+    sendMailError(req, mailError);
   } else {
     send({
       jsonrpc: '2.0',

@@ -135,6 +135,7 @@ describe('workspace mail delivery orchestration', () => {
       persisted: true,
       queued: true,
     });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
   });
   it('kicks queue progress when recovery finds no dispatchable wake', async () => {
     mocks.recover.mockResolvedValue({ dispatchableCount: 0 });
