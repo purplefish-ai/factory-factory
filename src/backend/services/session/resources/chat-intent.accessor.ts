@@ -22,12 +22,19 @@ export type IntentRecord = {
   message: QueuedMessage;
   status: z.infer<typeof statusSchema>;
   attemptId?: string;
+  revision: number;
 };
 export class ChatIntentConflictError extends Error {
   constructor() {
     super('Message id already accepted with different submitted content');
   }
 }
+export class ChatIntentRevisionChangedError extends Error {
+  constructor() {
+    super('Queued desired settings changed before the prompt was frozen');
+  }
+}
+
 export class ChatIntentQueueFullError extends Error {
   constructor() {
     super(`Queue full (max ${SERVICE_LIMITS.sessionStoreMaxQueueSize} messages)`);
@@ -38,6 +45,7 @@ function decode(row: ChatIntent): IntentRecord {
   message.settings = ChatSettingsSchema.parse(row.desired);
   return {
     message,
+    revision: row.revision,
     status: statusSchema.parse(row.status),
     ...(row.attemptId ? { attemptId: row.attemptId } : {}),
   };
@@ -135,7 +143,9 @@ export class ChatIntentAccessor {
     messages: readonly QueuedMessage[],
     content: string | AgentContentItem[],
     settings: QueuedMessage['settings'],
-    generation: number
+    generation: number,
+    expectedRevisions?: Record<string, number>,
+    expectedProvider?: { provider: string; providerSessionId: string; configOptions: unknown }
   ): Promise<string | null> {
     return this.db.$transaction(async (tx) => {
       const ids = messages.map((m) => m.id);
@@ -147,21 +157,45 @@ export class ChatIntentAccessor {
       if (rows.some((r) => r.status !== 'queued')) {
         throw new Error('Human dispatch members are no longer queued');
       }
+      if (
+        expectedRevisions &&
+        rows.some((row) => expectedRevisions[row.messageId] !== row.revision)
+      ) {
+        throw new ChatIntentRevisionChangedError();
+      }
       const session = await tx.agentSession.findUniqueOrThrow({ where: { id: sessionId } });
+      if (
+        expectedProvider &&
+        (session.provider !== expectedProvider.provider ||
+          session.providerSessionId !== expectedProvider.providerSessionId)
+      ) {
+        throw new ChatIntentRevisionChangedError();
+      }
       const attempt = await tx.promptDispatchAttempt.create({
         data: {
           sessionId,
-          members: messages.map((message) => ({
-            messageId: message.id,
-            owner: rows.some((row) => row.messageId === message.id) ? 'human' : 'external',
-            message: z.json().parse(JSON.parse(JSON.stringify(message))),
-          })),
+          members: messages.map((message) => {
+            const row = rows.find((entry) => entry.messageId === message.id);
+            return {
+              messageId: message.id,
+              owner: row ? 'human' : 'external',
+              ...(row ? { revision: row.revision } : {}),
+              message: z.json().parse(JSON.parse(JSON.stringify(message))),
+            };
+          }),
           content: z.union([z.string(), z.array(z.json())]).parse(content),
           effectiveSettings: settings,
           providerIdentity: {
             provider: session.provider,
             providerSessionId: session.providerSessionId,
             codexAccountId: session.codexAccountId,
+            ...(expectedProvider
+              ? {
+                  nativeConfigOptions: z
+                    .array(z.json())
+                    .parse(JSON.parse(JSON.stringify(expectedProvider.configOptions))),
+                }
+              : {}),
           },
           sendGeneration: generation,
         },

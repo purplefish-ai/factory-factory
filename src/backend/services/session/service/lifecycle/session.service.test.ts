@@ -4,6 +4,19 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+// These legacy prompt/lifecycle fixtures isolate configuration admission; the real
+// shared queue and permit path are exercised by session-prompt-admission.test.ts.
+vi.mock('./session.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./session.service')>();
+  return {
+    ...actual,
+    SessionService: class extends actual.SessionService {
+      constructor(options: import('./session.service').SessionServiceDependencies) {
+        super({ ...options, admitPrompt: undefined });
+      }
+    },
+  };
+});
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockRecordRatchetSessionEnd = vi.fn();
@@ -280,7 +293,6 @@ describe('SessionService', () => {
       provider: 'CLAUDE',
       providerSessionId: null,
     });
-
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
@@ -290,22 +302,17 @@ describe('SessionService', () => {
       description: null,
       projectId: 'project-1',
     });
-
     const acpHandle = unsafeCoerce<AcpProcessHandle>({
       getPid: vi.fn().mockReturnValue(456),
       isPromptInFlight: false,
       configOptions: [],
     });
-
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
-
     const result = await sessionLifecycleService.getOrCreateSessionClient('session-1');
-
     expect(result).toBe(acpHandle);
     expect(acpRuntimeManager.getOrCreateClient).toHaveBeenCalledWith(
       'session-1',
@@ -323,7 +330,6 @@ describe('SessionService', () => {
       status: SessionStatus.RUNNING,
     });
   });
-
   it('injects replayed user_message_chunk events while session is idle', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -336,7 +342,6 @@ describe('SessionService', () => {
       provider: 'CLAUDE',
       providerSessionId: 'provider-session-1',
     });
-
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
@@ -346,22 +351,18 @@ describe('SessionService', () => {
       description: null,
       projectId: 'project-1',
     });
-
     const acpHandle = unsafeCoerce<AcpProcessHandle>({
       getPid: vi.fn().mockReturnValue(456),
       isPromptInFlight: false,
       configOptions: [],
     });
-
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
-
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionLifecycleService.getOrCreateSessionClient('session-1');
-
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
       onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
@@ -372,7 +373,6 @@ describe('SessionService', () => {
         content: { type: 'text', text: 'ping' },
       },
     });
-
     expect(injectUserMessageSpy).toHaveBeenCalledWith('session-1', 'ping');
   });
 

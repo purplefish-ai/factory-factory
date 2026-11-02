@@ -1,5 +1,4 @@
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
-/** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
@@ -11,6 +10,7 @@ import { toErrorMessage } from '@/backend/services/session/service/lifecycle/ses
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage } from '@/shared/acp-protocol';
 import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
+import type { PromptConfigurationBoundary } from '../lifecycle/session-prompt-configuration';
 import {
   acknowledgeSentBatch,
   prepareBackgroundForDispatch,
@@ -18,7 +18,12 @@ import {
   dispatchCollectedBatch,
   combineBatchContents,
 } from './session-dispatch-batch';
-import { isClaudeCompactionClient, isThinkingBudgetClient } from './session-dispatch-client';
+import {
+  isClaudeCompactionClient,
+  isThinkingBudgetClient,
+  getRequeueReason,
+  isCompactCommandText,
+} from './session-dispatch-client';
 import type {
   SessionDispatchDependencies,
   SessionDispatchLifecycleDependencies,
@@ -26,9 +31,15 @@ import type {
 } from './session-dispatch.types';
 import {
   publishDispatchedBatch,
+  markDispatchError,
   getPermanentBlockedDispatchReason,
+  publishUncertainFailure,
 } from './session-dispatched-publication';
-import { prepareDurableAttempt, prepareDurableBatchContents } from './session-durable-attempt';
+import {
+  prepareDurableAttempt,
+  prepareDurableBatchContents,
+  sendConfiguredMessage,
+} from './session-durable-attempt';
 import { buildMessageContent } from './session-message-content';
 import { SessionQueuedSteering } from './session-queued-steering';
 
@@ -77,9 +88,7 @@ export class SessionDispatchService {
   /** Cross-domain bridge for workspace init policy (injected by orchestration layer) */
   private initPolicyBridge: SessionInitPolicyBridge | null = null;
 
-  /**
-   * Configure cross-domain bridges. Called once at startup by orchestration layer.
-   */
+  /** Configure the workspace initialization bridge. */
   configure(bridges: { initPolicy: SessionInitPolicyBridge }): void {
     this.initPolicyBridge = bridges.initPolicy;
   }
@@ -193,11 +202,7 @@ export class SessionDispatchService {
     }
   }
 
-  /**
-   * Examine the head of the queue: drop it if it is a duplicate workspace
-   * notification ('continue' — caller should examine the new head), otherwise
-   * dispatch it ('done').
-   */
+  /** Drop delivered notifications or dispatch the next complete batch. */
   private async getDispatchableHead(sessionId: string): Promise<QueuedMessage | undefined> {
     const message = sessionDomainService.peekNextMessage(sessionId);
     return message && !(await this.isExternalDeliveryHeld(sessionId, message))
@@ -442,8 +447,6 @@ export class SessionDispatchService {
   }
 
   // Private: Dispatch Helpers
-
-  /** Reject invalid input, requeue busy sends, and require explicit retry for other failures. */
   private handleDispatchError(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -452,9 +455,12 @@ export class SessionDispatchService {
     capturedClient?: unknown
   ): void {
     if (error instanceof UncertainChatDispatchError) {
-      if (!msg.source) {
-        sessionDomainService.failMessage(dbSessionId, msg, error.message);
-      }
+      publishUncertainFailure(
+        dbSessionId,
+        msg,
+        error.message,
+        this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)
+      );
       return;
     }
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
@@ -501,11 +507,11 @@ export class SessionDispatchService {
       return;
     }
 
-    if (this.isTurnAlreadyInProgressError(error)) {
+    if (toErrorMessage(error).includes('A turn is already in progress for this session')) {
       logger.warn('[Chat WS] ACP turn already in progress, retrying queued message later', {
         dbSessionId,
         messageId: msg.id,
-        error: this.formatDispatchError(error),
+        error: toErrorMessage(error),
       });
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
@@ -520,7 +526,7 @@ export class SessionDispatchService {
 
     // Dispatch can fail after we pessimistically committed the user message to
     // transcript for refresh safety. Roll it back before surfacing the failure.
-    const errorMessage = this.formatDispatchError(error);
+    const errorMessage = toErrorMessage(error);
     logger.error('[Chat WS] Failed to dispatch message', {
       dbSessionId,
       messageId: msg.id,
@@ -529,21 +535,13 @@ export class SessionDispatchService {
     sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
       emitSnapshot: false,
     });
-    this.markDispatchError(dbSessionId, errorMessage);
+    markDispatchError(
+      dbSessionId,
+      errorMessage,
+      this.dependencies.runtimeManager.isSessionRunning(dbSessionId)
+    );
     this.turnInProgressRetryAttempts.delete(dbSessionId);
     sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
-  }
-
-  private markDispatchError(sessionId: string, errorMessage: string): void {
-    // Preserve process exits and prompt errors already finalized with fresh work details.
-    if (!this.dependencies.runtimeManager.isSessionRunning(sessionId)) {
-      return;
-    }
-    const runtime = sessionDomainService.getRuntimeSnapshot(sessionId);
-    if (runtime.phase === 'error' && runtime.errorMessage === errorMessage) {
-      return;
-    }
-    sessionDomainService.markError(sessionId, errorMessage);
   }
 
   private scheduleTurnInProgressRetry(dbSessionId: string): void {
@@ -574,19 +572,7 @@ export class SessionDispatchService {
     this.turnInProgressRetryAttempts.delete(dbSessionId);
   }
 
-  private isTurnAlreadyInProgressError(error: unknown): boolean {
-    const message = this.formatDispatchError(error);
-    return message.includes('A turn is already in progress for this session');
-  }
-
-  private formatDispatchError(error: unknown): string {
-    return toErrorMessage(error);
-  }
-
-  /**
-   * Resolve (or auto-start) the client for dispatching a queued message.
-   * Returns null if the message should not be dispatched (requeue reason found).
-   */
+  /** Resolve or start a client without removing blocked input. */
   private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -604,7 +590,7 @@ export class SessionDispatchService {
 
     // Check the prompt slot even after startup: another caller may have acquired it
     // while startup/configuration was awaited. Background activity is only a UI signal.
-    const reason = this.getRequeueReason(dbSessionId, client);
+    const reason = getRequeueReason(this.dependencies.runtimeManager, dbSessionId, client);
     if (reason) {
       return msg.source && reason !== 'stopped' ? { blocked: 'busy' } : null;
     }
@@ -664,15 +650,34 @@ export class SessionDispatchService {
     }
   }
 
-  /**
-   * Dispatch a message to the client.
-   */
-  private async dispatchMessage(
+  private dispatchMessage(
     dbSessionId: string,
     messages: QueuedMessage[],
     client: unknown,
     stopGeneration: number,
     guard?: SessionCallerGuard
+  ): Promise<void> {
+    const run = (boundary?: PromptConfigurationBoundary) =>
+      this.dispatchMessageWithinBoundary(
+        dbSessionId,
+        messages,
+        client,
+        stopGeneration,
+        guard,
+        boundary
+      );
+    return this.dependencies.configService.withPromptConfiguration
+      ? this.dependencies.configService.withPromptConfiguration(dbSessionId, run, guard)
+      : run();
+  }
+
+  private async dispatchMessageWithinBoundary(
+    dbSessionId: string,
+    messages: QueuedMessage[],
+    client: unknown,
+    stopGeneration: number,
+    guard?: SessionCallerGuard,
+    boundary?: PromptConfigurationBoundary
   ): Promise<void> {
     await guard?.check();
     guard?.assertCurrent?.();
@@ -696,9 +701,13 @@ export class SessionDispatchService {
     if (!msg) {
       return;
     }
-    const isCompactCommand = this.isCompactCommand(msg.text);
+    const isCompactCommand = isCompactCommandText(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
+    const expectedRevisions = await this.dependencies.chatIntent?.refreshSelected(
+      dbSessionId,
+      messages
+    );
     if (
       !(await this.configureBatchForDispatch(
         dbSessionId,
@@ -706,7 +715,8 @@ export class SessionDispatchService {
         msg,
         client,
         stopGeneration,
-        guard
+        guard,
+        boundary
       ))
     ) {
       return;
@@ -724,6 +734,8 @@ export class SessionDispatchService {
       content,
       settings: msg.settings,
       generation: stopGeneration,
+      expectedRevisions,
+      configurationPermit: boundary?.permit,
       isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
       guard,
     });
@@ -735,10 +747,12 @@ export class SessionDispatchService {
 
     try {
       const sendPromise = attempt.invoke(() =>
-        this.dependencies.promptService.sendSessionMessage(
+        sendConfiguredMessage(
+          this.dependencies.promptService,
           dbSessionId,
           content,
-          ...(guard ? ([guard] as const) : [])
+          guard,
+          boundary?.permit
         )
       );
       // Persist immediately after dispatch so refresh/replay keeps this user message
@@ -787,10 +801,18 @@ export class SessionDispatchService {
     msg: QueuedMessage,
     client: unknown,
     stopGeneration: number,
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    boundary?: PromptConfigurationBoundary
   ): Promise<boolean> {
     if (
-      !(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration, guard))
+      !(await this.configureMessageForDispatch(
+        dbSessionId,
+        msg,
+        client,
+        stopGeneration,
+        guard,
+        boundary
+      ))
     ) {
       await this.failStoppedBatch(
         dbSessionId,
@@ -835,7 +857,8 @@ export class SessionDispatchService {
     msg: QueuedMessage,
     client: unknown,
     stopGeneration: number,
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    boundary?: PromptConfigurationBoundary
   ): Promise<boolean> {
     if (msg.source) {
       const valid = await this.dependencies.backgroundDelivery.validate(msg);
@@ -850,12 +873,14 @@ export class SessionDispatchService {
       return true;
     }
     try {
-      msg.settings = await this.dependencies.configService.configureQueuedMessage(
-        dbSessionId,
-        msg,
-        isThinkingBudgetClient(client),
-        ...(guard ? ([guard] as const) : [])
-      );
+      msg.settings = boundary
+        ? await boundary.configure(msg, isThinkingBudgetClient(client))
+        : await this.dependencies.configService.configureQueuedMessage(
+            dbSessionId,
+            msg,
+            isThinkingBudgetClient(client),
+            ...(guard ? ([guard] as const) : [])
+          );
     } catch (error) {
       if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         throw error;
@@ -890,27 +915,6 @@ export class SessionDispatchService {
       !this.lifecycle.gate.isSessionStopping(dbSessionId) &&
       this.lifecycle.gate.isGenerationCurrent(dbSessionId, stopGeneration)
     );
-  }
-
-  private getRequeueReason(
-    dbSessionId: string,
-    client?: unknown
-  ): 'working' | 'compacting' | 'stopped' | null {
-    if (this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId)) {
-      return 'working';
-    }
-    if (!this.dependencies.runtimeManager.isSessionRunning(dbSessionId)) {
-      return 'stopped';
-    }
-    if (isClaudeCompactionClient(client) && client.isCompactingActive()) {
-      return 'compacting';
-    }
-    return null;
-  }
-
-  private isCompactCommand(text: string): boolean {
-    const trimmed = text.trim();
-    return trimmed === '/compact' || trimmed.startsWith('/compact ');
   }
 
   private async handleBlockedDispatchGate(

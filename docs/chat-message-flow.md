@@ -94,6 +94,17 @@ and planning edits update separate desired settings/revisions for older queued
 humans. Restart hydration restores those desired settings. The dispatcher still
 combines consecutive messages into one prompt, preserves slash-command
 boundaries and human priority, and uses the last human's effective settings.
+Selected members are held out of hydration and cancellation until the batch
+exits; a rejected removal cannot cancel a durable member behind the dispatcher.
+The configuration owner serializes accepted edits, desired-revision refresh,
+provider configuration, atomic claim and the native turn. Claim compares every
+human's desired revision and provider identity. A revision conflict requeues the
+whole unsent batch. Later edits wait behind that turn, so the frozen settings
+and native configuration snapshot describe the actual invocation. Ordinary
+prompt sends share this admission queue and cannot occupy the prompt limiter
+while a frozen batch is waiting to invoke the provider. Runtime retirement
+rejects the old queue without blocking a replacement; a claimed mixed batch
+remains uncertain and retains its external delivery claims.
 
 Before invoking a provider, a transaction creates one `PromptDispatchAttempt`
 with complete ordered membership (including background messages), assembled

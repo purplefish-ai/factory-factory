@@ -6,6 +6,11 @@ type QueuePosition = { position: number } | { error: string };
 export interface ChatIntentDomain {
   enqueue(sessionId: string, message: QueuedMessage): QueuePosition;
   restoreAcceptedMessage(sessionId: string, message: QueuedMessage): QueuePosition;
+  removeQueuedMessage(
+    sessionId: string,
+    messageId: string,
+    options?: { expectedMessage?: QueuedMessage }
+  ): boolean;
   getQueueLength(sessionId: string): number;
   getQueueSnapshot(sessionId: string): QueuedMessage[];
   emitDelta(sessionId: string, event: SessionDeltaEvent): void;

@@ -13,6 +13,7 @@ import type {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientFactory } from './acp-client-factory';
 import type { AcpProcessHandle } from './acp-process-handle';
+import type { PromptConfigurationPermit } from './acp-prompt-configuration';
 import type { AcpPromptObservation } from './acp-prompt-controller';
 import { AcpPromptController } from './acp-prompt-controller';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
@@ -203,11 +204,22 @@ export class AcpRuntimeManager {
     prompt: ContentBlock[],
     timeoutMs?: number,
     observed?: ObservedAcpPrompt,
-    guard?: { check(): Promise<void>; assertCurrent?(): void }
+    guard?: { check(): Promise<void>; assertCurrent?(): void },
+    configurationPermit?: PromptConfigurationPermit
   ): Promise<{ stopReason: string }> {
     const handle = this.requireInstalledHandle(sessionId);
-    while (handle.configurationReady !== undefined || handle.pendingConfigUpdates !== undefined) {
-      await Promise.all([handle.configurationReady, handle.pendingConfigUpdates]);
+    configurationPermit?.assertCurrent();
+    while (
+      handle.configurationReady !== undefined ||
+      (!configurationPermit &&
+        (handle.pendingConfigUpdates !== undefined || handle.pendingPromptAdmission !== undefined))
+    ) {
+      await Promise.all([
+        handle.configurationReady,
+        configurationPermit ? undefined : handle.pendingConfigUpdates,
+        configurationPermit ? undefined : handle.pendingPromptAdmission,
+      ]);
+      configurationPermit?.assertCurrent();
     }
     if (
       this.supervisor.getClient(sessionId) !== handle ||
@@ -218,13 +230,16 @@ export class AcpRuntimeManager {
     }
     const providerSessionId = handle.acpSessionId;
     const assertCurrent = () => {
+      configurationPermit?.assertCurrent();
       if (
         this.supervisor.getClient(sessionId) !== handle ||
         this.supervisor.isStopInProgress(sessionId) ||
         !handle.isRunning() ||
         handle.acpSessionId !== providerSessionId ||
         handle.configurationReady !== undefined ||
-        handle.pendingConfigUpdates !== undefined
+        (!configurationPermit &&
+          (handle.pendingConfigUpdates !== undefined ||
+            handle.pendingPromptAdmission !== undefined))
       ) {
         throw new Error('Observed prompt runtime or configuration changed');
       }

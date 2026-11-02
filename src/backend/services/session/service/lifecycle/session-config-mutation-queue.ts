@@ -2,10 +2,15 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import type { AcpProcessHandle } from '../acp/acp-process-handle';
+import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
 
 /** Native RPC, durable state, and configuration publication share one per-session transaction. */
 export class SessionConfigMutationQueue {
-  private readonly updates = new Map<string, Promise<unknown>>();
+  private readonly updates = new Map<
+    string,
+    { handle: AcpProcessHandle | undefined; update: Promise<unknown> }
+  >();
 
   constructor(
     private readonly runtime: Pick<AcpRuntimeManager, 'getClient' | 'isStopInProgress'>,
@@ -13,17 +18,71 @@ export class SessionConfigMutationQueue {
     private readonly assertAllowed?: (sessionId: string) => Promise<void>
   ) {}
 
-  async run<T>(
+  run<T>(sessionId: string, operation: () => Promise<T>, guard?: SessionCallerGuard): Promise<T> {
+    return this.enqueue(sessionId, operation, guard, true);
+  }
+
+  runPrompt<T>(
+    sessionId: string,
+    operation: (permit: PromptConfigurationPermit) => Promise<T>,
+    guard?: SessionCallerGuard
+  ): Promise<T> {
+    const handle = this.runtime.getClient(sessionId);
+    if (!handle) {
+      return Promise.reject(new Error('Prompt configuration runtime is unavailable'));
+    }
+    const admission = handle.beginPromptAdmission();
+    let active = true;
+    return this.enqueue(
+      sessionId,
+      async () => {
+        const providerSessionId = handle.acpSessionId;
+        const permit: PromptConfigurationPermit = {
+          provider: handle.provider,
+          providerSessionId: handle.providerSessionId,
+          configOptions: () => structuredClone(handle.configOptions),
+          assertCurrent: () => {
+            if (
+              !active ||
+              handle.acpSessionId !== providerSessionId ||
+              this.runtime.getClient(sessionId) !== handle ||
+              this.runtime.isStopInProgress(sessionId)
+            ) {
+              throw new Error('Prompt configuration boundary is no longer current');
+            }
+          },
+        };
+        try {
+          permit.assertCurrent();
+          return await operation(permit);
+        } finally {
+          active = false;
+        }
+      },
+      guard,
+      false
+    ).finally(() => {
+      admission.complete();
+      active = false;
+    });
+  }
+
+  private async enqueue<T>(
     sessionId: string,
     operation: () => Promise<T>,
-    guard?: SessionCallerGuard
+    guard: SessionCallerGuard | undefined,
+    trackPending: boolean
   ): Promise<T> {
     const handle = this.runtime.getClient(sessionId);
     if (guard && !handle) {
       throw new Error('Retry runtime is unavailable');
     }
-    const prior = this.updates.get(sessionId) ?? Promise.resolve();
-    const update = prior
+    const previous = this.updates.get(sessionId);
+    const prior =
+      previous && (!previous.handle || previous.handle === handle)
+        ? previous.update
+        : Promise.resolve();
+    const work = prior
       .catch(() => undefined)
       .then(async () => {
         try {
@@ -57,13 +116,17 @@ export class SessionConfigMutationQueue {
           throw error;
         }
       });
-    this.updates.set(sessionId, update);
+    const retired = handle?.configurationFailure;
+    const update = retired === undefined ? work : Promise.race([work, retired]);
+    this.updates.set(sessionId, { handle, update });
     // Register synchronously so even a direct prompt cannot overtake this edit.
-    handle?.trackPendingConfigUpdate(update);
+    if (trackPending) {
+      handle?.trackPendingConfigUpdate(update);
+    }
     try {
       return await update;
     } finally {
-      if (this.updates.get(sessionId) === update) {
+      if (this.updates.get(sessionId)?.update === update) {
         this.updates.delete(sessionId);
       }
     }

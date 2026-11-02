@@ -12,7 +12,7 @@ import type { SessionChatIntentService } from '../../session-chat-intent.service
 const logger = createLogger('chat-message-handlers');
 
 export function createRemoveQueuedMessageHandler(deps: {
-  chatIntent?: Pick<SessionChatIntentService, 'cancel'>;
+  chatIntent?: Pick<SessionChatIntentService, 'cancelQueued'>;
   domain: Pick<
     SessionExecutionCommandServices['domain'],
     'removeQueuedMessage' | 'emitDelta' | 'chatIntent'
@@ -23,9 +23,7 @@ export function createRemoveQueuedMessageHandler(deps: {
     if (messageId.startsWith('pr-event-')) {
       return { replies: [{ type: 'error', error: { kind: 'background_monitoring_required' } }] };
     }
-    const remove = (): SessionCommandOutcome => {
-      const removed = deps.domain.removeQueuedMessage(sessionId, messageId);
-
+    const publish = (removed: boolean): SessionCommandOutcome => {
       if (removed) {
         deps.domain.emitDelta(sessionId, {
           type: 'message_state_changed',
@@ -40,6 +38,8 @@ export function createRemoveQueuedMessageHandler(deps: {
       }
       return { replies: [] };
     };
-    return deps.chatIntent ? deps.chatIntent.cancel(sessionId, messageId).then(remove) : remove();
+    return deps.chatIntent
+      ? deps.chatIntent.cancelQueued(sessionId, messageId).then(publish)
+      : publish(deps.domain.removeQueuedMessage(sessionId, messageId));
   };
 }

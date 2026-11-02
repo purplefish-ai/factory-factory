@@ -45,3 +45,30 @@ export function getPermanentBlockedDispatchReason(workspace: {
 
   return null;
 }
+
+export function markDispatchError(
+  sessionId: string,
+  errorMessage: string,
+  isRunning: boolean
+): void {
+  // Preserve process exits and prompt errors already finalized with fresh work details.
+  if (!isRunning) {
+    return;
+  }
+  const runtime = sessionDomainService.getRuntimeSnapshot(sessionId);
+  if (runtime.phase === 'error' && runtime.errorMessage === errorMessage) {
+    return;
+  }
+  sessionDomainService.markError(sessionId, errorMessage);
+}
+
+export function publishUncertainFailure(
+  sessionId: string,
+  message: QueuedMessage,
+  reason: string,
+  isCurrent: boolean
+): void {
+  if (isCurrent && !message.source) {
+    sessionDomainService.failMessage(sessionId, message, reason);
+  }
+}

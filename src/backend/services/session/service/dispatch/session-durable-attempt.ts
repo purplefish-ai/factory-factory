@@ -1,9 +1,11 @@
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
 import type { SessionCallerGuard } from '../bridges';
 import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
 import type { PermanentAttachmentError } from '../chat/chat-message-handlers/attachment-processing';
 import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import { prepareBatchContents } from './session-dispatch-batch';
+import type { SessionDispatchDependencies } from './session-dispatch.types';
 
 type AttemptInput = {
   owner?: SessionChatIntentService;
@@ -12,6 +14,8 @@ type AttemptInput = {
   content: string | AgentContentItem[];
   settings: QueuedMessage['settings'];
   generation: number;
+  expectedRevisions?: Record<string, number>;
+  configurationPermit?: PromptConfigurationPermit;
   isCurrent(): boolean;
   guard?: SessionCallerGuard;
 };
@@ -23,7 +27,15 @@ export async function prepareDurableAttempt(input: AttemptInput) {
     input.messages,
     input.content,
     input.settings,
-    input.generation
+    input.generation,
+    input.expectedRevisions,
+    input.configurationPermit
+      ? {
+          provider: input.configurationPermit.provider,
+          providerSessionId: input.configurationPermit.providerSessionId,
+          configOptions: input.configurationPermit.configOptions(),
+        }
+      : undefined
   );
   return {
     async invoke<T>(
@@ -95,4 +107,19 @@ export async function prepareDurableBatchContents(
     await owner?.cancel(sessionId, message.id, 'failed');
   }
   return contents;
+}
+
+export function sendConfiguredMessage(
+  service: SessionDispatchDependencies['promptService'],
+  sessionId: string,
+  content: string | AgentContentItem[],
+  guard?: SessionCallerGuard,
+  permit?: PromptConfigurationPermit
+): Promise<void> {
+  if (permit) {
+    return service.sendSessionMessage(sessionId, content, guard, permit);
+  }
+  return guard
+    ? service.sendSessionMessage(sessionId, content, guard)
+    : service.sendSessionMessage(sessionId, content);
 }

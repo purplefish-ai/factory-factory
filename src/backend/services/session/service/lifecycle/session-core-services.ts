@@ -156,6 +156,17 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
 });
 
 const sessionPromptCoordinator = new SessionService({
+  admitPrompt: (id, send, guard) =>
+    sessionConfigService.withPromptConfiguration(
+      id,
+      ({ permit }) => {
+        if (!permit) {
+          throw new Error('Prompt configuration admission is unavailable');
+        }
+        return send(permit);
+      },
+      guard
+    ),
   ownedWork: eventOwnedWork,
   eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,

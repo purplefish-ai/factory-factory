@@ -113,6 +113,7 @@ it('freezes a full mixed batch and atomically excludes all human members from re
     messages.map((message, index) => ({
       messageId: message.id,
       owner: index < 2 ? 'human' : 'external',
+      ...(index < 2 ? { revision: 0 } : {}),
       message,
     }))
   );

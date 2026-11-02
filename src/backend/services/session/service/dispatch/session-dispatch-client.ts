@@ -1,3 +1,4 @@
+import type { AcpRuntimeManager } from '../acp/acp-runtime-manager';
 interface ClaudeCompactionClient {
   isCompactingActive: () => boolean;
   startCompaction: () => void;
@@ -26,4 +27,26 @@ export function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetC
   }
   const candidate = value as Partial<ThinkingBudgetClient>;
   return typeof candidate.setMaxThinkingTokens === 'function';
+}
+
+export function getRequeueReason(
+  runtime: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>,
+  dbSessionId: string,
+  client?: unknown
+): 'working' | 'compacting' | 'stopped' | null {
+  if (runtime.isSessionPromptInFlight(dbSessionId)) {
+    return 'working';
+  }
+  if (!runtime.isSessionRunning(dbSessionId)) {
+    return 'stopped';
+  }
+  if (isClaudeCompactionClient(client) && client.isCompactingActive()) {
+    return 'compacting';
+  }
+  return null;
+}
+
+export function isCompactCommandText(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed === '/compact' || trimmed.startsWith('/compact ');
 }

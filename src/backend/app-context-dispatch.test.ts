@@ -86,7 +86,7 @@ describe('application queue producer composition', () => {
     vi.spyOn(store, 'find').mockResolvedValue(undefined);
     vi.spyOn(store, 'read').mockResolvedValue([]);
     vi.spyOn(store, 'accept').mockImplementation((_id, message) =>
-      Promise.resolve({ status: 'queued', message })
+      Promise.resolve({ status: 'queued', message, revision: 0 })
     );
     clearWorkspaceInitOrchestratorStateForTests();
     vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();

@@ -4,6 +4,7 @@ import { PermanentAttachmentError } from '@/backend/services/session/service/cha
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { ChatIntentRevisionChangedError } from '../../resources/chat-intent.accessor';
 import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
 import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import type {
@@ -97,7 +98,7 @@ function takeDispatchBatch(sessionId: string, messages: QueuedMessage[]): boolea
   return true;
 }
 
-export async function dispatchCollectedBatch(input: {
+type CollectedBatchInput = {
   chatIntent?: SessionChatIntentService;
   sessionId: string;
   batch: Awaited<ReturnType<typeof collectDispatchBatch>>;
@@ -106,9 +107,22 @@ export async function dispatchCollectedBatch(input: {
   send(messages: QueuedMessage[]): Promise<void>;
   onError(message: QueuedMessage, error: unknown): void | Promise<void>;
   onSuccess(): void;
-}): Promise<'retry' | undefined> {
+};
+
+export async function dispatchCollectedBatch(
+  input: CollectedBatchInput
+): Promise<'retry' | undefined> {
   const { messages } = input.batch;
   const releaseProjection = input.chatIntent?.holdProjection(input.sessionId, [...messages]);
+  if (input.chatIntent && !releaseProjection) {
+    await releasePreparedBackgrounds(
+      messages,
+      input.backgroundDelivery,
+      new Error('Queued cancellation is settling')
+    );
+    input.batch.release();
+    return 'retry';
+  }
   try {
     if (!input.isCurrent()) {
       await releasePreparedBackgrounds(
@@ -132,23 +146,40 @@ export async function dispatchCollectedBatch(input: {
       await input.send(messages);
       input.onSuccess();
     } catch (error) {
-      // Requeue from the end so a busy provider preserves FIFO order.
-      const backwards = [...messages].reverse();
-      if (!(error instanceof UncertainChatDispatchError)) {
-        await releasePreparedBackgrounds(
-          backwards,
-          input.backgroundDelivery,
-          error,
-          input.isCurrent() ? 'failed' : 'cancelled'
-        );
-      }
-      for (const message of backwards) {
-        await input.onError(message, error);
-      }
+      return await handleFailedBatch(input, messages, error);
     }
   } finally {
     releaseProjection?.();
     input.batch.release();
+  }
+  return undefined;
+}
+
+async function handleFailedBatch(
+  input: CollectedBatchInput,
+  messages: QueuedMessage[],
+  error: unknown
+): Promise<'retry' | undefined> {
+  // Requeue from the end so a busy provider preserves FIFO order.
+  const backwards = [...messages].reverse();
+  error = input.chatIntent?.protectClaimedBatchFailure(input.sessionId, messages, error) ?? error;
+  if (error instanceof ChatIntentRevisionChangedError) {
+    await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
+    for (const message of backwards) {
+      sessionDomainService.requeueFront(input.sessionId, message);
+    }
+    return 'retry';
+  }
+  if (!(error instanceof UncertainChatDispatchError)) {
+    await releasePreparedBackgrounds(
+      backwards,
+      input.backgroundDelivery,
+      error,
+      input.isCurrent() ? 'failed' : 'cancelled'
+    );
+  }
+  for (const message of backwards) {
+    await input.onError(message, error);
   }
   return undefined;
 }

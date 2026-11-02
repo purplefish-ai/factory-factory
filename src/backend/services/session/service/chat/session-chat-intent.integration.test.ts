@@ -6,13 +6,27 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatIntentAccessor } from '../../resources/chat-intent.accessor';
+import { AcpClientFactory } from '../acp/acp-client-factory';
+import { AcpRuntimeManager } from '../acp/acp-runtime-manager';
+import {
+  createTestProcessHandle,
+  createDeferred,
+  defaultOptions,
+  defaultHandlers,
+  defaultContext,
+} from '../acp/acp-runtime-manager.test-helpers';
 import { sessionDataService } from '../data/session-data.service';
 import { SessionDispatchService } from '../dispatch/session-dispatch.service';
 import type { SessionDispatchDependencies } from '../dispatch/session-dispatch.types';
+import { setupAuthority, configOptions } from '../lifecycle/session-config-authority.test-helpers';
+import { SessionConfigMutationQueue } from '../lifecycle/session-config-mutation-queue';
 import { SessionDomainService, sessionDomainService as domain } from '../session-domain.service';
 import { createQueueMessageHandler } from './chat-message-handlers/handlers/queue-message.handler';
+import { createRemoveQueuedMessageHandler } from './chat-message-handlers/handlers/remove-queued-message.handler';
 import { SessionChatIntentService } from './session-chat-intent.service';
+import { SessionLoadService } from './session-load.service';
 
 let db: IntegrationDatabase;
 let intents: SessionChatIntentService;
@@ -53,10 +67,19 @@ function dispatcher(
   ),
   options: {
     promptInFlight?: boolean;
+    stopped?: boolean;
+    runtimeManager?: SessionDispatchDependencies['runtimeManager'];
+    configService?: SessionDispatchDependencies['configService'];
+    client?: unknown;
     isCurrent?: () => boolean;
     steer?: SessionDispatchDependencies['promptService']['steerSessionMessage'];
   } = {}
 ) {
+  let started = !options.stopped;
+  const start = vi.fn(() => {
+    started = true;
+    return Promise.resolve(options.client ?? {});
+  });
   const background = {
     prepare: vi.fn(),
     validate: vi.fn(async () => true),
@@ -66,11 +89,11 @@ function dispatcher(
   const configured = vi.fn(async (_id: string, msg: QueuedMessage) => msg.settings);
   const service = new SessionDispatchService({
     chatIntent: intents,
-    runtimeManager: {
+    runtimeManager: options.runtimeManager ?? {
       isSessionPromptInFlight: () => options.promptInFlight ?? false,
-      isSessionRunning: () => true,
+      isSessionRunning: () => started,
     },
-    configService: {
+    configService: options.configService ?? {
       configureQueuedMessage: configured,
       resolveQueuedMessageSettings: (_id, msg) => msg.settings,
     },
@@ -86,7 +109,10 @@ function dispatcher(
       isGenerationCurrent: options.isCurrent ?? (() => true),
       isSessionStopping: () => false,
     },
-    startup: { getSessionClient: () => ({}), getOrCreateSessionClient: () => Promise.resolve({}) },
+    startup: {
+      getSessionClient: () => (started ? (options.client ?? {}) : undefined),
+      getOrCreateSessionClient: start,
+    },
     notificationDelivery: {
       claimForDispatch: () => ({ status: 'not_notification' }),
       isAlreadyDelivered: async () => false,
@@ -100,7 +126,7 @@ function dispatcher(
   vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue({
     workspace: { status: 'READY' },
   } as never);
-  return { service, send, configured, background };
+  return { service, send, configured, background, start };
 }
 it('persists accepted payload before acknowledgment and deduplicates concurrent handler retries', async () => {
   const emit = vi.spyOn(domain, 'emitDelta');
@@ -402,4 +428,257 @@ it('persists permanent attachment rejection so a legacy invalid intent cannot re
   domain.clearAllSessions();
   await new SessionChatIntentService(new ChatIntentAccessor(db.prisma), domain).hydrate('s');
   expect(domain.getQueueSnapshot('s')).toEqual([]);
+});
+
+it('refuses cancellation of selected input without failing any member of the unsent batch', async () => {
+  await intents.accept('s', message('one'));
+  await intents.accept('s', message('two'));
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const h = dispatcher();
+  h.configured.mockImplementationOnce(async () => {
+    await waiting;
+    return settings;
+  });
+  const dispatch = h.service.tryDispatchNextMessage('s');
+  await vi.waitFor(() => expect(h.configured).toHaveBeenCalled());
+  const remove = createRemoveQueuedMessageHandler({ domain, chatIntent: intents });
+  const result = await remove(
+    { sessionId: 's', workingDir: '/tmp' },
+    { type: 'remove_queued_message', messageId: 'one' }
+  );
+  expect(result.replies).toEqual([{ type: 'error', error: { kind: 'message_not_queued' } }]);
+  release();
+  await dispatch;
+  expect(h.send).toHaveBeenCalledExactlyOnceWith('s', 'one\n\ntwo');
+  expect((await intents.store.read('s')).map((row) => row.status)).toEqual([
+    'committed',
+    'committed',
+  ]);
+});
+it('compares immutable payloads on sequential initial retries after desired settings change', async () => {
+  const original = message('initial', 'original task');
+  await intents.acceptInitial('s', original);
+  await intents.override('s', Date.now(), { selectedModel: 'later-model' });
+  expect((await intents.acceptInitial('s', original)).message.settings.selectedModel).toBe(
+    'later-model'
+  );
+  await expect(intents.acceptInitial('s', { ...original, text: 'different task' })).rejects.toThrow(
+    'different submitted content'
+  );
+  expect(await db.prisma.chatIntent.count()).toBe(1);
+});
+
+it('freezes latest accepted desired revisions and actual provider settings across a delayed claim and later pending edit', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'session',
+      workspaceId: 'w',
+      provider: 'CODEX',
+      providerSessionId: 'thread',
+      workflow: 'implement',
+      model: 'first',
+    },
+  });
+  const beforeFreeze = createDeferred<void>();
+  const enteredConfig = createDeferred<void>();
+  const claiming = createDeferred<void>();
+  const enteredClaim = createDeferred<void>();
+  const response = createDeferred<{ stopReason: 'end_turn' }>();
+  let nativeModel = 'first';
+  const providerModels: string[] = [];
+  const handle = createTestProcessHandle({
+    provider: 'CODEX',
+    providerSessionId: 'thread',
+    connection: {
+      setSessionConfigOption: vi.fn(async ({ configId, value }) => {
+        if (configId === 'model') {
+          if (value === 'second') {
+            enteredConfig.resolve();
+            await beforeFreeze.promise;
+          }
+          nativeModel = String(value);
+        }
+        return { configOptions: configOptions(nativeModel) };
+      }),
+      prompt: vi.fn(() => {
+        providerModels.push(nativeModel);
+        return response.promise;
+      }),
+    },
+  });
+  Reflect.set(handle.child, 'pid', undefined);
+  handle.configOptions = configOptions('first');
+  const manager = new AcpRuntimeManager();
+  vi.spyOn(AcpClientFactory.prototype, 'createClient').mockResolvedValue(handle);
+  await manager.getOrCreateClient(
+    'session',
+    { ...defaultOptions(), provider: 'CODEX' },
+    defaultHandlers(),
+    defaultContext()
+  );
+  const config = setupAuthority(manager, intents).service;
+  const queued = { ...message('one'), settings: { ...settings, selectedModel: 'first' } };
+  await intents.accept('session', queued);
+  const earlyEdit = config.setSessionConfigOption('session', 'model', 'second');
+  await enteredConfig.promise;
+  const originalClaim = intents.store.claim.bind(intents.store);
+  vi.spyOn(intents.store, 'claim').mockImplementationOnce(async (...args) => {
+    enteredClaim.resolve();
+    await claiming.promise;
+    return originalClaim(...args);
+  });
+  const h = dispatcher(
+    (id, content, guard, permit) => {
+      if (typeof content !== 'string') {
+        throw new Error('Expected text');
+      }
+      return manager
+        .sendPrompt(id, [{ type: 'text', text: content }], undefined, undefined, guard, permit)
+        .then(() => undefined);
+    },
+    { runtimeManager: manager, configService: config, client: handle }
+  );
+  const sending = h.service.tryDispatchNextMessage('session');
+  beforeFreeze.resolve();
+  await earlyEdit;
+  await enteredClaim.promise;
+  let lateAccepted = false;
+  const lateEdit = config.setSessionConfigOption('session', 'model', 'third').then(() => {
+    lateAccepted = true;
+  });
+  expect(handle.pendingConfigUpdates).toBeDefined();
+  claiming.resolve();
+  await vi.waitFor(() => expect(providerModels).toEqual(['second']));
+  const attempt = await db.prisma.promptDispatchAttempt.findFirstOrThrow({
+    where: { sessionId: 'session' },
+  });
+  expect(attempt.effectiveSettings).toMatchObject({ selectedModel: 'second' });
+  expect(attempt.members).toEqual([expect.objectContaining({ messageId: 'one', revision: 1 })]);
+  expect(attempt.providerIdentity).toMatchObject({
+    providerSessionId: 'thread',
+    nativeConfigOptions: expect.arrayContaining([
+      expect.objectContaining({ id: 'model', currentValue: 'second' }),
+    ]),
+  });
+  expect(lateAccepted).toBe(false);
+  response.resolve({ stopReason: 'end_turn' });
+  await Promise.all([sending, lateEdit]);
+  expect(nativeModel).toBe('third');
+  expect((await intents.store.read('session'))[0]?.status).toBe('committed');
+  handle.child.emit('close', 0, null);
+});
+it('retries a pre-invocation desired-revision conflict without failing another human member', async () => {
+  await intents.accept('s', message('one'));
+  await intents.accept('s', message('two'));
+  const claim = intents.claim.bind(intents);
+  vi.spyOn(intents, 'claim').mockImplementationOnce(async (...args) => {
+    await intents.override('s', Date.now(), { selectedModel: 'newest' });
+    return claim(...args);
+  });
+  const h = dispatcher();
+  await h.service.tryDispatchNextMessage('s');
+  expect(h.send).toHaveBeenCalledExactlyOnceWith('s', 'one\n\ntwo');
+  expect((await intents.store.read('s')).map((row) => row.status)).toEqual([
+    'committed',
+    'committed',
+  ]);
+  expect(await db.prisma.promptDispatchAttempt.count()).toBe(1);
+  expect(
+    (await db.prisma.promptDispatchAttempt.findFirstOrThrow()).effectiveSettings
+  ).toMatchObject({ selectedModel: 'newest' });
+});
+
+it('loads and dispatches a durable initial prompt after a restart without another submission', async () => {
+  await db.prisma.agentSession.update({ where: { id: 's' }, data: { provider: 'CODEX' } });
+  const previous = domain.chatIntent;
+  try {
+    domain.chatIntent = intents;
+    await domain.storeInitialMessageDurably('s', 'initial task');
+    domain.clearAllSessions();
+    intents = new SessionChatIntentService(new ChatIntentAccessor(db.prisma), domain);
+    domain.chatIntent = intents;
+    const h = dispatcher(undefined, { stopped: true });
+    const load = new SessionLoadService({
+      findSession: (id) =>
+        db.prisma.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
+      hydrateProviderHistory: () => Promise.resolve(),
+      hydrateLifecycleEvents: () => Promise.resolve(),
+      hydrateChatIntent: async (id) => {
+        await intents.hydrate(id);
+        return intents.hasQueuedInput(id);
+      },
+      getRuntimeSnapshot: (id) => domain.getRuntimeSnapshot(id),
+      domain,
+      config: {
+        getSessionConfigProjection: () =>
+          Promise.resolve({
+            currentProjection: () => ({
+              capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+              configOptions: [],
+            }),
+          }),
+      },
+      getCachedCommands: () => Promise.resolve([]),
+      tryDispatchNextMessage: (id) => h.service.tryDispatchNextMessage(id),
+    });
+    const prepared = await load.prepareLoad({ sessionId: 's' });
+    if (prepared.status !== 'ready') {
+      throw new Error('Expected ready load');
+    }
+    expect(load.captureReplay(prepared).sessionRuntime.processState).toBe('stopped');
+    await load.completeLoad(prepared);
+    expect(h.start).toHaveBeenCalledOnce();
+    expect(h.send).toHaveBeenCalledExactlyOnceWith('s', 'initial task');
+    expect((await intents.store.read('s'))[0]?.status).toBe('committed');
+  } finally {
+    domain.chatIntent = previous;
+  }
+});
+
+it('keeps a claimed mixed batch uncertain when stop retires configuration before the provider result', async () => {
+  await db.prisma.agentSession.update({
+    where: { id: 's' },
+    data: { provider: 'CODEX', providerSessionId: 'thread' },
+  });
+  const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
+  handle.configOptions = configOptions('first');
+  const queue = new SessionConfigMutationQueue(
+    { getClient: () => handle, isStopInProgress: () => false },
+    vi.fn()
+  );
+  await intents.accept('s', {
+    ...message('human'),
+    settings: { ...settings, selectedModel: 'first' },
+  });
+  domain.enqueue('s', {
+    ...message('pr-event-bg', 'background'),
+    source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'pr', bindingRevision: 1 } },
+  });
+  const response = createDeferred<void>();
+  const send = vi.fn(() => response.promise);
+  const h = dispatcher(send, {
+    configService: {
+      configureQueuedMessage: (_id, msg) => Promise.resolve(msg.settings),
+      resolveQueuedMessageSettings: (_id, msg) => msg.settings,
+      withPromptConfiguration: (id, operation, guard) =>
+        queue.runPrompt(
+          id,
+          (permit) => operation({ permit, configure: (msg) => Promise.resolve(msg.settings) }),
+          guard
+        ),
+    },
+  });
+  h.background.prepare.mockResolvedValue({ status: 'ready' } as never);
+  const dispatch = h.service.tryDispatchNextMessage('s');
+  await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+  handle.failConfiguration(new Error('runtime stopped before response'));
+  await dispatch;
+  expect((await intents.store.read('s'))[0]?.status).toBe('uncertain');
+  expect(h.background.fail).not.toHaveBeenCalled();
+  expect(h.background.complete).not.toHaveBeenCalled();
+  response.resolve();
+  await vi.waitFor(() => expect(h.background.complete).toHaveBeenCalledOnce());
 });

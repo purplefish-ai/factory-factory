@@ -61,8 +61,9 @@ export class SessionQueuedSteering {
     const token = Symbol();
     this.pending.set(sessionId, { token, messageId });
     let resumeDispatch = true;
-    const releaseProjection = this.ports.chatIntent?.()?.holdProjection(sessionId, [message]);
+    let releaseProjection: (() => void) | undefined;
     try {
+      releaseProjection = this.holdProjection(sessionId, message);
       if (!(await this.ports.isAllowed(sessionId))) {
         throw new Error('Session is not ready for steering');
       }
@@ -96,6 +97,18 @@ export class SessionQueuedSteering {
       releaseProjection?.();
       this.releaseClaim(sessionId, token, isCurrent, resumeDispatch);
     }
+  }
+
+  private holdProjection(sessionId: string, message: QueuedMessage): (() => void) | undefined {
+    const owner = this.ports.chatIntent?.();
+    if (!owner) {
+      return undefined;
+    }
+    const release = owner.holdProjection(sessionId, [message]);
+    if (!release) {
+      throw new QueuedMessageNotFoundError();
+    }
+    return release;
   }
 
   private async sendSteering(

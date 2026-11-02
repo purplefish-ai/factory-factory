@@ -1,4 +1,8 @@
 import type { SessionConfigServiceDependencies } from './session-config-dependencies';
+import {
+  SessionPromptConfiguration,
+  type PromptConfigurationOperation,
+} from './session-prompt-configuration';
 export type { SessionConfigServiceDependencies } from './session-config-dependencies';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { codexAccountService } from '@/backend/services/codex-accounts';
@@ -7,6 +11,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import {
   assertConfiguredAcpHandle,
+  captureRuntimeIdentityGuard,
   withConfiguredAcpHandle,
 } from '@/backend/services/session/service/acp/acp-configured-handle';
 import {
@@ -35,6 +40,8 @@ import {
 } from './session-config-option-helpers';
 import {
   buildStoredConfigProjection,
+  readConfirmedConfigOptions,
+  readConfirmedConfigProjection,
   type ResolvedSessionConfigProjection,
   type SessionConfigProjection,
   type SessionConfigReadContext,
@@ -88,6 +95,7 @@ export class SessionConfigService {
   private readonly launchOptionsService: Pick<SessionLaunchOptionsService, 'getOptions'>;
   private readonly configUpdates: SessionConfigMutationQueue;
   private readonly queuedSettings: SessionQueuedSettings;
+  private readonly promptConfiguration: SessionPromptConfiguration;
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
@@ -133,6 +141,18 @@ export class SessionConfigService {
       (sessionId, operation) => this.configUpdates.run(sessionId, operation),
       options.chatIntent?.override.bind(options.chatIntent)
     );
+    this.promptConfiguration = new SessionPromptConfiguration(
+      this.configUpdates,
+      this.queuedSettings,
+      {
+        plan: (id, guard) => this.setSessionCollaborationModeUnserialized(id, 'plan', guard),
+        thinking: (id, budget, guard) =>
+          this.setSessionThinkingBudgetUnserialized(id, budget, guard),
+        model: (id, model, guard) => this.setSessionModelUnserialized(id, model, guard),
+        reasoning: (id, effort, guard) =>
+          this.setSessionReasoningEffortUnserialized(id, effort, guard),
+      }
+    );
   }
 
   requireSavedStartupAccess(handle: AcpProcessHandle, metadata: unknown): void {
@@ -150,7 +170,7 @@ export class SessionConfigService {
     handle: AcpProcessHandle,
     model: string
   ): Promise<void> {
-    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    const assertCurrent = captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle);
     const target = resolveAcpModelSelection(handle.provider, handle.configOptions, model);
     if (
       handle.configOptions.find((option) => option.id === target.configId)?.currentValue !==
@@ -179,7 +199,7 @@ export class SessionConfigService {
     preset: SessionPermissionPreset | undefined,
     override?: boolean
   ): Promise<void> {
-    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    const assertCurrent = captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle);
     try {
       await applyStartupLaunchPlan(
         sessionId,
@@ -223,7 +243,7 @@ export class SessionConfigService {
             throw new Error('Session runtime changed before configuration update');
           }
         }
-      : this.acceptRuntime(sessionId, handle);
+      : captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle);
     try {
       assertCurrent();
     } catch {
@@ -273,7 +293,7 @@ export class SessionConfigService {
         handle,
         startupModePreset,
         workflow,
-        assertCurrent: this.acceptRuntime(sessionId, handle),
+        assertCurrent: captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle),
       },
       (id, value) => this.startupPermissions.authorizeRequestedTarget(handle, id, value)
     );
@@ -456,16 +476,8 @@ export class SessionConfigService {
     return acpHandle ? [...acpHandle.configOptions] : [];
   }
 
-  async getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]> {
-    let resolved = await this.getSessionConfigProjection(sessionId);
-    for (;;) {
-      const current = resolved.currentProjection();
-      if ('retry' in current) {
-        resolved = await current.retry;
-        continue;
-      }
-      return current.configOptions;
-    }
+  getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]> {
+    return readConfirmedConfigOptions(() => this.getSessionConfigProjection(sessionId));
   }
 
   getSessionConfigProjection(sessionId: string): Promise<ResolvedSessionConfigProjection> {
@@ -564,18 +576,20 @@ export class SessionConfigService {
     supportsThinkingBudget = false,
     guard?: SessionCallerGuard
   ): Promise<QueuedMessage['settings']> {
-    return this.configUpdates.run(
+    return this.promptConfiguration.configureQueued(
       sessionId,
-      () =>
-        this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
-          plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan', guard),
-          thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget, guard),
-          model: (model) => this.setSessionModelUnserialized(sessionId, model, guard),
-          reasoning: (effort) =>
-            this.setSessionReasoningEffortUnserialized(sessionId, effort, guard),
-        }),
+      message,
+      supportsThinkingBudget,
       guard
     );
+  }
+
+  withPromptConfiguration<T>(
+    sessionId: string,
+    operation: PromptConfigurationOperation<T>,
+    guard?: SessionCallerGuard
+  ): Promise<T> {
+    return this.promptConfiguration.run(sessionId, operation, guard);
   }
 
   async setSessionModel(sessionId: string, model?: string, source?: 'user'): Promise<void> {
@@ -752,7 +766,7 @@ export class SessionConfigService {
       reasoningEffort?: string | null;
     }
   ): Promise<void> {
-    const assertCurrent = this.acceptRuntime(sessionId, handle);
+    const assertCurrent = captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle);
     try {
       const target = await startupReasoningTarget(
         sessionId,
@@ -919,22 +933,12 @@ export class SessionConfigService {
     if (handle && handle.configOptions.length === 0) {
       return this.buildAcpChatBarCapabilities(handle);
     }
-    let resolved = await this.getSessionConfigProjection(sessionId);
-    for (;;) {
-      const current = resolved.currentProjection();
-      if ('retry' in current) {
-        resolved = await current.retry;
-        continue;
-      }
-      return current.capabilities;
-    }
+    return (await readConfirmedConfigProjection(() => this.getSessionConfigProjection(sessionId)))
+      .capabilities;
   }
 
   buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
-    return buildCapabilitiesFromConfigOptions(
-      handle.provider as SessionProvider,
-      handle.configOptions
-    );
+    return buildCapabilitiesFromConfigOptions(handle.provider, handle.configOptions);
   }
 
   async persistAcpConfigSnapshot(
@@ -972,20 +976,8 @@ export class SessionConfigService {
   ) {
     return this.configAuthority.accept(
       sessionId,
-      assertCurrent ?? this.acceptRuntime(sessionId, handle)
+      assertCurrent ?? captureRuntimeIdentityGuard(this.runtimeManager, sessionId, handle)
     );
-  }
-
-  private acceptRuntime(sessionId: string, handle?: AcpProcessHandle): () => void {
-    return () => {
-      if (
-        handle &&
-        (this.runtimeManager.getClient(sessionId) !== handle ||
-          this.runtimeManager.isStopInProgress(sessionId))
-      ) {
-        throw new Error('Session runtime changed before configuration update');
-      }
-    };
   }
 
   private applyReasoningEffortTarget(params: ReasoningEffortTargetParams): Promise<void> {

@@ -6,6 +6,7 @@ import {
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-harness';
 import {
   createDeferred,
+  createTestProcessHandle,
   defaultContext,
   defaultHandlers,
   defaultOptions,
@@ -123,3 +124,94 @@ it.each([false, true])(
     expect(correction).toHaveBeenCalledWith('session', handle.configOptions);
   }
 );
+
+it('keeps late pending edits behind a frozen prompt configuration boundary without deadlocking native readiness', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  const queue = new SessionConfigMutationQueue(manager, vi.fn());
+  const claiming = createDeferred<void>();
+  const response = createDeferred<{ stopReason: 'end_turn' }>();
+  let model = 'original';
+  let frozen: string | undefined;
+  const observed: string[] = [];
+  vi.mocked(handle.connection.prompt).mockImplementation(() => {
+    observed.push(model);
+    return response.promise;
+  });
+  const priorEdit = queue.run('session', () => {
+    model = 'accepted-before-freeze';
+    return Promise.resolve();
+  });
+  const prompt = queue.runPrompt('session', async (permit) => {
+    frozen = model;
+    await claiming.promise;
+    return manager.sendPrompt('session', [], undefined, undefined, undefined, permit);
+  });
+  await priorEdit;
+  await vi.waitFor(() => expect(frozen).toBe('accepted-before-freeze'));
+  const laterEdit = queue.run('session', () => {
+    model = 'accepted-after-turn';
+    return Promise.resolve();
+  });
+  expect(handle.pendingConfigUpdates).toBeDefined();
+  claiming.resolve();
+  await vi.waitFor(() => expect(observed).toEqual([frozen]));
+  expect(model).toBe(frozen);
+  response.resolve({ stopReason: 'end_turn' });
+  await Promise.all([prompt, laterEdit]);
+  expect(model).toBe('accepted-after-turn');
+});
+
+it('rejects deferred edits and admits a replacement runtime when an old prompt never settles after stop', async () => {
+  const first = createTestProcessHandle();
+  const replacement = createTestProcessHandle({ providerSessionId: 'replacement' });
+  const runtime = { getClient: vi.fn(() => first), isStopInProgress: () => false };
+  const queue = new SessionConfigMutationQueue(runtime, vi.fn());
+  const entered = createDeferred<void>();
+  const pending = createDeferred<void>();
+  const prompt = queue
+    .runPrompt('session', async () => {
+      entered.resolve();
+      await pending.promise;
+    })
+    .catch(() => undefined);
+  await entered.promise;
+  let rejected: unknown;
+  const edit = queue
+    .run('session', () => Promise.resolve())
+    .catch((error: unknown) => {
+      rejected = error;
+    });
+  const stopped = new Error('runtime stopped');
+  first.failConfiguration(stopped);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    expect(rejected).toBe(stopped);
+    runtime.getClient.mockReturnValue(replacement);
+    expect(await queue.runPrompt('session', () => Promise.resolve('replacement admitted'))).toBe(
+      'replacement admitted'
+    );
+  } finally {
+    pending.resolve();
+    await Promise.allSettled([prompt, edit]);
+  }
+});
+
+it('retains the durable provider identity when native Codex IDs are normalized', async () => {
+  const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'sess_native' });
+  const queue = new SessionConfigMutationQueue(
+    { getClient: () => handle, isStopInProgress: () => false },
+    vi.fn()
+  );
+  expect(handle.acpSessionId).toBe('native');
+  await queue.runPrompt('session', (permit) => {
+    expect(permit.providerSessionId).toBe('sess_native');
+    return Promise.resolve();
+  });
+});

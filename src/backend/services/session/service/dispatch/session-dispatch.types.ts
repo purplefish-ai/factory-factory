@@ -4,6 +4,7 @@ import type { SessionBackgroundDeliveryService } from '@/backend/services/sessio
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
 import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 
 export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };
@@ -60,7 +61,8 @@ export interface SessionDispatchDependencies {
   configService: Pick<
     SessionConfigService,
     'configureQueuedMessage' | 'resolveQueuedMessageSettings'
-  >;
+  > &
+    Partial<Pick<SessionConfigService, 'withPromptConfiguration'>>;
   promptService: {
     steerSessionMessage(
       sessionId: string,
@@ -69,7 +71,8 @@ export interface SessionDispatchDependencies {
     sendSessionMessage(
       sessionId: string,
       content: string | AgentContentItem[],
-      guard?: SessionCallerGuard
+      guard?: SessionCallerGuard,
+      configurationPermit?: PromptConfigurationPermit
     ): Promise<void>;
   };
   backgroundDelivery: Pick<
