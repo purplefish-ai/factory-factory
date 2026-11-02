@@ -125,27 +125,36 @@ The claim is already potentially sent: a crash between persistence and provider
 invocation cannot prove non-delivery. Only explicit local proof produced before
 entering the provider RPC can return the entire batch to queued (or cancelled
 when stopped). That settlement also clears the live claim marker; missing proof
-is always uncertain. A validated ACP invalid-request busy reply is explicit
-declination, so its whole batch returns to queued with the existing backoff.
-Interrupted or failed invocations remain uncertain, appear as recoverable failed
-input, and are never automatically replayed, together or member by member. Check
-provider history before submitting replacement input. Trusted-local
-`session.listUncertainDispatches` exposes the full membership identifiers and
-frozen provider/settings identity. `session.resolveUncertainDispatch` resolves
-an entire human-only batch as confirmed committed or cancelled after manual
-history review; neither choice requeues any member. Mixed external batches fail
-closed and require the existing external delivery owners to reconcile their
-ledgers. Full batch proof remains stored without an age-based purge. Unresolved
-attempts hold automatic external delivery and notification transcript recovery
-for that session; existing PR/notification ledgers retain their replay and
-acknowledgment authority. This does not migrate AgentRun initial delivery.
+is always uncertain. An invoked RPC rejection, including a busy-shaped error, is
+not proof of nondelivery. Interrupted or failed invocations remain uncertain,
+appear as recoverable failed input, and are never automatically replayed,
+together or member by member. Check provider history before submitting
+replacement input. Trusted-local `session.listUncertainDispatches` exposes the
+full membership identifiers and frozen provider/settings identity.
+`session.resolveUncertainDispatch` resolves an entire human-only batch as
+confirmed committed or cancelled after manual history review; neither choice
+requeues any member. Mixed external batches fail closed. External owners may
+reconcile their own ledgers, but a partial receipt does not settle the complete
+chat batch or release its hold. Releasing such a batch requires an
+owner-coordinated recovery path with complete frozen-effect proof; that bridge
+is not currently implemented. Full batch proof remains stored without an
+age-based purge. Unresolved attempts hold automatic external delivery and
+notification transcript recovery for that session; existing PR/notification
+ledgers retain their replay and acknowledgment authority. This does not migrate
+AgentRun initial delivery.
 
-Queued cancellation and explicit stop persist cancellation before discarding the
-runtime queue. Unexpected process exit records queued input as failed; managed
-runtime replacement and backend shutdown preserve queued input. Stop cannot
-cancel the proof of an already uncertain attempt. Explicit session/workspace
-deletion cascades these records. Permission callbacks remain process-local and
-are never restored as durable requests.
+Queued cancellation persists cancellation before discarding the runtime queue.
+Explicit Stop still physically terminates its owned runtime and completes
+cleanup when that persistence fails, then reports the failure. Failed
+cancellation or exit writes retain an in-process fence: subsequent owner
+operations retry the write before hydrating or claiming input. A process crash
+while all persistence writes fail cannot retain that new cancellation intent; no
+successful durable cancellation is reported in that case. Unexpected process
+exit records queued input as failed and continues lifecycle cleanup on write
+failure; managed runtime replacement and backend shutdown preserve queued input.
+Stop cannot cancel the proof of an already uncertain attempt. Explicit
+session/workspace deletion cascades these records. Permission callbacks remain
+process-local and are never restored as durable requests.
 
 Resolving a human-only uncertain attempt also wakes the dispatcher, allowing
 unrelated external work held behind that proof to proceed under its own ledger.

@@ -10,6 +10,29 @@ type ConfigOperation = () => Promise<AcceptedQueuedConfig | undefined> | Promise
 
 /** Explicit edits supersede older queued intent, independently for each setting. */
 export class SessionQueuedSettings {
+  private readonly pendingPersistence = new Map<
+    string,
+    Array<{ requestedAt: number; settings: Partial<Settings> }>
+  >();
+
+  hasPendingPersistence(sessionId: string): boolean {
+    return Boolean(this.pendingPersistence.get(sessionId)?.length);
+  }
+
+  async reconcile(sessionId: string): Promise<void> {
+    const pending = this.pendingPersistence.get(sessionId);
+    while (pending?.length && this.pendingPersistence.get(sessionId) === pending) {
+      const edit = pending[0];
+      if (!edit) {
+        break;
+      }
+      await this.persist?.(sessionId, edit.requestedAt, edit.settings);
+      pending.shift();
+    }
+    if (!pending?.length && this.pendingPersistence.get(sessionId) === pending) {
+      this.pendingPersistence.delete(sessionId);
+    }
+  }
   private readonly publications = new Map<
     string,
     (config: AcceptedQueuedConfig) => Promise<void>
@@ -96,8 +119,14 @@ export class SessionQueuedSettings {
               return;
             }
             const settings = readSettings(config);
+            for (const key of Object.keys(settings) as Array<keyof Settings>) {
+              edits.values.set(key, { requestedAt, settings: { [key]: settings[key] } });
+            }
             if (Object.keys(settings).length) {
-              await this.persist?.(sessionId, requestedAt, settings);
+              const pending = this.pendingPersistence.get(sessionId) ?? [];
+              pending.push({ requestedAt, settings });
+              this.pendingPersistence.set(sessionId, pending);
+              await this.reconcile(sessionId);
             }
             projected = true;
           };
@@ -110,12 +139,8 @@ export class SessionQueuedSettings {
           if (!config) {
             return;
           }
-          const settings = readSettings(config);
-          if (!projected && Object.keys(settings).length) {
-            await this.persist?.(sessionId, requestedAt, settings);
-          }
-          for (const key of Object.keys(settings) as Array<keyof Settings>) {
-            edits.values.set(key, { requestedAt, settings: { [key]: settings[key] } });
+          if (!projected) {
+            await publication(config);
           }
         });
       } finally {
@@ -146,6 +171,7 @@ export class SessionQueuedSettings {
   }
 
   release(sessionId: string): void {
+    this.pendingPersistence.delete(sessionId);
     this.edits.delete(sessionId);
   }
 

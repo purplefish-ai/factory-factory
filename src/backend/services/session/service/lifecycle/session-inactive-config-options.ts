@@ -25,6 +25,7 @@ type InactiveConfigDependencies = {
   runtimeManager: Pick<AcpRuntimeManager, 'getClient' | 'getPendingClient'>;
   catalog: Pick<CodexModelCatalogService, 'getModels'>;
   persistSnapshot(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void>;
+  beforePersist(config: Pick<InactiveConfigOptions, 'provider' | 'configOptions'>): Promise<void>;
 };
 
 /** Null asks the caller to route the same edit through its newly installed live runtime. */
@@ -52,21 +53,25 @@ export async function setInactiveSessionConfigOption(
       session.provider
     );
     const configOptions = updateCachedConfigOptions(snapshot.configOptions, configId, value);
-    const persisted = await persistWhileInactive(sessionId, deps, (assertCurrent) =>
-      deps.persistSnapshot(sessionId, {
-        provider: snapshot.provider,
-        providerSessionId: snapshot.providerSessionId,
-        configOptions,
-        existingMetadata: session.providerMetadata,
-        requirePersistence: true,
-        pendingLaunchSettingsPatch: pendingSessionLaunchSettingsPatch(
-          session.providerMetadata,
-          session.provider,
-          snapshot.configOptions.find((option) => option.id === configId),
-          value
-        ),
-        assertCurrent,
-      })
+    const persisted = await persistWhileInactive(
+      sessionId,
+      deps,
+      { provider: session.provider, configOptions },
+      (assertCurrent) =>
+        deps.persistSnapshot(sessionId, {
+          provider: snapshot.provider,
+          providerSessionId: snapshot.providerSessionId,
+          configOptions,
+          existingMetadata: session.providerMetadata,
+          requirePersistence: true,
+          pendingLaunchSettingsPatch: pendingSessionLaunchSettingsPatch(
+            session.providerMetadata,
+            session.provider,
+            snapshot.configOptions.find((option) => option.id === configId),
+            value
+          ),
+          assertCurrent,
+        })
     );
     return persisted
       ? { provider: session.provider, configOptions, accepted: persisted }
@@ -102,8 +107,11 @@ export async function setInactiveSessionConfigOption(
     configOptions.find((option) => option.id === configId),
     latest.provider
   );
-  const accepted = await persistWhileInactive(sessionId, deps, (assertCurrent) =>
-    deps.repository.updateSession(sessionId, { model: value }, assertCurrent)
+  const accepted = await persistWhileInactive(
+    sessionId,
+    deps,
+    { provider: latest.provider, configOptions },
+    (assertCurrent) => deps.repository.updateSession(sessionId, { model: value }, assertCurrent)
   );
   if (!accepted) {
     return await setInactiveSessionConfigOption(sessionId, configId, value, deps);
@@ -122,6 +130,7 @@ async function settlePendingRuntime(
 async function persistWhileInactive(
   sessionId: string,
   deps: InactiveConfigDependencies,
+  config: Pick<InactiveConfigOptions, 'provider' | 'configOptions'>,
   operation: (assertCurrent: () => void) => Promise<unknown>
 ): Promise<AcceptedConfigCommit | null> {
   const hasRuntime = () =>
@@ -140,6 +149,8 @@ async function persistWhileInactive(
     accepted = deps.accept(assertCurrent);
     if (
       !(await accepted.persist(async (guard) => {
+        await deps.beforePersist(config);
+        guard();
         await operation(guard);
       }))
     ) {

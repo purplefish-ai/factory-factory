@@ -1,10 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { ChatIntentAccessor } from '@/backend/services/session/resources/chat-intent.accessor';
 import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
-import {
-  PromptNotInvokedError,
-  ProviderBusyDeclinedError,
-} from '@/backend/services/session/service/acp/acp-prompt-invocation';
+import { AcpPromptController } from '@/backend/services/session/service/acp/acp-prompt-controller';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import {
   createTestProcessHandle,
@@ -828,41 +826,65 @@ it('cancels initial input whose captured workspace guard becomes stale during du
   expect(domain.getQueueLength('s')).toBe(0);
 });
 
-it('preserves a declined busy batch as queued with backoff instead of requiring uncertainty recovery', async () => {
-  await intents.accept('s', message('busy-one'));
-  await intents.accept('s', message('busy-two'));
-  const send = vi.fn(() => Promise.reject(new ProviderBusyDeclinedError({ code: -32_600 })));
-  const h = dispatcher(send);
-  try {
-    await h.service.tryDispatchNextMessage('s');
-    expect(send).toHaveBeenCalledOnce();
-    expect(domain.getQueueSnapshot('s').map((row) => row.id)).toEqual(['busy-one', 'busy-two']);
-    expect((await intents.store.read('s')).map((row) => row.status)).toEqual(['queued', 'queued']);
-    expect(await intents.store.hasUncertainAttempt('s')).toBe(false);
-  } finally {
-    h.service.resetDispatchState('s');
-  }
+it('holds an invoked busy-shaped rejection as uncertain without provider nondelivery proof', async () => {
+  await intents.accept('s', message('busy'));
+  const rejection = {
+    code: -32_600,
+    data: { reason: 'A turn is already in progress for this session' },
+  };
+  const handle = createTestProcessHandle({
+    connection: { prompt: vi.fn().mockRejectedValue(rejection) },
+  });
+  const controller = new AcpPromptController({
+    isCurrentHandle: () => true,
+    stopClient: async () => undefined,
+  });
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [message('busy')],
+    content: 'busy',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+  });
+  await expect(
+    attempt.invoke(() =>
+      controller.sendPrompt(
+        's',
+        handle,
+        [{ type: 'text', text: 'busy' }],
+        undefined,
+        undefined,
+        undefined,
+        true
+      )
+    )
+  ).rejects.toBeInstanceOf(UncertainChatDispatchError);
+  expect((await intents.store.find('s', 'busy'))?.status).toBe('uncertain');
 });
 
 it('continues whole batch cleanup after one member persistence callback rejects', async () => {
   await intents.accept('s', message('one'));
   await intents.accept('s', message('two'));
   const called: string[] = [];
-  await dispatchCollectedBatch({
-    chatIntent: intents,
-    sessionId: 's',
-    batch: { messages: domain.getQueueSnapshot('s'), release: () => undefined },
-    backgroundDelivery: dispatcher().background,
-    isCurrent: () => true,
-    send: () => Promise.reject(new Error('configuration failed before claim')),
-    onSuccess: () => undefined,
-    onError: (msg) => {
-      called.push(msg.id);
-      return called.length === 1
-        ? Promise.reject(new Error('terminal persistence failed'))
-        : Promise.resolve();
-    },
-  });
+  await expect(
+    dispatchCollectedBatch({
+      chatIntent: intents,
+      sessionId: 's',
+      batch: { messages: domain.getQueueSnapshot('s'), release: () => undefined },
+      backgroundDelivery: dispatcher().background,
+      isCurrent: () => true,
+      send: () => Promise.reject(new Error('configuration failed before claim')),
+      onSuccess: () => undefined,
+      onError: (msg) => {
+        called.push(msg.id);
+        return called.length === 1
+          ? Promise.reject(new Error('terminal persistence failed'))
+          : Promise.resolve();
+      },
+    })
+  ).rejects.toThrow('Failed handling 1 dispatch member');
   expect(called).toEqual(['two', 'one']);
 });
 
@@ -872,6 +894,7 @@ it('serializes notification recovery effects with human claims and rechecks unce
   const release = createDeferred<void>();
   const markDelivered = vi.fn(() => Promise.resolve());
   const enqueue = vi.fn(() => ({ position: 0 }));
+  let published = false;
   const delivery = new SessionNotificationDeliveryService({
     isRecoveryHeld: (id) => intents.store.hasUncertainAttempt(id),
     withRecoveryGate: (id, operation) => intents.run(id, operation),
@@ -898,15 +921,18 @@ it('serializes notification recovery effects with human claims and rechecks unce
     },
     queuePort: { hasQueuedMessage: () => false, enqueue, removeQueuedMessage: () => true },
     transcriptPort: {
-      getTranscriptSnapshot: () => [
-        {
-          id: 'workspace-notification-notification',
-          source: 'user',
-          text: 'present',
-          timestamp: new Date(0).toISOString(),
-          order: 1,
-        },
-      ],
+      getTranscriptSnapshot: () =>
+        published
+          ? [
+              {
+                id: 'workspace-notification-notification',
+                source: 'user',
+                text: 'present',
+                timestamp: new Date(0).toISOString(),
+                order: 1,
+              },
+            ]
+          : [],
       getHistoryHydrationSource: () => 'jsonl',
       appendClaudeEvent: () => 1,
     },
@@ -918,7 +944,26 @@ it('serializes notification recovery effects with human claims and rechecks unce
     assertAllowed: () => undefined,
   });
   await entered.promise;
-  await intents.claim('s', [message('human')], 'human', settings, 1);
+  const notification = message('workspace-notification-notification');
+  const claim = delivery.claimForDispatch('s', notification.id);
+  expect(claim.status).toBe('claimed');
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [message('human'), notification],
+    content: 'human\n\npresent',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+  });
+  published = true;
+  await expect(
+    attempt.invoke(() => Promise.reject(new Error('connection lost after send')))
+  ).rejects.toBeInstanceOf(UncertainChatDispatchError);
+  if (claim.status === 'claimed') {
+    claim.release();
+  }
+  expect((await intents.store.find('s', 'human'))?.status).toBe('uncertain');
   release.resolve();
   expect(await recovery).toEqual({ dispatchableCount: 0 });
   expect(markDelivered).not.toHaveBeenCalled();

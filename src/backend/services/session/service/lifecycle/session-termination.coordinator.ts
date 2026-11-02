@@ -235,7 +235,8 @@ export class SessionTerminationCoordinator {
     options?: StopSessionOptions
   ): Promise<void> {
     this.dependencies.promptTurnCompletionService.clearSession(sessionId);
-    const beforeStop = this.dependencies.onBeforeStopSession?.(sessionId);
+    const persistenceFailures: unknown[] = [];
+    const beforeStop = this.cancelQueuedBeforeStop(sessionId, persistenceFailures);
     if (beforeStop !== undefined) {
       await beforeStop;
     }
@@ -255,8 +256,7 @@ export class SessionTerminationCoordinator {
         message: SESSION_STOP_MESSAGES[reason],
         dedupeKey: `session-stop:${stopInvocationId}`,
       };
-      const event = await this.dependencies.lifecycleEventService.record(input);
-      completeEvent({ persisted: event !== null, input });
+      completeEvent(await this.persistStopEvent(input, persistenceFailures));
     } else {
       completeEvent({ persisted: false });
     }
@@ -319,6 +319,37 @@ export class SessionTerminationCoordinator {
         acpTraceLogger.closeSession(sessionId);
       }
     }
+    throwPersistenceFailures(persistenceFailures);
+  }
+
+  private async persistStopEvent(
+    input: RecordLifecycleEventInput,
+    failures: unknown[]
+  ): Promise<StopLifecycleEventOutcome> {
+    try {
+      const event = await this.dependencies.lifecycleEventService.record(input);
+      return { persisted: event !== null, input };
+    } catch (error) {
+      failures.push(error);
+      return { persisted: false, input };
+    }
+  }
+
+  private cancelQueuedBeforeStop(
+    sessionId: string,
+    failures: unknown[]
+  ): Promise<void> | undefined {
+    try {
+      const result = this.dependencies.onBeforeStopSession?.(sessionId);
+      if (result !== undefined) {
+        return result.catch((error: unknown) => {
+          failures.push(error);
+        });
+      }
+    } catch (error) {
+      failures.push(error);
+    }
+    return undefined;
   }
 
   private async isEventOwnedForStop(
@@ -664,5 +695,14 @@ export class SessionTerminationCoordinator {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+}
+
+function throwPersistenceFailures(failures: unknown[]): void {
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length) {
+    throw new AggregateError(failures, 'Session stopped but persistence failed');
   }
 }

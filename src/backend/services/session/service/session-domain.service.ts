@@ -81,7 +81,8 @@ export class SessionDomainService extends EventEmitter {
     if (!this.chatIntent) {
       throw new Error('Durable chat admission is not configured');
     }
-    await this.chatIntent.cancelQueued(sessionId, messageId);
+    await this.chatIntent.cancel(sessionId, messageId);
+    this.removeQueuedMessage(sessionId, messageId);
   }
 
   recoverInitialMessageDurably(

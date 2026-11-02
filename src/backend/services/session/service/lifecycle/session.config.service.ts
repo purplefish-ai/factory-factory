@@ -84,9 +84,7 @@ import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const MAX_CONFIG_READ_RETIREMENTS = 3;
-
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
 export class SessionConfigService {
   private readonly startupPermissions = new SessionStartupPermissions();
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
@@ -129,12 +127,17 @@ export class SessionConfigService {
     this.configUpdates = new SessionConfigMutationQueue(
       this.runtimeManager,
       (sessionId, configOptions) => {
-        this.sessionDomainService.emitDelta(sessionId, {
-          type: 'config_options_update',
-          configOptions,
-        } as SessionDeltaEvent);
+        if (!this.queuedSettings.hasPendingPersistence(sessionId)) {
+          this.sessionDomainService.emitDelta(sessionId, {
+            type: 'config_options_update',
+            configOptions,
+          } as SessionDeltaEvent);
+        }
       },
-      options.eventAuthority?.assertOrdinary.bind(options.eventAuthority)
+      async (sessionId) => {
+        await options.eventAuthority?.assertOrdinary(sessionId);
+        await this.queuedSettings.reconcile(sessionId);
+      }
     );
     this.queuedSettings = new SessionQueuedSettings(
       this.runtimeManager,
@@ -870,6 +873,10 @@ export class SessionConfigService {
       guard?.assertCurrent?.();
       assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     });
+    await this.queuedSettings.persistBeforePublication(sessionId, {
+      provider: acpHandle.provider,
+      configOptions,
+    });
     if (
       !(await accepted.persist((assertCurrent) =>
         this.snapshotPersistence.persist(sessionId, {
@@ -885,10 +892,6 @@ export class SessionConfigService {
     if (!accepted.isCurrent()) {
       return;
     }
-    await this.queuedSettings.persistBeforePublication(sessionId, {
-      provider: acpHandle.provider,
-      configOptions,
-    });
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
@@ -906,6 +909,7 @@ export class SessionConfigService {
       runtimeManager: this.runtimeManager,
       catalog: this.codexModelCatalogService,
       persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
+      beforePersist: (config) => this.queuedSettings.persistBeforePublication(sessionId, config),
       accept: (assertCurrent) => this.configAuthority.accept(sessionId, assertCurrent),
     });
     if (!update) {
@@ -921,7 +925,6 @@ export class SessionConfigService {
       return;
     }
     const { provider, configOptions } = update;
-    await this.queuedSettings.persistBeforePublication(sessionId, update);
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,

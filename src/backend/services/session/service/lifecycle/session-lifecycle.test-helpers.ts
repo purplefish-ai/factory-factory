@@ -215,7 +215,7 @@ export type TerminationHarnessOverrides = Pick<
   LifecycleHarnessOverrides,
   'session' | 'getSessionById' | 'getSessionsByWorkspaceId'
 > & {
-  onBeforeStopSession?: (sessionId: string) => void;
+  onBeforeStopSession?: (sessionId: string) => void | Promise<void>;
 };
 
 export function mockCreatedAcpClient(

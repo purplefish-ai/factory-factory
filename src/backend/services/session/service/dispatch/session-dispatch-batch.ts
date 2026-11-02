@@ -1,9 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { ChatIntentRevisionChangedError } from '@/backend/services/session/resources/chat-intent.accessor';
-import {
-  PromptNotInvokedError,
-  ProviderBusyDeclinedError,
-} from '@/backend/services/session/service/acp/acp-prompt-invocation';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
@@ -169,15 +166,11 @@ async function handleFailedBatch(
   error = input.chatIntent?.protectClaimedBatchFailure(input.sessionId, messages, error) ?? error;
   if (
     error instanceof ChatIntentRevisionChangedError ||
-    (error instanceof PromptNotInvokedError &&
-      !(error instanceof ProviderBusyDeclinedError) &&
-      input.isCurrent())
+    (error instanceof PromptNotInvokedError && input.isCurrent())
   ) {
     await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
     if (!input.isCurrent()) {
-      for (const message of backwards) {
-        await handleMemberError(input, message, error);
-      }
+      await handleMemberErrors(input, backwards, error);
       return;
     }
     for (const message of backwards) {
@@ -193,9 +186,7 @@ async function handleFailedBatch(
       input.isCurrent() ? 'failed' : 'cancelled'
     );
   }
-  for (const message of backwards) {
-    await handleMemberError(input, message, error);
-  }
+  await handleMemberErrors(input, backwards, error);
   return undefined;
 }
 
@@ -379,17 +370,27 @@ export async function prepareBackgroundForDispatch(
   return true;
 }
 
-async function handleMemberError(
+async function handleMemberErrors(
   input: CollectedBatchInput,
-  message: QueuedMessage,
+  messages: QueuedMessage[],
   error: unknown
 ): Promise<void> {
-  try {
-    await input.onError(message, error);
-  } catch (failure) {
-    logger.warn(
-      'Failed persisting one batch member failure; remaining members still need cleanup',
-      { messageId: message.id, error: failure }
+  const failures: unknown[] = [];
+  for (const message of messages) {
+    try {
+      await input.onError(message, error);
+    } catch (failure) {
+      failures.push(failure);
+      logger.warn('Failed persisting one batch member failure; continuing cleanup', {
+        messageId: message.id,
+        error: failure,
+      });
+    }
+  }
+  if (failures.length) {
+    throw new AggregateError(
+      failures,
+      `Failed handling ${failures.length} dispatch member failures`
     );
   }
 }

@@ -13,6 +13,11 @@ export class SessionChatIntentService {
   private readonly attempted = new Map<string, Map<string, string>>();
   private readonly staged = new Map<string, Map<string, Set<symbol>>>();
   private readonly tails = new Map<string, Promise<unknown>>();
+  // A failed cancellation is not permission to restore or claim surviving input.
+  private readonly pendingCancellations = new Map<
+    string,
+    Array<{ messageId?: string; status: 'cancelled' | 'failed' }>
+  >();
   private canAccept = (_id: string) => true;
   configureAdmissionGuard(guard: (id: string) => boolean): void {
     this.canAccept = guard;
@@ -54,7 +59,12 @@ export class SessionChatIntentService {
   }
 
   run<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const result = (this.tails.get(id) ?? Promise.resolve()).catch(() => undefined).then(work);
+    const result = (this.tails.get(id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        await this.flushCancellations(id);
+        return work();
+      });
     this.tails.set(id, result);
     void result
       .finally(() => {
@@ -113,7 +123,7 @@ export class SessionChatIntentService {
         return record;
       }
       if (!(isCurrent() && this.canAccept(sessionId))) {
-        await this.store.cancel(sessionId, message.id);
+        await this.cancelLocked(sessionId, message.id);
         const cancelled = { ...record, status: 'cancelled' as const };
         this.publishRecorded(sessionId, cancelled);
         return cancelled;
@@ -121,12 +131,17 @@ export class SessionChatIntentService {
       if (this.isStaged(sessionId, message.id)) {
         return { ...record, position: 0 };
       }
-      const result = this.domain.enqueue(sessionId, record.message);
-      if ('error' in result) {
-        await this.store.cancel(sessionId, message.id);
-        throw new Error(result.error);
+      try {
+        const result = this.domain.enqueue(sessionId, record.message);
+        if ('error' in result) {
+          throw new Error(result.error);
+        }
+        return { ...record, position: result.position };
+      } catch (error) {
+        await this.cancelLocked(sessionId, message.id);
+        this.domain.removeQueuedMessage(sessionId, message.id, { expectedMessage: record.message });
+        throw error;
       }
-      return { ...record, position: result.position };
     });
   }
 
@@ -181,7 +196,7 @@ export class SessionChatIntentService {
         return false;
       }
       try {
-        await this.store.cancel(sessionId, messageId);
+        await this.cancelLocked(sessionId, messageId);
         return this.domain.removeQueuedMessage(sessionId, messageId, { expectedMessage: message });
       } finally {
         release();
@@ -254,8 +269,38 @@ export class SessionChatIntentService {
     messageId?: string,
     status: 'cancelled' | 'failed' = 'cancelled'
   ): Promise<void> {
-    return this.run(sessionId, () => this.store.cancel(sessionId, messageId, status));
+    this.queueCancellation(sessionId, messageId, status);
+    return this.run(sessionId, async () => undefined);
   }
+
+  private queueCancellation(
+    sessionId: string,
+    messageId: string | undefined,
+    status: 'cancelled' | 'failed'
+  ): void {
+    const pending = this.pendingCancellations.get(sessionId) ?? [];
+    pending.push({ messageId, status });
+    this.pendingCancellations.set(sessionId, pending);
+  }
+
+  private async cancelLocked(sessionId: string, messageId: string): Promise<void> {
+    this.queueCancellation(sessionId, messageId, 'cancelled');
+    await this.flushCancellations(sessionId);
+  }
+
+  private async flushCancellations(sessionId: string): Promise<void> {
+    const pending = this.pendingCancellations.get(sessionId);
+    while (pending?.length) {
+      const request = pending[0];
+      if (!request) {
+        break;
+      }
+      await this.store.cancel(sessionId, request.messageId, request.status);
+      pending.shift();
+    }
+    this.pendingCancellations.delete(sessionId);
+  }
+
   refreshSelected(sessionId: string, messages: QueuedMessage[]): Promise<Record<string, number>> {
     return this.run(sessionId, async () => {
       const rows = await this.store.read(sessionId, true);
