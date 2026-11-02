@@ -226,18 +226,41 @@ it.each(['CAPTURE', 'VERIFY', 'FINALIZE'] as const)(
     };
     if (phase === 'FINALIZE') {
       const timestamp = '2026-01-01T00:00:00.000Z';
-      data.agentEvent.push({
-        id: 'partial-finalize-event',
+      // The old fixture claimed 1000 finalized rows with only one retained
+      // event and no capture. Supply the exact prefix the runtime skips.
+      const events = Array.from({ length: 1001 }, (_, index) => ({
+        id: `partial-${index}`,
         connectionId: 'source',
-        providerEventId: 'new-head',
-        sourceOrder: 1006,
+        providerEventId: index === 1000 ? 'new-head' : `partial-${index}`,
+        sourceOrder: index === 1000 ? null : 7 + index,
         payload: null,
         occurredAt: timestamp,
         observedAt: timestamp,
         payloadExpiresAt: timestamp,
         identityExpiresAt: timestamp,
         createdAt: timestamp,
-      });
+      }));
+      data.agentEvent.push(...events);
+      const entries = events
+        .slice()
+        .reverse()
+        .map((event) => ({
+          providerEventId: event.providerEventId,
+          eventId: event.id,
+        }));
+      for (let ordinal = 0; ordinal < 11; ordinal++) {
+        const batch = entries.slice(ordinal * 100, ordinal * 100 + 100);
+        data.agentSourcePage.push({
+          ...data.agentSourcePage[0]!,
+          id: `partial-capture-${ordinal}`,
+          scanId: 'next-scan',
+          ordinal,
+          phase: 'CAPTURE',
+          requestPage: ordinal + 1,
+          sourceOrder: null,
+          evidence: { ids: batch.map((entry) => entry.providerEventId), entries: batch },
+        });
+      }
     }
     expect(() => validateRecoverySourceProof(data)).not.toThrow();
     data.agentSourceState[0]!.lastSourceOrder++;
@@ -294,4 +317,71 @@ it('accepts an empty parsed cursor at zero highwater without positive retained c
     scan: null,
   };
   expect(() => validateRecoverySourceProof(data)).not.toThrow();
+});
+
+it.each([
+  'order',
+  'missing-boundary',
+  'request-page',
+  'next-page',
+  'ordinal-gap',
+  'marker-page',
+  'entries',
+] as const)('rejects retained COMPLETE verification contradicted by %s', (mode) => {
+  const data = compactInterval();
+  const marker = data.agentSourcePage[0]!;
+  data.agentSourcePage.push({
+    ...marker,
+    id: 'capture',
+    ordinal: 0,
+    phase: 'CAPTURE',
+    sourceOrder: null,
+    evidence: { ids: ['A', 'B'], entries: [{ providerEventId: 'A', eventId: 'event-A' }] },
+  });
+  const verify = {
+    ...marker,
+    id: 'verify',
+    ordinal: 1,
+    phase: 'VERIFY',
+    sourceOrder: null,
+    nextPage: 2,
+    evidence: { ids: ['A'], entries: [] },
+  };
+  const tailEntries: { providerEventId: string; eventId: string | null }[] = [];
+  const tail = {
+    ...marker,
+    id: 'tail',
+    ordinal: 2,
+    phase: 'VERIFY',
+    sourceOrder: null,
+    requestPage: 2,
+    evidence: { ids: ['B'], entries: tailEntries },
+  };
+  marker.requestPage = 2;
+  data.agentSourcePage.push(verify, tail);
+  expect(() => validateRecoverySourceProof(data)).not.toThrow();
+  switch (mode) {
+    case 'order':
+      verify.evidence.ids = ['B', 'A'];
+      break;
+    case 'missing-boundary':
+      tail.evidence.ids = ['A'];
+      break;
+    case 'request-page':
+      tail.requestPage = 3;
+      break;
+    case 'next-page':
+      verify.nextPage = 3;
+      break;
+    case 'ordinal-gap':
+      tail.ordinal = 4;
+      break;
+    case 'marker-page':
+      marker.requestPage = 3;
+      break;
+    case 'entries':
+      tail.evidence.entries = [{ providerEventId: 'B', eventId: null }];
+      break;
+  }
+  expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
 });
