@@ -19,7 +19,7 @@ import type {
 } from '@prisma-gen/client';
 import {
   readDeliveryEvents,
-  prDeliveryMembershipSchema,
+  getFrozenDeliveryMembers,
   projectDeliveryEvent,
   projectDeliveryEvents,
   exportDeliveryEvents,
@@ -148,24 +148,15 @@ async function validDeliveryMembers(tx: Prisma.TransactionClient, delivery: Work
   if (delivery.state === 'BLOCKED') {
     return null;
   }
-  const parsed = prDeliveryMembershipSchema.safeParse(delivery.eventIds);
   const rows = await tx.workspacePREvent.findMany({
     where: { OR: [{ batchId: delivery.id }, { deliveryId: delivery.id }] },
   });
-  const ids = parsed.success ? new Set(parsed.data) : new Set<string>();
-  if (
-    !parsed.success ||
-    ids.size !== parsed.data.length ||
-    rows.length !== ids.size ||
-    rows.some(
-      (row) =>
-        !ids.has(row.id) || row.workspaceId !== delivery.workspaceId || row.batchId !== delivery.id
-    )
-  ) {
+  const members = getFrozenDeliveryMembers(delivery, rows);
+  if (!members) {
     await tx.workspacePRDelivery.update({ where: { id: delivery.id }, data: { state: 'BLOCKED' } });
     return null;
   }
-  return rows.map((row) => projectDeliveryEvent(row, delivery));
+  return members.map((row) => projectDeliveryEvent(row, delivery));
 }
 
 function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, workspaceId: string) {
