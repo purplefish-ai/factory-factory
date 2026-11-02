@@ -298,3 +298,29 @@ it('forward migration invalidates pre-fence progress without rewriting retained 
   }
   await expectRejected();
 });
+
+it('rejects a nonzero null-head pin even when the candidate boundary is non-null', async () => {
+  await pins([5]);
+  const pin = await db.prisma.agentSourceBaseline.create({
+    data: { connectionId: fixture.connectionId, headEventId: null, sourceOrder: 9 },
+  });
+  await legacy();
+  await expectRejected();
+  expect((await source.getBaseline(fixture.connectionId, pin.id))?.boundary?.sourceOrder).toBe(9);
+});
+
+it.each([0, null])(
+  'preserves a null-head pin with order %s alongside a non-null boundary',
+  async (sourceOrder) => {
+    await pins([5]);
+    await db.prisma.agentSourceBaseline.create({
+      data: { connectionId: fixture.connectionId, headEventId: null, sourceOrder },
+    });
+    const baselines = await db.prisma.agentSourceBaseline.findMany();
+    await legacy();
+    await maintain();
+    expect(await checkpoint()).toMatchObject({ status: 'COMPLETE' });
+    expect(await db.prisma.agentSourceBaseline.findMany()).toEqual(baselines);
+    expect((await source.prepareBaseline(fixture.connectionId, 'A')).boundary?.sourceOrder).toBe(6);
+  }
+);

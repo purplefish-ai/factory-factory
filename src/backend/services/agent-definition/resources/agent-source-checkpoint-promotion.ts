@@ -124,8 +124,9 @@ async function baselines(
   return baselinesSchema.parse(
     await tx.$queryRaw`
     SELECT baseline."id", CASE WHEN baseline."sourceOrder" IS NOT NULL
-      AND target."providerEventId" IS NOT NULL
-      AND baseline."sourceOrder" != ${sourceOrder} - target."precedingEventCount"
+      AND ((baseline."headEventId" IS NULL AND baseline."sourceOrder" != 0)
+        OR (target."providerEventId" IS NOT NULL
+          AND baseline."sourceOrder" != ${sourceOrder} - target."precedingEventCount"))
       THEN 'CONFLICT' ELSE 'OK' END AS conflict,
       CASE WHEN baseline."headEventId" IS ${boundaryEventId} AND baseline."sourceOrder" IS NOT NULL
         THEN CASE WHEN baseline."sourceOrder" = ${boundaryOrder}
