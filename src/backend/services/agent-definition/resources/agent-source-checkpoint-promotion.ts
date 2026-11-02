@@ -18,6 +18,8 @@ const markersSchema = z.array(
     scanId: z.string(),
     ordinal: z.number().int(),
     status: z.string().nullable(),
+    checkpointHead: z.string().nullable(),
+    checkpointOrder: z.number().int().nullable(),
     headEventId: z.string().nullable(),
     sourceOrder: z.number().int().nullable(),
   })
@@ -26,6 +28,12 @@ const headsSchema = z.array(
   z.object({
     scanId: z.string(),
     position: z.number().int(),
+    canonicalOrder: z
+      .union([z.number(), z.bigint().transform(Number)])
+      .pipe(z.number().int())
+      .nullable(),
+    baselineMinimum: z.number().int().nullable(),
+    baselineMaximum: z.number().int().nullable(),
     conflict: z.enum(['CONFLICT', 'OK']),
     boundary: z.enum(['MATCH', 'CONFLICT', 'NONE']),
   })
@@ -42,6 +50,7 @@ async function markers(tx: Tx, connectionId: string, progress: Progress, take: n
   return markersSchema.parse(
     await tx.$queryRaw`
     SELECT page."scanId", page."ordinal", checkpoint."status", page."sourceOrder",
+      checkpoint."headEventId" AS "checkpointHead", checkpoint."sourceOrder" AS "checkpointOrder",
       CASE WHEN json_valid(page."evidence") THEN
         CASE WHEN json_type(page."evidence", '$.ids') = 'array'
           AND json_array_length(page."evidence", '$.ids') = 1
@@ -72,10 +81,18 @@ async function heads(
   take: number
 ) {
   // Traverse authority rows, not candidate heads with an unbounded probe for each identity.
-  // Both joins are unique point lookups; the ordered range is capped before the next transaction.
+  // Joins are unique point lookups; each baseline extremum is one indexed range seek.
+  // Reserve three authority rows per head, including both optional baseline witnesses.
   return headsSchema.parse(
     await tx.$queryRaw`
     SELECT authority."scanId", authority."position",
+      other."sourceOrder" - authority."precedingEventCount" AS "canonicalOrder",
+      (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
+        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+          AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" ASC LIMIT 1) AS "baselineMinimum",
+      (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
+        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+          AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" DESC LIMIT 1) AS "baselineMaximum",
       CASE WHEN other."sourceOrder" IS NOT NULL AND target."providerEventId" IS NOT NULL
         AND other."sourceOrder" - authority."precedingEventCount" != ${sourceOrder} - target."precedingEventCount"
         THEN 'CONFLICT' ELSE 'OK' END AS conflict,
@@ -122,7 +139,7 @@ async function baselines(
   );
 }
 
-/** At most 100 authority rows, with unique point joins, per ledger writer transaction.
+/** At most 100 authority rows, including indexed baseline extrema, per ledger writer transaction.
  * SQLite triggers advance the connection revision whenever a consulted claim changes.
  * An interrupted traversal restarts at the new revision. Publication shares the final
  * chunk's writer lock, so no authority write can slip between its fence and COMPLETE.
@@ -190,6 +207,8 @@ async function advanceMarkers(
         row.headEventId === null ||
         row.sourceOrder === null ||
         row.sourceOrder < 0 ||
+        row.sourceOrder !== row.checkpointOrder ||
+        row.headEventId !== row.checkpointHead ||
         (row.headEventId === checkpoint.previousBoundaryEventId &&
           row.sourceOrder !== checkpoint.initialSourceOrder)
     )
@@ -222,6 +241,10 @@ async function advanceHeads(
   if (checkpoint.sourceOrder === null) {
     return null;
   }
+  const take = Math.floor(remaining / 3);
+  if (take === 0) {
+    return 0;
+  }
   const rows = await heads(
     tx,
     checkpoint.connectionId,
@@ -230,8 +253,18 @@ async function advanceHeads(
     checkpoint.previousBoundaryEventId,
     checkpoint.initialSourceOrder,
     progress,
-    remaining
+    take
   );
+  if (
+    rows.some(
+      (row) =>
+        row.canonicalOrder !== null &&
+        ((row.baselineMinimum !== null && row.baselineMinimum !== row.canonicalOrder) ||
+          (row.baselineMaximum !== null && row.baselineMaximum !== row.canonicalOrder))
+    )
+  ) {
+    return null;
+  }
   if (rows.some((row) => row.conflict === 'CONFLICT' || row.boundary === 'CONFLICT')) {
     return null;
   }
@@ -242,8 +275,8 @@ async function advanceHeads(
     progress.scanId = last.scanId;
     progress.position = last.position;
   }
-  remaining -= rows.length;
-  if (remaining > 0) {
+  remaining -= rows.length * 3;
+  if (rows.length < take) {
     progress.phase = 'BASELINES';
   }
   return remaining;

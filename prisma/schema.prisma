@@ -863,6 +863,7 @@ model AgentSourceBaseline {
 
   @@index([connectionId, sourceOrder])
   @@index([connectionId, headEventId])
+  @@index([connectionId, headEventId, sourceOrder])
   @@index([connectionId, id])
 }
 
