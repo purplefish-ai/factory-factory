@@ -16,6 +16,7 @@ import {
 import type { ChatMessage } from '@/shared/acp-protocol';
 import type { ClosedSession } from '@prisma-gen/client';
 import type { SessionProvider } from '@prisma-gen/client';
+import { getClosedSessionArchiveKey } from './closed-session-identity';
 
 const logger = createLogger('closed-session-persistence');
 
@@ -71,9 +72,9 @@ class ClosedSessionPersistenceService {
     if (input.messages.length === 0 && !input.providerSessionId) {
       return;
     }
-    // Snapshot first: callers may mutate their projection while the DB is awaited.
-    // Include the full immutable snapshot so a cancelled rollover followed by later
-    // activity can retain a newer copy without overwriting the earlier archive.
+    // Freeze original bytes before the DB await. Dedupe uses stable conversation
+    // content, so rehydrated presentation IDs/clocks cannot create another archive.
+    // Later content or a different conversation scope still retains a new copy.
     const snapshot = {
       version: 1,
       sessionId: input.sessionId,
@@ -90,7 +91,7 @@ class ClosedSessionPersistenceService {
       },
       messages: input.messages,
     };
-    const archiveKey = archiveDigest(JSON.stringify(snapshot));
+    const archiveKey = getClosedSessionArchiveKey(input);
     const completedAt = new Date();
     const pendingTranscript = JSON.stringify(
       { ...snapshot, metadata: { ...snapshot.metadata, completedAt: completedAt.toISOString() } },

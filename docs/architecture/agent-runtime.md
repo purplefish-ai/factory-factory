@@ -60,7 +60,14 @@ and the completion protocol. A deterministic SHA-256 archive key scopes each
 snapshot to its workspace, logical session, provider, account, provider
 conversation, rollover epoch and captured contents. Concurrent closes and
 retries reserve the same row and frozen bytes; later snapshots retain separate
-copies. Completion timestamps do not change retry identity.
+copies. Completion timestamps do not change retry identity. The identity uses
+canonical conversation content, not reconstructed chat IDs, order counters,
+timestamps, image-upload display metadata, model/usage envelopes or session
+labels. Native text/image content and tool IDs/inputs remain meaningful; text
+chunk splitting does not. Durable local events retain their IDs/content
+independently of their reconstructed timeline placement. Restart retries reuse
+the first reservation's exact bytes, including its original display fields and
+completion timestamp; canonicalization never rewrites that retained transcript.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
 its digest before any file write. Atomic file writing and hash verification
