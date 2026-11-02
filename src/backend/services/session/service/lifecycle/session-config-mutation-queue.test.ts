@@ -172,7 +172,8 @@ it('keeps late pending edits behind a frozen prompt configuration boundary witho
 it('rejects deferred edits and admits a replacement runtime when an old prompt never settles after stop', async () => {
   const first = createTestProcessHandle();
   const replacement = createTestProcessHandle({ providerSessionId: 'replacement' });
-  const runtime = { getClient: vi.fn(() => first), isStopInProgress: () => false };
+  let stopping = false;
+  const runtime = { getClient: vi.fn(() => first), isStopInProgress: () => stopping };
   const queue = new SessionConfigMutationQueue(runtime, vi.fn());
   const entered = createDeferred<void>();
   const pending = createDeferred<void>();
@@ -190,11 +191,13 @@ it('rejects deferred edits and admits a replacement runtime when an old prompt n
       rejected = error;
     });
   const stopped = new Error('runtime stopped');
+  stopping = true;
   first.failConfiguration(stopped);
   await new Promise<void>((resolve) => setImmediate(resolve));
   try {
     expect(rejected).toBe(stopped);
     runtime.getClient.mockReturnValue(replacement);
+    stopping = false;
     expect(await queue.runPrompt('session', () => Promise.resolve('replacement admitted'))).toBe(
       'replacement admitted'
     );

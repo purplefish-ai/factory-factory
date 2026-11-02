@@ -67,13 +67,15 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     message: QueuedMessage,
     isCurrent?: () => boolean
-  ): Promise<{ position: number; message?: QueuedMessage } | { error: string } | null> {
+  ): Promise<
+    { position: number; message?: QueuedMessage; created?: boolean } | { error: string } | null
+  > {
     if (!this.chatIntent) {
       throw new Error('Durable chat admission is not configured');
     }
     const result = await this.chatIntent.acceptInitial(sessionId, message, isCurrent);
     return result.status === 'queued' && result.position !== undefined
-      ? { position: result.position, message: result.message }
+      ? { position: result.position, message: result.message, created: result.created }
       : null;
   }
 

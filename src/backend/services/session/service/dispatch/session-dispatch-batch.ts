@@ -174,6 +174,11 @@ async function handleFailedBatch(
       return;
     }
     for (const message of backwards) {
+      // Confirmed non-invocation invalidates only the provisional transcript,
+      // not the accepted durable input that is about to retry.
+      sessionDomainService.removeTranscriptMessageById(input.sessionId, message.id, {
+        emitSnapshot: false,
+      });
       sessionDomainService.requeueFront(input.sessionId, message);
     }
     return 'retry';

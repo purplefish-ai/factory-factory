@@ -45,7 +45,8 @@ export async function enqueueAutoMessage(
       return false;
     }
   };
-  let enqueueResult: Awaited<ReturnType<typeof sessionDomainService.enqueueInitialMessageDurably>>;
+  let enqueueResult: Awaited<ReturnType<typeof sessionDomainService.enqueueInitialMessageDurably>> =
+    null;
   try {
     enqueueResult = await requireInitialAdmission(() =>
       sessionDomainService.enqueueInitialMessageDurably(sessionId, queued, isCurrent)
@@ -55,11 +56,14 @@ export async function enqueueAutoMessage(
       throw new DOMException('Initial preparation cancelled', 'AbortError');
     }
   } catch (error) {
-    await sessionDomainService
-      .cancelInitialMessageDurably(sessionId, messageId)
-      .catch((failure) =>
-        logger.warn('Failed cancelling interrupted initial input', { sessionId, error: failure })
-      );
+    // A failed conflicting or identical retry never owns the earlier acceptance.
+    if (enqueueResult && !('error' in enqueueResult) && enqueueResult.created) {
+      await sessionDomainService
+        .cancelInitialMessageDurably(sessionId, messageId)
+        .catch((failure) =>
+          logger.warn('Failed cancelling interrupted initial input', { sessionId, error: failure })
+        );
+    }
     throw error;
   }
   if (!enqueueResult) {

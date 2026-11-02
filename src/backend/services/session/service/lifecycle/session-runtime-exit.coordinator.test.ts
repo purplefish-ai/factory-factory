@@ -101,6 +101,7 @@ function createExitCoordinatorHarness(options?: {
 
   return {
     coordinator,
+    cancelIntents,
     providerIdentityService,
     handlers,
     repository,
@@ -450,6 +451,7 @@ it('finalizes a failed runtime even when delivery fencing fails', async () => {
 it('continues exit cleanup, persisted status and finalization when queued-intent failure persistence fails', async () => {
   const h = createExitCoordinatorHarness({ chatIntentFailure: true });
   await h.coordinator.handleExit(runtimeExit());
+  expect(h.cancelIntents).toHaveBeenCalledWith('session-1', undefined, 'failed');
   expect(h.domain.markProcessExit).toHaveBeenCalled();
   expect(h.repository.updateSession).toHaveBeenCalled();
   expect(h.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalled();

@@ -91,7 +91,7 @@ export class SessionQueuedSteering {
         newState: MessageState.COMMITTED,
       });
     } catch (error) {
-      resumeDispatch = this.handleSteerError(sessionId, message, error);
+      resumeDispatch = this.handleSteerError(sessionId, message, error, isCurrent);
       throw error;
     } finally {
       releaseProjection?.();
@@ -117,12 +117,16 @@ export class SessionQueuedSteering {
     content: string | AgentContentItem[],
     isCurrent: () => boolean
   ) {
+    const expectedRevisions = await this.ports
+      .chatIntent?.()
+      ?.refreshSelected(sessionId, [message]);
     const attempt = await prepareDurableAttempt({
       owner: this.ports.chatIntent?.(),
       sessionId,
       messages: [message],
       content,
       settings: message.settings,
+      expectedRevisions,
       generation: this.ports.generation?.(sessionId) ?? 0,
       isCurrent,
     });
@@ -132,10 +136,17 @@ export class SessionQueuedSteering {
     );
   }
 
-  private handleSteerError(sessionId: string, message: QueuedMessage, error: unknown): boolean {
+  private handleSteerError(
+    sessionId: string,
+    message: QueuedMessage,
+    error: unknown,
+    isCurrent: () => boolean
+  ): boolean {
     if (error instanceof UncertainChatDispatchError) {
-      domain.takeQueuedMessages(sessionId, [message]);
-      domain.failMessage(sessionId, message, error.message);
+      if (isCurrent()) {
+        domain.takeQueuedMessages(sessionId, [message]);
+        domain.failMessage(sessionId, message, error.message);
+      }
       return false;
     }
     return !(error instanceof AcpSteeringTimeoutError);

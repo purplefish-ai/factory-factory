@@ -210,3 +210,33 @@ it('acknowledges and dispatches human input when delivery resume fails', async (
     resume.mockRestore();
   }
 });
+
+it.each(['valid input', '   '])(
+  'returns a requester-only retry error when durable ownership is unavailable (%s)',
+  async (text) => {
+    const owner = {
+      accept: vi.fn(() => Promise.reject(new Error('database unavailable'))),
+      hasAccepted: vi.fn(() => Promise.reject(new Error('ownership unavailable'))),
+    };
+    const rejectMessage = vi.fn();
+    const handler = createQueueMessageHandler({
+      domain: { ...mocks, rejectMessage },
+      chatIntent: owner,
+      backgroundDelivery: sessionBackgroundDeliveryService,
+      tryDispatchNextMessage: vi.fn(),
+    });
+    const result = await handler(
+      { sessionId: 'session-1', workingDir: '/tmp' },
+      { type: 'queue_message', id: 'owned', text }
+    );
+    expect(result).toEqual({
+      replies: [
+        {
+          type: 'error',
+          error: { kind: 'queue_input_invalid', reason: expect.stringContaining('retry') },
+        },
+      ],
+    });
+    expect(rejectMessage).not.toHaveBeenCalled();
+  }
+);

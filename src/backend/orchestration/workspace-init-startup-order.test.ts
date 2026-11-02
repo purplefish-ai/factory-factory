@@ -54,6 +54,10 @@ describe('workspace initialization startup order', () => {
       },
     });
     await initializeWorkspaceWorktree(WORKSPACE_ID);
+    expect(sessionDomainService.recoverInitialMessageDurably).toHaveBeenCalledWith(
+      'session-1',
+      'auto-init-session-1'
+    );
     expect(sessionLifecycleService.startSession).toHaveBeenCalledOnce();
     expect(sessionDomainService.enqueueInitialMessageDurably).not.toHaveBeenCalled();
   });

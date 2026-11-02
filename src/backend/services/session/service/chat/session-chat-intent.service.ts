@@ -107,13 +107,13 @@ export class SessionChatIntentService {
     sessionId: string,
     message: QueuedMessage,
     isCurrent = () => true
-  ): Promise<IntentRecord & { position?: number }> {
+  ): Promise<IntentRecord & { position?: number; created?: boolean }> {
     return this.run(sessionId, async () => {
       for (const attachment of message.attachments ?? []) {
         validateAttachment(attachment);
       }
       await this.hydrateLocked(sessionId);
-      const { created, ...record } = await this.store.accept(
+      const record = await this.store.accept(
         sessionId,
         message,
         this.domain.getQueueLength(sessionId) >= SERVICE_LIMITS.sessionStoreMaxQueueSize
@@ -123,6 +123,9 @@ export class SessionChatIntentService {
         return record;
       }
       if (!(isCurrent() && this.canAccept(sessionId))) {
+        if (!record.created) {
+          return record;
+        }
         await this.cancelLocked(sessionId, message.id);
         const cancelled = { ...record, status: 'cancelled' as const };
         this.publishRecorded(sessionId, cancelled);
@@ -131,7 +134,7 @@ export class SessionChatIntentService {
       if (this.isStaged(sessionId, message.id)) {
         return { ...record, position: 0 };
       }
-      return this.projectAccepted(sessionId, record, created);
+      return this.projectAccepted(sessionId, record, record.created);
     });
   }
 
@@ -139,13 +142,13 @@ export class SessionChatIntentService {
     sessionId: string,
     record: IntentRecord,
     created: boolean
-  ): Promise<IntentRecord & { position: number }> {
+  ): Promise<IntentRecord & { position: number; created: boolean }> {
     try {
       const result = this.domain.enqueue(sessionId, record.message);
       if ('error' in result) {
         throw new Error(result.error);
       }
-      return { ...record, position: result.position };
+      return { ...record, created, position: result.position };
     } catch (error) {
       if (created) {
         await this.cancelLocked(sessionId, record.message.id);
@@ -193,7 +196,7 @@ export class SessionChatIntentService {
     sessionId: string,
     message: QueuedMessage,
     isCurrent?: () => boolean
-  ): Promise<IntentRecord & { position?: number }> {
+  ): Promise<IntentRecord & { position?: number; created?: boolean }> {
     return this.accept(sessionId, message, isCurrent);
   }
 
@@ -201,7 +204,15 @@ export class SessionChatIntentService {
     return this.run(sessionId, async () => {
       const message = this.domain.getQueueSnapshot(sessionId).find((item) => item.id === messageId);
       if (!message) {
-        return false;
+        if (this.isStaged(sessionId, messageId)) {
+          return false;
+        }
+        const retained = await this.store.find(sessionId, messageId);
+        if (retained?.status !== 'queued') {
+          return false;
+        }
+        await this.cancelLocked(sessionId, messageId);
+        return true;
       }
       const release = this.holdProjection(sessionId, [message]);
       if (!release) {
