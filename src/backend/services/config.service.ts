@@ -340,6 +340,10 @@ function loadSystemConfig(): SystemConfig {
 function loadAgentRuntimeLimits() {
   const env = ConfigEnvSchema.parse(process.env);
   return {
+    runContextRetentionMs:
+      env.AGENT_RUN_CONTEXT_RETENTION_DAYS === undefined
+        ? null
+        : env.AGENT_RUN_CONTEXT_RETENTION_DAYS * 86_400_000,
     activePerDefinition: env.AGENT_ACTIVE_PER_DEFINITION,
     activeGlobal: env.AGENT_ACTIVE_GLOBAL,
     waitingPerDefinition: env.AGENT_WAITING_PER_DEFINITION,

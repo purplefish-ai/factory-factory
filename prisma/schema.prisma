@@ -785,9 +785,10 @@ model AgentRun {
   initialDelivery      AgentInitialDelivery?
   effectiveExecution   Json? // eventAgentExecutionSchema; immutable account and launch binding
   launchPreparation    Json? // eventLaunchPreparationSchema; safe boundary vs owned physical work
-  definitionSnapshot   Json // agentDefinitionInputSchema; frozen at admission
-  triggerSnapshot      Json? // agentTriggerInputSchema; null for manual runs
-  input                Json // agentRunInputSchema; normalized event context, never raw provider payloads
+  contextExpiredAt     DateTime? // Opt-in terminal context expiry; null retains full frozen context
+  definitionSnapshot   Json // agentDefinitionInputSchema or expiredAgentRunContextSchema
+  triggerSnapshot      Json? // agentTriggerInputSchema (null for manual) or expiredAgentRunContextSchema
+  input                Json // agentRunInputSchema or expiredAgentRunContextSchema
   workspaceId          String?               @unique
   workspace            Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   errorMessage         String?
@@ -802,6 +803,7 @@ model AgentRun {
   @@index([agentDefinitionId, createdAt])
   @@index([triggerId, agentDefinitionId])
   @@index([status, createdAt])
+  @@index([contextExpiredAt, completedAt])
 }
 
 model AgentSourceState {

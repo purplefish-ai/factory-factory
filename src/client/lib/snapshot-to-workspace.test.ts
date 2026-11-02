@@ -584,3 +584,21 @@ it('keeps an authoritative empty snapshot collection empty despite stale aliases
     selectedPr: null,
   });
 });
+
+it('preserves identity provenance when scalar repairs reuse cached persisted legacy IDs', () => {
+  const synthetic = projectSnapshotToWorkspace(makeEntry());
+  expect(synthetic.prs[0]?.identitySource).toBe('legacy-snapshot');
+  const { identitySource: _source, ...persisted } = synthetic.prs[0]!;
+  const canonical = projectSnapshotToWorkspace(makeEntry({ prs: [persisted] }), synthetic);
+  expect(canonical.prs[0]?.id).toBe('legacy-pr-ws-1');
+  expect(canonical.prs[0]?.identitySource).toBeUndefined();
+  for (const projection of [
+    projectSnapshotToWorkspace(makeEntry(), canonical),
+    mergeProjectSnapshotIntoWorkspaceDetail(makeEntry(), seedDetail(canonical)),
+  ]) {
+    expect(projection?.selectedPrId).toBe(persisted.id);
+    expect(projection?.selectedPr?.identitySource).toBeUndefined();
+  }
+  const refreshedSynthetic = projectSnapshotToWorkspace(makeEntry(), synthetic);
+  expect(refreshedSynthetic.prs[0]?.identitySource).toBe('legacy-snapshot');
+});

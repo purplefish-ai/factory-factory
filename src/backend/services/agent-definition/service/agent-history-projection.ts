@@ -26,6 +26,10 @@ export function runHistoryProjection(
   const result = agentRunResultSchema.safeParse(row.result);
   const outcome = evidence.success ? evidence.data.outcome : undefined;
   return agentRunHistorySchema.parse({
+    context:
+      row.contextExpiredAt === null
+        ? { state: 'RETAINED' }
+        : { version: 1, state: 'EXPIRED', expiredAt: row.contextExpiredAt.toISOString() },
     id: row.id,
     agentId: row.agentDefinitionId,
     triggerId: row.triggerId,

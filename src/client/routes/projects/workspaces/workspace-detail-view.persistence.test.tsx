@@ -10,10 +10,12 @@ import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-
 
 // Mock workspace content only; exercise the real resizable wrapper and v4 library.
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
-vi.mock('@/client/features/workspace', () => ({
-  WorkspaceContentView: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+vi.mock('@/client/features/workspace', () => ({ ArchiveWorkspaceDialog: () => null }));
+vi.mock('@/client/features/workspace/right-panel', () => ({
   RightPanel: () => <aside>Mock workspace files</aside>,
-  ArchiveWorkspaceDialog: () => null,
+}));
+vi.mock('@/client/features/workspace/workspace-content-view', () => ({
+  WorkspaceContentView: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }));
 vi.mock('./workspace-detail-chat-content', () => ({
   ChatContent: () => <div data-testid="chat">Mock workspace chat</div>,

@@ -1,7 +1,12 @@
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { getWorkspacePRAssociationId } from '@/client/lib/workspace-selected-pr';
-export function useWorkspacePrActions(workspaceId: string, projectId?: string) {
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+export function useWorkspacePrActions(
+  workspaceId: string,
+  projectId?: string,
+  prs?: readonly WorkspacePullRequest[]
+) {
   const utils = trpc.useUtils();
   const refresh = async () => {
     await Promise.all([
@@ -48,7 +53,8 @@ export function useWorkspacePrActions(workspaceId: string, projectId?: string) {
       }
     },
     review: (prId: string) => {
-      const associationId = getWorkspacePRAssociationId(workspaceId, prId);
+      const pr = prs?.find((candidate) => candidate.id === prId);
+      const associationId = pr ? getWorkspacePRAssociationId(pr) : prId;
       review.mutate({ workspaceId, ...(associationId !== null ? { prId: associationId } : {}) });
     },
   };

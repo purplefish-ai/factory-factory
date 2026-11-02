@@ -62,6 +62,7 @@ function projectSnapshotPRs(
     : legacyId;
   const legacyPR: WorkspacePullRequest = {
     id: cachedPR?.id ?? fallbackId,
+    identitySource: cachedPR ? cachedPR.identitySource : 'legacy-snapshot',
     url: entry.prUrl,
     number: entry.prNumber,
     title: cachedPR?.title ?? null,
