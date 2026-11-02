@@ -273,6 +273,98 @@ describe('claudeSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it.each(['string', 'blocks'])(
+    'omits background task notifications with %s content from transcript reloads',
+    async (format) => {
+      const providerSessionId = 'background-task-session';
+      const cwd = '/Users/test/project';
+      const timestamp = '2026-11-02T01:19:21.463Z';
+      const notification = [
+        '<task-notification>',
+        '<task-id>balvj0w5f</task-id>',
+        '<tool-use-id>toolu-background</tool-use-id>',
+        '<output-file>/private/tmp/tasks/balvj0w5f.output</output-file>',
+        '<status>completed</status>',
+        '<summary>Background command "Push warning commit" completed (exit code 0)</summary>',
+        '</task-notification>',
+      ].join('\n');
+      const content = format === 'string' ? notification : [{ type: 'text', text: notification }];
+      writeSessionFile({
+        claudeConfigDir: tempDir,
+        cwd,
+        providerSessionId,
+        entries: [
+          {
+            type: 'user',
+            timestamp,
+            message: { role: 'user', content: 'Push the commit' },
+          },
+          {
+            type: 'user',
+            timestamp,
+            message: {
+              role: 'user',
+              content: [{ type: 'tool_result', tool_use_id: 'toolu-background', content: 'ok' }],
+            },
+          },
+          {
+            type: 'user',
+            timestamp,
+            isSidechain: false,
+            origin: { kind: 'task-notification', producer: 'session-task', runId: 'run-1' },
+            promptSource: 'system',
+            message: { role: 'user', content },
+          },
+          {
+            type: 'assistant',
+            timestamp,
+            message: { role: 'assistant', content: 'The commit was pushed.' },
+          },
+        ],
+      });
+
+      const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+        providerSessionId,
+        workingDir: cwd,
+      });
+      expect(result.status).toBe('loaded');
+      if (result.status !== 'loaded') {
+        return;
+      }
+      expect(result.history).toEqual([
+        { type: 'user', content: 'Push the commit', timestamp },
+        { type: 'tool_result', toolId: 'toolu-background', content: 'ok', timestamp },
+        { type: 'assistant', content: 'The commit was pushed.', timestamp },
+      ]);
+      expect(buildTranscriptFromHistory(result.history)).toHaveLength(3);
+    }
+  );
+
+  it.each([
+    { origin: undefined, content: '<task-notification>pasted XML</task-notification>' },
+    { origin: { kind: 'user' }, content: 'My prompt' },
+    { origin: { kind: 'task-notification', subkind: 'routine' }, content: 'Run the routine' },
+  ])('preserves genuine prompts with origin $origin', async ({ origin, content }) => {
+    const providerSessionId = 'task-origin-prompt-session';
+    const cwd = '/Users/test/project';
+    const timestamp = '2026-11-02T01:19:21.463Z';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [{ type: 'user', timestamp, origin, message: { role: 'user', content } }],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(result).toMatchObject({
+      status: 'loaded',
+      history: [{ type: 'user', content, timestamp }],
+    });
+  });
+
   it.each([{ isCompactSummary: true }, { isVisibleInTranscriptOnly: true }])(
     'omits the /compact summary user entry flagged with %j',
     async (flags) => {

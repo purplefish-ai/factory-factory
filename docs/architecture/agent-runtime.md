@@ -10,11 +10,13 @@ and retained when typing begins after a reload.
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Harness metadata, sidechain
 entries, `/compact` summaries, and image-reference companions are omitted from
-chat replay; their temporary file paths are not read. Codex history likewise
-restores user `input_image` data URLs, and images on legacy `user_message`
-events, onto the prompt; non-user images and `local_images` paths are skipped.
-Restoration rejects malformed base64 and images above the shared 10 MiB decoded
-size limit used for uploads.
+chat replay; their temporary file paths are not read. Background task-stop
+notifications marked by Claude's origin metadata are also omitted, while
+delivered prompts carrying an origin subkind remain visible. Codex history
+likewise restores user `input_image` data URLs, and images on legacy
+`user_message` events, onto the prompt; non-user images and `local_images` paths
+are skipped. Restoration rejects malformed base64 and images above the shared 10
+MiB decoded size limit used for uploads.
 
 Upload validation checks the complete JPEG codestream through its end-of-image
 marker and permits trailing metadata, including Samsung screenshot capture

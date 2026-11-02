@@ -38,6 +38,7 @@ const ClaudeHistoryEntrySchema = z
     turnCompanion: z.boolean().optional(),
     isCompactSummary: z.boolean().optional(),
     isVisibleInTranscriptOnly: z.boolean().optional(),
+    origin: z.unknown().optional(),
     sessionId: z.string().optional(),
     timestamp: z.string().optional(),
     createdAt: z.string().optional(),
@@ -386,6 +387,16 @@ function resolveSessionUuid(entry: ClaudeSessionHistoryEntry): string | undefine
 
 function isEntryEligible(entry: ClaudeSessionHistoryEntry, providerSessionId: string): boolean {
   if (entry.type !== 'user' && entry.type !== 'assistant') {
+    return false;
+  }
+  // Background task stops are model context, not user prompts. A subkind marks
+  // a delivered prompt (such as a routine), which must remain in the transcript.
+  if (
+    entry.type === 'user' &&
+    isRecord(entry.origin) &&
+    entry.origin.kind === 'task-notification' &&
+    entry.origin.subkind === undefined
+  ) {
     return false;
   }
   // Harness metadata, image companions, and /compact summaries are not conversation messages.
