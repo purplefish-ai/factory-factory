@@ -650,6 +650,9 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     providerSessionId: string | null
   ): (() => boolean) | null {
+    if (providerSessionId === null && this.repairedProviderHistoryIdentities.has(sessionId)) {
+      return null;
+    }
     if (providerSessionId && !this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
       return null;
     }

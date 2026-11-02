@@ -578,3 +578,71 @@ it.each(['stop', 'source reset'])(
     expect(domain.getTranscriptSnapshot('session-1')[0]?.timestamp).toBe(history[0]?.timestamp);
   }
 );
+
+it('rejects a delayed null-source preparation after repaired history is ordinarily evicted', async () => {
+  const { h, domain, processor, hydrateProviderHistory } = setup();
+  const context = await h.contextService.load('session-1');
+  if (!context) {
+    throw new Error('Missing test context');
+  }
+  context.session.providerSessionId = null;
+  context.session.providerMetadata = {};
+  domain.resetProviderHistory('session-1', 'replacement');
+  domain.clearSession('session-1');
+  processor.setReplaySuppression('session-1', true);
+  const suppression = vi.spyOn(processor, 'setReplaySuppression');
+  const barrier = createSessionHistoryBarrier(
+    'session-1',
+    context,
+    {
+      hydrateProviderHistory,
+      sessionDomainService: domain,
+      runtimeManager: h.runtimeManager,
+      acpEventProcessor: processor,
+    },
+    async () => undefined
+  );
+  await barrier();
+  expect(suppression).not.toHaveBeenCalled();
+  expect(domain.isHistoryHydrated('session-1')).toBe(false);
+  expect(domain.acceptProviderHistoryIdentity('session-1', 'replacement')).toBe(true);
+});
+
+it('rechecks lifecycle generation after the caller check resolves before committing suppression', async () => {
+  const { h, domain, processor, hydrateProviderHistory } = setup();
+  const context = await h.contextService.load('session-1');
+  if (!context) {
+    throw new Error('Missing test context');
+  }
+  loadHistory.mockResolvedValue({ status: 'not_found' });
+  const generation = h.lifecycleGate.getGeneration('session-1');
+  const isCurrent = () =>
+    h.lifecycleGate.isGenerationCurrent('session-1', generation) &&
+    !h.lifecycleGate.isSessionStopping('session-1');
+  const suppression = vi.spyOn(processor, 'setReplaySuppression');
+  const barrier = createSessionHistoryBarrier(
+    'session-1',
+    context,
+    {
+      hydrateProviderHistory,
+      sessionDomainService: domain,
+      runtimeManager: h.runtimeManager,
+      acpEventProcessor: processor,
+    },
+    () => {
+      expect(isCurrent()).toBe(true);
+      queueMicrotask(() => {
+        const stop = h.lifecycleGate.reserveStop('session-1');
+        stop?.release();
+        h.lifecycleGate.getGeneration('session-1');
+        processor.setReplaySuppression('session-1', true);
+      });
+      return Promise.resolve();
+    },
+    undefined,
+    isCurrent
+  );
+  await barrier();
+  expect(isCurrent()).toBe(false);
+  expect(suppression).toHaveBeenCalledExactlyOnceWith('session-1', true);
+});

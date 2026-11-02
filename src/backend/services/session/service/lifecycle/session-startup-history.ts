@@ -138,7 +138,7 @@ export function createSessionHistoryBarrier(
   return async () => {
     const suppressReplay = await history;
     await assertCurrent();
-    if (historyIsCurrent?.() && suppressReplay !== undefined) {
+    if ((isCurrent?.() ?? true) && historyIsCurrent?.() && suppressReplay !== undefined) {
       dependencies.acpEventProcessor.setReplaySuppression(sessionId, suppressReplay);
     }
   };
