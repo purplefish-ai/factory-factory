@@ -1146,8 +1146,14 @@ workspace, session, frozen account/input, original initialMessageId,
 setupStartedAt and inherited attemptCount, including an exhausted budget. It
 rotates only the current send identities and attemptGeneration, reuses the READY
 worktree without rerunning setup, and replaces the consumer's old operation.
-Deleted or unavailable resources block retry. Known child work, unknown child
-history and settled UNKNOWN setup cleanup have no supported recovery action.
+Deleted or unavailable resources block retry. Inspection includes directory
+existence and read/traversal access in `retryResourcesAvailable` and reports a
+retry-specific `retryBlocked` resource reason, separate from common proof
+blocks. An unavailable retry directory does not block RESOLVE or ABANDON. Retry
+checks resources before targeted stop and again at final transaction validation;
+losing the directory during the write rolls back with `RESOURCES_UNAVAILABLE`.
+Known child work, unknown child history and settled UNKNOWN setup cleanup have
+no supported recovery action.
 
 Saved resolution JSON does not restore lost live coverage. Both a later action
 and the rotated attempt's startup require the old stopped-work window to remain

@@ -1,3 +1,5 @@
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   createEventDeliveryFixture,
@@ -131,6 +133,116 @@ it.each(['admission', 'startup'] as const)(
   }
 );
 
+it.each(['deleted', 'unreadable', 'file'] as const)(
+  'reports a %s retry directory as unavailable before any stop',
+  async (failure) => {
+    const path = await recoveryWorktree();
+    await launch();
+    providers[0]!.response.resolve({ stopReason: 'end_turn' });
+    await consumer.drain();
+    const input = await context();
+    expect(await consumer.inspectRun(input)).toMatchObject({ retryResourcesAvailable: true });
+    try {
+      if (failure === 'unreadable') {
+        await chmod(path, 0);
+      } else {
+        await rm(path, { recursive: true });
+        if (failure === 'file') {
+          await writeFile(path, 'Not a directory');
+        }
+      }
+      expect(await consumer.inspectRun(input)).toMatchObject({
+        retryResourcesAvailable: false,
+        retryBlocked: 'RESOURCES_UNAVAILABLE',
+        blocked: null,
+      });
+      await strictStop();
+      expect(await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' })).toMatchObject({
+        status: 'BLOCKED',
+        reason: 'RESOURCES_UNAVAILABLE',
+      });
+      expect(providers[0]!.child.kill).not.toHaveBeenCalled();
+      expect(providers).toHaveLength(1);
+      expect((await h.read()).attempt).toEqual(input.attempt);
+      expect((await h.read()).evidence?.stop).toBeUndefined();
+      expect((await row()).status).toBe('RUNNING');
+    } finally {
+      if (failure === 'unreadable') {
+        await chmod(path, 0o700);
+      }
+    }
+  }
+);
+
+it.each(['RESOLVE', 'ABANDON'] as const)(
+  'allows %s with valid work proof after the retry directory is deleted',
+  async (action) => {
+    const path = await recoveryWorktree();
+    await launch();
+    providers[0]!.response.resolve({ stopReason: 'end_turn' });
+    await consumer.drain();
+    await rm(path, { recursive: true });
+    const input = await context();
+    expect(await consumer.inspectRun(input)).toMatchObject({
+      retryResourcesAvailable: false,
+      retryBlocked: 'RESOURCES_UNAVAILABLE',
+      blocked: null,
+    });
+    await strictStop();
+    expect(await consumer.resolveAmbiguousRun({ ...input, action })).toMatchObject({
+      status: action === 'RESOLVE' ? 'RESOLVED' : 'ABANDONED',
+    });
+    expect((await h.read()).evidence?.outcome?.result).toBe('COMPLETED');
+    expect(providers).toHaveLength(1);
+  }
+);
+
+it('rolls back retry as a resource failure when its directory disappears during the owner write', async () => {
+  const path = await recoveryWorktree();
+  await launch();
+  providers[0]!.response.resolve({ stopReason: 'end_turn' });
+  await consumer.drain();
+  await strictStop();
+  const input = await context();
+  const transaction = db.prisma.$transaction.bind(db.prisma);
+  const gate = boundary();
+  vi.spyOn(db.prisma, '$transaction').mockImplementation((operation) =>
+    transaction((tx) => {
+      const update = tx.agentRun.update.bind(tx.agentRun);
+      const delayedUpdate = async (args: Parameters<typeof update>[0]) => {
+        const result = await update(args);
+        if (args.data.attemptGeneration === input.attempt.attemptGeneration + 1) {
+          await gate.wait();
+        }
+        return result;
+      };
+      vi.spyOn(tx.agentRun, 'update').mockImplementation(
+        unsafeCoerce<typeof update>(delayedUpdate)
+      );
+      return operation(tx);
+    })
+  );
+  const recovering = consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' });
+  await gate.entered;
+  await rm(path, { recursive: true });
+  gate.release();
+  expect(await recovering).toMatchObject({ status: 'BLOCKED', reason: 'RESOURCES_UNAVAILABLE' });
+  expect((await h.read()).attempt).toEqual(input.attempt);
+  expect((await h.read()).evidence?.resolution).toBeUndefined();
+  expect((await row()).status).toBe('RUNNING');
+  expect(providers).toHaveLength(1);
+});
+
+async function recoveryWorktree() {
+  const path = join(db.tempDir, 'retry-worktree');
+  await mkdir(path);
+  await db.prisma.workspace.update({
+    where: { id: h.claim.reservedWorkspaceId },
+    data: { worktreePath: path },
+  });
+  return path;
+}
+
 it('fences pending initial admission through recovery timeout and preserves a replacement permit', async () => {
   await consumer.consumeClaim(h.claim, new AbortController().signal, true);
   await consumer.drain();
@@ -224,6 +336,14 @@ it.each([
     const input = await context();
     expect(await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' })).toMatchObject({
       status: 'BLOCKED',
+      reason: {
+        goal: 'WORK_PROOF_UNAVAILABLE',
+        child: 'CHILD_WORK_UNPROVEN',
+        'unknown-history': 'CHILD_WORK_UNPROVEN',
+        'missing-worktree': 'RESOURCES_UNAVAILABLE',
+        replay: 'WORK_PROOF_UNAVAILABLE',
+        'deleted-session': 'RESOURCES_UNAVAILABLE',
+      }[reason],
     });
     expect((await h.read()).attempt).toEqual(input.attempt);
     expect((await row()).status).toBe('RUNNING');
@@ -712,7 +832,10 @@ it.each(['RETRY', 'ABANDON'] as const)(
       _meta: { jetbrains: { air: { goal: { status: 'active' } } } },
     });
     gate.release();
-    expect(await recovering).toMatchObject({ status: 'BLOCKED' });
+    expect(await recovering).toMatchObject({
+      status: 'BLOCKED',
+      reason: 'PROOF_OR_OWNERSHIP_UNAVAILABLE',
+    });
     expect((await h.read()).attempt).toEqual(input.attempt);
     expect((await h.read()).evidence?.resolution).toBeUndefined();
     expect((await row()).status).toBe('RUNNING');
