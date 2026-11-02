@@ -5,6 +5,7 @@ import {
   type RecoveryJsonNullLookup,
 } from '@/shared/schemas/recovery-json-storage.schema';
 import { Prisma } from '@prisma-gen/client';
+import { conflictingRecoverySourceConnections } from './agent-source-recovery-collisions';
 
 export async function restoreAgentConfigRecovery(
   tx: Prisma.TransactionClient,
@@ -15,6 +16,7 @@ export async function restoreAgentConfigRecovery(
   const definitions = new Set<string>();
   const connections = new Set<string>();
   const triggers = new Set<string>();
+  const conflictingSources = await conflictingRecoverySourceConnections(tx, data);
   for (const row of data.agentDefinition) {
     if (
       !projects.has(row.projectId) ||
@@ -30,6 +32,7 @@ export async function restoreAgentConfigRecovery(
   for (const row of data.agentConnection) {
     // Existing connections may contain credentials; never borrow their authority.
     if (
+      conflictingSources.has(row.id) ||
       (await tx.agentConnection.findUnique({ where: { id: row.id } })) ||
       (await tx.agentConnection.findUnique({
         where: { provider_externalId: { provider: row.provider, externalId: row.externalId } },

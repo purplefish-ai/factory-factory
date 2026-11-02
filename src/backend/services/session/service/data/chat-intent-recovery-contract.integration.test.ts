@@ -84,7 +84,7 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 
-async function producerSnapshot() {
+async function producerSnapshot(includeExternal = true) {
   const owner = new Accessor(db.prisma);
   await owner.accept('session', message, false);
   await owner.override('session', Date.parse(message.timestamp) + 1, {
@@ -108,7 +108,7 @@ async function producerSnapshot() {
   };
   await owner.claim(
     'session',
-    [current.message, external],
+    [current.message, ...(includeExternal ? [external] : [])],
     [{ type: 'text', text: 'Frozen combined prompt' }],
     effective,
     7,
@@ -212,4 +212,36 @@ it('rejects a corrupted canonical fingerprint from a real producer export before
   expect(await db.prisma.project.count()).toBe(0);
   expect(await db.prisma.chatIntent.count()).toBe(0);
   expect(await db.prisma.promptDispatchAttempt.count()).toBe(0);
+});
+
+it.each(['queued', 'committed', 'cancelled', 'failed'] as const)(
+  'rejects an uncertain receipt whose human member is %s before parent writes',
+  async (status) => {
+    await producerSnapshot(false);
+    const { dataBackupService } = await vi.importActual<
+      typeof import('@/backend/orchestration/data-backup.service')
+    >('@/backend/orchestration/data-backup.service');
+    const backup = await dataBackupService.exportData('test');
+    backup.data.durable!.chatIntent[0]!.status = status;
+    await db.prisma.workspace.deleteMany();
+    await db.prisma.project.deleteMany();
+    await expect(dataBackupService.importData(backup)).rejects.toThrow(
+      /uncertain.*human membership/i
+    );
+    expect(await db.prisma.project.count()).toBe(0);
+  }
+);
+it('restores a valid uncertain human receipt that the real owner can explicitly resolve', async () => {
+  const { owner } = await producerSnapshot(false);
+  const { dataBackupService } = await vi.importActual<
+    typeof import('@/backend/orchestration/data-backup.service')
+  >('@/backend/orchestration/data-backup.service');
+  const backup = await dataBackupService.exportData('test');
+  const attemptId = backup.data.durable!.promptDispatchAttempt[0]!.id;
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await dataBackupService.importData(backup);
+  await owner.resolve('session', attemptId, 'cancelled');
+  expect(await owner.hasUncertainAttempt('session')).toBe(false);
+  expect(await owner.read('session')).toMatchObject([{ status: 'cancelled', attemptId }]);
 });

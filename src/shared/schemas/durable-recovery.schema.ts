@@ -423,6 +423,7 @@ export const durableRecoverySchema = z
             member.owner === 'human' &&
             !data.chatIntent.some(
               (row) =>
+                row.status === 'uncertain' &&
                 row.attemptId === attempt.id &&
                 row.sessionId === attempt.sessionId &&
                 row.messageId === member.messageId
@@ -431,7 +432,7 @@ export const durableRecoverySchema = z
       ) {
         ctx.addIssue({
           code: 'custom',
-          message: 'Uncertain dispatch is missing its complete human membership',
+          message: 'Uncertain dispatch is missing its complete uncertain human membership',
         });
       }
     }

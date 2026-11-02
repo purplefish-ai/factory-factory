@@ -37,7 +37,21 @@ async function reservationConflicts(
       return true;
     }
   }
-  return false;
+  const reservations: Prisma.AgentRunWhereInput[] = [];
+  for (const field of ['reservedWorkspaceId', 'reservedSessionId', 'initialMessageId'] as const) {
+    if (run[field] !== null) {
+      reservations.push({ [field]: run[field] });
+    }
+  }
+  return (
+    reservations.length > 0 &&
+    Boolean(
+      await tx.agentRun.findFirst({
+        where: { OR: reservations },
+        select: { id: true },
+      })
+    )
+  );
 }
 async function conflictingDelivery(
   tx: Prisma.TransactionClient,
