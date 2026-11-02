@@ -113,6 +113,17 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
         .prepare('SELECT workspaceId,eventIds,state FROM WorkspacePRDelivery WHERE id=?')
         .get('cross-workspace')
     ).toEqual({ workspaceId: 'w', eventIds: '["early-a","early-b","late"]', state: 'BLOCKED' });
+    expect(
+      db
+        .prepare(
+          "SELECT id,deliveryId,state,deliveryText FROM WorkspacePREvent WHERE id IN ('late','early-a','early-b') ORDER BY id"
+        )
+        .all()
+    ).toEqual([
+      { id: 'early-a', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+      { id: 'early-b', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+      { id: 'late', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+    ]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   } finally {
     db?.close();
