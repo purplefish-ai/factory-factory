@@ -186,3 +186,21 @@ it.each(['snapshot failure', 'runtime handoff'] as const)(
     );
   }
 );
+
+it('durably removes queued input after its runtime projection was evicted', async () => {
+  await intents.accept('s', message('evicted-queued'));
+  domain.clearAllSessions();
+  expect(await intents.cancelQueued('s', 'evicted-queued')).toBe(true);
+  expect((await intents.store.find('s', 'evicted-queued'))?.status).toBe('cancelled');
+  await intents.hydrate('s');
+  expect(domain.getQueueLength('s')).toBe(0);
+});
+
+it('does not cancel uncertain claimed input when the projection is absent', async () => {
+  const pending = message('uncertain-evicted');
+  await intents.accept('s', pending);
+  await intents.claim('s', [pending], pending.text, settings, 1);
+  domain.clearAllSessions();
+  expect(await intents.cancelQueued('s', pending.id)).toBe(false);
+  expect((await intents.store.find('s', pending.id))?.status).toBe('uncertain');
+});

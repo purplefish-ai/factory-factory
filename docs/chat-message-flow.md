@@ -129,10 +129,12 @@ with complete ordered membership (including background messages), assembled
 content, effective settings, provider/account identity and lifecycle generation.
 Each frozen member explicitly records human or external recovery ownership,
 derived from its persisted intent membership. All durable human members are
-claimed together. Successful provider completion settles the attempt and every
-member together. Steering follows the same protocol; an explicit provider
-`promptRequired` response is evidence that the injection did not occur and
-releases that claim for normal dispatch.
+claimed together. Successful provider completion settles the prompt attempt and
+its durable human members together. External delivery owners acknowledge their
+ledgers afterward; a failed acknowledgment is deferred without rolling back the
+successful provider turn. Steering follows the same protocol; an explicit
+provider `promptRequired` response is evidence that the injection did not occur
+and releases that claim for normal dispatch.
 
 The claim is already potentially sent: a crash between persistence and provider
 invocation cannot prove non-delivery. Only explicit local proof produced before

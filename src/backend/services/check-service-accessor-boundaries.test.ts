@@ -143,6 +143,18 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).not.toContain('TypeError');
   });
 
+  it('rejects the production chat intent singleton imported through a foreign capsule barrel', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/service/example.ts',
+        content:
+          "import { chatIntentAccessor as rawIntent } from '@/backend/services/session';\nexport const leaked = rawIntent;\n",
+      },
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('chatIntentAccessor');
+  });
+
   it('rejects raw persistence accessor exports from capsule barrels', () => {
     const result = runChecker([
       {
