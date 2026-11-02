@@ -74,6 +74,14 @@ interface CacheEntry {
   snapshot: WorkspaceGitStateSnapshot;
 }
 
+interface SnapshotCalculation {
+  generation: number;
+  failed: boolean;
+  drained: Promise<void>;
+  promise: Promise<WorkspaceGitStateSnapshot>;
+  refresh?: { watcher: WatcherRecord; promise: Promise<WorkspaceGitStateSnapshot> };
+}
+
 interface WatcherRecord {
   worktreePath: string;
   mode: 'healthy' | 'fallback';
@@ -222,9 +230,8 @@ export class WorkspaceGitStateService {
   private readonly readFile: ReadFile;
   private readonly watchPath: WatchPath;
   private readonly cache = new Map<string, CacheEntry>();
-  private readonly inFlight = new Map<string, Promise<WorkspaceGitStateSnapshot>>();
+  private readonly inFlight = new Map<string, SnapshotCalculation>();
   private readonly generations = new Map<string, number>();
-  private readonly activeCalculations = new Map<string, number>();
   private readonly watchers = new Map<string, WatcherRecord>();
   private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
 
@@ -241,50 +248,63 @@ export class WorkspaceGitStateService {
     const normalizedInput = { ...input, worktreePath: path.resolve(input.worktreePath) };
     const watcher = this.ensureWatcher(normalizedInput.worktreePath);
     const key = this.cacheKey(normalizedInput);
-    const cached = this.cache.get(key);
+    const cached = this.getCachedSnapshot(normalizedInput);
     if (cached) {
-      const ttl = isDegraded(cached.snapshot)
-        ? DEGRADED_TTL_MS
-        : watcher.mode === 'healthy'
-          ? Number.POSITIVE_INFINITY
-          : FALLBACK_TTL_MS;
-      if (this.now() - cached.snapshot.computedAt < ttl) {
-        return Promise.resolve(cached.snapshot);
-      }
+      return Promise.resolve(cached);
     }
-    if (cached) {
-      this.cache.delete(key);
-    }
+    this.cache.delete(key);
 
     const existing = this.inFlight.get(key);
+    const generation = this.generations.get(key) ?? 0;
     if (existing !== undefined) {
-      return existing;
+      if (existing.generation === generation && !existing.failed) {
+        return existing.promise;
+      }
+      // Keep physical work registered until it settles. All readers following
+      // invalidation share one fresh calculation, started after the old one.
+      if (existing.refresh?.watcher !== watcher) {
+        existing.refresh = {
+          watcher,
+          promise: existing.drained.then(() =>
+            this.watchers.get(normalizedInput.worktreePath) === watcher
+              ? this.getSnapshot(normalizedInput)
+              : existing.promise
+          ),
+        };
+      }
+      return existing.refresh.promise;
     }
 
-    const generation = this.generations.get(key) ?? 0;
-    this.activeCalculations.set(key, (this.activeCalculations.get(key) ?? 0) + 1);
-    const calculation = watcher.setup
-      .then(() => this.calculate(normalizedInput))
+    const run = watcher.setup.then(() => this.calculate(normalizedInput));
+    const outcome = run
+      .then((started) => started.promise)
       .then((snapshot) => {
         if ((this.generations.get(key) ?? 0) === generation) {
           this.cache.set(key, { snapshot });
         }
         return snapshot;
-      })
-      .finally(() => {
-        if (this.inFlight.get(key) === calculation) {
-          this.inFlight.delete(key);
-        }
-        const activeCount = this.activeCalculations.get(key) ?? 0;
-        if (activeCount <= 1) {
-          this.activeCalculations.delete(key);
-          this.generations.delete(key);
-        } else {
-          this.activeCalculations.set(key, activeCount - 1);
-        }
       });
+    const calculation: SnapshotCalculation = {
+      generation,
+      failed: false,
+      promise: outcome.then(
+        (snapshot) => calculation.drained.then(() => snapshot),
+        (error: unknown) => {
+          calculation.failed = true;
+          throw error;
+        }
+      ),
+      drained: Promise.resolve(),
+    };
+    calculation.drained = Promise.allSettled([
+      outcome,
+      run.then((started) => started.drained),
+    ]).then(() => {
+      this.inFlight.delete(key);
+      this.generations.delete(key);
+    });
     this.inFlight.set(key, calculation);
-    return calculation;
+    return calculation.promise;
   }
 
   /**
@@ -361,7 +381,6 @@ export class WorkspaceGitStateService {
       ...this.cache.keys(),
       ...this.inFlight.keys(),
       ...this.generations.keys(),
-      ...this.activeCalculations.keys(),
     ]);
     for (const key of keys) {
       if (!shouldInvalidate(key)) {
@@ -369,8 +388,7 @@ export class WorkspaceGitStateService {
       }
       this.cache.delete(key);
       this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
-      this.inFlight.delete(key);
-      if (!this.activeCalculations.has(key)) {
+      if (!this.inFlight.has(key)) {
         this.generations.delete(key);
       }
     }
@@ -584,25 +602,40 @@ export class WorkspaceGitStateService {
     this.activateFallback(record);
   }
 
-  private async calculate(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
+  private calculate(input: WorkspaceGitStateInput): {
+    promise: Promise<WorkspaceGitStateSnapshot>;
+    drained: Promise<void>;
+  } {
     const limitGit = pLimit(SNAPSHOT_GIT_CONCURRENCY);
-    const runGit: RunGit = (args, cwd) => limitGit(() => this.runGit(args, cwd));
-    const [statusResult, base, upstream] = await Promise.all([
+    const commands: Promise<ExecResult>[] = [];
+    const runGit: RunGit = (args, cwd) => {
+      const command = limitGit(() => this.runGit(args, cwd));
+      commands.push(command);
+      return command;
+    };
+    const sections = [
       runGit(['--no-optional-locks', 'status', '--porcelain'], input.worktreePath),
       this.calculateBase(input, runGit),
       this.calculateUpstream(input.worktreePath, runGit),
-    ]);
-    const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
-    const status: WorkspaceGitStateSnapshot['status'] = {
-      files: statusFiles,
-      hasUncommitted: statusFiles.length > 0,
-    };
-    if (statusResult.code !== 0) {
-      status.error = commandError(statusResult);
-    }
-
-    base.stats.hasUncommitted = status.hasUncommitted;
-    return { ...input, computedAt: this.now(), status, base, upstream };
+    ] as const;
+    const promise = Promise.all(sections).then(([statusResult, base, upstream]) => {
+      const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
+      const status: WorkspaceGitStateSnapshot['status'] = {
+        files: statusFiles,
+        hasUncommitted: statusFiles.length > 0,
+      };
+      if (statusResult.code !== 0) {
+        status.error = commandError(statusResult);
+      }
+      base.stats.hasUncommitted = status.hasUncommitted;
+      return { ...input, computedAt: this.now(), status, base, upstream };
+    });
+    // Report errors immediately, but keep ownership until every section and
+    // its started commands settle. A failed base diff can outlive its section.
+    const drained = Promise.allSettled(sections)
+      .then(() => Promise.allSettled(commands))
+      .then(() => undefined);
+    return { promise, drained };
   }
 
   private async calculateBase(
@@ -611,10 +644,11 @@ export class WorkspaceGitStateService {
   ): Promise<WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats }> {
     const mergeBase = await this.findMergeBase(input, runGit);
     const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-    const [numstatResult, nameStatusResult] = await Promise.all([
+    const diffs = [
       runGit(diffArgs, input.worktreePath),
       mergeBase ? runGit(['diff', '--name-status', mergeBase], input.worktreePath) : null,
-    ]);
+    ] as const;
+    const [numstatResult, nameStatusResult] = await Promise.all(diffs);
     const base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats } = {
       mergeBase,
       noMergeBase: mergeBase === null,
