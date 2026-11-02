@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 /**
  * Snapshot Reconciliation Orchestrator
  *
@@ -16,8 +17,6 @@
  * - Runtime accessors, stores, Git, logging, and session ports supplied at construction
  * - NOT re-exported from orchestration/index.ts (circular dep avoidance)
  */
-
-import { isDeepStrictEqual } from 'node:util';
 import pLimit from 'p-limit';
 import {
   buildWorkspaceSessionSummaries,
@@ -41,6 +40,7 @@ import {
   type workspaceMaintenanceService,
   type workspaceSnapshotStore,
 } from '@/backend/services/workspace';
+import { snapshotDriftFields } from '@/shared/workspace-projection-fields';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 
 // ---------------------------------------------------------------------------
@@ -113,60 +113,7 @@ interface DriftEntry {
 // Drift detection (pure function, exported for testing)
 // ---------------------------------------------------------------------------
 
-type DriftComparableField =
-  | 'status'
-  | 'name'
-  | 'branchName'
-  | 'prs'
-  | 'prSummary'
-  | 'prState'
-  | 'prCiStatus'
-  | 'prNumber'
-  | 'ratchetEnabled'
-  | 'ratchetState'
-  | 'prMonitoring'
-  | 'runScriptStatus'
-  | 'isWorking'
-  | 'pendingRequestType'
-  | 'sessionSummaries'
-  | 'worktreePath'
-  | 'defaultSessionProvider'
-  | 'initErrorMessage'
-  | 'githubIssueNumber'
-  | 'githubIssueUrl'
-  | 'linearIssueId'
-  | 'linearIssueIdentifier'
-  | 'linearIssueUrl'
-  | 'creationSource'
-  | 'conversationSummary';
-
-const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
-  {
-    group: 'metadata',
-    fields: [
-      'conversationSummary',
-      'defaultSessionProvider',
-      'worktreePath',
-      'initErrorMessage',
-      'githubIssueNumber',
-      'githubIssueUrl',
-      'linearIssueId',
-      'linearIssueIdentifier',
-      'linearIssueUrl',
-      'creationSource',
-    ],
-  },
-  { group: 'workspace', fields: ['status'] },
-  { group: 'branch', fields: ['branchName'] },
-  { group: 'name', fields: ['name'] },
-  { group: 'pr', fields: ['prs', 'prSummary', 'prState', 'prCiStatus', 'prNumber'] },
-  {
-    group: 'ratchet',
-    fields: ['ratchetEnabled', 'ratchetState', 'prMonitoring'],
-  },
-  { group: 'runScript', fields: ['runScriptStatus'] },
-  { group: 'session', fields: ['isWorking', 'pendingRequestType', 'sessionSummaries'] },
-];
+type DriftComparableField = (typeof snapshotDriftFields)[number]['field'];
 
 /** Compare fields using the snapshot store's collection equality semantics. */
 function driftFieldValuesEqual(
@@ -196,22 +143,13 @@ export function detectDrift(
 ): DriftEntry[] {
   const drifts: DriftEntry[] = [];
 
-  for (const { group, fields } of DRIFT_FIELD_GROUPS) {
-    for (const field of fields) {
-      const authValue = authoritative[field];
-      if (authValue === undefined) {
-        continue;
-      }
-      const snapValue = existing[field];
-      const valuesEqual = driftFieldValuesEqual(field, authoritative, existing);
-      if (!valuesEqual) {
-        drifts.push({
-          field,
-          group,
-          snapshotValue: snapValue,
-          authoritativeValue: authValue,
-        });
-      }
+  for (const { group, field } of snapshotDriftFields) {
+    const authValue = authoritative[field];
+    if (authValue === undefined) {
+      continue;
+    }
+    if (!driftFieldValuesEqual(field, authoritative, existing)) {
+      drifts.push({ field, group, snapshotValue: existing[field], authoritativeValue: authValue });
     }
   }
 

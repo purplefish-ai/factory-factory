@@ -1,7 +1,7 @@
 import type { WorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type { SessionSummary } from '@/shared/session-runtime';
 import { deriveWorkspacePRSelection } from '@/shared/workspace-pr';
-import { type WorkspaceSummary } from '@/shared/workspace-summary';
+import { pickWorkspaceSummary, type WorkspaceSummary } from '@/shared/workspace-summary';
 
 type WorkspaceSummarySource = Omit<
   WorkspaceSummary<Date>,
@@ -23,44 +23,13 @@ export function projectWorkspaceSummary(
     derivedState: WorkspaceDerivedState;
   }
 ): WorkspaceSummary<Date> {
-  return {
-    id: w.id,
-    projectId: w.projectId,
-    name: w.name,
-    ...(w.conversationSummary !== undefined ? { conversationSummary: w.conversationSummary } : {}),
-    status: w.status,
-    defaultSessionProvider: w.defaultSessionProvider,
-    createdAt: w.createdAt,
-    branchName: w.branchName,
-    worktreePath: w.worktreePath,
-    initErrorMessage: w.initErrorMessage,
-    prs: w.prs,
+  return pickWorkspaceSummary({
+    ...w,
     ...deriveWorkspacePRSelection(w.prs),
-    prSummary: w.prSummary,
-    prUrl: w.prUrl,
-    prNumber: w.prNumber,
-    prState: w.prState,
-    prCiStatus: w.prCiStatus,
-    ratchetEnabled: w.ratchetEnabled,
-    ratchetState: w.ratchetState,
-    prMonitoring: w.prMonitoring,
-    runScriptStatus: w.runScriptStatus,
-    githubIssueNumber: w.githubIssueNumber,
-    githubIssueUrl: w.githubIssueUrl,
-    linearIssueId: w.linearIssueId,
-    linearIssueIdentifier: w.linearIssueIdentifier,
-    linearIssueUrl: w.linearIssueUrl,
-    creationSource: w.creationSource,
     sessionSummaries: fields.sessionSummaries,
     pendingRequestType: fields.pendingRequestType,
     gitStats: fields.gitStats,
     lastActivityAt: fields.lastActivityAt,
-    isWorking: fields.derivedState.isWorking,
-    kanbanColumn: fields.derivedState.kanbanColumn,
-    sidebarStatus: fields.derivedState.sidebarStatus,
-    ratchetButtonAnimated: fields.derivedState.ratchetButtonAnimated,
-    flowPhase: fields.derivedState.flowPhase,
-    ciObservation: fields.derivedState.ciObservation,
-    statusReason: fields.derivedState.statusReason,
-  };
+    ...fields.derivedState,
+  });
 }
