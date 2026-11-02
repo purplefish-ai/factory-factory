@@ -374,8 +374,12 @@ historical events. An already-polled source retains a prepared head in
 have ordinal zero. Retained completed-interval evidence also resolves
 preparation that races a newer commit, even after event rows are pruned. These
 methods do not enable any trigger; trusted activation and its
-revision/generation checks remain separate work. Source page and baseline
-retention cleanup is likewise a separate worker.
+revision/generation checks remain separate work. CAPTURE/FINALIZED proof pairs,
+including immutable event-ID markers, and baseline metadata are retained beyond
+event identity expiry. A provider baseline read can still be in flight before
+its pending row exists. These compact provider/control identities have a
+separate lifetime from source text; no source-proof garbage collection or
+current-reference expiry is implemented.
 
 Defaults are one active run per definition, four globally, 100 waiting runs per
 definition and 24-hour waiting expiry. The first three limits are configurable
@@ -386,14 +390,20 @@ triggers and cancel unclaimed runs. Trigger edits do the same for that trigger;
 cosmetic name edits preserve activation. Work claimed before an edit keeps its
 frozen settings.
 
-The ledger records 30-day text/evaluation and 90-day identity retention
-boundaries. Automatic admission rejects events older than 30 days even if they
-are newly observed. Cleanup workers are a separate implementation step. Frozen
-run input and provider conversations have separate lifetimes, so ledger pruning
-does not erase all source text. Compact run results and PR links survive
-workspace and event deletion. Logical export/import still excludes the agent
-tables and credentials; the complete supported backup is the database file
-together with `encryption.key`.
+Existing evaluation maintenance clears eligible event payloads/evaluations at 30
+days and event identities at 90 days, measured from occurrence rather than
+observation. Each pass inspects bounded rotating pages under the ledger write
+lock and captures expiry time after locking. Unresolved runs, retry/admission
+cohorts, STARTING activations, malformed or unavailable dependency proof and
+active GitHub scan identities remain retained. Evaluation dependents are removed
+before identity deletion; retained run event links become null. Source high
+water, cursor, recovery health, proof pages and baselines remain unchanged.
+Automatic admission independently rejects events older than 30 days, including
+replays after tombstones expire. Frozen run input and provider conversations
+have separate lifetimes, so ledger pruning does not erase all source text.
+Compact run results and PR links survive workspace and event deletion. Logical
+export/import still excludes the agent tables and credentials; the complete
+supported backup is the database file together with `encryption.key`.
 
 ### Conversational creation
 

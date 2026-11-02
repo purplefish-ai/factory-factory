@@ -123,9 +123,18 @@ Provisioning retries retain RUNNING capacity, frozen snapshots, identities and
 account; they never return to the authoring-sensitive QUEUED state. Retry-After
 extends the remaining shared retry delay. Only typed transient failures retry.
 The original fifteen-minute setup deadline is retained across safe retries.
-Unknown cleanup keeps capacity and forbids retry. Explicit operator recovery,
-predelete result capture, retention and activation capability/UI validation
-remain prerequisites; saved agents cannot yet be enabled.
+Unknown cleanup keeps capacity and forbids retry. Saved agents cannot yet be
+enabled; activation capability/UI validation and the positive child-cleanup
+product boundary remain prerequisites.
+
+The evaluation job also owns bounded ledger retention before evaluation: one
+rotating page each of expired evaluations, event payloads and event identities.
+Its live shutdown signal is checked after awaited dependency reads, before
+mutations and at the final transaction boundary. Cursors publish only after
+commit, including progress past retained candidates; aborted batches roll back.
+There is no additional retention job or timer. See
+[integrations](./integrations.md) for the 30/90-day boundaries and retained
+source-proof/history lifetimes.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule

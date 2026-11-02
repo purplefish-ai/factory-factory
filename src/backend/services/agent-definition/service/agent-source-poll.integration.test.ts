@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
@@ -6,6 +6,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { AgentGitHubSourcePort, AgentIssueEventPage } from '@/shared/agent-source';
+import { Prisma } from '@prisma-gen/client';
 
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
@@ -39,6 +40,7 @@ beforeEach(async () => {
     classifyError: () => 'auth_required',
   };
 });
+afterEach(() => vi.useRealTimers());
 const label = (id: string) => ({ providerEventId: id, payload: fixture.github(id).payload });
 function service() {
   return new runtime.AgentSourcePollService(port, () => 10);
@@ -160,6 +162,20 @@ it('fails closed when an already captured interval changes during verification',
     cursor: { committedHeadEventId: 'B' },
   });
   expect(await db.prisma.agentEvent.count({ where: { sourceOrder: { not: null } } })).toBe(0);
+  const failed = await state();
+  const pages = await db.prisma.agentSourcePage.findMany();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(Date.now() + 90 * 86_400_000));
+  await new runtime.AgentLedgerRetentionService().pruneExpired(new AbortController().signal);
+  expect(await state()).toEqual(failed);
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
+  const { agentSourceAccessor } = await vi.importActual<
+    typeof import('../resources/agent-source.accessor')
+  >('../resources/agent-source.accessor');
+  await expect(agentSourceAccessor.finalizeNextChunk(fixture.connectionId)).rejects.toMatchObject({
+    code: 'CONFLICT',
+  });
+  expect(await state()).toEqual(failed);
 });
 
 it('keeps the committed boundary on missing anchor, auth failure, or archived project', async () => {
@@ -227,6 +243,7 @@ it('recovers a committed finalization chunk without interleaving a newer interva
   const { agentSourceAccessor } = await vi.importActual<
     typeof import('../resources/agent-source.accessor')
   >('../resources/agent-source.accessor');
+  const pending = await baseline();
   const original = agentSourceAccessor.finalizeNextChunk;
   const controller = new AbortController();
   const spy = vi.spyOn(agentSourceAccessor, 'finalizeNextChunk').mockImplementation(async (id) => {
@@ -245,6 +262,18 @@ it('recovers a committed finalization chunk without interleaving a newer interva
     lastSourceOrder: 1000,
     cursor: { committedHeadEventId: 'B', scan: { phase: 'FINALIZE', finalizedCount: 1000 } },
   });
+  const beforePrune = await state();
+  const pages = await db.prisma.agentSourcePage.findMany();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(Date.now() + 90 * 86_400_000));
+  const retention = new runtime.AgentLedgerRetentionService();
+  for (let i = 0; i < 11; i++) {
+    await retention.pruneExpired(new AbortController().signal);
+  }
+  expect(await db.prisma.agentEvent.count()).toBe(1001);
+  expect(await db.prisma.agentEvent.count({ where: { payload: { not: Prisma.DbNull } } })).toBe(0);
+  expect(await state()).toEqual(beforePrune);
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
   feed.unshift(label('newer'));
   calls = [];
   await cycle();
@@ -254,6 +283,15 @@ it('recovers a committed finalization chunk without interleaving a newer interva
     cursor: { committedHeadEventId: 'e-1001', scan: null },
   });
   expect(await db.prisma.agentEvent.count({ where: { providerEventId: 'newer' } })).toBe(0);
+  expect((await service().getBaseline(fixture.connectionId, pending.id))?.boundary).toMatchObject({
+    headEventId: 'e-1001',
+    sourceOrder: 1001,
+  });
+  for (let i = 0; i < 11; i++) {
+    await retention.pruneExpired(new AbortController().signal);
+  }
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+  expect(await state()).toMatchObject({ lastSourceOrder: 1001, health: { state: 'READY' } });
 }, 30_000);
 
 it('rolls back both the page and executable inserts if a later item fails ownership', async () => {
@@ -310,27 +348,56 @@ it('retains the cursor on cancellation and exposes a sanitized rate-limit health
   });
 });
 
-it('resolves a prepared head after a newer interval commits and its event rows are pruned', async () => {
-  feed = [{ providerEventId: 'B', payload: null }];
-  await baseline();
-  feed.unshift(label('H'));
-  const original = port.listIssueEvents;
-  port.listIssueEvents = async (input, signal) => {
-    const observed = await original(input, signal);
-    port.listIssueEvents = original;
-    feed.unshift(label('H2'));
+it.each([false, true])(
+  'resolves delayed baseline after real pruning with no pending row (control-only: %s)',
+  async (controlOnly) => {
+    feed = [{ providerEventId: 'B', payload: null }];
+    await baseline();
+    feed.unshift(controlOnly ? { providerEventId: 'H', payload: null } : label('H'));
+    const original = port.listIssueEvents;
+    port.listIssueEvents = async (input, signal) => {
+      const observed = await original(input, signal);
+      port.listIssueEvents = original;
+      feed.unshift(controlOnly ? { providerEventId: 'H2', payload: null } : label('H2'));
+      await cycle();
+      // The provider read is in flight; prepareBaseline has not persisted H yet.
+      expect(await db.prisma.agentSourceBaseline.count({ where: { headEventId: 'H' } })).toBe(0);
+      const pages = await db.prisma.agentSourcePage.findMany();
+      const baselines = await db.prisma.agentSourceBaseline.findMany();
+      const before = await state();
+      expect(pages.some((page) => page.phase === 'CAPTURE')).toBe(true);
+      expect(pages.some((page) => page.phase === 'FINALIZED')).toBe(true);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(Date.now() + 90 * 86_400_000));
+      await new runtime.AgentLedgerRetentionService().pruneExpired(new AbortController().signal);
+      expect(await db.prisma.agentEvent.count()).toBe(0);
+      expect(await db.prisma.agentSourceBaseline.count({ where: { headEventId: 'H' } })).toBe(0);
+      expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
+      expect(await db.prisma.agentSourceBaseline.findMany()).toEqual(baselines);
+      expect(await state()).toEqual(before);
+      return observed;
+    };
+    expect((await baseline()).boundary).toEqual({
+      provider: 'GITHUB',
+      headEventId: 'H',
+      sourceOrder: controlOnly ? 0 : 1,
+    });
+    expect(await state()).toMatchObject({
+      lastSourceOrder: controlOnly ? 0 : 2,
+      cursor: { committedHeadEventId: 'H2', scan: null },
+    });
+    expect(await db.prisma.agentEvent.count()).toBe(0);
+    feed.unshift(controlOnly ? { providerEventId: 'next', payload: null } : label('next'));
     await cycle();
-    await db.prisma.agentEvent.deleteMany();
-    return observed;
-  };
-  expect((await baseline()).boundary).toEqual({
-    provider: 'GITHUB',
-    headEventId: 'H',
-    sourceOrder: 1,
-  });
-  expect((await state()).lastSourceOrder).toBe(2);
-  expect(await db.prisma.agentEvent.count()).toBe(0);
-});
+    expect((await state()).lastSourceOrder).toBe(controlOnly ? 0 : 3);
+    if (!controlOnly) {
+      expect(await db.prisma.agentEvent.findFirstOrThrow()).toMatchObject({
+        providerEventId: 'next',
+        sourceOrder: 3,
+      });
+    }
+  }
+);
 
 it('resolves a same-head baseline from its active scan while a newer head waits for the next interval', async () => {
   feed = [{ providerEventId: 'B', payload: null }];

@@ -6,7 +6,7 @@ import {
   type AgentEventInput,
   type AgentEventOrderInput,
 } from '@/shared/agent-runtime';
-import type { Prisma } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,8 +122,22 @@ async function finalizeEventOrderInTransaction(
   return result;
 }
 
+/** The retention owner has already checked expiry/dependencies under this ledger lock. */
+async function pruneEventInTransaction(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  kind: 'payload' | 'identity'
+) {
+  if (kind === 'payload') {
+    await tx.agentEvent.update({ where: { id: eventId }, data: { payload: Prisma.DbNull } });
+  } else {
+    await tx.agentEvent.delete({ where: { id: eventId } });
+  }
+}
+
 export const agentEventAccessor = {
   ingestEvent,
   ingestEventInTransaction,
+  pruneEventInTransaction,
   finalizeEventOrderInTransaction,
 };
