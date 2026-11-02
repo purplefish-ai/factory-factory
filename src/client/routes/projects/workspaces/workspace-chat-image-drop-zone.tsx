@@ -10,6 +10,7 @@ type WorkspaceChatImageDropZoneProps = Pick<
   | 'sessionStatus'
   | 'chatCapabilities'
   | 'inputAttachments'
+  | 'inputDraftGeneration'
   | 'setInputAttachments'
   | 'inputRef'
 > & { children: ReactNode };
@@ -17,7 +18,7 @@ type WorkspaceChatImageDropZoneProps = Pick<
 export function WorkspaceChatImageDropZone(props: WorkspaceChatImageDropZoneProps) {
   return (
     <ImageDropZone
-      dropIdentity={`${props.workspaceId}/${props.sessionId ?? 'none'}`}
+      dropIdentity={`${props.workspaceId}/${props.sessionId ?? 'none'}/${props.inputDraftGeneration ?? 0}`}
       disabled={
         !(props.sessionId && props.connected) ||
         props.sessionStatus.phase === 'loading' ||
@@ -26,7 +27,7 @@ export function WorkspaceChatImageDropZone(props: WorkspaceChatImageDropZoneProp
       }
       label="Drop images to attach to your message"
       onAttachments={(attachments) => {
-        props.setInputAttachments([...props.inputAttachments, ...attachments]);
+        props.setInputAttachments((previous) => [...previous, ...attachments]);
         props.inputRef.current?.focus();
       }}
     >

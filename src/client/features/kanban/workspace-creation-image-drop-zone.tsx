@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { ImageDropZone } from '@/client/features/composer';
-import { cn } from '@/lib/utils';
 import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
 
 interface WorkspaceCreationImageDropZoneProps {
@@ -11,15 +10,20 @@ interface WorkspaceCreationImageDropZoneProps {
   children: ReactNode;
 }
 
-function ProjectImageDropZone({
+export function WorkspaceCreationImageDropZone({
   projectId,
   onDropAccepted,
+  disabled,
   ...props
-}: WorkspaceCreationImageDropZoneProps & { projectId: string }) {
-  const { updateDraft, generation } = useWorkspaceCreationDraft(projectId);
+}: WorkspaceCreationImageDropZoneProps) {
+  const { updateDraft, generation } = useWorkspaceCreationDraft(
+    projectId ?? '',
+    Boolean(projectId)
+  );
   return (
     <ImageDropZone
       {...props}
+      disabled={!projectId || disabled}
       dropIdentity={`${projectId}/${generation}`}
       label="Drop images to attach to a new workspace"
       onDropAccepted={onDropAccepted}
@@ -28,12 +32,4 @@ function ProjectImageDropZone({
       }
     />
   );
-}
-
-/** Shared creation destination for the board and navigation sidebar. */
-export function WorkspaceCreationImageDropZone(props: WorkspaceCreationImageDropZoneProps) {
-  if (!props.projectId) {
-    return <div className={cn('relative h-full min-h-0', props.className)}>{props.children}</div>;
-  }
-  return <ProjectImageDropZone {...props} projectId={props.projectId} />;
 }

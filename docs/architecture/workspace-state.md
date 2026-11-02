@@ -118,9 +118,10 @@ viewing a workspace: dropping there opens the sidebar's new workspace form with
 the images attached. Dropping over the main chat transcript or composer
 highlights the message destination and appends images to that chat's composer.
 Existing instructions and attachments are retained. Image limits and per-file
-errors match the composer; workspace drops require a connected, loaded chat that
+errors match the composer; chat drops require a connected, loaded chat that
 supports image attachments. File reads finishing after a project or session
-switch are ignored.
+switch or explicit draft clearing are ignored. An accepted drop survives a
+temporary chat disconnect while its files are being read.
 
 The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and

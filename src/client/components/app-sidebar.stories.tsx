@@ -83,8 +83,10 @@ export const NewWorkspaceImageDrop: Story = {
   play: ({ canvasElement }) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'reference.png', { type: 'image/png' }));
-    canvasElement
-      .querySelector('[data-sidebar="content"]')
-      ?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
+    const target = canvasElement.querySelector('[data-sidebar="content"]');
+    if (!target) {
+      throw new Error('Sidebar workspace content not found');
+    }
+    target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
   },
 };

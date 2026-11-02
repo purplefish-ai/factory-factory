@@ -54,6 +54,7 @@ export interface ChatContentProps {
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
   inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
+  inputDraftGeneration?: number;
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];

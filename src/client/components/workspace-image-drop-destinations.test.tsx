@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
-import { act, useRef, useState } from 'react';
+import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useChatState } from '@/client/features/chat/use-chat-state';
 import { useWorkspaceCreationDraft } from '@/client/features/kanban/use-workspace-creation-draft';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { WorkspaceChatImageDropZone } from '@/client/routes/projects/workspaces/workspace-chat-image-drop-zone';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import type { MessageAttachment } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { AppSidebar } from './app-sidebar';
 
@@ -46,8 +46,8 @@ const navigation: AppNavigationData = {
 };
 
 function MainChat({ sessionId }: { sessionId: string }) {
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const chat = useChatState({ dbSessionId: sessionId, send: () => true, connected: true });
+  const { inputAttachments: attachments, setInputAttachments: setAttachments, inputRef } = chat;
   return (
     <WorkspaceChatImageDropZone
       workspaceId="workspace"
@@ -58,12 +58,19 @@ function MainChat({ sessionId }: { sessionId: string }) {
         ...EMPTY_CHAT_BAR_CAPABILITIES,
         attachments: { enabled: true, kinds: ['image', 'text'] },
       }}
+      inputDraftGeneration={chat.inputDraftGeneration}
       inputAttachments={attachments}
       setInputAttachments={setAttachments}
       inputRef={inputRef}
     >
       <section aria-label="Conversation">
         <p>Transcript</p>
+        <button type="button" onClick={() => chat.sendMessage('Send current draft')}>
+          Send
+        </button>
+        <button type="button" onClick={() => setAttachments([])}>
+          Clear attachments
+        </button>
         <textarea aria-label="Message" ref={inputRef} />
         {attachments.map(({ id, name }) => (
           <span key={id}>{name}</span>
@@ -77,6 +84,7 @@ let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  sessionStorage.clear();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -152,10 +160,71 @@ it('does not deliver slow chat reads into a newly selected session', async () =>
     await render();
     await drag(container.querySelector('[aria-label="Conversation"]')!, 'drop', 'late-chat.png');
     await render('session-b');
-    await act(async () => finishRead?.());
+    expect(finishRead).toBeDefined();
+    await act(async () => {
+      finishRead!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(container.querySelector('[aria-label="Conversation"]')?.textContent).not.toContain(
       'late-chat.png'
     );
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it.each(['Send', 'Clear attachments'])(
+  'does not restore a pending image after %s clears the chat draft',
+  async (action) => {
+    let finishRead: (() => void) | undefined;
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader) {
+      finishRead = () => {
+        Object.defineProperty(this, 'result', { value: 'data:image/png;base64,aW1hZ2U=' });
+        this.dispatchEvent(new ProgressEvent('load'));
+      };
+    });
+    try {
+      await render();
+      const conversation = container.querySelector('[aria-label="Conversation"]')!;
+      await drag(conversation, 'drop', 'canceled.png');
+      expect(finishRead).toBeDefined();
+      const button = [...conversation.querySelectorAll('button')].find(
+        (item) => item.textContent === action
+      )!;
+      await act(() => button.click());
+      await act(async () => {
+        finishRead!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(conversation.textContent).not.toContain('canceled.png');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  }
+);
+
+it('retains both overlapping image drops when reads complete before React commits', async () => {
+  const finishReads: Array<() => void> = [];
+  vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader) {
+    finishReads.push(() => {
+      Object.defineProperty(this, 'result', { value: 'data:image/png;base64,aW1hZ2U=' });
+      this.dispatchEvent(new ProgressEvent('load'));
+    });
+  });
+  try {
+    await render();
+    const conversation = container.querySelector('[aria-label="Conversation"]')!;
+    await drag(conversation, 'drop', 'first.png');
+    await drag(conversation, 'drop', 'second.png');
+    expect(finishReads).toHaveLength(2);
+    await act(async () => {
+      finishReads.forEach((finish) => finish());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(conversation.textContent).toContain('first.png');
+    expect(conversation.textContent).toContain('second.png');
+    expect(sessionStorage.getItem('chat-attachments-session-a')).toContain('first.png');
+    expect(sessionStorage.getItem('chat-attachments-session-a')).toContain('second.png');
   } finally {
     vi.restoreAllMocks();
   }

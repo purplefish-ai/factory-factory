@@ -114,7 +114,10 @@ describe('ImageDropZone', () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining('File too large'));
   });
 
-  it('does not attach to another chat when a file finishes reading after a switch', async () => {
+  it.each([
+    { label: 'A -> B', identities: ['chat-b'] },
+    { label: 'A -> B -> A', identities: ['chat-b', 'chat-a'] },
+  ])('does not attach after $label while a read is pending', async ({ identities }) => {
     let finishRead: (() => void) | undefined;
     vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader) {
       finishRead = () => {
@@ -125,12 +128,52 @@ describe('ImageDropZone', () => {
     try {
       await render();
       drag('drop', [image()]);
-      await render('chat-b');
-      await act(async () => finishRead?.());
+      expect(finishRead).toBeDefined();
+      for (const identity of identities) {
+        await render(identity);
+      }
+      await act(async () => {
+        finishRead!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
       expect(attachments).toEqual([]);
     } finally {
       vi.restoreAllMocks();
     }
+  });
+
+  it('retains an accepted read through a temporary disabled state', async () => {
+    let finishRead: (() => void) | undefined;
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader) {
+      finishRead = () => {
+        Object.defineProperty(this, 'result', { value: 'data:image/png;base64,aW1hZ2U=' });
+        this.dispatchEvent(new ProgressEvent('load'));
+      };
+    });
+    try {
+      await render();
+      drag('drop', [image()]);
+      expect(finishRead).toBeDefined();
+      await render('chat-a', true);
+      await act(async () => {
+        finishRead!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0]?.name).toBe('screenshot.png');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('clears feedback when leaving after the drop destination changes mid-drag', async () => {
+    await render();
+    drag('dragenter', [image()]);
+    await render('chat-b');
+    drag('dragover', [image()]);
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    drag('dragleave', [image()]);
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
   it('leaves drops inside a portal to that portal instead of routing them to the underlying view', async () => {

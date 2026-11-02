@@ -11,21 +11,27 @@ import {
 } from './workspace-creation-draft-storage';
 
 type DraftPatch = Partial<Omit<WorkspaceCreationDraft, 'schemaVersion' | 'revision'>>;
-export function useWorkspaceCreationDraft(projectId: string) {
+export function useWorkspaceCreationDraft(projectId: string, enabled = true) {
   const [emptyDraft] = useState(createWorkspaceCreationDraft);
   const subscribe = useCallback(
-    (listener: () => void) => subscribeWorkspaceCreationDraft(projectId, listener),
-    [projectId]
+    (listener: () => void) =>
+      enabled ? subscribeWorkspaceCreationDraft(projectId, listener) : () => undefined,
+    [projectId, enabled]
   );
   const getSnapshot = useCallback(() => getWorkspaceCreationDraftSnapshot(projectId), [projectId]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
   useEffect(() => {
-    void loadWorkspaceCreationDraft(projectId).catch(() => undefined);
-  }, [projectId]);
+    if (enabled) {
+      void loadWorkspaceCreationDraft(projectId).catch(() => undefined);
+    }
+  }, [projectId, enabled]);
   // Captures the project, not a mutable ref: file conversions finishing after a
   // project switch still belong to the project where they started.
   const updateDraft = useCallback(
     (patch: DraftPatch | ((draft: WorkspaceCreationDraft) => DraftPatch)) => {
+      if (!enabled) {
+        return;
+      }
       const currentSnapshot = getWorkspaceCreationDraftSnapshot(projectId);
       if (currentSnapshot.generation !== snapshot.generation) {
         return;
@@ -46,7 +52,7 @@ export function useWorkspaceCreationDraft(projectId: string) {
       };
       void saveWorkspaceCreationDraft(projectId, next).catch(() => undefined);
     },
-    [projectId, emptyDraft, snapshot.generation]
+    [projectId, emptyDraft, snapshot.generation, enabled]
   );
   const captureDraft = useCallback(() => {
     const draft = getWorkspaceCreationDraftSnapshot(projectId).draft ?? emptyDraft;

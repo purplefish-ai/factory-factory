@@ -16,8 +16,8 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
-import { WorkspaceCreationImageDropZone } from '@/client/features/kanban';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
+import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
 import {
   getProjectSlugFromPath,
   type useAppNavigationData,

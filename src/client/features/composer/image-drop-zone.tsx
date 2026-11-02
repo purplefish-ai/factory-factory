@@ -44,13 +44,21 @@ export function ImageDropZone({
 
   // Never deliver a slow file read to a replacement session, even after A -> B -> A.
   useInsertionEffect(() => {
-    lifetime.current = { dropIdentity, disabled };
+    lifetime.current = { dropIdentity };
     depth.current = 0;
     return () => {
       lifetime.current = null;
     };
-  }, [dropIdentity, disabled]);
+  }, [dropIdentity]);
 
+  const showFeedback = () => {
+    const token = lifetime.current;
+    setDraggingIdentity((previous) =>
+      previous?.identity === dropIdentity && previous.token === token
+        ? previous
+        : { identity: dropIdentity, token }
+    );
+  };
   const reset = () => {
     depth.current = 0;
     setDraggingIdentity(null);
@@ -99,14 +107,15 @@ export function ImageDropZone({
       onDragEnterCapture={(event) => {
         if (capture(event) && !disabled) {
           depth.current += 1;
-          setDraggingIdentity({ identity: dropIdentity, token: lifetime.current });
+          showFeedback();
         }
       }}
       onDragOverCapture={(event) => {
         if (capture(event)) {
           event.dataTransfer.dropEffect = disabled ? 'none' : 'copy';
           if (!disabled) {
-            setDraggingIdentity({ identity: dropIdentity, token: lifetime.current });
+            depth.current = Math.max(1, depth.current);
+            showFeedback();
           }
         }
       }}

@@ -92,7 +92,7 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
         >
           <ChatContent
             workspaceId="scroll-button-story"
-            sessionId={null}
+            sessionId="story-session"
             messages={messages}
             sessionStatus={{ phase: work ? 'running' : 'ready' }}
             sessionRuntime={
@@ -199,8 +199,10 @@ export const MessageImageDrop: Story = {
   play: ({ canvasElement }) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'reference.png', { type: 'image/png' }));
-    canvasElement
-      .querySelector('textarea')
-      ?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
+    const target = canvasElement.querySelector('textarea');
+    if (!target) {
+      throw new Error('Message composer not found');
+    }
+    target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
   },
 };
