@@ -6,8 +6,8 @@
  * registries. Fan-out cost is O(subscribers of the topic), not O(all
  * connections), because sockets are indexed by topic key.
  *
- * Sends go through `safeSend`, so a socket that is not OPEN or whose send
- * throws never drops the message for the remaining subscribers.
+ * Sends use an injected delivery policy (safeSend by default). Stateful
+ * channels retire slow viewers without interrupting healthy subscribers.
  */
 
 import type { WebSocket } from 'ws';
@@ -86,6 +86,17 @@ export class TopicBroadcaster<TKey = string> {
    * successfully handed to.
    */
   broadcast(topic: TKey, payload: unknown): number {
+    return this.broadcastWith(topic, payload, (ws, message) =>
+      safeSend(ws, message, this.logger, this.defaultDescription)
+    );
+  }
+
+  /** Channel-owned admission, with shared serialization and subscriber isolation. */
+  broadcastWith(
+    topic: TKey,
+    payload: unknown,
+    send: (ws: WebSocket, message: string) => boolean
+  ): number {
     const sockets = this.topics.get(topic);
     if (!sockets || sockets.size === 0) {
       return 0;
@@ -94,7 +105,7 @@ export class TopicBroadcaster<TKey = string> {
     const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
     let sent = 0;
     for (const ws of sockets) {
-      if (safeSend(ws, message, this.logger, this.defaultDescription)) {
+      if (send(ws, message)) {
         sent++;
       }
     }

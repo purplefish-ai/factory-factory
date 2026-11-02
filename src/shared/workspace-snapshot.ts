@@ -101,10 +101,18 @@ export const SnapshotRemovedMessageSchema = z.object({
   reviewCount: z.number().int().nonnegative().optional(),
 });
 
+export const SnapshotErrorMessageSchema = z.object({
+  type: z.literal('snapshot_error'),
+  projectId: z.string().optional(),
+  code: z.literal('FRAME_TOO_LARGE'),
+  message: z.string().max(512),
+});
+
 export const SnapshotServerMessageSchema = z.discriminatedUnion('type', [
   SnapshotFullMessageSchema,
   SnapshotChangedMessageSchema,
   SnapshotRemovedMessageSchema,
+  SnapshotErrorMessageSchema,
 ]);
 
 export type SnapshotFullMessage = z.infer<typeof SnapshotFullMessageSchema>;

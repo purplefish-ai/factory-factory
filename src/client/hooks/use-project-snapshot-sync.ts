@@ -19,6 +19,7 @@ import { getQueryKey } from '@trpc/react-query';
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { isCompleteWorkspaceSnapshot } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -405,6 +406,11 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       ) {
         return;
       }
+      if (message.type === 'snapshot_error') {
+        toast.error(message.message);
+        fallbackToHttp();
+        return;
+      }
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(
@@ -452,7 +458,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
         }
       }
     },
-    [projectId, queryClient, utils, lifecycle]
+    [projectId, queryClient, utils, lifecycle, fallbackToHttp]
   );
 
   useWebSocketChannel({

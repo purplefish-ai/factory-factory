@@ -15,8 +15,8 @@ import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { RawData, WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
-import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
+import { sendStateful } from '@/backend/lib/websocket-send';
 import { ChatMessageSchema } from '@/backend/schemas/websocket';
 import { applySessionCommandOutcome } from './chat-command-adapter';
 import {
@@ -103,12 +103,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
   function sendChatError(ws: WebSocket, dbSessionId: string | null, message: string): void {
     const errorResponse = { type: 'error', message };
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
-    }
-    if (ws.readyState === WS_READY_STATE.OPEN) {
-      ws.send(JSON.stringify(errorResponse));
-    }
+    sendStateful(ws, JSON.stringify(errorResponse), logger, 'chat error', {
+      onFlushed: (error) => {
+        if (!error && dbSessionId) {
+          sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+        }
+      },
+    });
   }
 
   // ==========================================================================
@@ -210,6 +211,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             sendChatError(ws, dbSessionId, 'Invalid message format');
             return;
           }
+          if (message.type === 'load_session') {
+            chatConnectionRegistry.expectReplay(ws, message.loadRequestId);
+          }
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }
@@ -218,7 +222,14 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             workingDir ?? '',
             message
           );
-          applySessionCommandOutcome(ws, outcome);
+          applySessionCommandOutcome(
+            {
+              send: (payload) => {
+                sendStateful(ws, payload, logger, 'chat command reply');
+              },
+            },
+            outcome
+          );
         } catch (error) {
           logger.error('Error handling chat message', toError(error));
           sendChatError(ws, dbSessionId, 'Invalid message format');

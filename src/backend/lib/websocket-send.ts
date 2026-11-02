@@ -87,3 +87,135 @@ export function sendStreamOutput(
     return false;
   }
 }
+
+/** Ordinary queued data is bounded independently of a full baseline/replay. */
+export const MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES = 1024 * 1024;
+export const MAX_WEBSOCKET_STATEFUL_FRAME_BYTES = 32 * 1024 * 1024;
+export const WEBSOCKET_RETIRE_DEADLINE_MS = 5000;
+
+export interface StatefulSendOptions {
+  allowLargeFrame?: boolean;
+  maxFrameBytes?: number;
+  onFlushed?: (error?: Error) => void;
+}
+
+const retiredSockets = new WeakSet<WebSocket>();
+const largeFrames = new WeakMap<
+  WebSocket,
+  { bytes: number; queuedBytes: number; cleanup: () => void }
+>();
+
+function exceedsBacklog(
+  bufferedAmount: number,
+  bytes: number,
+  large: { bytes: number; queuedBytes: number } | undefined,
+  allowLarge: boolean
+): boolean {
+  if (allowLarge) {
+    return false;
+  }
+  return (
+    bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES ||
+    bufferedAmount + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES + (large?.bytes ?? 0) ||
+    (large !== undefined && large.queuedBytes + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES)
+  );
+}
+
+export function retireStatefulViewer(ws: WebSocket, logger: SendErrorLogger): void {
+  if (retiredSockets.has(ws)) {
+    return;
+  }
+  retiredSockets.add(ws);
+  largeFrames.get(ws)?.cleanup();
+  if (ws.readyState === WS_READY_STATE.CLOSED) {
+    return;
+  }
+  const cleanup = () => {
+    clearTimeout(deadline);
+    ws.off('close', cleanup);
+  };
+  const terminate = () => {
+    cleanup();
+    if (ws.readyState !== WS_READY_STATE.CLOSED) {
+      try {
+        ws.terminate();
+      } catch (error) {
+        logger.error('Failed to terminate retired WebSocket viewer', toError(error));
+      }
+    }
+  };
+  const deadline = setTimeout(terminate, WEBSOCKET_RETIRE_DEADLINE_MS);
+  deadline.unref();
+  ws.once('close', cleanup);
+  try {
+    ws.close(1013, 'Viewer fell behind; reconnect for current state');
+  } catch (error) {
+    logger.error('Failed to close retired WebSocket viewer', toError(error));
+    terminate();
+  }
+}
+
+/**
+ * Stateful channels must reconnect after any missed write. Never reuse the
+ * dropping stream policy for deltas. A single authoritative frame may exceed
+ * the ordinary backlog budget only on an empty socket. Its flush callback
+ * releases that allowance; follow-up metadata/deltas get a separate budget.
+ */
+export function sendStateful(
+  ws: WebSocket,
+  message: string,
+  logger: SendErrorLogger,
+  description = 'stateful WebSocket message',
+  options: StatefulSendOptions = {}
+): boolean {
+  if (retiredSockets.has(ws) || ws.readyState !== WS_READY_STATE.OPEN) {
+    return false;
+  }
+  if (ws.bufferedAmount === 0) {
+    largeFrames.get(ws)?.cleanup();
+  }
+  const bytes = Buffer.byteLength(message);
+  if (
+    options.allowLargeFrame &&
+    bytes > (options.maxFrameBytes ?? MAX_WEBSOCKET_STATEFUL_FRAME_BYTES)
+  ) {
+    return false;
+  }
+  let large = largeFrames.get(ws);
+  const isLargeFrame = bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;
+  const allowLarge = options.allowLargeFrame === true && ws.bufferedAmount === 0;
+  if (exceedsBacklog(ws.bufferedAmount, bytes, large, allowLarge)) {
+    retireStatefulViewer(ws, logger);
+    return false;
+  }
+  if (isLargeFrame) {
+    const cleanup = () => {
+      if (largeFrames.get(ws) === large) {
+        largeFrames.delete(ws);
+      }
+      ws.off('close', cleanup);
+    };
+    large = { bytes, queuedBytes: 0, cleanup };
+    largeFrames.set(ws, large);
+    ws.once('close', cleanup);
+  } else if (large) {
+    large.queuedBytes += bytes;
+  }
+  const ownLargeFrame = isLargeFrame ? large : undefined;
+  try {
+    ws.send(message, (error) => {
+      ownLargeFrame?.cleanup();
+      options.onFlushed?.(error);
+      if (error) {
+        logger.error(`Failed to send ${description}`, toError(error));
+        retireStatefulViewer(ws, logger);
+      }
+    });
+    return !retiredSockets.has(ws);
+  } catch (error) {
+    options.onFlushed?.(toError(error));
+    logger.error(`Failed to send ${description}`, toError(error));
+    retireStatefulViewer(ws, logger);
+    return false;
+  }
+}

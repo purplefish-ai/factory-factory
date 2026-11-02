@@ -224,6 +224,61 @@ cleanup remain owned by the transport. A closed or throwing requester does not
 skip application completion or another viewer's load updates. Concurrent loads
 retain their own request IDs and consume stored initial text once.
 
+Chat and snapshot delivery use a stateful send policy. A viewer that exceeds 1
+MiB of accumulated outgoing backlog is retired with close code 1013, then
+terminated after five seconds if its close handshake has not completed. No
+further state is sent on that connection, even if the buffer later drains.
+Synchronous and asynchronous write failures also retire that viewer. Other
+viewers and application work continue; reconnect runs the existing correlated
+load/replay or current full-snapshot path.
+
+A full snapshot, session snapshot, or legacy replay batch can exceed the
+ordinary backlog budget on an empty connection. `WEBSOCKET_MAX_FRAME_BYTES`,
+read through `configService`, sets its absolute UTF-8 frame ceiling: **32 MiB by
+default** (33554432 bytes). Valid overrides are integer byte counts from 1 MiB
+through 256 MiB, inclusive; missing or invalid values use the default. This
+permits realistic large history/project baselines while bounding queued state
+per viewer. Serialization still happens before measurement, so the limit bounds
+outgoing frames rather than the cost of constructing authoritative state.
+
+Load correlation IDs are bounded to 128 UTF-16 code units at admission so even
+escaped identifiers fit the small error envelope without losing correlation.
+Existing persisted/imported project IDs remain valid; snapshot errors omit an
+overlong project ID and use the current connection scope for HTTP fallback. An
+excessive replay returns a small `error` with code 413 and the requesting
+`loadRequestId`; the client ends loading, cancels automatic load retries and
+keeps unhydrated controls disabled. Other already-hydrated viewers keep their
+live updates. An excessive project baseline returns `snapshot_error` with
+`FRAME_TOO_LARGE`; the client shows its explanation and refreshes via the
+existing HTTP fallback. Both keep the socket open and suppress subsequent
+baseline-dependent updates to the viewer missing its baseline. Independent
+command replies and workspace notifications remain available. Only a baseline
+accepted by that viewer can release the guard. They do not reconnect to the same
+rejected state. Increase the configured limit within its supported range,
+restart the backend, and explicitly reconnect to retry; snapshots remain
+available over HTTP. A successfully accepted baseline releases that guard.
+
+Replay retains the responsive history loading and 128 KiB wire chunks. Chunk
+envelopes carry the bounded load correlation ID, including the byte-fragment
+fallback for unusually large replay metadata. The configured budget also bounds
+the logical replay; the existing 128 MiB replay assembly ceiling remains an
+absolute upper bound. A viewer queues one bounded replay sequence, writes one
+chunk at a time as local write callbacks finish, and holds at most 1 MiB of
+dependent updates until the complete baseline is written. Serialized replay
+storage is bounded by twice its declared source size plus 1 KiB per bounded
+chunk for base64/envelope overhead. Independent command replies and
+notifications remain available. A retry of the same pending load reuses its
+sequence; a newer distinct request explicitly supersedes and settles the older
+request with a correlated 409 error. Neither coalesced retries nor failed writes
+create OUT_TO_CLIENT records. These records describe successful local socket
+writes, not application-level peer receipts.
+
+A large full frame's write callback releases its allowance. Completion metadata
+and subsequent deltas share an additional 1 MiB budget. Close, successful flush,
+and retirement clean up listeners, pending queues and termination timers.
+Snapshot deltas still wait for the full baseline to be admitted, and replay
+keeps its existing request IDs, message identities and ordering.
+
 Passive loading does not initialize an ACP runtime. A stored initial message may
 subsequently be enqueued and dispatched through the normal message path.
 
