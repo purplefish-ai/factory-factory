@@ -6,6 +6,7 @@ import {
   SessionTargetStopButton,
   useReconcileSessionTargetStops,
 } from '@/client/features/session-controls';
+import { useRememberedDisclosure } from '@/client/hooks/use-remembered-disclosure';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import { LoadingIndicator } from './agent-activity';
@@ -38,6 +39,7 @@ function getActivityState(work?: SessionWorkState) {
 }
 
 export function SessionActivityIndicator({
+  sessionId,
   work,
   controlSessionId,
   latestThinking,
@@ -45,6 +47,7 @@ export function SessionActivityIndicator({
   showThinking = true,
   runningSubagentIconIndices = [],
 }: {
+  sessionId?: string | null;
   showThinking?: boolean;
   runningSubagentIconIndices?: readonly number[];
   work?: SessionWorkState;
@@ -52,6 +55,14 @@ export function SessionActivityIndicator({
   latestThinking?: string | null;
   runningSubagentList?: ReactNode;
 }) {
+  const [backgroundExpanded, setBackgroundExpanded] = useRememberedDisclosure(
+    sessionId,
+    'background-processes'
+  );
+  const [subagentsExpanded, setSubagentsExpanded] = useRememberedDisclosure(
+    sessionId,
+    'running-subagents'
+  );
   const {
     backgroundTasks,
     agentWorking,
@@ -73,11 +84,15 @@ export function SessionActivityIndicator({
         </div>
       )}
       {backgroundTasks.length > 0 && (
-        <Collapsible defaultOpen={false} className="text-sm text-muted-foreground">
+        <Collapsible
+          open={backgroundExpanded}
+          onOpenChange={setBackgroundExpanded}
+          className="text-sm text-muted-foreground"
+        >
           <span role="status" aria-label="Background activity" className="sr-only">
             {backgroundLabel}
           </span>
-          <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <CaretRightIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
             <TerminalIcon className="h-4 w-4 shrink-0" />
             <span>{backgroundLabel}</span>
@@ -111,7 +126,7 @@ export function SessionActivityIndicator({
         </Collapsible>
       )}
       {!!runningSubagents && (
-        <Collapsible defaultOpen={false}>
+        <Collapsible open={subagentsExpanded} onOpenChange={setSubagentsExpanded}>
           <span role="status" aria-label="Sub-agent activity" className="sr-only">
             {subagentLabel}
           </span>

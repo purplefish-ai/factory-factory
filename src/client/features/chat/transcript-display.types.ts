@@ -5,6 +5,8 @@ import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import type { AcpPlanState } from './reducer';
 
 export interface TranscriptDisplayProps {
+  /** Stable session identity for remembered activity disclosures, including while disconnected. */
+  sessionId?: string | null;
   /** Workspace ID (enables persisted tool expansion state per workspace) */
   workspaceId?: string;
   messages: GroupedMessageItem[];

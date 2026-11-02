@@ -207,6 +207,12 @@ reveals chronological actions; each action expands to its full input and output.
 Failures appear within those expanded actions, without a failure count or error
 styling on the summary. Pending activity keeps its running indicator.
 
+Running sub-agent, background-process and completed sub-agent disclosures
+remember explicit expand/collapse choices per session in browser memory,
+including across navigation and temporary activity gaps. Reloading the page
+resets these choices. They share a bounded disclosure cache; tool-call and
+file-tree expansion retain their existing local-storage persistence.
+
 Thinking-only assistant messages and thinking stream blocks are omitted from the
 grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the

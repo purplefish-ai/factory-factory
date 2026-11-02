@@ -48,6 +48,25 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
+  it('remembers completed expansion per session after remounting', () => {
+    const props = {
+      state: { kind: 'ready' as const, subagents: [subagent({ id: 'done', status: 'completed' })] },
+      onSelect: vi.fn(),
+    };
+    const expanded = () =>
+      container.querySelector('button[aria-expanded]')?.getAttribute('aria-expanded');
+    render({ ...props, sessionId: 'remember-completed' });
+    void act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded]')?.click());
+    expect(expanded()).toBe('true');
+    void act(() => root.render(null));
+    render({ ...props, sessionId: 'remember-completed' });
+    expect(expanded()).toBe('true');
+    render({ ...props, sessionId: 'other-completed' });
+    expect(expanded()).toBe('false');
+    render({ ...props, sessionId: 'remember-completed' });
+    expect(expanded()).toBe('true');
+  });
+
   it('shows only active agents in chat and removes them when they finish', () => {
     const active = subagent({ id: 'active', name: 'Review code' });
     const finished = subagent({ id: 'finished', name: 'Done task', status: 'completed' });
