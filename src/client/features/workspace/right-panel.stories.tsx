@@ -6,6 +6,7 @@ import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { ChatTranscript } from '@/client/features/chat';
+import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,20 @@ import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 const workspaceId = 'right-panel-capabilities-story';
+const activitySelection: SubagentSelection = {
+  parentSessionId: 'session-1',
+  parentSessionName: 'Chat 1',
+  subagent: {
+    id: 'review',
+    name: 'Review code',
+    status: 'running',
+    createdAt: null,
+    updatedAt: null,
+    completedAt: null,
+    latestActivity: null,
+    resultPreview: null,
+  },
+};
 function RightPanelStory({
   hasTask = false,
   showChatToolbar = false,
@@ -33,6 +48,11 @@ function RightPanelStory({
             observable((observer) => {
               const responses: Record<string, () => unknown> = {
                 'session.listQuickActions': () => [],
+                'session.listSubagents': () => ({
+                  supported: true,
+                  subagents: [activitySelection.subagent],
+                  nextCursor: null,
+                }),
                 'workspace.get': () => ({
                   id: workspaceId,
                   projectId: 'right-panel-project',
@@ -129,10 +149,11 @@ function RightPanelStory({
 }
 
 function ActivityNavigation() {
-  const { rightPanelVisible, setRightPanelVisible, setActiveTopTab } = useWorkspacePanel();
+  const { rightPanelVisible, openSubagentTab } = useWorkspacePanel();
   return (
     <div className="flex h-[650px] w-[1000px] border">
       <div className="flex-1 p-4">
+        <MainViewTabBar workspaceId={workspaceId} sessions={[]} />
         <ChatTranscript
           messages={[]}
           running
@@ -146,10 +167,7 @@ function ActivityNavigation() {
             initialPosition: null,
           }}
           work={{ promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 }}
-          onOpenAgents={() => {
-            setActiveTopTab('agents');
-            setRightPanelVisible(true);
-          }}
+          onOpenSingleSubagent={() => openSubagentTab(activitySelection)}
         />
       </div>
       {rightPanelVisible && (
@@ -261,12 +279,15 @@ export const AlignedToolbars: Story = {
   },
 };
 
-export const OpenAgentsFromActivity: Story = {
+export const OpenSubagentFromActivity: Story = {
   args: { showActivity: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '1 sub-agent running' }));
-    await expect(canvas.getByRole('button', { name: 'Sessions' })).toBeVisible();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('agents');
+    await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
+    await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
+      'false'
+    );
   },
 };

@@ -23,7 +23,7 @@ it.each(['subagents', 'processes'])(
               promptInFlight: false,
               backgroundTasks:
                 section === 'processes' ? [{ id: 'tests', name: 'pnpm test', kind: 'shell' }] : [],
-              runningSubagents: section === 'subagents' ? 1 : 0,
+              runningSubagents: section === 'subagents' ? 2 : 0,
               activeGoals: 0,
             }}
             runningSubagentList={<p>Review code</p>}

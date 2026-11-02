@@ -52,7 +52,7 @@ export interface MessageItemProps {
   onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
-  onOpenAgents?: () => void;
+  onOpenSubagent?: (subagentId: string) => void;
 }
 
 function PRUpdateMessageItem({
@@ -154,10 +154,10 @@ export const MessageItem = memo(function MessageItem({
   onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
-  onOpenAgents,
+  onOpenSubagent,
 }: MessageItemProps) {
   if (isSubagentLifecycleMessage(message.message)) {
-    return <SubagentLifecycleRenderer message={message} onOpenAgents={onOpenAgents} />;
+    return <SubagentLifecycleRenderer message={message} onOpenSubagent={onOpenSubagent} />;
   }
   if (isPRUpdateMessage(message)) {
     return <PRUpdateMessageItem message={message} isQueued={isQueued} />;
@@ -273,7 +273,7 @@ export interface GroupedMessageItemRendererProps {
   onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
-  onOpenAgents?: () => void;
+  onOpenSubagent?: (subagentId: string) => void;
   /** Reads persisted expansion state by key */
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state by key */
@@ -294,7 +294,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
-  onOpenAgents,
+  onOpenSubagent,
   getToolExpansionState,
   setToolExpansionState,
   toolExpansionToken: _toolExpansionToken,
@@ -331,7 +331,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   return (
     <MessageItem
       message={item}
-      onOpenAgents={onOpenAgents}
+      onOpenSubagent={onOpenSubagent}
       isQueued={isQueued}
       onRemove={onRemove}
       onSteer={onSteer}

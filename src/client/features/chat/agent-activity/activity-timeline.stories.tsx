@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import type { ChatMessage, GroupedMessageItem, PairedToolCall } from '@/lib/chat-protocol';
 import { GroupedMessageItemRenderer } from './agent-activity';
 
@@ -23,6 +23,7 @@ function prose(id: string, text: string): ChatMessage {
 function agent(phase: 'started' | 'finished', status = 'completed'): ChatMessage {
   return {
     id: `subagent-audit-${phase}`,
+    subagentId: 'audit',
     source: 'agent',
     order: 0,
     timestamp: '2026-10-30T12:00:00Z',
@@ -72,7 +73,7 @@ const items: GroupedMessageItem[] = [
 ];
 
 export const Conversation: Story = {
-  args: { item: items[0]!, onOpenAgents: fn() },
+  args: { item: items[0]!, onOpenSubagent: fn() },
   render: (args) => (
     <div className="mx-auto max-w-3xl space-y-2">
       {items.map((item) => (
@@ -82,7 +83,7 @@ export const Conversation: Story = {
   ),
 };
 export const RunningAndFailed: Story = {
-  args: { item: items[0]!, onOpenAgents: fn() },
+  args: { item: items[0]!, onOpenSubagent: fn() },
   render: (args) => (
     <div className="mx-auto max-w-3xl space-y-2">
       <GroupedMessageItemRenderer {...args} item={agent('started', 'running')} />
@@ -112,6 +113,27 @@ export const RunningAndFailed: Story = {
       <GroupedMessageItemRenderer {...args} item={agent('finished', 'failed')} />
     </div>
   ),
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole('button', { name: 'Audit capture fix started working' })
+    );
+    await expect(args.onOpenSubagent).toHaveBeenLastCalledWith('audit');
+    await userEvent.click(canvas.getByRole('button', { name: 'Audit capture fix failed' }));
+    await expect(args.onOpenSubagent).toHaveBeenCalledTimes(2);
+    await expect(args.onOpenSubagent).toHaveBeenLastCalledWith('audit');
+  },
+};
+
+export const StoppedSubagent: Story = {
+  args: { item: agent('finished', 'interrupted'), onOpenSubagent: fn() },
+  play: async ({ args, canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: 'Audit capture fix interrupted' })
+    );
+    await expect(args.onOpenSubagent).toHaveBeenCalledOnce();
+    await expect(args.onOpenSubagent).toHaveBeenCalledWith('audit');
+  },
 };
 export const LongCommand: Story = {
   args: {
