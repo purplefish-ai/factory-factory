@@ -32,6 +32,11 @@ beforeEach(() => {
 });
 
 describe('workspaceDataService', () => {
+  it('refuses deletion when result capture has not been configured', () => {
+    expect(() => workspaceDataService.delete('workspace-1')).toThrowError(
+      expect.objectContaining({ code: 'PRECONDITION_FAILED' })
+    );
+  });
   it('sets the branch name and clears the discovery schedule together', async () => {
     mockSetBranchName.mockResolvedValue({
       id: 'workspace-1',

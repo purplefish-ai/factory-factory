@@ -29,6 +29,7 @@ import type {
   WorkspacePRContext,
   WorkspaceProviderSelectionSnapshot,
   WorkspaceStatusSnapshot,
+  WorkspaceDeletionCapture,
 } from '@/backend/services/workspace/types';
 import type { RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
 import {
@@ -40,6 +41,7 @@ import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
 import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
+import { deleteWorkspace } from './workspace-delete.accessor';
 import { workspaceLaunchOriginAccessor } from './workspace-launch-origin.accessor';
 import { projectConversationSummary } from './workspace-metadata.accessor';
 import {
@@ -695,10 +697,8 @@ class WorkspaceAccessor {
     });
   }
 
-  delete(id: string): Promise<Workspace> {
-    return prisma.workspace.delete({
-      where: { id },
-    });
+  delete(id: string, capture: WorkspaceDeletionCapture): Promise<Workspace> {
+    return deleteWorkspace(id, capture);
   }
 
   // Note: archive functionality is provided by workspaceStateMachine.archive()
