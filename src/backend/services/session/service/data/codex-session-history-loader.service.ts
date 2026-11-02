@@ -9,7 +9,11 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
-import { codexHistoryPrompt, restoreCodexEventPrompt } from './codex-history-prompt';
+import {
+  type CodexHistoryItem,
+  codexHistoryPrompt,
+  projectCodexTurnUsers,
+} from './codex-history-prompt';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
@@ -76,7 +80,7 @@ type CodexHistoryEntry = z.infer<typeof CodexHistoryEntrySchema>;
 type CodexHistorySource = 'event' | 'response';
 type CodexHistoryTurn = {
   id?: string;
-  messages: { source: CodexHistorySource; message: HistoryMessage }[];
+  messages: CodexHistoryItem[];
 };
 type SessionFileLookupCacheEntry = {
   filePath: string | null;
@@ -528,16 +532,14 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
   const eventTypes = new Set(
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
-  // Legacy event copies of the prompt may omit images that the response item kept.
-  const responseUser = turn.messages.find(
-    (item) =>
-      item.source === 'response' &&
-      item.message.type === 'user' &&
-      (item.message.attachments || item.message.providerPrompt !== undefined)
-  )?.message;
+  const { replacements, covered } = projectCodexTurnUsers(turn.messages);
   for (const { source, message } of turn.messages) {
-    if (source === 'event' || !eventTypes.has(message.type)) {
-      history.push(restoreCodexEventPrompt(message, responseUser, source === 'event'));
+    const include =
+      message.type === 'user'
+        ? !covered.has(message)
+        : source === 'event' || !eventTypes.has(message.type);
+    if (include) {
+      history.push(replacements.get(message) ?? message);
     }
   }
   turn.messages = [];
@@ -981,7 +983,7 @@ class CodexSessionHistoryLoaderService {
       turn.id = turnId;
     }
     for (const message of parsedMessages) {
-      turn.messages.push({ source, message });
+      turn.messages.push({ source, message, turnId });
     }
   }
 }

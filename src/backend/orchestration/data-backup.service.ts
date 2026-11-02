@@ -534,6 +534,7 @@ async function importUserSettings(
       preferredIde: settings.preferredIde,
       customIdeCommand: settings.customIdeCommand,
       playSoundOnComplete: settings.playSoundOnComplete,
+      childWorkspacesEnabled: settings.childWorkspacesEnabled,
       notificationSoundPath: settings.notificationSoundPath,
       // Ratchet settings
       ratchetEnabled: settings.ratchetEnabled,
@@ -703,6 +704,7 @@ class DataBackupService {
               preferredIde: userSettings.preferredIde,
               customIdeCommand: userSettings.customIdeCommand,
               playSoundOnComplete: userSettings.playSoundOnComplete,
+              childWorkspacesEnabled: userSettings.childWorkspacesEnabled,
               notificationSoundPath: userSettings.notificationSoundPath,
               // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,

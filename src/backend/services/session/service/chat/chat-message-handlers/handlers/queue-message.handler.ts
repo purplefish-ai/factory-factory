@@ -70,15 +70,13 @@ export function createQueueMessageHandler(
     const text = message.text?.trim();
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
-      if (message.id && (await deps.chatIntent?.hasAccepted(sessionId, message.id))) {
-        return rejectAcceptanceError(
-          deps.domain,
-          sessionId,
-          message.id,
-          new ChatIntentConflictError()
-        );
-      }
-      return rejectInvalidMessage(deps.domain, sessionId, message.id, validationError);
+      return rejectInvalidSubmission(
+        deps.domain,
+        sessionId,
+        message.id,
+        validationError,
+        deps.chatIntent
+      );
     }
 
     const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
@@ -138,10 +136,13 @@ async function rejectAcceptanceError(
   error: unknown,
   owner?: Pick<SessionChatIntentService, 'hasAccepted'>
 ): Promise<SessionCommandOutcome> {
-  if (
-    error instanceof ChatIntentConflictError ||
-    (await owner?.hasAccepted(sessionId, messageId))
-  ) {
+  let accepted = error instanceof ChatIntentConflictError;
+  try {
+    accepted ||= Boolean(await owner?.hasAccepted(sessionId, messageId));
+  } catch {
+    return retryDurableInput();
+  }
+  if (accepted) {
     return {
       replies: [
         {
@@ -163,4 +164,35 @@ async function rejectAcceptanceError(
     error instanceof Error ? error.message : 'Unable to durably accept message'
   );
   return { replies: [] };
+}
+
+function retryDurableInput(): SessionCommandOutcome {
+  return {
+    replies: [
+      {
+        type: 'error',
+        error: {
+          kind: 'queue_input_invalid',
+          reason: 'Durable input ownership is unavailable; retry this message id',
+        },
+      },
+    ],
+  };
+}
+
+async function rejectInvalidSubmission(
+  domain: Pick<SessionExecutionCommandServices['domain'], 'rejectMessage'>,
+  sessionId: string,
+  messageId: string,
+  reason: string,
+  owner?: Pick<SessionChatIntentService, 'hasAccepted'>
+): Promise<SessionCommandOutcome> {
+  try {
+    if (messageId && (await owner?.hasAccepted(sessionId, messageId))) {
+      return rejectAcceptanceError(domain, sessionId, messageId, new ChatIntentConflictError());
+    }
+  } catch {
+    return retryDurableInput();
+  }
+  return rejectInvalidMessage(domain, sessionId, messageId, reason);
 }

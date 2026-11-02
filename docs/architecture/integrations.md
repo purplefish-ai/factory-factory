@@ -560,6 +560,10 @@ of those pages. Archived projects remain readable; writes and discovery require
 an active project. Scheduled-agent APIs and routes retain their existing
 behavior.
 
+`agent.list` accepts the optional `direction: "forward"` metadata added by tRPC
+infinite queries and removes it before domain validation. Pagination remains
+forward-only; unrelated input fields are still rejected.
+
 `managementRevision` is the shared optimistic save token. Both saved replacement
 and accepted-proposal edits increment it once, including a rename/no-op. Saved
 edits also synchronize a surviving proposal's revision and local-ID

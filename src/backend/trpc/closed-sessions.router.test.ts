@@ -207,3 +207,58 @@ it('reads application-owned archives without a live worktree', async () => {
   );
   expect(mockReadFile).toHaveBeenCalledWith('/app-data/owned.json', 'utf-8');
 });
+
+it('sanitizes transcript path resolution failures before reading', async () => {
+  mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
+    id: 'closed-1',
+    archiveKey: 'key',
+    workspace: { worktreePath: null },
+  });
+  mockSessionDataService.resolveClosedSessionTranscriptPath.mockImplementationOnce(() => {
+    throw new Error('invalid /private/archive/location');
+  });
+  await expect(createCaller().getTranscript({ id: 'closed-1' })).rejects.toMatchObject({
+    code: 'INTERNAL_SERVER_ERROR',
+    message: 'Failed to read transcript file',
+  });
+});
+
+it('projects archived messages without exposing internal native prompt evidence', async () => {
+  const transcript = {
+    version: 1,
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    metadata: {
+      name: null,
+      workflow: 'followup',
+      provider: 'CLAUDE',
+      model: 'model',
+      startedAt: '2026-01-01',
+      completedAt: '2026-01-01',
+    },
+    messages: [
+      {
+        id: 'human',
+        source: 'user',
+        text: 'visible',
+        timestamp: '2026-01-01',
+        order: 0,
+        providerPrompt: [{ type: 'text', text: 'private native evidence' }],
+      },
+    ],
+  };
+  mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
+    id: 'closed-1',
+    archiveKey: 'key',
+    workspace: { worktreePath: null },
+  });
+  mockSessionDataService.readClosedSessionTranscript.mockResolvedValueOnce(
+    JSON.stringify(transcript)
+  );
+  const result = await createCaller().getTranscript({ id: 'closed-1' });
+  expect(result.messages[0]).not.toHaveProperty('providerPrompt');
+  expect(result.messages[0]).toMatchObject({ id: 'human', text: 'visible' });
+  expect(transcript.messages[0]?.providerPrompt).toEqual([
+    { type: 'text', text: 'private native evidence' },
+  ]);
+});

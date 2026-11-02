@@ -58,6 +58,11 @@ describe('userSettingsRouter', () => {
     ]);
   });
 
+  it('accepts the child workspace toggle without dropping false', async () => {
+    await createCaller().update({ childWorkspacesEnabled: false });
+    expect(mockUpdate).toHaveBeenCalledWith({ childWorkspacesEnabled: false });
+  });
+
   it('gets and updates settings', async () => {
     mockGet.mockResolvedValue({
       preferredIde: 'cursor',

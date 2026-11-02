@@ -14,6 +14,7 @@ const {
   mockNotificationDeliveryService,
 } = vi.hoisted(() => ({
   mockSessionDomainService: {
+    prioritizeQueuedHumanMessages: vi.fn(),
     peekNextMessage: vi.fn(),
     getQueueSnapshot: vi.fn(),
     dequeueNext: vi.fn(),

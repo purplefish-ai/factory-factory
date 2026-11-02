@@ -70,6 +70,14 @@ while their provider dispatch is unsettled, including across session stop/reset.
 Only settled transcript evidence can acknowledge delivery; a failed send leaves
 its durable notification pending for a later startup to recover.
 
+Child workspaces are enabled by default. Settings → General → Child Workspaces
+can disable their controls, MCP tools, and creation through the UI or MCP.
+Existing children and notifications are preserved. MCP checks the current
+setting when listing or calling child workspace tools; disabled tools are
+rejected even in running sessions. Start a new conversation after re-enabling if
+its provider has cached the disabled tool catalog. Agent-authoring tools remain
+available.
+
 Child workspace creation offers active projects only and rejects archived target
 projects at the orchestration boundary, including requests from MCP clients or
 stale browser selections. Child inserts also connect only to active projects
@@ -111,22 +119,28 @@ snapshot to its workspace, logical session, provider, account, provider
 conversation, rollover epoch and captured contents. Concurrent closes and
 retries reserve the same row and frozen bytes; later snapshots retain separate
 copies. Completion timestamps do not change retry identity. The identity uses
-canonical conversation content, not reconstructed chat IDs, order counters,
-timestamps, image-upload display metadata, model/usage envelopes or session
-labels. Native text/image content and tool IDs/inputs remain meaningful; text
-chunk splitting does not. Durable local events retain their IDs/content
-independently of their reconstructed timeline placement. Restart retries reuse
-the first reservation's exact bytes, including its original display fields and
-completion timestamp; canonicalization never rewrites that retained transcript.
-The dispatcher records the exact sent prompt on the first committed batch row
-(`providerPrompt`), with `null` on the other covered rows. Archive identity uses
-that prompt once, so queued humans retain their separate UI entries while
-matching the combined native-history prompt after restart. Unmarked adjacent
-human prompts retain separate boundaries; identity never guesses their batching.
-Native Claude text/image arrays and Codex input blocks retain the same
-provenance before their UI projection splits/joins text and restores images,
-including mixed PR/human prompts. Codex event projections also retain the
-matching native response prompt when it supplies the image/block evidence.
+canonical conversation content and session start time, not reconstructed chat
+IDs, order counters, message timestamps, image-upload display metadata,
+model/usage envelopes or session labels. Native text/image content and tool
+IDs/inputs remain meaningful; text chunk splitting does not. Durable local
+events retain their IDs/content independently of their reconstructed timeline
+placement. Restart retries reuse the first reservation's exact bytes, including
+its original display fields and completion timestamp; canonicalization never
+rewrites that retained transcript. The dispatcher records the exact sent prompt
+on the first committed batch row (`providerPrompt`), with `null` on the other
+covered rows. Archive identity uses that prompt once, so queued humans retain
+their separate UI entries while matching the combined native-history prompt
+after restart. Unmarked adjacent human prompts retain separate boundaries;
+identity never guesses their batching. Renderer snapshots and
+archived-transcript responses omit this internal prompt evidence from copied UI
+messages; retained transcript bytes and identity inputs keep it. Native Claude
+text/image arrays and Codex input blocks retain the same provenance before their
+UI projection splits/joins text and restores images, including mixed PR/human
+prompts. Codex event projections also retain the matching native response prompt
+when it supplies the image/block evidence. Split response records combine only
+for one explicitly identified turn and a matching single event prompt,
+preserving native block order. Ambiguous copies and unmatched user records
+remain separate.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
 its digest before any file write. Archive writes opt into syncing temporary
@@ -1247,8 +1261,8 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents remain
-unactivatable until operator recovery, lossless predelete result capture,
-retention, native capability validation and UI gates exist.
+unactivatable until operator recovery, lossless predelete result capture, native
+capability validation and UI gates exist.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or

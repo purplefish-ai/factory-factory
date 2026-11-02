@@ -17,5 +17,6 @@ export * from './use-terminal-websocket';
 export * from './workspace-panel-context';
 export * from './workspace-pr-menu';
 export * from './workspace-status-badge';
+export * from './workspace-family-navigation';
 export * from './workspaces-back-link';
 export * from './use-workspace-archive-command';

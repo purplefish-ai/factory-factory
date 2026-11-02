@@ -112,7 +112,11 @@ before reconciliation may retain the accepted native snapshot with prior queued
 desired settings, so the failed operation is not reported as fully durable. The
 dispatcher still combines consecutive messages into one prompt, preserves
 slash-command boundaries and human priority, and uses the last human's effective
-settings. Selected members are held out of hydration and cancellation until the
+settings. New human input precedes both PR events and workspace notifications.
+When a held external entry leads a retained queue, selection restores human
+priority without changing eligible delivery retry order. The unresolved mixed
+attempt and external FIFO remain intact; no frozen receipt or member record is
+released. Selected members are held out of hydration and cancellation until the
 batch exits; a rejected removal cannot cancel a durable member behind the
 dispatcher. The configuration owner serializes accepted edits, desired-revision
 refresh, provider configuration, atomic claim and the native turn. Claim
@@ -129,10 +133,12 @@ with complete ordered membership (including background messages), assembled
 content, effective settings, provider/account identity and lifecycle generation.
 Each frozen member explicitly records human or external recovery ownership,
 derived from its persisted intent membership. All durable human members are
-claimed together. Successful provider completion settles the attempt and every
-member together. Steering follows the same protocol; an explicit provider
-`promptRequired` response is evidence that the injection did not occur and
-releases that claim for normal dispatch.
+claimed together. Successful provider completion settles the prompt attempt and
+its durable human members together. External delivery owners acknowledge their
+ledgers afterward; a failed acknowledgment is deferred without rolling back the
+successful provider turn. Steering follows the same protocol; an explicit
+provider `promptRequired` response is evidence that the injection did not occur
+and releases that claim for normal dispatch.
 
 The claim is already potentially sent: a crash between persistence and provider
 invocation cannot prove non-delivery. Only explicit local proof produced before

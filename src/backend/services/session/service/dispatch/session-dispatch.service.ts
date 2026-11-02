@@ -13,6 +13,7 @@ import { notificationClaimBlockReason } from '@/backend/services/session/service
 import type { PromptConfigurationBoundary } from '@/backend/services/session/service/lifecycle/session-prompt-configuration';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { isExternalQueuedMessage } from '@/backend/services/session/service/store/session-queue';
 import { MessageState, type QueuedMessage } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,
@@ -20,6 +21,7 @@ import {
   collectDispatchBatch,
   dispatchCollectedBatch,
   combineBatchContents,
+  getDispatchableHead,
 } from './session-dispatch-batch';
 import {
   isClaudeCompactionClient,
@@ -201,19 +203,13 @@ export class SessionDispatchService {
     }
   }
 
-  private async getDispatchableHead(sessionId: string): Promise<QueuedMessage | undefined> {
-    const message = sessionDomainService.peekNextMessage(sessionId);
-    return message && !(await this.isExternalDeliveryHeld(sessionId, message))
-      ? message
-      : undefined;
-  }
-
   private async isExternalDeliveryHeld(
     sessionId: string,
     message: QueuedMessage
   ): Promise<boolean> {
     return Boolean(
-      (message.source || this.lifecycle.notificationDelivery.isNotificationMessage(message.id)) &&
+      (isExternalQueuedMessage(message) ||
+        this.lifecycle.notificationDelivery.isNotificationMessage(message.id)) &&
       (await this.dependencies.chatIntent?.store.hasUncertainAttempt(sessionId))
     );
   }
@@ -226,7 +222,9 @@ export class SessionDispatchService {
     await guard?.check();
     guard?.assertCurrent?.();
     // Peek first — message stays in queue (visible in snapshots during auto-start).
-    const peeked = await this.getDispatchableHead(dbSessionId);
+    const peeked = await getDispatchableHead(dbSessionId, (message) =>
+      this.isExternalDeliveryHeld(dbSessionId, message)
+    );
     if (!peeked) {
       this.turnInProgressRetryAttempts.delete(dbSessionId);
       return 'done';

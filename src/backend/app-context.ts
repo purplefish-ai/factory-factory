@@ -461,6 +461,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     },
     createChildWorkspace: (input) =>
       createChildWorkspace(input, {
+        getSettings: () => services.userSettingsQueryService.get(),
         findProject: (projectId) => services.projectManagementService.findById(projectId),
         launchWorkspace: (source) => services.launchWorkspace(source),
       }),

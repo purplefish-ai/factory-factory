@@ -195,6 +195,7 @@ it('roundtrips a supported cross-project child created by the actual workspace o
   const childId = await createChildWorkspace(
     { parentWorkspaceId: 'workspace', projectId: 'child-project', name: 'Cross-project child' },
     {
+      getSettings: async () => ({ childWorkspacesEnabled: true }),
       findProject: (id) =>
         db.prisma.project.findUnique({ where: { id }, include: { workspaces: true } }),
       launchWorkspace: async (source) => ({

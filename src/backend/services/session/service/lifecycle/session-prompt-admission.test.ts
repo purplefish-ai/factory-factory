@@ -24,6 +24,7 @@ it.each([false, true])(
   async (sharedAdmission) => {
     const handle = createTestProcessHandle();
     const observed: string[] = [];
+    const runtimeEntries: string[] = [];
     const runtime = {
       getClient: () => handle,
       isStopInProgress: () => false,
@@ -36,6 +37,7 @@ it.each([false, true])(
         _guard: unknown,
         permit?: PromptConfigurationPermit
       ) => {
+        runtimeEntries.push(content[0]?.text ?? '');
         if (!permit) {
           await handle.pendingConfigUpdates;
         }
@@ -74,9 +76,21 @@ it.each([false, true])(
       await service.sendSessionMessage('session', 'admitted', undefined, permit);
     });
     await entered.promise;
-    const edit = queue.run('session', async () => undefined);
+    const editEntered = createDeferred<void>();
+    const finishEdit = createDeferred<void>();
+    const edit = queue.run('session', async () => {
+      editEntered.resolve();
+      await finishEdit.promise;
+    });
     const ordinary = service.sendSessionMessage('session', 'ordinary');
     claiming.resolve();
+    await editEntered.promise;
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(runtimeEntries).toEqual(sharedAdmission ? ['admitted'] : ['admitted', 'ordinary']);
+    } finally {
+      finishEdit.resolve();
+    }
     await vi.waitFor(() => expect(observed).toEqual(['admitted', 'ordinary']), { timeout: 500 });
     await Promise.all([prompt, edit, ordinary]);
   }

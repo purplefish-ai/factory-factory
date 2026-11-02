@@ -321,8 +321,10 @@ class SessionDataImplementation {
     return closedSessionPersistenceService.stopArchiveMaintenance();
   }
 
-  deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
-    return closedSessionPersistenceService.deleteArchive(id);
+  async deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
+    const { pendingTranscript: _pendingTranscript, ...record } =
+      await closedSessionPersistenceService.deleteArchive(id);
+    return record;
   }
 }
 

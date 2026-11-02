@@ -16,6 +16,7 @@ import {
   AppearanceSettingsSection,
   AppInfoSection,
   ChatProviderDefaultsSection,
+  ChildWorkspaceSettingsSection,
   CliAuthSection,
   DataBackupSection,
   IdeSettingsSection,
@@ -104,6 +105,7 @@ export default function AdminDashboardPage() {
             <NotificationSettingsSection />
             <IdeSettingsSection />
             <ChatProviderDefaultsSection />
+            <ChildWorkspaceSettingsSection />
             <CodexAccountsSettings />
             <CliAuthSection />
             <SlackSettings />

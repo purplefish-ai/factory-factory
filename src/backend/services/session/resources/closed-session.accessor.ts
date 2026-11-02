@@ -234,7 +234,7 @@ class PrismaClosedSessionAccessor {
     return prisma.closedSession.findFirst({ where: { id, archiveState: 'PENDING' } });
   }
 
-  delete(id: string): Promise<ClosedSessionRecord> {
+  delete(id: string): Promise<ClosedSession> {
     return prisma.$transaction((tx) => tx.closedSession.delete({ where: { id } }));
   }
 }

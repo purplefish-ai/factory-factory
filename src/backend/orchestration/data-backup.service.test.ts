@@ -237,6 +237,7 @@ const mockUserSettings: UserSettings = {
   preferredIde: 'cursor',
   customIdeCommand: null,
   playSoundOnComplete: true,
+  childWorkspacesEnabled: false,
   notificationSoundPath: '/path/to/sound.mp3',
   workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
   cachedSlashCommands: { commands: [] },
@@ -249,10 +250,7 @@ const mockUserSettings: UserSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
-  // Non-default values — an export/import test that only ever exercises
-  // defaults can't tell a real persisted preference from a value the
-  // schema's default happened to backfill (see the voiceModeEnabled et al.
-  // assertions below).
+  // Non-default preferences prove persistence rather than schema-default backfilling.
   reviewerSessionProvider: SessionProvider.CLAUDE,
   reviewerClaudeModel: 'opus',
   reviewerCodexModel: 'gpt-5-codex-high',
@@ -385,6 +383,7 @@ function createImportData(
         preferredIde: 'cursor',
         customIdeCommand: null,
         playSoundOnComplete: true,
+        childWorkspacesEnabled: false,
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
         ratchetReplyToPrComments: true,
@@ -393,8 +392,7 @@ function createImportData(
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
-        // Non-default so the import test below actually exercises restoring
-        // a persisted preference, not just the schema's own default.
+        // Restore an actual non-default preference.
         reviewerSessionProvider: SessionProvider.CLAUDE,
         reviewerClaudeModel: 'opus',
         reviewerCodexModel: 'gpt-5-codex-high',
@@ -537,6 +535,7 @@ describe('DataBackupService', () => {
       ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
+          childWorkspacesEnabled: false,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
@@ -561,8 +560,7 @@ describe('DataBackupService', () => {
           appearanceFontMono: 'Fira Code',
         })
       );
-      // The Deepgram API key is a secret, not a preference — it must never
-      // appear in an export.
+      // Secret Deepgram API keys must never appear in exports.
       expect(result.data.userSettings).not.toHaveProperty('deepgramApiKeyEncrypted');
       expect(exportDataSchema.safeParse(result).success).toBe(true);
     });
@@ -583,6 +581,7 @@ describe('DataBackupService', () => {
       });
 
       expect(exportedData.data.userSettings?.ratchetReviewTriggerMode).toBe('CHANGES_REQUESTED');
+      expect(exportedData.data.userSettings?.childWorkspacesEnabled).toBe(true);
     });
 
     it('exports null user settings when absent', async () => {
@@ -814,6 +813,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -831,8 +831,7 @@ describe('DataBackupService', () => {
           appearanceFontMono: 'Fira Code',
         }),
       });
-      // The Deepgram API key is never part of the export, so a restore
-      // never sets it — the admin re-enters it after import.
+      // Restore never sets the omitted Deepgram secret; the admin re-enters it.
       expect(mockTx.userSettings.create.mock.calls[0]?.[0].data).not.toHaveProperty(
         'deepgramApiKeyEncrypted'
       );
@@ -853,6 +852,7 @@ describe('DataBackupService', () => {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          childWorkspacesEnabled: false,
           notificationSoundPath: null,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,

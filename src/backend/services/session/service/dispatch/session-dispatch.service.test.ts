@@ -877,11 +877,18 @@ it.each([
       deltaPort: sessionDomainService,
     });
     const h = harness('allowed', notifications);
-    if (precedingHuman) {
-      enqueue('before');
-    }
-    enqueue('workspace-notification-retry');
+    const before = precedingHuman ? enqueue('before') : undefined;
+    const notification = enqueue('workspace-notification-retry');
     enqueue('after');
+    // Recreate restored ordering: newly accepted humans now outrank external work.
+    sessionDomainService.removeQueuedMessage('session', notification.id, {
+      expectedMessage: notification,
+    });
+    sessionDomainService.requeueFront('session', notification);
+    if (before) {
+      sessionDomainService.removeQueuedMessage('session', before.id, { expectedMessage: before });
+      sessionDomainService.requeueFront('session', before);
+    }
     const held = deferred();
     if (slow) {
       h.sendSessionMessage.mockReturnValueOnce(held.promise);

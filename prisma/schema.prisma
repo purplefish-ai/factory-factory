@@ -609,7 +609,8 @@ model ClosedSession {
 
   transcriptPath  String          // Legacy: worktree relative; keyed archives: base-dir relative
   archiveKey      String?         @unique // Immutable provider/account/conversation snapshot identity
-  archiveState    String          @default("COMPLETE") // Legacy rows are already published
+  // Legacy rows default to published; new reservations explicitly write PENDING.
+  archiveState    String          @default("COMPLETE")
   pendingTranscript String?       // Durable original bytes until file completion
   transcriptHash  String?         // SHA-256 of exact completed bytes
 
@@ -633,6 +634,9 @@ model UserSettings {
   // Notification Settings
   playSoundOnComplete   Boolean  @default(true)   // Play sound when workspace completes
   notificationSoundPath String?                   // Path to custom notification sound file
+
+  // Workspace features
+  childWorkspacesEnabled Boolean @default(true)
 
   // Sidebar Settings
   workspaceOrder      Json?    // { [projectId]: string[] } - ordered workspace IDs per project
