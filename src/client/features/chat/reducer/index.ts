@@ -494,6 +494,7 @@ const messageHandlers: MessageHandlerMap = {
   session_delta: null,
   subagents_changed: null,
   session_replay_batch: handleSessionReplayBatch,
+  session_replay_chunk: null,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
   tool_use_summary: handleToolUseSummaryMessage,
