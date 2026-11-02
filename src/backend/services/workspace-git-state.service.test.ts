@@ -240,7 +240,7 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
-  it('starts a fresh calculation for a caller arriving after invalidation', async () => {
+  it('starts a fresh calculation after the invalidated calculation settles', async () => {
     const statusResolvers: Array<(value: ExecResult) => void> = [];
     runGit.mockImplementation((args) => {
       if (isStatusCommand(args)) {
@@ -254,10 +254,12 @@ describe('WorkspaceGitStateService', () => {
     service.invalidate(input.worktreePath);
 
     const second = service.getSnapshot(input);
-    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
+    expect(statusResolvers).toHaveLength(1);
     expect(second).not.toBe(first);
 
     statusResolvers[0]?.(defaultGitResult(['status']));
+    await first;
+    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
     statusResolvers[1]?.(defaultGitResult(['status']));
     await Promise.all([first, second]);
   });
@@ -272,7 +274,7 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
-  it('cleans a removal generation tombstone only after all detached calculations settle', async () => {
+  it('retains a removal fence until running work settles without launching retired refreshes', async () => {
     const statusResolvers: Array<(value: ExecResult) => void> = [];
     runGit.mockImplementation((args) => {
       if (isStatusCommand(args)) {
@@ -285,15 +287,13 @@ describe('WorkspaceGitStateService', () => {
     await vi.waitFor(() => expect(statusResolvers).toHaveLength(1));
     service.remove(input.worktreePath);
     const second = service.getSnapshot(input);
-    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
+    expect(statusResolvers).toHaveLength(1);
     service.remove(input.worktreePath);
-
-    statusResolvers[1]?.(defaultGitResult(['status']));
-    await second;
     expect(service.getGenerationCount()).toBe(1);
 
     statusResolvers[0]?.(defaultGitResult(['status']));
-    await first;
+    await Promise.all([first, second]);
+    expect(statusResolvers).toHaveLength(1);
     expect(service.getGenerationCount()).toBe(0);
     expect(service.getCachedSnapshotCount()).toBe(0);
   });

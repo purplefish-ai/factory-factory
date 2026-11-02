@@ -6,10 +6,15 @@ import type {
   WorkspacePRIdentity,
 } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
+import { shouldPollPR } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
 import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
 import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import {
+  deriveWorkspacePRSelection,
+  selectWorkspacePR,
+  type WorkspacePullRequest,
+} from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma as PrismaValues } from '@prisma-gen/client';
 import type { Prisma, WorkspacePR, WorkspaceStatus } from '@prisma-gen/client';
@@ -99,8 +104,9 @@ export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: bo
   const prs = attached.map(serializeWorkspacePR);
   const prSummary = deriveWorkspacePRSummary(prs, enabled);
   return {
-    ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
+    ...flattenWorkspacePR(selectWorkspacePR(attached)),
     prs,
+    ...deriveWorkspacePRSelection(prs),
     prSummary,
     prState: prSummary.state,
     prCiStatus: prSummary.ciStatus,
@@ -123,10 +129,6 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
     hasMergeConflict: pr.hasMergeConflict,
     syncedAt: pr.syncedAt?.toISOString() ?? null,
   };
-}
-
-export function selectActiveWorkspacePR<T extends { state: PRState }>(prs: T[]): T | undefined {
-  return prs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ?? prs[0];
 }
 
 const reattachmentFields = {
@@ -451,23 +453,32 @@ class WorkspacePRAccessor {
     });
   }
   async findNeedingSync(staleThresholdMinutes = 5) {
+    const now = Date.now();
     const rows = await prisma.workspacePR.findMany({
       where: {
         detachedAt: null,
         workspace: { status: 'READY' },
         OR: [
           { syncedAt: null },
-          { syncedAt: { lt: new Date(Date.now() - staleThresholdMinutes * 60_000) } },
+          { syncedAt: { lt: new Date(now - staleThresholdMinutes * 60_000) } },
         ],
       },
-      include: { workspace: { include: { project: true } } },
+      include: {
+        workspace: { include: { project: true, prMonitoring: { select: { eventEpoch: true } } } },
+      },
       orderBy: { syncedAt: 'asc' },
     });
-    return rows.map(({ workspace, ...pr }) => ({
-      ...workspace,
-      prId: pr.id,
-      ...flattenWorkspacePR(pr),
-    }));
+    // Prisma cannot compare a PR field with its related monitoring epoch. Filter
+    // before scheduling GitHub reads, using the same predicate as the watcher.
+    return rows
+      .filter(({ workspace, ...pr }) =>
+        shouldPollPR(pr, workspace.prMonitoring?.eventEpoch ?? pr.observationEpoch, now)
+      )
+      .map(({ workspace: { prMonitoring: _prMonitoring, ...workspace }, ...pr }) => ({
+        ...workspace,
+        prId: pr.id,
+        ...flattenWorkspacePR(pr),
+      }));
   }
   findNeedingDiscovery(limit: number, dueAt = new Date()) {
     return workspacePrDiscoveryAccessor.findNeedingDiscovery(limit, dueAt);
@@ -561,7 +572,7 @@ class WorkspacePRAccessor {
       where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
       orderBy: { id: 'asc' },
     });
-    const row = selectActiveWorkspacePR(rows);
+    const row = selectWorkspacePR(rows);
     return row ? { prId: row.id, prUrl: row.url, prNumber: row.number, prState: row.state } : null;
   }
 }

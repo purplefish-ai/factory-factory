@@ -8,6 +8,7 @@ import type { AskUserQuestion } from './interaction';
 import type { ChatMessage } from './messages';
 import type { ChatSettings, CommandInfo } from './models';
 import type { MessageAttachment, QueuedMessage } from './queued';
+import type { SessionReplayChunk } from './replay-frame-schema';
 import type { SessionInfo } from './session';
 import type { MessageState } from './state-machine';
 
@@ -170,6 +171,7 @@ interface WebSocketMessagePayloadByType {
       voiceMode?: boolean;
     };
   };
+  session_replay_chunk: SessionReplayChunk;
   session_replay_batch: {
     /** Batch of WebSocket events for atomic session replay during hydration */
     replayEvents?: WebSocketMessage[];
@@ -261,6 +263,7 @@ export const SESSION_DELTA_EXCLUDED_MESSAGE_TYPES = [
   'session_delta',
   'session_snapshot',
   'session_replay_batch',
+  'session_replay_chunk',
 ] as const;
 type SessionDeltaExcludedMessageType = (typeof SESSION_DELTA_EXCLUDED_MESSAGE_TYPES)[number];
 type SessionDeltaEventType = Exclude<WebSocketMessageType, SessionDeltaExcludedMessageType>;
@@ -301,6 +304,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   message_used_as_response: true,
   message_state_changed: true,
   session_replay_batch: true,
+  session_replay_chunk: true,
   tool_progress: true,
   tool_use_summary: true,
   status_update: true,

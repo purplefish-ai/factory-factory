@@ -135,4 +135,68 @@ describe.each([false, true])('AdversarialReviewButton (menu=%s)', (renderAsMenuI
     expect(getAction()).toBeNull();
     expect(mutation.mutate).not.toHaveBeenCalled();
   });
+
+  it('reviews the selected association using its own eligibility and explicit identity', () => {
+    const a = {
+      id: 'a',
+      url: 'https://github.com/example/repo/pull/1',
+      number: 1,
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      state: 'APPROVED' as const,
+      reviewState: 'APPROVED',
+      ciStatus: 'SUCCESS' as const,
+      hasMergeConflict: false,
+      syncedAt: null,
+    };
+    const b = {
+      ...a,
+      id: 'b',
+      number: 2,
+      state: 'CHANGES_REQUESTED' as const,
+      reviewState: 'CHANGES_REQUESTED',
+      ciStatus: 'FAILURE' as const,
+    };
+    render(workspace({ prs: [b, a], prUrl: null, prNumber: null, prState: 'OPEN' }));
+    const action = getAction();
+    expect(action).not.toBeNull();
+    flushSync(() => action?.click());
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: 'workspace-1',
+      prId: 'a',
+    });
+    render(workspace({ prs: [{ ...a, state: 'NONE' }, b], prState: 'OPEN' }));
+    expect(getAction()).toBeNull();
+  });
+
+  it('retains workspace-only routing for a scalar-only legacy payload', () => {
+    render(workspace());
+    expect(getAction()).not.toBeNull();
+    flushSync(() => getAction()?.click());
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1' });
+  });
+
+  it('preserves a persisted migrated PR identity despite stale aggregate terminal flags', () => {
+    const migrated = {
+      id: 'legacy-pr-workspace-1',
+      url: 'https://github.com/example/repo/pull/42',
+      number: 42,
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      state: 'OPEN' as const,
+      reviewState: null,
+      ciStatus: 'SUCCESS' as const,
+      hasMergeConflict: false,
+      syncedAt: null,
+    };
+    render(workspace({ prs: [migrated], prState: 'MERGED', ratchetState: 'MERGED' }));
+    expect(getAction()).not.toBeNull();
+    flushSync(() => getAction()?.click());
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: 'workspace-1',
+      prId: migrated.id,
+    });
+  });
 });

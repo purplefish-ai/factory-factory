@@ -689,7 +689,7 @@ export const ToolSequenceGroupWithFileChange: StoryObj<typeof ToolSequenceGroup>
   ),
 };
 
-/** Single calls use the same quiet summary as longer sequences. */
+/** Single calls identify the command without showing its arguments. */
 export const ToolSequenceSingleCommand: StoryObj<typeof ToolSequenceGroup> = {
   render: () => (
     <ToolSequenceGroup
@@ -707,5 +707,41 @@ export const ToolSequenceSingleFailure: StoryObj<typeof ToolSequenceGroup> = {
         { name: 'exec_command', input: { cmd: 'pnpm test' }, result: 'Test failed', isError: true },
       ])}
     />
+  ),
+};
+
+/** Compact labels for single actions and category labels for repeated actions. */
+export const CompactActivitySummaries: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <div className="max-w-xl space-y-2">
+      {[
+        [{ name: 'Read', input: { file_path: '/project/src/Button.tsx' }, result: 'content' }],
+        [
+          { name: 'Read', input: { file_path: '/project/src/Button.tsx' }, result: 'content' },
+          { name: 'Read', input: { file_path: '/project/src/Input.tsx' }, result: 'content' },
+        ],
+        [{ name: 'exec_command', input: { cmd: '/usr/bin/python3 -c "print(42)"' }, result: '42' }],
+        [
+          {
+            name: 'Bash',
+            input: {
+              command:
+                'git -C "/tmp/a project" cherry-pick 5ca9a1b21e4b01e08661a790055276f6ef330c9a',
+            },
+            result: 'Applied commit',
+          },
+        ],
+        [
+          {
+            name: 'Bash',
+            input: { command: 'git -C /tmp/project diff HEAD --stat' },
+            result: 'diff',
+          },
+          { name: 'Bash', input: { command: 'python3 /tmp/check.py' }, result: 'ok' },
+        ],
+      ].map((tools) => (
+        <ToolSequenceGroup key={JSON.stringify(tools)} sequence={createToolSequence(tools)} />
+      ))}
+    </div>
   ),
 };

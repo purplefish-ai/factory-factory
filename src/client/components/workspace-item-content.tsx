@@ -6,6 +6,7 @@ import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure'
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';
+import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
 function ConversationFocus({ summary }: { summary: ServerWorkspace['conversationSummary'] }) {
@@ -66,14 +67,11 @@ function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => voi
   return <span className="flex items-center gap-0.5">{content}</span>;
 }
 
-function hasPullRequests(workspace: ServerWorkspace) {
-  return (
-    Boolean(workspace.prs?.length) ||
-    (workspace.prState !== 'NONE' &&
-      workspace.prState != null &&
-      workspace.prNumber != null &&
-      workspace.prUrl != null)
-  );
+function hasPullRequests(
+  workspace: ServerWorkspace,
+  selectedPr: ReturnType<typeof getWorkspaceSelectedPR>
+) {
+  return Boolean(workspace.prs?.length || (selectedPr?.state !== 'NONE' && selectedPr?.number));
 }
 
 export function WorkspaceItemContent({
@@ -86,7 +84,8 @@ export function WorkspaceItemContent({
   onOpenIssue?: () => void;
 }) {
   const showBranch = Boolean(workspace.branchName);
-  const showPR = hasPullRequests(workspace);
+  const selectedPr = getWorkspaceSelectedPR(workspace);
+  const showPR = hasPullRequests(workspace, selectedPr);
   const showStats =
     workspace.gitStats && (workspace.gitStats.additions > 0 || workspace.gitStats.deletions > 0);
   const hasMetaRow = showBranch || showPR || showStats;
@@ -141,8 +140,8 @@ export function WorkspaceItemContent({
               />
             ) : (
               showPR &&
-              workspace.prNumber != null && (
-                <PrLink prNumber={workspace.prNumber} onOpenPr={onOpenPr} />
+              selectedPr?.number != null && (
+                <PrLink prNumber={selectedPr.number} onOpenPr={onOpenPr} />
               )
             )}
           </span>

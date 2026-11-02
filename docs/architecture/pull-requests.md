@@ -74,8 +74,8 @@ attachment, review, and monitoring controls.
 ## PR event delivery destinations
 
 PR monitoring replaces the former Ratchet fixer workflow. The two-minute
-`pr-event-poll` job observes every attached PR and queues actionable updates in
-either a bound ordinary conversation (MAIN, the default) or one reusable
+`pr-event-poll` job observes eligible attached PRs and queues actionable updates
+in either a bound ordinary conversation (MAIN, the default) or one reusable
 dedicated conversation per PR (DEDICATED). This is one event pipeline with a
 destination setting, replacing the former fixer engine. Queued non-command human
 messages are provided together in FIFO order on the next agent turn. Slash
@@ -165,19 +165,42 @@ newly opened association, including attachment and discovery refreshes. Rejected
 or unchanged observations and later moves between open states (such as `DRAFT` →
 `OPEN`) do not repeat the notification.
 
-Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
-arrays are compared by identity and content, so database row order does not
-trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
-ratchet snapshot reads order PRs by ID to keep scalar PR selection consistent.
+Workspace reads, HTTP summaries, and snapshots include the plain `prs`
+collection and its `prSummary`, plus derived `selectedPrId` and `selectedPr`.
+Selection uses the existing ID-ascending rule: first nonterminal association
+(including an unsynced `NONE`), otherwise the first historical association, or
+explicit nulls for an empty collection. It is not a saved primary preference.
+`selectedPr` carries that association's own state, CI, review, conflicts and
+sync time. Links, PR badges and review actions use these facts; the CI chip uses
+collection state. Review submits the persisted association ID. Scalar-only
+legacy payloads without a known association retain workspace-scoped review
+routing. Their display-only PRs carry `identitySource: 'legacy-snapshot'`;
+identity is not inferred from ID spelling, because migrated/restored persisted
+associations can also have `legacy-pr-…` IDs. Reusing a cached persisted
+association preserves its identity, and canonical collections replace adapter
+provenance. The PR menu continues to show and act on each individual
+association.
+
+Older summary/snapshot payloads may omit selection; client adapters derive it
+from the collection or adapt scalar-only legacy data. The snapshot store derives
+selection from accepted `prs`, so it has no independent timestamp, hydration
+requirement or drift policy. Full and changed payloads carry the same derived
+facts without changing `summaryVersion: 1`. No persistence migration or export
+version change is required. PR arrays are compared by identity and content, so
+database row order does not trigger drift warnings, version bumps, or snapshot
+broadcasts. Workspace and ratchet snapshot reads order PRs by ID to keep scalar
+PR selection consistent.
 
 The PR menu offers per-association refresh, review, and detachment. Detaching
 one association cancels its pending events while leaving sibling monitoring and
 the main conversation intact. Discovery preserves detached associations as
 tombstones; only an explicit attachment clears them.
 
-The ratchet projection and reconciliation select one association for the PR URL,
-number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
-merge conflicts come from the aggregate summary.
+Legacy flat aliases retain their existing mixed semantics at read/transport and
+export adapters: URL, number, review and sync timestamp describe the selected
+association; state, CI status, and merge conflicts describe the aggregate
+summary. Consumers must use `selectedPr` for association facts and `prSummary`
+for collection facts rather than pairing those legacy fields.
 
 The event collector uses one per-lifetime projection worker for PR collection
 and monitoring invalidations. Its narrow database read publishes the complete PR
@@ -197,6 +220,26 @@ without another database read.
 Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
 their reason while preserving transitions already written by successful reads.
+
+### Terminal PR polling
+
+Both background schedulers use the persisted per-association observation and
+`syncedAt` timestamp to pace terminal PRs. Once a normalized MERGED observation
+has committed its transition and events for the current monitoring epoch,
+background GitHub observations stop for that association. Monitoring stays
+enabled, and every poll still wakes pending deliveries, including terminal
+events, receipt recovery, and frozen retries. Open siblings continue at the
+normal cadence.
+
+CLOSED PRs become eligible again after 30 minutes so reopening remains visible
+on the next scheduled pass. Legacy terminal snapshots without a normalized
+observation are initialized before this policy applies. Enabling monitoring or
+changing its recipient/destination initializes facts for the new observation
+epoch before terminal backoff applies. A reopened PR returns to the normal
+cadence. The stale-data scheduler applies the same terminal policy, so its
+three-minute pass cannot bypass the closed-PR backoff. Explicit workspace and
+per-PR refreshes, and delivery preparation's freshness checks, remain
+unrestricted.
 
 ### Observations and events
 

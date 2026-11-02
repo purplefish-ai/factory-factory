@@ -49,7 +49,11 @@ calls using existing authentication; they consume the account's usage allowance.
 Several workspace concerns were split out of the `Workspace` table into 1:1 side
 tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot
-wire, the v4 export format and the client are unchanged.
+wire aliases and v4 export format retain compatibility. PR reads additionally
+expose the derived `selectedPrId`/`selectedPr` contract described in
+[pull requests](pull-requests.md#pr-event-delivery-destinations). The selected
+association's facts stay separate from the authoritative `prs`/`prSummary`
+collection; selection is never persisted as a primary preference.
 
 Worktree cleanup matches Git's registered paths against the real worktree base
 directory, so a symlinked base still removes Git metadata. Branch-resume
@@ -590,6 +594,16 @@ and excludes, and reftable state. Object and reflog writes are ignored because
 the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
+
+Git snapshots keep one running calculation per worktree/default-branch pair.
+Invalidation clears the cached result and fences the running generation without
+detaching its Git commands. Readers arriving after invalidation share one fresh
+calculation after the running work settles; bursts before that refresh starts
+coalesce into the same refresh. A stale completion is never cached. Removal and
+stop retire queued refreshes, and rejected Git commands reach callers
+immediately while sibling commands drain before releasing ownership. The
+existing three-command per-snapshot and six-command service budgets still apply
+across independent workspace keys.
 
 The board provider and its children are keyed by project ID. Switching projects
 resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and

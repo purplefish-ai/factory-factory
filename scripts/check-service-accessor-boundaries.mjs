@@ -19,6 +19,10 @@ const ACCESSOR_POLICIES = {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-management-history.accessor',
   },
+  agentRunContextRetentionAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run-context-retention.accessor',
+  },
   agentLedgerRetentionAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-ledger-retention.accessor',

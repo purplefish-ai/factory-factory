@@ -73,17 +73,7 @@ it('does not consume the schedule when the project archives after the due read',
   });
   expect((await periodicTaskAccessor.findDueTasks()).map((due) => due.id)).toEqual([task.id]);
   await db.prisma.project.update({ where: { id: project.id }, data: { isArchived: true } });
-  const reserve = () =>
-    periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-      { periodicTaskId: task.id, workspaceId: null, status: 'RUNNING' },
-      {
-        cadence: 'DAILY',
-        scheduledTime: null,
-        timezone: null,
-        scheduledDayOfMonth: null,
-        dueAt: new Date(0),
-      }
-    );
+  const reserve = () => periodicTaskAccessor.reserveExecutionAndMarkDispatched(task.id);
   expect(await reserve()).toBeNull();
   expect(await db.prisma.periodicTaskExecution.count()).toBe(0);
   expect(await db.prisma.periodicTask.findUnique({ where: { id: task.id } })).toMatchObject({

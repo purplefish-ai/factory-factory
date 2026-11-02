@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import {
   type AgentMessage,
@@ -153,54 +154,87 @@ function buildPRUpdateHistoryMessages(
   return messages;
 }
 
+function appendHistoryToTranscript(
+  historyMsg: HistoryMessage,
+  index: number,
+  transcript: ChatMessage[],
+  order: number
+): number {
+  const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
+  const messageId = `${messageBaseId}-${order}`;
+
+  if (historyMsg.type === 'user') {
+    const updates = buildPRUpdateHistoryMessages(historyMsg, messageBaseId, order);
+    if (updates) {
+      transcript.push(...updates);
+      return order + updates.length;
+    }
+  }
+  if (historyMsg.type === 'user') {
+    transcript.push({
+      id: messageId,
+      source: 'user',
+      text: historyMsg.content,
+      attachments: historyMsg.attachments,
+      timestamp: historyMsg.timestamp,
+      order,
+    });
+    return order + 1;
+  }
+
+  if (
+    historyMsg.type === 'assistant' ||
+    historyMsg.type === 'tool_use' ||
+    historyMsg.type === 'tool_result' ||
+    historyMsg.type === 'thinking' ||
+    historyMsg.type === 'user_tool_result'
+  ) {
+    transcript.push({
+      id: messageId,
+      source: 'agent',
+      message: historyToClaudeMessage(historyMsg),
+      timestamp: historyMsg.timestamp,
+      order,
+    });
+    order += 1;
+  }
+  return order;
+}
+
 export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {
   const transcript: ChatMessage[] = [];
   let order = 0;
+  for (const [index, message] of history.entries()) {
+    order = appendHistoryToTranscript(message, index, transcript, order);
+  }
+  return transcript;
+}
 
-  for (const [index, historyMsg] of history.entries()) {
-    const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
-    const messageId = `${messageBaseId}-${order}`;
-
-    if (historyMsg.type === 'user') {
-      const updates = buildPRUpdateHistoryMessages(historyMsg, messageBaseId, order);
-      if (updates) {
-        transcript.push(...updates);
-        order += updates.length;
-        continue;
-      }
+/** Same projection and identities, yielding between small batches during hydration. */
+export async function buildTranscriptFromHistoryCooperatively(
+  history: HistoryMessage[],
+  isCurrent: () => boolean
+): Promise<ChatMessage[] | null> {
+  const transcript: ChatMessage[] = [];
+  let order = 0;
+  let budgetUntil = performance.now() + 16;
+  for (const [index, message] of history.entries()) {
+    if (index % 8 === 0 && !isCurrent()) {
+      return null;
     }
-    if (historyMsg.type === 'user') {
-      transcript.push({
-        id: messageId,
-        source: 'user',
-        text: historyMsg.content,
-        attachments: historyMsg.attachments,
-        timestamp: historyMsg.timestamp,
-        order,
-      });
-      order += 1;
-      continue;
-    }
-
+    order = appendHistoryToTranscript(message, index, transcript, order);
     if (
-      historyMsg.type === 'assistant' ||
-      historyMsg.type === 'tool_use' ||
-      historyMsg.type === 'tool_result' ||
-      historyMsg.type === 'thinking' ||
-      historyMsg.type === 'user_tool_result'
+      ((index + 1) % 8 === 0 || message.content.length > 64 * 1024) &&
+      performance.now() >= budgetUntil
     ) {
-      transcript.push({
-        id: messageId,
-        source: 'agent',
-        message: historyToClaudeMessage(historyMsg),
-        timestamp: historyMsg.timestamp,
-        order,
-      });
-      order += 1;
+      await yieldToEventLoop();
+      if (!isCurrent()) {
+        return null;
+      }
+      budgetUntil = performance.now() + 16;
     }
   }
-
-  return transcript;
+  return isCurrent() ? transcript : null;
 }
 
 export function rebuildTranscriptIndex(store: SessionStore): void {

@@ -8,7 +8,7 @@ import {
 } from '@/backend/services/session/service/session-domain.service';
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
-import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
+import { buildTranscriptFromHistoryCooperatively } from '@/backend/services/session/service/store/session-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
 
 const logger = createLogger('session-provider-history-hydrator');
@@ -141,12 +141,13 @@ async function hydrateProviderHistory(
   }
 
   const loadStart = Date.now();
-  const loadResult = await loadProviderHistory(dbSession, providerSessionId);
+  const loadResult = await loadProviderHistory(dbSession, providerSessionId, historyIsCurrent);
   if (!historyIsCurrent()) {
     return;
   }
   if (loadResult.status === 'loaded') {
-    handleLoadedProviderHistory(domain, {
+    await handleLoadedProviderHistory(domain, {
+      isCurrent: historyIsCurrent,
       sessionId,
       dbSession,
       providerSessionId,
@@ -164,11 +165,13 @@ async function hydrateProviderHistory(
 
 async function loadProviderHistory(
   dbSession: ProviderHistorySession,
-  providerSessionId: string
+  providerSessionId: string,
+  isCurrent: () => boolean
 ): Promise<ProviderHistoryLoadResult> {
   const input = {
     providerSessionId,
     workingDir: dbSession.workspace.worktreePath ?? '',
+    isCurrent,
   };
   return dbSession.provider === 'CLAUDE'
     ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
@@ -181,7 +184,7 @@ async function loadProviderHistory(
       });
 }
 
-function handleLoadedProviderHistory(
+async function handleLoadedProviderHistory(
   domain: ProviderHistoryHydrationDomain,
   {
     sessionId,
@@ -190,6 +193,7 @@ function handleLoadedProviderHistory(
     loadResult,
     shouldAttemptCodexToolBackfill,
     loadStart,
+    isCurrent,
   }: {
     sessionId: string;
     dbSession: ProviderHistorySession;
@@ -197,8 +201,9 @@ function handleLoadedProviderHistory(
     loadResult: LoadedProviderHistory;
     shouldAttemptCodexToolBackfill: boolean;
     loadStart: number;
+    isCurrent: () => boolean;
   }
-): void {
+): Promise<void> {
   domain.clearHistoryRetryCooldown(sessionId);
   if (
     domain.getHistoryHydrationSource(sessionId) === 'jsonl' ||
@@ -209,7 +214,16 @@ function handleLoadedProviderHistory(
     return;
   }
 
-  const loadedTranscript = buildTranscriptFromHistory(loadResult.history);
+  const loadedTranscript = await buildTranscriptFromHistoryCooperatively(
+    loadResult.history,
+    isCurrent
+  );
+  if (
+    !(loadedTranscript && isCurrent()) ||
+    domain.getHistoryHydrationSource(sessionId) === 'jsonl'
+  ) {
+    return;
+  }
   const latestTranscript = domain.getTranscriptSnapshot(sessionId);
   const latestProviderMessages = providerMessages(latestTranscript);
   if (latestProviderMessages.length > 0) {

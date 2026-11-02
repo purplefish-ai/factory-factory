@@ -1,3 +1,5 @@
+// Install the shared mocks before loading service barrels.
+import './pr-event-flow.test-helpers';
 import { EventEmitter } from 'node:events';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -16,61 +18,16 @@ import {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import {
-  createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
-import type { PrismaClient } from '@prisma-gen/client';
-
-const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined, busy: false }));
-vi.mock('@/backend/db', () => ({
-  get prisma() {
-    if (!state.prisma) {
-      throw new Error('Missing test database');
-    }
-    return state.prisma;
-  },
-}));
-vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: { isSessionPromptInFlight: () => state.busy },
-  sessionDomainService: { getPendingInteractiveRequest: () => null },
-  sessionLifecycleService: {},
-  sessionDataService: {
-    findPRDedicatedSession: async ({
-      workspaceId,
-      prId,
-    }: {
-      workspaceId: string;
-      prId: string;
-    }) => {
-      const bound = await state.prisma?.workspacePRDedicatedSession.findUnique({
-        where: { prId },
-        include: { session: { include: { workspace: true } } },
-      });
-      return bound?.session?.workspaceId === workspaceId ? bound.session : null;
-    },
-    findAgentSessionById: (id: string) =>
-      state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
-  },
-  sessionBackgroundDeliveryService: {
-    enqueue: vi.fn(() => ({ queued: true })),
-    invalidate: vi.fn(),
-  },
-  sessionDispatchService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
-  findPRDeliveryReceipt: vi.fn(),
-}));
-
-vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: vi.fn(async () => true) }));
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
-}));
-
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
+import { createPRFlowIntegrationDatabase, getPRFlowTestState } from './pr-event-flow.test-helpers';
 import {
   createPRObservationPorts,
   defaultPRMonitoringServices,
@@ -86,23 +43,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const state = getPRFlowTestState();
 let db: IntegrationDatabase;
 beforeEach(() => {
   // Delivery integration controls its freshness prerequisite at the delivery port.
   vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
 });
 beforeAll(async () => {
-  db = await createIntegrationDatabase();
-  state.prisma = db.prisma;
-  await db.prisma.project.create({
-    data: {
-      id: 'project',
-      name: 'Project',
-      slug: 'project',
-      repoPath: '/tmp/repo',
-      worktreeBasePath: '/tmp/worktrees',
-    },
-  });
+  db = await createPRFlowIntegrationDatabase();
   await db.prisma.workspace.create({
     data: {
       id: 'w',

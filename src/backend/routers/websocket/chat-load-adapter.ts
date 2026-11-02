@@ -4,6 +4,7 @@ import type {
   SessionFileLogger,
   SessionLoadService,
 } from '@/backend/services/session';
+import { frameSessionReplay } from './session-replay-framing';
 
 interface SessionLoadAdapterDependencies {
   loadService: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
@@ -28,11 +29,13 @@ export async function executeSessionLoad(
     loadRequestId: loadRequestId ?? null,
     replayEventCount: replay.replayEvents.length,
   });
-  deps.eventBus.publishToSession(sessionId, {
+  for (const frame of frameSessionReplay({
     type: 'session_replay_batch',
     replayEvents: replay.replayEvents,
     ...(loadRequestId ? { loadRequestId } : {}),
-  });
+  })) {
+    deps.eventBus.publishToSession(sessionId, frame);
+  }
   await deps.loadService.completeLoad(prepared);
   return { replies: [] };
 }
