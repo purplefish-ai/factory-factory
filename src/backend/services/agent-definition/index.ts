@@ -54,3 +54,4 @@ export { eventRunLaunch } from './service/agent-launch.service';
 export { AgentRunMonitorService } from './service/agent-run-monitor.service';
 export { eventRunRecovery } from './service/agent-run-recovery.service';
 export { eventRunResults } from './service/agent-run-results.service';
+export { AgentLedgerRetentionService } from './service/agent-ledger-retention.service';
