@@ -1,4 +1,9 @@
 import { prisma } from '@/backend/db';
+import {
+  codexAccountMetadataSchema,
+  type CodexAccountMetadata,
+} from '@/shared/codex-account-backup';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import type {
   AgentSession,
   Prisma,
@@ -6,6 +11,7 @@ import type {
   TerminalSession,
   UserSettings,
 } from '@prisma-gen/client';
+import { readDurableRecovery } from './durable-recovery';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 
@@ -30,33 +36,45 @@ export interface DataBackupSnapshot {
   agentSessions: AgentSession[];
   terminalSessions: TerminalSession[];
   userSettings: UserSettings | null;
+  codexAccounts: CodexAccountMetadata[];
+  durable: DurableRecovery;
 }
 
 class DataBackupAccessor {
   getSnapshotForExport(): Promise<DataBackupSnapshot> {
-    return Promise.all([
-      prisma.project.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.workspace.findMany({
-        orderBy: { createdAt: 'asc' },
-        include: {
-          conversationMetadata: true,
-          prMonitoring: true,
-          prEvents: true,
-          prDiscovery: true,
-          prs: { include: { dedicatedSession: true } },
-          runScript: true,
-        },
-      }),
-      prisma.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.userSettings.findFirst({ where: { userId: 'default' } }),
-    ]).then(([projects, workspaces, agentSessions, terminalSessions, userSettings]) => ({
-      projects,
-      workspaces,
-      agentSessions,
-      terminalSessions,
-      userSettings,
-    }));
+    return prisma.$transaction(async (tx) => {
+      const [projects, workspaces, agentSessions, terminalSessions, userSettings, accounts] =
+        await Promise.all([
+          tx.project.findMany({ orderBy: { createdAt: 'asc' } }),
+          tx.workspace.findMany({
+            orderBy: { createdAt: 'asc' },
+            include: {
+              conversationMetadata: true,
+              prMonitoring: true,
+              prEvents: true,
+              prDiscovery: true,
+              prs: { include: { dedicatedSession: true } },
+              runScript: true,
+            },
+          }),
+          tx.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
+          tx.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
+          tx.userSettings.findFirst({ where: { userId: 'default' } }),
+          tx.codexAccount.findMany({
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, label: true, kind: true, enabled: true, identityKey: true },
+          }),
+        ]);
+      return {
+        durable: await readDurableRecovery(tx),
+        projects,
+        workspaces,
+        agentSessions,
+        terminalSessions,
+        userSettings,
+        codexAccounts: codexAccountMetadataSchema.array().parse(accounts),
+      };
+    });
   }
 
   runInTransaction<T>(callback: (tx: DataBackupTransactionClient) => Promise<T>): Promise<T> {

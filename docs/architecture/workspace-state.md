@@ -318,6 +318,24 @@ creation. Project slugs and worktree base paths must be nonempty; legacy backups
 with empty values are rejected before any records are imported. Valid backup
 paths are preserved rather than recomputed for the current machine.
 
+Logical version-8 exports capture relational rows and account identity metadata
+inside one read transaction. The versioned recovery manifest classifies every
+registered model and explicitly names unsupported coverage. This is a limited
+logical recovery format: filesystem contents, account homes, credentials,
+encryption keys and provider-owned history are excluded. Full database backups
+must retain `encryption.key` together with the database and separately stored
+files needed for recovery.
+
+Import persists the graph atomically. A colliding project must match repository
+identity before descendants can attach. Existing workspace IDs are skipped with
+their imported descendants; no imported child/session borrows a local workspace
+by ID alone. Missing parents and cycles are skipped. Saved schedules, agent
+definitions, triggers, connections and PR monitoring restore disabled or paused.
+Unfinished scheduled executions become failed history for explicit review.
+Process IDs and running script/terminal state are cleared. No import action
+launches an agent or sends a message. Supported legacy versions 4–7 remain
+readable.
+
 ## Retired auto-iteration
 
 Auto-iteration is removed. Workspaces, conversations, worktrees, branches, and

@@ -418,8 +418,11 @@ Automatic admission independently rejects events older than 30 days, including
 replays after tombstones expire. Frozen run input and provider conversations
 have separate lifetimes, so ledger pruning does not erase all source text.
 Compact run results and PR links survive workspace and event deletion. Logical
-export/import still excludes the agent tables and credentials; the complete
-supported backup is the database file together with `encryption.key`.
+version-8 export/import includes disabled agent definitions, triggers and
+credential-free connection identities, plus disabled schedules and execution
+history. Run/effect/provenance coverage remains explicitly limited in the
+recovery manifest. The complete database backup requires the database file
+together with `encryption.key` and separately stored recovery files.
 
 ### Project-owned saved management
 
@@ -563,7 +566,8 @@ through trusted local API procedures.
 Proposals belong to their authoring workspace and are removed with it; created
 definitions belong to the project and survive workspace deletion. Deleting a
 saved definition also removes its accepted proposal. Logical export/import does
-not include proposals or the other new agent tables.
+not yet include proposals or run/effect history; the recovery manifest states
+the exact per-model coverage.
 
 The live authoring evaluation uses the installed Codex ACP runtime, the actual
 MCP server and authoring API, a disposable database, and fixed provider
@@ -609,8 +613,8 @@ does not enable event subscriptions, change an existing Slack app's webhook, or
 start agents. Slack event intake is still a separate implementation step.
 
 These credentials depend on the server's `encryption.key`; retain it with any
-database-file backup. Logical export/import does not yet include agent
-connections or their credentials.
+database-file backup. Logical version-8 export/import includes disabled
+connection identities, but excludes credentials.
 
 ## Client query transport
 

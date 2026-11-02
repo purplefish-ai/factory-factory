@@ -30,6 +30,7 @@ afterAll(async () => {
   }
 });
 beforeEach(async () => {
+  await db.prisma.periodicTask.deleteMany();
   await clearIntegrationDatabase(db.prisma);
   await db.prisma.project.create({
     data: {
@@ -276,7 +277,7 @@ it('imports a metadata-free version 4 wire backup and converts its flattened PR'
   expect(
     await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
   ).toMatchObject({
-    enabled: true,
+    enabled: false,
     deliveryPauseReason: 'LEGACY_FIXER',
     legacySessionIds: ['legacy-fixer'],
   });
@@ -322,7 +323,7 @@ it('imports a metadata-free published version 5 wire backup and normalizes per-P
   expect(
     await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
   ).toMatchObject({
-    enabled: true,
+    enabled: false,
     recipientSessionId: null,
     deliveryPauseReason: 'LEGACY_FIXER',
     legacySessionIds: ['legacy-fixer'],
@@ -388,7 +389,7 @@ it.each([6, 7])(
     expect(
       await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
     ).toMatchObject({
-      enabled: true,
+      enabled: false,
       bindingRevision: 4,
       eventEpoch: 2,
       deliveryPauseReason: 'USER_STOPPED',
@@ -405,3 +406,152 @@ it.each([6, 7])(
     });
   }
 );
+
+it('does not attach imported children or sessions to an incompatible project ID collision', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'session',
+      workspaceId: 'workspace',
+      workflow: 'followup',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+    },
+  });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  await clearIntegrationDatabase(db.prisma);
+  await db.prisma.project.create({
+    data: {
+      id: 'project',
+      name: 'Unrelated',
+      slug: 'unrelated',
+      repoPath: '/tmp/other',
+      worktreeBasePath: '/tmp/other-trees',
+    },
+  });
+  await dataBackupService.importData(backup);
+  expect(await db.prisma.workspace.count()).toBe(0);
+  expect(await db.prisma.agentSession.count()).toBe(0);
+});
+
+it('does not attach sessions to a colliding workspace or mutate its provenance', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'session',
+      workspaceId: 'workspace',
+      workflow: 'followup',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+    },
+  });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  await db.prisma.workspace.update({
+    where: { id: 'workspace' },
+    data: { name: 'Existing local workspace' },
+  });
+  await db.prisma.agentSession.deleteMany();
+  await dataBackupService.importData(backup);
+  expect(await db.prisma.agentSession.count()).toBe(0);
+  expect((await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'workspace' } })).name).toBe(
+    'Existing local workspace'
+  );
+});
+
+it('roundtrips scheduled and event agent definitions with every activation disabled and no credentials', async () => {
+  await db.prisma.periodicTask.create({
+    data: {
+      id: 'schedule',
+      projectId: 'project',
+      name: 'Daily',
+      prompt: 'Review',
+      cadence: 'DAILY',
+      nextRunAt: new Date(),
+      isEnabled: true,
+    },
+  });
+  await db.prisma.agentDefinition.create({
+    data: {
+      id: 'definition',
+      projectId: 'project',
+      name: 'Issues',
+      instructions: 'Review issues',
+      isEnabled: true,
+    },
+  });
+  await db.prisma.agentConnection.create({
+    data: {
+      id: 'connection',
+      provider: 'GITHUB',
+      externalId: 'gh:123',
+      name: 'Repo',
+      credentialsEncrypted: 'NEVER_EXPORT_CIPHERTEXT',
+    },
+  });
+  await db.prisma.agentTrigger.create({
+    data: {
+      id: 'trigger',
+      agentDefinitionId: 'definition',
+      type: 'GITHUB_ISSUE',
+      connectionId: 'connection',
+      description: 'New issues',
+      config: { version: 1 },
+      isEnabled: true,
+      activationState: 'ACTIVE',
+    },
+  });
+  await db.prisma.periodicTaskExecution.create({
+    data: {
+      id: 'execution',
+      periodicTaskId: 'schedule',
+      workspaceId: 'workspace',
+      status: 'RUNNING',
+    },
+  });
+  const backup = exportDataSchema.parse(
+    JSON.parse(JSON.stringify(await dataBackupService.exportData('test')))
+  );
+  expect(JSON.stringify(backup)).not.toContain('NEVER_EXPORT_CIPHERTEXT');
+  await db.prisma.agentDefinition.deleteMany();
+  await db.prisma.agentConnection.deleteMany();
+  await db.prisma.periodicTask.deleteMany();
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(backup);
+  expect(
+    await db.prisma.periodicTaskExecution.findUnique({ where: { id: 'execution' } })
+  ).toMatchObject({ status: 'FAILED', workspaceId: 'workspace' });
+  expect(await db.prisma.periodicTask.findUnique({ where: { id: 'schedule' } })).toMatchObject({
+    isEnabled: false,
+    prompt: 'Review',
+  });
+  expect(await db.prisma.agentDefinition.findUnique({ where: { id: 'definition' } })).toMatchObject(
+    { isEnabled: false, instructions: 'Review issues' }
+  );
+  expect(await db.prisma.agentTrigger.findUnique({ where: { id: 'trigger' } })).toMatchObject({
+    isEnabled: false,
+    activationState: 'PAUSED',
+    pendingActivation: null,
+    activationBoundary: null,
+  });
+  expect(await db.prisma.agentConnection.findUnique({ where: { id: 'connection' } })).toMatchObject(
+    { isEnabled: false, credentialsEncrypted: null }
+  );
+});
+
+it('restores the supported hierarchy when children precede their parent in the wire payload', async () => {
+  await db.prisma.workspace.create({
+    data: {
+      id: 'child',
+      projectId: 'project',
+      parentWorkspaceId: 'workspace',
+      name: 'Child',
+      status: 'READY',
+    },
+  });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  backup.data.workspaces.reverse();
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(backup);
+  expect(await db.prisma.workspace.count()).toBe(2);
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'child' } })).toMatchObject({
+    parentWorkspaceId: 'workspace',
+  });
+});

@@ -9,3 +9,4 @@ import { createLogger } from '@/backend/services/logger.service';
 import { PeriodicTaskService } from './service';
 
 export const periodicTaskService = new PeriodicTaskService(createLogger('periodic-task'));
+export { restorePeriodicRecovery } from './service/periodic-recovery';

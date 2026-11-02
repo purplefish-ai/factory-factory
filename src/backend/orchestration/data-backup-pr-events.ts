@@ -92,7 +92,10 @@ export async function restorePRBackupState(
       lastCheckedAt: workspace.ratchetLastCheckedAt,
     };
     await restoreDedicatedBindings(workspace, tx);
-    await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, config);
+    await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, {
+      ...config,
+      enabled: false,
+    });
     await workspacePRMonitoringService.restoreEventsBackup(tx, workspace.id, workspace.prEvents);
   }
 }

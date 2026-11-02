@@ -45,6 +45,7 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
+import { durableRecoverySchema } from './durable-recovery.schema';
 import { validateBackupPRs, validateLegacyFixerOwnership } from './export-data-pr-validation';
 import {
   prAssociationBackupSchema,
@@ -259,11 +260,27 @@ const exportedUserSettingsSchema = z.object({
 
 const legacyAndCurrentSchema = z.object({
   meta: z.object({
+    recovery: z
+      .object({
+        version: z.literal(1),
+        kind: z.literal('logical'),
+        models: z.record(
+          z.string(),
+          z.object({
+            category: z.enum(['config', 'history', 'evidence', 'cache', 'runtime', 'secret']),
+            handling: z.enum(['included', 'partial', 'excluded']),
+            reason: z.string().min(1),
+          })
+        ),
+        limitations: z.array(z.string()),
+      })
+      .optional(),
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6), z.literal(7)]),
+    schemaVersion: z.union([z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8)]),
   }),
   data: z.object({
+    durable: durableRecoverySchema.optional(),
     projects: z.array(exportedProjectSchema),
     workspaces: z.array(exportedWorkspaceSchema),
     agentSessions: z.array(exportedAgentSessionSchema),
@@ -362,7 +379,11 @@ function normalizePublishedVersion5(data: z.infer<typeof publishedVersion5Schema
   };
 }
 function normalizeLegacyAndCurrent(data: z.infer<typeof legacyAndCurrentSchema>) {
-  if (data.meta.schemaVersion === 6 || data.meta.schemaVersion === 7) {
+  if (
+    data.meta.schemaVersion === 6 ||
+    data.meta.schemaVersion === 7 ||
+    data.meta.schemaVersion === 8
+  ) {
     return { ...data, meta: { ...data.meta, schemaVersion: data.meta.schemaVersion } };
   }
   const workspaces = data.data.workspaces.map((workspace) => {
@@ -468,6 +489,14 @@ export const exportDataSchema = z
       safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
     ),
   ])
+  .superRefine((backup, ctx) => {
+    if (backup.meta.schemaVersion === 8 && !(backup.meta.recovery && backup.data.durable)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Version 8 requires a recovery manifest and durable rows',
+      });
+    }
+  })
   .superRefine(validateBackupPRs)
   .superRefine(validateAccountReferences);
 

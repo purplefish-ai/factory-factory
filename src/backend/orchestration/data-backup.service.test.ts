@@ -415,6 +415,33 @@ function createImportData(
 describe('DataBackupService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const model of [
+      'periodicTask',
+      'periodicTaskExecution',
+      'agentDefinition',
+      'agentConnection',
+      'agentTrigger',
+    ]) {
+      Object.assign(mockTx, { [model]: { findMany: vi.fn(async () => []) } });
+    }
+    Object.assign(mockTx.project, { findMany: prisma.project.findMany });
+    Object.assign(mockTx.workspace, { findMany: prisma.workspace.findMany });
+    Object.assign(mockTx.agentSession, { findMany: prisma.agentSession.findMany });
+    Object.assign(mockTx.terminalSession, { findMany: prisma.terminalSession.findMany });
+    Object.assign(mockTx.userSettings, { findFirst: prisma.userSettings.findFirst });
+    Object.assign(mockTx, {
+      codexAccount: {
+        findMany: vi.fn(async () => [
+          {
+            id: 'account-b',
+            label: 'Work',
+            kind: 'MANAGED',
+            enabled: true,
+            identityKey: 'a'.repeat(64),
+          },
+        ]),
+      },
+    });
   });
 
   describe('exportData', () => {
@@ -451,7 +478,7 @@ describe('DataBackupService', () => {
       expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
     });
 
-    it('exports version 7 with account bindings and all settings fields', async () => {
+    it('exports version 8 with account bindings and all settings fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -460,7 +487,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(7);
+      expect(result.meta.schemaVersion).toBe(8);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
@@ -737,10 +764,10 @@ describe('DataBackupService', () => {
             create: {
               command: 'npm run dev',
               cleanupCommand: 'npm run cleanup',
-              pid: 12_345,
-              port: 3000,
-              startedAt: new Date('2025-01-01T00:10:00.000Z'),
-              status: RunScriptStatus.RUNNING,
+              pid: null,
+              port: null,
+              startedAt: null,
+              status: RunScriptStatus.IDLE,
             },
           },
           // The v4 format's flat ratchet fields land in the nested row, and
