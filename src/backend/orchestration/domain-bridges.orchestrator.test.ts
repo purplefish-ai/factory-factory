@@ -29,6 +29,7 @@ vi.mock('@/backend/services/workspace', () => ({
     create = mockWorkspaceCreationService.create;
   },
   workspaceDataService: {
+    configureDeletionCapture: vi.fn(),
     findById: vi.fn(),
     findFixerContext: vi.fn(),
     findPRContext: vi.fn(),

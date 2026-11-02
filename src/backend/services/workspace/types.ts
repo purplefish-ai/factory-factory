@@ -1,4 +1,15 @@
 import type { CIStatus, PRState, WorkspaceProviderSelection, WorkspaceStatus } from '@/shared/core';
+import type { Prisma } from '@prisma-gen/client';
+
+export type WorkspaceDeletionCapture = (
+  tx: Prisma.TransactionClient,
+  snapshot: {
+    workspaceId: string;
+    projectId: string;
+    originRunId: string | null;
+    prs: { url: string; number: number | null }[];
+  }
+) => Promise<void>;
 
 export interface PRDiscoveryClaim {
   githubOwner: string;

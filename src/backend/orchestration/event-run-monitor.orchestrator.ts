@@ -1,7 +1,6 @@
 import {
   AgentRunMonitorService,
   eventRunLaunch,
-  agentRunResultSchema,
   type EventLaunchClaim,
 } from '@/backend/services/agent-definition';
 import {
@@ -11,7 +10,7 @@ import {
   acpRuntimeManager,
 } from '@/backend/services/session';
 import { workspacePrSnapshotService, workspaceDataService } from '@/backend/services/workspace';
-import { parseGitHubPRLink } from '@/shared/github-pr-preview';
+import { compactAgentRunResult } from '@/shared/agent-run-result';
 
 const monitor = new AgentRunMonitorService();
 /** Coordinates public owner reads without starting/restoring a provider. */
@@ -31,19 +30,7 @@ export function observeEventRun(
     check();
     const prs = workspace ? await workspacePrSnapshotService.list(workspace.id) : [];
     check();
-    const result = agentRunResultSchema.parse({
-      version: 1,
-      summary: '',
-      pullRequests: prs
-        .flatMap((pr) => {
-          const parsed = agentRunResultSchema.shape.pullRequests.element.safeParse({
-            url: pr.url,
-            number: pr.number ?? parseGitHubPRLink(pr.url)?.number,
-          });
-          return parsed.success ? [parsed.data] : [];
-        })
-        .slice(0, 20),
-    });
+    const result = compactAgentRunResult(prs);
     const attempt = {
       runId: claim.runId,
       sessionId: claim.reservedSessionId,
