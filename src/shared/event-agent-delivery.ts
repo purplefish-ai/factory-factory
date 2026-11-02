@@ -40,6 +40,16 @@ export const initialOutcomeSchema = z
     'Inconsistent terminal outcome'
   );
 export type InitialOutcome = z.infer<typeof initialOutcomeSchema>;
+/** Last explicit decision, separate from the provider's immutable response. */
+export const eventRunResolutionSchema = z.strictObject({
+  action: z.enum(['RESOLVE', 'ABANDON', 'RETRY']),
+  attempt: initialAttemptSchema,
+  outcome: initialOutcomeSchema.optional(),
+  stop: runtimeStopEvidenceSchema,
+  work: eventWorkProofSchema,
+  resolvedAt: z.iso.datetime(),
+});
+export type EventRunResolution = z.infer<typeof eventRunResolutionSchema>;
 export const initialDeliveryEvidenceSchema = z.strictObject({
   version: z.literal(1),
   attempt: initialAttemptSchema,
@@ -47,6 +57,7 @@ export const initialDeliveryEvidenceSchema = z.strictObject({
   outcome: initialOutcomeSchema.optional(),
   stop: runtimeStopEvidenceSchema.optional(),
   work: eventWorkProofSchema.optional(),
+  resolution: eventRunResolutionSchema.optional(),
 });
 export type InitialDeliveryEvidence = z.infer<typeof initialDeliveryEvidenceSchema>;
 export const initialDeliveryFenceSchema = z.strictObject({

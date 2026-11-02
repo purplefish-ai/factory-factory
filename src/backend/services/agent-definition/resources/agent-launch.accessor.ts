@@ -22,7 +22,7 @@ export function launchConflict(): never {
 export async function currentLaunch(
   tx: Prisma.TransactionClient,
   input: EventLaunchClaim,
-  lease: 'LIVE' | 'EXPIRED' = 'LIVE'
+  lease: 'LIVE' | 'EXPIRED' | 'ANY' = 'LIVE'
 ) {
   const claim = agentClaimResultSchema.options[0].parse(input);
   const run = await tx.agentRun.findUnique({
@@ -38,7 +38,7 @@ export async function currentLaunch(
     run.initialMessageId !== claim.initialMessageId ||
     (lease === 'LIVE'
       ? !run.leaseExpiresAt || run.leaseExpiresAt <= new Date()
-      : run.leaseExpiresAt && run.leaseExpiresAt > new Date()) ||
+      : lease === 'EXPIRED' && run.leaseExpiresAt && run.leaseExpiresAt > new Date()) ||
     run.initialDelivery?.attemptGeneration !== claim.attemptGeneration
   ) {
     launchConflict();

@@ -15,6 +15,10 @@ const ACCESSOR_POLICIES = {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-run-settlement.accessor',
   },
+  agentRunRecoveryAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run-recovery.accessor',
+  },
   agentLaunchAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-launch.accessor',

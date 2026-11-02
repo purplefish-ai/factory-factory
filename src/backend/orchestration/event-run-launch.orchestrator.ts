@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { eventRunLaunch, type EventLaunchClaim } from '@/backend/services/agent-definition';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
@@ -6,6 +7,7 @@ import {
   EventInitialDispatchInterrupted,
   interruptEventInitial,
 } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
 import { createEventLaunchResources } from './event-run-resources.orchestrator';
 import {
@@ -64,7 +66,19 @@ class EventRunLaunch {
     this.check();
     await eventRunLaunch.link(this.claim);
     this.check();
-    if (!(await this.initialize())) {
+    const manualRetry = run.delivery.evidence?.resolution?.action === 'RETRY';
+    if (manualRetry) {
+      const workspace = await workspaceDataService.findById(this.claim.reservedWorkspaceId);
+      this.check();
+      if (
+        workspace?.status !== 'READY' ||
+        !workspace.worktreePath ||
+        !(await stat(workspace.worktreePath)).isDirectory()
+      ) {
+        throw new Error('Completed event preparation is unavailable');
+      }
+      this.check();
+    } else if (!(await this.initialize())) {
       return;
     }
     this.check();
@@ -82,7 +96,9 @@ class EventRunLaunch {
         sendAttemptId: binding.sendAttemptId,
       },
       text: initialText(run),
-      assertCurrent: this.check,
+      // Dispatch checks its abort signal separately. Cleanup must retain the
+      // current owner's authority to stop after abort, but lose it on revocation.
+      assertCurrent: this.assertOwned,
       signal: this.signal,
     });
     this.physicalStage(false);
@@ -127,29 +143,37 @@ class EventRunLaunch {
   private async failed(error: unknown) {
     try {
       this.assertOwned();
-    } catch (stale) {
-      this.physicalStage(false);
-      throw stale;
-    }
-    let cleanup: 'CONFIRMED' | 'UNKNOWN' = this.stage === 'DURABLE' ? 'CONFIRMED' : 'UNKNOWN';
-    if (error instanceof EventInitialDispatchInterrupted) {
-      cleanup = error.cleanup;
-    } else if (this.stage === 'STARTUP') {
-      if (await this.handedOff()) {
-        return;
+      let cleanup: 'CONFIRMED' | 'UNKNOWN' = this.stage === 'DURABLE' ? 'CONFIRMED' : 'UNKNOWN';
+      if (error instanceof EventInitialDispatchInterrupted) {
+        cleanup = error.cleanup;
+      } else if (this.stage === 'STARTUP') {
+        const handedOff = await this.handedOff();
+        this.assertOwned();
+        if (handedOff) {
+          return;
+        }
+        const evidence = await interruptEventInitial(
+          this.claim.reservedSessionId,
+          this.signal.aborted ? 'SHUTDOWN' : 'TIMEOUT',
+          undefined,
+          this.assertOwned
+        ).catch(() => null);
+        this.assertOwned();
+        cleanup = evidence?.status === 'LOCAL_RUNTIME_GROUP_STOPPED' ? 'CONFIRMED' : 'UNKNOWN';
       }
-      const evidence = await interruptEventInitial(
-        this.claim.reservedSessionId,
-        this.signal.aborted ? 'SHUTDOWN' : 'TIMEOUT'
-      ).catch(() => null);
-      cleanup = evidence?.status === 'LOCAL_RUNTIME_GROUP_STOPPED' ? 'CONFIRMED' : 'UNKNOWN';
+      await eventRunLaunch.dispose(
+        this.claim,
+        {
+          kind: this.signal.aborted ? 'SHUTDOWN' : 'FAILED',
+          cleanup,
+          ...classifyEventPreparationFailure(error),
+        },
+        this.assertOwned
+      );
+    } finally {
+      // Only after dispatch and any already-started physical cleanup have joined.
+      this.physicalStage(false);
     }
-    this.physicalStage(false);
-    await eventRunLaunch.dispose(this.claim, {
-      kind: this.signal.aborted ? 'SHUTDOWN' : 'FAILED',
-      cleanup,
-      ...classifyEventPreparationFailure(error),
-    });
   }
   private async handedOff(): Promise<boolean> {
     try {

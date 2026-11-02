@@ -57,7 +57,7 @@ async function settlementFor(
   proof: EventWorkProof;
   status: Parameters<typeof writeRunSettlement>[5];
 } | null> {
-  if (!proof || run.initialDelivery.evidence === null) {
+  if (!proof || run.initialDelivery.evidence === null || run.reasonCode === 'EXPLICITLY_RESOLVED') {
     return null;
   }
   const evidence = initialDeliveryEvidenceSchema.parse(run.initialDelivery.evidence);
@@ -92,7 +92,10 @@ async function settlementFor(
   return { evidence, proof, status };
 }
 /** The write lock serializes child creation and its retained origin before settlement. */
-async function childHistoryIsClear(tx: Prisma.TransactionClient, run: Run): Promise<boolean> {
+export async function childHistoryIsClear(
+  tx: Prisma.TransactionClient,
+  run: Run
+): Promise<boolean> {
   const workspaceId = run.reservedWorkspaceId;
   if (!workspaceId) {
     return false;
@@ -117,7 +120,7 @@ async function childHistoryIsClear(tx: Prisma.TransactionClient, run: Run): Prom
     select: { childWorkspaceId: true },
   }));
 }
-function assertAttempt(run: Run, expected: InitialAttempt) {
+export function assertAttempt(run: Run, expected: InitialAttempt) {
   const current = initialAttemptSchema.parse({
     runId: run.id,
     sessionId: run.reservedSessionId,

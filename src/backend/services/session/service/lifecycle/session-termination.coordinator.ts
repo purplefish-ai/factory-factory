@@ -358,8 +358,10 @@ export class SessionTerminationCoordinator {
   async interruptEventInitial(
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
-    expected?: ExpectedEventRuntime
+    expected?: ExpectedEventRuntime,
+    assertInitialCurrent?: () => void
   ): Promise<RuntimeStopEvidence> {
+    assertInitialCurrent?.();
     this.assertExpectedRuntime(sessionId, expected);
     const reservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
     if (!reservation) {
@@ -368,7 +370,14 @@ export class SessionTerminationCoordinator {
     const cancellation = new AbortController();
     try {
       const evidence = await withEventEvidenceDeadline(
-        this.performEventStop(sessionId, cause, cancellation.signal, expected, false),
+        this.performEventStop(
+          sessionId,
+          cause,
+          cancellation.signal,
+          expected,
+          false,
+          assertInitialCurrent
+        ),
         () => cancellation.abort(),
         10_000
       );
@@ -386,8 +395,10 @@ export class SessionTerminationCoordinator {
     cause: RuntimeStopEvidence['cause'],
     signal: AbortSignal,
     expected?: ExpectedEventRuntime,
-    allowPhysicalFallback = true
+    allowPhysicalFallback = true,
+    assertInitialCurrent?: () => void
   ): Promise<RuntimeStopEvidence | null> {
+    assertInitialCurrent?.();
     const authority = this.dependencies.eventAuthority;
     if (
       !(authority && (await this.isEventOwnedForStop(sessionId, authority, allowPhysicalFallback)))
@@ -395,6 +406,7 @@ export class SessionTerminationCoordinator {
       return null;
     }
     signal.throwIfAborted();
+    assertInitialCurrent?.();
     const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch((error) => {
       if (!allowPhysicalFallback) {
         throw error;
@@ -402,6 +414,7 @@ export class SessionTerminationCoordinator {
       return null;
     });
     signal.throwIfAborted();
+    assertInitialCurrent?.();
     this.assertExpectedRuntime(sessionId, expected);
     if (
       expected &&
@@ -433,8 +446,17 @@ export class SessionTerminationCoordinator {
         })
       : unknown;
     signal.throwIfAborted();
+    assertInitialCurrent?.();
     expected?.assertCurrent();
-    if (expected) {
+    if (assertInitialCurrent) {
+      await authority.recordStop(
+        sessionId,
+        { ...evidence, cause },
+        signal,
+        expected,
+        assertInitialCurrent
+      );
+    } else if (expected) {
       await authority.recordStop(sessionId, { ...evidence, cause }, signal, expected);
     } else {
       await authority.recordStop(sessionId, { ...evidence, cause }, signal);
