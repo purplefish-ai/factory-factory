@@ -67,7 +67,16 @@ it('drops interrupted, reordered, expired and oversized batches and accepts a fr
   assembler.reset(); // reconnect or session replacement
   expect(assembler.accept(frames[1])).toBeNull();
   expect(assembler.accept({ ...frames[0], byteLength: MAX_REPLAY_BYTES + 1 })).toBeNull();
-  expect(assembler.accept({ ...frames[0], chunk: 'invalid base64' })).toBeNull();
+  const firstFragment = frames.findIndex(
+    (frame) => frame.type === 'session_replay_chunk' && frame.encoding === 'event_fragment'
+  );
+  expect(firstFragment).toBeGreaterThan(0);
+  for (const frame of frames.slice(0, firstFragment)) {
+    expect(assembler.accept(frame)).toBeNull();
+  }
+  const fragment = frames[firstFragment]!;
+  expect(SessionReplayChunkSchema.safeParse(fragment).success).toBe(true);
+  expect(assembler.accept({ ...fragment, chunk: 'invalid base64' })).toBeNull();
   let replay: unknown;
   for (const frame of frames) {
     replay = assembler.accept(frame);
@@ -158,9 +167,20 @@ it('fragments the envelope when unusually large metadata cannot fit in a JSON ev
 it('rejects oversized JSON envelopes and resets before accepting another replay', () => {
   const frames = [...frameSessionReplay(ordinaryBatch())];
   const assembler = new SessionReplayAssembler();
-  expect(
-    assembler.accept({ ...frames[0], replayId: 'x'.repeat(MAX_REPLAY_FRAME_BYTES) })
-  ).toBeNull();
+  const batch = ordinaryBatch();
+  const oversized = {
+    type: 'session_replay_chunk',
+    replayId: 'oversized-json',
+    index: 0,
+    total: 1,
+    byteLength: Buffer.byteLength(JSON.stringify(batch)),
+    encoding: 'events',
+    batch: { ...batch, replayEvents: [] },
+    replayEvents: batch.replayEvents,
+  };
+  expect(SessionReplayChunkSchema.safeParse(oversized).success).toBe(true);
+  expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_REPLAY_FRAME_BYTES);
+  expect(assembler.accept(oversized)).toBeNull();
   for (const frame of frames.slice(1)) {
     expect(assembler.accept(frame)).toBeNull();
   }
@@ -230,4 +250,20 @@ it('rejects incomplete or mixed wire variants in both the producer contract and 
     expect(SessionReplayChunkSchema.safeParse(frame).success).toBe(false);
     expect(assembler.accept(frame)).toBeNull();
   }
+});
+
+it('rejects oversized direct legacy batches and resets interrupted assembly', () => {
+  const frames = [...frameSessionReplay(ordinaryBatch())];
+  const assembler = new SessionReplayAssembler();
+  expect(assembler.accept(frames[0])).toBeNull();
+  const oversized = ordinaryBatch();
+  expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_REPLAY_FRAME_BYTES);
+  expect(assembler.accept(oversized)).toBeNull();
+  for (const frame of frames.slice(1)) {
+    expect(assembler.accept(frame)).toBeNull();
+  }
+  for (const frame of frames.slice(0, -1)) {
+    expect(assembler.accept(frame)).toBeNull();
+  }
+  expect(assembler.accept(frames.at(-1))).toEqual(ordinaryBatch());
 });

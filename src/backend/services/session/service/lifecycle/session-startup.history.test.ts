@@ -282,7 +282,7 @@ it('owns a late hydration rejection after adapter initialization has failed', as
 it('does not resume a provider when stopped during concurrent history hydration', async () => {
   const reading = createDeferred<unknown>();
   loadHistory.mockReturnValue(reading.promise);
-  const { h, coordinator } = setup();
+  const { h, coordinator, domain } = setup();
   const startup = coordinator
     .getOrCreateSessionClient('session-1')
     .catch((error: unknown) => error);
@@ -291,6 +291,12 @@ it('does not resume a provider when stopped during concurrent history hydration'
   reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
   expect(await startup).toBeInstanceOf(SessionStartupCancelledError);
   expect(h.runtimeManager.getClient('session-1')).toBeUndefined();
+  expect(
+    domain
+      .getTranscriptSnapshot('session-1')
+      .every((message) => message.message?.type === 'session_lifecycle')
+  ).toBe(true);
+  expect(domain.isHistoryHydrated('session-1')).toBe(false);
   reservation?.release();
 });
 
@@ -478,3 +484,97 @@ it('keeps a serialized retry behind shared hydration when the first adapter init
   expect(replayed).toHaveBeenCalledOnce();
   expect(domain.getTranscriptSnapshot('session-1')[0]?.timestamp).toBe(history[0]?.timestamp);
 });
+
+it.each(['existing-thread', null])(
+  'discards old %s suppression after identity replacement during the caller check',
+  async (oldIdentity) => {
+    const { h, domain, processor, hydrateProviderHistory } = setup();
+    const context = await h.contextService.load('session-1');
+    if (!context) {
+      throw new Error('Missing test context');
+    }
+    context.session.providerSessionId = oldIdentity;
+    context.session.providerMetadata = {};
+    loadHistory.mockResolvedValue({ status: 'not_found' });
+    const checking = createDeferred<void>();
+    const checked = createDeferred<void>();
+    const suppression = vi.spyOn(processor, 'setReplaySuppression');
+    const barrier = createSessionHistoryBarrier(
+      'session-1',
+      context,
+      {
+        hydrateProviderHistory,
+        sessionDomainService: domain,
+        runtimeManager: h.runtimeManager,
+        acpEventProcessor: processor,
+      },
+      async () => {
+        checking.resolve();
+        await checked.promise;
+      }
+    );
+    const committing = barrier();
+    await checking.promise;
+    domain.resetProviderHistory('session-1', 'replacement');
+    processor.setReplaySuppression('session-1', true);
+    checked.resolve();
+    await committing;
+    expect(suppression).toHaveBeenCalledExactlyOnceWith('session-1', true);
+  }
+);
+
+it.each(['stop', 'source reset'])(
+  'starts fresh hydration after %s instead of joining an obsolete same-provider preparation',
+  async (invalidation) => {
+    const oldRead = createDeferred<unknown>();
+    const newRead = createDeferred<unknown>();
+    loadHistory.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(newRead.promise);
+    const { h, domain, hydrateProviderHistory } = setup();
+    const context = await h.contextService.load('session-1');
+    if (!context) {
+      throw new Error('Missing test context');
+    }
+    const dependencies = {
+      hydrateProviderHistory,
+      sessionDomainService: domain,
+      runtimeManager: h.runtimeManager,
+    };
+    let oldCurrent = true;
+    const old = prepareSessionHistoryForResume(
+      'session-1',
+      context,
+      dependencies,
+      undefined,
+      () => oldCurrent
+    );
+    if (invalidation === 'stop') {
+      oldCurrent = false;
+    } else {
+      domain.resetProviderHistory('session-1', 'existing-thread');
+    }
+    h.runtimeManager.getPendingClient.mockReturnValue(Promise.resolve(h.handle));
+    const fresh = prepareSessionHistoryForResume(
+      'session-1',
+      context,
+      dependencies,
+      undefined,
+      () => true
+    );
+    expect(fresh).not.toBe(old);
+    expect(loadHistory).toHaveBeenCalledTimes(2);
+    oldRead.resolve({ status: 'loaded', history, filePath: '/tmp/old.jsonl' });
+    await expect(old).resolves.toBe(false);
+    expect(domain.isHistoryHydrated('session-1')).toBe(false);
+    const joining = prepareSessionHistoryForResume(
+      'session-1',
+      context,
+      dependencies,
+      undefined,
+      () => true
+    );
+    expect(joining).toBe(fresh);
+    newRead.resolve({ status: 'loaded', history, filePath: '/tmp/fresh.jsonl' });
+    await expect(fresh).resolves.toBe(true);
+    expect(domain.getTranscriptSnapshot('session-1')[0]?.timestamp).toBe(history[0]?.timestamp);
+  }
+);
