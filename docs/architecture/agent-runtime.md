@@ -678,10 +678,17 @@ the new identity. After backend restart, the reconciled column is the
 authoritative history ID.
 
 Startup buffers at most 10,000 ACP events while provider creation and identity
-persistence are pending. Overflow cancels startup and terminates its candidate;
-it never installs a runtime with a silently truncated transcript. Rollover
-fencing rejects further reconciliation after overflow, and a later startup can
-retry.
+persistence are pending. During provider history load, transcript events already
+covered by hydrated history are suppressed before entering this buffer. Raw
+logging and native work tracking still receive the replay, while configuration,
+commands, usage, plans, notices and subagent state continue through startup.
+Native child replay retains all transcript updates within its existing limits
+but emits only creation/completion invalidations until replay finishes, avoiding
+one buffered invalidation per child output chunk. Live invalidations continue
+normally afterward. Suppression ends before a failed load starts a replacement
+conversation. Overflow cancels startup and terminates its candidate; it never
+installs a runtime with a silently truncated transcript. Rollover fencing
+rejects further reconciliation after overflow, and a later startup can retry.
 
 ### Session prompts
 

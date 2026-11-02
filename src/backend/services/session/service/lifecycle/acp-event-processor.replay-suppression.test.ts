@@ -37,6 +37,7 @@ function setup(working = false) {
     domain,
     emitDelta,
     processor,
+    handler,
     sendUpdate,
     startPrompt: () => {
       promptInFlight = true;
@@ -45,6 +46,48 @@ function setup(working = false) {
 }
 
 describe('AcpEventProcessor replay suppression', () => {
+  it.each([
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Old prompt' } },
+    { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Old reply' } },
+    { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'Old thought' } },
+    { sessionUpdate: 'tool_call', toolCallId: 'old-tool', title: 'Read', status: 'pending' },
+    { sessionUpdate: 'tool_call_update', toolCallId: 'old-tool', status: 'completed' },
+  ] satisfies SessionUpdate[])(
+    'omits hydrated $sessionUpdate before startup buffering and retains fallback replay',
+    (update) => {
+      const { domain, handler, processor } = setup();
+      const event = { type: 'acp_session_update' as const, update };
+      expect(handler.shouldSuppressReplayEvent?.(SESSION_ID, event)).toBe(true);
+      processor.setReplaySuppression(SESSION_ID, false);
+      expect(handler.shouldSuppressReplayEvent?.(SESSION_ID, event)).toBe(false);
+      domain.clearAllSessions();
+    }
+  );
+
+  it.each([
+    { sessionUpdate: 'usage_update', used: 123, size: 1000 },
+    { sessionUpdate: 'plan', entries: [] },
+    { sessionUpdate: 'available_commands_update', availableCommands: [] },
+    { sessionUpdate: 'config_option_update', configOptions: [] },
+    { sessionUpdate: 'current_mode_update', currentModeId: 'agent' },
+    { sessionUpdate: 'session_info_update', title: 'Saved title' },
+  ] satisfies SessionUpdate[])(
+    'keeps $sessionUpdate in startup while replay is suppressed',
+    (update) => {
+      const { domain, handler } = setup();
+      expect(
+        handler.shouldSuppressReplayEvent?.(SESSION_ID, { type: 'acp_session_update', update })
+      ).toBe(false);
+      expect(
+        handler.shouldSuppressReplayEvent?.(SESSION_ID, {
+          type: 'acp_task_status_changed',
+          active: true,
+        })
+      ).toBe(false);
+      domain.clearAllSessions();
+    }
+  );
+
   it('restores task snapshots sent while attaching provider history', () => {
     const { domain, sendUpdate } = setup();
     const entries = [

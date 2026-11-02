@@ -54,6 +54,8 @@ export type AcpRuntimeEventHandlers = {
     event: AcpRuntimeEvent,
     configSource?: AcpConfigObservationSource
   ) => void;
+  /** Omit transcript replay already hydrated by the owner, before startup buffering. */
+  shouldSuppressReplayEvent?: (sessionId: string, event: AcpRuntimeEvent) => boolean;
   onAcpLog?: (sessionId: string, payload: Record<string, unknown>) => void;
   /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
   permissionBridge?: AcpPermissionBridge;

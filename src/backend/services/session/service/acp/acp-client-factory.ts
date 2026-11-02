@@ -158,18 +158,25 @@ export class AcpClientFactory {
       const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
       const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
       const stream = ndJsonStream(output, input);
+      let replayingHistory = Boolean(options.resumeProviderSessionId);
+      const onEvent = (sid: string, event: AcpRuntimeEvent) => {
+        if (replayingHistory && handlers.shouldSuppressReplayEvent?.(sid, event)) {
+          return;
+        }
+        handlers.onAcpEvent?.(sid, event);
+      };
       const nativeSessionTracker = new AcpNativeSessionTracker({
         groupCodexGenerations: isCodex,
         onSubagentsChanged: (event) =>
-          handlers.onAcpEvent?.(sessionId, {
+          onEvent(sessionId, {
             type: 'acp_subagents_changed',
             subagentId: event.subagentId,
             change: event.change,
           }),
         onTaskStatusChanged: (active) =>
-          handlers.onAcpEvent?.(sessionId, { type: 'acp_task_status_changed', active }),
+          onEvent(sessionId, { type: 'acp_task_status_changed', active }),
         onSubagentToolUpdate: (subagentId, update) =>
-          handlers.onAcpEvent?.(sessionId, {
+          onEvent(sessionId, {
             type: 'acp_subagent_tool_update',
             subagentId,
             update,
@@ -188,12 +195,6 @@ export class AcpClientFactory {
         ),
       };
 
-      const acpEventHandler = handlers.onAcpEvent;
-      const onEvent = acpEventHandler
-        ? (sid: string, event: AcpRuntimeEvent) => acpEventHandler(sid, event)
-        : (_sid: string, _event: AcpRuntimeEvent) => {
-            logger.debug('ACP event received but no handler registered', { sessionId });
-          };
       const connection = createAcpConnection(
         new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
         normalizedStream
@@ -251,6 +252,7 @@ export class AcpClientFactory {
             options,
             agentCapabilities,
             () => {
+              replayingHistory = false;
               nativeSessionTracker.resetSession();
               params.discardFailedResumeReplay?.();
             }
@@ -264,6 +266,7 @@ export class AcpClientFactory {
         stopSignal.promise,
       ]);
 
+      replayingHistory = false;
       nativeSessionTracker.setRootSessionId(
         toAcpSessionId(options.provider, sessionInfo.providerSessionId)
       );

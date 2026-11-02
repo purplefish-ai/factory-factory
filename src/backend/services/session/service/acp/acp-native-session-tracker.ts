@@ -685,6 +685,11 @@ export class AcpNativeSessionTracker {
   }
 
   private changed(subagentId: string, change: SubagentsChangedParams['change']): void {
+    // Startup publishes the created/completed invalidations after history is loaded.
+    // Per-chunk invalidations add no state and can overflow its bounded event buffer.
+    if (this.replayingHistory && change === 'updated') {
+      return;
+    }
     if (this.rootSessionId) {
       this.callbacks.onSubagentsChanged?.({ sessionId: this.rootSessionId, subagentId, change });
     }
