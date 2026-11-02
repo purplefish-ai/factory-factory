@@ -49,7 +49,11 @@ calls using existing authentication; they consume the account's usage allowance.
 Several workspace concerns were split out of the `Workspace` table into 1:1 side
 tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot
-wire, the v4 export format and the client are unchanged.
+wire aliases and v4 export format retain compatibility. PR reads additionally
+expose the derived `selectedPrId`/`selectedPr` contract described in
+[pull requests](pull-requests.md#pr-event-delivery-destinations). The selected
+association's facts stay separate from the authoritative `prs`/`prSummary`
+collection; selection is never persisted as a primary preference.
 
 Worktree cleanup matches Git's registered paths against the real worktree base
 directory, so a symlinked base still removes Git metadata. Branch-resume

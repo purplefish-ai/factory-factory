@@ -84,3 +84,41 @@ export const OverflowReady: Story = { args: { renderAsMenuItem: true } };
 export const OverflowNoWorktree: Story = {
   args: { renderAsMenuItem: true, workspace: { ...workspace, worktreePath: null } },
 };
+
+export const OpposingPrFacts: Story = {
+  args: {
+    workspace: {
+      ...workspace,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prs: [
+        {
+          id: 'a',
+          url: 'https://github.com/example/repo/pull/42',
+          number: 42,
+          title: 'Approved selection',
+          headRefName: 'feature',
+          baseRefName: 'main',
+          state: 'APPROVED',
+          reviewState: 'APPROVED',
+          ciStatus: 'SUCCESS',
+          hasMergeConflict: false,
+          syncedAt: null,
+        },
+        {
+          id: 'b',
+          url: 'https://github.com/example/repo/pull/43',
+          number: 43,
+          title: 'Sibling needs changes',
+          headRefName: 'sibling',
+          baseRefName: 'main',
+          state: 'CHANGES_REQUESTED',
+          reviewState: 'CHANGES_REQUESTED',
+          ciStatus: 'FAILURE',
+          hasMergeConflict: true,
+          syncedAt: null,
+        },
+      ],
+    },
+  },
+};

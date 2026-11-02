@@ -136,10 +136,10 @@ export function WorkspaceCiStatus({ workspace }: { workspace: WorkspaceHeaderWor
     <div className="flex items-center gap-2">
       <CiStatusChip
         ciState={workspace.sidebarStatus.ciState}
-        prState={workspace.prState}
+        prState={workspace.prSummary.state}
         size="md"
       />
-      <PrStateBadge prState={workspace.prState} size="md" />
+      <PrStateBadge prState={workspace.prSummary.state} size="md" />
     </div>
   );
 }
