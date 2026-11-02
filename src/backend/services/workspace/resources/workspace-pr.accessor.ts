@@ -6,6 +6,7 @@ import type {
   WorkspacePRIdentity,
 } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
+import { CLOSED_PR_POLL_INTERVAL_MS } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
 import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
 import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
@@ -455,9 +456,27 @@ class WorkspacePRAccessor {
       where: {
         detachedAt: null,
         workspace: { status: 'READY' },
-        OR: [
-          { syncedAt: null },
-          { syncedAt: { lt: new Date(Date.now() - staleThresholdMinutes * 60_000) } },
+        AND: [
+          {
+            OR: [
+              { syncedAt: null },
+              { syncedAt: { lt: new Date(Date.now() - staleThresholdMinutes * 60_000) } },
+            ],
+          },
+          {
+            OR: [
+              { state: { notIn: ['MERGED', 'CLOSED'] } },
+              // Legacy snapshots have not committed a normalized terminal transition.
+              { observation: { equals: PrismaValues.AnyNull } },
+              {
+                state: 'CLOSED',
+                OR: [
+                  { syncedAt: null },
+                  { syncedAt: { lte: new Date(Date.now() - CLOSED_PR_POLL_INTERVAL_MS) } },
+                ],
+              },
+            ],
+          },
         ],
       },
       include: { workspace: { include: { project: true } } },
