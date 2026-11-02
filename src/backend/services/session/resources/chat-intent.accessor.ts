@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
@@ -305,12 +306,24 @@ export class ChatIntentAccessor {
 
 export const chatIntentAccessor = new ChatIntentAccessor(() => prisma);
 
+export function validateRecoveryChatIntentFingerprints(data: DurableRecovery): void {
+  for (const row of data.chatIntent) {
+    if (fingerprint(submittedSchema.parse(row.submitted)) !== row.fingerprint) {
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        `Imported chat intent fingerprint disagrees with submitted content: ${row.messageId}`
+      );
+    }
+  }
+}
+
 /** Additive recovery preserves whole provider effects, never borrows local members. */
 export async function restoreRecoveryChatIntents(
   tx: Prisma.TransactionClient,
   data: DurableRecovery,
   sessions: ReadonlySet<string>
 ) {
+  validateRecoveryChatIntentFingerprints(data);
   const attempts = await restoreRecoveryAttempts(tx, data, sessions);
   for (const row of data.chatIntent) {
     if (

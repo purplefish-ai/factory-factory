@@ -1,6 +1,7 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { validateRecoverySourceProof } from '@/backend/services/agent-definition';
 import { prismaModelNames, type PrismaModelName } from '@/backend/services/registry';
+import { validateRecoveryChatIntentFingerprints } from '@/backend/services/session';
 import { validateRecoveryIdentityUniqueness } from '@/backend/services/settings';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { validateRecoveryGraph } from './data-backup-graph-validation';
@@ -246,6 +247,7 @@ export function validateRecoveryManifest(input: ExportData) {
   validateRecoveryJsonStorage(input.data);
   if (input.data.durable) {
     validateRecoverySourceProof(input.data.durable);
+    validateRecoveryChatIntentFingerprints(input.data.durable);
   }
   const declared = new Set(Object.keys(input.meta.recovery?.models ?? {}));
   if (

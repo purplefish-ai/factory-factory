@@ -8,6 +8,17 @@ import {
 import { submittedIntentSchema } from '@/shared/schemas/chat-intent.schema';
 import { durableRecoverySchema } from '@/shared/schemas/durable-recovery.schema';
 
+const database = vi.hoisted(() => ({
+  prisma: undefined as import('@prisma-gen/client').PrismaClient | undefined,
+}));
+vi.mock('@/backend/db', () => ({
+  get prisma() {
+    if (!database.prisma) {
+      throw new Error('Missing recovery DB');
+    }
+    return database.prisma;
+  },
+}));
 let db: IntegrationDatabase;
 let Accessor: typeof import('../../resources/chat-intent.accessor').ChatIntentAccessor;
 let restore: typeof import('../../resources/chat-intent.accessor').restoreRecoveryChatIntents;
@@ -36,6 +47,7 @@ const message = {
 };
 beforeAll(async () => {
   db = await createIntegrationDatabase();
+  database.prisma = db.prisma;
   vi.stubEnv('BASE_DIR', db.tempDir);
   ({ ChatIntentAccessor: Accessor, restoreRecoveryChatIntents: restore } = await vi.importActual(
     '../../resources/chat-intent.accessor'
@@ -182,3 +194,22 @@ it.each(['submitted', 'desired', 'effectiveSettings'])(
     expect(await db.prisma.promptDispatchAttempt.count()).toBe(0);
   }
 );
+
+it('rejects a corrupted canonical fingerprint from a real producer export before importing parents', async () => {
+  await producerSnapshot();
+  const { dataBackupService } = await vi.importActual<
+    typeof import('@/backend/orchestration/data-backup.service')
+  >('@/backend/orchestration/data-backup.service');
+  const backup = await dataBackupService.exportData('test');
+  const intent = backup.data.durable?.chatIntent[0];
+  if (!intent) {
+    throw new Error('Missing accepted exported intent');
+  }
+  intent.fingerprint = '0'.repeat(64);
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await expect(dataBackupService.importData(backup)).rejects.toThrow(/fingerprint/i);
+  expect(await db.prisma.project.count()).toBe(0);
+  expect(await db.prisma.chatIntent.count()).toBe(0);
+  expect(await db.prisma.promptDispatchAttempt.count()).toBe(0);
+});

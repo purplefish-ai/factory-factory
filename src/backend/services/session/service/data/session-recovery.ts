@@ -16,3 +16,5 @@ export async function restoreRetainedSessionRecovery(
   await restoreRecoverySessionOrigins(tx, data, ids);
   await restoreRecoveryLifecycleEvents(tx, data, ids);
 }
+
+export { validateRecoveryChatIntentFingerprints } from '../../resources/chat-intent.accessor';

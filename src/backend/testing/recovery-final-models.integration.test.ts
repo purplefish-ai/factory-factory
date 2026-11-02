@@ -104,7 +104,9 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
       id: 42,
       sessionId: 'session',
       messageId: 'message',
-      fingerprint: 'fingerprint',
+      fingerprint: createHash('sha256')
+        .update(JSON.stringify({ ...submitted, timestamp: undefined }))
+        .digest('hex'),
       submitted,
       desired: { ...settings, selectedModel: 'later' },
       revision: 3,
@@ -117,7 +119,9 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
       id: 43,
       sessionId: 'session',
       messageId: 'waiting',
-      fingerprint: 'waiting-fingerprint',
+      fingerprint: createHash('sha256')
+        .update(JSON.stringify({ ...submitted, id: 'waiting', timestamp: undefined }))
+        .digest('hex'),
       submitted: { ...submitted, id: 'waiting' },
       desired: settings,
       status: 'queued',
