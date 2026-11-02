@@ -303,7 +303,10 @@ it.each(
             .mockRejectedValueOnce(new Error('interrupted before publication'))
         : undefined;
     await close(interrupted.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     const original = await db.prisma.closedSession.findFirstOrThrow();
     expect(original.archiveState).toBe(phase === 'pending' ? 'PENDING' : 'COMPLETE');
     const bytes =
@@ -363,7 +366,10 @@ it.each([
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     expect(await db.prisma.agentSession.count()).toBe(1);
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const originalBytes =
@@ -413,6 +419,7 @@ it('recovers a real atomic writer exit immediately before rename and removes its
     throw new Error('writer exited before rename');
   });
   await close(runtime(true).finalizer);
+  expect(crash).toHaveBeenCalledOnce();
   crash.mockRestore();
   const pending = await db.prisma.closedSession.findFirstOrThrow();
   const directory = paths.closedSessionWorkspaceDirectory('workspace');
@@ -452,7 +459,10 @@ it.each(['pending', 'complete'])(
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const bytes =
       original.pendingTranscript ??
@@ -499,7 +509,10 @@ it.each(['pending', 'complete'])(
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const bytes =
       original.pendingTranscript ??

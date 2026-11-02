@@ -26,7 +26,7 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
-const mockMaintainArchives = vi.fn(async (_signal?: AbortSignal) => undefined);
+const mockMaintainArchives = vi.fn<(signal?: AbortSignal) => Promise<void>>(async () => undefined);
 const mockStopArchives = vi.fn(async () => undefined);
 const mockInitializeWorktree = vi.fn();
 const mockRecoverStaleProvisioningWorkspace = vi.fn();
@@ -64,9 +64,60 @@ describe('ReconciliationService', () => {
   it('maintains session archives during cleanup and closes their cursors on stop', async () => {
     reconciliationService.startPeriodicCleanup();
     await reconciliationService.cleanupOrphans();
-    expect(mockMaintainArchives).toHaveBeenCalledWith(undefined);
+    expect(mockMaintainArchives).toHaveBeenCalledWith(expect.any(AbortSignal));
     await reconciliationService.stopPeriodicCleanup();
     expect(mockStopArchives).toHaveBeenCalled();
+  });
+
+  it('runs archive recovery even when terminal recovery rejects', async () => {
+    reconciliationService.startPeriodicCleanup();
+    vi.mocked(terminalSessionService.recoverOrphanedSessions).mockRejectedValueOnce(
+      new Error('terminal failed')
+    );
+    await expect(reconciliationService.cleanupOrphans()).rejects.toThrow('terminal failed');
+    expect(mockMaintainArchives).toHaveBeenCalledOnce();
+  });
+
+  it('aborts and joins a direct startup cleanup before shutdown returns', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockMaintainArchives.mockImplementationOnce(() => gate);
+    reconciliationService.startPeriodicCleanup();
+    const cleanup = reconciliationService.cleanupOrphans();
+    await vi.waitFor(() => expect(mockMaintainArchives).toHaveBeenCalledOnce());
+    const signal = mockMaintainArchives.mock.calls[0]?.[0];
+    let stopped = false;
+    const stop = reconciliationService.stopPeriodicCleanup().then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    try {
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
+      expect(stopped).toBe(false);
+      expect(mockStopArchives).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await Promise.allSettled([cleanup, stop]);
+    }
+    expect(stopped).toBe(true);
+    expect(mockStopArchives).toHaveBeenCalledOnce();
+  });
+
+  it('fails explicitly when the archive recovery bridge is missing', async () => {
+    const bridge = Reflect.get(reconciliationService, '_archives');
+    Reflect.set(reconciliationService, '_archives', null);
+    reconciliationService.startPeriodicCleanup();
+    try {
+      await expect(reconciliationService.cleanupOrphans()).rejects.toThrow(
+        'archive bridge not configured'
+      );
+    } finally {
+      Reflect.set(reconciliationService, '_archives', bridge);
+    }
   });
 
   describe('reconcile', () => {

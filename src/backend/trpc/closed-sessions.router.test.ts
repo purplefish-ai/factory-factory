@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockReadFile = vi.hoisted(() => vi.fn());
-const mockUnlink = vi.hoisted(() => vi.fn());
 const mockSessionDataService = vi.hoisted(() => ({
   findClosedSessionsByWorkspaceId: vi.fn(),
   findClosedSessionByIdWithWorkspace: vi.fn(),
@@ -11,7 +10,6 @@ const mockSessionDataService = vi.hoisted(() => ({
 
 vi.mock('node:fs/promises', () => ({
   readFile: (...args: unknown[]) => mockReadFile(...args),
-  unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
 import { closedSessionsRouter } from './closed-sessions.trpc';
@@ -134,31 +132,30 @@ describe('closedSessionsRouter', () => {
     );
   });
 
-  it('deletes closed sessions and best-effort deletes transcript files', async () => {
+  it('delegates deletion and artifact ownership to the session data service', async () => {
     mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
       id: 'closed-1',
       transcriptPath: 'transcripts/closed-1.json',
       workspace: { worktreePath: '/tmp/worktree' },
     });
     mockSessionDataService.deleteClosedSession.mockResolvedValue(undefined);
-    mockUnlink.mockResolvedValue(undefined);
     const caller = createCaller();
 
     await expect(caller.delete({ id: 'closed-1' })).resolves.toEqual({ success: true });
     expect(mockSessionDataService.deleteClosedSession).toHaveBeenCalledWith('closed-1');
   });
 
-  it('returns success even when transcript unlink fails', async () => {
+  it('does not report success when the deletion owner rejects', async () => {
     mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
       id: 'closed-1',
       transcriptPath: 'transcripts/closed-1.json',
       workspace: { worktreePath: '/tmp/worktree' },
     });
-    mockSessionDataService.deleteClosedSession.mockResolvedValue(undefined);
-    mockUnlink.mockRejectedValue(new Error('permission denied'));
+    mockSessionDataService.deleteClosedSession.mockRejectedValue(new Error('database unavailable'));
     const caller = createCaller();
 
-    await expect(caller.delete({ id: 'closed-1' })).resolves.toEqual({ success: true });
+    await expect(caller.delete({ id: 'closed-1' })).rejects.toThrow('database unavailable');
+    expect(mockSessionDataService.deleteClosedSession).toHaveBeenCalledExactlyOnceWith('closed-1');
   });
 
   it('throws NOT_FOUND when deleting an unknown closed session', async () => {

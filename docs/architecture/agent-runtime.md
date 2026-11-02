@@ -111,10 +111,14 @@ including mixed PR/human prompts. Codex event projections also retain the
 matching native response prompt when it supplies the image/block evidence.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
-its digest before any file write. Atomic file writing and hash verification
-happen outside database transactions. Only then does a database-only completion
-write publish `COMPLETE` and clear the pending payload. Files are immutable
-artifact generations named by row ID and digest:
+its digest before any file write. Archive writes opt into syncing temporary
+bytes before rename, then the containing directories through `BASE_DIR`; this
+also covers directory entries created by concurrent writers. Sync failures
+retain pending proof. Other atomic-file callers keep their existing defaults.
+Atomic file writing and hash verification happen outside database transactions.
+Only then does a database-only completion write publish `COMPLETE` and clear the
+pending payload. SQLite constrains the state to `PENDING` or `COMPLETE`. Files
+are immutable artifact generations named by row ID and digest:
 `BASE_DIR/closed-sessions/<sha256(workspaceId)>/<id>.<transcriptHash>.json`. A
 deleted and re-reserved logical archive key gets another row ID and file; a
 stale writer can neither overwrite nor remove its replacement. Failed completion

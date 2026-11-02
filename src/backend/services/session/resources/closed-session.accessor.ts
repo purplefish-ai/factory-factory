@@ -116,6 +116,14 @@ class PrismaClosedSessionAccessor {
     });
   }
 
+  findPendingForSession(sessionId: string, limit = 50) {
+    return prisma.closedSession.findMany({
+      where: { sessionId, archiveState: 'PENDING' },
+      orderBy: { id: 'asc' },
+      take: limit,
+    });
+  }
+
   cleanupDeletedWorkspace(workspaceId: string, remove: () => void) {
     return prisma.$transaction(
       async (tx) => {
@@ -162,7 +170,7 @@ class PrismaClosedSessionAccessor {
     });
   }
 
-  findMaintenancePending(afterId?: string) {
+  findMaintenancePending(afterId?: string): Promise<ClosedSession[]> {
     return prisma.closedSession.findMany({
       where: { archiveState: 'PENDING', ...(afterId ? { id: { gt: afterId } } : {}) },
       orderBy: { id: 'asc' },
