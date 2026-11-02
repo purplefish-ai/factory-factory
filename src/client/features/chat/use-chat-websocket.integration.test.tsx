@@ -239,6 +239,57 @@ async function mount(initialCapabilities = capabilities) {
   };
 }
 
+it('ignores stale frame-limit errors while the current load is pending', async () => {
+  vi.useFakeTimers();
+  const test = await mount();
+  try {
+    await act(() => vi.advanceTimersByTime(300));
+    await act(() =>
+      test.socket.receive({
+        type: 'error',
+        code: 413,
+        loadRequestId: 'older-load',
+        message: 'Old frame rejected',
+      })
+    );
+    expect(test.chat.sessionStatus.phase).toBe('loading');
+    expect(test.chat.messages).toHaveLength(0);
+    await act(() => vi.advanceTimersByTime(10_000));
+    expect(
+      test.socket.sent.filter((data) => JSON.parse(data).type === 'load_session')
+    ).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('settles an oversized correlated load without retrying or enabling unhydrated controls', async () => {
+  vi.useFakeTimers();
+  const test = await mount();
+  const loadRequestId = test.socket.sent
+    .map((data) => outboundSchema.parse(JSON.parse(data)))
+    .findLast((message) => message.type === 'load_session')?.loadRequestId;
+  try {
+    await act(() =>
+      test.socket.receive({
+        type: 'error',
+        code: 413,
+        loadRequestId,
+        message: 'Replay exceeds frame limit; raise WEBSOCKET_MAX_FRAME_BYTES and reconnect.',
+      })
+    );
+    await act(() => vi.advanceTimersByTime(40_000));
+    expect(test.chat.sessionStatus.phase).not.toBe('loading');
+    expect(test.chat.controlsHydrated).toBe(false);
+    expect(
+      test.socket.sent.filter((data) => JSON.parse(data).type === 'load_session')
+    ).toHaveLength(1);
+    expect(BrowserSocket.sockets).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 beforeEach(() => {
   sessionStorage.clear();
   BrowserSocket.sockets = [];

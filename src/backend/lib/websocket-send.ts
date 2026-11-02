@@ -8,7 +8,6 @@
  * broadcast.
  */
 
-import { constants as bufferConstants } from 'node:buffer';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from './error-utils';
@@ -91,14 +90,13 @@ export function sendStreamOutput(
 
 /** Ordinary queued data is bounded independently of a full baseline/replay. */
 export const MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES = 1024 * 1024;
-// JSON.stringify already requires a Node string. Three UTF-8 bytes per UTF-16
-// code unit covers every string it can produce, without imposing a new history
-// or project-size limit that would make the same baseline fail every reconnect.
-export const MAX_WEBSOCKET_STATEFUL_FRAME_BYTES = 3 * bufferConstants.MAX_STRING_LENGTH;
+export const MAX_WEBSOCKET_STATEFUL_FRAME_BYTES = 32 * 1024 * 1024;
 export const WEBSOCKET_RETIRE_DEADLINE_MS = 5000;
 
 export interface StatefulSendOptions {
   allowLargeFrame?: boolean;
+  maxFrameBytes?: number;
+  onFlushed?: () => void;
 }
 
 const retiredSockets = new WeakSet<WebSocket>();
@@ -106,6 +104,22 @@ const largeFrames = new WeakMap<
   WebSocket,
   { bytes: number; queuedBytes: number; cleanup: () => void }
 >();
+
+function exceedsBacklog(
+  bufferedAmount: number,
+  bytes: number,
+  large: { bytes: number; queuedBytes: number } | undefined,
+  allowLarge: boolean
+): boolean {
+  if (allowLarge) {
+    return false;
+  }
+  return (
+    bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES ||
+    bufferedAmount + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES + (large?.bytes ?? 0) ||
+    (large !== undefined && large.queuedBytes + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES)
+  );
+}
 
 function retireStatefulViewer(ws: WebSocket, logger: SendErrorLogger): void {
   if (retiredSockets.has(ws)) {
@@ -161,16 +175,16 @@ export function sendStateful(
     largeFrames.get(ws)?.cleanup();
   }
   const bytes = Buffer.byteLength(message);
+  if (
+    options.allowLargeFrame &&
+    bytes > (options.maxFrameBytes ?? MAX_WEBSOCKET_STATEFUL_FRAME_BYTES)
+  ) {
+    return false;
+  }
   let large = largeFrames.get(ws);
   const isLargeFrame = bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;
-  const allowLarge = options.allowLargeFrame && ws.bufferedAmount === 0;
-  if (
-    bytes > MAX_WEBSOCKET_STATEFUL_FRAME_BYTES ||
-    (isLargeFrame && !allowLarge) ||
-    (!allowLarge &&
-      (ws.bufferedAmount + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES + (large?.bytes ?? 0) ||
-        (large && large.queuedBytes + bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES)))
-  ) {
+  const allowLarge = options.allowLargeFrame === true && ws.bufferedAmount === 0;
+  if (exceedsBacklog(ws.bufferedAmount, bytes, large, allowLarge)) {
     retireStatefulViewer(ws, logger);
     return false;
   }
@@ -191,6 +205,7 @@ export function sendStateful(
   try {
     ws.send(message, (error) => {
       ownLargeFrame?.cleanup();
+      options.onFlushed?.();
       if (error) {
         logger.error(`Failed to send ${description}`, toError(error));
         retireStatefulViewer(ws, logger);
@@ -198,6 +213,7 @@ export function sendStateful(
     });
     return !retiredSockets.has(ws);
   } catch (error) {
+    options.onFlushed?.();
     logger.error(`Failed to send ${description}`, toError(error));
     retireStatefulViewer(ws, logger);
     return false;

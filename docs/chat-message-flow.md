@@ -160,18 +160,39 @@ viewers and application work continue; reconnect runs the existing correlated
 load/replay or current full-snapshot path.
 
 A full snapshot, session snapshot, or replay batch can exceed the ordinary
-backlog budget on an empty connection. Its separate frame ceiling is three times
-Node's `buffer.constants.MAX_STRING_LENGTH` bytes, covering every UTF-8 string
-the existing JSON serializer can produce. This deliberately preserves the
-existing supported history/project sizes rather than creating a smaller limit
-that rejects the same baseline on every reconnect. The policy bounds
-accumulation, not the size or serialization cost of one existing authoritative
-state. A frame's write callback releases its allowance. While it is pending,
-completion metadata and subsequent deltas share an additional 1 MiB budget; a
-second large frame is not admitted to a nonempty queue. Close, successful flush,
-and retirement clean up the frame listener; close or deadline expiry cleans up
-the termination timer and listener. Snapshot deltas still wait for the full
-baseline to be admitted, and replay keeps its existing loadRequestId.
+backlog budget on an empty connection. `WEBSOCKET_MAX_FRAME_BYTES`, read through
+`configService`, sets its absolute UTF-8 frame ceiling: **32 MiB by default**
+(33554432 bytes). Valid overrides are integer byte counts from 1 MiB through 256
+MiB, inclusive; missing or invalid values use the default. This permits
+realistic large history/project baselines while bounding queued state per
+viewer. Serialization still happens before measurement, so the limit bounds
+outgoing frames rather than the cost of constructing authoritative state.
+
+Load correlation IDs and snapshot project selectors are bounded to 128 UTF-16
+code units at admission, so even Unicode identifiers fit the small error
+envelope without losing correlation. An excessive replay returns a small `error`
+with code 413 and the requesting `loadRequestId`; the client ends loading,
+cancels automatic load retries and keeps unhydrated controls disabled. Other
+already-hydrated viewers keep their live updates. An excessive project baseline
+returns `snapshot_error` with `FRAME_TOO_LARGE`; the client shows its
+explanation and refreshes via the existing HTTP fallback. Both keep the socket
+open and suppress subsequent baseline-dependent updates to the viewer missing
+its baseline. Independent command replies and workspace notifications remain
+available. Only a baseline accepted by that viewer can release the guard. They
+do not reconnect to the same rejected state. Increase the configured limit
+within its supported range, restart the backend, and explicitly reconnect to
+retry; snapshots remain available over HTTP. A successfully accepted baseline
+releases that guard.
+
+A retry of the same loadRequestId while its large replay is still queued reuses
+that pending baseline and ordered deltas; it does not enqueue a duplicate large
+frame or interrupt a valid slow load. A large frame's write callback releases
+its allowance. While it is pending, completion metadata and subsequent deltas
+share an additional 1 MiB budget; a second large frame is not admitted to a
+nonempty queue. Close, successful flush, and retirement clean up the frame
+listener; close or deadline expiry cleans up the termination timer and listener.
+Snapshot deltas still wait for the full baseline to be admitted, and replay
+keeps its existing loadRequestId.
 
 Passive loading does not initialize an ACP runtime. A stored initial message may
 subsequently be enqueued and dispatched through the normal message path.

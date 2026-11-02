@@ -208,6 +208,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             sendChatError(ws, dbSessionId, 'Invalid message format');
             return;
           }
+          if (message.type === 'load_session') {
+            chatConnectionRegistry.expectReplay(ws, message.loadRequestId);
+          }
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }

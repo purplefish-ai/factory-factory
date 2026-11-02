@@ -25,6 +25,25 @@ const logger = { error: vi.fn() };
 afterEach(() => vi.useRealTimers());
 
 describe('stateful viewer delivery', () => {
+  it.each([
+    ['below', 5, true],
+    ['at', 4, true],
+    ['above', 3, false],
+  ] as const)(
+    'measures Unicode frame bytes %s configured ceiling without closing on oversize',
+    (_name, maxFrameBytes, accepted) => {
+      const viewer = new Viewer();
+      expect(
+        sendStateful(viewer.socket(), 'éé', logger, 'baseline', {
+          allowLargeFrame: true,
+          maxFrameBytes,
+        })
+      ).toBe(accepted);
+      expect(viewer.sent).toEqual(accepted ? ['éé'] : []);
+      expect(viewer.close).not.toHaveBeenCalled();
+    }
+  );
+
   it('retires a viewer at sustained backlog and never resumes a missed delta', () => {
     vi.useFakeTimers();
     const viewer = new Viewer();

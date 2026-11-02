@@ -257,6 +257,7 @@ describe('executeSessionLoad', () => {
       return { ws, frames };
     };
     const first = connect();
+    registry.expectReplay(first.ws as unknown as WebSocket, 'first');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
     expect(first.frames).toHaveLength(3);
     expect(first.frames[0]).toMatchObject({
@@ -264,13 +265,16 @@ describe('executeSessionLoad', () => {
       loadRequestId: 'first',
       replayEvents: [{ type: 'assistant_text_delta', text: replayText }],
     });
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
+    expect(first.frames).toHaveLength(5);
     first.ws.bufferedAmount += 1024 * 1024;
     registry.broadcastToSession('s1', {
       type: 'session_delta',
       data: { type: 'slash_commands', slashCommands: [] },
     });
-    expect(first.frames).toHaveLength(3);
+    expect(first.frames).toHaveLength(5);
     const second = connect();
+    registry.expectReplay(second.ws as unknown as WebSocket, 'second');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
     expect(second.frames).toHaveLength(3);
     expect(second.frames[0]).toMatchObject({

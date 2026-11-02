@@ -7,6 +7,9 @@ import {
 } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
+const { mockToastError } = vi.hoisted(() => ({ mockToastError: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { error: mockToastError } }));
+
 // =============================================================================
 // Mocks (vi.mock calls are hoisted above imports by vitest)
 // =============================================================================
@@ -122,6 +125,21 @@ describe('useProjectSnapshotSync', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('keeps HTTP fallback and displays a bounded snapshot load error without changing cache', () => {
+    useProjectSnapshotSync('proj-1');
+    mockListInvalidate.mockClear();
+    const message = 'Project snapshot exceeds WEBSOCKET_MAX_FRAME_BYTES';
+    capturedOptions?.onMessage?.({
+      type: 'snapshot_error',
+      projectId: 'proj-1',
+      code: 'FRAME_TOO_LARGE',
+      message,
+    });
+    expect(mockToastError).toHaveBeenCalledWith(message);
+    expect(mockListInvalidate).toHaveBeenCalledExactlyOnceWith({ projectId: 'proj-1' });
+    expect(mockSetData).not.toHaveBeenCalled();
   });
 
   it('sets URL to null when projectId is undefined', () => {

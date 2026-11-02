@@ -7,6 +7,7 @@
  */
 
 import type { WebSocket } from 'ws';
+import { z } from 'zod';
 import type { AppContext, Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
@@ -23,7 +24,7 @@ import type {
   SnapshotFullMessage,
   SnapshotRemovedMessage,
 } from '@/shared/workspace-snapshot';
-import { createWebSocketUpgradeHandler } from './upgrade-utils';
+import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
 type SnapshotHandlerServices = Pick<
   ApplicationServices,
@@ -220,6 +221,13 @@ export function createSnapshotsUpgradeHandler(
     configService,
     logger,
     requiredParams: ['projectId'],
+    authorize: ({ params, socket }) => {
+      if (!z.string().min(1).max(128).safeParse(params.projectId).success) {
+        sendBadRequest(socket, 'Invalid projectId');
+        return null;
+      }
+      return true;
+    },
     onOpen: (ws, { params }) => {
       const { projectId } = params;
 
@@ -250,8 +258,26 @@ export function createSnapshotsUpgradeHandler(
           entries,
           reviewCount,
         };
-        const baselineSent = sendStateful(ws, JSON.stringify(message), logger, 'full snapshot', {
+        const serialized = JSON.stringify(message);
+        const maxFrameBytes = configService.getWebSocketConfig().maxFrameBytes;
+        if (Buffer.byteLength(serialized) > maxFrameBytes) {
+          sendStateful(
+            ws,
+            JSON.stringify({
+              type: 'snapshot_error',
+              projectId,
+              code: 'FRAME_TOO_LARGE',
+              message:
+                'Project snapshot exceeds WEBSOCKET_MAX_FRAME_BYTES; increase the configured limit and reconnect. HTTP data remains available.',
+            }),
+            logger,
+            'snapshot limit error'
+          );
+          return;
+        }
+        const baselineSent = sendStateful(ws, serialized, logger, 'full snapshot', {
           allowLargeFrame: true,
+          maxFrameBytes,
         });
         if (!baselineSent) {
           // The client has no baseline, so deltas must not start flowing.

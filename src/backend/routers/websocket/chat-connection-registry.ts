@@ -14,7 +14,11 @@
 import type { WebSocket } from 'ws';
 import type { Application, ApplicationServices } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { sendStateful } from '@/backend/lib/websocket-send';
+import {
+  MAX_WEBSOCKET_STATEFUL_FRAME_BYTES,
+  MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES,
+  sendStateful,
+} from '@/backend/lib/websocket-send';
 import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
@@ -59,10 +63,13 @@ export class ChatConnectionRegistry {
   /** Per-session socket index; topics are DB session ids. */
   private readonly broadcaster = new TopicBroadcaster<string>(
     { error: (...args) => this.logger.error(...args) },
-    'chat session message',
-    sendStateful
+    'chat session message'
   );
 
+  private readonly blockedBaselines = new WeakSet<WebSocket>();
+  private readonly pendingReplays = new WeakMap<WebSocket, { loadRequestId: string }>();
+  private readonly expectedReplays = new WeakMap<WebSocket, string | undefined>();
+  private maxFrameBytes = MAX_WEBSOCKET_STATEFUL_FRAME_BYTES;
   private chatWsMsgCounter = 0;
   private logger: ChatRegistryLogger = NOOP_LOGGER;
   private debugChatWebSocket = false;
@@ -70,10 +77,13 @@ export class ChatConnectionRegistry {
   configure({
     logger,
     debugChatWebSocket,
+    maxFrameBytes = MAX_WEBSOCKET_STATEFUL_FRAME_BYTES,
   }: {
     logger: ChatRegistryLogger;
     debugChatWebSocket: boolean;
+    maxFrameBytes?: number;
   }): void {
+    this.maxFrameBytes = maxFrameBytes;
     this.logger = logger;
     this.debugChatWebSocket = debugChatWebSocket;
   }
@@ -108,6 +118,11 @@ export class ChatConnectionRegistry {
     return this.connections.has(connectionId);
   }
 
+  /** Correlate a load to its requesting viewer without changing normal replay fan-out. */
+  expectReplay(ws: WebSocket, loadRequestId?: string): void {
+    this.expectedReplays.set(ws, loadRequestId);
+  }
+
   /** Count connections currently viewing a specific DB session. */
   countViewers(dbSessionId: string | null): number {
     if (!dbSessionId) {
@@ -124,9 +139,15 @@ export class ChatConnectionRegistry {
     this.chatWsMsgCounter++;
     const msgNum = this.chatWsMsgCounter;
 
-    const sent = this.broadcaster.broadcast(dbSessionId, payload, {
-      allowLargeFrame:
-        payload.type === 'session_replay_batch' || payload.type === 'session_snapshot',
+    const baseline = payload.type === 'session_replay_batch' || payload.type === 'session_snapshot';
+    const sent = this.broadcaster.broadcastWith(dbSessionId, payload, (ws, message) => {
+      if (baseline) {
+        return this.sendBaseline(ws, message, payload.loadRequestId);
+      }
+      return (
+        !this.blockedBaselines.has(ws) &&
+        sendStateful(ws, message, this.logger, 'chat session message')
+      );
     });
     if (sent === 0) {
       if (this.debugChatWebSocket) {
@@ -146,6 +167,68 @@ export class ChatConnectionRegistry {
     }
 
     return sent;
+  }
+
+  private sendBaseline(ws: WebSocket, message: string, loadRequestId?: string): boolean {
+    const ownLoad = this.expectedReplays.get(ws) === loadRequestId;
+    const bytes = Buffer.byteLength(message);
+    // A peer discards another viewer's correlated replay. Do not pressure it
+    // with a large authoritative frame that it cannot use.
+    if (loadRequestId && !ownLoad && bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES) {
+      return false;
+    }
+    if (loadRequestId && this.pendingReplays.get(ws)?.loadRequestId === loadRequestId) {
+      return true;
+    }
+    if (this.blockedBaselines.has(ws) && !ownLoad) {
+      return false;
+    }
+    if (bytes > this.maxFrameBytes) {
+      this.blockedBaselines.add(ws);
+      this.sendLoadLimitError(ws, loadRequestId);
+      return false;
+    }
+    return this.enqueueBaseline(ws, message, loadRequestId, ownLoad);
+  }
+
+  private enqueueBaseline(
+    ws: WebSocket,
+    message: string,
+    loadRequestId: string | undefined,
+    ownLoad: boolean
+  ): boolean {
+    const pending =
+      loadRequestId && Buffer.byteLength(message) > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES
+        ? { loadRequestId }
+        : undefined;
+    const clearPending = () => {
+      if (this.pendingReplays.get(ws) === pending) {
+        this.pendingReplays.delete(ws);
+      }
+    };
+    if (pending) {
+      this.pendingReplays.set(ws, pending);
+    }
+    const sent = sendStateful(ws, message, this.logger, 'chat replay', {
+      allowLargeFrame: true,
+      maxFrameBytes: this.maxFrameBytes,
+      onFlushed: clearPending,
+    });
+    if (!sent) {
+      clearPending();
+    }
+    if (sent && ownLoad) {
+      this.blockedBaselines.delete(ws);
+      this.expectedReplays.delete(ws);
+    }
+    return sent;
+  }
+
+  private sendLoadLimitError(ws: WebSocket, loadRequestId?: string): void {
+    const message =
+      'Session replay exceeds WEBSOCKET_MAX_FRAME_BYTES; increase the configured limit and reconnect.';
+    const reply = JSON.stringify({ type: 'error', code: 413, loadRequestId, message });
+    sendStateful(ws, reply, this.logger, 'chat replay limit error');
   }
 
   /**
@@ -252,6 +335,7 @@ export function attachChatTransport(
   registry.configure({
     logger: createLogger('chat-connection'),
     debugChatWebSocket: configService.getDebugConfig().chatWebSocket,
+    maxFrameBytes: configService.getWebSocketConfig().maxFrameBytes,
   });
 
   const sessionOutboundListener = (event: SessionOutboundEvent) => {

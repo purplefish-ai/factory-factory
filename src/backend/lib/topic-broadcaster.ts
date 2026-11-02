@@ -11,7 +11,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { safeSend, type sendStateful, type StatefulSendOptions } from './websocket-send';
+import { safeSend } from './websocket-send';
 
 interface BroadcastLogger {
   error(message: string, error: Error): void;
@@ -24,8 +24,7 @@ export class TopicBroadcaster<TKey = string> {
 
   constructor(
     private readonly logger: BroadcastLogger,
-    private readonly defaultDescription = 'WebSocket message',
-    private readonly send: typeof sendStateful = safeSend
+    private readonly defaultDescription = 'WebSocket message'
   ) {}
 
   /**
@@ -86,7 +85,18 @@ export class TopicBroadcaster<TKey = string> {
    * serialized once. Returns the number of sockets the message was
    * successfully handed to.
    */
-  broadcast(topic: TKey, payload: unknown, options?: StatefulSendOptions): number {
+  broadcast(topic: TKey, payload: unknown): number {
+    return this.broadcastWith(topic, payload, (ws, message) =>
+      safeSend(ws, message, this.logger, this.defaultDescription)
+    );
+  }
+
+  /** Channel-owned admission, with shared serialization and subscriber isolation. */
+  broadcastWith(
+    topic: TKey,
+    payload: unknown,
+    send: (ws: WebSocket, message: string) => boolean
+  ): number {
     const sockets = this.topics.get(topic);
     if (!sockets || sockets.size === 0) {
       return 0;
@@ -95,7 +105,7 @@ export class TopicBroadcaster<TKey = string> {
     const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
     let sent = 0;
     for (const ws of sockets) {
-      if (this.send(ws, message, this.logger, this.defaultDescription, options)) {
+      if (send(ws, message)) {
         sent++;
       }
     }

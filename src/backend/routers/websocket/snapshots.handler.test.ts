@@ -72,7 +72,11 @@ const workspaceSnapshotStore = {
 // ============================================================================
 
 function createAppContextMock(
-  overrides: { workspaceQueryService?: unknown; workspaceSnapshotStore?: unknown } = {}
+  overrides: {
+    workspaceQueryService?: unknown;
+    workspaceSnapshotStore?: unknown;
+    frameLimit?: () => number;
+  } = {}
 ): AppContext {
   const application = {
     services: {
@@ -84,6 +88,7 @@ function createAppContextMock(
       })),
       configService: {
         getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        getWebSocketConfig: () => ({ maxFrameBytes: overrides.frameLimit?.() ?? 33_554_432 }),
       },
       workspaceQueryService: overrides.workspaceQueryService ?? {
         getCachedReviewCount: mockGetCachedReviewCount,
@@ -142,7 +147,7 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
   });
 }
 
-function createPendingBaseline() {
+function createPendingBaseline(frameLimit?: () => number) {
   let finishSeed: () => void = () => undefined;
   mockWaitForSeed.mockReturnValueOnce(
     new Promise<void>((resolve) => {
@@ -162,7 +167,7 @@ function createPendingBaseline() {
   });
   testStores.add(store);
   const handler = createSnapshotsUpgradeHandler(
-    createAppContextMock({ workspaceSnapshotStore: store })
+    createAppContextMock({ workspaceSnapshotStore: store, frameLimit })
   );
   const ws = new MockWebSocket();
   callHandler(handler, ws, 'proj-1');
@@ -180,6 +185,50 @@ function sentMessages(ws: MockWebSocket) {
 // ============================================================================
 
 describe('createSnapshotsUpgradeHandler', () => {
+  it('rejects overlong project IDs before snapshot upgrade so error envelopes remain bounded', () => {
+    const ws = new MockWebSocket();
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const result = callHandler(handler, ws, 'p'.repeat(129));
+    expect(result.wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(result.socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
+  });
+
+  it.each([-1, 0, 1])(
+    'bounds snapshot_full at the UTF8 frame ceiling (extra byte %s)',
+    async (extra) => {
+      let limit = 33_554_432;
+      const { store, ws, finishSeed } = createPendingBaseline(() => limit);
+      store.upsert(
+        'ws-1',
+        { projectId: 'proj-1', name: 'é'.repeat(1024 * 1024), status: 'READY' },
+        'test',
+        100
+      );
+      limit =
+        Buffer.byteLength(
+          JSON.stringify({
+            type: 'snapshot_full',
+            projectId: 'proj-1',
+            entries: store.getByProjectId('proj-1'),
+            reviewCount: 5,
+          })
+        ) - extra;
+      finishSeed();
+      await waitForInitialSnapshot(ws);
+      expect(sentMessages(ws)[0]).toMatchObject(
+        extra > 0
+          ? { type: 'snapshot_error', projectId: 'proj-1', code: 'FRAME_TOO_LARGE' }
+          : { type: 'snapshot_full' }
+      );
+      expect(ws.close).not.toHaveBeenCalled();
+      if (extra > 0) {
+        store.upsert('ws-1', { name: 'Small subsequent update' }, 'test', 200);
+        expect(ws.send).toHaveBeenCalledTimes(1);
+        expect(Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(512);
+      }
+    }
+  );
+
   it('accepts a large full snapshot, retires on accumulated deltas and reconnects from current state', async () => {
     const { store, handler, ws, finishSeed } = createPendingBaseline();
     const largeName = 'x'.repeat(2 * 1024 * 1024);
