@@ -168,3 +168,72 @@ it('reports retained identities skipped for local collisions or rejected parents
   expect(await db.prisma.periodicTaskExecution.count()).toBe(0);
   expect(await db.prisma.decisionLog.count()).toBe(1);
 });
+
+it('roundtrips a supported cross-project child created by the actual workspace owner', async () => {
+  const { WorkspaceCreationService } = await vi.importActual<
+    typeof import('@/backend/services/workspace')
+  >('@/backend/services/workspace');
+  const { createChildWorkspace } = await vi.importActual<
+    typeof import('@/backend/orchestration/workspace-children.orchestrator')
+  >('@/backend/orchestration/workspace-children.orchestrator');
+  const { createLogger } = await vi.importActual<
+    typeof import('@/backend/services/logger.service')
+  >('@/backend/services/logger.service');
+  await db.prisma.project.create({
+    data: {
+      id: 'child-project',
+      name: 'Child repository',
+      slug: 'child-repository',
+      repoPath: '/child-repo',
+      worktreeBasePath: '/child-trees',
+    },
+  });
+  const creation = new WorkspaceCreationService({
+    logger: createLogger('recovery-cross-project-test'),
+  });
+  const childId = await createChildWorkspace(
+    { parentWorkspaceId: 'workspace', projectId: 'child-project', name: 'Cross-project child' },
+    {
+      findProject: (id) =>
+        db.prisma.project.findUnique({ where: { id }, include: { workspaces: true } }),
+      launchWorkspace: async (source) => ({
+        workspace: await creation.create(source),
+        defaultSessionId: null,
+      }),
+    }
+  );
+  const backup = await dataBackupService.exportData('test');
+  const origins = await db.prisma.workspaceChildOrigin.findMany();
+  expect(origins).toEqual([
+    expect.objectContaining({ parentWorkspaceId: 'workspace', childWorkspaceId: childId }),
+  ]);
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.workspaceChildOrigin.deleteMany();
+  await db.prisma.project.deleteMany();
+  await expect(dataBackupService.importData(backup)).resolves.toMatchObject({
+    projects: { imported: 2, skipped: 0 },
+    workspaces: { imported: 2, skipped: 0 },
+  });
+  expect(await db.prisma.workspace.findUnique({ where: { id: childId } })).toMatchObject({
+    projectId: 'child-project',
+    parentWorkspaceId: 'workspace',
+    creationSource: 'CHILD_WORKSPACE',
+  });
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'workspace' } })).toMatchObject({
+    projectId: 'project',
+  });
+  expect(await db.prisma.workspaceChildOrigin.findMany()).toEqual(origins);
+});
+it.each(['missing-parent', 'workspace'])(
+  'still rejects missing or cyclic workspace ancestry: %s',
+  async (parentWorkspaceId) => {
+    const backup = await dataBackupService.exportData('test');
+    backup.data.workspaces[0]!.parentWorkspaceId = parentWorkspaceId;
+    await db.prisma.workspace.deleteMany();
+    await db.prisma.project.deleteMany();
+    await expect(dataBackupService.importData(backup)).rejects.toThrow(
+      /required parent|ancestry cycle/i
+    );
+    expect(await db.prisma.project.count()).toBe(0);
+  }
+);

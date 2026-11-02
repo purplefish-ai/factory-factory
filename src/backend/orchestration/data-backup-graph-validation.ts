@@ -51,14 +51,7 @@ type Owners = ReturnType<typeof owners>;
 function validateWorkspaceGraph(data: Data, graph: Owners) {
   for (const workspace of data.workspaces) {
     required(graph.projects, workspace.projectId, 'Workspace.projectId');
-    const parent = optional(
-      graph.workspaces,
-      workspace.parentWorkspaceId,
-      'Workspace.parentWorkspaceId'
-    );
-    if (parent) {
-      same(parent.projectId, workspace.projectId, 'Workspace.parentWorkspaceId');
-    }
+    optional(graph.workspaces, workspace.parentWorkspaceId, 'Workspace.parentWorkspaceId');
     const task = optional(graph.tasks, workspace.periodicTaskId, 'Workspace.periodicTaskId');
     if (task) {
       same(task.projectId, workspace.projectId, 'Workspace.periodicTaskId');
