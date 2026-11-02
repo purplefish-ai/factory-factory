@@ -428,10 +428,14 @@ invalid checkpoints never serve historical lookups. Fully indexed intervals wait
 until all legacy finalized intervals have been indexed before conflict checks
 can publish them. Promotion keyset-traverses at most 100 retained authority rows
 per transaction across finalized markers, heads, and baselines. Each row uses
-unique point joins, so repeated head identities or baseline pins cannot turn one
-row into an unbounded conflict probe. A persisted cursor counts the candidate's
-heads and records the connection authority revision. SQLite triggers advance
-that revision when consulted proof or ordinal claims change; validation restarts
+unique point joins. Each head also checks the minimum and maximum issued
+baseline orders through two indexed seeks, including claims for older intervals.
+A head reserves three units of the shared row budget for itself and those
+witnesses; repeated head identities or baseline pins cannot expand a join or
+probe. Every finalized marker must match its own checkpoint head and highwater.
+A persisted cursor counts the candidate's heads and records the connection
+authority revision. SQLite triggers advance that revision when consulted proof,
+checkpoint head/boundary/count, or ordinal claims change; validation restarts
 from the beginning at a new revision. The final chunk and publication share the
 ledger writer lock. Small intervals can publish during finalization; larger
 intervals remain INDEXED with their full pages until maintenance finishes.
@@ -440,10 +444,16 @@ validation. Conflicting ordinals fail closed and retain their original proof.
 Any rejected interval fences new baseline preparation (including the current
 committed head) and page compaction for that connection, since later pages may
 contain unexamined conflicting heads. Already-issued baseline IDs remain
-readable through `getBaseline`. The verifier progress migration replays older
-BUILDING checkpoints from their retained pages, without deleting their heads or
-interrupting active source scans. INDEXED, COMPLETE, and rejected checkpoints
-retain their existing status.
+readable through `getBaseline`. The verifier progress migration resets older
+BUILDING checkpoints for replay from their retained pages. Subsequent serialized
+maintenance replays them without deleting their heads or interrupting active
+source scans. INDEXED, COMPLETE, and rejected checkpoints retain their existing
+status.
+
+During legacy capture replay, an observation without any indexed identity can be
+a boundary-only continuation only when the next retained page starts
+verification. Observations still searching for shifted overlap do not establish
+a boundary.
 
 Each operational target in a poll cycle also advances at most one legacy proof
 page or one authority-validation chunk in a serialized maintenance transaction.

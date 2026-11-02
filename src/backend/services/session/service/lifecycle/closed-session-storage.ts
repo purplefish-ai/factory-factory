@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { configService } from '@/backend/services/config.service';
 
 export function archiveDigest(value: string): string {
@@ -56,7 +56,7 @@ export function resolveClosedSessionTranscriptPath(
   }
   const path = resolve(worktreePath, archive.transcriptPath);
   const within = relative(resolve(worktreePath), path);
-  if (within.startsWith('..') || resolve(worktreePath) === path) {
+  if (within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within) || within === '') {
     throw new Error('Invalid legacy transcript path');
   }
   return path;

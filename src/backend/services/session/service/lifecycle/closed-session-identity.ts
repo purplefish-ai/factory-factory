@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { AgentContentItem, AgentMessage, ChatMessage } from '@/shared/acp-protocol';
 import {
   buildCombinedTextContent,
   buildContentArray,
   categorizeAttachments,
-} from '../chat/chat-message-handlers/attachment-processing';
+} from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import type { AgentContentItem, AgentMessage, ChatMessage } from '@/shared/acp-protocol';
 
 export function getClosedSessionConversationEpoch(metadata: unknown): number {
   const parsed = z
@@ -142,9 +142,12 @@ function orderedValue(value: unknown): unknown {
 function conversationContent(messages: ChatMessage[]) {
   const tokens: CanonicalContent = { provider: [], local: [] };
   for (const message of messages) {
-    if (message.source === 'user') {
+    if (message.providerPrompt != null) {
+      appendPayload(tokens.provider, 'user', message.providerPrompt);
+    }
+    if (message.source === 'user' && message.providerPrompt === undefined) {
       appendUser(tokens.provider, message);
-    } else if (message.message) {
+    } else if (message.source === 'agent' && message.message) {
       appendAgent(tokens, message.message);
     }
   }

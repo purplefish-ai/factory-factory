@@ -5,6 +5,7 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { resolveClosedSessionTranscriptPath } from '@/backend/services/session/service/lifecycle/closed-session-storage';
 import { prEventMarker } from '@/shared/pr-monitoring';
+import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { readClosedSessionTranscriptHeader } from './closed-session-transcript-header';
 
 export async function findPRDeliveryReceipt(
@@ -87,8 +88,9 @@ async function findArchivedReceipt(
   deliveryId: string,
   unavailableWhenEmpty = true
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
+  const recovered = await closedSessionPersistenceService.recoverPendingForSession(sessionId);
   const archives = await closedSessionAccessor.findBySessionIdWithWorkspace(sessionId);
-  let unavailable = unavailableWhenEmpty && archives.length === 0;
+  let unavailable = !recovered || (unavailableWhenEmpty && archives.length === 0);
   for (const archive of archives) {
     try {
       if (!archive.workspace.worktreePath) {

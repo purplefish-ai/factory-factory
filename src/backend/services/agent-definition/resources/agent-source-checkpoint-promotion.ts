@@ -13,11 +13,18 @@ const progressSchema = z.object({
   headCount: z.number().int().nonnegative(),
 });
 type Progress = z.infer<typeof progressSchema>;
+type PhaseOutcome =
+  | { kind: 'DEFERRED' }
+  | { kind: 'INVALID' }
+  | { kind: 'ADVANCED'; remaining: number }
+  | { kind: 'COMPLETE' };
 const markersSchema = z.array(
   z.object({
     scanId: z.string(),
     ordinal: z.number().int(),
     status: z.string().nullable(),
+    checkpointHead: z.string().nullable(),
+    checkpointOrder: z.number().int().nullable(),
     headEventId: z.string().nullable(),
     sourceOrder: z.number().int().nullable(),
   })
@@ -26,6 +33,12 @@ const headsSchema = z.array(
   z.object({
     scanId: z.string(),
     position: z.number().int(),
+    canonicalOrder: z
+      .union([z.number(), z.bigint().transform(Number)])
+      .pipe(z.number().int())
+      .nullable(),
+    baselineMinimum: z.number().int().nullable(),
+    baselineMaximum: z.number().int().nullable(),
     conflict: z.enum(['CONFLICT', 'OK']),
     boundary: z.enum(['MATCH', 'CONFLICT', 'NONE']),
   })
@@ -42,6 +55,7 @@ async function markers(tx: Tx, connectionId: string, progress: Progress, take: n
   return markersSchema.parse(
     await tx.$queryRaw`
     SELECT page."scanId", page."ordinal", checkpoint."status", page."sourceOrder",
+      checkpoint."headEventId" AS "checkpointHead", checkpoint."sourceOrder" AS "checkpointOrder",
       CASE WHEN json_valid(page."evidence") THEN
         CASE WHEN json_type(page."evidence", '$.ids') = 'array'
           AND json_array_length(page."evidence", '$.ids') = 1
@@ -72,10 +86,18 @@ async function heads(
   take: number
 ) {
   // Traverse authority rows, not candidate heads with an unbounded probe for each identity.
-  // Both joins are unique point lookups; the ordered range is capped before the next transaction.
+  // Joins are unique point lookups; each baseline extremum is one indexed range seek.
+  // Reserve three authority rows per head, including both optional baseline witnesses.
   return headsSchema.parse(
     await tx.$queryRaw`
     SELECT authority."scanId", authority."position",
+      other."sourceOrder" - authority."precedingEventCount" AS "canonicalOrder",
+      (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
+        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+          AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" ASC LIMIT 1) AS "baselineMinimum",
+      (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
+        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+          AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" DESC LIMIT 1) AS "baselineMaximum",
       CASE WHEN other."sourceOrder" IS NOT NULL AND target."providerEventId" IS NOT NULL
         AND other."sourceOrder" - authority."precedingEventCount" != ${sourceOrder} - target."precedingEventCount"
         THEN 'CONFLICT' ELSE 'OK' END AS conflict,
@@ -107,8 +129,9 @@ async function baselines(
   return baselinesSchema.parse(
     await tx.$queryRaw`
     SELECT baseline."id", CASE WHEN baseline."sourceOrder" IS NOT NULL
-      AND target."providerEventId" IS NOT NULL
-      AND baseline."sourceOrder" != ${sourceOrder} - target."precedingEventCount"
+      AND ((baseline."headEventId" IS NULL AND baseline."sourceOrder" != 0)
+        OR (target."providerEventId" IS NOT NULL
+          AND baseline."sourceOrder" != ${sourceOrder} - target."precedingEventCount"))
       THEN 'CONFLICT' ELSE 'OK' END AS conflict,
       CASE WHEN baseline."headEventId" IS ${boundaryEventId} AND baseline."sourceOrder" IS NOT NULL
         THEN CASE WHEN baseline."sourceOrder" = ${boundaryOrder}
@@ -122,7 +145,7 @@ async function baselines(
   );
 }
 
-/** At most 100 authority rows, with unique point joins, per ledger writer transaction.
+/** At most 100 authority rows, including indexed baseline extrema, per ledger writer transaction.
  * SQLite triggers advance the connection revision whenever a consulted claim changes.
  * An interrupted traversal restarts at the new revision. Publication shares the final
  * chunk's writer lock, so no authority write can slip between its fence and COMPLETE.
@@ -150,25 +173,27 @@ export async function checkpointPromotionStatus(tx: Tx, connectionId: string, sc
           headCount: 0,
         };
   let remaining = 100;
-  if (progress.phase === 'MARKERS') {
-    const budget = await advanceMarkers(tx, checkpoint, progress, remaining);
-    if (budget === 'INVALID') {
-      return { status: 'INVALID' };
+  for (const phase of ['MARKERS', 'HEADS', 'BASELINES'] as const) {
+    if (remaining === 0 || progress.phase !== phase) {
+      continue;
     }
-    if (budget === null) {
-      return;
+    const outcome =
+      phase === 'MARKERS'
+        ? await advanceMarkers(tx, checkpoint, progress, remaining)
+        : phase === 'HEADS'
+          ? await advanceHeads(tx, checkpoint, progress, remaining)
+          : await advanceBaselines(tx, checkpoint, progress, remaining);
+    switch (outcome.kind) {
+      case 'DEFERRED':
+        return;
+      case 'INVALID':
+        return { status: 'INVALID' };
+      case 'COMPLETE':
+        return { status: 'COMPLETE', validationCursor: progress };
+      case 'ADVANCED':
+        remaining = outcome.remaining;
+        break;
     }
-    remaining = budget;
-  }
-  if (remaining > 0 && progress.phase === 'HEADS') {
-    const budget = await advanceHeads(tx, checkpoint, progress, remaining);
-    if (budget === null) {
-      return { status: 'INVALID' };
-    }
-    remaining = budget;
-  }
-  if (remaining > 0 && progress.phase === 'BASELINES') {
-    return await advanceBaselines(tx, checkpoint, progress, remaining);
   }
   return { validationCursor: progress };
 }
@@ -178,11 +203,11 @@ async function advanceMarkers(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   const rows = await markers(tx, checkpoint.connectionId, progress, remaining);
   // Unindexed legacy intervals might contain contradictory heads. Keep their proof.
   if (rows.some((row) => row.status !== 'INDEXED' && row.status !== 'COMPLETE')) {
-    return null;
+    return { kind: 'DEFERRED' };
   }
   if (
     rows.some(
@@ -190,11 +215,13 @@ async function advanceMarkers(
         row.headEventId === null ||
         row.sourceOrder === null ||
         row.sourceOrder < 0 ||
+        row.sourceOrder !== row.checkpointOrder ||
+        row.headEventId !== row.checkpointHead ||
         (row.headEventId === checkpoint.previousBoundaryEventId &&
           row.sourceOrder !== checkpoint.initialSourceOrder)
     )
   ) {
-    return 'INVALID';
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some(
     (row) => row.headEventId === checkpoint.previousBoundaryEventId
@@ -210,7 +237,7 @@ async function advanceMarkers(
     progress.scanId = '';
     progress.position = -1;
   }
-  return remaining;
+  return { kind: 'ADVANCED', remaining };
 }
 
 async function advanceHeads(
@@ -218,9 +245,13 @@ async function advanceHeads(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   if (checkpoint.sourceOrder === null) {
-    return null;
+    return { kind: 'INVALID' };
+  }
+  const take = Math.floor(remaining / 3);
+  if (take === 0) {
+    return { kind: 'ADVANCED', remaining: 0 };
   }
   const rows = await heads(
     tx,
@@ -230,10 +261,20 @@ async function advanceHeads(
     checkpoint.previousBoundaryEventId,
     checkpoint.initialSourceOrder,
     progress,
-    remaining
+    take
   );
+  if (
+    rows.some(
+      (row) =>
+        row.canonicalOrder !== null &&
+        ((row.baselineMinimum !== null && row.baselineMinimum !== row.canonicalOrder) ||
+          (row.baselineMaximum !== null && row.baselineMaximum !== row.canonicalOrder))
+    )
+  ) {
+    return { kind: 'INVALID' };
+  }
   if (rows.some((row) => row.conflict === 'CONFLICT' || row.boundary === 'CONFLICT')) {
-    return null;
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some((row) => row.boundary === 'MATCH');
   progress.headCount += rows.filter((row) => row.scanId === checkpoint.scanId).length;
@@ -242,11 +283,11 @@ async function advanceHeads(
     progress.scanId = last.scanId;
     progress.position = last.position;
   }
-  remaining -= rows.length;
-  if (remaining > 0) {
+  remaining -= rows.length * 3;
+  if (rows.length < take) {
     progress.phase = 'BASELINES';
   }
-  return remaining;
+  return { kind: 'ADVANCED', remaining };
 }
 
 async function advanceBaselines(
@@ -254,9 +295,9 @@ async function advanceBaselines(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   if (checkpoint.sourceOrder === null) {
-    return { status: 'INVALID' };
+    return { kind: 'INVALID' };
   }
   const rows = await baselines(
     tx,
@@ -269,7 +310,7 @@ async function advanceBaselines(
     remaining
   );
   if (rows.some((row) => row.conflict === 'CONFLICT' || row.boundary === 'CONFLICT')) {
-    return { status: 'INVALID' };
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some((row) => row.boundary === 'MATCH');
   const last = rows.at(-1);
@@ -278,12 +319,11 @@ async function advanceBaselines(
   }
   if (rows.length < remaining) {
     return {
-      status:
+      kind:
         progress.headCount === checkpoint.entryCount && progress.boundaryWitnessed
           ? 'COMPLETE'
           : 'INVALID',
-      validationCursor: progress,
     };
   }
-  return { validationCursor: progress };
+  return { kind: 'ADVANCED', remaining: 0 };
 }

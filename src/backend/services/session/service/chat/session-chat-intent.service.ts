@@ -13,6 +13,11 @@ export class SessionChatIntentService {
   private readonly attempted = new Map<string, Map<string, string>>();
   private readonly staged = new Map<string, Map<string, Set<symbol>>>();
   private readonly tails = new Map<string, Promise<unknown>>();
+  // A failed cancellation is not permission to restore or claim surviving input.
+  private readonly pendingCancellations = new Map<
+    string,
+    Array<{ messageId?: string; status: 'cancelled' | 'failed' }>
+  >();
   private canAccept = (_id: string) => true;
   configureAdmissionGuard(guard: (id: string) => boolean): void {
     this.canAccept = guard;
@@ -54,7 +59,12 @@ export class SessionChatIntentService {
   }
 
   run<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const result = (this.tails.get(id) ?? Promise.resolve()).catch(() => undefined).then(work);
+    const result = (this.tails.get(id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        await this.flushCancellations(id);
+        return work();
+      });
     this.tails.set(id, result);
     void result
       .finally(() => {
@@ -74,19 +84,21 @@ export class SessionChatIntentService {
       );
   }
 
-  hydrate(sessionId: string): Promise<void> {
-    return this.run(sessionId, () => this.hydrateLocked(sessionId));
+  hydrate(sessionId: string, options?: { publish?: boolean }): Promise<void> {
+    return this.run(sessionId, () => this.hydrateLocked(sessionId, options?.publish));
   }
-  private async hydrateLocked(sessionId: string): Promise<void> {
+  private async hydrateLocked(sessionId: string, publish = true): Promise<void> {
     const rows = await this.store.read(sessionId, true);
     for (const row of rows) {
       if (row.status === 'queued' && !this.isStaged(sessionId, row.message.id)) {
-        const result = this.domain.restoreAcceptedMessage(sessionId, row.message);
+        const result = this.domain.restoreAcceptedMessage(sessionId, row.message, {
+          emitSnapshot: publish,
+        });
         if ('error' in result) {
           throw new Error(result.error);
         }
       } else if (row.status === 'uncertain' || row.status === 'failed') {
-        this.publishRecorded(sessionId, row);
+        this.publishRecorded(sessionId, row, publish);
       }
     }
   }
@@ -101,7 +113,7 @@ export class SessionChatIntentService {
         validateAttachment(attachment);
       }
       await this.hydrateLocked(sessionId);
-      const record = await this.store.accept(
+      const { created, ...record } = await this.store.accept(
         sessionId,
         message,
         this.domain.getQueueLength(sessionId) >= SERVICE_LIMITS.sessionStoreMaxQueueSize
@@ -111,7 +123,7 @@ export class SessionChatIntentService {
         return record;
       }
       if (!(isCurrent() && this.canAccept(sessionId))) {
-        await this.store.cancel(sessionId, message.id);
+        await this.cancelLocked(sessionId, message.id);
         const cancelled = { ...record, status: 'cancelled' as const };
         this.publishRecorded(sessionId, cancelled);
         return cancelled;
@@ -119,12 +131,30 @@ export class SessionChatIntentService {
       if (this.isStaged(sessionId, message.id)) {
         return { ...record, position: 0 };
       }
+      return this.projectAccepted(sessionId, record, created);
+    });
+  }
+
+  private async projectAccepted(
+    sessionId: string,
+    record: IntentRecord,
+    created: boolean
+  ): Promise<IntentRecord & { position: number }> {
+    try {
       const result = this.domain.enqueue(sessionId, record.message);
       if ('error' in result) {
         throw new Error(result.error);
       }
       return { ...record, position: result.position };
-    });
+    } catch (error) {
+      if (created) {
+        await this.cancelLocked(sessionId, record.message.id);
+        this.domain.removeQueuedMessage(sessionId, record.message.id, {
+          expectedMessage: record.message,
+        });
+      }
+      throw error;
+    }
   }
 
   hasAccepted(sessionId: string, messageId: string): Promise<boolean> {
@@ -134,14 +164,11 @@ export class SessionChatIntentService {
   async settleNotInvoked(
     sessionId: string,
     attemptId: string,
-    status: 'queued' | 'cancelled'
+    status: 'queued' | 'cancelled',
+    evidence = 'confirmed local rejection before provider invocation'
   ): Promise<void> {
     await this.run(sessionId, async () => {
-      await this.store.settle(
-        attemptId,
-        status,
-        'confirmed local rejection before provider invocation'
-      );
+      await this.store.settle(attemptId, status, evidence);
       const attempts = this.attempted.get(sessionId);
       for (const [id, claimed] of attempts ?? []) {
         if (claimed === attemptId) {
@@ -164,9 +191,10 @@ export class SessionChatIntentService {
 
   acceptInitial(
     sessionId: string,
-    message: QueuedMessage
+    message: QueuedMessage,
+    isCurrent?: () => boolean
   ): Promise<IntentRecord & { position?: number }> {
-    return this.accept(sessionId, message);
+    return this.accept(sessionId, message, isCurrent);
   }
 
   cancelQueued(sessionId: string, messageId: string): Promise<boolean> {
@@ -180,7 +208,7 @@ export class SessionChatIntentService {
         return false;
       }
       try {
-        await this.store.cancel(sessionId, messageId);
+        await this.cancelLocked(sessionId, messageId);
         return this.domain.removeQueuedMessage(sessionId, messageId, { expectedMessage: message });
       } finally {
         release();
@@ -188,13 +216,15 @@ export class SessionChatIntentService {
     });
   }
 
-  private publishRecorded(sessionId: string, row: IntentRecord): void {
+  private publishRecorded(sessionId: string, row: IntentRecord, publish = true): void {
     if (row.status === 'uncertain' && this.isStaged(sessionId, row.message.id)) {
-      this.domain.emitDelta(sessionId, {
-        type: 'message_state_changed',
-        id: row.message.id,
-        newState: MessageState.DISPATCHED,
-      });
+      if (publish) {
+        this.domain.emitDelta(sessionId, {
+          type: 'message_state_changed',
+          id: row.message.id,
+          newState: MessageState.DISPATCHED,
+        });
+      }
       return;
     }
     if (row.status === 'uncertain' || row.status === 'failed') {
@@ -203,7 +233,9 @@ export class SessionChatIntentService {
         row.message,
         row.status === 'uncertain'
           ? `Delivery outcome is uncertain (batch ${row.attemptId ?? 'unknown'}). Check provider history before submitting again. This batch will not be resent automatically.`
-          : 'Message was not sent. Submit a new message to retry.'
+          : 'Message was not sent. Submit a new message to retry.',
+        'failed',
+        publish
       );
     } else {
       this.domain.emitDelta(sessionId, {
@@ -249,8 +281,38 @@ export class SessionChatIntentService {
     messageId?: string,
     status: 'cancelled' | 'failed' = 'cancelled'
   ): Promise<void> {
-    return this.run(sessionId, () => this.store.cancel(sessionId, messageId, status));
+    this.queueCancellation(sessionId, messageId, status);
+    return this.run(sessionId, async () => undefined);
   }
+
+  private queueCancellation(
+    sessionId: string,
+    messageId: string | undefined,
+    status: 'cancelled' | 'failed'
+  ): void {
+    const pending = this.pendingCancellations.get(sessionId) ?? [];
+    pending.push({ messageId, status });
+    this.pendingCancellations.set(sessionId, pending);
+  }
+
+  private async cancelLocked(sessionId: string, messageId: string): Promise<void> {
+    this.queueCancellation(sessionId, messageId, 'cancelled');
+    await this.flushCancellations(sessionId);
+  }
+
+  private async flushCancellations(sessionId: string): Promise<void> {
+    const pending = this.pendingCancellations.get(sessionId);
+    while (pending?.length) {
+      const request = pending[0];
+      if (!request) {
+        break;
+      }
+      await this.store.cancel(sessionId, request.messageId, request.status);
+      pending.shift();
+    }
+    this.pendingCancellations.delete(sessionId);
+  }
+
   refreshSelected(sessionId: string, messages: QueuedMessage[]): Promise<Record<string, number>> {
     return this.run(sessionId, async () => {
       const rows = await this.store.read(sessionId, true);

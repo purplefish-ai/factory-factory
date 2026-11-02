@@ -4,7 +4,7 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-// Legacy fixtures isolate admission and event ownership; focused authority/admission tests cover their real paths.
+// Legacy fixtures omit admission; session-prompt-admission.test.ts covers it.
 vi.mock('./session.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./session.service')>();
   return {
@@ -36,7 +36,7 @@ vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/chat/session-chat-intent', () => ({
   sessionChatIntentService: {
-    cancel: vi.fn(),
+    cancel: vi.fn().mockResolvedValue(undefined),
     override: vi.fn(),
     configureAdmissionGuard: vi.fn(),
     store: { hasUncertainAttempt: vi.fn().mockResolvedValue(false) },

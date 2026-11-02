@@ -755,11 +755,11 @@ export class SessionDispatchService {
           boundary?.permit
         )
       );
-      // Persist immediately after dispatch so refresh/replay keeps this user message
-      // visible while the provider is still working on the turn.
-      for (const { message, order } of dispatched) {
+      // Preserve each visible message and the exact frozen provider batch during the turn.
+      for (const [index, { message, order }] of dispatched.entries()) {
         sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order, {
           emitSnapshot: false,
+          providerPrompt: index === 0 ? content : null,
         });
       }
       sessionDomainService.emitSessionSnapshot(dbSessionId);

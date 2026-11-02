@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
-import type { ChatMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   closedSessionPersistenceService,
@@ -37,7 +36,9 @@ const createInput = (
   provider: 'CLAUDE',
   model: 'sonnet',
   startedAt: new Date('2026-01-01T00:00:00.000Z'),
-  messages: unsafeCoerce<ChatMessage[]>([{ type: 'mock-message' }]),
+  messages: [
+    { id: 'message', source: 'user', text: 'retained', timestamp: '2026-01-01', order: 0 },
+  ],
   ...overrides,
 });
 
@@ -84,6 +85,44 @@ describe('closedSessionPersistenceService', () => {
     ).rejects.toThrow('Disk full');
 
     expect(closedSessionAccessor.complete).not.toHaveBeenCalled();
+    const row = await vi.mocked(closedSessionAccessor.reserve).mock.results[0]!.value;
+    expect(closedSessionAccessor.removeOrphan).toHaveBeenCalledWith(
+      row.id,
+      row.transcriptHash,
+      row.transcriptPath,
+      expect.any(Function)
+    );
+  });
+
+  it('completes only the reserved ID and verified hash after requesting a durable write', async () => {
+    await closedSessionPersistenceService.persistClosedSession(createInput());
+    const row = await vi.mocked(closedSessionAccessor.reserve).mock.results[0]!.value;
+    expect(closedSessionAccessor.complete).toHaveBeenCalledExactlyOnceWith(
+      row.id,
+      row.transcriptHash
+    );
+    expect(writeFileAtomic).toHaveBeenCalledWith(
+      expect.any(String),
+      row.pendingTranscript,
+      expect.objectContaining({ durable: true, durableDirectoryRoot: expect.any(String) })
+    );
+  });
+
+  it('retains pending proof and refuses completion when readback has another digest', async () => {
+    vi.mocked(writeFileAtomic).mockResolvedValue(undefined);
+    vi.mocked(readFile).mockResolvedValue('different bytes');
+    await expect(
+      closedSessionPersistenceService.persistClosedSession(createInput())
+    ).rejects.toThrow('Archive verification failed');
+    expect(closedSessionAccessor.reserve).toHaveBeenCalledOnce();
+    expect(closedSessionAccessor.complete).not.toHaveBeenCalled();
+    const row = await vi.mocked(closedSessionAccessor.reserve).mock.results[0]!.value;
+    expect(closedSessionAccessor.removeOrphan).toHaveBeenCalledWith(
+      row.id,
+      row.transcriptHash,
+      row.transcriptPath,
+      expect.any(Function)
+    );
   });
 
   it('rethrows database errors before transcript file write', async () => {

@@ -65,15 +65,24 @@ export class SessionDomainService extends EventEmitter {
 
   async enqueueInitialMessageDurably(
     sessionId: string,
-    message: QueuedMessage
-  ): Promise<{ position: number } | { error: string } | null> {
+    message: QueuedMessage,
+    isCurrent?: () => boolean
+  ): Promise<{ position: number; message?: QueuedMessage } | { error: string } | null> {
     if (!this.chatIntent) {
       throw new Error('Durable chat admission is not configured');
     }
-    const result = await this.chatIntent.acceptInitial(sessionId, message);
+    const result = await this.chatIntent.acceptInitial(sessionId, message, isCurrent);
     return result.status === 'queued' && result.position !== undefined
-      ? { position: result.position }
+      ? { position: result.position, message: result.message }
       : null;
+  }
+
+  async cancelInitialMessageDurably(sessionId: string, messageId: string): Promise<void> {
+    if (!this.chatIntent) {
+      throw new Error('Durable chat admission is not configured');
+    }
+    await this.chatIntent.cancel(sessionId, messageId);
+    this.removeQueuedMessage(sessionId, messageId);
   }
 
   recoverInitialMessageDurably(
@@ -222,7 +231,8 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     message: QueuedMessage,
     errorMessage: string,
-    deliveryState: 'failed' | 'cancelled' = 'failed'
+    deliveryState: 'failed' | 'cancelled' = 'failed',
+    publish = true
   ): void {
     if (message.source?.type === 'pr_event') {
       const store = this.registry.getOrCreateActive(sessionId);
@@ -230,18 +240,22 @@ export class SessionDomainService extends EventEmitter {
         return;
       }
       removeQueuedMessage(store, message.id, { recordCancellation: false });
-      this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
+      if (publish) {
+        this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
+      }
       return;
     }
     this.recordRecentMessageRejection(
       sessionId,
-      buildMessageFailure(sessionId, message, errorMessage)
+      buildMessageFailure(sessionId, message, errorMessage),
+      publish
     );
   }
 
   private recordRecentMessageRejection(
     sessionId: string,
-    rejection: Omit<RecentMessageRejection, 'rejectedAt' | 'expiresAt'>
+    rejection: Omit<RecentMessageRejection, 'rejectedAt' | 'expiresAt'>,
+    publish = true
   ): void {
     const store = this.registry.getOrCreate(sessionId);
     const now = Date.now();
@@ -258,6 +272,9 @@ export class SessionDomainService extends EventEmitter {
       store.recentRejections = store.recentRejections.slice(-MAX_RECENT_REJECTIONS);
     }
 
+    if (!publish) {
+      return;
+    }
     this.publisher.emitDelta(sessionId, {
       type: 'message_state_changed',
       id: rejection.id,
@@ -310,11 +327,14 @@ export class SessionDomainService extends EventEmitter {
 
   restoreAcceptedMessage(
     sessionId: string,
-    message: QueuedMessage
+    message: QueuedMessage,
+    options?: { emitSnapshot?: boolean }
   ): { position: number } | { error: string } {
     const store = this.registry.getOrCreateActive(sessionId);
     const result = enqueueMessage(store, message, { restoreAccepted: true });
-    this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    if (options?.emitSnapshot !== false) {
+      this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    }
     return result;
   }
 
@@ -381,7 +401,7 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { emitSnapshot?: boolean; providerPrompt?: ChatMessage['providerPrompt'] }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     this.commitSentUserMessageWithOrder(store, message, order, options);
@@ -391,9 +411,9 @@ export class SessionDomainService extends EventEmitter {
     store: SessionStore,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { emitSnapshot?: boolean; providerPrompt?: ChatMessage['providerPrompt'] }
   ): void {
-    commitSentUserMessageWithOrder(store, message, order);
+    commitSentUserMessageWithOrder(store, message, order, options?.providerPrompt);
     this.emit('user_message_committed', { sessionId: store.sessionId });
 
     if (options?.emitSnapshot !== false) {
@@ -701,8 +721,14 @@ export class SessionDomainService extends EventEmitter {
     return !store.historySuspended && store.historyProviderSessionId === providerSessionId;
   }
 
-  createProviderHistoryFence(sessionId: string, providerSessionId: string): (() => boolean) | null {
-    if (!this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
+  createProviderHistoryFence(
+    sessionId: string,
+    providerSessionId: string | null
+  ): (() => boolean) | null {
+    if (providerSessionId === null && this.repairedProviderHistoryIdentities.has(sessionId)) {
+      return null;
+    }
+    if (providerSessionId && !this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
       return null;
     }
     const store = this.registry.getOrCreate(sessionId);
@@ -710,7 +736,7 @@ export class SessionDomainService extends EventEmitter {
     return () =>
       this.registry.isCurrentStore(sessionId, store) &&
       !store.historySuspended &&
-      store.historyProviderSessionId === providerSessionId &&
+      (store.historyProviderSessionId ?? null) === providerSessionId &&
       (store.historyReadGeneration ?? 0) === generation;
   }
 

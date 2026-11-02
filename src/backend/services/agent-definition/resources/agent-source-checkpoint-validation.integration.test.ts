@@ -109,7 +109,8 @@ it('requires multiple bounded validation transactions before publishing a large 
   expect(await db.prisma.agentSourcePage.count()).toBe(7);
   await maintain(1);
   expect(await checkpoint()).toMatchObject({ status: 'INDEXED' });
-  await maintain(1);
+  // Each head now reserves itself plus two indexed baseline witnesses in the same budget.
+  await maintain(7);
   expect(await checkpoint()).toMatchObject({ status: 'COMPLETE' });
   await maintain(1);
   expect(await db.prisma.agentSourcePage.count()).toBe(1);
@@ -172,9 +173,9 @@ it('bounds actual joined authority rows and records the fixture writer-lock scop
     ids.length
   );
   await db.prisma.agentSourceBaseline.createMany({
-    data: Array.from({ length: 250 }, () => ({
+    data: Array.from({ length: 250 }, (_, i) => ({
       connectionId: fixture.connectionId,
-      headEventId: 'head-0',
+      headEventId: `head-${i}`,
       sourceOrder: 0,
     })),
   });
@@ -184,7 +185,7 @@ it('bounds actual joined authority rows and records the fixture writer-lock scop
   >('./agent-source-checkpoint-promotion');
   const inspected: number[] = [];
   const lockMs: number[] = [];
-  for (let i = 0; i < 20 && (await checkpoint()).status === 'INDEXED'; i++) {
+  for (let i = 0; i < 50 && (await checkpoint()).status === 'INDEXED'; i++) {
     await db.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`UPDATE "AgentDefinition" SET "definitionRevision" = "definitionRevision" WHERE 0`;
       const started = performance.now();
@@ -202,6 +203,16 @@ it('bounds actual joined authority rows and records the fixture writer-lock scop
         const rows = await result.value;
         expect(Array.isArray(rows)).toBe(true);
         count += rows.length;
+        const witnesses = z
+          .array(
+            z.object({
+              baselineMinimum: z.number().nullable().optional(),
+              baselineMaximum: z.number().nullable().optional(),
+            })
+          )
+          .parse(rows);
+        count += witnesses.filter((row) => row.baselineMinimum != null).length;
+        count += witnesses.filter((row) => row.baselineMaximum != null).length;
       }
       lockMs.push(performance.now() - started);
       const queries = [...raw.mock.calls];
@@ -213,18 +224,59 @@ it('bounds actual joined authority rows and records the fixture writer-lock scop
           .array(z.object({ detail: z.string() }))
           .parse(await tx.$queryRawUnsafe(`EXPLAIN QUERY PLAN ${sql}`, ...values));
         expect(plan.some((row) => row.detail.includes('USE TEMP B-TREE'))).toBe(false);
-        expect(plan.some((row) => /SCAN (authority|baseline|page)/.test(row.detail))).toBe(false);
+        expect(plan.some((row) => /SCAN (authority|baseline|page|pin)/.test(row.detail))).toBe(
+          false
+        );
+        if (sql.includes('FROM "AgentSourceHead" authority')) {
+          expect(
+            plan.filter((row) => row.detail.includes('SEARCH pin USING COVERING INDEX'))
+          ).toHaveLength(2);
+        }
       }
       inspected.push(count);
     });
   }
   expect(inspected.length).toBeGreaterThan(10);
   expect(inspected.every((count) => count <= 100)).toBe(true);
-  expect(inspected.reduce((sum, count) => sum + count, 100)).toBe(1502);
+  // Finalization inspected one marker, 33 heads and their 66 baseline extrema (100 rows).
+  expect(inspected.reduce((sum, count) => sum + count, 100)).toBe(2002);
   expect(await checkpoint()).toMatchObject({ status: 'COMPLETE' });
   expect(await db.prisma.agentSourceHead.count()).toBe(1250);
   expect(await db.prisma.agentSourceBaseline.count()).toBe(251);
   process.stdout.write(
     `checkpoint validation fixture ${JSON.stringify({ heads: 1250, baselines: 251, inspected, lockMs })}\n`
   );
+});
+
+it('defers promotion for an unindexed marker and advances after its authority becomes available', async () => {
+  await legacy([['head-0', 'head-1']]);
+  await db.prisma.agentSourcePage.create({
+    data: {
+      connectionId: fixture.connectionId,
+      scanId: 'z-unindexed',
+      ordinal: 2,
+      phase: 'FINALIZED',
+      requestPage: 1,
+      sourceOrder: 0,
+      evidence: { ids: ['older-head'], entries: [] },
+    },
+  });
+  const pages = await db.prisma.agentSourcePage.findMany();
+  await maintain(3);
+  expect(await checkpoint()).toMatchObject({ status: 'INDEXED', validationCursor: null });
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
+  await db.prisma.agentSourceCheckpoint.create({
+    data: {
+      connectionId: fixture.connectionId,
+      scanId: 'z-unindexed',
+      status: 'COMPLETE',
+      headEventId: 'older-head',
+      sourceOrder: 0,
+      entryCount: 1,
+      heads: { create: { providerEventId: 'older-head', position: 0, precedingEventCount: 0 } },
+    },
+  });
+  await maintain(1);
+  expect(await checkpoint()).toMatchObject({ status: 'COMPLETE' });
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
 });

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as atomic from '@/backend/lib/atomic-file';
+import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
 import { closedSessionPersistenceService as service } from './closed-session-persistence.service';
 import { closedSessionWorkspaceDirectory } from './closed-session-storage';
 
@@ -51,6 +52,86 @@ it('retains a temporary transcript while another writer process is alive', async
   const { dir, name } = await temporaryFile(99_999_999);
   await service.maintainArchives();
   expect(await readdir(dir)).toEqual([name]);
+});
+
+it('joins a pending maintenance DB read before closing cursors on stop', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.mocked(closedSessionAccessor.findMaintenancePending).mockImplementationOnce(async () => {
+    await gate;
+    return [];
+  });
+  const run = service.maintainArchives();
+  let stopped = false;
+  const stop = service.stopArchiveMaintenance().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  try {
+    expect(stopped).toBe(false);
+  } finally {
+    release();
+    await Promise.all([run, stop]);
+  }
+  expect(stopped).toBe(true);
+});
+
+it('joins in-flight file completion before shutdown may disconnect its DB', async () => {
+  vi.spyOn(atomic, 'writeFileAtomic').mockRejectedValueOnce(new Error('initial disk failure'));
+  await expect(
+    service.persistClosedSession({
+      sessionId: 'stop',
+      workspaceId: 'workspace',
+      worktreePath: '/unused',
+      name: null,
+      workflow: 'ratchet',
+      provider: 'CLAUDE',
+      providerSessionId: 'history',
+      model: 'model',
+      startedAt: new Date(0),
+      messages: [],
+    })
+  ).rejects.toThrow('initial disk failure');
+  const pending = await vi.mocked(closedSessionAccessor.reserve).mock.results.at(-1)!.value;
+  vi.mocked(closedSessionAccessor.findMaintenancePending).mockResolvedValueOnce([pending]);
+  const original = await vi.importActual<typeof import('@/backend/lib/atomic-file')>(
+    '@/backend/lib/atomic-file'
+  );
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  vi.mocked(atomic.writeFileAtomic).mockImplementationOnce(async (...args) => {
+    entered();
+    await gate;
+    await original.writeFileAtomic(...args);
+  });
+  const completedBefore = vi.mocked(closedSessionAccessor.complete).mock.calls.length;
+  const run = service.maintainArchives();
+  await started;
+  let stopped = false;
+  const stop = service.stopArchiveMaintenance().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  try {
+    expect(stopped).toBe(false);
+  } finally {
+    release();
+    await Promise.all([run, stop]);
+  }
+  expect(closedSessionAccessor.complete).toHaveBeenCalledTimes(completedBefore + 1);
+  expect(stopped).toBe(true);
 });
 
 it('skips an active local atomic write and collects its abandoned temporary copy afterward', async () => {

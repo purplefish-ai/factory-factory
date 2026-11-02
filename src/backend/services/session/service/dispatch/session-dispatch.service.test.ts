@@ -151,6 +151,11 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       first.id,
       second.id,
     ]);
+    expect(
+      sessionDomainService
+        .getTranscriptSnapshot('session')
+        .map(({ providerPrompt }) => providerPrompt)
+    ).toEqual(['first\n\nsecond', null]);
     const late = enqueue('late');
     pending.resolve();
     await dispatch;

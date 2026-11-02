@@ -108,8 +108,8 @@ describe('SessionTerminationCoordinator workspace stops', () => {
     await expect(coordinator.stopWorkspaceSessions('workspace-1')).rejects.toThrow(
       'Failed to stop 2 workspace sessions'
     );
-    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-running');
-    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-runtime-only');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-running');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-runtime-only');
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-browse-only');
     expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-idle');
   });
@@ -542,7 +542,9 @@ describe('SessionTerminationCoordinator races', () => {
   it('keeps cleanup order and releases the reservation after a propagated cleanup failure', async () => {
     const effects: string[] = [];
     const harness = createTerminationHarness({
-      onBeforeStopSession: () => effects.push('before-stop'),
+      onBeforeStopSession: () => {
+        effects.push('before-stop');
+      },
       getSessionById: () => {
         effects.push('load-session');
         return Promise.resolve(harness.session);
@@ -958,4 +960,30 @@ it('reports a rejected physical stop with a constant diagnostic and retains UNKN
     expect.objectContaining({ status: 'UNKNOWN' }),
     expect.any(AbortSignal)
   );
+});
+
+it('stops the provider and finalizes cleanup before reporting durable cancellation failure', async () => {
+  const failure = new Error('intent cancellation unavailable');
+  const harness = createTerminationHarness({
+    onBeforeStopSession: () => Promise.reject(failure),
+  });
+  await expect(harness.coordinator.stopSession('session-1')).rejects.toBe(failure);
+  expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
+  expect(harness.sessionDomainService.clearQueuedWork).toHaveBeenCalledTimes(2);
+  expect(harness.workflowFinalizer.finalizeDeliberateStop).toHaveBeenCalled();
+  expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledWith('session-1');
+  expect(harness.lifecycleGate.isSessionStopping('session-1')).toBe(false);
+});
+
+it('still stops physically when cancellation and lifecycle persistence both fail', async () => {
+  const cancellation = new Error('cancel unavailable');
+  const lifecycle = new Error('history unavailable');
+  const h = createTerminationHarness({ onBeforeStopSession: () => Promise.reject(cancellation) });
+  h.lifecycleEventService.record.mockRejectedValue(lifecycle);
+  await expect(h.coordinator.stopSession('session-1')).rejects.toMatchObject({
+    errors: [cancellation, lifecycle],
+  });
+  expect(h.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
+  expect(h.sessionDomainService.clearQueuedWork).toHaveBeenCalledTimes(2);
+  expect(h.acpEventProcessor.clearSessionState).toHaveBeenCalledWith('session-1');
 });

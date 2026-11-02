@@ -290,7 +290,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         if (!owner) {
           throw new Error('Durable chat load owner unavailable');
         }
-        await owner.hydrate(id);
+        await owner.hydrate(id, { publish: false });
         return owner.hasQueuedInput(id);
       },
       domain: {

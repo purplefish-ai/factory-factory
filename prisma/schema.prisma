@@ -895,6 +895,7 @@ model AgentSourceBaseline {
 
   @@index([connectionId, sourceOrder])
   @@index([connectionId, headEventId])
+  @@index([connectionId, headEventId, sourceOrder])
   @@index([connectionId, id])
 }
 
@@ -1084,11 +1085,11 @@ model ChatIntent {
   revision Int @default(0)
   status String @default("queued")
   attemptId String?
-  attempt PromptDispatchAttempt? @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  attempt PromptDispatchAttempt? @relation(fields: [sessionId, attemptId], references: [sessionId, id], onDelete: Restrict)
   createdAt DateTime @default(now())
   @@unique([sessionId, messageId])
   @@index([sessionId, status, id])
-  @@index([attemptId])
+  @@index([sessionId, attemptId])
 }
 
 // One provider effect, including its complete ordered background membership.
@@ -1106,5 +1107,6 @@ model PromptDispatchAttempt {
   createdAt DateTime @default(now())
   settledAt DateTime?
   intents ChatIntent[]
+  @@unique([sessionId, id])
   @@index([sessionId, status])
 }

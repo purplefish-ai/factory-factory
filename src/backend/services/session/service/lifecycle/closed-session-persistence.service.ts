@@ -57,6 +57,9 @@ class ClosedSessionPersistenceService {
   private orphanDirectory: { path: string; cursor: Dir } | undefined;
   private pendingCursor: string | undefined;
   private readonly activeWrites = new Map<string, number>();
+  private maintenanceRun: Promise<void> | undefined;
+  private maintenanceController: AbortController | undefined;
+  private maintenanceStopping = false;
 
   async cleanupDeletedWorkspace(workspaceId: string): Promise<void> {
     try {
@@ -171,8 +174,41 @@ class ClosedSessionPersistenceService {
     }
   }
 
+  /** Receipt checks cannot call unresolved archive proof absent and resend it. */
+  async recoverPendingForSession(sessionId: string): Promise<boolean> {
+    for (const row of await closedSessionAccessor.findPendingForSession(sessionId)) {
+      try {
+        await this.finish(row);
+      } catch (error) {
+        logger.warn('Closed session receipt recovery deferred', { id: row.id, error });
+      }
+    }
+    return (await closedSessionAccessor.findPendingForSession(sessionId, 1)).length === 0;
+  }
+
   /** Invoked by the existing reconciliation job, never by history list reads. */
-  async maintainArchives(signal?: AbortSignal): Promise<void> {
+  maintainArchives(signal?: AbortSignal): Promise<void> {
+    if (this.maintenanceStopping || signal?.aborted) {
+      return Promise.resolve();
+    }
+    if (this.maintenanceRun !== undefined) {
+      return this.maintenanceRun;
+    }
+    const controller = new AbortController();
+    this.maintenanceController = controller;
+    const run = this.runArchiveMaintenance(
+      signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    );
+    this.maintenanceRun = run;
+    const settled = () => {
+      this.maintenanceRun = undefined;
+      this.maintenanceController = undefined;
+    };
+    void run.then(settled, settled);
+    return run;
+  }
+
+  private async runArchiveMaintenance(signal: AbortSignal): Promise<void> {
     if (signal?.aborted) {
       return;
     }
@@ -197,6 +233,17 @@ class ClosedSessionPersistenceService {
   }
 
   async stopArchiveMaintenance(): Promise<void> {
+    this.maintenanceStopping = true;
+    this.maintenanceController?.abort();
+    try {
+      await this.maintenanceRun?.catch(() => undefined);
+      await this.closeOrphanCursors();
+    } finally {
+      this.maintenanceStopping = false;
+    }
+  }
+
+  private async closeOrphanCursors(): Promise<void> {
     const directory = this.orphanDirectory;
     const root = this.orphanRoot;
     this.orphanDirectory = undefined;
@@ -239,7 +286,7 @@ class ClosedSessionPersistenceService {
         await this.collectArtifact(directory.path, entry, signal);
       }
     } catch (error) {
-      await this.stopArchiveMaintenance();
+      await this.closeOrphanCursors();
       if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
         logger.warn('Archive orphan cleanup deferred', { error });
       }
@@ -352,6 +399,8 @@ class ClosedSessionPersistenceService {
         encoding: 'utf-8',
         mode: 0o600,
         temporaryFileTag: `archive-${process.pid}`,
+        durable: true,
+        durableDirectoryRoot: dirname(closedSessionArchivesDirectory()),
       });
       if (archiveDigest(await readFile(path, 'utf-8')) !== row.transcriptHash) {
         throw new Error('Archive verification failed');

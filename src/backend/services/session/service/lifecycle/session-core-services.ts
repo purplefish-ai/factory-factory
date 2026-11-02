@@ -138,6 +138,7 @@ sessionChatIntentService.configureAdmissionGuard(
 
 export const sessionNotificationDeliveryService = new SessionNotificationDeliveryService({
   isRecoveryHeld: (id) => sessionChatIntentService.store.hasUncertainAttempt(id),
+  withRecoveryGate: (id, operation) => sessionChatIntentService.run(id, operation),
   notificationPort: workspaceNotificationService,
   queuePort: sessionDomainService,
   transcriptPort: sessionDomainService,

@@ -564,6 +564,7 @@ describe('claudeSessionHistoryLoaderService', () => {
       return;
     }
     const transcript = buildTranscriptFromHistory(result.history);
+    expect(transcript.map(({ providerPrompt }) => providerPrompt)).toEqual([content, null]);
     expect(
       transcript.filter(
         (message) =>

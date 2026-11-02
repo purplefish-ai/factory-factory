@@ -4,12 +4,16 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { CodexRuntimeContext } from '@/backend/services/codex-accounts';
+import { ChatIntentAccessor } from '@/backend/services/session/resources/chat-intent.accessor';
+import { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import {
   clearIntegrationDatabase,
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { prEventMarker } from '@/shared/pr-monitoring';
 
 let db: IntegrationDatabase;
 let service: typeof import('./closed-session-persistence.service').closedSessionPersistenceService;
@@ -19,6 +23,8 @@ let hydrator: typeof import('./session-provider-history-hydrator').createProvide
 let atomic: typeof import('@/backend/lib/atomic-file');
 let config: typeof import('@/backend/services/config.service').configService;
 let paths: typeof import('./closed-session-storage');
+let dispatchModule: typeof import('../dispatch/session-dispatch.service');
+let liveDomain: typeof import('../session-domain.service').sessionDomainService;
 const sessionId = 'restart-session';
 let worktree: string;
 let providerFile: string;
@@ -46,6 +52,12 @@ beforeAll(async () => {
   paths = await vi.importActual<typeof import('./closed-session-storage')>(
     './closed-session-storage'
   );
+  dispatchModule = await vi.importActual<typeof import('../dispatch/session-dispatch.service')>(
+    '../dispatch/session-dispatch.service'
+  );
+  ({ sessionDomainService: liveDomain } = await vi.importActual<
+    typeof import('../session-domain.service')
+  >('../session-domain.service'));
 });
 
 beforeEach(async () => {
@@ -81,6 +93,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  liveDomain.clearAllSessions();
   await service.stopArchiveMaintenance();
   vi.restoreAllMocks();
   await clearIntegrationDatabase(db.prisma);
@@ -91,8 +104,7 @@ afterAll(async () => {
   await destroyIntegrationDatabase(db);
 });
 
-function runtime(failDeletion: boolean, context?: CodexRuntimeContext) {
-  const domain = new Domain();
+function runtime(failDeletion: boolean, context?: CodexRuntimeContext, domain = new Domain()) {
   const hydrate = hydrator(domain);
   const finalizer = new Finalizer({
     repository: {
@@ -133,6 +145,312 @@ function historyEntry(uuid?: string) {
   });
 }
 
+type BatchAttachment = NonNullable<QueuedMessage['attachments']>[number];
+async function enqueueBatch(
+  durable: boolean,
+  image: boolean,
+  settings: QueuedMessage['settings'],
+  attachment: BatchAttachment
+) {
+  const intents = durable
+    ? new SessionChatIntentService(new ChatIntentAccessor(db.prisma), liveDomain)
+    : undefined;
+  for (const text of ['first', 'second']) {
+    const message: QueuedMessage = {
+      id: text,
+      text,
+      timestamp: '2026-01-01',
+      settings: { ...settings },
+      ...(image && text === 'second' ? { attachments: [attachment] } : {}),
+    };
+    if (intents) {
+      await intents.accept(sessionId, message);
+    } else {
+      liveDomain.enqueue(sessionId, message);
+    }
+  }
+  return intents;
+}
+
+function expectedBatchContent(
+  image: boolean,
+  background: boolean,
+  attachment: BatchAttachment,
+  renderedBackground: string
+): string | AgentContentItem[] {
+  return image
+    ? [
+        { type: 'text', text: 'first' },
+        { type: 'text', text: '\n\nsecond' },
+        {
+          type: 'image',
+          source: { type: 'base64', data: attachment.data, media_type: 'image/png' },
+        },
+      ]
+    : background
+      ? `first\n\nsecond\n\n${renderedBackground}`
+      : 'first\n\nsecond';
+}
+
+function expectedReplayedHumans(
+  image: boolean,
+  context: CodexRuntimeContext | undefined,
+  background: boolean,
+  sentContent: string | AgentContentItem[]
+) {
+  return image
+    ? context
+      ? ['first\n\n\nsecond']
+      : ['first', '\n\nsecond']
+    : background
+      ? ['first\n\nsecond']
+      : [sentContent];
+}
+
+async function assertDurableBatch(
+  intents: SessionChatIntentService | undefined,
+  background: boolean,
+  sentContent: string | AgentContentItem[]
+) {
+  if (!intents) {
+    return;
+  }
+  const attempt = await db.prisma.promptDispatchAttempt.findFirstOrThrow();
+  expect(attempt.content).toEqual(sentContent);
+  expect(attempt.status).toBe('committed');
+  expect(attempt.members).toEqual([
+    expect.objectContaining({ messageId: 'first', owner: 'human', revision: 0 }),
+    expect.objectContaining({ messageId: 'second', owner: 'human', revision: 0 }),
+    ...(background
+      ? [expect.objectContaining({ messageId: 'pr-event-rendered', owner: 'external' })]
+      : []),
+  ]);
+  expect((await intents.store.read(sessionId)).map((row) => row.status)).toEqual([
+    'committed',
+    'committed',
+  ]);
+  expect(await db.prisma.workspacePRDelivery.count()).toBe(0);
+  expect(await db.prisma.workspacePREvent.count()).toBe(0);
+}
+
+it.each([
+  ...['pending', 'complete'].flatMap((phase) =>
+    [false, true].flatMap((image) =>
+      ['CLAUDE', 'CODEX'].flatMap((provider) =>
+        [false, true].map((durable) => ({ phase, image, provider, durable, background: false }))
+      )
+    )
+  ),
+  { phase: 'pending', image: false, provider: 'CLAUDE', durable: true, background: true },
+])(
+  'reuses the first $phase archive after real batching and restart (image=$image, provider=$provider, durable=$durable, background=$background)',
+  async ({ phase, image, provider, durable, background }) => {
+    let context: CodexRuntimeContext | undefined;
+    if (provider === 'CODEX') {
+      await db.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { provider: 'CODEX', codexAccountId: 'codex-native-default' },
+      });
+      const home = join(db.tempDir, 'provider', 'codex');
+      const sessionsDir = join(home, 'sessions');
+      providerFile = join(sessionsDir, '2026', '11', '02', 'rollout-history.jsonl');
+      await mkdir(dirname(providerFile), { recursive: true });
+      context = {
+        accountId: 'codex-native-default',
+        homeDir: home,
+        sessionsDir,
+        env: { CODEX_HOME: home },
+      };
+    }
+    const settings = {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    };
+    const attachment = {
+      id: 'image',
+      name: 'image.png',
+      type: 'image/png',
+      contentType: 'image' as const,
+      size: 67,
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    };
+    const intents = await enqueueBatch(durable, image, settings, attachment);
+    if (background) {
+      liveDomain.enqueue(sessionId, {
+        id: 'pr-event-rendered',
+        text: 'queued placeholder',
+        timestamp: '2026-01-01',
+        settings: { ...settings },
+        source: {
+          type: 'pr_event',
+          request: { workspaceId: 'workspace', prId: 'pr', bindingRevision: 1 },
+        },
+      });
+    }
+    const sendSessionMessage = vi.fn(async (_id: string, content: string | AgentContentItem[]) => {
+      if (context) {
+        const blocks =
+          typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+        const input = blocks.flatMap<{ type: string; text?: string; image_url?: string }>((block) =>
+          block.type === 'text'
+            ? [{ type: 'input_text', text: block.text }]
+            : block.type === 'image'
+              ? [
+                  {
+                    type: 'input_image',
+                    image_url: `data:${block.source.media_type};base64,${block.source.data}`,
+                  },
+                ]
+              : []
+        );
+        await writeFile(
+          providerFile,
+          [
+            { type: 'session_meta', payload: { id: 'history', cwd: worktree } },
+            { type: 'response_item', payload: { type: 'message', role: 'user', content: input } },
+            {
+              type: 'event_msg',
+              payload: {
+                type: 'user_message',
+                message: blocks
+                  .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+                  .join('\n'),
+              },
+            },
+            {
+              type: 'event_msg',
+              payload: { type: 'agent_message', message: 'Saved provider answer' },
+            },
+          ]
+            .map((entry) => JSON.stringify(entry))
+            .join('\n')
+        );
+        return;
+      }
+      await writeFile(
+        providerFile,
+        `${JSON.stringify({ type: 'user', uuid: 'native-batch', message: { role: 'user', content } })}\n${historyEntry('native-answer')}\n`
+      );
+    });
+    const renderedBackground = `${prEventMarker('rendered')}\nrendered external update`;
+    const dispatcher = new dispatchModule.SessionDispatchService({
+      ...(intents ? { chatIntent: intents } : {}),
+      runtimeManager: { isSessionPromptInFlight: () => false, isSessionRunning: () => true },
+      configService: {
+        resolveQueuedMessageSettings: (_id, message) => message.settings,
+        configureQueuedMessage: async (_id, message) => message.settings,
+      },
+      promptService: {
+        sendSessionMessage,
+        steerSessionMessage: async () => ({ outcome: 'injected' }),
+      },
+      backgroundDelivery: {
+        prepare: vi.fn((_sessionId: string, message: QueuedMessage) => {
+          message.text = renderedBackground;
+          return Promise.resolve({
+            status: 'ready' as const,
+            delivery: {
+              deliveryId: 'rendered',
+              sessionId,
+              bindingRevision: 1,
+              eventIds: ['event'],
+              text: renderedBackground,
+              attempt: 1,
+            },
+            releaseOnRejection: async () => undefined,
+          });
+        }),
+        validate: async () => true,
+        fail: async () => undefined,
+        complete: async () => undefined,
+      },
+    });
+    dispatcher.configure({
+      initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }) },
+    });
+    dispatcher.configureLifecycle({
+      gate: {
+        getGeneration: () => 0,
+        isGenerationCurrent: () => true,
+        isSessionStopping: () => false,
+      },
+      startup: { getSessionClient: () => ({}), getOrCreateSessionClient: async () => ({}) },
+      notificationDelivery: {
+        claimForDispatch: () => ({ status: 'not_notification' }),
+        isAlreadyDelivered: async () => false,
+        acknowledgeSuccessfulDispatch: async () => undefined,
+        recoverPending: async () => ({ dispatchableCount: 0 }),
+        resetSession: () => undefined,
+        removeDuplicateFromQueue: () => false,
+        isNotificationMessage: () => false,
+      },
+    });
+    await dispatcher.tryDispatchNextMessage(sessionId);
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
+      sessionId,
+      expectedBatchContent(image, background, attachment, renderedBackground)
+    );
+    expect(liveDomain.getTranscriptSnapshot(sessionId).map(({ text }) => text)).toEqual([
+      'first',
+      'second',
+      ...(background ? [renderedBackground] : []),
+    ]);
+    const sentContent = sendSessionMessage.mock.calls[0]![1];
+    expect(liveDomain.getTranscriptSnapshot(sessionId).map((row) => row.providerPrompt)).toEqual([
+      sentContent,
+      null,
+      ...(background ? [null] : []),
+    ]);
+    await assertDurableBatch(intents, background, sentContent);
+    liveDomain.appendClaudeEvent(sessionId, {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Saved provider answer' }] },
+    });
+    const interrupted = runtime(true, context, liveDomain);
+    const write =
+      phase === 'pending'
+        ? vi
+            .spyOn(atomic, 'writeFileAtomic')
+            .mockRejectedValueOnce(new Error('interrupted before publication'))
+        : undefined;
+    await close(interrupted.finalizer);
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
+    const original = await db.prisma.closedSession.findFirstOrThrow();
+    expect(original.archiveState).toBe(phase === 'pending' ? 'PENDING' : 'COMPLETE');
+    const bytes =
+      original.pendingTranscript ??
+      (await readFile(paths.resolveClosedSessionTranscriptPath(original, null), 'utf8'));
+    liveDomain.clearAllSessions();
+    const restarted = runtime(false, context);
+    const session = await db.prisma.agentSession.findUniqueOrThrow({ where: { id: sessionId } });
+    await restarted.hydrate(sessionId, {
+      ...session,
+      codexAccountContext: context,
+      workspace: { worktreePath: worktree },
+    });
+    expect(
+      restarted.domain
+        .getTranscriptSnapshot(sessionId)
+        .filter(({ source }) => source === 'user')
+        .map(({ text }) => text)
+    ).toEqual(expectedReplayedHumans(image, context, background, sentContent));
+    await service.recoverPending('workspace');
+    await close(restarted.finalizer);
+    expect(await db.prisma.agentSession.count()).toBe(0);
+    const archives = await db.prisma.closedSession.findMany();
+    expect(archives).toHaveLength(1);
+    expect(archives[0]?.id).toBe(original.id);
+    expect(
+      await readFile(paths.resolveClosedSessionTranscriptPath(archives[0]!, null), 'utf8')
+    ).toBe(bytes);
+  }
+);
+
 it.each([
   { live: true, phase: 'pending' },
   { live: true, phase: 'complete' },
@@ -159,7 +477,10 @@ it.each([
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     expect(await db.prisma.agentSession.count()).toBe(1);
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const originalBytes =
@@ -209,6 +530,7 @@ it('recovers a real atomic writer exit immediately before rename and removes its
     throw new Error('writer exited before rename');
   });
   await close(runtime(true).finalizer);
+  expect(crash).toHaveBeenCalledOnce();
   crash.mockRestore();
   const pending = await db.prisma.closedSession.findFirstOrThrow();
   const directory = paths.closedSessionWorkspaceDirectory('workspace');
@@ -248,7 +570,10 @@ it.each(['pending', 'complete'])(
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const bytes =
       original.pendingTranscript ??
@@ -295,7 +620,10 @@ it.each(['pending', 'complete'])(
             .mockRejectedValueOnce(new Error('interrupted before write'))
         : undefined;
     await close(initial.finalizer);
-    write?.mockRestore();
+    if (write) {
+      expect(write).toHaveBeenCalledOnce();
+      write.mockRestore();
+    }
     const original = await db.prisma.closedSession.findFirstOrThrow();
     const bytes =
       original.pendingTranscript ??

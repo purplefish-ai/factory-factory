@@ -28,15 +28,20 @@ export interface ReconciliationTerminalBridge {
   recoverOrphanedSessions(): Promise<number>;
 }
 
+export interface ReconciliationArchiveBridge {
+  maintain(signal: AbortSignal): Promise<void>;
+  stop(): Promise<void>;
+}
+
 /** Job name this service registers with the shared runner. */
 const RECONCILIATION_CLEANUP_JOB = 'reconciliation-cleanup';
 
 class ReconciliationService {
   private _workspace: ReconciliationWorkspaceBridge | null = null;
   private _terminal: ReconciliationTerminalBridge | null = null;
-  private archives:
-    | { maintain(signal?: AbortSignal): Promise<void>; stop(): Promise<void> }
-    | undefined;
+  private _archives: ReconciliationArchiveBridge | null = null;
+  private cleanupController = new AbortController();
+  private readonly cleanupRuns = new Set<Promise<void>>();
   /** The signal of the run currently executing; see `isShuttingDown`. */
   private runSignal: AbortSignal | null = null;
   /** Whether the service itself has been stopped, independent of any run. */
@@ -66,17 +71,28 @@ class ReconciliationService {
    * between steps.
    */
   private get isShuttingDown(): boolean {
-    return this.stopped || (this.runSignal?.aborted ?? false);
+    return (
+      this.stopped || this.cleanupController.signal.aborted || (this.runSignal?.aborted ?? false)
+    );
   }
 
   configure(bridges: {
     workspace: ReconciliationWorkspaceBridge;
     terminal: ReconciliationTerminalBridge;
-    archives?: { maintain(signal?: AbortSignal): Promise<void>; stop(): Promise<void> };
+    archives: ReconciliationArchiveBridge;
   }): void {
     this._workspace = bridges.workspace;
     this._terminal = bridges.terminal;
-    this.archives = bridges.archives;
+    this._archives = bridges.archives;
+  }
+
+  private get archives(): ReconciliationArchiveBridge {
+    if (!this._archives) {
+      throw new Error(
+        'ReconciliationService: archive bridge not configured. Call configure() first.'
+      );
+    }
+    return this._archives;
   }
 
   private get terminal(): ReconciliationTerminalBridge {
@@ -106,6 +122,9 @@ class ReconciliationService {
    * Start periodic reconciliation and orphan cleanup.
    */
   startPeriodicCleanup(): void {
+    if (this.cleanupController.signal.aborted) {
+      this.cleanupController = new AbortController();
+    }
     this.stopped = false;
     jobRunner.start(RECONCILIATION_CLEANUP_JOB);
   }
@@ -115,8 +134,10 @@ class ReconciliationService {
    */
   async stopPeriodicCleanup(): Promise<void> {
     this.stopped = true;
+    this.cleanupController.abort();
     await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
-    await this.archives?.stop();
+    await Promise.allSettled([...this.cleanupRuns]);
+    await this.archives.stop();
   }
 
   private async runPeriodicReconciliation(): Promise<void> {
@@ -219,18 +240,45 @@ class ReconciliationService {
   }
 
   /** Cleanup orphaned terminal processes on startup. */
-  async cleanupOrphans(): Promise<void> {
+  cleanupOrphans(): Promise<void> {
+    const run = this.cleanupOrphansRun();
+    this.cleanupRuns.add(run);
+    void run.then(
+      () => this.cleanupRuns.delete(run),
+      () => this.cleanupRuns.delete(run)
+    );
+    return run;
+  }
+
+  private async cleanupOrphansRun(): Promise<void> {
     // Bail early if shutdown has started to avoid accessing prisma after disconnect
     if (this.isShuttingDown) {
       logger.debug('Skipping orphan cleanup - shutdown in progress');
       return;
     }
 
-    // Terminal sessions are still PID-tracked and may become orphaned.
-    const recoveredCount = await this.terminal.recoverOrphanedSessions();
-    if (!this.isShuttingDown) {
-      await this.archives?.maintain(this.runSignal ?? undefined);
+    const signal = this.runSignal
+      ? AbortSignal.any([this.cleanupController.signal, this.runSignal])
+      : this.cleanupController.signal;
+    const archives = this.archives;
+    // Independent recovery domains must both run even if one rejects. Joining
+    // the entire direct/periodic run also fences startup work during shutdown.
+    const [terminal, archive] = await Promise.allSettled([
+      this.terminal.recoverOrphanedSessions(),
+      archives.maintain(signal),
+    ]);
+    if (terminal.status === 'rejected') {
+      if (archive.status === 'rejected') {
+        logger.warn('Archive recovery also failed during terminal recovery failure', {
+          error: archive.reason,
+        });
+      }
+      throw terminal.reason;
     }
+    if (archive.status === 'rejected') {
+      throw archive.reason;
+    }
+    const recoveredCount = terminal.value;
     if (recoveredCount > 0) {
       logger.info('Marked orphaned terminal sessions as idle', {
         recoveredCount,

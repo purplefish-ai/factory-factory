@@ -235,5 +235,8 @@ function classifyPreInvocationFailure(
   invoked: boolean,
   observation?: AcpPromptObservation
 ): unknown {
-  return requested && !invoked && !observation ? new PromptNotInvokedError(error) : error;
+  if (!requested || observation) {
+    return error;
+  }
+  return invoked ? error : new PromptNotInvokedError(error);
 }

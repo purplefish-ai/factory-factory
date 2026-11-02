@@ -170,9 +170,7 @@ async function handleFailedBatch(
   ) {
     await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
     if (!input.isCurrent()) {
-      for (const message of backwards) {
-        await input.onError(message, error);
-      }
+      await handleMemberErrors(input, backwards, error);
       return;
     }
     for (const message of backwards) {
@@ -188,9 +186,7 @@ async function handleFailedBatch(
       input.isCurrent() ? 'failed' : 'cancelled'
     );
   }
-  for (const message of backwards) {
-    await input.onError(message, error);
-  }
+  await handleMemberErrors(input, backwards, error);
   return undefined;
 }
 
@@ -372,4 +368,29 @@ export async function prepareBackgroundForDispatch(
   }
 
   return true;
+}
+
+async function handleMemberErrors(
+  input: CollectedBatchInput,
+  messages: QueuedMessage[],
+  error: unknown
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const message of messages) {
+    try {
+      await input.onError(message, error);
+    } catch (failure) {
+      failures.push(failure);
+      logger.warn('Failed persisting one batch member failure; continuing cleanup', {
+        messageId: message.id,
+        error: failure,
+      });
+    }
+  }
+  if (failures.length) {
+    throw new AggregateError(
+      failures,
+      `Failed handling ${failures.length} dispatch member failures`
+    );
+  }
 }

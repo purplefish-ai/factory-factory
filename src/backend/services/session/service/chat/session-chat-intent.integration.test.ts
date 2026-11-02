@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { ChatIntentAccessor } from '@/backend/services/session/resources/chat-intent.accessor';
 import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
+import { AcpPromptController } from '@/backend/services/session/service/acp/acp-prompt-controller';
 import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import {
@@ -11,6 +12,7 @@ import {
   defaultContext,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { dispatchCollectedBatch } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
 import type { SessionDispatchDependencies } from '@/backend/services/session/service/dispatch/session-dispatch.types';
 import { prepareDurableAttempt } from '@/backend/services/session/service/dispatch/session-durable-attempt';
@@ -19,10 +21,12 @@ import {
   configOptions,
 } from '@/backend/services/session/service/lifecycle/session-config-authority.test-helpers';
 import { SessionConfigMutationQueue } from '@/backend/services/session/service/lifecycle/session-config-mutation-queue';
+import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import {
   SessionDomainService,
   sessionDomainService as domain,
 } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import {
   createIntegrationDatabase,
   clearIntegrationDatabase,
@@ -778,4 +782,190 @@ it('does not requeue a confirmed-unsent mixed batch when stop occurs while relea
   await dispatch;
   expect(domain.getQueueLength('s')).toBe(0);
   expect((await intents.store.read('s'))[0]?.status).toBe('cancelled');
+});
+
+it('cancels a newly persisted intent when runtime projection fails instead of reviving rejected input on restart', async () => {
+  vi.spyOn(domain, 'enqueue').mockReturnValueOnce({ error: 'projection unavailable' });
+  await expect(intents.accept('s', message('projection-failed'))).rejects.toThrow(
+    'projection unavailable'
+  );
+  expect((await intents.store.find('s', 'projection-failed'))?.status).toBe('cancelled');
+  domain.clearAllSessions();
+  await intents.hydrate('s');
+  expect(domain.getQueueLength('s')).toBe(0);
+});
+
+it('stages load hydration without publishing queue or failure deltas before replay is captured', async () => {
+  await intents.accept('s', message('queued'));
+  await intents.accept('s', message('failed'));
+  await intents.cancel('s', 'failed', 'failed');
+  domain.clearAllSessions();
+  vi.spyOn(sessionEventBus, 'hasNoViewers').mockReturnValue(false);
+  const publish = vi.spyOn(sessionEventBus, 'publishToSession');
+  await intents.hydrate('s', { publish: false });
+  expect(publish).not.toHaveBeenCalled();
+  expect(domain.getQueueSnapshot('s').map((entry) => entry.id)).toEqual(['queued']);
+  const replay = domain.prepareLoad('s', domain.getRuntimeSnapshot('s')).replayEvents;
+  expect(replay).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 'failed', newState: 'FAILED' })])
+  );
+});
+
+it('cancels initial input whose captured workspace guard becomes stale during durable acceptance', async () => {
+  let current = true;
+  const accept = intents.store.accept.bind(intents.store);
+  vi.spyOn(intents.store, 'accept').mockImplementation(async (...args) => {
+    const result = await accept(...args);
+    current = false;
+    return result;
+  });
+  const result = await intents.acceptInitial('s', message('initial'), () => current);
+  expect(result.status).toBe('cancelled');
+  domain.clearAllSessions();
+  await intents.hydrate('s');
+  expect(domain.getQueueLength('s')).toBe(0);
+});
+
+it('holds an invoked busy-shaped rejection as uncertain without provider nondelivery proof', async () => {
+  await intents.accept('s', message('busy'));
+  const rejection = {
+    code: -32_600,
+    data: { reason: 'A turn is already in progress for this session' },
+  };
+  const handle = createTestProcessHandle({
+    connection: { prompt: vi.fn().mockRejectedValue(rejection) },
+  });
+  const controller = new AcpPromptController({
+    isCurrentHandle: () => true,
+    stopClient: async () => undefined,
+  });
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [message('busy')],
+    content: 'busy',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+  });
+  await expect(
+    attempt.invoke(() =>
+      controller.sendPrompt(
+        's',
+        handle,
+        [{ type: 'text', text: 'busy' }],
+        undefined,
+        undefined,
+        undefined,
+        true
+      )
+    )
+  ).rejects.toBeInstanceOf(UncertainChatDispatchError);
+  expect((await intents.store.find('s', 'busy'))?.status).toBe('uncertain');
+});
+
+it('continues whole batch cleanup after one member persistence callback rejects', async () => {
+  await intents.accept('s', message('one'));
+  await intents.accept('s', message('two'));
+  const called: string[] = [];
+  await expect(
+    dispatchCollectedBatch({
+      chatIntent: intents,
+      sessionId: 's',
+      batch: { messages: domain.getQueueSnapshot('s'), release: () => undefined },
+      backgroundDelivery: dispatcher().background,
+      isCurrent: () => true,
+      send: () => Promise.reject(new Error('configuration failed before claim')),
+      onSuccess: () => undefined,
+      onError: (msg) => {
+        called.push(msg.id);
+        return called.length === 1
+          ? Promise.reject(new Error('terminal persistence failed'))
+          : Promise.resolve();
+      },
+    })
+  ).rejects.toThrow('Failed handling 1 dispatch member');
+  expect(called).toEqual(['two', 'one']);
+});
+
+it('serializes notification recovery effects with human claims and rechecks uncertainty after its pending read', async () => {
+  await intents.accept('s', message('human'));
+  const entered = createDeferred<void>();
+  const release = createDeferred<void>();
+  const markDelivered = vi.fn(() => Promise.resolve());
+  const enqueue = vi.fn(() => ({ position: 0 }));
+  let published = false;
+  const delivery = new SessionNotificationDeliveryService({
+    isRecoveryHeld: (id) => intents.store.hasUncertainAttempt(id),
+    withRecoveryGate: (id, operation) => intents.run(id, operation),
+    notificationPort: {
+      listPendingForDelivery: async () => {
+        entered.resolve();
+        await release.promise;
+        return [
+          {
+            id: 'notification',
+            workspaceId: 'w',
+            sourceWorkspaceId: 'source',
+            sourceWorkspaceName: 'Source',
+            sourceProjectName: 'Project',
+            message: 'Update',
+            direction: 'CHILD_TO_PARENT',
+            deliveredAt: null,
+            createdAt: new Date(0),
+          },
+        ];
+      },
+      findForDelivery: () => Promise.resolve(null),
+      markDelivered,
+    },
+    queuePort: { hasQueuedMessage: () => false, enqueue, removeQueuedMessage: () => true },
+    transcriptPort: {
+      getTranscriptSnapshot: () =>
+        published
+          ? [
+              {
+                id: 'workspace-notification-notification',
+                source: 'user',
+                text: 'present',
+                timestamp: new Date(0).toISOString(),
+                order: 1,
+              },
+            ]
+          : [],
+      getHistoryHydrationSource: () => 'jsonl',
+      appendClaudeEvent: () => 1,
+    },
+    deltaPort: { emitDelta: vi.fn() },
+  });
+  const recovery = delivery.recoverPending({
+    sessionId: 's',
+    workspaceId: 'w',
+    assertAllowed: () => undefined,
+  });
+  await entered.promise;
+  const notification = message('workspace-notification-notification');
+  const claim = delivery.claimForDispatch('s', notification.id);
+  expect(claim.status).toBe('claimed');
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [message('human'), notification],
+    content: 'human\n\npresent',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+  });
+  published = true;
+  await expect(
+    attempt.invoke(() => Promise.reject(new Error('connection lost after send')))
+  ).rejects.toBeInstanceOf(UncertainChatDispatchError);
+  if (claim.status === 'claimed') {
+    claim.release();
+  }
+  expect((await intents.store.find('s', 'human'))?.status).toBe('uncertain');
+  release.resolve();
+  expect(await recovery).toEqual({ dispatchableCount: 0 });
+  expect(markDelivered).not.toHaveBeenCalled();
+  expect(enqueue).not.toHaveBeenCalled();
 });

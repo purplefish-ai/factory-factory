@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   history: vi.fn(),
   archives: vi.fn(),
+  pending: vi.fn(),
   read: vi.fn(),
 }));
 vi.mock('./closed-session-transcript-header', () => ({
@@ -13,7 +14,10 @@ vi.mock('./closed-session-transcript-header', () => ({
   ) => schema.parse(JSON.parse(await mocks.read())),
 }));
 vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
-  closedSessionAccessor: { findBySessionIdWithWorkspace: mocks.archives },
+  closedSessionAccessor: {
+    findBySessionIdWithWorkspace: mocks.archives,
+    findPendingForSession: mocks.pending,
+  },
 }));
 vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: { findAgentSessionById: mocks.session },
@@ -29,6 +33,7 @@ import { findPRDeliveryReceipt } from './session-pr-receipt';
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.archives.mockResolvedValue([]);
+  mocks.pending.mockResolvedValue([]);
 });
 
 it.each(['CLAUDE', 'CODEX'])(

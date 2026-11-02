@@ -89,24 +89,40 @@ existing initial input before rebuilding mutable linked-issue content; submitted
 retry APIs still reject conflicting payloads. Failed initial acceptance rolls
 back a newly created session. Loading safely queued durable human input triggers
 dispatch after configuration publication; a browse-only load without queued
-human intent stays passive. Legacy in-memory input cannot be backfilled.
+human intent stays passive. Initial provisioning admission rechecks its captured
+workspace guard after persistence; stale input is cancelled before acceptance
+publication. Admission failure prevents READY. Legacy in-memory input cannot be
+backfilled.
+
+An identical retry preserves its previously accepted durable outcome even if
+rebuilding or publishing its runtime projection fails. Only a newly inserted
+intent may be compensated for failed initial projection; a replay cannot cancel
+already accepted input.
 
 Submitted payloads remain immutable. Accepted later model, reasoning, thinking
 and planning edits update separate desired settings/revisions for older queued
-humans. Restart hydration restores those desired settings. The dispatcher still
-combines consecutive messages into one prompt, preserves slash-command
-boundaries and human priority, and uses the last human's effective settings.
-Selected members are held out of hydration and cancellation until the batch
-exits; a rejected removal cannot cancel a durable member behind the dispatcher.
-The configuration owner serializes accepted edits, desired-revision refresh,
-provider configuration, atomic claim and the native turn. Claim compares every
-human's desired revision and provider identity. A revision conflict requeues the
-whole unsent batch. Later edits wait behind that turn, so the frozen settings
-and native configuration snapshot describe the actual invocation. Ordinary
-prompt sends share this admission queue and cannot occupy the prompt limiter
-while a frozen batch is waiting to invoke the provider. Runtime retirement
-rejects the old queue without blocking a replacement; a claimed mixed batch
-remains uncertain and retains its external delivery claims.
+humans. Restart hydration restores those desired settings. An inactive edit is
+accepted only after its guarded snapshot/model write succeeds. A runtime
+installed before that commit receives the edit through the live provider; its
+rejection leaves desired settings unchanged. Once the inactive commit succeeds,
+a runtime appearing during desired persistence does not trigger another provider
+edit or stale configuration publication. Failed desired writes retain an
+in-process reconciliation fence and report partial persistence failure; a crash
+before reconciliation may retain the accepted native snapshot with prior queued
+desired settings, so the failed operation is not reported as fully durable. The
+dispatcher still combines consecutive messages into one prompt, preserves
+slash-command boundaries and human priority, and uses the last human's effective
+settings. Selected members are held out of hydration and cancellation until the
+batch exits; a rejected removal cannot cancel a durable member behind the
+dispatcher. The configuration owner serializes accepted edits, desired-revision
+refresh, provider configuration, atomic claim and the native turn. Claim
+compares every human's desired revision and provider identity. A revision
+conflict requeues the whole unsent batch. Later edits wait behind that turn, so
+the frozen settings and native configuration snapshot describe the actual
+invocation. Ordinary prompt sends share this admission queue and cannot occupy
+the prompt limiter while a frozen batch is waiting to invoke the provider.
+Runtime retirement rejects the old queue without blocking a replacement; a
+claimed mixed batch remains uncertain and retains its external delivery claims.
 
 Before invoking a provider, a transaction creates one `PromptDispatchAttempt`
 with complete ordered membership (including background messages), assembled
@@ -122,29 +138,43 @@ The claim is already potentially sent: a crash between persistence and provider
 invocation cannot prove non-delivery. Only explicit local proof produced before
 entering the provider RPC can return the entire batch to queued (or cancelled
 when stopped). That settlement also clears the live claim marker; missing proof
-is always uncertain. Interrupted or failed invocations remain uncertain, appear
-as recoverable failed input, and are never automatically replayed, together or
-member by member. Check provider history before submitting replacement input.
-Trusted-local `session.listUncertainDispatches` exposes the full membership
-identifiers and frozen provider/settings identity.
+is always uncertain. An invoked RPC rejection, including a busy-shaped error, is
+not proof of nondelivery. Interrupted or failed invocations remain uncertain,
+appear as recoverable failed input, and are never automatically replayed,
+together or member by member. Check provider history before submitting
+replacement input. Trusted-local `session.listUncertainDispatches` exposes the
+full membership identifiers and frozen provider/settings identity.
 `session.resolveUncertainDispatch` resolves an entire human-only batch as
 confirmed committed or cancelled after manual history review; neither choice
-requeues any member. Mixed external batches fail closed and require the existing
-external delivery owners to reconcile their ledgers. Full batch proof remains
-stored without an age-based purge. Unresolved attempts hold automatic external
-delivery and notification transcript recovery for that session; existing
-PR/notification ledgers retain their replay and acknowledgment authority. This
-does not migrate AgentRun initial delivery.
+requeues any member. Mixed external batches fail closed. External owners may
+reconcile their own ledgers, but a partial receipt does not settle the complete
+chat batch or release its hold. Releasing such a batch requires an
+owner-coordinated recovery path with complete frozen-effect proof; that bridge
+is not currently implemented. Full batch proof remains stored without an
+age-based purge. Unresolved attempts hold automatic external delivery and
+notification transcript recovery for that session; existing PR/notification
+ledgers retain their replay and acknowledgment authority. This does not migrate
+AgentRun initial delivery.
 
-Queued cancellation and explicit stop persist cancellation before discarding the
-runtime queue. Unexpected process exit records queued input as failed; managed
-runtime replacement and backend shutdown preserve queued input. Stop cannot
-cancel the proof of an already uncertain attempt. Explicit session/workspace
-deletion cascades these records. Permission callbacks remain process-local and
-are never restored as durable requests.
+Queued cancellation persists cancellation before discarding the runtime queue.
+Explicit Stop still physically terminates its owned runtime and completes
+cleanup when that persistence fails, then reports the failure. Failed
+cancellation or exit writes retain an in-process fence: subsequent owner
+operations retry the write before hydrating or claiming input. A process crash
+while all persistence writes fail cannot retain that new cancellation intent; no
+successful durable cancellation is reported in that case. Unexpected process
+exit records queued input as failed and continues lifecycle cleanup on write
+failure; managed runtime replacement and backend shutdown preserve queued input.
+Stop cannot cancel the proof of an already uncertain attempt. Explicit
+session/workspace deletion cascades these records. Permission callbacks remain
+process-local and are never restored as durable requests.
 
 Resolving a human-only uncertain attempt also wakes the dispatcher, allowing
 unrelated external work held behind that proof to proceed under its own ledger.
+Notification recovery rechecks uncertainty after reading pending receipts while
+holding the same session intent gate before transcript-based acknowledgment or
+queue projection. Failed intent persistence during runtime exit does not skip
+runtime cleanup, status updates or workflow finalization.
 
 ## Session commands
 
@@ -156,14 +186,16 @@ no WebSocket and do not serialize frames.
 
 `chat-command-adapter.ts` owns requester serialization and existing error copy.
 The session configuration service serializes each configuration write through
-provider completion, persistence and state publication. When a live configured
-handle supplies confirmed options, a rejected change emits its configuration
-correction through `SessionDomainService.emitDelta` before releasing that
-write's queue slot. This prevents a delayed rollback from overwriting a newer
-successful choice. Inactive or unavailable-session failures can return an error
-without a configuration correction. Correction delivery is independent of the
-requester's connection; only the requester receives the error and its optional
-request correlation ID. Explicit model capabilities replies are requester-only.
+provider completion, persistence and state publication. Captured desired
+overrides persist before configuration publication or acknowledgment;
+unsupported/no-op captures do not rewrite intents. When a live configured handle
+supplies confirmed options, a rejected change emits its configuration correction
+through `SessionDomainService.emitDelta` before releasing that write's queue
+slot. This prevents a delayed rollback from overwriting a newer successful
+choice. Inactive or unavailable-session failures can return an error without a
+configuration correction. Correction delivery is independent of the requester's
+connection; only the requester receives the error and its optional request
+correlation ID. Explicit model capabilities replies are requester-only.
 Permission completion and matching-request cleanup remain owned by the
 permission service.
 
@@ -193,7 +225,9 @@ Registering a chat WebSocket does not hydrate history. The client explicitly
 sends `load_session`, whose transport adapter runs these application stages:
 
 1. `prepareLoad` reads the `AgentSession`, hydrates provider history, and merges
-   durable lifecycle events and accepted chat intent. History fences, transcript
+   durable lifecycle events and accepted chat intent. Chat-intent hydration
+   stages queue entries and failed recovery content without publishing
+   snapshots/deltas ahead of the replay envelope. History fences, transcript
    writes, hydration flags, and retry cooldowns use the same application domain
    that supplies replay.
 2. `captureReplay` synchronously reads the current runtime, recovers interrupted

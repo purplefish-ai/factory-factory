@@ -116,6 +116,10 @@ export interface ChatMessage {
   message?: AgentMessage; // For agent messages
   timestamp: string;
   attachments?: import('./queued').MessageAttachment[]; // For user uploaded images/files
+  /** Exact dispatched provider prompt on the first batch row; null on covered rows.
+   * Keeps archive identity stable when native history restores one combined prompt.
+   */
+  providerPrompt?: string | AgentContentItem[] | null;
   /** Backend-assigned order for reliable sorting (monotonically increasing per session) */
   order: number;
 }

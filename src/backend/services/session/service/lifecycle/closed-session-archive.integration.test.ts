@@ -87,6 +87,74 @@ it('concurrent close and retry share one immutable archive outside the worktree'
   ).toEqual(input.messages);
 });
 
+it('rejects invalid archive states at the SQLite boundary', async () => {
+  await service.persistClosedSession(input);
+  const row = await db.prisma.closedSession.findFirstOrThrow();
+  await expect(
+    db.prisma.closedSession.update({ where: { id: row.id }, data: { archiveState: 'UNKNOWN' } })
+  ).rejects.toThrow();
+  expect(
+    (await db.prisma.closedSession.findUniqueOrThrow({ where: { id: row.id } })).archiveState
+  ).toBe('COMPLETE');
+});
+
+it('recovers a pending archive before looking for an archived PR receipt', async () => {
+  const write = vi.spyOn(atomic, 'writeFileAtomic').mockRejectedValueOnce(new Error('disk failed'));
+  await expect(
+    service.persistClosedSession({ ...input, provider: 'CLAUDE', codexAccountId: null })
+  ).rejects.toThrow('disk failed');
+  expect(write).toHaveBeenCalledOnce();
+  write.mockRestore();
+  const { claudeSessionHistoryLoaderService } = await vi.importActual<
+    typeof import('../data/session-history-loader.service')
+  >('../data/session-history-loader.service');
+  vi.spyOn(claudeSessionHistoryLoaderService, 'loadSessionHistory').mockResolvedValue({
+    status: 'loaded',
+    filePath: '/fixture',
+    history: [
+      {
+        type: 'user',
+        content: '<!-- factory-factory-pr-event:delivery -->',
+        timestamp: '2026-01-01',
+      },
+    ],
+  });
+  const { findPRDeliveryReceipt } =
+    await vi.importActual<typeof import('./session-pr-receipt')>('./session-pr-receipt');
+  expect(await findPRDeliveryReceipt(input.sessionId, 'delivery')).toBe('delivered');
+  expect((await db.prisma.closedSession.findFirstOrThrow()).archiveState).toBe('COMPLETE');
+});
+
+it('reports unavailable rather than absent while pending PR receipt proof cannot recover', async () => {
+  await db.prisma.agentSession.create({
+    data: {
+      id: input.sessionId,
+      workspaceId: input.workspaceId,
+      provider: 'CLAUDE',
+      providerSessionId: 'thread',
+      model: 'model',
+      workflow: 'followup',
+    },
+  });
+  const write = vi.spyOn(atomic, 'writeFileAtomic').mockRejectedValue(new Error('disk failed'));
+  await expect(
+    service.persistClosedSession({ ...input, provider: 'CLAUDE', codexAccountId: null })
+  ).rejects.toThrow('disk failed');
+  const { claudeSessionHistoryLoaderService } = await vi.importActual<
+    typeof import('../data/session-history-loader.service')
+  >('../data/session-history-loader.service');
+  vi.spyOn(claudeSessionHistoryLoaderService, 'loadSessionHistory').mockResolvedValue({
+    status: 'loaded',
+    filePath: '/fixture',
+    history: [],
+  });
+  const { findPRDeliveryReceipt } =
+    await vi.importActual<typeof import('./session-pr-receipt')>('./session-pr-receipt');
+  expect(await findPRDeliveryReceipt(input.sessionId, 'delivery')).toBe('unavailable');
+  expect(write).toHaveBeenCalledTimes(2);
+  expect((await db.prisma.closedSession.findFirstOrThrow()).archiveState).toBe('PENDING');
+});
+
 it('recovers a pending write after failure without advertising an incomplete transcript', async () => {
   const write = vi.spyOn(atomic, 'writeFileAtomic').mockRejectedValueOnce(new Error('disk full'));
   await expect(service.persistClosedSession(input)).rejects.toThrow('disk full');
@@ -103,9 +171,16 @@ it('recovers after file rename but before database completion using the original
     .mockRejectedValueOnce(new Error('DB unavailable'));
   await expect(service.persistClosedSession(input)).rejects.toThrow('DB unavailable');
   expect(await accessor.findByWorkspaceId('workspace', 20)).toEqual([]);
+  const pending = await db.prisma.closedSession.findFirstOrThrow();
+  const { resolveClosedSessionTranscriptPath } = await vi.importActual<
+    typeof import('./closed-session-storage')
+  >('./closed-session-storage');
+  const bytes = await readFile(resolveClosedSessionTranscriptPath(pending, null), 'utf8');
+  expect(JSON.parse(bytes).messages).toEqual(input.messages);
   complete.mockRestore();
   await service.recoverPending('workspace');
   expect(await accessor.findByWorkspaceId('workspace', 20)).toHaveLength(1);
+  expect(await readFile(resolveClosedSessionTranscriptPath(pending, null), 'utf8')).toBe(bytes);
   await service.persistClosedSession(input);
   expect(await db.prisma.closedSession.count()).toBe(1);
 });
@@ -195,6 +270,12 @@ it('keeps a legacy original if relocation fails and resumes after restart', asyn
 
 it('explicit workspace deletion cascades records and removes owned artifacts', async () => {
   await service.persistClosedSession(input);
+  const row = await db.prisma.closedSession.findFirstOrThrow();
+  const { resolveClosedSessionTranscriptPath } = await vi.importActual<
+    typeof import('./closed-session-storage')
+  >('./closed-session-storage');
+  const path = resolveClosedSessionTranscriptPath(row, null);
+  expect(JSON.parse(await readFile(path, 'utf8')).messages).toEqual(input.messages);
   const { workspaceDataService } = await vi.importActual<
     typeof import('@/backend/services/workspace')
   >('@/backend/services/workspace');
@@ -204,12 +285,7 @@ it('explicit workspace deletion cascades records and removes owned artifacts', a
   );
   await workspaceDataService.delete('workspace');
   expect(await db.prisma.closedSession.count()).toBe(0);
-  const { closedSessionWorkspaceDirectory } = await vi.importActual<
-    typeof import('@/backend/services/session/service/lifecycle/closed-session-storage')
-  >('@/backend/services/session/service/lifecycle/closed-session-storage');
-  await expect(
-    readFile(join(closedSessionWorkspaceDirectory('workspace'), 'anything'))
-  ).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('late file publication after workspace deletion cannot publish or leak a transcript', async () => {
@@ -258,10 +334,44 @@ it('cleans orphaned owned files during maintenance while preserving committed an
   await service.persistClosedSession(input);
   const row = (await accessor.findByWorkspaceId('workspace', 20))[0]!;
   await db.prisma.closedSession.delete({ where: { id: row.id } });
-  await service.maintainArchives();
+  await service.persistClosedSession({ ...input, sessionId: 'committed-proof' });
+  const committed = await db.prisma.closedSession.findFirstOrThrow({
+    where: { sessionId: 'committed-proof' },
+  });
   const { resolveClosedSessionTranscriptPath } = await vi.importActual<
-    typeof import('@/backend/services/session/service/lifecycle/closed-session-storage')
-  >('@/backend/services/session/service/lifecycle/closed-session-storage');
+    typeof import('./closed-session-storage')
+  >('./closed-session-storage');
+  const committedBytes = await readFile(
+    resolveClosedSessionTranscriptPath(committed, null),
+    'utf8'
+  );
+  const complete = vi
+    .spyOn(accessor, 'complete')
+    .mockRejectedValueOnce(new Error('DB unavailable'));
+  await expect(
+    service.persistClosedSession({ ...input, sessionId: 'pending-proof' })
+  ).rejects.toThrow('DB unavailable');
+  complete.mockRestore();
+  const pending = await db.prisma.closedSession.findFirstOrThrow({
+    where: { sessionId: 'pending-proof' },
+  });
+  expect(pending.archiveState).toBe('PENDING');
+  const pendingBytes = await readFile(resolveClosedSessionTranscriptPath(pending, null), 'utf8');
+  const write = vi
+    .spyOn(atomic, 'writeFileAtomic')
+    .mockRejectedValue(new Error('disk unavailable'));
+  await service.maintainArchives();
+  expect(write).toHaveBeenCalledOnce();
+  expect(await readFile(resolveClosedSessionTranscriptPath(committed, null), 'utf8')).toBe(
+    committedBytes
+  );
+  expect(await readFile(resolveClosedSessionTranscriptPath(pending, null), 'utf8')).toBe(
+    pendingBytes
+  );
+  expect(
+    (await db.prisma.closedSession.findUniqueOrThrow({ where: { id: pending.id } }))
+      .pendingTranscript
+  ).toBe(pendingBytes);
   await expect(readFile(resolveClosedSessionTranscriptPath(row, null))).rejects.toMatchObject({
     code: 'ENOENT',
   });
@@ -436,7 +546,9 @@ it('does not roll back an unrelated accepted write when the archive filesystem f
     data: { name: 'accepted rename' },
   });
   release();
-  await closeResult;
+  expect(await closeResult).toMatchObject([
+    { status: 'rejected', reason: { message: 'disk full' } },
+  ]);
   expect((await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'workspace' } })).name).toBe(
     'accepted rename'
   );

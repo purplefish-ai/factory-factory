@@ -5,7 +5,11 @@ type QueuePosition = { position: number } | { error: string };
 /** Runtime projection capabilities supplied by the session domain. */
 export interface ChatIntentDomain {
   enqueue(sessionId: string, message: QueuedMessage): QueuePosition;
-  restoreAcceptedMessage(sessionId: string, message: QueuedMessage): QueuePosition;
+  restoreAcceptedMessage(
+    sessionId: string,
+    message: QueuedMessage,
+    options?: { emitSnapshot?: boolean }
+  ): QueuePosition;
   removeQueuedMessage(
     sessionId: string,
     messageId: string,
@@ -14,6 +18,12 @@ export interface ChatIntentDomain {
   getQueueLength(sessionId: string): number;
   getQueueSnapshot(sessionId: string): QueuedMessage[];
   emitDelta(sessionId: string, event: SessionDeltaEvent): void;
-  failMessage(sessionId: string, message: QueuedMessage, reason: string): void;
+  failMessage(
+    sessionId: string,
+    message: QueuedMessage,
+    reason: string,
+    deliveryState?: 'failed' | 'cancelled',
+    publish?: boolean
+  ): void;
   clearMessageRejection(sessionId: string, messageId: string): void;
 }

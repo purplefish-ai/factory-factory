@@ -68,7 +68,11 @@ export class ChatIntentAccessor {
     return typeof this.client === 'function' ? this.client() : this.client;
   }
 
-  accept(sessionId: string, message: QueuedMessage, full: boolean): Promise<IntentRecord> {
+  accept(
+    sessionId: string,
+    message: QueuedMessage,
+    full: boolean
+  ): Promise<IntentRecord & { created: boolean }> {
     const hash = fingerprint(message);
     return this.db.$transaction(async (tx) => {
       const where = { sessionId_messageId: { sessionId, messageId: message.id } };
@@ -77,23 +81,22 @@ export class ChatIntentAccessor {
         if (prior.fingerprint !== hash) {
           throw new ChatIntentConflictError();
         }
-        return decode(prior);
+        return { ...decode(prior), created: false };
       }
       const count = await tx.chatIntent.count({ where: { sessionId, status: 'queued' } });
       if (full || count >= SERVICE_LIMITS.sessionStoreMaxQueueSize) {
         throw new ChatIntentQueueFullError();
       }
-      return decode(
-        await tx.chatIntent.create({
-          data: {
-            sessionId,
-            messageId: message.id,
-            fingerprint: hash,
-            submitted: submittedSchema.parse(message),
-            desired: message.settings,
-          },
-        })
-      );
+      const row = await tx.chatIntent.create({
+        data: {
+          sessionId,
+          messageId: message.id,
+          fingerprint: hash,
+          submitted: submittedSchema.parse(message),
+          desired: message.settings,
+        },
+      });
+      return { ...decode(row), created: true };
     });
   }
 

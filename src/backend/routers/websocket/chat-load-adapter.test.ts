@@ -98,7 +98,7 @@ describe('executeSessionLoad', () => {
 
   it('bounds every replay frame even when one tool body exceeds the frame limit', async () => {
     const test = setup();
-    test.deps.loadService.captureReplay = () => ({
+    const replay: ReturnType<typeof test.deps.loadService.captureReplay> = {
       sessionRuntime: runtime,
       replayEvents: [
         {
@@ -116,16 +116,51 @@ describe('executeSessionLoad', () => {
           },
         },
       ],
-    });
+    };
+    test.deps.loadService.captureReplay = () => replay;
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'large' }, test.deps);
     const outbound = test.calls.filter(
       (call): call is { payload: unknown } =>
         typeof call === 'object' && call !== null && 'payload' in call
     );
-    expect(outbound.length).toBeGreaterThan(1);
+    const replayFrames = outbound.filter(
+      ({ payload }) =>
+        typeof payload === 'object' &&
+        payload !== null &&
+        'type' in payload &&
+        payload.type === 'session_replay_chunk'
+    );
+    expect(replayFrames.length).toBeGreaterThan(1);
     expect(
-      Math.max(...outbound.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
+      Math.max(...replayFrames.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
     ).toBeLessThanOrEqual(128 * 1024);
+    const assembler = new SessionReplayAssembler();
+    for (const { payload } of replayFrames.slice(0, -1)) {
+      expect(assembler.accept(payload)).toBeNull();
+    }
+    expect(assembler.accept(replayFrames.at(-1)?.payload)).toEqual({
+      type: 'session_replay_batch',
+      loadRequestId: 'large',
+      replayEvents: replay.replayEvents,
+    });
+  });
+
+  it('settles a hard framing limit with a correlated terminal error while completing application work', async () => {
+    const test = setup();
+    const framing = vi.spyOn(replayFraming, 'frameSessionReplay').mockImplementation(() => {
+      throw new replayFraming.SessionReplayLimitError(
+        'Session replay exceeds the 128 MiB transport limit'
+      );
+    });
+    try {
+      await executeSessionLoad({ sessionId: 's1', loadRequestId: 'too-large' }, test.deps);
+      expect(test.calls[0]).toMatchObject({
+        payload: { type: 'error', code: 413, loadRequestId: 'too-large' },
+      });
+      expect(test.calls.at(-1)).toBe('activation');
+    } finally {
+      framing.mockRestore();
+    }
   });
 
   it('settles a hard framing limit with a correlated terminal error while completing application work', async () => {

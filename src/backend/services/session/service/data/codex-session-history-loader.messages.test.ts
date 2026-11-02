@@ -78,8 +78,9 @@ describe('Codex response-item history messages', () => {
         payload: { type: 'function_call_output', call_id: 'call', output },
       },
       { type: 'turn_context', payload: { turn_id: 'two', ignored: 'x'.repeat(1_100_000) } },
-      response('user', 'second', { kinds: ['user.text'], turnId: 'two' }),
-      response('assistant', 'done', { phase: 'final_answer', turnId: 'two' }),
+      response('user', 'second', { kinds: ['user.text'] }),
+      event('user_message', 'second'),
+      response('assistant', 'done', { phase: 'final_answer' }),
     ]);
     expect(history.map(({ type }) => type)).toEqual([
       'user',

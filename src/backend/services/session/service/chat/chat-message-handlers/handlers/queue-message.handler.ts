@@ -97,7 +97,7 @@ export function createQueueMessageHandler(
         result = deps.domain.enqueue(sessionId, queuedMsg);
       }
     } catch (error) {
-      return rejectAcceptanceError(deps.domain, sessionId, messageId, error);
+      return rejectAcceptanceError(deps.domain, sessionId, messageId, error, deps.chatIntent);
     }
 
     if ('error' in result) {
@@ -131,15 +131,30 @@ function rejectInvalidMessage(
   return { replies: [{ type: 'error', error: { kind: 'queue_input_invalid', reason } }] };
 }
 
-function rejectAcceptanceError(
+async function rejectAcceptanceError(
   domain: Pick<SessionExecutionCommandServices['domain'], 'rejectMessage'>,
   sessionId: string,
   messageId: string,
-  error: unknown
-): SessionCommandOutcome {
-  if (error instanceof ChatIntentConflictError) {
+  error: unknown,
+  owner?: Pick<SessionChatIntentService, 'hasAccepted'>
+): Promise<SessionCommandOutcome> {
+  if (
+    error instanceof ChatIntentConflictError ||
+    (await owner?.hasAccepted(sessionId, messageId))
+  ) {
     return {
-      replies: [{ type: 'error', error: { kind: 'queue_input_invalid', reason: error.message } }],
+      replies: [
+        {
+          type: 'error',
+          error: {
+            kind: 'queue_input_invalid',
+            reason:
+              error instanceof Error
+                ? error.message
+                : 'Durable input projection is unavailable; retry this message id',
+          },
+        },
+      ],
     };
   }
   domain.rejectMessage(

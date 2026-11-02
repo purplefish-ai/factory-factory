@@ -100,7 +100,11 @@ export type SessionStartupCoordinatorDependencies = {
   >;
   sessionDomainService: Pick<
     SessionDomainService,
-    'emitDelta' | 'getTranscriptSnapshot' | 'getHistoryHydrationSource' | 'setRuntimeSnapshot'
+    | 'emitDelta'
+    | 'getTranscriptSnapshot'
+    | 'getHistoryHydrationSource'
+    | 'setRuntimeSnapshot'
+    | 'createProviderHistoryFence'
   >;
   sessionConfigService: Pick<
     SessionConfigService,
@@ -466,9 +470,11 @@ export class SessionStartupCoordinator {
       sessionContext,
       this.dependencies,
       () => this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
-      codexAccountContext
+      codexAccountContext,
+      () =>
+        this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration) &&
+        !this.dependencies.lifecycleGate.isSessionStopping(sessionId)
     );
-
     const clientOptions: AcpClientOptions = {
       beforeSessionCreation,
       assertCurrent: options.assertCurrent,

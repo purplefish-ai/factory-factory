@@ -80,7 +80,7 @@ export function createSessionLoadService(
     hydrateChatIntent:
       ports.hydrateChatIntent ??
       (async (sessionId) => {
-        await sessionChatIntentService.hydrate(sessionId);
+        await sessionChatIntentService.hydrate(sessionId, { publish: false });
         return sessionChatIntentService.hasQueuedInput(sessionId);
       }),
     findSession: (sessionId) => agentSessionAccessor.findById(sessionId),
