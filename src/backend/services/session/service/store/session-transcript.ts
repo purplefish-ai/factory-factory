@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import {
+  buildCombinedTextContent,
+  buildContentArray,
+  categorizeAttachments,
+} from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import {
   type AgentMessage,
@@ -8,11 +13,6 @@ import {
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
 } from '@/shared/acp-protocol';
-import {
-  buildCombinedTextContent,
-  buildContentArray,
-  categorizeAttachments,
-} from '../chat/chat-message-handlers/attachment-processing';
 import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
 

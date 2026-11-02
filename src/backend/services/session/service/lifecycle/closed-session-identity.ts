@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { AgentContentItem, AgentMessage, ChatMessage } from '@/shared/acp-protocol';
 import {
   buildCombinedTextContent,
   buildContentArray,
   categorizeAttachments,
-} from '../chat/chat-message-handlers/attachment-processing';
+} from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import type { AgentContentItem, AgentMessage, ChatMessage } from '@/shared/acp-protocol';
 
 export function getClosedSessionConversationEpoch(metadata: unknown): number {
   const parsed = z

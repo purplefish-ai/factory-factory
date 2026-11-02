@@ -12,6 +12,8 @@ import {
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/lifecycle/closed-session-persistence.service';
+import { resolveClosedSessionTranscriptPath } from '@/backend/services/session/service/lifecycle/closed-session-storage';
 import { createSessionLaunchMetadata } from '@/backend/services/session/service/lifecycle/session-launch-settings';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
@@ -24,8 +26,6 @@ import type { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import type { PRTarget } from '@/shared/pr-monitoring';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
-import { closedSessionPersistenceService } from '../lifecycle/closed-session-persistence.service';
-import { resolveClosedSessionTranscriptPath } from '../lifecycle/closed-session-storage';
 import {
   sessionProviderResolverService,
   type SessionProviderResolverService,
