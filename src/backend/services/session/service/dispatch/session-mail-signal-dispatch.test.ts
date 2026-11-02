@@ -943,3 +943,29 @@ it('waits for timeout quarantine before recovering a racing late non-injection r
   expect(h.sendSessionMessage).not.toHaveBeenCalled();
   expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
 });
+
+it('preserves a replacement same-ID queued object when native steering times out after store replacement', async () => {
+  const h = mailHarness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const signal = sessionDomainService.peekNextMessage('session')!;
+  const replacement = { ...signal, text: 'Replacement store queued input' };
+  h.steerSessionMessage.mockImplementationOnce(() => {
+    h.stop();
+    h.dispatcher.resetDispatchState('session');
+    sessionDomainService.clearSession('session');
+    sessionDomainService.enqueue('session', replacement);
+    return Promise.reject(new AcpSteeringTimeoutError());
+  });
+  await expect(h.dispatcher.steerWorkspaceMailSignal('session', signal.id)).rejects.toBeInstanceOf(
+    AcpSteeringTimeoutError
+  );
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([replacement]);
+  expect(h.notificationPort.quarantineWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+});
