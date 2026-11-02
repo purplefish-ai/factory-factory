@@ -64,6 +64,43 @@ it('steers the selected queued message without removing it before delivery is co
   }
 });
 
+it('keeps the message DOM mounted when dequeued and replaces queue actions with rewind', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const render = (isQueued: boolean) => (
+    <TranscriptRenderingFixture
+      messages={[queued]}
+      queuedMessageIds={new Set(isQueued ? [queued.id] : [])}
+      onSteerQueuedMessage={vi.fn()}
+      onRemoveQueuedMessage={vi.fn()}
+      getUuidForMessageId={() => 'user-uuid'}
+      onRewindToMessage={vi.fn()}
+      running
+      startingSession={false}
+      loadingSession={false}
+    />
+  );
+  try {
+    flushSync(() => root.render(render(true)));
+    const row = container.querySelector('[data-transcript-key]');
+    const message = Array.from(container.querySelectorAll('div')).find(
+      (element) => element.textContent === queued.text && element.children.length === 0
+    );
+    expect(message).toBeDefined();
+    expect(container.querySelector('button[aria-label="Cancel queued message"]')).not.toBeNull();
+    flushSync(() => root.render(render(false)));
+    expect(container.querySelector('[data-transcript-key]')).toBe(row);
+    expect(container.contains(message ?? null)).toBe(true);
+    expect(container.querySelector('button[aria-label="Steer queued message"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Cancel queued message"]')).toBeNull();
+    expect(
+      container.querySelector('button[aria-label="Rewind files to before this message"]')
+    ).not.toBeNull();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
 it.each([
   { id: 'pr-event-update', text: 'Automatic update' },
   { id: 'workspace-notification-update', text: 'Automatic update' },
@@ -86,6 +123,11 @@ it.each([
       )
     );
     expect(container.querySelector('button[aria-label="Steer queued message"]')).toBeNull();
+    const actions = container.querySelector<HTMLElement>('[style*="grid-template-rows"]');
+    // PR updates render their own card; other ineligible messages collapse the empty controls row.
+    if (id !== 'pr-event-update') {
+      expect(actions?.style.gridTemplateRows).toBe('0fr');
+    }
   } finally {
     flushSync(() => root.unmount());
   }

@@ -3,6 +3,7 @@ import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -118,6 +119,21 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
+  it('keeps every batch message visible in each snapshot during the queue-to-transcript handoff', async () => {
+    const h = harness();
+    enqueue('first');
+    enqueue('second');
+    const publish = vi.spyOn(sessionEventBus, 'publishToSession');
+    await h.dispatcher.tryDispatchNextMessage('session');
+    const snapshots = publish.mock.calls.flatMap(([, payload]) =>
+      payload.type === 'session_snapshot' ? [payload] : []
+    );
+    expect(snapshots.length).toBeGreaterThan(0);
+    for (const snapshot of snapshots) {
+      expect(snapshot.messages.map(({ id }) => id)).toEqual(['first', 'second']);
+    }
+  });
+
   it('sends all waiting human messages in one turn and retains their individual transcript entries', async () => {
     const { dispatcher, sendSessionMessage, configureQueuedMessage } = harness();
     const first = enqueue('first');
@@ -671,6 +687,24 @@ describe('session dispatcher queue and lifecycle coordination', () => {
 });
 
 describe('explicit queued-message steering', () => {
+  it('keeps the steered message visible in every published snapshot until committed', async () => {
+    const h = harness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    enqueue('first');
+    enqueue('selected');
+    const publish = vi.spyOn(sessionEventBus, 'publishToSession');
+    await h.dispatcher.steerQueuedMessage('session', 'selected');
+    const snapshots = publish.mock.calls.flatMap(([, payload]) =>
+      payload.type === 'session_snapshot' ? [payload] : []
+    );
+    expect(snapshots.length).toBeGreaterThan(0);
+    for (const snapshot of snapshots) {
+      expect(snapshot.messages.filter(({ id }) => id === 'selected')).toHaveLength(1);
+      expect(snapshot.messages.some(({ id }) => id === 'first')).toBe(true);
+    }
+    expect(snapshots.at(-1)?.queuedMessages.map(({ id }) => id)).toEqual(['first']);
+  });
+
   it('injects only the selected queued message while the original turn remains active', async () => {
     const h = harness();
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
