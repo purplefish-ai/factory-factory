@@ -224,10 +224,10 @@ connection is logically closed. Operation/session-close timeouts and TERM/KILL
 requests bound caller results but do not release that native lifetime. SDK
 logical closure alone does not prove child drain. A lifetime that never closes
 remains charged; retries share its bounded failure, or report discovery busy
-when its successful cache entry expires after 30 seconds. The success timestamp
-is not refreshed while cleanup remains charged. This tracks the owned child and
-pipes, without claiming containment of every SDK continuation or external
-descendant.
+when its successful cache entry expires after 30 seconds or is evicted. The
+success timestamp is not refreshed while cleanup remains charged. This tracks
+the owned child and pipes, without claiming containment of every SDK
+continuation or external descendant.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model

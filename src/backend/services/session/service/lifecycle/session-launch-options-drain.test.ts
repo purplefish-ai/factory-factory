@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import * as acpModelSelection from '@/backend/services/session/service/acp/acp-model-selection';
 import { createMockChildProcess } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
@@ -58,8 +59,9 @@ function fakeProvider(options: { stallSelection?: boolean; stallClose?: boolean 
   const requests: z.infer<typeof requestSchema>[] = [];
   const reply = (id: string | number | undefined, result: unknown) => {
     if (!child.stdout.destroyed) {
-      child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
+      return child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
     }
+    return false;
   };
   const respondToRequest = (request: z.infer<typeof requestSchema>) => {
     if (request.method === 'initialize') {
@@ -153,6 +155,7 @@ describe('native launch admission through actual child drain', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('keeps eight timed-out native lifetimes charged through KILL and exit until child close', async () => {
@@ -201,7 +204,7 @@ describe('native launch admission through actual child drain', () => {
       message: expect.stringContaining('busy'),
     });
     await vi.advanceTimersByTimeAsync(36_001);
-    await replacement;
+    expect(await replacement).toMatchObject({ message: expect.stringContaining('timed out') });
     expect(peers.flatMap((peer) => peer.requests).some((r) => r.method === 'session/prompt')).toBe(
       false
     );
@@ -229,14 +232,42 @@ describe('native launch admission through actual child drain', () => {
     expect(peers).toHaveLength(2);
   });
 
-  it('shares a failed result until drain, ignores late responses, then retries without failure caching', async () => {
+  it('shares a failed result after consuming a late native response during cleanup, then retries after drain', async () => {
+    // Call through to actual model selection: its completion proves the real
+    // SDK decoded and delivered the late response, beyond merely writing bytes.
+    const modelSelection = vi.spyOn(acpModelSelection, 'applyAcpStartupModel');
     const options = service();
     const failed = settled(options.getOptions(request('model-0')));
-    await vi.advanceTimersByTimeAsync(36_001);
-    expect(await failed).toMatchObject({ message: expect.stringContaining('timed out') });
+    await vi.advanceTimersByTimeAsync(30_001);
     const old = peers[0]!;
     const selection = old.requests.find((r) => r.method === 'session/set_config_option')!;
-    old.reply(selection.id, { configOptions: config('model-0') });
+    expect(old.requests.some((r) => r.method === 'session/close')).toBe(true);
+    expect(old.child.kill).not.toHaveBeenCalled();
+    expect(old.child.stdout.destroyed).toBe(false);
+    const nativeWork = modelSelection.mock.results[0];
+    if (nativeWork?.type !== 'return') {
+      throw new Error('Native model selection did not start');
+    }
+    let nativeResult: unknown;
+    void nativeWork.value.then(
+      (value) => {
+        nativeResult = value;
+      },
+      (error: unknown) => {
+        nativeResult = error;
+      }
+    );
+    expect(old.reply(selection.id, { configOptions: config('model-0') })).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(nativeResult).toMatchObject([
+      { id: 'model', currentValue: 'model-0' },
+      { id: 'reasoning_effort' },
+      { id: 'mode' },
+    ]);
+    expect(old.child.stdout.destroyed).toBe(false);
+    await vi.advanceTimersByTimeAsync(6001);
+    expect(old.child.stdout.destroyed).toBe(true);
+    expect(await failed).toMatchObject({ message: expect.stringContaining('timed out') });
     expect(await settled(options.getOptions(request('model-0')))).toMatchObject({
       message: expect.stringContaining('timed out'),
     });
