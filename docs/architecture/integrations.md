@@ -175,8 +175,23 @@ approval prompts cannot stall scheduled runs.
 
 The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
 its schedule before emitting a typed `timer_due` event. The event carries that
-execution ID as its correlation identity. Composition wires its narrow timer
-dispatch port to the `new_workspace` arm of
+execution ID as its correlation identity. The due-task poll supplies only a task
+ID to reservation. Inside the transaction, reservation reads the current enabled
+and due definition, rechecks active project and overlap exclusion, and derives
+the calendar advance from that same row and admission time. Legacy monthly
+anchors resolve from that row's creation date without a separate database read.
+Prompt-only edits before admission therefore use the latest instructions;
+calendar edits use their current pending slot or defer admission if it is still
+ahead.
+
+New executions persist a versioned `launchSnapshot` containing the actual
+workspace name, project, instructions, cadence, timezone/time, monthly anchor
+and due slot. Dispatch uses only this frozen snapshot, so later definition edits
+cannot change an admitted launch. Legacy execution snapshots remain null:
+historical instructions cannot be reconstructed safely from today's definition.
+This additive execution field is historical evidence, owned by the periodic
+capsule; it does not enable replay or move scheduled agents into `AgentRun`.
+Composition wires its narrow timer dispatch port to the `new_workspace` arm of
 `background-action-dispatch.orchestrator.ts`, shared with PR delivery's
 `existing_sessions` arm. Timer dispatch awaits the injected workspace launcher
 and returns the workspace ID; the periodic capsule owns linkage, failures and
