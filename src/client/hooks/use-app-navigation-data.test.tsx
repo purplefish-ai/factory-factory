@@ -29,7 +29,16 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({ prReview: { listReviewRequests: { reset: mocks.resetReviews } } }),
     prReview: { listReviewRequests: { useQuery: mocks.reviewQuery } },
-    periodicTask: { navigationSummary: { useQuery: () => ({ data: undefined }) } },
+    periodicTask: {
+      navigationSummary: {
+        useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
+      },
+    },
+    agent: {
+      navigationSummary: {
+        useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
+      },
+    },
     project: {
       getBySlug: { useQuery: mocks.getBySlug },
       list: {

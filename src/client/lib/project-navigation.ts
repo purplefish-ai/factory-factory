@@ -5,8 +5,26 @@ export function getProjectSectionPath(slug: string, section: ProjectSection): st
   return `/projects/${encodeURIComponent(slug)}/${section}`;
 }
 
-export function getProjectAgentPath(slug: string, id: string): string {
-  return `${getProjectSectionPath(slug, 'agents')}/${encodeURIComponent(id)}`;
+export type AgentKind = 'scheduled' | 'event';
+
+export function getProjectAgentPath(
+  slug: string,
+  id: string,
+  kind: AgentKind = 'scheduled'
+): string {
+  return `${getProjectSectionPath(slug, 'agents')}/${encodeURIComponent(id)}${kind === 'event' ? '?kind=event' : ''}`;
+}
+
+/** An explicit malformed discriminator must never fall back to a different owner. */
+export function getAgentRouteKind(search: string): AgentKind | null {
+  const values = new URLSearchParams(search).getAll('kind');
+  if (values.length === 0) {
+    return 'scheduled';
+  }
+  if (values.length !== 1) {
+    return null;
+  }
+  return values[0] === 'scheduled' || values[0] === 'event' ? values[0] : null;
 }
 
 export function getProjectSection(pathname: string): ProjectSection | null {

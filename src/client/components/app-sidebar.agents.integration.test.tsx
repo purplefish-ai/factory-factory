@@ -28,6 +28,8 @@ const alpha = { id: 'alpha', slug: 'alpha', name: 'Alpha' };
 const beta = { id: 'beta', slug: 'space here', name: 'Beta', isArchived: true };
 type Summary = { totalCount: number; failedCount: number };
 let summaries: Record<string, Summary | Promise<Summary>>;
+let eventSummaries: Record<string, Summary | Promise<Summary>>;
+let failEventSummary: boolean;
 let ownerWait: Promise<void> | undefined;
 let failSummary: boolean;
 let requests: Array<{ path: string; input: unknown }>;
@@ -59,6 +61,12 @@ async function respond(path: string, input: unknown) {
     await ownerWait;
     const { slug } = z.object({ slug: z.string() }).parse(input);
     return [alpha, beta].find((project) => project.slug === slug) ?? null;
+  }
+  if (path === 'agent.navigationSummary') {
+    if (failEventSummary) {
+      throw new Error('Event offline');
+    }
+    return eventSummaries[z.object({ projectId: z.string() }).parse(input).projectId];
   }
   if (path === 'periodicTask.navigationSummary') {
     if (failSummary) {
@@ -130,6 +138,11 @@ beforeEach(() => {
   requests = [];
   ownerWait = undefined;
   failSummary = false;
+  failEventSummary = false;
+  eventSummaries = {
+    alpha: { totalCount: 0, failedCount: 0 },
+    beta: { totalCount: 0, failedCount: 0 },
+  };
   summaries = { alpha: { totalCount: 3, failedCount: 1 }, beta: { totalCount: 0, failedCount: 0 } };
 });
 afterEach(async () => {
@@ -231,4 +244,86 @@ it('does not borrow a loaded count or accept a late refresh after switching proj
   expect(description()).toBeNull();
   await act(() => betaResult.resolve({ totalCount: 2, failedCount: 0 }));
   await waitForReact(() => expect(description()).toBe('2 agents'));
+});
+
+it('combines both authoritative kinds and keeps the prior combined value when one refresh fails', async () => {
+  eventSummaries.alpha = { totalCount: 4, failedCount: 2 };
+  await render();
+  await waitForReact(() =>
+    expect(description()).toBe('7 agents, 3 with a failed last completed run')
+  );
+  failEventSummary = true;
+  summaries.alpha = { totalCount: 30, failedCount: 0 };
+  await act(() =>
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+  );
+  await act(() =>
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.periodicTask.navigationSummary) })
+  );
+  expect(description()).toBe('7 agents, 3 with a failed last completed run');
+  failEventSummary = false;
+  eventSummaries.alpha = { totalCount: 5, failedCount: 0 };
+  await act(() =>
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+  );
+  await waitForReact(() => expect(description()).toBe('35 agents'));
+});
+it.each(['scheduled', 'event'])(
+  'hides an incomplete initial %s summary and never displays a partial sum',
+  async (kind) => {
+    if (kind === 'scheduled') {
+      failSummary = true;
+    } else {
+      failEventSummary = true;
+    }
+    await render();
+    await waitForReact(() =>
+      expect(requests.some((request) => request.path === 'agent.navigationSummary')).toBe(true)
+    );
+    expect(description()).toBeNull();
+  }
+);
+it('waits for initial event data despite a successful scheduled count', async () => {
+  const event = deferred<Summary>();
+  eventSummaries.alpha = event.promise;
+  await render();
+  await waitForReact(() =>
+    expect(requests.some((request) => request.path === 'agent.navigationSummary')).toBe(true)
+  );
+  expect(description()).toBeNull();
+  await act(() => event.resolve({ totalCount: 2, failedCount: 0 }));
+  await waitForReact(() =>
+    expect(description()).toBe('5 agents, 1 with a failed last completed run')
+  );
+});
+it('keeps the combined snapshot when scheduled refresh fails and event refresh succeeds', async () => {
+  eventSummaries.alpha = { totalCount: 2, failedCount: 0 };
+  await render();
+  await waitForReact(() =>
+    expect(description()).toBe('5 agents, 1 with a failed last completed run')
+  );
+  failSummary = true;
+  await act(() =>
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.periodicTask.navigationSummary) })
+  );
+  eventSummaries.alpha = { totalCount: 40, failedCount: 8 };
+  await act(() =>
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+  );
+  expect(description()).toBe('5 agents, 1 with a failed last completed run');
+});
+it('does not accept a late old-project event summary into a new owner', async () => {
+  await render();
+  await waitForReact(() => expect(description()).toContain('3 agents'));
+  const lateEvent = deferred<Summary>();
+  eventSummaries.alpha = lateEvent.promise;
+  await act(() => {
+    void queryClient.invalidateQueries({
+      queryKey: getQueryKey(trpc.agent.navigationSummary, { projectId: 'alpha' }, 'query'),
+    });
+  });
+  await switchProject();
+  await waitForReact(() => expect(description()).toBe('0 agents'));
+  await act(() => lateEvent.resolve({ totalCount: 90, failedCount: 90 }));
+  expect(description()).toBe('0 agents');
 });

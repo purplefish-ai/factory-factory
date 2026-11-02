@@ -38,7 +38,16 @@ vi.mock('@/client/lib/trpc', () => ({
       project: { list: { invalidate: vi.fn() } },
       prReview: { listReviewRequests: { reset: vi.fn() } },
     }),
-    periodicTask: { navigationSummary: { useQuery: () => ({ data: undefined }) } },
+    periodicTask: {
+      navigationSummary: {
+        useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
+      },
+    },
+    agent: {
+      navigationSummary: {
+        useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
+      },
+    },
     prReview: {
       listReviewRequests: {
         useQuery: (

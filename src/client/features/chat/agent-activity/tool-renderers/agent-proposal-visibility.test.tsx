@@ -33,6 +33,11 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
       () =>
         ({ op }) =>
           observable((observer) => {
+            if (op.path === 'workspace.get') {
+              observer.next({ result: { data: { projectId: 'project-1' } } });
+              observer.complete();
+              return;
+            }
             if (op.path === 'agent.create') {
               observer.error(new TRPCClientError('Could not save this agent.'));
               return;

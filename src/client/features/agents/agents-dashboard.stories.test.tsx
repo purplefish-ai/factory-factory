@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { expect, it } from 'vitest';
 import { actFlushSync } from '@/test-utils/react-act';
 import meta from './agents-dashboard.stories';
+import type { EventStoryState } from './event-dashboard-story';
 
 it('resets the visual session and form when Storybook Controls change the state argument', () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -62,5 +63,54 @@ it('resets the visual session and form when Storybook Controls change the state 
   } finally {
     actFlushSync(() => root.unmount());
     container.remove();
+  }
+});
+
+it.each<EventStoryState>([
+  'event',
+  'event-edit',
+  'event-unknown',
+  'event-replacement',
+  'event-null',
+  'event-health-error',
+  'event-health-catching-up',
+  'event-preview-unsupported',
+  'event-preview-unavailable',
+  'event-conflict',
+])('renders the actual saved event story %s with typed event links', (state) => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const Dashboard = meta.component;
+  actFlushSync(() =>
+    root.render(
+      <MemoryRouter>
+        <Dashboard state={state} />
+      </MemoryRouter>
+    )
+  );
+  try {
+    expect(
+      container.querySelector('a[href$="event-agent?kind=event"][aria-current="page"]')
+    ).not.toBeNull();
+    expect(container.querySelector('main')?.textContent).not.toContain('Run history');
+    if (state === 'event-replacement') {
+      expect(
+        container.querySelector<HTMLTextAreaElement>(
+          'textarea[aria-label="Full saved specification JSON"]'
+        )?.value
+      ).toBe('');
+    }
+    if (state === 'event-preview-unsupported') {
+      expect(container.querySelector('main')?.textContent).toContain('UNSUPPORTED');
+    }
+    if (state === 'event-preview-unavailable') {
+      expect(container.querySelector('main')?.textContent).toContain('UNAVAILABLE');
+    }
+    if (state === 'event-conflict') {
+      expect(container.querySelector('main')?.textContent).toContain('original save token');
+    }
+  } finally {
+    actFlushSync(() => root.unmount());
   }
 });

@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
-import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
+import {
+  getProjectAgentPath,
+  getProjectSectionPath,
+  type AgentKind,
+} from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues, AgentProject } from './types';
 
@@ -11,7 +15,8 @@ function mutationErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Could not update agent. Please try again.';
 }
 
-export function useAgentsController(project: AgentProject) {
+export function useAgentsController(project: AgentProject, kind: AgentKind = 'scheduled') {
+  const location = useLocation();
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -21,7 +26,9 @@ export function useAgentsController(project: AgentProject) {
   }, []);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'detail' | 'create' | 'edit'>('detail');
+  const [mode, setMode] = useState<'detail' | 'create' | 'edit'>(
+    location.state?.createAgent === true ? 'create' : 'detail'
+  );
   const currentMode = useRef(mode);
   currentMode.current = mode;
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -33,7 +40,7 @@ export function useAgentsController(project: AgentProject) {
   const utils = trpc.useUtils();
   const task = trpc.periodicTask.get.useQuery(
     { id: id ?? '' },
-    { enabled: !!id, refetchInterval: 10_000, retry: false }
+    { enabled: !!id && kind === 'scheduled', refetchInterval: 10_000, retry: false }
   );
   const currentProjectId = useRef(project.id);
   currentProjectId.current = project.id;
@@ -41,6 +48,19 @@ export function useAgentsController(project: AgentProject) {
     { projectId: project.id },
     { refetchInterval: 10_000 }
   );
+  const events = trpc.agent.list.useInfiniteQuery(
+    { projectId: project.id },
+    {
+      getNextPageParam: (page) => page.nextCursor ?? undefined,
+      refetchInterval: 10_000,
+      retry: false,
+    }
+  );
+  const event = trpc.agent.get.useQuery(
+    { projectId: project.id, agentId: id ?? '' },
+    { enabled: !!id && kind === 'event', refetchInterval: 10_000, retry: false }
+  );
+  const [savedEvent, setSavedEvent] = useState(false);
   const create = trpc.periodicTask.create.useMutation({
     onError: (error) => toast.error(`Failed to create agent: ${error.message}`),
   });
@@ -58,7 +78,9 @@ export function useAgentsController(project: AgentProject) {
     pending ||
     create.isPending ||
     update.isPending ||
-    (!!id && (!task.data || project.id !== task.data.projectId));
+    !!project.isArchived ||
+    (!!id &&
+      (kind === 'scheduled' ? !task.data || project.id !== task.data.projectId : !event.data));
 
   const previousId = useRef(id);
   useEffect(() => {
@@ -71,11 +93,36 @@ export function useAgentsController(project: AgentProject) {
     setActionError(null);
   }, [id]);
   useEffect(() => {
-    const first = list.data?.[0];
-    if (!id && mode === 'detail' && first && !list.error) {
-      void navigate(getProjectAgentPath(project.slug, first.id), { replace: true });
+    if (
+      id ||
+      mode !== 'detail' ||
+      !list.isSuccess ||
+      !events.isSuccess ||
+      list.error ||
+      events.error
+    ) {
+      return;
     }
-  }, [id, list.data, list.error, mode, navigate, project.slug]);
+    const scheduled = list.data?.[0];
+    const first = scheduled ?? events.data?.pages[0]?.items[0];
+    if (first) {
+      void navigate(
+        getProjectAgentPath(project.slug, first.id, scheduled ? 'scheduled' : 'event'),
+        { replace: true }
+      );
+    }
+  }, [
+    id,
+    list.data,
+    list.isSuccess,
+    list.error,
+    events.data,
+    events.isSuccess,
+    events.error,
+    mode,
+    navigate,
+    project.slug,
+  ]);
 
   const invalidate = (projectId: string, agentId: string) => {
     runInBackground(
@@ -99,10 +146,15 @@ export function useAgentsController(project: AgentProject) {
         setMode('detail');
         void navigate(getProjectAgentPath(project.slug, created.id));
       }
-    } else if (id && task.data?.projectId === project.id) {
+    } else if (kind === 'scheduled' && id && task.data?.projectId === project.id) {
       await update.mutateAsync({ id, ...values });
       invalidate(task.data.projectId, id);
-      if (active.current && currentId.current === id) {
+      if (
+        active.current &&
+        currentId.current === id &&
+        currentProjectId.current === project.id &&
+        currentMode.current === 'edit'
+      ) {
         setMode('detail');
       }
     }
@@ -113,8 +165,14 @@ export function useAgentsController(project: AgentProject) {
       setPending(false);
     }
   };
-  const performAction = async (kind: 'toggle' | 'delete') => {
-    if (!(task.data && id) || task.data.projectId !== project.id || pendingRef.current) {
+  const performAction = async (operation: 'toggle' | 'delete') => {
+    if (
+      kind !== 'scheduled' ||
+      project.isArchived ||
+      !(task.data && id) ||
+      task.data.projectId !== project.id ||
+      pendingRef.current
+    ) {
       return;
     }
     const target = task.data;
@@ -123,18 +181,18 @@ export function useAgentsController(project: AgentProject) {
     setPending(true);
     setActionError(null);
     try {
-      if (kind === 'toggle') {
+      if (operation === 'toggle') {
         await toggle.mutateAsync({ id: targetId, enabled: !target.isEnabled });
       } else {
         await remove.mutateAsync({ id: targetId });
       }
-      if (kind === 'delete') {
+      if (operation === 'delete') {
         utils.periodicTask.list.setData({ projectId: target.projectId }, (agents) =>
           agents?.filter((agent) => agent.id !== targetId)
         );
       }
       invalidate(target.projectId, targetId);
-      if (active.current && kind === 'delete' && currentId.current === targetId) {
+      if (active.current && operation === 'delete' && currentId.current === targetId) {
         setDeleteOpen(false);
         setMode('detail');
         void navigate(getProjectSectionPath(project.slug, 'agents'));
@@ -151,10 +209,37 @@ export function useAgentsController(project: AgentProject) {
 
   return {
     id,
+    kind,
+    events: {
+      data: events.data,
+      error: events.error,
+      isLoading: events.isLoading,
+      hasNextPage: events.hasNextPage,
+      isFetchingNextPage: events.isFetchingNextPage,
+      fetchNextPage: () => {
+        void events.fetchNextPage();
+      },
+      refetch: () => {
+        void events.refetch();
+      },
+    },
+    event: {
+      data: event.data,
+      error: event.error,
+      isLoading: event.isLoading,
+      refetch: () => {
+        void event.refetch();
+      },
+    },
+    savedEvent,
+    eventSaved: () => {
+      setSavedEvent(true);
+      setMode('detail');
+    },
     task: { data: task.data, error: task.error, isLoading: task.isLoading, refetch: task.refetch },
     list: { data: list.data, error: list.error, isLoading: list.isLoading, refetch: list.refetch },
     project,
-    wrongOwner: !!task.data && task.data.projectId !== project.id,
+    wrongOwner: kind === 'scheduled' && !!task.data && task.data.projectId !== project.id,
     mode,
     setMode,
     deleteOpen,
@@ -174,6 +259,12 @@ export function useAgentsController(project: AgentProject) {
     },
     startCreate: () => {
       if (createDisabled) {
+        return;
+      }
+      if (kind === 'event') {
+        void navigate(getProjectSectionPath(project.slug, 'agents'), {
+          state: { createAgent: true },
+        });
         return;
       }
       setMode('create');

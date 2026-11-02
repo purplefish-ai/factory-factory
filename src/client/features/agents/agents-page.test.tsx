@@ -170,6 +170,12 @@ async function listResponse(input: unknown) {
   return removed || projectId !== (archived ? 'archived' : task.projectId) ? [] : [task];
 }
 async function queryResponse(path: string, input: unknown) {
+  if (path === 'agent.list') {
+    return { items: [], nextCursor: null };
+  }
+  if (path === 'agent.navigationSummary') {
+    return { totalCount: 0, failedCount: 0 };
+  }
   if (path === 'periodicTask.navigationSummary') {
     const totalCount = (await listResponse(input)).length;
     return { totalCount, failedCount: totalCount };

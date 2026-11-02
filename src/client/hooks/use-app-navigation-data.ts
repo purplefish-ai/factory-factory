@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
+import { useCombinedAgentSummary } from '@/client/hooks/use-combined-agent-summary';
 import {
   getReviewRepository,
   useProjectReviewRequests,
@@ -130,11 +131,7 @@ export function useAppNavigationData() {
       ? urlProject.data
       : undefined
     : selectedProject;
-  const agentSummary = trpc.periodicTask.navigationSummary.useQuery(
-    { projectId: agentProject?.id ?? '' },
-    { enabled: !!agentProject?.id, refetchInterval: 10_000 }
-  );
-  const agentsSummary = agentProject?.id ? agentSummary.data : undefined;
+  const agentsSummary = useCombinedAgentSummary(agentProject?.id);
   const utils = trpc.useUtils();
   const previousReviewScope = useRef<{ id: string; repository: string | null } | null>(null);
   useEffect(() => {

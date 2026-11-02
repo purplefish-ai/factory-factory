@@ -349,4 +349,14 @@ describe('explicit agent links during real project normalization', () => {
       )
     );
   });
+  it('requires an explicit project for a legacy event link without probing scheduled ownership', async () => {
+    render('requested-agent?kind=event', 'owner-project');
+    await waitForReact(() =>
+      expect(container.textContent).toContain('require an explicit project owner')
+    );
+    expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
+      '/agents/requested-agent'
+    );
+    expect(container.querySelector('form')).toBeNull();
+  });
 });

@@ -202,22 +202,33 @@ does not re-emit reserved runs. The launch/link crash gap remains; there is no
 replay or exactly-once guarantee. Timer events use no second run store, PR
 ledger entry, session queue delivery or receipt protocol.
 
-Manage agents at `/projects/:slug/agents` or open an individual definition at
-`/projects/:slug/agents/:id`. The navbar project selector is the shared project
-context; Agents has no separate project filter. Agents and project-wide Reviews
-remain in the sidebar footer above global Settings. Settings links to Agents
-without a duplicate editor. Project switches preserve the current section and
-clear the selected definition. Legacy `/agents` and `/agents/:id` links resolve
-the definition's owner before trusting a stored project selection, including
+The mixed Agents page at `/projects/:slug/agents` lists scheduled definitions,
+then saved event definitions with paginated continuation. Scheduled details use
+`/projects/:slug/agents/:id`; saved events use
+`/projects/:slug/agents/:id?kind=event`. Both path segments are encoded. Missing
+kind selects scheduled; invalid or duplicate explicit kinds show a bounded link
+error. Owner-less legacy links remain scheduled-only; event links require a
+project. The navbar project selector is the shared project context; Agents has
+no separate project filter. Agents and project-wide Reviews remain in the
+sidebar footer above global Settings. Settings links to Agents without a
+duplicate editor. Project switches preserve the current section and clear the
+selected definition. Legacy `/agents` and `/agents/:id` links resolve the
+definition's owner before trusting a stored project selection, including
 archived owners. A definition belonging to another project or an invalid ID
 shows project-local not found instead of selecting another agent.
 
-The Agents footer badge counts all definitions in the URL owner's project,
-including paused definitions and archived project owners. It warns when any
-agent's latest completed outcome is FAILED. RUNNING and SKIPPED retries retain
-that warning until the same agent completes a run or creates a PR. The summary
-query selects the latest terminal outcome by start time, then ID, independently
-of history limits. It refreshes with management's 10-second cadence and after
+The Agents footer badge combines authoritative scheduled and event summaries for
+the URL owner's project, including paused definitions and archived project
+owners. Both queries must succeed before a count is known; partial sums stay
+hidden. If either refresh fails, the prior successful combined value for that
+same project remains visible. Unresolved owners and different projects never
+borrow another project's value. It warns when any agent's latest completed
+outcome is FAILED. RUNNING and SKIPPED retries retain that warning until the
+same agent completes a run or creates a PR. The scheduled summary query selects
+its latest terminal outcome by start time, then ID; the event owner uses
+terminal timestamp and ID. Each summary is independent of history limits.
+PR_CREATED clears an earlier event-run failure; source health errors do not
+count as failed runs. It refreshes with management's 10-second cadence and after
 definition changes. Unknown/loading projects hide the badge; loaded empty
 projects show zero. A failed refresh retains the last successful count for that
 project.
@@ -226,10 +237,10 @@ Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.
 
-Create/edit use Name, Instructions and Schedule. Creation makes the first run
-due immediately; the existing periodic-task poll admits it, then follows the
-configured schedule. No new timer or admission policy is introduced. An
-unchanged clock time keeps an edited agent's timezone; changing the time uses
+Scheduled create/edit use Name, Instructions and Schedule. Creation makes the
+first run due immediately; the existing periodic-task poll admits it, then
+follows the configured schedule. No new timer or admission policy is introduced.
+An unchanged clock time keeps an edited agent's timezone; changing the time uses
 the browser timezone. Clearing the time or switching to a minute cadence clears
 both schedule fields. Kanban's **Create Agent** launch mode keeps its
 instructions composer and uses the same schedule controls. It remains available
@@ -478,8 +489,29 @@ archived rows; it does not mean ready or running. Null result/preparation
 metadata means no validated public metadata is available, not an empty result,
 completion or cleanup.
 
-These management APIs do not add activation or UI. Exact-context operator
-recovery uses the separate trusted-local transport described in
+The saved event detail/editor consumes these project-owned APIs independently of
+its authoring workspace/proposal. It displays saved instructions, execution
+settings, configured versus retained trigger records, actual runtime flags,
+capabilities and nullable source health. Editing captures managementRevision
+once; polling and CAS conflicts preserve all entered fields and the original
+token. Reloading is deliberate. Saved edits invalidate the captured owner and
+matching surviving proposal cards; proposal edits refresh the same saved owner.
+
+A complete valid specification initializes the field/JSON editor without
+rewriting inherited execution omissions. Unknown membership, null or invalid
+stored configuration starts as read-only inspection. An explicit complete
+replacement starts with a blank full-specification JSON input, validated by the
+saved schema. It never reconstructs membership from retained pages or silently
+removes historical actor restrictions. Source refresh and native validation are
+explicit user actions; validation is a POST preview of the current full draft
+and grants no activation or account authority. Late previews cannot certify
+newer drafts. Archived details remain readable with writes/previews disabled.
+
+This UI cut offers Edit for events. Event activation, run/evaluation history,
+workspace origin extensions, recovery controls and deletion belong to separate
+cuts. Scheduled CRUD and history retain their existing behavior. These
+management APIs do not add activation. Exact-context operator recovery uses the
+separate trusted-local transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. The current runtime has
 no membership or native intent gate for manually altered ACTIVE-looking legacy

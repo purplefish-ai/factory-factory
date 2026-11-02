@@ -86,8 +86,8 @@ it('creates distinct fresh agents without inheriting the selected agent history 
   const allLinks = [...container.querySelectorAll('nav[aria-label="Agents"] a')].map((link) =>
     link.getAttribute('href')
   );
-  expect(allLinks).toHaveLength(4);
-  expect(new Set(allLinks).size).toBe(4);
+  expect(allLinks).toHaveLength(6);
+  expect(new Set(allLinks).size).toBe(6);
 });
 it.each([
   { ctrlKey: true },
@@ -128,4 +128,37 @@ it('keeps the project selector in the navbar and section links in the real mobil
     [...(footer?.querySelectorAll('a') ?? [])].map((link) => link.getAttribute('href'))
   ).toEqual(['/projects/factory-factory/agents', '/projects/factory-factory/reviews', '/admin']);
   expect(footer?.textContent).toContain('Reviews2');
+});
+
+it('uses actual saved detail, editor and blank replacement with explicit fixture preview feedback', async () => {
+  actFlushSync(() =>
+    container
+      .querySelector<HTMLAnchorElement>(
+        'a[href="/projects/factory-factory/agents/event-agent?kind=event"]'
+      )
+      ?.click()
+  );
+  expect(container.querySelector('h2')?.textContent).toBe('Investigate labeled issues');
+  expect(container.querySelector('main')?.textContent).not.toContain('Run history');
+  actFlushSync(() => button('Edit Agent').click());
+  expect(container.querySelector('textarea[aria-label="Instructions"]')).not.toBeNull();
+  await act(() => button('Validate draft').click());
+  expect(container.textContent).toContain(
+    'Native discovery is unavailable in this frontend fixture.'
+  );
+  actFlushSync(() =>
+    container
+      .querySelector<HTMLAnchorElement>(
+        'a[href="/projects/factory-factory/agents/replacement-agent?kind=event"]'
+      )
+      ?.click()
+  );
+  actFlushSync(() => button('Edit Agent').click());
+  expect(container.querySelector('form')).toBeNull();
+  actFlushSync(() => button('Replace complete specification').click());
+  expect(
+    container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Full saved specification JSON"]'
+    )?.value
+  ).toBe('');
 });
