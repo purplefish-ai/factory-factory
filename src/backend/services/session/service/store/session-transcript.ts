@@ -156,15 +156,15 @@ function buildPRUpdateHistoryMessages(
   if (suffix || (!before && hasAttachments && boundary >= 0)) {
     appendHuman(suffix, !before);
   }
+  const attachments = categorizeAttachments(historyMsg.attachments ?? []);
+  const prompt =
+    historyMsg.providerPrompt === undefined
+      ? buildContentArray(
+          buildCombinedTextContent(historyMsg.content, attachments.textAttachments),
+          attachments.imageAttachments
+        )
+      : historyMsg.providerPrompt;
   messages.forEach((message, index) => {
-    const attachments = categorizeAttachments(historyMsg.attachments ?? []);
-    const prompt =
-      historyMsg.providerPrompt === undefined
-        ? buildContentArray(
-            buildCombinedTextContent(historyMsg.content, attachments.textAttachments),
-            attachments.imageAttachments
-          )
-        : historyMsg.providerPrompt;
     message.providerPrompt = index === 0 ? prompt : null;
   });
   return messages;

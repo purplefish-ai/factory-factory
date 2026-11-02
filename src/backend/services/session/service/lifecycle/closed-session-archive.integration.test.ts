@@ -265,7 +265,14 @@ it('keeps a legacy original if relocation fails and resumes after restart', asyn
   expect(await readFile(join(input.worktreePath, 'legacy.json'), 'utf8')).toBe('{"messages":[]}');
   write.mockRestore();
   await service.recoverPending('workspace');
-  expect(await accessor.findByWorkspaceId('workspace', 20)).toHaveLength(1);
+  const rows = await accessor.findByWorkspaceId('workspace', 20);
+  expect(rows).toHaveLength(1);
+  const { resolveClosedSessionTranscriptPath } = await vi.importActual<
+    typeof import('./closed-session-storage')
+  >('./closed-session-storage');
+  expect(await readFile(resolveClosedSessionTranscriptPath(rows[0]!, null), 'utf8')).toBe(
+    '{"messages":[]}'
+  );
 });
 
 it('explicit workspace deletion cascades records and removes owned artifacts', async () => {
@@ -321,7 +328,15 @@ it('late file publication after workspace deletion cannot publish or leak a tran
   const { closedSessionWorkspaceDirectory } = await vi.importActual<
     typeof import('@/backend/services/session/service/lifecycle/closed-session-storage')
   >('@/backend/services/session/service/lifecycle/closed-session-storage');
-  expect(await readdir(closedSessionWorkspaceDirectory('workspace')).catch(() => [])).toEqual([]);
+  const files = await readdir(closedSessionWorkspaceDirectory('workspace')).catch(
+    (error: unknown) => {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        return [];
+      }
+      throw error;
+    }
+  );
+  expect(files).toEqual([]);
 });
 
 it('distinguishes a repeated provider ID in a later conversation epoch', async () => {
@@ -394,12 +409,16 @@ it('does not resurrect a removed reservation or overwrite a newly completed copy
   });
   const first = service.persistClosedSession(input);
   await started;
-  const removal = accessor.delete((await db.prisma.closedSession.findFirstOrThrow()).id);
+  const removed = await db.prisma.closedSession.findFirstOrThrow();
+  const removal = accessor.delete(removed.id);
   const replacement = removal.then(() => service.persistClosedSession(input));
   // A correct completion lock makes deletion wait until its file is published.
   release();
   await Promise.allSettled([first, replacement]);
-  const row = (await accessor.findByWorkspaceId('workspace', 20))[0]!;
+  const rows = await accessor.findByWorkspaceId('workspace', 20);
+  expect(rows).toHaveLength(1);
+  const row = rows[0]!;
+  expect(row.id).not.toBe(removed.id);
   const { archiveDigest, resolveClosedSessionTranscriptPath } = await vi.importActual<
     typeof import('@/backend/services/session/service/lifecycle/closed-session-storage')
   >('@/backend/services/session/service/lifecycle/closed-session-storage');
@@ -552,4 +571,49 @@ it('does not roll back an unrelated accepted write when the archive filesystem f
   expect((await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'workspace' } })).name).toBe(
     'accepted rename'
   );
+});
+
+it('retains exact internal prompt evidence while renderer projection removes it', async () => {
+  const prompt = [
+    { type: 'text' as const, text: 'first' },
+    {
+      type: 'image' as const,
+      source: { type: 'base64' as const, media_type: 'image/png', data: 'aGk=' },
+    },
+    { type: 'text' as const, text: 'second' },
+  ];
+  input.messages[0]!.providerPrompt = prompt;
+  await service.persistClosedSession(input);
+  const row = await accessor.findByIdWithWorkspace(
+    (await accessor.findByWorkspaceId('workspace', 20))[0]!.id
+  );
+  const { resolveClosedSessionTranscriptPath } = await vi.importActual<
+    typeof import('./closed-session-storage')
+  >('./closed-session-storage');
+  const original = await service.readTranscript(
+    row!,
+    resolveClosedSessionTranscriptPath(row!, null)
+  );
+  expect(JSON.parse(original).messages).toEqual(input.messages);
+  expect(await readFile(resolveClosedSessionTranscriptPath(row!, null), 'utf8')).toBe(original);
+});
+
+it('refuses workspace archival when legacy source bytes are missing without altering the row', async () => {
+  const row = await db.prisma.closedSession.create({
+    data: {
+      sessionId: input.sessionId,
+      workspaceId: input.workspaceId,
+      name: input.name,
+      workflow: input.workflow,
+      provider: input.provider,
+      model: input.model,
+      startedAt: input.startedAt,
+      transcriptPath: 'unavailable-legacy.json',
+    },
+  });
+  await expect(service.preserveWorkspaceArchives('workspace')).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
+  expect(await db.prisma.closedSession.findUniqueOrThrow({ where: { id: row.id } })).toEqual(row);
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'workspace' } })).not.toBeNull();
 });

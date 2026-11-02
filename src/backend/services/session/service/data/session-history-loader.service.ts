@@ -281,9 +281,10 @@ const HistoryImageSchema = z.object({
   type: z.literal('image'),
   source: HistoryImageSourceSchema.extend({ type: z.literal('base64') }),
 });
-const HistoryPromptSchema = z.array(
-  z.union([z.object({ type: z.literal('text'), text: z.string() }), HistoryImageSchema])
-);
+const HistoryPromptBlockSchema = z.union([
+  z.object({ type: z.literal('text'), text: z.string() }),
+  HistoryImageSchema,
+]);
 
 function restoreUserImages(
   messages: HistoryMessage[],
@@ -305,6 +306,22 @@ function restoreUserImages(
     userMessage.attachments = attachments;
   } else {
     messages.unshift(withOptionalUuid({ type: 'user', content: '', timestamp, attachments }, uuid));
+  }
+}
+
+function restoreUserPrompt(messages: HistoryMessage[], content: unknown[]): void {
+  // Keep native prompt boundaries and image order before the UI projection
+  // splits text blocks and moves images onto its first human row.
+  const prompt = content.flatMap((chunk) => {
+    const parsed = HistoryPromptBlockSchema.safeParse(chunk);
+    return parsed.success ? [parsed.data] : [];
+  });
+  let firstUser = true;
+  for (const message of messages) {
+    if (message.type === 'user' && prompt.length > 0) {
+      message.providerPrompt = firstUser ? prompt : null;
+      firstUser = false;
+    }
   }
 }
 
@@ -337,16 +354,7 @@ function parseContentAsHistory(
 
   if (role === 'user') {
     restoreUserImages(messages, content, timestamp, uuid);
-    // Keep native prompt boundaries and image order before the UI projection
-    // splits text blocks and moves images onto its first human row.
-    const prompt = HistoryPromptSchema.safeParse(content);
-    if (prompt.success) {
-      messages.forEach((message, index) => {
-        if (message.type === 'user') {
-          message.providerPrompt = index === 0 ? prompt.data : null;
-        }
-      });
-    }
+    restoreUserPrompt(messages, content);
   }
   return messages;
 }

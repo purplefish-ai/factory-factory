@@ -16,7 +16,9 @@ function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
 }
 
 export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
-  const snapshot = [...selectRendererTranscriptWindow(store)];
+  const snapshot = selectRendererTranscriptWindow(store).map(
+    ({ providerPrompt: _providerPrompt, ...message }) => message
+  );
   store.queue.forEach((queued, index) => {
     snapshot.push({
       id: queued.id,

@@ -119,22 +119,28 @@ snapshot to its workspace, logical session, provider, account, provider
 conversation, rollover epoch and captured contents. Concurrent closes and
 retries reserve the same row and frozen bytes; later snapshots retain separate
 copies. Completion timestamps do not change retry identity. The identity uses
-canonical conversation content, not reconstructed chat IDs, order counters,
-timestamps, image-upload display metadata, model/usage envelopes or session
-labels. Native text/image content and tool IDs/inputs remain meaningful; text
-chunk splitting does not. Durable local events retain their IDs/content
-independently of their reconstructed timeline placement. Restart retries reuse
-the first reservation's exact bytes, including its original display fields and
-completion timestamp; canonicalization never rewrites that retained transcript.
-The dispatcher records the exact sent prompt on the first committed batch row
-(`providerPrompt`), with `null` on the other covered rows. Archive identity uses
-that prompt once, so queued humans retain their separate UI entries while
-matching the combined native-history prompt after restart. Unmarked adjacent
-human prompts retain separate boundaries; identity never guesses their batching.
-Native Claude text/image arrays and Codex input blocks retain the same
-provenance before their UI projection splits/joins text and restores images,
-including mixed PR/human prompts. Codex event projections also retain the
-matching native response prompt when it supplies the image/block evidence.
+canonical conversation content and session start time, not reconstructed chat
+IDs, order counters, message timestamps, image-upload display metadata,
+model/usage envelopes or session labels. Native text/image content and tool
+IDs/inputs remain meaningful; text chunk splitting does not. Durable local
+events retain their IDs/content independently of their reconstructed timeline
+placement. Restart retries reuse the first reservation's exact bytes, including
+its original display fields and completion timestamp; canonicalization never
+rewrites that retained transcript. The dispatcher records the exact sent prompt
+on the first committed batch row (`providerPrompt`), with `null` on the other
+covered rows. Archive identity uses that prompt once, so queued humans retain
+their separate UI entries while matching the combined native-history prompt
+after restart. Unmarked adjacent human prompts retain separate boundaries;
+identity never guesses their batching. Renderer snapshots and
+archived-transcript responses omit this internal prompt evidence from copied UI
+messages; retained transcript bytes and identity inputs keep it. Native Claude
+text/image arrays and Codex input blocks retain the same provenance before their
+UI projection splits/joins text and restores images, including mixed PR/human
+prompts. Codex event projections also retain the matching native response prompt
+when it supplies the image/block evidence. Split response records combine only
+for one explicitly identified turn and a matching single event prompt,
+preserving native block order. Ambiguous copies and unmatched user records
+remain separate.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
 its digest before any file write. Archive writes opt into syncing temporary

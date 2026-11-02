@@ -68,9 +68,7 @@ it('joins a pending maintenance DB read before closing cursors on stop', async (
   const stop = service.stopArchiveMaintenance().then(() => {
     stopped = true;
   });
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   try {
     expect(stopped).toBe(false);
   } finally {
@@ -121,9 +119,7 @@ it('joins in-flight file completion before shutdown may disconnect its DB', asyn
   const stop = service.stopArchiveMaintenance().then(() => {
     stopped = true;
   });
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   try {
     expect(stopped).toBe(false);
   } finally {

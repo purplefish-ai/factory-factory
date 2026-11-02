@@ -49,20 +49,23 @@ export const closedSessionsRouter = router({
         });
       }
 
-      // Read transcript from file
-      const transcriptPath = sessionDataService.resolveClosedSessionTranscriptPath(
-        closedSession,
-        closedSession.workspace.worktreePath
-      );
-
       try {
+        const transcriptPath = sessionDataService.resolveClosedSessionTranscriptPath(
+          closedSession,
+          closedSession.workspace.worktreePath
+        );
         const content = await sessionDataService.readClosedSessionTranscript(
           closedSession,
           transcriptPath
         );
         const transcript = closedSessionTranscriptSchema.parse(JSON.parse(content));
 
-        return transcript;
+        return {
+          ...transcript,
+          messages: transcript.messages.map(
+            ({ providerPrompt: _providerPrompt, ...message }) => message
+          ),
+        };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           throw new TRPCError({
