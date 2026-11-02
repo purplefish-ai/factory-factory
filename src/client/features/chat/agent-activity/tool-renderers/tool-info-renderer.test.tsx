@@ -179,7 +179,7 @@ describe('quiet activity summaries', () => {
         })
       )
     );
-    expect(container.textContent).toBe('Ran commands');
+    expect(container.textContent).toBe('Ran pnpm test');
     expect(container.textContent).not.toContain('Success');
     expect(container.textContent).not.toContain('All tests passed');
     expect(container.textContent).not.toContain('Run the full unit suite');
@@ -213,7 +213,7 @@ describe('quiet activity summaries', () => {
         })
       )
     );
-    expect(container.textContent).toContain('Edited a file, ran commands');
+    expect(container.textContent).toContain('Edited a file, ran pnpm test');
     expect(container.textContent).not.toMatch(/failed|error/i);
     expect(container.querySelector('button')?.className).not.toContain('text-destructive');
     flushSync(() => container.querySelector('button')?.click());
@@ -243,7 +243,7 @@ describe('bounded command previews in expanded activity', () => {
       );
       const trigger = container.querySelector('button');
       expect(trigger?.textContent?.length).toBeLessThanOrEqual(84);
-      expect(trigger?.textContent).toBe('Ran commands');
+      expect(trigger?.textContent).toBe('Ran printf');
       flushSync(() => trigger?.click());
       const commandTrigger = container.querySelectorAll('button')[1];
       expect(commandTrigger?.textContent?.length).toBeLessThanOrEqual(84);
@@ -258,9 +258,9 @@ describe('bounded command previews in expanded activity', () => {
 
 describe('single activity summaries', () => {
   it.each([
-    { name: 'Read', status: 'success' as const, label: 'Read files' },
-    { name: 'Bash', status: 'error' as const, label: 'Ran commands' },
-    { name: 'exec_command', status: 'pending' as const, label: 'Running commands' },
+    { name: 'Read', status: 'success' as const, label: 'Read file single.ts' },
+    { name: 'Bash', status: 'error' as const, label: 'Ran command' },
+    { name: 'exec_command', status: 'pending' as const, label: 'Running command' },
   ])('summarizes $name with status $status', ({ name, status, label }) => {
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -276,7 +276,6 @@ describe('single activity summaries', () => {
       const trigger = container.querySelector('button');
       expect(trigger?.textContent).toBe(label + (status === 'pending' ? 'Running' : ''));
       expect(trigger?.className).not.toContain('text-destructive');
-      expect(container.textContent).not.toContain('single.ts');
       flushSync(() => trigger?.click());
       expect(container.textContent).toContain(name === 'Read' ? 'single.ts' : 'command');
     } finally {
