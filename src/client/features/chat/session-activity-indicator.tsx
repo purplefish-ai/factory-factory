@@ -44,6 +44,7 @@ export function SessionActivityIndicator({
   controlSessionId,
   latestThinking,
   runningSubagentList,
+  onOpenSingleSubagent,
   showThinking = true,
   runningSubagentIconIndices = [],
 }: {
@@ -54,6 +55,7 @@ export function SessionActivityIndicator({
   controlSessionId?: string;
   latestThinking?: string | null;
   runningSubagentList?: ReactNode;
+  onOpenSingleSubagent?: () => void;
 }) {
   const [backgroundExpanded, setBackgroundExpanded] = useRememberedDisclosure(
     sessionId,
@@ -76,6 +78,15 @@ export function SessionActivityIndicator({
   if (!(showThinking || hasBackgroundActivity)) {
     return null;
   }
+  const subagentIcons = (
+    <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
+      {runningSubagentIconIndices.slice(0, Math.min(3, runningSubagents)).map((index) => (
+        <SubagentIcon key={index} index={index} />
+      ))}
+    </span>
+  );
+  const subagentButtonClassName =
+    'group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
   return (
     <div className="space-y-3 py-4">
       {showThinking && agentWorking && (
@@ -125,20 +136,30 @@ export function SessionActivityIndicator({
           </CollapsibleContent>
         </Collapsible>
       )}
-      {!!runningSubagents && (
+      {runningSubagents === 1 && (
+        <div>
+          <span role="status" aria-label="Sub-agent activity" className="sr-only">
+            {subagentLabel}
+          </span>
+          <button
+            type="button"
+            title="Open sub-agent tab"
+            onClick={onOpenSingleSubagent}
+            disabled={!onOpenSingleSubagent}
+            className={subagentButtonClassName}
+          >
+            {subagentIcons}
+            <span>{subagentLabel}</span>
+          </button>
+        </div>
+      )}
+      {runningSubagents > 1 && (
         <Collapsible open={subagentsExpanded} onOpenChange={setSubagentsExpanded}>
           <span role="status" aria-label="Sub-agent activity" className="sr-only">
             {subagentLabel}
           </span>
-          <CollapsibleTrigger
-            type="button"
-            className="group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
-              {runningSubagentIconIndices.slice(0, Math.min(3, runningSubagents)).map((index) => (
-                <SubagentIcon key={index} index={index} />
-              ))}
-            </span>
+          <CollapsibleTrigger type="button" className={subagentButtonClassName}>
+            {subagentIcons}
             <span>{subagentLabel}</span>
             <CaretRightIcon
               aria-hidden="true"

@@ -39,6 +39,10 @@ function text(id: string, timestamp: string): ChatMessage {
 }
 
 describe('mergeSubagentTimeline', () => {
+  it('retains the provider identity on both lifecycle entries for direct navigation', () => {
+    const events = createSubagentTimelineEvents([agent]);
+    expect(events.map((event) => event.subagentId)).toEqual(['review', 'review']);
+  });
   it('interleaves separate start and finish entries without reordering the transcript', () => {
     const messages = [
       text('before', '2026-10-30T12:00:00Z'),

@@ -58,6 +58,21 @@ interruptibility is a shutdown concern rather than a scheduling feature.
 `stop()` waits unbounded for an in-flight run, exactly as every loop did before
 — bounding it would change shutdown to abandon work mid-flight.
 
+### Fatal backend errors
+
+The standalone backend claims one shutdown attempt before logging a fatal error.
+Further uncaught exceptions and unhandled rejections during cleanup do not write
+more fatal records or restart cleanup. Its terminal error is appended
+synchronously to `logs/server.log`, without a console echo, so an immediate
+failure exit retains the original cause when the filesystem is available.
+Ordinary console logging disables a stdout/stderr sink after a write failure;
+sink failures are never logged back through that sink.
+
+Fatal cleanup has a 30-second deadline, after which the standalone backend exits
+with status 1. This bounds failed-process cleanup without changing normal job
+`stop()` drains. Electron's separate backend stop/kill budget still applies to
+the desktop utility process; this deadline does not extend it.
+
 ## Timer dispatch ownership
 
 The `agent-source-poll` job runs immediately, then waits 60 seconds after each

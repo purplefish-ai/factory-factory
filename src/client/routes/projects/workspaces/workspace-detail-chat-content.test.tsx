@@ -9,6 +9,9 @@ import { ChatContent, type ChatContentProps } from './workspace-detail-chat-cont
 
 const transcript = vi.hoisted(() => vi.fn());
 const input = vi.hoisted(() => vi.fn((_props: { placeholder: string }) => null));
+const subagentState = vi.hoisted(() => ({
+  siblingStatus: 'completed' as 'completed' | 'starting' | 'waiting' | 'running',
+}));
 
 vi.mock('@/client/features/chat', () => ({
   useGroupedChatMessages: () => [],
@@ -157,6 +160,86 @@ describe('ChatContent message queue wording', () => {
 });
 
 describe('ChatContent transcript ownership', () => {
+  it.each(['starting', 'waiting', 'running'] as const)(
+    'matches the running count when a sibling is %s',
+    (siblingStatus) => {
+      subagentState.siblingStatus = siblingStatus;
+      const onOpenSubagent = vi.fn();
+      const props = {
+        workspaceId: 'workspace-1',
+        sessionId: 'session-1',
+        onOpenSubagent,
+        messages: [],
+        queuedMessages: [],
+        sessionStatus: { phase: 'ready' },
+        sessionRuntime: createInitialSessionRuntimeState(),
+        chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+        pendingRequest: { type: 'none' },
+        pendingMessages: new Map(),
+        inputRef: createRef(),
+      } as unknown as ChatContentProps;
+      const root = createRoot(document.createElement('div'));
+      try {
+        flushSync(() => root.render(<ChatContent {...props} />));
+        const display = transcript.mock.lastCall?.[0];
+        if (siblingStatus === 'running') {
+          expect(display.onOpenSingleSubagent).toBeUndefined();
+        } else {
+          expect(display.onOpenSingleSubagent).toBeTypeOf('function');
+          display.onOpenSingleSubagent();
+          expect(onOpenSubagent).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+              subagent: expect.objectContaining({ id: 'agent-1' }),
+            })
+          );
+        }
+      } finally {
+        flushSync(() => root.unmount());
+        subagentState.siblingStatus = 'completed';
+      }
+    }
+  );
+  it.each(['agent-1', 'agent-2'])('opens lifecycle target %s in its parent session', (id) => {
+    const onOpenSubagent = vi.fn();
+    const props = {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      parentSessionName: 'Main chat',
+      onOpenSubagent,
+      messages: [],
+      queuedMessages: [],
+      sessionStatus: { phase: 'ready' },
+      sessionRuntime: createInitialSessionRuntimeState(),
+      chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+      pendingRequest: { type: 'none' },
+      pendingMessages: new Map(),
+      inputRef: createRef(),
+    } as unknown as ChatContentProps;
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      const display = transcript.mock.lastCall?.[0];
+      expect(display.onOpenSubagent).toBeTypeOf('function');
+      display.onOpenSubagent(id);
+      expect(onOpenSubagent).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          parentSessionId: 'session-1',
+          parentSessionName: 'Main chat',
+          subagent: expect.objectContaining({ id }),
+        })
+      );
+      display.onOpenSubagent('missing');
+      expect(onOpenSubagent).toHaveBeenCalledOnce();
+      display.onOpenSingleSubagent();
+      expect(onOpenSubagent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          subagent: expect.objectContaining({ id: 'agent-1' }),
+        })
+      );
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
   it('opens an active sub-agent transcript directly from the chat list', () => {
     const onOpenSubagent = vi.fn();
     const props = {
@@ -227,39 +310,45 @@ describe('ChatContent transcript ownership', () => {
   });
 });
 
-vi.mock('@/client/features/subagents', async () => ({
-  SubagentList: (
-    await vi.importActual<typeof import('@/client/features/subagents/subagent-list')>(
-      '@/client/features/subagents/subagent-list'
-    )
-  ).SubagentList,
-  useSubagentTimelineMessages: (messages: unknown[]) => ({
-    messages,
-    error: null,
-    subagentListState: {
-      kind: 'ready',
-      subagents: [
-        {
-          id: 'agent-1',
-          name: 'Review code',
-          status: 'running',
-          createdAt: null,
-          updatedAt: null,
-          completedAt: null,
-          latestActivity: null,
-          resultPreview: null,
-        },
-        {
-          id: 'agent-2',
-          name: 'Finished task',
-          status: 'completed',
-          createdAt: null,
-          updatedAt: null,
-          completedAt: null,
-          latestActivity: null,
-          resultPreview: null,
-        },
-      ],
+vi.mock('@/client/features/subagents', async () => {
+  const subagents = [
+    {
+      id: 'agent-1',
+      name: 'Review code',
+      status: 'running',
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
     },
-  }),
-}));
+    {
+      id: 'agent-2',
+      name: 'Finished task',
+      status: 'completed',
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+    },
+  ];
+  return {
+    SubagentList: (
+      await vi.importActual<typeof import('@/client/features/subagents/subagent-list')>(
+        '@/client/features/subagents/subagent-list'
+      )
+    ).SubagentList,
+    useSubagentTimelineMessages: (messages: unknown[]) => {
+      const currentSubagents = subagents.map((agent) =>
+        agent.id === 'agent-2' ? { ...agent, status: subagentState.siblingStatus } : agent
+      );
+      return {
+        messages,
+        subagents: currentSubagents,
+        error: null,
+        subagentListState: { kind: 'ready', subagents: currentSubagents },
+      };
+    },
+  };
+});

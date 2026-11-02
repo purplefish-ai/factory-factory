@@ -286,3 +286,113 @@ it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
     expect(stateChanged).not.toHaveBeenCalled();
   }
 );
+
+it('stops merged polling while waking pending terminal deliveries and polling open siblings', async () => {
+  const prs = [
+    {
+      ...config.workspace.prs[0],
+      id: 'merged',
+      state: 'MERGED',
+      observation: {},
+      syncedAt: new Date(),
+    },
+    { ...config.workspace.prs[0], id: 'open', observation: {}, syncedAt: new Date() },
+  ];
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  mocks.listPending.mockResolvedValue([{ id: 'terminal-event', prId: 'merged', state: 'PENDING' }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const wake = vi.fn().mockResolvedValue(undefined);
+  const service = new RatchetService();
+  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  const result = await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['open']);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  expect(result.actionsTriggered).toBe(1);
+});
+
+it('backs off closed PRs but observes them again to detect reopening', async () => {
+  const now = Date.now();
+  const prs = [
+    {
+      ...config.workspace.prs[0],
+      id: 'recent',
+      state: 'CLOSED',
+      observation: {},
+      syncedAt: new Date(now - 10 * 60_000),
+    },
+    {
+      ...config.workspace.prs[0],
+      id: 'due',
+      state: 'CLOSED',
+      observation: {},
+      syncedAt: new Date(now - 31 * 60_000),
+    },
+    {
+      ...config.workspace.prs[0],
+      id: 'legacy',
+      state: 'MERGED',
+      observation: null,
+      syncedAt: new Date(now - 10 * 60_000),
+    },
+  ];
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const service = new RatchetService();
+  service.configure({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['due', 'legacy']);
+});
+
+it('eliminates recurring observations for four initialized merged PRs across thirty poll cycles', async () => {
+  const prs = Array.from({ length: 4 }, (_, index) => ({
+    ...config.workspace.prs[0],
+    id: `merged-${index}`,
+    state: 'MERGED',
+    observation: {},
+    syncedAt: new Date(),
+  }));
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const wake = vi.fn().mockResolvedValue(undefined);
+  const service = new RatchetService();
+  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  for (let cycle = 0; cycle < 30; cycle++) {
+    await service.checkAllWorkspaces();
+  }
+  expect(observe).toHaveBeenCalledTimes(0);
+  expect(wake).toHaveBeenCalledTimes(30);
+});
+
+it('initializes terminal facts for a new monitoring epoch before applying backoff', async () => {
+  const prs = ['MERGED', 'CLOSED'].map((state) => ({
+    ...config.workspace.prs[0],
+    id: state,
+    state,
+    observation: {},
+    observationEpoch: 0,
+    syncedAt: new Date(),
+  }));
+  mocks.listEnabled.mockResolvedValue([{ ...config, eventEpoch: 1, workspace: { prs } }]);
+  const observe = vi.fn().mockImplementation((target) => {
+    const pr = prs.find((pr) => pr.id === target.prId);
+    if (pr) {
+      pr.observationEpoch = 1;
+    }
+    return Promise.resolve(true);
+  });
+  const service = new RatchetService();
+  service.configure({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['MERGED', 'CLOSED']);
+  observe.mockClear();
+  await service.checkAllWorkspaces();
+  expect(observe).not.toHaveBeenCalled();
+});

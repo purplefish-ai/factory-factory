@@ -17,26 +17,46 @@ export async function readNonEmptyJsonlLines(params: {
   onError: (error: unknown) => void;
   containing?: string;
   chunkBytes?: number;
+  isCurrent?: () => boolean;
 }): Promise<void> {
   try {
+    assertHistoryReadCurrent(params.isCurrent);
     const needle = params.containing === undefined ? null : jsonStringBytes(params.containing);
     let linesBeforeBlock = 0;
     for await (const block of readLineAlignedBlocks(params.filePath, params.chunkBytes)) {
       let scanned = 0;
+      let budgetUntil = performance.now() + 16;
+      let processed = 0;
       let newlines = 0;
       for (const [start, end] of lineRanges(block, needle)) {
+        assertHistoryReadCurrent(params.isCurrent);
         newlines += countNewlines(block, scanned, start);
         scanned = start;
         // trim() also drops the `\r` of CRLF line endings.
         const trimmed = block.toString('utf8', start, end).trim();
         if (trimmed) {
           await params.onLine(trimmed, linesBeforeBlock + newlines + 1);
+          // Keep the original byte-block yields, with a time budget for dense
+          // blocks and large records. A single JSON.parse remains atomic.
+          if (
+            (++processed % 16 === 0 || end - start > 64 * 1024) &&
+            performance.now() >= budgetUntil
+          ) {
+            await yieldToEventLoop();
+            budgetUntil = performance.now() + 16;
+          }
         }
       }
       linesBeforeBlock += newlines + countNewlines(block, scanned, block.length);
     }
   } catch (error) {
     params.onError(error);
+  }
+}
+
+function assertHistoryReadCurrent(isCurrent?: () => boolean): void {
+  if (isCurrent?.() === false) {
+    throw new Error('Provider history identity changed during read');
   }
 }
 
