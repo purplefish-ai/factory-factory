@@ -13,6 +13,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  writeSync,
   type WriteStream,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -296,13 +297,20 @@ class Logger {
 
     if (fatal) {
       // The terminal record must survive an immediate process.exit, even when
-      // ordinary asynchronous file writes are still queued. Do not echo it.
+      // ordinary asynchronous file writes are still queued.
+      const record = `${safeStringify(entry)}\n`;
       try {
         const path = getLogFilePath();
         mkdirSync(dirname(path), { recursive: true });
-        appendFileSync(path, `${safeStringify(entry)}\n`);
+        appendFileSync(path, record);
       } catch {
-        // Best effort when the filesystem itself is unavailable.
+        // A single direct write preserves the cause when the file is unavailable.
+        // Never route this fallback through the logger or retry a broken pipe.
+        try {
+          writeSync(2, record);
+        } catch {
+          // Both terminal sinks are unavailable; shutdown must still proceed.
+        }
       }
     } else if (this.config.prettyPrint) {
       this.prettyOutput(entry);
