@@ -143,8 +143,9 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
         currentProjectId.current === project.id &&
         currentMode.current === 'create'
       ) {
-        setMode('detail');
-        void navigate(getProjectAgentPath(project.slug, created.id));
+        void navigate(getProjectAgentPath(project.slug, created.id), {
+          replace: location.state?.createAgent === true,
+        });
       }
     } else if (kind === 'scheduled' && id && task.data?.projectId === project.id) {
       await update.mutateAsync({ id, ...values });

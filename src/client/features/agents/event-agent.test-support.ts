@@ -1,4 +1,5 @@
 import { managedAgentSchema, agentSummarySchema } from '@/shared/agent-management';
+import { agentProjectSourcesSchema } from '@/shared/agent-validation';
 
 /** Canonical public shape for visual fixtures; ownership/CAS use real integration owners. */
 export function eventAgentFixture() {
@@ -50,4 +51,50 @@ export function eventAgentFixture() {
 
 export function eventSummaryFixture(agent: ReturnType<typeof eventAgentFixture>) {
   return agentSummarySchema.strip().parse(agent);
+}
+
+/** Frontend-only discovery pages; credentials/native/source ports are never acquired. */
+export function eventProjectSourcesFixture(
+  projectId: string,
+  connectionId?: string,
+  cursor?: string
+) {
+  const channels =
+    cursor === 'fixture-page-2'
+      ? [
+          { id: 'fixture-shared', name: 'Fixture shared channel' },
+          { id: 'fixture-two', name: 'Fixture channel two' },
+        ]
+      : cursor === 'fixture-page-3'
+        ? [{ id: 'fixture-three', name: 'Fixture channel three' }]
+        : [
+            { id: 'fixture-one', name: 'Fixture channel one' },
+            { id: 'fixture-shared', name: 'Fixture shared channel' },
+          ];
+  return agentProjectSourcesSchema.parse({
+    project: { id: projectId, name: 'Frontend fixture' },
+    slack: {
+      connections: [
+        {
+          id: 'fixture-slack',
+          name: 'Fixture Slack',
+          workspaceId: 'fixture-workspace',
+          isEnabled: true,
+          hasCredentials: false,
+        },
+      ],
+      ...(connectionId === 'fixture-slack'
+        ? {
+            channels,
+            nextCursor:
+              cursor === 'fixture-page-3'
+                ? null
+                : cursor === 'fixture-page-2'
+                  ? 'fixture-page-3'
+                  : 'fixture-page-2',
+          }
+        : {}),
+    },
+    github: { error: 'Source discovery is unavailable in this frontend fixture.' },
+  });
 }

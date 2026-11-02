@@ -30,8 +30,9 @@ export function SavedEventEditor({
       agent={agent}
       onCancel={onCancel}
       onSave={async (specification, revision) => {
+        let result: EventAgent;
         try {
-          await update.mutateAsync({
+          result = await update.mutateAsync({
             ...owner,
             expectedManagementRevision: revision,
             specification,
@@ -40,6 +41,9 @@ export function SavedEventEditor({
           await utils.agent.get.invalidate(owner);
           throw error;
         }
+        utils.agent.get.setData(owner, (cached) =>
+          cached && cached.managementRevision > result.managementRevision ? cached : result
+        );
         await invalidateSavedAgentQueries(utils, owner.projectId, owner.agentId);
         if (active.current) {
           onSaved();

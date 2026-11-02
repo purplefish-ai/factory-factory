@@ -228,14 +228,18 @@ function SourceControls({ editor, id }: { editor: Editor; id: string }) {
         <Button
           type="button"
           variant="outline"
+          disabled={editor.busy === 'save'}
           onClick={() => void editor.attempt('sources', connectionId ? { connectionId } : {})}
         >
-          Refresh project sources
+          {editor.sourceError && !editor.sources
+            ? 'Retry project sources'
+            : 'Refresh project sources'}
         </Button>
         {editor.sources?.slack.nextCursor && (
           <Button
             type="button"
             variant="outline"
+            disabled={editor.busy === 'sources' || editor.busy === 'save'}
             onClick={() =>
               void editor.attempt('sources', {
                 ...(connectionId ? { connectionId } : {}),
@@ -243,7 +247,7 @@ function SourceControls({ editor, id }: { editor: Editor; id: string }) {
               })
             }
           >
-            More Slack channels
+            {editor.sourceError ? 'Retry more Slack channels' : 'More Slack channels'}
           </Button>
         )}
       </div>

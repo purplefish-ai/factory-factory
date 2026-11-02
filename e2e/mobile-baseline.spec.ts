@@ -265,6 +265,14 @@ for (const viewport of mobileViewports) {
     await page.setViewportSize({ width: 1024, height: 1000 });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(instructions).toHaveValue('Phone draft stays during resize');
+    await page.locator('input[id$="-connection"]').fill('fixture-slack');
+    await page.getByRole('button', { name: 'Refresh project sources', exact: true }).click();
+    await page.getByRole('button', { name: 'More Slack channels', exact: true }).click();
+    await page.getByRole('button', { name: 'More Slack channels', exact: true }).click();
+    const sources = page.getByLabel('Project sources', { exact: true });
+    await expect(sources).toContainText('Fixture channel one');
+    await expect(sources).toContainText('Fixture channel two');
+    await expect(sources).toContainText('Fixture channel three');
     await page.getByText('Event settings', { exact: true }).click();
     const main = page.locator('main');
     const editor = await main.boundingBox();

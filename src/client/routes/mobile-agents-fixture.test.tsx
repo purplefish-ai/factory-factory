@@ -162,3 +162,28 @@ it('uses actual saved detail, editor and blank replacement with explicit fixture
     )?.value
   ).toBe('');
 });
+it('keeps explicit frontend-only Slack channel pages accessible in the saved editor', async () => {
+  actFlushSync(() =>
+    container
+      .querySelector<HTMLAnchorElement>(
+        'a[href="/projects/factory-factory/agents/event-agent?kind=event"]'
+      )
+      ?.click()
+  );
+  actFlushSync(() => button('Edit Agent').click());
+  const connection = container.querySelector<HTMLInputElement>('input[id$="-connection"]');
+  actFlushSync(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+      connection,
+      'fixture-slack'
+    );
+    connection?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(() => button('Refresh project sources').click());
+  await act(() => button('More Slack channels').click());
+  await act(() => button('More Slack channels').click());
+  const sources = container.querySelector('[aria-label="Project sources"]');
+  expect(sources?.textContent).toContain('Fixture channel one');
+  expect(sources?.textContent).toContain('Fixture channel two');
+  expect(sources?.textContent).toContain('Fixture channel three');
+});

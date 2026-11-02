@@ -5,7 +5,15 @@ import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
+import {
+  Link,
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
@@ -63,6 +71,7 @@ const preview = agentDraftValidationSchema.parse({
 function Harness() {
   const { slug } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const project = {
     id: slug === 'other' ? 'other' : 'owner',
     slug: slug ?? 'owner',
@@ -74,6 +83,9 @@ function Harness() {
       <Link to="/projects/owner/agents/same">Scheduled same ID</Link>
       <Link to="/projects/owner/agents/same?kind=event">Event same ID</Link>
       <Link to="/projects/other/agents/same?kind=event">Other project</Link>
+      <button type="button" onClick={() => void navigate(-1)}>
+        Back
+      </button>
       <AgentsPage project={project} />
       <output>
         {location.pathname}
@@ -130,6 +142,43 @@ async function listEvents(input: unknown) {
         nextCursor: 'list-next',
       };
 }
+async function updateEvent(input: unknown) {
+  await saveWait;
+  const args = agentSavedUpdateSchema.parse(input);
+  if (args.expectedManagementRevision !== saved.managementRevision) {
+    throw new TRPCClientError('The saved definition changed. Review your edits before reloading.', {
+      result: {
+        error: {
+          message: 'Saved definition changed',
+          code: -32_009,
+          data: { code: 'CONFLICT', httpStatus: 409 },
+        },
+      },
+    });
+  }
+  const taskChanged = saved.instructions !== args.specification.instructions;
+  saved = managedAgentSchema.parse({
+    ...saved,
+    name: args.specification.name,
+    instructions: args.specification.instructions,
+    executionConfig: args.specification.executionConfig,
+    specification: args.specification,
+    managementRevision: saved.managementRevision + 1,
+    definitionRevision: saved.definitionRevision + Number(taskChanged),
+    configuredTriggers: saved.configuredTriggers.map((trigger) =>
+      taskChanged
+        ? {
+            ...trigger,
+            isEnabled: false,
+            activationState: 'PAUSED',
+            triggerRevision: trigger.triggerRevision + 1,
+            activationGeneration: trigger.activationGeneration + 1,
+          }
+        : trigger
+    ),
+  });
+  return saved;
+}
 async function respond(path: string, input: unknown) {
   if (path === 'agent.list') {
     return listEvents(input);
@@ -138,31 +187,7 @@ async function respond(path: string, input: unknown) {
     return getEvent(input);
   }
   if (path === 'agent.updateSaved') {
-    await saveWait;
-    const args = agentSavedUpdateSchema.parse(input);
-    if (args.expectedManagementRevision !== saved.managementRevision) {
-      throw new TRPCClientError(
-        'The saved definition changed. Review your edits before reloading.',
-        {
-          result: {
-            error: {
-              message: 'Saved definition changed',
-              code: -32_009,
-              data: { code: 'CONFLICT', httpStatus: 409 },
-            },
-          },
-        }
-      );
-    }
-    saved = managedAgentSchema.parse({
-      ...saved,
-      name: args.specification.name,
-      instructions: args.specification.instructions,
-      executionConfig: args.specification.executionConfig,
-      specification: args.specification,
-      managementRevision: saved.managementRevision + 1,
-    });
-    return saved;
+    return updateEvent(input);
   }
   if (path === 'agent.validateDraft') {
     await previewWait;
@@ -183,7 +208,14 @@ async function respond(path: string, input: unknown) {
     return [scheduled()];
   }
   if (path === 'periodicTask.get') {
-    return scheduled();
+    return { ...scheduled(), id: z.object({ id: z.string() }).parse(input).id };
+  }
+  if (path === 'periodicTask.create') {
+    return {
+      ...scheduled(),
+      ...z.object({ name: z.string(), prompt: z.string() }).parse(input),
+      id: 'created',
+    };
   }
   if (path === 'periodicTask.listExecutions') {
     return [];
@@ -672,3 +704,135 @@ it.each(['preview', 'sources'])(
     expect(container.textContent).not.toContain('Older request failed after current feedback');
   }
 );
+
+it('shows authoritative paused state and reopens with returned CAS when successful save refetch fails', async () => {
+  saved = {
+    ...saved,
+    isEnabled: true,
+    configuredTriggers: saved.configuredTriggers.map((trigger) => ({
+      ...trigger,
+      isEnabled: true,
+      activationState: 'ACTIVE',
+    })),
+  };
+  await render();
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  expect(container.querySelector('main')?.textContent).toContain('ACTIVE');
+  await click('Edit Agent');
+  await edit('textarea[aria-label="Instructions"]', 'Authoritative returned instructions');
+  fail = 'agent.get';
+  await submit();
+  const key = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  await waitForReact(() => expect(queryClient.getQueryState(key)?.status).toBe('error'));
+  await waitForReact(() => expect(container.querySelector('form')).toBeNull());
+  expect(container.querySelector('main')?.textContent).toContain(
+    'Authoritative returned instructions'
+  );
+  expect(container.querySelector('main')?.textContent).toContain('Management revision 3');
+  expect(container.querySelector('main')?.textContent).toContain('PAUSED');
+  expect(container.querySelector('main')?.textContent).not.toContain('ACTIVE');
+  expect(container.querySelector('main')?.textContent).toContain('re-enabling is needed');
+  expect(managedAgentSchema.parse(queryClient.getQueryData(key)).managementRevision).toBe(3);
+  await click('Edit Agent');
+  expect(
+    container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
+  ).toBe('Authoritative returned instructions');
+  await submit();
+  await waitForReact(() =>
+    expect(requests.filter((request) => request.path === 'agent.updateSaved')).toHaveLength(2)
+  );
+  expect(
+    agentSavedUpdateSchema.parse(
+      requests.filter((request) => request.path === 'agent.updateSaved')[1]?.input
+    ).expectedManagementRevision
+  ).toBe(3);
+});
+it('preserves a higher same-owner cached revision over an older successful mutation response', async () => {
+  await render();
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await click('Edit Agent');
+  await edit('textarea[aria-label="Instructions"]', 'Pending revision three');
+  const gate = deferred();
+  saveWait = gate.promise;
+  await submit();
+  const key = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  const newer = managedAgentSchema.parse({
+    ...saved,
+    managementRevision: 5,
+    instructions: 'Newer authoritative revision five',
+    specification: { ...saved.specification!, instructions: 'Newer authoritative revision five' },
+  });
+  await act(() => queryClient.setQueryData(key, newer));
+  expect(
+    container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
+  ).toBe('Pending revision three');
+  fail = 'agent.get';
+  await act(() => gate.resolve());
+  await waitForReact(() => expect(container.querySelector('form')).toBeNull());
+  expect(managedAgentSchema.parse(queryClient.getQueryData(key)).managementRevision).toBe(5);
+  expect(container.querySelector('main')?.textContent).toContain(
+    'Newer authoritative revision five'
+  );
+  await click('Edit Agent');
+  expect(container.textContent).toContain('Saved management revision 5');
+  expect(
+    container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
+  ).toBe('Newer authoritative revision five');
+});
+it('seeds the captured event owner after delayed save without replacing the same-ID scheduled draft', async () => {
+  await render();
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await click('Edit Agent');
+  await edit('textarea[aria-label="Instructions"]', 'Saved after event editor unmount');
+  const gate = deferred();
+  saveWait = gate.promise;
+  await submit();
+  const baseKey = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  const retainedKey = getQueryKey(
+    trpc.agent.get,
+    { projectId: 'owner', agentId: 'same', retainedCursor: 'tail' },
+    'query'
+  );
+  queryClient.setQueryData(retainedKey, saved);
+  await navigate('Scheduled same ID');
+  await waitForReact(() =>
+    expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+  );
+  await click('Edit Agent');
+  await edit('input[name="name"]', 'Keep scheduled draft');
+  const form = container.querySelector('form');
+  fail = 'agent.get';
+  await act(() => gate.resolve());
+  await waitForReact(() =>
+    expect(queryClient.getQueryState(retainedKey)?.isInvalidated).toBe(true)
+  );
+  expect(managedAgentSchema.parse(queryClient.getQueryData(baseKey))).toMatchObject({
+    managementRevision: 3,
+    instructions: 'Saved after event editor unmount',
+  });
+  expect(container.querySelector('form')).toBe(form);
+  expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
+    'Keep scheduled draft'
+  );
+  expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents/same');
+});
+
+it('consumes event-to-scheduled create intent after success so Back does not reopen a blank form', async () => {
+  await render();
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await click('Create Agent');
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe('Create Agent'));
+  expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
+  await edit('input[name="name"]', 'Created from event detail');
+  await edit('textarea', 'Scheduled instructions from explicit create');
+  await submit();
+  await waitForReact(() =>
+    expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents/created')
+  );
+  await click('Back');
+  await waitForReact(() => expect(container.querySelector('form')).toBeNull());
+  expect(container.querySelector('output')?.textContent).toBe(
+    '/projects/owner/agents/same?kind=event'
+  );
+  expect(container.querySelector('h2')?.textContent).toBe(saved.name);
+});

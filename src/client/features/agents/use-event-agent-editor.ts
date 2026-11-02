@@ -16,6 +16,22 @@ export interface EventAgentEditorProps {
   onCancel: () => void;
   onReload?: () => Promise<EventAgent>;
 }
+function sourcePageResult(
+  previous: EventProjectSources | undefined,
+  result: EventProjectSources,
+  append: boolean
+): EventProjectSources {
+  if (!append) {
+    return result;
+  }
+  const channels = new Map(
+    [...(previous?.slack.channels ?? []), ...(result.slack.channels ?? [])].map((channel) => [
+      channel.id,
+      channel,
+    ])
+  );
+  return { ...result, slack: { ...result.slack, channels: [...channels.values()] } };
+}
 export function useEventAgentEditor(props: EventAgentEditorProps) {
   const [baseline, setBaseline] = useState(props.agent);
   const [draft, setDraft] = useState(() =>
@@ -26,6 +42,7 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<EventDraftValidation>();
   const [sources, setSources] = useState<EventProjectSources>();
+  const [sourceError, setSourceError] = useState(false);
   const [busy, setBusy] = useState<'save' | 'validate' | 'sources' | 'reload' | null>(null);
   const submitting = useRef(false);
   const version = useRef(0);
@@ -47,6 +64,7 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
     }
     setPreview(undefined);
     setSources(undefined);
+    setSourceError(false);
     setError(undefined);
   };
   const updateDraft = (next: NonNullable<typeof draft>) => {
@@ -127,14 +145,16 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
   };
   const discover = async (input: { connectionId?: string; cursor?: string }) => {
     const request = ++sourceRequest.current;
+    setSourceError(false);
     const target = begin('sources');
     try {
       const result = await props.onSources(input);
       if (isCurrent(target.version) && sourceRequest.current === request) {
-        setSources(result);
+        setSources((previous) => sourcePageResult(previous, result, !!input.cursor));
       }
     } catch (failure) {
-      if (sourceRequest.current === request) {
+      if (sourceRequest.current === request && isCurrent(target.version)) {
+        setSourceError(true);
         showFailure(failure, target.version);
       }
     } finally {
@@ -171,15 +191,15 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
     const target = begin('reload');
     try {
       const latest = await props.onReload();
-      if (isCurrent(target.version)) {
+      if (isCurrent(target.version) && busyRequest.current === target.request) {
         applyLatest(latest);
       }
     } catch (failure) {
-      showFailure(failure, target.version);
-    } finally {
-      if (active.current) {
-        setBusy(null);
+      if (busyRequest.current === target.request) {
+        showFailure(failure, target.version);
       }
+    } finally {
+      finish(target);
     }
   };
   return {
@@ -198,6 +218,7 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
     error,
     preview,
     sources,
+    sourceError,
     busy,
     attempt,
     stale: baseline.managementRevision !== props.agent.managementRevision,

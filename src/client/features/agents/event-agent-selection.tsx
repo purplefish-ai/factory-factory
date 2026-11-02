@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { EventAgentDetail, TriggerInspection } from './event-agent-detail';
@@ -6,33 +6,95 @@ import { SavedEventEditor } from './saved-event-editor';
 import type { EventAgent } from './types';
 import type { useAgentsController } from './use-agents-controller';
 
-function RetainedContinuation({ agent }: { agent: EventAgent }) {
+function appendRetained(
+  previous: EventAgent['retainedTriggers'],
+  incoming: EventAgent['retainedTriggers'],
+  initial: EventAgent['retainedTriggers']
+) {
+  const initialIds = new Set(initial.map((trigger) => trigger.id));
+  const records = new Map(
+    [...previous, ...incoming]
+      .filter((trigger) => !initialIds.has(trigger.id))
+      .map((trigger) => [trigger.id, trigger])
+  );
+  return [...records.values()];
+}
+export function RetainedContinuation({ agent }: { agent: EventAgent }) {
+  return (
+    <RetainedPageSession
+      key={`${agent.projectId}:${agent.id}:${agent.managementRevision}`}
+      agent={agent}
+    />
+  );
+}
+function RetainedPageSession({ agent }: { agent: EventAgent }) {
   const [cursor, setCursor] = useState<string>();
+  const [records, setRecords] = useState<EventAgent['retainedTriggers']>([]);
+  const [next, setNext] = useState(agent.retainedNextCursor);
+  const utils = trpc.useUtils();
   const page = trpc.agent.get.useQuery(
     { projectId: agent.projectId, agentId: agent.id, retainedCursor: cursor },
     { enabled: !!cursor, retry: false }
   );
-  const next = cursor ? page.data?.retainedNextCursor : agent.retainedNextCursor;
+  const stale =
+    !!cursor && !!page.data && page.data.managementRevision !== agent.managementRevision;
+  useEffect(() => {
+    if (!(cursor && page.data) || page.data.managementRevision !== agent.managementRevision) {
+      return;
+    }
+    const current = page.data;
+    setRecords((previous) =>
+      appendRetained(previous, current.retainedTriggers, agent.retainedTriggers)
+    );
+    setNext(current.retainedNextCursor);
+  }, [cursor, page.data, agent.managementRevision, agent.retainedTriggers]);
   return (
     <div className="space-y-3">
-      {cursor && page.data && (
+      {records.length > 0 && (
         <section className="space-y-3" aria-label="More retained triggers">
-          {page.data.retainedTriggers.map((trigger) => (
+          {records.map((trigger) => (
             <TriggerInspection key={trigger.id} trigger={trigger} />
           ))}
         </section>
       )}
-      {page.error && (
-        <p role="alert" className="text-sm">
-          Could not load retained triggers: {page.error.message}
-          <Button variant="outline" onClick={() => void page.refetch()}>
-            Retry retained triggers
-          </Button>
+      {cursor && page.isFetching && (
+        <p role="status" className="text-sm">
+          Loading retained triggers…
         </p>
       )}
-      {next && (
-        <Button variant="outline" disabled={page.isFetching} onClick={() => setCursor(next)}>
-          Load more retained triggers
+      {cursor && page.error && (
+        <p role="alert" className="text-sm">
+          Could not load retained triggers: {page.error.message}
+        </p>
+      )}
+      {stale && !page.isFetching && (
+        <div role="status" className="space-y-2 text-sm">
+          <p>
+            The saved definition changed. Refresh the agent before inspecting more retained records.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() =>
+              void utils.agent.get.invalidate({ projectId: agent.projectId, agentId: agent.id })
+            }
+          >
+            Refresh agent
+          </Button>
+        </div>
+      )}
+      {(next || (cursor && page.error)) && (
+        <Button
+          variant="outline"
+          disabled={page.isFetching || stale}
+          onClick={() => {
+            if (page.error) {
+              void page.refetch();
+            } else if (next) {
+              setCursor(next);
+            }
+          }}
+        >
+          {page.error ? 'Retry retained triggers' : 'Load more retained triggers'}
         </Button>
       )}
     </div>

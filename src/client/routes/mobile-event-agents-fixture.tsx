@@ -1,6 +1,9 @@
 import { EventAgentDetail } from '@/client/features/agents/event-agent-detail';
 import { EventAgentEditor } from '@/client/features/agents/event-agent-editor';
-import { eventAgentFixture } from '@/client/features/agents/event-agent.test-support';
+import {
+  eventAgentFixture,
+  eventProjectSourcesFixture,
+} from '@/client/features/agents/event-agent.test-support';
 import type { EventAgent } from '@/client/features/agents/types';
 
 export function mobileEventFixtures(projectId: string): EventAgent[] {
@@ -65,11 +68,9 @@ export function MobileEventAgentContent({
           explanation: 'Native discovery is unavailable in this frontend fixture.',
         },
       })}
-      onSources={async () => ({
-        project: { id: agent.projectId, name: 'Factory Factory' },
-        slack: { connections: [] },
-        github: { error: 'Source discovery is unavailable in this frontend fixture.' },
-      })}
+      onSources={({ connectionId, cursor }) =>
+        Promise.resolve(eventProjectSourcesFixture(agent.projectId, connectionId, cursor))
+      }
     />
   ) : (
     <EventAgentDetail agent={agent} onEdit={onEdit} />
