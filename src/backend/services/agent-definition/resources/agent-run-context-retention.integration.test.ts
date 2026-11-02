@@ -15,13 +15,23 @@ let afterQuery:
   | ((model: string | undefined, operation: string) => Promise<void> | void)
   | undefined;
 let onTransaction: (() => void) | undefined;
+let measuredQueries:
+  | { model: string | undefined; operation: string; durationMs: number; finishedAt: number }[]
+  | undefined;
 let retention: InstanceType<typeof runtime.AgentLedgerRetentionService>;
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   const observed = db.prisma.$extends({
     query: {
       $allOperations: async ({ model, operation, args, query }) => {
+        const started = performance.now();
         const result = await query(args);
+        measuredQueries?.push({
+          model,
+          operation,
+          durationMs: performance.now() - started,
+          finishedAt: performance.now(),
+        });
         await afterQuery?.(model, operation);
         return result;
       },
@@ -51,6 +61,7 @@ afterAll(async () => {
 afterEach(() => {
   afterQuery = undefined;
   onTransaction = undefined;
+  measuredQueries = undefined;
   vi.useRealTimers();
   vi.unstubAllEnvs();
   config.configService.reload();
@@ -433,3 +444,211 @@ it('retains inconsistent abandonment proof even when the initial outcome complet
   await prune();
   expect(await read()).toEqual(before);
 });
+
+it('previews prospective expiry without writes or enabling policy and matches actual byte impact', async () => {
+  const before = await terminal();
+  const rowsBefore = await db.prisma.agentRun.findMany();
+  const deliveriesBefore = await db.prisma.agentInitialDelivery.findMany();
+  const evaluationsBefore = await db.prisma.agentEvaluation.findMany();
+  measuredQueries = [];
+  const preview = await retention.inspectRunContexts(
+    { retentionDays: 1 },
+    new AbortController().signal
+  );
+  const operations = measuredQueries.map((query) => query.operation);
+  measuredQueries = undefined;
+  expect(preview).toMatchObject({
+    inspected: 1,
+    eligible: 1,
+    retained: {},
+    retentionDays: 1,
+    policySource: 'PREVIEW',
+  });
+  expect(operations.every((operation) => operation.startsWith('find'))).toBe(true);
+  expect(await db.prisma.agentRun.findMany()).toEqual(rowsBefore);
+  expect(await db.prisma.agentInitialDelivery.findMany()).toEqual(deliveriesBefore);
+  expect(await db.prisma.agentEvaluation.findMany()).toEqual(evaluationsBefore);
+  expect(config.configService.getAgentRuntimeLimits().runContextRetentionMs).toBeNull();
+  enable();
+  await prune();
+  const after = await read();
+  const bytes = (row: typeof before) =>
+    [row.definitionSnapshot, row.triggerSnapshot, row.input].reduce<number>(
+      (sum, value) => sum + (value === null ? 0 : Buffer.byteLength(JSON.stringify(value))),
+      0
+    ) + Buffer.byteLength(row.errorMessage ?? '');
+  expect(preview.byteImpact.eligibleBefore).toBe(bytes(before));
+  expect(preview.byteImpact.eligibleAfter).toBe(bytes(after));
+  expect(preview.byteImpact.eligibleDelta).toBe(bytes(after) - bytes(before));
+});
+
+it('retains by default during inspection and does not advance the maintenance cursor', async () => {
+  const before = await terminal();
+  expect(await retention.inspectRunContexts({}, new AbortController().signal)).toMatchObject({
+    retentionDays: null,
+    policySource: 'CONFIGURED',
+    inspected: 0,
+    eligible: 0,
+  });
+  const preview = await retention.inspectRunContexts(
+    { retentionDays: 1 },
+    new AbortController().signal
+  );
+  expect(preview.eligible).toBe(1);
+  expect(await read()).toEqual(before);
+  enable();
+  expect((await prune()).find((batch) => batch.kind === 'runContext')).toMatchObject({
+    inspected: 1,
+    changed: 1,
+  });
+});
+
+it.each(['missing', 'corrupt'] as const)(
+  'inspection retains sent context with %s origin proof',
+  async (corruption) => {
+    const { run } = await sentTerminal();
+    if (corruption === 'missing') {
+      await db.prisma.workspaceLaunchOrigin.delete({ where: { runId: run.id } });
+    } else {
+      await db.prisma.workspaceLaunchOrigin.update({
+        where: { runId: run.id },
+        data: { projectId: 'other-project' },
+      });
+    }
+    const preview = await retention.inspectRunContexts(
+      { retentionDays: 1 },
+      new AbortController().signal
+    );
+    expect(preview).toMatchObject({
+      inspected: 1,
+      eligible: 0,
+      retained: { RECOVERY_DEPENDENCY: 1 },
+      byteImpact: { eligibleBefore: 0, eligibleAfter: 0, eligibleDelta: 0 },
+    });
+    expect(await read()).toEqual(run);
+  }
+);
+
+it('bounds a mixed fixture preview, measures its impact and preserves the maintenance cursor', async () => {
+  await terminal();
+  await db.prisma.agentRun.updateMany({
+    data: {
+      definitionSnapshot: {
+        name: 'Fixture',
+        instructions: 'fixture instruction '.repeat(256),
+        isEnabled: true,
+        executionConfig: { version: 1, provider: 'CLAUDE', model: 'sonnet' },
+      },
+      input: {
+        version: 1,
+        eventId: (await read()).eventId!,
+        context: [{ id: 'fixture-source', text: 'context-🧵'.repeat(512) }],
+      },
+    },
+  });
+  const original = await read();
+  const fixtureRows = Array.from({ length: 100 }, (_, i) => ({
+    id: `m-${String(i).padStart(3, '0')}`,
+    agentDefinitionId: original.agentDefinitionId,
+    triggerId: original.triggerId,
+    idempotencyKey: `measurement-${i}`,
+    status: i < 50 ? ('CANCELLED' as const) : ('RUNNING' as const),
+    launchPhase: 'FINISHED' as const,
+    completedAt: original.completedAt,
+    reservedWorkspaceId: `fixture-workspace-${i}`,
+    reservedSessionId: `fixture-session-${i}`,
+    initialMessageId: `fixture-message-${i}`,
+    definitionSnapshot: original.definitionSnapshot!,
+    triggerSnapshot: original.triggerSnapshot!,
+    input: original.input!,
+    errorMessage: original.errorMessage,
+  }));
+  await db.prisma.agentRun.createMany({ data: fixtureRows });
+  await db.prisma.agentInitialDelivery.createMany({
+    data: fixtureRows.map((row, i) => ({
+      runId: row.id,
+      messageId: row.initialMessageId,
+      sendAttemptId: `fixture-send-${i}`,
+    })),
+  });
+  const before = await db.prisma.agentRun.findMany({ orderBy: { id: 'asc' } });
+  measuredQueries = [];
+  const inspectStarted = performance.now();
+  const preview = await retention.inspectRunContexts(
+    { retentionDays: 1 },
+    new AbortController().signal
+  );
+  const inspectElapsedMs = performance.now() - inspectStarted;
+  const inspectQueries = measuredQueries;
+  measuredQueries = undefined;
+  expect(preview).toMatchObject({ inspected: 100, eligible: 51, retained: { ACTIVE_RUN: 49 } });
+  expect(inspectQueries.every((query) => query.operation.startsWith('find'))).toBe(true);
+  expect(await db.prisma.agentRun.findMany({ orderBy: { id: 'asc' } })).toEqual(before);
+  expect(
+    await retention.inspectRunContexts(
+      { retentionDays: 1, after: preview.cursor },
+      new AbortController().signal
+    )
+  ).toMatchObject({ inspected: 1, eligible: 0, retained: { ACTIVE_RUN: 1 } });
+  enable();
+  measuredQueries = [];
+  const pruneStarted = performance.now();
+  const results = await prune();
+  const pruneFinished = performance.now();
+  const pruneQueries = measuredQueries;
+  measuredQueries = undefined;
+  expect(results.find((batch) => batch.kind === 'runContext')).toMatchObject({
+    inspected: 100,
+    changed: 51,
+    retained: { ACTIVE_RUN: 49 },
+  });
+  const after = await db.prisma.agentRun.findMany({ orderBy: { id: 'asc' } });
+  expect(after.filter((run) => run.contextExpiredAt !== null)).toHaveLength(51);
+  expect(after.filter((run) => run.status === 'RUNNING')).toEqual(
+    before.filter((run) => run.status === 'RUNNING')
+  );
+  const bytes = (rows: typeof before) =>
+    rows.reduce(
+      (sum, row) =>
+        sum +
+        [row.definitionSnapshot, row.triggerSnapshot, row.input].reduce<number>(
+          (subtotal, value) =>
+            subtotal + (value === null ? 0 : Buffer.byteLength(JSON.stringify(value))),
+          0
+        ) +
+        Buffer.byteLength(row.errorMessage ?? ''),
+      0
+    );
+  expect(bytes(after) - bytes(before)).toBe(preview.byteImpact.eligibleDelta);
+  const lookups = (queries: typeof inspectQueries) =>
+    queries.filter((query) => query.operation.startsWith('find'));
+  const lookupMs = (queries: typeof inspectQueries) =>
+    lookups(queries).reduce((sum, query) => sum + query.durationMs, 0);
+  const lockAcquired = pruneQueries
+    .filter((query) => query.operation === '$executeRaw')
+    .at(-1)!.finishedAt;
+  const measurement = {
+    fixture: {
+      candidates: 101,
+      inspected: preview.inspected,
+      eligible: preview.eligible,
+      retained: preview.retained,
+      textRepeat: 512,
+      instructionRepeat: 256,
+    },
+    byteImpact: preview.byteImpact,
+    inspection: {
+      elapsedMs: inspectElapsedMs,
+      prismaLookupCount: lookups(inspectQueries).length,
+      prismaLookupMs: lookupMs(inspectQueries),
+      writeStatements: 0,
+    },
+    pruning: {
+      elapsedMs: pruneFinished - pruneStarted,
+      contextLockScopeObservedMs: pruneFinished - lockAcquired,
+      prismaLookupCount: lookups(pruneQueries).length,
+      prismaLookupMs: lookupMs(pruneQueries),
+    },
+  };
+  process.stdout.write(`RUN_CONTEXT_FIXTURE_MEASUREMENT ${JSON.stringify(measurement)}\n`);
+}, 30_000);

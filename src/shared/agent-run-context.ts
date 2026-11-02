@@ -34,3 +34,10 @@ export const storedAgentRunContextSchema = z.union([
       'Expired context must be replaced atomically'
     ),
 ]);
+
+/** Prospective days preview eligibility without enabling the deletion policy. */
+export const inspectAgentRunContextsInputSchema = z.strictObject({
+  after: z.string().min(1).max(256).nullable().optional(),
+  retentionDays: z.number().int().positive().max(365_000).optional(),
+});
+export type InspectAgentRunContextsInput = z.infer<typeof inspectAgentRunContextsInputSchema>;

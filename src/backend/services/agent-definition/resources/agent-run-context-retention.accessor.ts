@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
+import { prisma } from '@/backend/db';
 import { configService } from '@/backend/services/config.service';
 import {
   expiredAgentRunContextSchema,
   retainedAgentRunContextSchema,
+  type InspectAgentRunContextsInput,
 } from '@/shared/agent-run-context';
 import { agentRunResultSchema } from '@/shared/agent-runtime';
 import {
@@ -194,54 +196,150 @@ async function dependency(
     : null;
 }
 
+export type RunContextInspection = {
+  retentionDays: number | null;
+  policySource: 'CONFIGURED' | 'PREVIEW';
+  cursor: string | null;
+  inspected: number;
+  eligible: number;
+  retained: Partial<Record<RetentionReason, number>>;
+  /** Logical UTF-8 snapshot JSON plus diagnostic text; excludes DB/file overhead. */
+  byteImpact: {
+    inspected: number;
+    eligibleBefore: number;
+    eligibleAfter: number;
+    eligibleDelta: number;
+  };
+};
+
+function contextBytes(run: Run) {
+  return (
+    [run.definitionSnapshot, run.triggerSnapshot, run.input].reduce<number>(
+      (bytes, value) => bytes + (value === null ? 0 : Buffer.byteLength(JSON.stringify(value))),
+      0
+    ) + Buffer.byteLength(run.errorMessage ?? '')
+  );
+}
+
+function recordByteImpact(
+  report: RunContextInspection,
+  run: Run,
+  eligible: boolean,
+  expired: ReturnType<typeof expiredAgentRunContextSchema.parse>
+) {
+  const beforeBytes = contextBytes(run);
+  report.byteImpact.inspected += beforeBytes;
+  if (eligible) {
+    report.byteImpact.eligibleBefore += beforeBytes;
+    report.byteImpact.eligibleAfter += 3 * Buffer.byteLength(JSON.stringify(expired));
+  }
+}
+
+async function inspectPage(
+  tx: Prisma.TransactionClient,
+  cursor: string | null,
+  prospectiveDays: number | undefined,
+  assertCurrent: () => void,
+  measureBytes: boolean
+) {
+  assertCurrent();
+  // Pruning calls this only after the ledger write lock. Inspection uses a read snapshot.
+  const limits = configService.getAgentRuntimeLimits();
+  const retentionMs =
+    prospectiveDays === undefined ? limits.runContextRetentionMs : prospectiveDays * 86_400_000;
+  const now = new Date();
+  const expired = expiredAgentRunContextSchema.parse({
+    version: 1,
+    state: 'EXPIRED',
+    expiredAt: now.toISOString(),
+  });
+  const report: RunContextInspection = {
+    retentionDays: retentionMs === null ? null : retentionMs / 86_400_000,
+    policySource: prospectiveDays === undefined ? 'CONFIGURED' : 'PREVIEW',
+    cursor,
+    inspected: 0,
+    eligible: 0,
+    retained: {},
+    byteImpact: { inspected: 0, eligibleBefore: 0, eligibleAfter: 0, eligibleDelta: 0 },
+  };
+  const eligibleRows: Run[] = [];
+  if (retentionMs === null) {
+    return { report, eligibleRows, expired, now };
+  }
+  const where = {
+    contextExpiredAt: null,
+    completedAt: { lte: new Date(now.getTime() - retentionMs) },
+  };
+  const page = (after: string | null) =>
+    tx.agentRun.findMany({
+      where: { ...where, ...(after ? { id: { gt: after } } : {}) },
+      include,
+      orderBy: { id: 'asc' },
+      take: limits.queueBatchSize,
+    });
+  let rows = await page(cursor);
+  assertCurrent();
+  if (!rows.length && cursor) {
+    rows = await page(null);
+    assertCurrent();
+  }
+  report.cursor = rows.at(-1)?.id ?? null;
+  report.inspected = rows.length;
+  for (const run of rows) {
+    const reason = await dependency(tx, run, limits.queueBatchSize, assertCurrent);
+    assertCurrent();
+    if (reason) {
+      report.retained[reason] = (report.retained[reason] ?? 0) + 1;
+    } else {
+      eligibleRows.push(run);
+      report.eligible++;
+    }
+    if (measureBytes) {
+      recordByteImpact(report, run, reason === null, expired);
+    }
+  }
+  report.byteImpact.eligibleDelta =
+    report.byteImpact.eligibleAfter - report.byteImpact.eligibleBefore;
+  assertCurrent();
+  return { report, eligibleRows, expired, now };
+}
+
 export const agentRunContextRetentionAccessor = {
+  /** Advisory read snapshot: no write statement, policy changes or maintenance cursor updates. */
+  inspectBatch(
+    input: InspectAgentRunContextsInput,
+    assertCurrent: () => void
+  ): Promise<RunContextInspection> {
+    return prisma.$transaction(async (tx) => {
+      const { report } = await inspectPage(
+        tx,
+        input.after ?? null,
+        input.retentionDays,
+        assertCurrent,
+        true
+      );
+      assertCurrent();
+      return report;
+    });
+  },
   pruneBatch(cursor: string | null, assertCurrent: () => void): Promise<RetentionBatch> {
     return ledgerTransaction(async (tx) => {
-      assertCurrent();
-      // Read both policy and clock after acquiring the same lock as claims/recovery.
-      const limits = configService.getAgentRuntimeLimits();
-      const now = new Date();
+      const { report, eligibleRows, expired, now } = await inspectPage(
+        tx,
+        cursor,
+        undefined,
+        assertCurrent,
+        false
+      );
       const batch: RetentionBatch = {
         kind: 'runContext',
-        cursor,
-        inspected: 0,
+        cursor: report.cursor,
+        inspected: report.inspected,
         changed: 0,
-        retained: {},
+        retained: report.retained,
       };
-      if (limits.runContextRetentionMs === null) {
-        return batch;
-      }
-      const where = {
-        contextExpiredAt: null,
-        completedAt: { lte: new Date(now.getTime() - limits.runContextRetentionMs) },
-      };
-      const page = (after: string | null) =>
-        tx.agentRun.findMany({
-          where: { ...where, ...(after ? { id: { gt: after } } : {}) },
-          include,
-          orderBy: { id: 'asc' },
-          take: limits.queueBatchSize,
-        });
-      let rows = await page(cursor);
-      assertCurrent();
-      if (!rows.length && cursor) {
-        rows = await page(null);
+      for (const run of eligibleRows) {
         assertCurrent();
-      }
-      batch.cursor = rows.at(-1)?.id ?? null;
-      batch.inspected = rows.length;
-      for (const run of rows) {
-        const reason = await dependency(tx, run, limits.queueBatchSize, assertCurrent);
-        assertCurrent();
-        if (reason) {
-          batch.retained[reason] = (batch.retained[reason] ?? 0) + 1;
-          continue;
-        }
-        const expired = expiredAgentRunContextSchema.parse({
-          version: 1,
-          state: 'EXPIRED',
-          expiredAt: now.toISOString(),
-        });
         await tx.agentRun.update({
           where: { id: run.id },
           data: {

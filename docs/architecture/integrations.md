@@ -429,6 +429,25 @@ uncertain, malformed or recovery-dependent rows remain intact; expiry never
 retries or resends provider effects. Batch metrics contain counts and bounded
 reason codes, without context or run identifiers.
 
+`AgentLedgerRetentionService.inspectRunContexts({ retentionDays?, after? }, signal)`
+previews one bounded page in a read-only transaction. Omit `retentionDays` to
+inspect the configured policy (default retain); supply prospective positive days
+to preview eligibility without enabling deletion. The result contains eligible
+and retained-reason counts, an independent next cursor, and logical UTF-8 byte
+impact for snapshot JSON plus diagnostic text. A positive `eligibleDelta` means
+growth; a negative value means reduction. This excludes SQLite/file overhead and
+is not a physical disk-space guarantee. Inspection neither updates rows nor
+advances the maintenance cursor. Its snapshot is advisory: pruning independently
+rechecks eligibility under the ledger write lock. Byte serialization is confined
+to inspection rather than added to the destructive maintenance lock scope.
+
+A disposable mixed fixture measures lookup counts/timings and the observed
+write-lock scope without production data. Reproduce it with
+`pnpm test src/backend/services/agent-definition/resources/agent-run-context-retention.integration.test.ts -t "bounds a mixed fixture preview" --maxWorkers=1 --reporter=verbose --silent=false`.
+The fixture validates predicted versus actual logical byte change, read-only
+inspection, the 100-row bound, and cursor independence; its wall times are
+observations under the current host load, not production benchmarks or SLAs.
+
 Eligible expiry replaces `definitionSnapshot`, `triggerSnapshot` and `input`
 together with `{ version: 1, state: "EXPIRED", expiredAt }`, clears copied
 `errorMessage` diagnostics, and sets `contextExpiredAt` in the same transaction.

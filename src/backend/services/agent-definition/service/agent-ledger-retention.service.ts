@@ -6,6 +6,7 @@ import {
 import { agentRunContextRetentionAccessor } from '@/backend/services/agent-definition/resources/agent-run-context-retention.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { inspectAgentRunContextsInputSchema } from '@/shared/agent-run-context';
 
 const logger = createLogger('agent-ledger-retention');
 
@@ -17,6 +18,13 @@ export class AgentLedgerRetentionService {
     identity: null,
     runContext: null,
   };
+
+  /** Preview does not opt into expiry or advance the maintenance cursor. */
+  inspectRunContexts(input: unknown, signal: AbortSignal) {
+    const parsed = inspectAgentRunContextsInputSchema.parse(input);
+    signal.throwIfAborted();
+    return agentRunContextRetentionAccessor.inspectBatch(parsed, () => signal.throwIfAborted());
+  }
 
   async pruneExpired(signal: AbortSignal): Promise<RetentionBatch[]> {
     const batches: RetentionBatch[] = [];
