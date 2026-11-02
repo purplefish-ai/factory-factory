@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,19 +47,40 @@ describe('fatal logging', () => {
     expect(process.stderr.listenerCount('error')).toBeLessThanOrEqual(listenersBefore + 1);
   });
 
-  it('disables a throwing stderr sink across logger instances', async () => {
-    const baseDir = await mkdtemp(join(tmpdir(), 'ff-broken-stderr-'));
-    temporaryDirectories.push(baseDir);
-    vi.stubEnv('BASE_DIR', baseDir);
-    vi.stubEnv('NODE_ENV', 'production');
-    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {
-      throw new Error('write EPIPE');
-    });
-
-    expect(() => createLogger('first').error('first failure')).not.toThrow();
-    expect(() => createLogger('second').error('second failure')).not.toThrow();
-    expect(stderr).toHaveBeenCalledTimes(1);
-  });
+  it.each(['throw', 'event'] as const)(
+    'keeps a failed sink disabled across instances and module reloads (%s)',
+    async (failure) => {
+      const baseDir = await mkdtemp(join(tmpdir(), 'ff-broken-stderr-'));
+      temporaryDirectories.push(baseDir);
+      const code = `
+        const failure = ${JSON.stringify(failure)};
+        let calls = 0;
+        console.error = () => {
+          calls++;
+          if (failure === 'throw') throw new Error('write EPIPE');
+        };
+        const first = await import('./src/backend/services/logger.service.ts?reload=0');
+        first.createLogger('first').error('first failure');
+        if (failure === 'event') process.stderr.emit('error', new Error('write EPIPE'));
+        first.createLogger('second').error('second failure');
+        const reloaded = await import('./src/backend/services/logger.service.ts?reload=1');
+        reloaded.createLogger('reloaded').error('failure after reload');
+        console.log(JSON.stringify({ calls }));
+      `;
+      const child = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '--input-type=module', '-e', code],
+        {
+          cwd: process.cwd(),
+          env: { ...process.env, BASE_DIR: baseDir, NODE_ENV: 'production' },
+          encoding: 'utf8',
+          timeout: 10_000,
+        }
+      );
+      expect(child.status, child.stderr).toBe(0);
+      expect(z.object({ calls: z.number() }).parse(JSON.parse(child.stdout))).toEqual({ calls: 1 });
+    }
+  );
 
   it('survives a closed stderr pipe and retains one fatal record before immediate exit', async () => {
     const baseDir = await mkdtemp(join(tmpdir(), 'ff-closed-stderr-'));

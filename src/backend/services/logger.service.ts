@@ -208,23 +208,31 @@ function getDefaultConfig(): LoggerConfig {
   };
 }
 
-// Share sink state across logger instances. Never report a sink error through
-// the logger: doing so can recursively fail on the same broken pipe.
-const failedConsoleStreams = new WeakSet<NodeJS.WriteStream>();
-const monitoredConsoleStreams = new WeakSet<NodeJS.WriteStream>();
+// Keep sink state on the stream so module reloads share one error listener and
+// cannot revive a failed sink. Never report a sink failure through the logger.
+const consoleSinkStateKey = Symbol.for('factory-factory.logger.console-sink-state');
+interface ConsoleSinkState {
+  failed: boolean;
+}
+type ConsoleStream = NodeJS.WriteStream & { [consoleSinkStateKey]?: ConsoleSinkState };
 
-function writeToConsole(stream: NodeJS.WriteStream, write: () => void): void {
-  if (failedConsoleStreams.has(stream)) {
-    return;
+function writeToConsole(stream: ConsoleStream, write: () => void): void {
+  let state = stream[consoleSinkStateKey];
+  if (!state) {
+    const registeredState = { failed: false };
+    stream[consoleSinkStateKey] = registeredState;
+    stream.on('error', () => {
+      registeredState.failed = true;
+    });
+    state = registeredState;
   }
-  if (!monitoredConsoleStreams.has(stream)) {
-    monitoredConsoleStreams.add(stream);
-    stream.on('error', () => failedConsoleStreams.add(stream));
+  if (state.failed) {
+    return;
   }
   try {
     write();
   } catch {
-    failedConsoleStreams.add(stream);
+    state.failed = true;
   }
 }
 
