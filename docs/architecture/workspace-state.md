@@ -262,6 +262,13 @@ discarded until those descendants close their pipes, so writing after
 provisioning does not interrupt them. Persistent background commands should
 redirect output if it needs to remain available after startup.
 
+Terminals and setup, run, postRun and cleanup scripts run the user's commands,
+so they omit the variables Factory Factory's launchers set for its own backend
+(`NODE_ENV`, `DATABASE_PATH`, `BACKEND_PORT`, and the rest listed in
+`lib/user-process-env.ts`). Otherwise `NODE_ENV=production` from `ff serve` or
+the desktop app would make `npm install` skip devDependencies and run dev
+servers in production mode. Agent sessions are not covered.
+
 The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
 `postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
 written only by `workspace-run-script.accessor.ts`; reads flatten it back under

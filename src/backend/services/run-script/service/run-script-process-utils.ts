@@ -1,12 +1,30 @@
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import treeKill from 'tree-kill';
 import { toError } from '@/backend/lib/error-utils';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
+import { configService } from '@/backend/services/config.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RunScriptStatus } from '@/shared/core';
 import { FactoryConfigService } from './factory-config.service';
 
 type Logger = ReturnType<typeof createLogger>;
+
+/**
+ * Decodes one output stream's chunks as UTF-8. Pipes split output at arbitrary
+ * byte offsets, so a multi-byte character can span two chunks; decoding each
+ * chunk independently would replace both halves with U+FFFD.
+ */
+export function decodeOutputChunks(onOutput: (output: string) => void): (data: Buffer) => void {
+  const decoder = new StringDecoder('utf8');
+  return (data) => {
+    const output = decoder.write(data);
+    if (output) {
+      onOutput(output);
+    }
+  };
+}
 
 export function shouldRejectStopWithoutProcess(
   status: RunScriptStatus,
@@ -31,6 +49,7 @@ export function spawnPipedShellCommand(
 ): ChildProcess {
   const childProcess = spawn('bash', ['-c', command], {
     cwd,
+    env: buildUserProcessEnv(configService.getChildProcessEnv()),
     detached: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -64,6 +83,7 @@ export async function runCleanupScriptProcess(
 
     const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
       cwd: workspace.worktreePath,
+      env: buildUserProcessEnv(configService.getChildProcessEnv()),
       detached: false,
       stdio: 'ignore',
     });

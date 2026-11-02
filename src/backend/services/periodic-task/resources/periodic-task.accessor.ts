@@ -305,6 +305,25 @@ function computeNextRunAt(
 }
 
 /**
+ * The first slot strictly after `now` for a schedule that starts now: the
+ * current calendar slot (e.g. today's scheduled time or this month's anchored
+ * day) when it is still ahead, otherwise the following one.
+ */
+function computeFirstRunAfter(
+  cadence: PeriodicTaskCadence,
+  now: Date,
+  scheduledTime: string | null,
+  timezone: string | null,
+  scheduledDayOfMonth: number | null
+): Date {
+  const current = advanceRunAt(cadence, now, 0, scheduledTime, timezone, scheduledDayOfMonth);
+  if (current > now) {
+    return current;
+  }
+  return computeNextRunAt(cadence, now, scheduledTime, timezone, scheduledDayOfMonth);
+}
+
+/**
  * The first slot of the series that continues from `dueAt` which falls after
  * `after`. Consecutive slots are at most `MAX_PERIOD_MS` apart, so jumping by
  * the whole periods that fit in the remaining gap never passes over a slot
@@ -395,6 +414,43 @@ type PeriodicTaskWithExecutions = PeriodicTask & {
   executions: PeriodicTaskExecution[];
 };
 
+/**
+ * Schedule fields for an edit. The agent form resubmits the schedule with every
+ * save, so an unchanged schedule keeps its pending slot instead of skipping or
+ * shifting it; a changed one starts at its first slot still ahead.
+ */
+function buildScheduleUpdate(
+  existing: PeriodicTask,
+  input: UpdatePeriodicTaskInput,
+  now: Date
+): Record<string, unknown> {
+  const cadence = (input.cadence ?? existing.cadence) as PeriodicTaskCadence;
+  const scheduledTime =
+    input.scheduledTime !== undefined ? input.scheduledTime : existing.scheduledTime;
+  const timezone = input.timezone !== undefined ? input.timezone : existing.timezone;
+  if (
+    cadence === existing.cadence &&
+    scheduledTime === existing.scheduledTime &&
+    timezone === existing.timezone
+  ) {
+    return {};
+  }
+  const scheduledDayOfMonth = resolveScheduledDayOfMonth(
+    cadence,
+    existing.scheduledDayOfMonth,
+    timezone,
+    existing.cadence === 'MONTHLY' ? existing.createdAt : now
+  );
+
+  return {
+    ...(input.cadence !== undefined && { cadence: input.cadence }),
+    ...(input.scheduledTime !== undefined && { scheduledTime: input.scheduledTime }),
+    ...(input.timezone !== undefined && { timezone: input.timezone }),
+    ...(cadence === 'MONTHLY' && { scheduledDayOfMonth }),
+    nextRunAt: computeFirstRunAfter(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
+  };
+}
+
 // ─── Accessor ───────────────────────────────────────────────────────────────
 
 export const periodicTaskAccessor = {
@@ -469,25 +525,7 @@ export const periodicTaskAccessor = {
 
     if (needsNextRunAt) {
       const existing = await prisma.periodicTask.findUniqueOrThrow({ where: { id } });
-      const cadence = (input.cadence ?? existing.cadence) as PeriodicTaskCadence;
-      const scheduledTime =
-        input.scheduledTime !== undefined ? input.scheduledTime : existing.scheduledTime;
-      const timezone = input.timezone !== undefined ? input.timezone : existing.timezone;
-      const now = new Date();
-      const scheduledDayOfMonth = resolveScheduledDayOfMonth(
-        cadence,
-        existing.scheduledDayOfMonth,
-        timezone,
-        existing.cadence === 'MONTHLY' ? existing.createdAt : now
-      );
-
-      Object.assign(data, {
-        ...(input.cadence !== undefined && { cadence: input.cadence }),
-        ...(input.scheduledTime !== undefined && { scheduledTime: input.scheduledTime }),
-        ...(input.timezone !== undefined && { timezone: input.timezone }),
-        ...(cadence === 'MONTHLY' && { scheduledDayOfMonth }),
-        nextRunAt: computeNextRunAt(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
-      });
+      Object.assign(data, buildScheduleUpdate(existing, input, new Date()));
     }
 
     return await prisma.periodicTask.update({ where: { id }, data });
@@ -511,7 +549,7 @@ export const periodicTaskAccessor = {
       if (cadence === 'MONTHLY') {
         data.scheduledDayOfMonth = scheduledDayOfMonth;
       }
-      data.nextRunAt = computeNextRunAt(
+      data.nextRunAt = computeFirstRunAfter(
         cadence,
         new Date(),
         task.scheduledTime,

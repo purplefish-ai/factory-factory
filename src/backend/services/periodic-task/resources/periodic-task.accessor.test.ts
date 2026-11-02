@@ -305,6 +305,82 @@ describe('periodicTaskAccessor.update', () => {
       nextRunAt: new Date('2026-02-19T14:00:00.000Z'),
     });
   });
+  it('keeps the pending slot when an edit resubmits an unchanged schedule', async () => {
+    // A daily 09:00 agent whose next run is later today; the user edits only its instructions.
+    vi.setSystemTime(new Date('2026-01-20T08:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: null,
+      nextRunAt: new Date('2026-01-20T09:00:00.000Z'),
+      createdAt: new Date('2026-01-01T09:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    // The agent form always resubmits cadence, time and timezone with every save.
+    await periodicTaskAccessor.update('task-1', {
+      name: 'Daily review',
+      prompt: 'Review the latest changes carefully',
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+    });
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).toMatchObject({ prompt: 'Review the latest changes carefully' });
+    expect(update?.data).not.toHaveProperty('nextRunAt');
+  });
+
+  it("schedules today's slot when a changed daily time is still ahead", async () => {
+    vi.setSystemTime(new Date('2026-01-20T08:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'DAILY',
+      scheduledTime: '10:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: null,
+      nextRunAt: new Date('2026-01-20T10:00:00.000Z'),
+      createdAt: new Date('2026-01-01T10:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.update('task-1', {
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+    });
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).toMatchObject({
+      scheduledTime: '09:00',
+      nextRunAt: new Date('2026-01-20T09:00:00.000Z'),
+    });
+  });
+
+  it("keeps this month's anchored slot when a monthly edit happens before it", async () => {
+    vi.setSystemTime(new Date('2026-01-10T12:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: 15,
+      nextRunAt: new Date('2026-01-15T09:00:00.000Z'),
+      createdAt: new Date('2025-12-15T09:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.update('task-1', {
+      cadence: 'MONTHLY',
+      scheduledTime: '10:00',
+      timezone: 'UTC',
+    });
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).toMatchObject({
+      scheduledDayOfMonth: 15,
+      nextRunAt: new Date('2026-01-15T10:00:00.000Z'),
+    });
+  });
 });
 
 describe('periodicTaskAccessor.toggleEnabled', () => {
@@ -336,6 +412,25 @@ describe('periodicTaskAccessor.toggleEnabled', () => {
     expect(update?.data).toMatchObject({
       isEnabled: true,
       nextRunAt: new Date('2026-01-21T09:00:00.000Z'),
+    });
+  });
+  it("resumes at today's slot when it is still ahead", async () => {
+    vi.setSystemTime(new Date('2026-01-20T08:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: null,
+      createdAt: new Date('2026-01-15T09:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.toggleEnabled('task-1', true);
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).toMatchObject({
+      isEnabled: true,
+      nextRunAt: new Date('2026-01-20T09:00:00.000Z'),
     });
   });
 });

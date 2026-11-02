@@ -294,3 +294,63 @@ it('supersedes obsolete unfrozen facts while retaining frozen in-flight facts', 
   expect(result.events.map((e) => e.kind)).toEqual(['CI_FAILED']);
   expect(reduce(redObservation, null, { inFlightEvents: [frozen] }).events).toEqual([]);
 });
+
+describe('review feedback across pushes', () => {
+  const review = {
+    identity: 'comment:42',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'Rename this helper',
+    path: 'src/a.ts',
+    line: 3,
+    url: `${redObservation.url}#discussion_r42`,
+    activityAt: redObservation.observedAt,
+  };
+  const green = { ...redObservation, ciStatus: 'SUCCESS' as const, actionableReviews: [review] };
+  const pushed = { ...green, headSha: 'head-2', observedAt: '2026-10-08T00:05:00.000Z' };
+
+  it('does not redeliver already delivered feedback after the agent pushes a new head', () => {
+    // The agent receives the unresolved thread, pushes a fix, and the reviewer
+    // has not resolved the thread yet. The push alone is not new feedback.
+    const first = reduce(green);
+    const delivered = first.events.map((e) => ({ ...e, id: 'delivered-review' }));
+    expect(delivered.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
+    const afterPush = reduce(pushed, green, {
+      deliveredEvents: delivered,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    expect(afterPush.events.filter((e) => e.kind === 'REVIEW_FEEDBACK')).toEqual([]);
+  });
+
+  it('does not duplicate feedback frozen in flight when the head changes', () => {
+    const first = reduce(green);
+    const frozen = first.events.map((e) => ({ ...e, id: 'frozen-review' }));
+    const afterPush = reduce(pushed, green, {
+      inFlightEvents: frozen,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    expect(afterPush.events.filter((e) => e.kind === 'REVIEW_FEEDBACK')).toEqual([]);
+  });
+
+  it('re-emits undelivered feedback that a new head supersedes', () => {
+    const first = reduce(green);
+    const pending = first.events.map((e) => ({ ...e, id: 'pending-review' }));
+    const afterPush = reduce(pushed, green, {
+      pendingEvents: pending,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    expect(afterPush.supersededEventIds).toEqual(['pending-review']);
+    expect(afterPush.events.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
+  });
+
+  it('delivers edited feedback after a push', () => {
+    const first = reduce(green);
+    const delivered = first.events.map((e) => ({ ...e, id: 'delivered-review' }));
+    const edited = { ...pushed, actionableReviews: [{ ...review, contentHash: 'edited' }] };
+    const afterEdit = reduce(edited, green, {
+      deliveredEvents: delivered,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    expect(afterEdit.events.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
+  });
+});

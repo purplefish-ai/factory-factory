@@ -8,6 +8,8 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import { toError } from '@/backend/lib/error-utils';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
@@ -290,7 +292,10 @@ class StartupScriptService {
     guard?.assertCurrent();
     return new Promise((resolve) => {
       guard?.assertCurrent();
-      const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
+      const spawnOptions = {
+        cwd,
+        env: { ...buildUserProcessEnv(configService.getChildProcessEnv()), WORKSPACE_PATH: cwd },
+      };
       const proc = spawn('bash', bashArgs.args, spawnOptions);
       let recordPidPromise: Promise<unknown> = Promise.resolve();
       if (proc.pid !== undefined) {

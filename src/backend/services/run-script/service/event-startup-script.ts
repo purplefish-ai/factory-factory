@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { stopOwnedProcessGroup } from '@/backend/lib/owned-process-group';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
@@ -34,7 +35,7 @@ export async function executeEventStartupScript(
   input.signal.throwIfAborted();
   const child = spawn('bash', input.args, {
     cwd: input.cwd,
-    env: { ...configService.getChildProcessEnv(), WORKSPACE_PATH: input.cwd },
+    env: { ...buildUserProcessEnv(configService.getChildProcessEnv()), WORKSPACE_PATH: input.cwd },
     detached: process.platform !== 'win32',
   });
   input.physicalStage?.(true);

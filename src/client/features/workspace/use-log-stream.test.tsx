@@ -339,4 +339,68 @@ describe('useLogStream', () => {
     expect(resultRef.current?.output).toBe('');
     expect(requestAnimationFrameMock).not.toHaveBeenCalled();
   });
+
+  // The server sends its whole retained buffer on every connection
+  // (push-channel.handler.ts), so a reconnect replays output already shown.
+  it('does not duplicate output the server replays after a reconnect', () => {
+    render(true);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'server started\n' });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'GET / 200\n' });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      // Replay of the server buffer, including output produced while offline.
+      capturedOptions?.onMessage?.({
+        type: 'output',
+        data: 'server started\nGET / 200\nGET /about 200\n',
+      });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'GET /live 200\n' });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      'Connected!\n\nserver started\nGET / 200\nDisconnected. Reconnecting...\n' +
+        'Reconnected!\n\nGET /about 200\nGET /live 200\n'
+    );
+  });
+
+  it('keeps only unseen output when the server replays a truncated buffer', () => {
+    render(true);
+    const earlier = `${'old line\n'.repeat(200)}`;
+    const recent = `${'recent line\n'.repeat(200)}`;
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: earlier + recent });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      // The server retained only the tail of its stream, plus new output.
+      capturedOptions?.onMessage?.({ type: 'output', data: `${recent}while offline\n` });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      `Connected!\n\n${earlier}${recent}Disconnected. Reconnecting...\n` +
+        'Reconnected!\n\nwhile offline\n'
+    );
+  });
+
+  it('keeps fresh output when the server has nothing to replay after a reconnect', () => {
+    render(true);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'first run\n' });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'second run\n' });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      'Connected!\n\nfirst run\nDisconnected. Reconnecting...\nReconnected!\n\nsecond run\n'
+    );
+  });
 });

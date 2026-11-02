@@ -247,11 +247,13 @@ instructions composer and uses the same schedule controls. It remains available
 while chat provider defaults load. No provider or unattended-execution policy
 changes accompany this UI.
 
-Pause affects future runs; an already running workspace continues. Deleting an
-agent requires confirmation and removes its definition and execution history,
-while existing workspaces and conversations remain available. Failed requests
-show an error and preserve form drafts. The management page polls task/history
-data without replacing unsaved edits.
+Pause affects future runs; an already running workspace continues. Saving an
+edit with an unchanged schedule keeps the pending run. Changing the schedule or
+resuming starts at the first slot still ahead, which can be later the same day
+or month. Deleting an agent requires confirmation and removes its definition and
+execution history, while existing workspaces and conversations remain available.
+Failed requests show an error and preserve form drafts. The management page
+polls task/history data without replacing unsaved edits.
 
 Both the management page and the workspace's **Agent** origin panel use the
 shared run history query, showing up to 50 recent runs with status, start time,

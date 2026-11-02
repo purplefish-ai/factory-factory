@@ -10,6 +10,7 @@ import {
 } from './run-script-config-persistence.service';
 import { RunScriptOutputBuffer } from './run-script-output-buffer';
 import {
+  decodeOutputChunks,
   runCleanupScriptProcess,
   shouldRejectStopWithoutProcess,
   spawnPipedShellCommand,
@@ -163,16 +164,13 @@ export class RunScriptService {
     });
 
     // Capture and broadcast stdout/stderr
-    const handleOutput = (data: Buffer) => {
-      this.appendOutput(workspaceId, data.toString());
-    };
-
-    childProcess.stdout?.on('data', handleOutput);
+    const handleOutput = (output: string) => this.appendOutput(workspaceId, output);
+    childProcess.stdout?.on('data', decodeOutputChunks(handleOutput));
     childProcess.stdout?.on('error', (error) => {
       logger.warn('Run script stdout stream error', { workspaceId, error, pid });
     });
 
-    childProcess.stderr?.on('data', handleOutput);
+    childProcess.stderr?.on('data', decodeOutputChunks(handleOutput));
     childProcess.stderr?.on('error', (error) => {
       logger.warn('Run script stderr stream error', { workspaceId, error, pid });
     });
@@ -687,16 +685,13 @@ export class RunScriptService {
     this.appendOutput(workspaceId, postRunStartMessage);
     this.appendPostRunOutput(workspaceId, postRunStartMessage);
 
-    const handleOutput = (data: Buffer) => {
-      this.appendPostRunOutput(workspaceId, data.toString());
-    };
-
-    postRunProcess.stdout?.on('data', handleOutput);
+    const handleOutput = (output: string) => this.appendPostRunOutput(workspaceId, output);
+    postRunProcess.stdout?.on('data', decodeOutputChunks(handleOutput));
     postRunProcess.stdout?.on('error', (error) => {
       logger.warn('PostRun stdout stream error', { workspaceId, error });
     });
 
-    postRunProcess.stderr?.on('data', handleOutput);
+    postRunProcess.stderr?.on('data', decodeOutputChunks(handleOutput));
     postRunProcess.stderr?.on('error', (error) => {
       logger.warn('PostRun stderr stream error', { workspaceId, error });
     });

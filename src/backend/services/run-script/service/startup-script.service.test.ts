@@ -152,6 +152,36 @@ describe('StartupScriptService', () => {
     expect(mockClearInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
   });
 
+  // A desktop/`ff serve` backend runs with NODE_ENV=production; a setup script
+  // like `npm install` inheriting it silently omits devDependencies.
+  it("runs setup scripts without Factory Factory's own runtime env", async () => {
+    mockSpawn.mockImplementation(() => {
+      const proc = new FakeProc();
+      queueMicrotask(() => proc.emit('close', 0));
+      return proc;
+    });
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('DATABASE_PATH', '/Users/me/factory-factory/data.db');
+    vi.stubEnv('BACKEND_PORT', '3001');
+    vi.stubEnv('MY_PROJECT_TOKEN', 'keep-me');
+    try {
+      await service.runStartupScript(
+        { id: 'w1', worktreePath: '/tmp/w1' } as never,
+        { startupScriptCommand: 'npm install', startupScriptTimeout: 5 } as never
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    const env = mockSpawn.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv;
+    expect(env.WORKSPACE_PATH).toBe('/tmp/w1');
+    expect(env.MY_PROJECT_TOKEN).toBe('keep-me');
+    expect(env.PATH).toBe(process.env.PATH);
+    expect(env).not.toHaveProperty('NODE_ENV');
+    expect(env).not.toHaveProperty('DATABASE_PATH');
+    expect(env).not.toHaveProperty('BACKEND_PORT');
+  });
+
   it('reports a natural exit at the timeout boundary as successful', async () => {
     vi.useFakeTimers();
     const proc = new FakeProc();

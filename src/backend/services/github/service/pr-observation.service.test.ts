@@ -224,3 +224,30 @@ it('keeps terminal state and the current head when enrichment is unavailable', a
     reviewsComplete: false,
   });
 });
+
+it('keeps a known merge conflict while GitHub is still computing mergeability', async () => {
+  // GitHub reports UNKNOWN while it recomputes mergeability after the base or
+  // head moves. That is not evidence that a conflicting PR became clean.
+  prObservationService.configure({
+    findPR: async () => ({ url: redObservation.url, hasMergeConflict: true }),
+    readPolicy,
+  });
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
+    fullDetails({ mergeStateStatus: 'UNKNOWN' })
+  );
+  expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: true });
+
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
+    fullDetails({ mergeStateStatus: 'CLEAN' })
+  );
+  expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: false });
+
+  prObservationService.configure({
+    findPR: async () => ({ url: redObservation.url, hasMergeConflict: false }),
+    readPolicy,
+  });
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
+    fullDetails({ mergeStateStatus: 'UNKNOWN' })
+  );
+  expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: false });
+});

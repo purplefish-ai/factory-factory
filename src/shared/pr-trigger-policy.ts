@@ -159,12 +159,17 @@ function addReviewTransitions(
   sequence: number
 ) {
   const { previous, current, target } = input;
+  const sameReview = (r: { identity: string; contentHash: string }, review: typeof r) =>
+    r.identity === review.identity && r.contentHash === review.contentHash;
+  // A new head supersedes undelivered feedback, so it is re-emitted; feedback
+  // already delivered or frozen in flight is unchanged and is not repeated.
+  const handedOff = [...input.deliveredEvents, ...(input.inFlightEvents ?? [])].flatMap((e) =>
+    e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []
+  );
   for (const review of current.actionableReviews) {
     if (
-      !previous?.actionableReviews.some(
-        (r) => r.identity === review.identity && r.contentHash === review.contentHash
-      ) ||
-      previous.headSha !== current.headSha
+      !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
+      (previous.headSha !== current.headSha && !handedOff.some((r) => sameReview(r, review)))
     ) {
       sequence++;
       add(

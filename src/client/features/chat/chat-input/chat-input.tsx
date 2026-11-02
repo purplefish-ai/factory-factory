@@ -118,18 +118,23 @@ export const ChatInput = memo(function ChatInput({
   // If only `attachments` is passed without `onAttachmentsChange`, component is uncontrolled (uses internal state)
   const isControlled = onAttachmentsChange !== undefined;
   const attachments = isControlled ? (controlledAttachments ?? []) : internalAttachments;
+  // Async paste/drop/upload conversions apply their updater after later edits may
+  // have landed, so controlled updaters must see the latest value, not a render's.
+  const latestControlledAttachmentsRef = useRef(controlledAttachments ?? []);
+  latestControlledAttachmentsRef.current = controlledAttachments ?? [];
   const setAttachments = useCallback(
     (updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])) => {
       if (isControlled) {
         // In controlled mode, always use the external setter
-        const currentValue = controlledAttachments ?? [];
+        const currentValue = latestControlledAttachmentsRef.current;
         const newValue = typeof updater === 'function' ? updater(currentValue) : updater;
+        latestControlledAttachmentsRef.current = newValue;
         onAttachmentsChange(newValue);
       } else {
         setInternalAttachments(updater);
       }
     },
-    [isControlled, controlledAttachments, onAttachmentsChange]
+    [isControlled, onAttachmentsChange]
   );
 
   // Slash commands hook

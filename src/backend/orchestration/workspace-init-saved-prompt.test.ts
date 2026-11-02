@@ -1,0 +1,77 @@
+// Register the shared mocks before any service or orchestrator module loads.
+import './workspace-init.test-harness';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { githubCLIService } from '@/backend/services/github';
+import { sessionDataService, sessionDomainService } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
+import { SessionStatus } from '@/shared/core';
+import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import {
+  clearWorkspaceInitOrchestratorStateForTests,
+  initializeWorkspaceWorktree,
+} from './workspace-init.orchestrator';
+import {
+  makeWorkspaceWithProject,
+  setupHappyPath,
+  WORKSPACE_ID,
+} from './workspace-init.test-harness';
+
+const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
+
+async function initializeWithSavedPrompt(initialPrompt: string) {
+  const workspace = makeWorkspaceWithProject({
+    githubIssueNumber: 42,
+    creationMetadata: {
+      issueNumber: 42,
+      issueUrl: 'https://github.com/owner/repo/issues/42',
+      initialPrompt,
+    },
+  });
+  setupHappyPath();
+  vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+  vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+  vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+    unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+  ]);
+  enqueueInitialMessage.mockReturnValue({ position: 0 });
+
+  await initializeWorkspaceWorktree(WORKSPACE_ID);
+}
+
+describe('saved initial prompts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearWorkspaceInitOrchestratorStateForTests();
+  });
+
+  it('delivers a saved prompt containing closing tags verbatim', async () => {
+    await initializeWithSavedPrompt('Fix the unclosed </div> in Header.tsx');
+
+    expect(githubCLIService.getIssue).not.toHaveBeenCalled();
+    expect(enqueueInitialMessage).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ text: 'Fix the unclosed </div> in Header.tsx' })
+    );
+  });
+
+  it('keeps the issue_data boundary of an edited issue launch prompt closed', async () => {
+    // The issue launch sheet saves the full buildIssueStartPrompt() output.
+    const launchPrompt = buildIssueStartPrompt({
+      providerLabel: 'GitHub Issue',
+      issueReference: '#42',
+      title: 'Crash on save',
+      body: 'Steps: click save',
+      url: 'https://github.com/owner/repo/issues/42',
+      commitReference: '#42',
+      closeReference: '#42',
+      rawScreenshotBaseUrl: '',
+    });
+
+    await initializeWithSavedPrompt(launchPrompt);
+
+    const delivered = enqueueInitialMessage.mock.calls[0]?.[1]?.text ?? '';
+    expect(delivered).toBe(launchPrompt);
+    expect(delivered).toContain('\n</issue_data>\n');
+  });
+});

@@ -1,3 +1,4 @@
+import type { SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -167,6 +168,95 @@ describe('RunScriptService process lifecycle', () => {
     expect(() =>
       postRunChild.emit('error', Object.assign(new Error('spawn bash EAGAIN'), { code: 'EAGAIN' }))
     ).not.toThrow();
+  });
+
+  // A desktop/`ff serve` backend runs with NODE_ENV=production and its own
+  // BACKEND_PORT/DATABASE_PATH. A project's `pnpm dev` must not inherit them.
+  it("starts run, postRun and cleanup scripts without Factory Factory's runtime env", async () => {
+    mockReconcileWorkspaceCommandCache.mockResolvedValue({
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: 'pnpm watch:assets',
+      runScriptCleanupCommand: 'pnpm clean',
+    });
+    const runChild = new FakeChildProcess(1001);
+    const postRunChild = new FakeChildProcess(1002);
+    const cleanupChild = new FakeChildProcess(1003);
+    mockSpawn
+      .mockReturnValueOnce(runChild)
+      .mockReturnValueOnce(postRunChild)
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => cleanupChild.emit('exit', 0));
+        return cleanupChild;
+      });
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptStatus: 'IDLE',
+      runScriptPid: null,
+      runScriptPort: null,
+      ...COMMANDS,
+    });
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('DATABASE_PATH', '/Users/me/factory-factory/data.db');
+    vi.stubEnv('BACKEND_PORT', '3001');
+    vi.stubEnv('MY_PROJECT_TOKEN', 'keep-me');
+    try {
+      const service = new RunScriptService();
+      await expect(service.startRunScript('ws-1')).resolves.toMatchObject({ success: true });
+      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledTimes(2));
+
+      mockFindById.mockResolvedValue({
+        id: 'ws-1',
+        worktreePath: '/tmp/ws-1',
+        runScriptStatus: 'RUNNING',
+        runScriptPid: 1001,
+        runScriptPort: null,
+        ...COMMANDS,
+      });
+      mockTreeKill.mockImplementation(
+        (_pid: number, _signal: string, callback: (error: Error | null) => void) => {
+          runChild.signalCode = 'SIGTERM';
+          callback(null);
+        }
+      );
+      await expect(service.stopRunScript('ws-1')).resolves.toEqual({ success: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(mockSpawn).toHaveBeenCalledTimes(3);
+    for (const [, , options] of mockSpawn.mock.calls as [unknown, unknown, SpawnOptions][]) {
+      const env = options.env as NodeJS.ProcessEnv;
+      expect(env.MY_PROJECT_TOKEN).toBe('keep-me');
+      expect(env.PATH).toBe(process.env.PATH);
+      expect(env).not.toHaveProperty('NODE_ENV');
+      expect(env).not.toHaveProperty('DATABASE_PATH');
+      expect(env).not.toHaveProperty('BACKEND_PORT');
+    }
+  });
+
+  // Pipes deliver arbitrary byte chunks, so a multi-byte character such as the
+  // `➜` Vite prints before its URLs can straddle two 'data' events.
+  it('decodes UTF-8 characters split across output chunks', async () => {
+    const child = new FakeChildProcess(1001);
+    mockSpawn.mockReturnValueOnce(child);
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptStatus: 'IDLE',
+      ...COMMANDS,
+    });
+    const service = new RunScriptService();
+    const received: string[] = [];
+    service.subscribeToOutput('ws-1', (data) => received.push(data));
+    await expect(service.startRunScript('ws-1')).resolves.toMatchObject({ success: true });
+
+    const line = Buffer.from('  ➜  Local:   http://localhost:5173/\n');
+    child.stdout.emit('data', line.subarray(0, 3));
+    child.stdout.emit('data', line.subarray(3));
+
+    expect(received.join('')).toBe(line.toString());
+    expect(service.getOutputBuffer('ws-1')).toContain(line.toString());
   });
 
   // The dev-logs WebSocket (push-channel.handler.ts) subscribes once per
