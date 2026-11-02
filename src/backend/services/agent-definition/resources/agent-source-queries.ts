@@ -105,15 +105,15 @@ export async function getBaseline(connectionId: string, id: string) {
 
 /** A baseline read can race a newer interval commit. Retained evidence resolves its exact head. */
 export async function historicalHeadOrder(tx: Tx, connectionId: string, head: string | null) {
-  if (head === null) {
-    return 0;
-  }
   const rejected = await tx.agentSourceCheckpoint.findFirst({
     where: { connectionId, status: 'INVALID' },
     select: { scanId: true },
   });
   if (rejected) {
     throw new ApplicationError('CONFLICT', 'Invalid historical source proof requires recovery.');
+  }
+  if (head === null) {
+    return 0;
   }
   const indexed = await tx.agentSourceHead.findFirst({
     where: {

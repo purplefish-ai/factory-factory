@@ -169,6 +169,11 @@ it('never compacts an active scan, and finalization races safely with backfill',
     scan: null,
     committedHeadEventId: 'next-control',
   });
+  expect(
+    await db.prisma.agentSourcePage.count({
+      where: { id: { in: activePages.map((page) => page.id) } },
+    })
+  ).toBe(activePages.length);
   for (let i = 0; i < 6; i++) {
     await source.maintainCheckpoints(fixture.connectionId);
   }
@@ -178,7 +183,6 @@ it('never compacts an active scan, and finalization races safely with backfill',
   expect(
     (await source.prepareBaseline(fixture.connectionId, 'next-control')).boundary?.sourceOrder
   ).toBe(2);
-  expect(activePages.length).toBeGreaterThan(0);
 });
 
 it('bounds backfill to100 heads per call and uses indexed lookups after page compaction', async () => {
@@ -413,5 +417,47 @@ it('retains all connection proof when rejected legacy pages leave later heads un
   expect(await db.prisma.agentSourceCheckpoint.count({ where: { status: 'COMPLETE' } })).toBe(0);
   await expect(
     source.prepareBaseline(fixture.connectionId, 'unsupported-old')
+  ).rejects.toMatchObject({ code: 'CONFLICT' });
+});
+
+it('backfills a previous boundary at the start of a new capture page without fencing valid proof', async () => {
+  await db.prisma.agentSourceState.deleteMany();
+  const anchor = await source.prepareBaseline(fixture.connectionId, 'anchor');
+  const events = Array.from({ length: 100 }, (_, i) => ({
+    providerEventId: `head-${i}`,
+    payload: null,
+  }));
+  const tail = [
+    { providerEventId: 'anchor', payload: null },
+    { providerEventId: 'older', payload: null },
+  ];
+  await source.savePage(fixture.connectionId, 1, { events, nextPage: 2 });
+  await source.savePage(fixture.connectionId, 2, { events: tail, nextPage: 3 });
+  await source.savePage(fixture.connectionId, 1, { events, nextPage: 2 });
+  await source.savePage(fixture.connectionId, 2, { events: tail, nextPage: 3 });
+  await source.finalizeNextChunk(fixture.connectionId);
+  await db.prisma.agentSourceCheckpoint.deleteMany();
+  for (let i = 0; i < 6; i++) {
+    await source.maintainCheckpoints(fixture.connectionId);
+  }
+  expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({
+    status: 'COMPLETE',
+    previousBoundaryEventId: 'anchor',
+    initialSourceOrder: 0,
+  });
+  expect(await db.prisma.agentSourcePage.count()).toBe(1);
+  expect(
+    (await source.prepareBaseline(fixture.connectionId, 'head-99')).boundary?.sourceOrder
+  ).toBe(0);
+  expect(await source.getBaseline(fixture.connectionId, anchor.id)).toEqual(anchor);
+});
+
+it('applies the invalid historical-proof fence before resolving an empty head', async () => {
+  await interval();
+  await db.prisma.agentSourceCheckpoint.updateMany({ data: { status: 'INVALID' } });
+  const { historicalHeadOrder } =
+    await vi.importActual<typeof import('./agent-source-queries')>('./agent-source-queries');
+  await expect(
+    db.prisma.$transaction((tx) => historicalHeadOrder(tx, fixture.connectionId, null))
   ).rejects.toMatchObject({ code: 'CONFLICT' });
 });

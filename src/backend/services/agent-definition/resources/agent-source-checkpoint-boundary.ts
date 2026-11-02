@@ -41,7 +41,10 @@ export async function captureBoundary(
   });
   const anchor = known[0]?.providerEventId;
   const end = anchor ? evidence.ids.indexOf(anchor) : -1;
-  const boundary = end >= 0 ? evidence.ids[end + 1] : undefined;
+  // A continuation page may begin with the boundary and contain no captured head.
+  // Its first identity still requires an independent canonical witness below.
+  const boundary =
+    end >= 0 ? evidence.ids[end + 1] : checkpoint.entryCount > 0 ? evidence.ids[0] : undefined;
   if (boundary) {
     const order = await boundaryOrder(tx, page.connectionId, boundary);
     return order === null

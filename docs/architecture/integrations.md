@@ -408,12 +408,14 @@ Any rejected interval fences historical preparation and page compaction for that
 connection, since later pages may contain unexamined conflicting heads.
 Already-issued baseline IDs remain readable through `getBaseline`.
 
-Each operational poll cycle also advances at most one legacy proof page in a
-serialized maintenance transaction. Until its entire interval is verified,
-historical baseline preparation falls back to retained CAPTURE/FINALIZED proof.
-After completion, maintenance can remove at most 100 redundant CAPTURE/VERIFY
-pages per transaction. Active scans, missing or malformed proof and incomplete
-checkpoints remain untouched. FINALIZED markers, head checkpoints and issued
+Each operational target in a poll cycle also advances at most one legacy proof
+page in a serialized maintenance transaction. Until its entire interval is
+verified, historical baseline preparation falls back to retained
+CAPTURE/FINALIZED proof. After completion, maintenance can remove at most 100
+redundant CAPTURE/VERIFY pages per transaction. Proof pages for active scans,
+missing or malformed proof, and incomplete checkpoints remain retained.
+Checkpoint metadata can advance through backfill or become invalid without
+deleting those proof pages. FINALIZED markers, head checkpoints and issued
 baseline rows remain indefinitely, preserving both exact historical head lookups
 and `getBaseline(connectionId, id)` answers after event pruning and page
 compaction. No age or current-reference rule deletes that retained evidence: a
