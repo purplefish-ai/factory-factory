@@ -270,6 +270,10 @@ describe('application queue producer composition', () => {
           options: [{ value: label, name: label }],
         },
       ];
+      domain.chatIntent = unsafeCoerce({
+        hydrate: () => Promise.resolve(),
+        hasQueuedInput: () => false,
+      });
       services.sessionDomainService = domain;
       services.sessionConfigService = new SessionConfigService({
         repository: unsafeCoerce({ getSessionById: forbidden }),

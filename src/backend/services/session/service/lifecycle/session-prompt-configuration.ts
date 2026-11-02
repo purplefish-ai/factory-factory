@@ -1,6 +1,6 @@
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { QueuedMessage } from '@/shared/acp-protocol';
-import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
-import type { SessionCallerGuard } from '../bridges';
 import type { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import type { SessionQueuedSettings } from './session-queued-settings';
 

@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import {
   createManagerTestHarness,
   mockPrompt,
@@ -11,7 +12,6 @@ import {
   defaultHandlers,
   defaultOptions,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
-import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 
 it.each(['resolve', 'reject'] as const)(

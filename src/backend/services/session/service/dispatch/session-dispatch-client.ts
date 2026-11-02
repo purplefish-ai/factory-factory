@@ -1,4 +1,4 @@
-import type { AcpRuntimeManager } from '../acp/acp-runtime-manager';
+import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 interface ClaudeCompactionClient {
   isCompactingActive: () => boolean;
   startCompaction: () => void;

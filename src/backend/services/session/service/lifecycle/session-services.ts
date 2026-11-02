@@ -1,5 +1,6 @@
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
+import { sessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent';
 import {
   SessionLoadService,
   type SessionLoadDependencies,
@@ -9,7 +10,6 @@ import type { SessionDispatchStartOptions } from '@/backend/services/session/ser
 import { projectSessionStartupOptions } from '@/backend/services/session/service/dispatch/session-startup-options';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
-import { sessionChatIntentService } from '../chat/session-chat-intent';
 import { eventSessionAuthority } from './event-session-authority';
 import {
   acpEventProcessor,
@@ -77,10 +77,12 @@ export function createSessionLoadService(
 ): SessionLoadService {
   return new SessionLoadService({
     ...ports,
-    hydrateChatIntent: async (sessionId) => {
-      await sessionChatIntentService.hydrate(sessionId);
-      return sessionChatIntentService.hasQueuedInput(sessionId);
-    },
+    hydrateChatIntent:
+      ports.hydrateChatIntent ??
+      (async (sessionId) => {
+        await sessionChatIntentService.hydrate(sessionId);
+        return sessionChatIntentService.hasQueuedInput(sessionId);
+      }),
     findSession: (sessionId) => agentSessionAccessor.findById(sessionId),
     hydrateProviderHistory: createProviderHistoryHydrator(ports.domain),
     getCachedCommands: (provider) => slashCommandCacheService.getCachedCommands(provider),

@@ -5,6 +5,7 @@ import type {
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
 } from '@/backend/services/session/service/acp';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -12,7 +13,6 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
-import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { EventSessionAuthority } from './event-session-authority';
 import { sessionBackgroundDeliveryService } from './session-background-delivery.service';

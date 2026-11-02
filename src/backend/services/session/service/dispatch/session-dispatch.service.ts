@@ -2,15 +2,15 @@ import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-erro
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
+import type { PromptConfigurationBoundary } from '@/backend/services/session/service/lifecycle/session-prompt-configuration';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage } from '@/shared/acp-protocol';
-import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
-import type { PromptConfigurationBoundary } from '../lifecycle/session-prompt-configuration';
 import {
   acknowledgeSentBatch,
   prepareBackgroundForDispatch,

@@ -1,13 +1,13 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { ChatIntentRevisionChangedError } from '@/backend/services/session/resources/chat-intent.accessor';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
-import { ChatIntentRevisionChangedError } from '../../resources/chat-intent.accessor';
-import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
-import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
-import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import type {
   SessionDispatchDependencies,
   SessionDispatchNotificationDeliveryService,
@@ -169,6 +169,12 @@ async function handleFailedBatch(
     (error instanceof PromptNotInvokedError && input.isCurrent())
   ) {
     await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
+    if (!input.isCurrent()) {
+      for (const message of backwards) {
+        await input.onError(message, error);
+      }
+      return;
+    }
     for (const message of backwards) {
       sessionDomainService.requeueFront(input.sessionId, message);
     }

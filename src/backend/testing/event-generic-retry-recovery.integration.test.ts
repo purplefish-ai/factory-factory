@@ -318,33 +318,36 @@ it.each([
     const { SessionConfigService } = await vi.importActual<
       typeof import('@/backend/services/session/service/lifecycle/session.config.service')
     >('@/backend/services/session/service/lifecycle/session.config.service');
-    const configure = SessionConfigService.prototype.configureQueuedMessage;
+    const configure = SessionConfigService.prototype.withPromptConfiguration;
     const held = boundary();
     let complete: () => void = () => undefined;
     let beforeConfig = -1;
     let beforePrompt = -1;
-    vi.spyOn(SessionConfigService.prototype, 'configureQueuedMessage').mockImplementation(function (
-      this: InstanceType<typeof SessionConfigService>,
-      id,
-      ...args
-    ) {
-      if (id === other.id) {
-        const provider = providers[1]!;
-        const configuration = provider.handle.beginConfiguration();
-        complete = () => configuration.complete();
-        beforeConfig = provider.connection.setSessionConfigOption.mock.calls.length;
-        beforePrompt = provider.connection.prompt.mock.calls.length;
-        const pending = provider.handle.configurationReady;
-        const read = vi
-          .spyOn(provider.handle, 'configurationReady', 'get')
-          .mockImplementation(() => {
-            read.mockRestore();
-            void held.wait();
-            return pending;
-          });
+    vi.spyOn(SessionConfigService.prototype, 'withPromptConfiguration').mockImplementation(
+      function <T>(
+        this: InstanceType<typeof SessionConfigService>,
+        id: string,
+        operation: import('@/backend/services/session/service/lifecycle/session-prompt-configuration').PromptConfigurationOperation<T>,
+        guard?: import('@/backend/services/session/service/bridges').SessionCallerGuard
+      ) {
+        if (id === other.id) {
+          const provider = providers[1]!;
+          const configuration = provider.handle.beginConfiguration();
+          complete = () => configuration.complete();
+          beforeConfig = provider.connection.setSessionConfigOption.mock.calls.length;
+          beforePrompt = provider.connection.prompt.mock.calls.length;
+          const pending = provider.handle.configurationReady;
+          const read = vi
+            .spyOn(provider.handle, 'configurationReady', 'get')
+            .mockImplementation(() => {
+              read.mockRestore();
+              void held.wait();
+              return pending;
+            });
+        }
+        return configure.bind(this)(id, operation, guard);
       }
-      return configure.call(this, id, ...args);
-    });
+    );
     const dispatch = h.session.sessionDispatchService.tryDispatchNextMessage.bind(
       h.session.sessionDispatchService
     );
@@ -563,7 +566,7 @@ it.each([
     const held = boundary();
     const send = h.session.acpRuntimeManager.sendPrompt.bind(h.session.acpRuntimeManager);
     vi.spyOn(h.session.acpRuntimeManager, 'sendPrompt').mockImplementation(
-      (id, prompt, timeout, observation, caller) =>
+      (id, prompt, timeout, observation, caller, permit) =>
         send(
           id,
           prompt,
@@ -578,7 +581,8 @@ it.each([
                   await caller.check();
                 },
               }
-            : caller
+            : caller,
+          permit
         )
     );
     h.session.sessionDomainService.enqueue(other.id, {

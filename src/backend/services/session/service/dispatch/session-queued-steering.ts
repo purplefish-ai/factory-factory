@@ -1,9 +1,9 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/acp-steering';
+import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type AgentContentItem, type QueuedMessage } from '@/shared/acp-protocol';
-import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
-import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import { prepareDurableAttempt } from './session-durable-attempt';
 import { buildMessageContent } from './session-message-content';
 import { QueuedMessageNotFoundError } from './session-steering-errors';

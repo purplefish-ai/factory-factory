@@ -1,10 +1,10 @@
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
+import type { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
-import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
-import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
-import type { SessionCallerGuard } from '../bridges';
-import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
-import type { PermanentAttachmentError } from '../chat/chat-message-handlers/attachment-processing';
-import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import { prepareBatchContents } from './session-dispatch-batch';
 import type { SessionDispatchDependencies } from './session-dispatch.types';
 

@@ -3,14 +3,14 @@ import pLimit, { type LimitFunction } from 'p-limit';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { createLogger } from '@/backend/services/logger.service';
 import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
-import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { withEventEvidenceDeadline } from './event-evidence-deadline';
 import type { EventOwnedWork } from './event-owned-work';
@@ -203,8 +203,11 @@ export class SessionService {
     configurationPermit?: PromptConfigurationPermit
   ): Promise<string> {
     // An ordinary send must not occupy the limiter needed by the admitted batch.
-    if (!configurationPermit) {
-      await this.runtimeManager.getClient(sessionId)?.pendingPromptAdmission;
+    const admission = configurationPermit
+      ? undefined
+      : this.runtimeManager.getClient(sessionId)?.pendingPromptAdmission;
+    if (admission !== undefined) {
+      await admission;
     }
     return this.withSerializedAcpPrompt(sessionId, async () => {
       try {
@@ -339,7 +342,8 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
-      if (error instanceof WorkspaceInitFenceError) {
+      const localError = error instanceof PromptNotInvokedError ? error.cause : error;
+      if (localError instanceof WorkspaceInitFenceError) {
         this.abandonRejectedPrompt(sessionId, attemptKey, stopGeneration, promptHandle);
         throw error;
       }

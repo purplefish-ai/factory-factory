@@ -36,7 +36,7 @@ vi.mock('@/backend/services/session/resources/agent-session-launch-origin.access
 }));
 vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
-vi.mock('../chat/session-chat-intent', () => ({
+vi.mock('@/backend/services/session/service/chat/session-chat-intent', () => ({
   sessionChatIntentService: {
     cancel: vi.fn(),
     override: vi.fn(),

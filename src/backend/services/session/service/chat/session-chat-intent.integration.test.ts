@@ -1,4 +1,28 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { ChatIntentAccessor } from '@/backend/services/session/resources/chat-intent.accessor';
+import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
+import { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
+import {
+  createTestProcessHandle,
+  createDeferred,
+  defaultOptions,
+  defaultHandlers,
+  defaultContext,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
+import type { SessionDispatchDependencies } from '@/backend/services/session/service/dispatch/session-dispatch.types';
+import { prepareDurableAttempt } from '@/backend/services/session/service/dispatch/session-durable-attempt';
+import {
+  setupAuthority,
+  configOptions,
+} from '@/backend/services/session/service/lifecycle/session-config-authority.test-helpers';
+import { SessionConfigMutationQueue } from '@/backend/services/session/service/lifecycle/session-config-mutation-queue';
+import {
+  SessionDomainService,
+  sessionDomainService as domain,
+} from '@/backend/services/session/service/session-domain.service';
 import {
   createIntegrationDatabase,
   clearIntegrationDatabase,
@@ -7,24 +31,6 @@ import {
 } from '@/backend/testing/integration-db';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { ChatIntentAccessor } from '../../resources/chat-intent.accessor';
-import { AcpClientFactory } from '../acp/acp-client-factory';
-import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
-import { AcpRuntimeManager } from '../acp/acp-runtime-manager';
-import {
-  createTestProcessHandle,
-  createDeferred,
-  defaultOptions,
-  defaultHandlers,
-  defaultContext,
-} from '../acp/acp-runtime-manager.test-helpers';
-import { sessionDataService } from '../data/session-data.service';
-import { SessionDispatchService } from '../dispatch/session-dispatch.service';
-import type { SessionDispatchDependencies } from '../dispatch/session-dispatch.types';
-import { prepareDurableAttempt } from '../dispatch/session-durable-attempt';
-import { setupAuthority, configOptions } from '../lifecycle/session-config-authority.test-helpers';
-import { SessionConfigMutationQueue } from '../lifecycle/session-config-mutation-queue';
-import { SessionDomainService, sessionDomainService as domain } from '../session-domain.service';
 import { UncertainChatDispatchError } from './chat-intent-errors';
 import { createQueueMessageHandler } from './chat-message-handlers/handlers/queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './chat-message-handlers/handlers/remove-queued-message.handler';
@@ -744,4 +750,32 @@ it('recovers the original trusted initial submission before rebuilding mutable p
   const recovered = await domain.recoverInitialMessageDurably('s', 'auto-init-s');
   expect(recovered?.text).toBe('original linked issue');
   expect(domain.getQueueSnapshot('s').map((row) => row.text)).toEqual(['original linked issue']);
+});
+
+it('does not requeue a confirmed-unsent mixed batch when stop occurs while releasing external claims', async () => {
+  await intents.accept('s', message('one'));
+  domain.enqueue('s', {
+    ...message('pr-event-held'),
+    source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'pr', bindingRevision: 1 } },
+  });
+  let current = true;
+  const entered = createDeferred<void>();
+  const release = createDeferred<void>();
+  const h = dispatcher(() => Promise.reject(new PromptNotInvokedError(new Error('before RPC'))), {
+    isCurrent: () => current,
+  });
+  h.background.prepare.mockResolvedValue({ status: 'ready' } as never);
+  h.background.fail.mockImplementation(async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  const dispatch = h.service.tryDispatchNextMessage('s');
+  await entered.promise;
+  current = false;
+  await intents.cancel('s');
+  domain.clearQueuedWork('s');
+  release.resolve();
+  await dispatch;
+  expect(domain.getQueueLength('s')).toBe(0);
+  expect((await intents.store.read('s'))[0]?.status).toBe('cancelled');
 });

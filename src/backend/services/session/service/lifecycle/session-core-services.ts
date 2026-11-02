@@ -7,6 +7,7 @@ import {
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
+import { sessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent';
 import {
   EventInitialDispatcher,
   EventInitialDispatchInterrupted,
@@ -14,7 +15,6 @@ import {
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
-import { sessionChatIntentService } from '../chat/session-chat-intent';
 import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';

@@ -213,14 +213,11 @@ export class AcpRuntimeManager {
       configurationPermit?.assertCurrent();
       while (
         handle.configurationReady !== undefined ||
-        (!configurationPermit &&
-          (handle.pendingConfigUpdates !== undefined ||
-            handle.pendingPromptAdmission !== undefined))
+        (!configurationPermit && handle.pendingConfigUpdates !== undefined)
       ) {
         await Promise.all([
           handle.configurationReady,
           configurationPermit ? undefined : handle.pendingConfigUpdates,
-          configurationPermit ? undefined : handle.pendingPromptAdmission,
         ]);
         configurationPermit?.assertCurrent();
       }
@@ -240,9 +237,7 @@ export class AcpRuntimeManager {
           !handle.isRunning() ||
           handle.acpSessionId !== providerSessionId ||
           handle.configurationReady !== undefined ||
-          (!configurationPermit &&
-            (handle.pendingConfigUpdates !== undefined ||
-              handle.pendingPromptAdmission !== undefined))
+          (!configurationPermit && handle.pendingConfigUpdates !== undefined)
         ) {
           throw new Error('Observed prompt runtime or configuration changed');
         }

@@ -5,6 +5,7 @@ import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type {
   SessionCommandHandler,
   SessionCommandOutcome,
@@ -13,7 +14,6 @@ import type {
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
-import type { SessionChatIntentService } from '../../session-chat-intent.service';
 
 const logger = createLogger('chat-message-handlers');
 

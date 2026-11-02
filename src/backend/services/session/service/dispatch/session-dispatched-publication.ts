@@ -1,5 +1,5 @@
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
-import { sessionDomainService } from '../session-domain.service';
 
 export function publishDispatchedBatch(
   sessionId: string,

@@ -1,5 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type {
   SessionCommandHandler,
   SessionCommandOutcome,
@@ -7,7 +8,6 @@ import type {
 } from '@/backend/services/session/service/chat/session-command.types';
 import { MessageState } from '@/shared/acp-protocol';
 import type { RemoveQueuedMessageInput } from '@/shared/websocket';
-import type { SessionChatIntentService } from '../../session-chat-intent.service';
 
 const logger = createLogger('chat-message-handlers');
 

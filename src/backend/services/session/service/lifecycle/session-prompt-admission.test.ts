@@ -1,10 +1,10 @@
 import { expect, it, vi } from 'vitest';
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
 import {
   createDeferred,
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import { SessionService, type SessionServiceDependencies } from './session.service';
 

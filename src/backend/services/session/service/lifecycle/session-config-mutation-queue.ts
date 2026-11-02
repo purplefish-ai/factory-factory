@@ -1,9 +1,9 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp/acp-process-handle';
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
-import type { AcpProcessHandle } from '../acp/acp-process-handle';
-import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
 
 /** Native RPC, durable state, and configuration publication share one per-session transaction. */
 export class SessionConfigMutationQueue {
