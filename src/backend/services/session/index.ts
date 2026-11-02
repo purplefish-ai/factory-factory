@@ -18,5 +18,6 @@ export {
 export {
   exportSessionArchives,
   restoreSessionArchives,
+  validateSessionArchiveRecovery,
   publishRestoredSessionArchives,
 } from './service/data/archive-recovery';

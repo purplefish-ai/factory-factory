@@ -106,7 +106,12 @@ it('does not attach imported decisions to a colliding local session but retains 
   const backup = await dataBackupService.exportData('test');
   await db.prisma.decisionLog.deleteMany();
   // The local session survives and must not receive history from the skipped source session.
-  await dataBackupService.importData(backup);
+  const result = await dataBackupService.importData(backup);
+  expect(result.recovery.skipped).toContainEqual({
+    model: 'DecisionLog',
+    identity: 'foreign-decision',
+    reason: 'CONFLICTING_IDENTITY_OR_PARENT',
+  });
   expect(await db.prisma.decisionLog.findUnique({ where: { id: 'foreign-decision' } })).toBeNull();
   expect(
     await db.prisma.decisionLog.findUnique({ where: { id: 'deleted-decision' } })

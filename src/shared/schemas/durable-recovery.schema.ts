@@ -394,22 +394,7 @@ export const durableRecoverySchema = z
   .superRefine((data, ctx) => {
     const attempts = new Map(data.promptDispatchAttempt.map((row) => [row.id, row]));
     for (const intent of data.chatIntent) {
-      if (!intent.attemptId) {
-        continue;
-      }
-      const attempt = attempts.get(intent.attemptId);
-      if (
-        !attempt ||
-        attempt.sessionId !== intent.sessionId ||
-        !attempt.members.some(
-          (member) => member.owner === 'human' && member.messageId === intent.messageId
-        )
-      ) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Chat intent has missing or foreign frozen dispatch membership',
-        });
-      }
+      validateIntentMembership(intent, attempts, ctx);
     }
     for (const attempt of data.promptDispatchAttempt) {
       const ids = attempt.members.map((member) => member.messageId);
@@ -438,3 +423,32 @@ export const durableRecoverySchema = z
     }
   });
 export type DurableRecovery = z.infer<typeof durableRecoverySchema>;
+
+function validateIntentMembership(
+  intent: z.infer<typeof chatIntentRecoverySchema>,
+  attempts: ReadonlyMap<string, z.infer<typeof promptDispatchAttemptRecoverySchema>>,
+  ctx: z.RefinementCtx
+) {
+  const attempt = intent.attemptId ? attempts.get(intent.attemptId) : undefined;
+  if (intent.status === 'uncertain' && attempt?.status !== 'uncertain') {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Uncertain chat intent requires its uncertain frozen dispatch attempt',
+    });
+  }
+  if (!intent.attemptId) {
+    return;
+  }
+  if (
+    !attempt ||
+    attempt.sessionId !== intent.sessionId ||
+    !attempt.members.some(
+      (member) => member.owner === 'human' && member.messageId === intent.messageId
+    )
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Chat intent has missing or foreign frozen dispatch membership',
+    });
+  }
+}

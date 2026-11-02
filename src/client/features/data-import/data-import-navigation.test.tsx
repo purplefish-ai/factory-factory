@@ -120,6 +120,7 @@ it('keeps skipped identities and downloadable report mounted before the projects
     })
   );
   await act(() => click('Close'));
+  expect(state.invalidate).toHaveBeenCalledOnce();
   expect(state.navigated).toHaveBeenCalledOnce();
   expect(document.body.textContent).toContain('Projects destination');
 });
@@ -139,4 +140,18 @@ it('keeps the immediate success navigation when there is no durable report to di
   });
   expect(state.navigated).toHaveBeenCalledOnce();
   expect(document.body.textContent).toContain('Projects destination');
+});
+
+it('labels PR-prefixed history kinds without merging their acronym and next word', async () => {
+  await renderRoute();
+  const imported = result(1);
+  imported.results.recovery.models = [
+    { model: 'WorkspacePRMonitoring', imported: 0, skipped: 1 },
+    { model: 'WorkspacePRDedicatedSession', imported: 0, skipped: 1 },
+  ];
+  await act(async () => {
+    await state.complete?.(imported);
+  });
+  expect(document.body.textContent).toContain('Workspace PR Monitoring');
+  expect(document.body.textContent).toContain('Workspace PR Dedicated Session');
 });

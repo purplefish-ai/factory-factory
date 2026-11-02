@@ -334,6 +334,15 @@ read transaction captures archive references; filesystem reads happen afterward.
 Missing or changed file bytes fail the export unless a validated transcript is
 retained in the database.
 
+Logical packages are capped at 64 MiB of serialized UTF-8 JSON. Only the single
+import route permits a 65 MiB SuperJSON request, allowing its framing overhead;
+ordinary APIs keep their 10 MiB cap, and combined import batches are explicitly
+rejected. Archives separately allow 16 MiB per decoded transcript, at most
+10,000 entries and 256 MiB decoded aggregate; the stricter package cap still
+applies. The private backup transaction has a bounded two-minute operation
+budget, separate from SQLite's five-second busy wait. An exhausted import rolls
+back and returns a conflict for explicit whole-package retry.
+
 Full installation backups must retain `encryption.key` together with a
 consistent database snapshot, the application-owned `closed-sessions` directory,
 and legacy transcript files not yet relocated. Stop the application before

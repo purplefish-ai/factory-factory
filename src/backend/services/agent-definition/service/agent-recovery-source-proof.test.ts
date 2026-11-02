@@ -100,7 +100,7 @@ it('rejects validation progress whose future revision could become authoritative
   expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
 });
 
-it('rejects contradictory ordinal claims in unfinished checkpoint heads despite a forged current cursor', () => {
+it('rejects an unfinished checkpoint head claim conflicting with its indexed checkpoint', () => {
   const data = compactInterval();
   const original = data.agentSourceCheckpoint[0]!;
   original.status = 'INDEXED';

@@ -65,19 +65,24 @@ function verifyCoverage(descriptors: Record<string, Descriptor>, models = metada
     'workspacePRDelivery',
     'workspacePREvent',
   ];
-  expect(Object.keys(descriptors).sort()).toEqual(expectedKeys.sort());
-  expect(new Set(Object.values(descriptors).map((entry) => entry.model)).size).toBe(
-    expectedKeys.length
+  expect(Object.keys(descriptors).sort(), 'Inventory group coverage mismatch').toEqual(
+    expectedKeys.sort()
   );
+  expect(
+    new Set(Object.values(descriptors).map((entry) => entry.model)).size,
+    'Inventory model coverage mismatch'
+  ).toBe(expectedKeys.length);
   for (const entry of Object.values(descriptors)) {
     expect(Object.values(Prisma.ModelName)).toContain(entry.model);
     const model = models.get(entry.model);
     expect(model).toBeDefined();
-    expect(entry.table).toBe(model?.table);
+    expect(entry.table, `Inventory table mismatch: ${entry.model}`).toBe(model?.table);
     if (entry.identity === 'unique') {
-      expect(model?.uniques).toContainEqual(entry.keys);
+      expect(model?.uniques, `Inventory unique key mismatch: ${entry.model}`).toContainEqual(
+        entry.keys
+      );
     } else {
-      expect(entry.keys).toEqual(model?.keys);
+      expect(entry.keys, `Inventory primary key mismatch: ${entry.model}`).toEqual(model?.keys);
     }
   }
 }
@@ -91,10 +96,10 @@ it('detects omitted mappings, wrong models/tables, nonprimary fields and SQL-col
     verifyCoverage(
       Object.fromEntries(Object.entries(descriptors).filter(([key]) => key !== 'agentSourceHead'))
     )
-  ).toThrow();
+  ).toThrow('Inventory group coverage mismatch');
   expect(() =>
     verifyCoverage({ ...descriptors, agentRun: { ...descriptors.agentRun, model: 'AgentEvent' } })
-  ).toThrow();
+  ).toThrow('Inventory model coverage mismatch');
   expect(() =>
     verifyCoverage({
       ...descriptors,
@@ -103,7 +108,7 @@ it('detects omitted mappings, wrong models/tables, nonprimary fields and SQL-col
         table: 'WorkspaceNotification',
       },
     })
-  ).toThrow();
+  ).toThrow('Inventory table mismatch: WorkspaceNotification');
   expect(() =>
     verifyCoverage({
       ...descriptors,
@@ -112,13 +117,13 @@ it('detects omitted mappings, wrong models/tables, nonprimary fields and SQL-col
         keys: [{ field: 'scanId', column: 'scanId' }],
       },
     })
-  ).toThrow();
+  ).toThrow('Inventory primary key mismatch: AgentSourceCheckpoint');
   expect(() =>
     verifyCoverage({
       ...descriptors,
       chatIntent: { ...descriptors.chatIntent, keys: [{ field: 'createdAt', column: 'id' }] },
     })
-  ).toThrow();
+  ).toThrow('Inventory unique key mismatch: ChatIntent');
   expect(() =>
     verifyCoverage({
       ...descriptors,
@@ -127,7 +132,7 @@ it('detects omitted mappings, wrong models/tables, nonprimary fields and SQL-col
         keys: [{ field: 'connectionId', column: 'connection_id' }],
       },
     })
-  ).toThrow();
+  ).toThrow('Inventory primary key mismatch: AgentSourceState');
 });
 it('does not turn an unrelated new nullable field into an inventory contract change', () => {
   const extended = schema.replace(

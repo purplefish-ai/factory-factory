@@ -638,7 +638,14 @@ it('preserves ordered PR batch membership and frozen effect evidence while resto
   expect(await db.prisma.workspacePREvent.count({ where: { batchId: 'receipt' } })).toBe(2);
   // An inert imported batch must itself remain exportable without flattening or reordering proof.
   const again = exportDataSchema.parse(await dataBackupService.exportData('test'));
-  expect(again).toBeDefined();
+  expect(
+    again.data.workspaces.find((row) => row.id === 'workspace')?.prRecovery?.deliveries
+  ).toContainEqual(
+    expect.objectContaining({ id: 'receipt', eventIds: ['second', 'first'], state: 'BLOCKED' })
+  );
+  expect(
+    await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'receipt' } })
+  ).toMatchObject({ state: 'BLOCKED', eventIds: ['second', 'first'] });
 });
 
 it('retains undelivered notification intent without marking it delivered or admitting it for a send', async () => {

@@ -24,6 +24,7 @@ import { restorePeriodicRecovery } from '@/backend/services/periodic-task';
 import {
   exportSessionArchives,
   restoreSessionArchives,
+  validateSessionArchiveRecovery,
   publishRestoredSessionArchives,
   restoreRetainedSessionRecovery,
 } from '@/backend/services/session';
@@ -760,6 +761,9 @@ class DataBackupService {
     input = exportDataSchema.parse(input);
     validateWireBudget(input);
     validateRecoveryManifest(input);
+    if (input.data.archives) {
+      validateSessionArchiveRecovery(input.data.archives);
+    }
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,

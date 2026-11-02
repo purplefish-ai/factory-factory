@@ -148,3 +148,25 @@ describe('durable chat owner decoding contract', () => {
     ).toBe(false);
   });
 });
+
+it.each([
+  { attemptId: null, attemptStatus: 'uncertain' },
+  { attemptId: 'attempt', attemptStatus: 'committed' },
+  { attemptId: 'attempt', attemptStatus: 'cancelled' },
+  { attemptId: 'attempt', attemptStatus: 'queued' },
+])(
+  'rejects stranded uncertain human intent $attemptId/$attemptStatus',
+  ({ attemptId, attemptStatus }) => {
+    const result = durableRecoverySchema.safeParse({
+      ...durable(),
+      chatIntent: [{ ...intent, attemptId }],
+      promptDispatchAttempt: attemptId ? [{ ...attempt, status: attemptStatus }] : [],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        message: 'Uncertain chat intent requires its uncertain frozen dispatch attempt',
+      })
+    );
+  }
+);

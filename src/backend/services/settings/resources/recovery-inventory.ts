@@ -182,9 +182,16 @@ function groups(data: ExportData['data']): Group[] {
   });
   result.push({
     ...prRecoveryInventoryDescriptors.workspacePRDelivery,
-    values: data.workspaces.flatMap((workspace) =>
-      (workspace.prRecovery?.deliveries ?? []).map((row) => [row.id])
-    ),
+    values: [
+      ...new Set(
+        data.workspaces.flatMap((workspace) => [
+          ...(workspace.prRecovery?.deliveries ?? []).map((row) => row.id),
+          ...(workspace.prRecovery?.events ?? workspace.prEvents).flatMap((row) =>
+            row.deliveryId ? [row.deliveryId] : []
+          ),
+        ])
+      ),
+    ].map((id) => [id]),
   });
   result.push({
     ...prRecoveryInventoryDescriptors.workspacePREvent,

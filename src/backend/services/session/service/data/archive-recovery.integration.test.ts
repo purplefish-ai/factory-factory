@@ -246,9 +246,14 @@ it('does not overwrite a different artifact when wire identifiers contain traver
   expect(await db.prisma.closedSession.count()).toBe(0);
 });
 
-it.each([false, true])(
-  'roundtrips actual legacy writer timing with preserved=%s without changing row clocks or frozen bytes',
-  async (preserved) => {
+it.each([
+  { preserved: false, marker: true },
+  { preserved: true, marker: true },
+  { preserved: false, marker: false },
+  { preserved: true, marker: false },
+])(
+  'roundtrips actual legacy writer timing with preserved=$preserved marker=$marker without changing row clocks or frozen bytes',
+  async ({ preserved, marker }) => {
     // Pre-protocol persistence wrote JSON before a second new Date() for the DB row.
     const fileCompletedAt = '2026-01-02T00:00:00.001Z';
     const rowCompletedAt = new Date('2026-01-02T00:00:00.009Z');
@@ -327,6 +332,9 @@ it.each([false, true])(
       completedAt: rowCompletedAt.toISOString(),
       transcript: oldTranscript,
     });
+    if (!marker) {
+      Reflect.deleteProperty(packaged.entries[0]!, 'identity');
+    }
     await db.prisma.closedSession.deleteMany();
     await rm(worktree, { recursive: true, force: true });
     const ids = await db.prisma.$transaction((tx) =>
@@ -344,6 +352,9 @@ it.each([false, true])(
       [restored],
       new Map([['workspace', null]])
     );
-    expect(reexported).toEqual(packaged);
+    expect(reexported).toEqual({
+      ...packaged,
+      entries: packaged.entries.map((entry) => ({ ...entry, identity: 'legacy-v1' })),
+    });
   }
 );

@@ -78,3 +78,30 @@ it('bounds normalized frozen delivery text by UTF-8 bytes while preserving exact
   ).toBe(false);
   expect(prDeliveryRecoverySchema.safeParse({ ...delivery, text: null }).success).toBe(true);
 });
+
+it('indexes many independent deliveries without losing legacy/normalized membership or frozen order', () => {
+  const original = fixture();
+  const snapshot = {
+    deliveries: Array.from({ length: 1000 }, (_, index) => ({
+      ...original.deliveries[0]!,
+      id: `receipt-${index}`,
+      eventIds: [`${index}-second`, `${index}-first`],
+    })),
+    events: Array.from({ length: 1000 }, (_, index) =>
+      original.events.map((event) => ({
+        ...event,
+        id: `${index}-${event.id}`,
+        batchId: `receipt-${index}`,
+        deliveryId: `receipt-${index}`,
+      }))
+    ).flat(),
+  };
+  expect(prRecoverySchema.parse(snapshot).deliveries.at(-1)?.eventIds).toEqual([
+    '999-second',
+    '999-first',
+  ]);
+  snapshot.events[0]!.workspaceId = 'foreign';
+  expect(prRecoverySchema.safeParse(snapshot).error?.issues).toContainEqual(
+    expect.objectContaining({ message: 'Incomplete or inconsistent PR delivery membership' })
+  );
+});

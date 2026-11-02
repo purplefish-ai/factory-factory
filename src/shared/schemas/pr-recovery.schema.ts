@@ -32,17 +32,16 @@ export const prRecoverySchema = z
     if (events.size !== snapshot.events.length) {
       ctx.addIssue({ code: 'custom', message: 'Duplicate PR receipt identity' });
     }
+    const membersByDelivery = indexDeliveryMembers(snapshot.events);
     for (const delivery of snapshot.deliveries) {
-      const members = snapshot.events.filter(
-        (event) => event.batchId === delivery.id || event.deliveryId === delivery.id
-      );
+      const members = membersByDelivery.get(delivery.id) ?? [];
+      const expectedIds = new Set(delivery.eventIds);
       if (
         ids.has(delivery.id) ||
-        new Set(delivery.eventIds).size !== delivery.eventIds.length ||
+        expectedIds.size !== delivery.eventIds.length ||
         members.length !== delivery.eventIds.length ||
         members.some(
-          (event) =>
-            !delivery.eventIds.includes(event.id) || event.workspaceId !== delivery.workspaceId
+          (event) => !expectedIds.has(event.id) || event.workspaceId !== delivery.workspaceId
         )
       ) {
         ctx.addIssue({
@@ -72,3 +71,18 @@ export const prRecoverySchema = z
     }
   });
 export type PRRecovery = z.infer<typeof prRecoverySchema>;
+
+function indexDeliveryMembers(events: z.infer<typeof prFactRecoverySchema>[]) {
+  const membersByDelivery = new Map<string, typeof events>();
+  for (const event of events) {
+    for (const id of new Set([event.batchId, event.deliveryId])) {
+      if (!id) {
+        continue;
+      }
+      const members = membersByDelivery.get(id) ?? [];
+      members.push(event);
+      membersByDelivery.set(id, members);
+    }
+  }
+  return membersByDelivery;
+}

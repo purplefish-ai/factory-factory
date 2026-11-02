@@ -1,7 +1,9 @@
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { createLogger } from '@/backend/services/logger.service';
-import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
-import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import type {
+  SessionCallerGuard,
+  SessionInitPolicyBridge,
+} from '@/backend/services/session/service/bridges';
 import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
@@ -71,11 +73,10 @@ export class SessionDispatchService {
     return this.steering.steer(sessionId, messageId);
   }
 
-  /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
   private dispatchInProgress = new Map<string, number>();
   /** Monotonic token to invalidate stale dispatch completions. */
   private nextDispatchToken = 1;
-  /** Retry timers for provider-side busy responses that are not reflected locally yet. */
+  /** Delayed retries for provider busy responses and unavailable notification state. */
   private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnInProgressRetryAttempts = new Map<string, number>();
   private lifecycleGate: SessionDispatchLifecycleDependencies['gate'] | null = null;
@@ -83,13 +84,10 @@ export class SessionDispatchService {
   private notificationDeliveryService:
     | SessionDispatchLifecycleDependencies['notificationDelivery']
     | null = null;
-  /** Per-session override to allow dispatch under manual_resume policy. */
   private manualDispatchResumed = new Map<string, boolean>();
 
-  /** Cross-domain bridge for workspace init policy (injected by orchestration layer) */
   private initPolicyBridge: SessionInitPolicyBridge | null = null;
 
-  /** Configure the workspace initialization bridge. */
   configure(bridges: { initPolicy: SessionInitPolicyBridge }): void {
     this.initPolicyBridge = bridges.initPolicy;
   }
@@ -203,7 +201,6 @@ export class SessionDispatchService {
     }
   }
 
-  /** Drop delivered notifications or dispatch the next complete batch. */
   private async getDispatchableHead(sessionId: string): Promise<QueuedMessage | undefined> {
     const message = sessionDomainService.peekNextMessage(sessionId);
     return message && !(await this.isExternalDeliveryHeld(sessionId, message))
@@ -243,6 +240,10 @@ export class SessionDispatchService {
         if (guard) {
           await guard.check();
           guard.assertCurrent?.();
+        }
+        if (reason === 'unavailable') {
+          this.scheduleTurnInProgressRetry(dbSessionId, stopGeneration);
+          return 'done';
         }
         return notifications.removeBlockedFromQueue(dbSessionId, peeked.id, reason)
           ? 'continue'
@@ -309,6 +310,7 @@ export class SessionDispatchService {
     }
     await guard?.check();
     guard?.assertCurrent?.();
+    let notificationUnavailable = false;
     const batch = await collectDispatchBatch({
       sessionId: dbSessionId,
       first: peeked,
@@ -332,6 +334,9 @@ export class SessionDispatchService {
         }
       },
       isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+      onNotificationUnavailable: () => {
+        notificationUnavailable = true;
+      },
     });
     try {
       await guard?.check();
@@ -340,7 +345,7 @@ export class SessionDispatchService {
       batch.release();
       throw error;
     }
-    return dispatchCollectedBatch({
+    const result = await dispatchCollectedBatch({
       chatIntent: this.dependencies.chatIntent,
       sessionId: dbSessionId,
       batch,
@@ -367,6 +372,10 @@ export class SessionDispatchService {
         this.turnInProgressRetryAttempts.delete(dbSessionId);
       },
     });
+    if (notificationUnavailable) {
+      this.scheduleTurnInProgressRetry(dbSessionId, stopGeneration);
+    }
+    return result;
   }
 
   private async releaseStoppedBackground(message: QueuedMessage): Promise<void> {
@@ -538,7 +547,10 @@ export class SessionDispatchService {
     sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
   }
 
-  private scheduleTurnInProgressRetry(dbSessionId: string): void {
+  private scheduleTurnInProgressRetry(dbSessionId: string, generation?: number): void {
+    if (generation !== undefined && !this.isDispatchGenerationCurrent(dbSessionId, generation)) {
+      return;
+    }
     if (this.turnInProgressRetryTimers.has(dbSessionId)) {
       return;
     }
@@ -566,7 +578,6 @@ export class SessionDispatchService {
     this.turnInProgressRetryAttempts.delete(dbSessionId);
   }
 
-  /** Resolve or start a client without removing blocked input. */
   private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -592,9 +603,7 @@ export class SessionDispatchService {
     return { client };
   }
 
-  /**
-   * Auto-start a client for queue dispatch using settings from the provided message.
-   */
+  /** Auto-start a client using queued-message settings. */
   private async autoStartClientForQueue(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -968,10 +977,7 @@ export class SessionDispatchService {
       : { policy: 'manual_resume' };
   }
 
-  /**
-   * Evaluate dispatch gate without touching the queue.
-   * Message stays in queue — no requeue needed on block.
-   */
+  /** Evaluate the gate without dequeuing blocked input. */
   private async evaluateDispatchGateSafely(dbSessionId: string): Promise<DispatchGateResult> {
     try {
       return await this.evaluateDispatchGate(dbSessionId);

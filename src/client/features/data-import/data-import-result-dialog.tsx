@@ -11,7 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import type { RecoveryImportReport } from '@/shared/recovery-import-report';
 
-const historyLabel = (model: string) => model.replace(/([a-z])([A-Z])/g, '$1 $2');
+const historyLabel = (model: string) =>
+  model.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2').replace(/([a-z])([A-Z])/g, '$1 $2');
 
 function downloadReport(report: RecoveryImportReport) {
   downloadFile({

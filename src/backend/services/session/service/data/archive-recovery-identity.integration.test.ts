@@ -133,6 +133,8 @@ it.each(['CLAUDE', 'CODEX'] as const)(
     if (!entry) {
       throw new Error('Missing package');
     }
+    // Omitting the marker cannot make a forged modern snapshot a legacy archive.
+    Reflect.deleteProperty(entry, 'identity');
     entry.transcript = entry.transcript.replace('Provider answer', 'Attacker answer');
     entry.sha256 = storage.archiveDigest(entry.transcript);
     entry.byteLength = Buffer.byteLength(entry.transcript);

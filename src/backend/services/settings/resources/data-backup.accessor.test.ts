@@ -56,7 +56,10 @@ import { dataBackupAccessor } from './data-backup.accessor';
 it('includes account identity metadata in the relational snapshot transaction', async () => {
   const snapshot = await dataBackupAccessor.getSnapshotForExport();
   expect(state.transaction).toHaveBeenCalledOnce();
-  expect(state.tx.codexAccount.findMany).toHaveBeenCalledOnce();
+  expect(state.tx.codexAccount.findMany).toHaveBeenCalledExactlyOnceWith({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, label: true, kind: true, enabled: true, identityKey: true },
+  });
   expect(snapshot.codexAccounts).toEqual([
     {
       id: 'managed-account',

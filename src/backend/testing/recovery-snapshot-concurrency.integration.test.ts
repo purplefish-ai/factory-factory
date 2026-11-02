@@ -1,7 +1,10 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { withBackupImport } from '@/backend/services/settings/resources/backup-snapshot';
+import {
+  withBackupImport,
+  withBackupSnapshot,
+} from '@/backend/services/settings/resources/backup-snapshot';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -280,3 +283,37 @@ it('preserves production connection pragmas on the private writer and commits it
   });
   expect(await db.prisma.project.count({ where: { id: 'private-writer-committed' } })).toBe(1);
 });
+
+it.each([
+  { name: 'snapshot', run: withBackupSnapshot },
+  { name: 'import', run: withBackupImport },
+])(
+  'keeps a private $name transaction valid beyond Prisma default five seconds',
+  async ({ name, run }) => {
+    // The new case intentionally crosses the default interactive timeout; existing test limits stay unchanged.
+    const result = await run(db.prisma, async (tx) => {
+      const before = await tx.project.count();
+      await new Promise((resolve) => setTimeout(resolve, 5500));
+      expect(await tx.project.count()).toBe(before);
+      if (name === 'import') {
+        await tx.project.create({
+          data: {
+            id: 'long-budget-import',
+            name: 'Bounded long import',
+            slug: 'long-budget-import',
+            repoPath: '/long',
+            worktreeBasePath: '/long-trees',
+          },
+        });
+      }
+      return before;
+    });
+    expect(await db.prisma.project.count()).toBe(result + Number(name === 'import'));
+    if (name === 'import') {
+      expect(
+        await db.prisma.project.findUnique({ where: { id: 'long-budget-import' } })
+      ).toMatchObject({ name: 'Bounded long import' });
+    }
+  },
+  15_000
+);

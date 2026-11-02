@@ -30,7 +30,7 @@ const archiveRecoveryEntrySchema = z
     startedAt: z.iso.datetime(),
     completedAt: z.iso.datetime(),
     archiveKey: digest,
-    // Omission preserves the strict modern contract for earlier v1 packages.
+    // Unmarked v1 identities are resolved and checked against exact legacy/content keys by the backend.
     identity: z.enum(['content-v1', 'legacy-v1']).optional(),
     sha256: digest,
     byteLength: z.number().int().positive().max(MAX_ARCHIVE_ENTRY_BYTES),
@@ -73,7 +73,7 @@ const archiveRecoveryEntrySchema = z
       (['name', 'workflow', 'provider', 'model', 'startedAt'] as const).some(
         (field) => transcript.metadata[field] !== entry[field]
       ) ||
-      (entry.identity !== 'legacy-v1' && transcript.metadata.completedAt !== entry.completedAt)
+      (entry.identity === 'content-v1' && transcript.metadata.completedAt !== entry.completedAt)
     ) {
       ctx.addIssue({
         code: 'custom',

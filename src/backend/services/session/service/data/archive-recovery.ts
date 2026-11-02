@@ -56,16 +56,15 @@ function legacyArchiveKey(workspaceId: string, id: string, sha256: string): stri
 
 function validateChecksums(recovery: ArchiveRecovery): void {
   for (const entry of recovery.entries) {
-    if (
-      entry.identity === 'legacy-v1' &&
-      entry.archiveKey !== legacyArchiveKey(entry.workspaceId, entry.id, entry.sha256)
-    ) {
+    const matchesLegacyKey =
+      entry.archiveKey === legacyArchiveKey(entry.workspaceId, entry.id, entry.sha256);
+    if (entry.identity === 'legacy-v1' && !matchesLegacyKey) {
       throw new Error(`Invalid legacy archive identity: ${entry.id}`);
     }
     if (archiveDigest(entry.transcript) !== entry.sha256) {
       throw new Error(`Archive checksum mismatch: ${entry.id}`);
     }
-    if (entry.identity !== 'legacy-v1') {
+    if (!(entry.identity === 'legacy-v1' || (entry.identity === undefined && matchesLegacyKey))) {
       validateModernArchiveIdentity(entry);
     }
   }
@@ -150,6 +149,11 @@ export async function exportSessionArchives(
   const recovery = archiveRecoverySchema.parse({ version: 1, entries });
   validateChecksums(recovery);
   return recovery;
+}
+
+/** Validate original bytes and scoped identity before opening an import connection. */
+export function validateSessionArchiveRecovery(recovery: ArchiveRecovery): void {
+  validateChecksums(archiveRecoverySchema.parse(recovery));
 }
 
 /** Relational staging only. The caller must commit before publishing these IDs. */

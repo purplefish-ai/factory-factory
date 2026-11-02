@@ -194,46 +194,57 @@ it.each(
   }
 );
 
-it('normalizes an uncontended legacy effect in order while preserving unrelated local legacy evidence', async () => {
-  const backup = await sourceBackup('legacy');
-  await projectAndWorkspace('local');
-  await legacyGroup('local', 'unrelated-local-receipt');
-  const localEvents = await db.prisma.workspacePREvent.findMany({
-    where: { workspaceId: 'local' },
-    orderBy: { id: 'asc' },
-  });
-  const result = await dataBackupService.importData(backup);
-  expect(
-    await db.prisma.workspacePREvent.findMany({
+it.each(['legacy', 'v6', 'v7'] as const)(
+  'normalizes an uncontended %s effect in order while preserving unrelated local legacy evidence',
+  async (format) => {
+    const backup = await sourceBackup(format);
+    await projectAndWorkspace('local');
+    await legacyGroup('local', 'unrelated-local-receipt');
+    const localEvents = await db.prisma.workspacePREvent.findMany({
       where: { workspaceId: 'local' },
       orderBy: { id: 'asc' },
-    })
-  ).toEqual(localEvents);
-  expect(
-    await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'receipt' } })
-  ).toMatchObject({
-    workspaceId: 'source',
-    eventIds: ['source-first', 'source-second'],
-    state: 'BLOCKED',
-    text: 'source frozen text',
-    provider: 'CODEX',
-    providerSessionId: 'source-native',
-    sessionId: 'source-session',
-    bindingRevision: 1,
-    attempts: 2,
-  });
-  expect(
-    await db.prisma.workspacePREvent.findMany({
-      where: { workspaceId: 'source', batchId: 'receipt' },
-      orderBy: { id: 'asc' },
-    })
-  ).toEqual([
-    expect.objectContaining({ id: 'source-first' }),
-    expect.objectContaining({ id: 'source-second' }),
-  ]);
-  expect(result.recovery.models).toContainEqual({
-    model: 'WorkspacePREvent',
-    imported: 3,
-    skipped: 0,
-  });
-});
+    });
+    const result = await dataBackupService.importData(backup);
+    expect(
+      await db.prisma.workspacePREvent.findMany({
+        where: { workspaceId: 'local' },
+        orderBy: { id: 'asc' },
+      })
+    ).toEqual(localEvents);
+    expect(
+      await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'receipt' } })
+    ).toMatchObject({
+      workspaceId: 'source',
+      eventIds: ['source-first', 'source-second'],
+      state: 'BLOCKED',
+      text: 'source frozen text',
+      provider: 'CODEX',
+      providerSessionId: 'source-native',
+      sessionId: 'source-session',
+      bindingRevision: 1,
+      attempts: 2,
+    });
+    expect(
+      await db.prisma.workspacePREvent.findMany({
+        where: { workspaceId: 'source', batchId: 'receipt' },
+        orderBy: { id: 'asc' },
+      })
+    ).toEqual([
+      expect.objectContaining({ id: 'source-first' }),
+      expect.objectContaining({ id: 'source-second' }),
+    ]);
+    expect(result.recovery.models).toContainEqual({
+      model: 'WorkspacePRDelivery',
+      imported: 1,
+      skipped: 0,
+    });
+    expect(result.recovery.skipped.filter((row) => row.model === 'WorkspacePRDelivery')).toEqual(
+      []
+    );
+    expect(result.recovery.models).toContainEqual({
+      model: 'WorkspacePREvent',
+      imported: 3,
+      skipped: 0,
+    });
+  }
+);

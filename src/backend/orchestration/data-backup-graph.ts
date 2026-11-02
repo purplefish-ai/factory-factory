@@ -7,6 +7,7 @@ export async function selectRecoveryGraph(
   tx: DataBackupTransactionClient,
   projects: ReadonlySet<string>
 ) {
+  const occupied = await existingWorkspaceIds(tx, data.workspaces);
   const children = new Map<string, typeof data.workspaces>();
   const queue: typeof data.workspaces = [];
   for (const workspace of data.workspaces) {
@@ -26,7 +27,7 @@ export async function selectRecoveryGraph(
     if (
       workspaces.has(workspace.id) ||
       !projects.has(workspace.projectId) ||
-      (await tx.workspace.findUnique({ where: { id: workspace.id } }))
+      occupied.has(workspace.id)
     ) {
       continue;
     }
@@ -46,4 +47,22 @@ export async function selectRecoveryGraph(
       workspaces.has(session.workspaceId)
     ),
   };
+}
+
+async function existingWorkspaceIds(
+  tx: DataBackupTransactionClient,
+  workspaces: ExportData['data']['workspaces']
+) {
+  const occupied = new Set<string>();
+  const ids = [...new Set(workspaces.map((row) => row.id))];
+  for (let start = 0; start < ids.length; start += 200) {
+    const rows = await tx.workspace.findMany({
+      where: { id: { in: ids.slice(start, start + 200) } },
+      select: { id: true },
+    });
+    for (const row of rows) {
+      occupied.add(row.id);
+    }
+  }
+  return occupied;
 }

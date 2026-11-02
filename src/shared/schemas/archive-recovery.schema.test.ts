@@ -27,6 +27,7 @@ function entry(padding = '') {
   });
   return {
     id: 'archive',
+    identity: 'content-v1' as const,
     workspaceId: 'workspace',
     sessionId: 'session',
     name: 'saved',
@@ -55,6 +56,22 @@ describe('archive recovery wire boundary', () => {
     ]) {
       expect(archiveRecoverySchema.safeParse(invalid).success).toBe(false);
     }
+  });
+  it('measures non-ASCII transcript bytes rather than UTF-16 code units', () => {
+    const original = entry('é🙂');
+    expect(original.byteLength).toBe(new TextEncoder().encode(original.transcript).length);
+    expect(original.byteLength).toBeGreaterThan(original.transcript.length);
+    expect(
+      archiveRecoverySchema.parse({ version: 1, entries: [original] }).entries[0]?.transcript
+    ).toBe(original.transcript);
+    expect(
+      archiveRecoverySchema.safeParse({
+        version: 1,
+        entries: [{ ...original, byteLength: original.transcript.length }],
+      }).error?.issues
+    ).toContainEqual(
+      expect.objectContaining({ message: 'Invalid archive UTF-8 byte length or encoding' })
+    );
   });
   it('rejects duplicate ids and logical keys and traversal identifiers', () => {
     const original = entry();

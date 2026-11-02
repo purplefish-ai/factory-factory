@@ -20,6 +20,7 @@ vi.mock('@/backend/db', () => ({
 let db: IntegrationDatabase;
 beforeEach(async () => {
   db = await createIntegrationDatabase();
+  vi.stubEnv('BASE_DIR', db.tempDir);
   database.prisma = db.prisma;
   vi.spyOn(configService, 'getBaseDir').mockReturnValue(db.tempDir);
   await db.prisma.project.create({
@@ -46,6 +47,7 @@ beforeEach(async () => {
 }, 30_000);
 afterEach(async () => {
   await destroyIntegrationDatabase(db);
+  vi.unstubAllEnvs();
 });
 
 async function clear() {
@@ -237,3 +239,61 @@ it('observes the source database lookup when a valid import opens its private wr
   expect(connectionLookup).toHaveBeenCalledTimes(1);
   expect(connectionLookup.mock.calls[0]?.[0]).toEqual(['PRAGMA database_list']);
 });
+
+it.each(['completion clock', 'scope', 'forged legacy marker'] as const)(
+  'rejects an unmarked modern archive with changed %s before opening the private import connection',
+  async (kind) => {
+    const { configService: producerConfig } = await vi.importActual<
+      typeof import('@/backend/services/config.service')
+    >('@/backend/services/config.service');
+    expect(producerConfig.getBaseDir()).toBe(db.tempDir);
+    const { closedSessionPersistenceService } = await vi.importActual<
+      typeof import('@/backend/services/session/service/lifecycle/closed-session-persistence.service')
+    >('@/backend/services/session/service/lifecycle/closed-session-persistence.service');
+    await closedSessionPersistenceService.persistClosedSession({
+      workspaceId: 'workspace',
+      sessionId: 'session',
+      worktreePath: db.tempDir,
+      name: 'Archive',
+      workflow: 'default',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      providerSessionId: 'native',
+      conversationEpoch: 1,
+      startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      messages: [
+        {
+          id: 'human',
+          source: 'user',
+          text: 'Exact original request',
+          order: 0,
+          timestamp: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const backup = await dataBackupService.exportData('test');
+    const entry = backup.data.archives!.entries[0]!;
+    Reflect.deleteProperty(entry, 'identity');
+    if (kind === 'completion clock') {
+      entry.completedAt = new Date(new Date(entry.completedAt).getTime() + 1).toISOString();
+    }
+    if (kind === 'scope') {
+      entry.transcript = entry.transcript.replace('"native"', '"other-native"');
+      const { archiveDigest } = await vi.importActual<
+        typeof import('@/backend/services/session/service/lifecycle/closed-session-storage')
+      >('@/backend/services/session/service/lifecycle/closed-session-storage');
+      entry.sha256 = archiveDigest(entry.transcript);
+      entry.byteLength = Buffer.byteLength(entry.transcript);
+    }
+    if (kind === 'forged legacy marker') {
+      entry.identity = 'legacy-v1';
+    }
+    const lookup = vi.spyOn(db.prisma, '$queryRaw');
+    await expect(dataBackupService.importData(backup)).rejects.toThrow(
+      /Invalid (content|legacy) archive/
+    );
+    expect(lookup).not.toHaveBeenCalled();
+    expect(await db.prisma.closedSession.count()).toBe(1);
+    await closedSessionPersistenceService.stopArchiveMaintenance();
+  }
+);

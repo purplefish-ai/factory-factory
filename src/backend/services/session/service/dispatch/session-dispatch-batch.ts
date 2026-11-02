@@ -209,14 +209,14 @@ async function dropBlockedNotification(
     claims.push(claim);
   }
   const reason = await notificationClaimBlockReason(notifications, claim);
-  if (reason) {
+  if (reason && reason !== 'unavailable') {
     if (guard) {
       await guard.check();
       guard.assertCurrent?.();
     }
     notifications.removeBlockedFromQueue(sessionId, messageId, reason);
   }
-  return reason !== undefined;
+  return reason;
 }
 
 /** Receipt/notification acknowledgement must never roll back a successful provider turn. */
@@ -270,6 +270,7 @@ export async function collectDispatchBatch(input: {
   notifications: SessionDispatchNotificationDeliveryService;
   prepareBackground(message: QueuedMessage): Promise<boolean>;
   isHeld?(message: QueuedMessage): Promise<boolean>;
+  onNotificationUnavailable?(): void;
   guard?: SessionCallerGuard;
   isCurrent(): boolean;
 }) {
@@ -282,22 +283,25 @@ export async function collectDispatchBatch(input: {
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
   try {
     for (const message of snapshot.slice(1)) {
-      if (!input.isCurrent() || isCommand(message) || (await input.isHeld?.(message))) {
+      if (await isBatchBoundary(message, input.isCurrent, input.isHeld)) {
         break;
       }
       // One PR claim already covers all pending facts for this conversation.
       if (message.source && messages.some((item) => item.source)) {
         break;
       }
-      if (
-        await dropBlockedNotification(
-          input.notifications,
-          input.sessionId,
-          message.id,
-          claims,
-          input.guard
-        )
-      ) {
+      const reason = await dropBlockedNotification(
+        input.notifications,
+        input.sessionId,
+        message.id,
+        claims,
+        input.guard
+      );
+      if (reason === 'unavailable') {
+        input.onNotificationUnavailable?.();
+        break;
+      }
+      if (reason) {
         continue;
       }
       if (message.source && !(await input.prepareBackground(message))) {
@@ -394,4 +398,12 @@ async function handleMemberErrors(
       `Failed handling ${failures.length} dispatch member failures`
     );
   }
+}
+
+async function isBatchBoundary(
+  message: QueuedMessage,
+  isCurrent: () => boolean,
+  isHeld?: (message: QueuedMessage) => Promise<boolean>
+) {
+  return !isCurrent() || isCommand(message) || (await isHeld?.(message));
 }

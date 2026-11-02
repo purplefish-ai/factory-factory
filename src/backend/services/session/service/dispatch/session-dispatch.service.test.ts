@@ -1,116 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/acp-steering';
-import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
-import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionDispatchService } from './session-dispatch.service';
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
-function enqueue(id: string) {
-  const message: QueuedMessage = {
-    id,
-    text: id,
-    timestamp: '2026-10-27T00:00:00Z',
-    settings: {
-      selectedModel: null,
-      reasoningEffort: null,
-      thinkingEnabled: false,
-      planModeEnabled: false,
-    },
-  };
-  sessionDomainService.enqueue('session', message);
-  return message;
-}
-
-function harness(
-  policy: 'allowed' | 'manual_resume' = 'allowed',
-  notifications?: SessionNotificationDeliveryService,
-  eventAuthority?: { assertOrdinary(id: string): Promise<void> }
-) {
-  let generation = 0;
-  const sendSessionMessage = vi
-    .fn<(sessionId: string, content: string | AgentContentItem[]) => Promise<void>>()
-    .mockResolvedValue(undefined);
-  const steerSessionMessage = vi.fn().mockResolvedValue({ outcome: 'injected' });
-  const startup = {
-    getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
-    getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
-  };
-  const runtimeManager = {
-    isSessionWorking: vi.fn(() => false),
-    isSessionPromptInFlight: vi.fn(() => false),
-    isSessionRunning: vi.fn(() => true),
-  };
-  const resolveQueuedMessageSettings = vi.fn(
-    (_id: string, message: QueuedMessage) => message.settings
-  );
-  const configureQueuedMessage = vi.fn((_id: string, message: QueuedMessage) =>
-    Promise.resolve(message.settings)
-  );
-  const backgroundDelivery = {
-    prepare: vi.fn(),
-    validate: vi.fn().mockResolvedValue(true),
-    fail: vi.fn().mockResolvedValue(undefined),
-    complete: vi.fn().mockResolvedValue(undefined),
-  };
-  const dispatcher = new SessionDispatchService({
-    eventAuthority,
-    runtimeManager,
-    configService: {
-      resolveQueuedMessageSettings,
-      configureQueuedMessage,
-    },
-    promptService: { sendSessionMessage, steerSessionMessage },
-    backgroundDelivery,
-  });
-  dispatcher.configure({
-    initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: policy }) },
-  });
-  dispatcher.configureLifecycle({
-    gate: {
-      getGeneration: () => generation,
-      isGenerationCurrent: (_sessionId, expected) => expected === generation,
-      isSessionStopping: () => false,
-    },
-    startup,
-    notificationDelivery: notifications ?? {
-      claimForDispatch: () => ({ status: 'not_notification' }),
-      getDispatchState: async () => 'pending',
-      acknowledgeSuccessfulDispatch: async () => undefined,
-      recoverPending: async () => ({ dispatchableCount: 0 }),
-      resetSession: () => undefined,
-      removeBlockedFromQueue: () => false,
-      isNotificationMessage: () => false,
-    },
-  });
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue(
-    unsafeCoerce({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } })
-  );
-  return {
-    dispatcher,
-    steerSessionMessage,
-    resolveQueuedMessageSettings,
-    sendSessionMessage,
-    startup,
-    runtimeManager,
-    configureQueuedMessage,
-    backgroundDelivery,
-    stop: () => {
-      generation += 1;
-    },
-  };
-}
+import type { QueuedMessage } from '@/shared/acp-protocol';
+import { deferred, enqueue, harness } from './session-dispatch-recovery.test-support';
 
 afterEach(() => {
   sessionDomainService.clearAllSessions();
@@ -948,3 +843,128 @@ it('a real busy retry timer rechecks the event fence before dequeue or startup',
   expect(h.sendSessionMessage).toHaveBeenCalledOnce();
   expect(sessionDomainService.peekNextMessage('session')).toBe(message);
 });
+
+it.each([
+  { precedingHuman: false, slow: false },
+  { precedingHuman: true, slow: false },
+  { precedingHuman: true, slow: true },
+])(
+  'retains an unavailable notification and retries fairly with preceding human=$precedingHuman slow=$slow',
+  async ({ precedingHuman, slow }) => {
+    vi.useFakeTimers();
+    let available = false;
+    const delivered: string[] = [];
+    const read = vi.fn(() =>
+      available
+        ? Promise.resolve({ deliveredAt: null, recoveryHeld: false })
+        : Promise.reject(new Error('Temporary database read failure'))
+    );
+    const notifications = new SessionNotificationDeliveryService({
+      notificationPort: {
+        listPendingForDelivery: async () => [],
+        findForDelivery: read,
+        markDelivered: (ids) => {
+          delivered.push(...ids);
+          return Promise.resolve();
+        },
+      },
+      queuePort: sessionDomainService,
+      transcriptPort: {
+        getTranscriptSnapshot: (id) => sessionDomainService.getTranscriptSnapshot(id),
+        getHistoryHydrationSource: () => 'none',
+        appendClaudeEvent: () => 0,
+      },
+      deltaPort: sessionDomainService,
+    });
+    const h = harness('allowed', notifications);
+    if (precedingHuman) {
+      enqueue('before');
+    }
+    enqueue('workspace-notification-retry');
+    enqueue('after');
+    const held = deferred();
+    if (slow) {
+      h.sendSessionMessage.mockReturnValueOnce(held.promise);
+    }
+    const dispatch = h.dispatcher.tryDispatchNextMessage('session');
+    if (slow) {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(read).toHaveBeenCalledOnce();
+      held.resolve();
+    }
+    await dispatch;
+    expect(sessionDomainService.getQueueSnapshot('session').map((row) => row.id)).toEqual([
+      'workspace-notification-retry',
+      'after',
+    ]);
+    expect(delivered).toEqual([]);
+    expect(h.sendSessionMessage.mock.calls.map(([, content]) => content)).toEqual(
+      precedingHuman ? ['before'] : []
+    );
+    expect(read).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(read).toHaveBeenCalledOnce();
+    available = true;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(h.sendSessionMessage.mock.calls.at(-1)?.[1]).toBe(
+      'workspace-notification-retry\n\nafter'
+    );
+    expect(delivered).toEqual(['retry']);
+    expect(sessionDomainService.getQueueLength('session')).toBe(0);
+    h.dispatcher.resetDispatchState('session');
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);
+
+it.each(['lookup', 'timer'] as const)(
+  'does not revive unavailable notification retry after stop during %s',
+  async (stage) => {
+    vi.useFakeTimers();
+    let rejectRead!: (error: Error) => void;
+    const pending = new Promise<never>((_resolve, reject) => {
+      rejectRead = reject;
+    });
+    const read = vi.fn(() =>
+      stage === 'lookup' ? pending : Promise.reject(new Error('Temporary database failure'))
+    );
+    const notifications = new SessionNotificationDeliveryService({
+      notificationPort: {
+        listPendingForDelivery: async () => [],
+        findForDelivery: read,
+        markDelivered: vi.fn(async () => undefined),
+      },
+      queuePort: sessionDomainService,
+      transcriptPort: {
+        getTranscriptSnapshot: (id) => sessionDomainService.getTranscriptSnapshot(id),
+        getHistoryHydrationSource: () => 'none',
+        appendClaudeEvent: () => 0,
+      },
+      deltaPort: sessionDomainService,
+    });
+    const h = harness('allowed', notifications);
+    enqueue('workspace-notification-stopped');
+    const dispatch = h.dispatcher.tryDispatchNextMessage('session');
+    if (stage === 'lookup') {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledOnce();
+      h.stop();
+      rejectRead(new Error('Temporary database failure'));
+      await dispatch;
+    } else {
+      await dispatch;
+      expect(vi.getTimerCount()).toBe(1);
+      h.stop();
+      h.dispatcher.resetDispatchState('session');
+    }
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(read).toHaveBeenCalledOnce();
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.getQueueSnapshot('session').map((row) => row.id)).toEqual([
+      'workspace-notification-stopped',
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);

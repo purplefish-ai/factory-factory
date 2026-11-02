@@ -1,12 +1,29 @@
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { Prisma } from '@prisma-gen/client';
 const state = vi.hoisted(() => ({
   constructed: vi.fn(),
+  adapterOptions: vi.fn(),
   logError: vi.fn(),
-  transaction: vi.fn(async (read: () => Promise<unknown>) => await read()),
+  transaction: vi.fn(
+    async (read: () => Promise<unknown>, _options?: { timeout: number }) => await read()
+  ),
   disconnect: vi.fn(async () => undefined),
 }));
+vi.mock('@prisma/adapter-better-sqlite3', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prisma/adapter-better-sqlite3')>();
+  return {
+    ...actual,
+    PrismaBetterSqlite3: class extends actual.PrismaBetterSqlite3 {
+      constructor(options: ConstructorParameters<typeof actual.PrismaBetterSqlite3>[0]) {
+        super(options);
+        state.adapterOptions(options);
+      }
+    },
+  };
+});
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ error: state.logError }),
 }));
@@ -44,7 +61,7 @@ it('closes its private reader after a successful snapshot', async () => {
   await expect(withBackupSnapshot(source, async () => 'snapshot')).resolves.toBe('snapshot');
   expect(state.disconnect).toHaveBeenCalledOnce();
 });
-it('closes its private reader when snapshot decoding fails', async () => {
+it('closes its private reader when the operation rejects', async () => {
   const source = { $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: '/main.db' }]) };
   const failure = new Error('Invalid retained snapshot');
   await expect(withBackupSnapshot(source, () => Promise.reject(failure))).rejects.toBe(failure);
@@ -90,7 +107,7 @@ it('maps SQLite writer contention to a retryable whole-import conflict without h
   });
   expect(state.disconnect).toHaveBeenCalledOnce();
 });
-it('preserves snapshot query failures instead of classifying them as import conflicts', async () => {
+it('passes through the read operation P1008 error without classifying it as an import conflict', async () => {
   const source = { $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: '/main.db' }]) };
   const busy = new Prisma.PrismaClientKnownRequestError('SQLite busy', {
     code: 'P1008',
@@ -98,4 +115,44 @@ it('preserves snapshot query failures instead of classifying them as import conf
   });
   await expect(withBackupSnapshot(source, () => Promise.reject(busy))).rejects.toBe(busy);
   expect(state.disconnect).toHaveBeenCalledOnce();
+});
+
+it('reports an exhausted private import transaction as a retryable whole-package conflict', async () => {
+  const source = { $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: '/main.db' }]) };
+  const expired = new Prisma.PrismaClientKnownRequestError('Transaction expired', {
+    code: 'P2028',
+    clientVersion: 'test',
+  });
+  await expect(withBackupImport(source, () => Promise.reject(expired))).rejects.toMatchObject({
+    code: 'CONFLICT',
+    cause: expired,
+  });
+  expect(state.disconnect).toHaveBeenCalledOnce();
+});
+
+it('constructs a physically readonly reader and separately tuned writer with bounded transaction budgets', async () => {
+  const source = { $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: '/main.db' }]) };
+  await withBackupSnapshot(source, async () => 'read');
+  expect(state.constructed).toHaveBeenLastCalledWith({ adapter: expect.any(PrismaBetterSqlite3) });
+  expect(state.adapterOptions).toHaveBeenLastCalledWith({
+    url: '/main.db',
+    readonly: true,
+    fileMustExist: true,
+    timeout: 5000,
+  });
+  await withBackupImport(source, async () => 'write');
+  expect(state.constructed).toHaveBeenLastCalledWith({
+    adapter: expect.any(TunedPrismaBetterSqlite3),
+  });
+  expect(state.adapterOptions).toHaveBeenLastCalledWith({ url: '/main.db', fileMustExist: true });
+  for (const call of state.transaction.mock.calls) {
+    expect(call[1]).toEqual({ timeout: 120_000 });
+  }
+});
+it('rejects malformed database-list metadata before constructing either private connection', async () => {
+  for (const run of [withBackupSnapshot, withBackupImport]) {
+    const source = { $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: 42 }]) };
+    await expect(run(source, async () => 'unused')).rejects.toThrow(/expected string/);
+    expect(state.constructed).not.toHaveBeenCalled();
+  }
 });

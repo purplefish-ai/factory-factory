@@ -96,6 +96,7 @@ vi.mock('@/backend/db', () => ({
 }));
 
 import { prisma } from '@/backend/db';
+import { recoveryWorkspaceRead } from './data-backup-graph.test-support';
 import { dataBackupService } from './data-backup.service';
 
 const mockProject: Project = {
@@ -449,7 +450,9 @@ describe('DataBackupService', () => {
       });
     }
     Object.assign(mockTx.project, { findMany: prisma.project.findMany });
-    Object.assign(mockTx.workspace, { findMany: prisma.workspace.findMany });
+    Object.assign(mockTx.workspace, {
+      findMany: recoveryWorkspaceRead(mockTx.workspace.findUnique, prisma.workspace.findMany),
+    });
     Object.assign(mockTx.agentSession, {
       findMany: vi.fn((args: Prisma.AgentSessionFindManyArgs) =>
         args.where ? Promise.resolve([]) : prisma.agentSession.findMany(args)
@@ -471,7 +474,6 @@ describe('DataBackupService', () => {
       },
     });
   });
-
   describe('exportData', () => {
     it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
       const pr = mockWorkspace.prs[0]!;
@@ -505,7 +507,6 @@ describe('DataBackupService', () => {
       });
       expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
     });
-
     it('exports version 8 with account bindings and all settings fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
@@ -565,7 +566,6 @@ describe('DataBackupService', () => {
       expect(result.data.userSettings).not.toHaveProperty('deepgramApiKeyEncrypted');
       expect(exportDataSchema.safeParse(result).success).toBe(true);
     });
-
     it('defaults old backups to changes-requested review triggers', () => {
       const exportedData = createImportData({
         userSettings: {

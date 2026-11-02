@@ -16,6 +16,9 @@ export function validateModernArchiveIdentity(entry: ArchiveRecovery['entries'][
     throw new Error(`Invalid content archive snapshot: ${entry.id}`);
   }
   const metadata = snapshot.metadata;
+  if (metadata.completedAt !== entry.completedAt) {
+    throw new Error(`Invalid content archive completion clock: ${entry.id}`);
+  }
   const key = getClosedSessionArchiveKey({
     workspaceId: snapshot.workspaceId,
     sessionId: snapshot.sessionId,

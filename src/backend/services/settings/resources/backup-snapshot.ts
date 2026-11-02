@@ -8,6 +8,9 @@ import { createLogger } from '@/backend/services/logger.service';
 import { PrismaClient, Prisma } from '@prisma-gen/client';
 
 const logger = createLogger('backup-connection');
+// A bounded 64 MiB package can require many owner writes; this is separate
+// from SQLite's five-second busy wait and never makes imports unbounded.
+const BACKUP_TRANSACTION_TIMEOUT_MS = 120_000;
 type BackupSource = Pick<PrismaClient, '$queryRaw'>;
 type BackupOperation<T> = (tx: Prisma.TransactionClient) => Promise<T>;
 
@@ -53,19 +56,19 @@ async function withBackupConnection<T>(
   });
   let failed = false;
   try {
-    return await connection.$transaction(operation);
+    return await connection.$transaction(operation, { timeout: BACKUP_TRANSACTION_TIMEOUT_MS });
   } catch (error) {
     failed = true;
-    // This SQLite adapter maps SQLITE_BUSY (including BUSY_SNAPSHOT) to P1008.
+    // SQLite contention is P1008; an exhausted interactive transaction is P2028.
     // No import effects commit on this failure; retry uses a fresh snapshot.
     if (
       mode === 'write' &&
       error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P1008'
+      (error.code === 'P1008' || error.code === 'P2028')
     ) {
       throw new ApplicationError(
         'CONFLICT',
-        'Database changed or is busy during import. Retry the import.',
+        'Database changed, is busy, or import exceeded its time budget. Retry the whole import.',
         { cause: error }
       );
     }

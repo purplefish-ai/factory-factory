@@ -140,7 +140,10 @@ function assertLiveRecoveryIdentity(origin: Origin, workspace: Workspace | null)
     return;
   }
   if (workspace.projectId !== origin.projectId) {
-    throw new Error('Imported workspace origin belongs to another project');
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      'Imported workspace origin belongs to another project'
+    );
   }
   assertLiveIdentity(origin, workspace);
 }
