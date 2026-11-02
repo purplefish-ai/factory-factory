@@ -474,7 +474,11 @@ export class SessionDomainService extends EventEmitter {
   }
 
   clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
-    const store = this.registry.getOrCreateActive(sessionId);
+    // Cleanup must not revive a deleted or preservation-only session.
+    const store = this.registry.getExisting(sessionId);
+    if (!store) {
+      return;
+    }
     const pendingRequest = store.pendingInteractiveRequest;
     const hadQueuedWork = clearQueuedWork(store);
 

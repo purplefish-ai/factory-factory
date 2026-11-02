@@ -1309,3 +1309,17 @@ on entry and after physical cleanup, while its stop reservation remains held, so
 input arriving during the stop is cancelled. Captured PR failure settlement
 compares the attempt as well as the existing binding and recipient identity; a
 failed settlement cannot pause a replacement binding.
+
+Queue cleanup and queue-length reads do not create or activate a session store.
+This keeps post-stop cleanup from reviving a permanently deleted transient
+ratchet session, including while a viewer remains open, and preserves
+rejection-only store expiration. Existing stores still clear queued work and
+publish pending request/queue updates normally.
+
+Resuming exhausted PR delivery allowance can reset an active claim's attempt
+count. Its old captured settlement then fails the attempt fence, but owner
+cleanup releases the active mapping. A subsequent existing idle or regular-poll
+wake performs receipt recovery: delivered receipts settle, absent receipts can
+reclaim under the current binding, and unavailable receipts pause explicitly.
+The nested completion wake may still see the active map; this is not an
+immediate-delivery or polling-time guarantee.

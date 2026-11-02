@@ -20,6 +20,10 @@ export class SessionStoreRegistry {
     return this.stores.get(sessionId) === store;
   }
 
+  getExisting(sessionId: string): SessionStore | undefined {
+    return this.stores.get(sessionId);
+  }
+
   getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
     if (!store) {
@@ -95,7 +99,7 @@ export class SessionStoreRegistry {
   }
 
   getQueueLength(sessionId: string): number {
-    return this.getOrCreate(sessionId).queue.length;
+    return this.getExisting(sessionId)?.queue.length ?? 0;
   }
 
   getQueueSnapshot(sessionId: string): QueuedMessage[] {

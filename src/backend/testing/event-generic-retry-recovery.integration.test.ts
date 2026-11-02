@@ -822,11 +822,16 @@ it.each([
   async (edge, position, revoked) => {
     const { other, workspace, guard, port } = await readyRetryPRFixture();
     const held = boundary();
+    let deliveryId: string | undefined;
     h.session.sessionBackgroundDeliveryService.configure({
       ...port,
       prepare: async (input) => {
         const result = await port.prepare(input);
         expect(result.status).toBe('ready');
+        if (result.status !== 'ready') {
+          throw new Error('Missing prepared claim');
+        }
+        deliveryId = result.delivery.deliveryId;
         if (edge === 'inner') {
           await held.wait();
         }
@@ -834,7 +839,6 @@ it.each([
       },
     });
     let published = false;
-    let deliveryId: string | undefined;
     const prepare = h.session.sessionBackgroundDeliveryService.prepare.bind(
       h.session.sessionBackgroundDeliveryService
     );
@@ -916,9 +920,10 @@ it.each([
       providers[1]!.response.resolve({ stopReason: 'end_turn' });
     }
     await dispatch;
-    if (deliveryId) {
-      expect(h.session.sessionBackgroundDeliveryService.isDeliveryActive(deliveryId)).toBe(false);
+    if (!deliveryId) {
+      throw new Error('Missing captured prepared delivery ID');
     }
+    expect(h.session.sessionBackgroundDeliveryService.isDeliveryActive(deliveryId)).toBe(false);
     if (revoked) {
       expect(providers[1]!.connection.setSessionConfigOption).not.toHaveBeenCalled();
     }
