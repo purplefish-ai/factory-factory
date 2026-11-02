@@ -23,7 +23,14 @@ export const closedSessionsRouter = router({
         limit
       );
 
-      return closedSessions;
+      return closedSessions.map(
+        ({
+          archiveKey: _archiveKey,
+          archiveState: _archiveState,
+          transcriptHash: _transcriptHash,
+          ...summary
+        }) => summary
+      );
     }),
 
   /**

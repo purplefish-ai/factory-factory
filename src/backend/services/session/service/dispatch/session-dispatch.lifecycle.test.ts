@@ -160,7 +160,6 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
-
   it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
     mockSessionService.getSessionClient.mockReturnValue({});
     let resolveSession!: (session: {
@@ -175,12 +174,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         resolveSession = resolve;
       })
     );
-
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
-
     mockSessionService.isSessionStopping.mockReturnValue(true);
     resolveSession({
       workspace: {
@@ -190,11 +187,9 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       },
     });
     await dispatchPromise;
-
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
-
   it('does not reject a queued message when stop begins during permanent gate evaluation', async () => {
     sessionDispatchService.configure({
       initPolicy: {
@@ -213,12 +208,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         resolveSession = resolve;
       })
     );
-
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
-
     mockSessionService.isSessionStopping.mockReturnValue(true);
     resolveSession({
       workspace: {
@@ -228,7 +221,6 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       },
     });
     await dispatchPromise;
-
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
   });

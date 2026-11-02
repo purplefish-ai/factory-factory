@@ -216,3 +216,21 @@ it('normalizes the successful tool-result default without conflating real errors
   expect(key([result()])).toBe(key([result(false)]));
   expect(key([result()])).not.toBe(key([result(true)]));
 });
+
+it('retains the v1 key and raw user block boundaries instead of inferring a joined provider string', () => {
+  const original: ChatMessage = {
+    id: 'old-native',
+    source: 'user',
+    text: 'first',
+    timestamp: '2026-01-01',
+    order: 0,
+    providerPrompt: [
+      { type: 'text', text: 'first' },
+      { type: 'text', text: 'second' },
+    ],
+  };
+  const bytes = JSON.stringify(original);
+  expect(key([original])).toBe('db5a11a88209d368ed913e7c9c5452063fd53b74f081c3c1936b5bd8e6799d1b');
+  expect(key([original])).not.toBe(key([{ ...original, providerPrompt: 'firstsecond' }]));
+  expect(JSON.stringify(original)).toBe(bytes);
+});
