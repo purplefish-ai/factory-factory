@@ -204,6 +204,14 @@ function validateSessionGraph(data: DurableRecovery, graph: Owners) {
   for (const row of [...data.workspaceNotification, ...data.sessionLifecycleEvent]) {
     required(graph.workspaces, row.workspaceId, 'RetainedHistory.workspaceId');
   }
+  for (const event of data.sessionLifecycleEvent) {
+    // Session IDs are retained after deletion, but a surviving package session
+    // must agree with the event's workspace ownership.
+    const session = graph.sessions.get(event.sessionId);
+    if (session) {
+      same(session.workspaceId, event.workspaceId, 'SessionLifecycleEvent.sessionId');
+    }
+  }
 }
 
 /** Actual foreign keys must be closed within the package. Non-FK retained origins,

@@ -3,4 +3,4 @@ export {
   validateRecoveryIdentityUniqueness,
   reportRecoveryImport,
   type RecoveryImportReport,
-} from '../resources/recovery-inventory';
+} from '@/backend/services/settings/resources/recovery-inventory';

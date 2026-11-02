@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { agentSourcePageEvidenceSchema } from '@/shared/agent-source-state';
+import {
+  agentGithubCursorSchema,
+  agentSourcePageEvidenceSchema,
+} from '@/shared/agent-source-state';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 
 type Checkpoint = DurableRecovery['agentSourceCheckpoint'][number];
 type Head = DurableRecovery['agentSourceHead'][number];
-type Claims = Map<string, number>;
+type Claims = Map<string, Map<string | null, number>>;
 const key = (connection: string, identity: string | null) => JSON.stringify([connection, identity]);
 function invalid(): never {
   throw new ApplicationError('INVALID_INPUT', 'Contradictory or incomplete recovery source proof');
@@ -14,8 +17,8 @@ function claim(claims: Claims, connection: string, identity: string | null, orde
   if (order === null) {
     return;
   }
-  const id = key(connection, identity);
-  const previous = claims.get(id);
+  const sourceClaims = claims.get(connection) ?? new Map<string | null, number>();
+  const previous = sourceClaims.get(identity);
   if (
     !Number.isSafeInteger(order) ||
     order < 0 ||
@@ -24,7 +27,8 @@ function claim(claims: Claims, connection: string, identity: string | null, orde
   ) {
     invalid();
   }
-  claims.set(id, order);
+  sourceClaims.set(identity, order);
+  claims.set(connection, sourceClaims);
 }
 function checkpointMetadata(checkpoint: Checkpoint, heads: Head[]) {
   if (
@@ -104,13 +108,15 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
   }
   collectCheckpointClaims(authoritative, states, markers, headsByScan, claims);
   collectRetainedClaims(data, headsByScan, claims);
+  collectCaptureClaims(data, markers, headsByScan, claims);
+  assertCommittedCursorClaims(data, claims);
   for (const checkpoint of authoritative) {
     if (checkpoint.previousBoundaryEventId === null) {
       if (checkpoint.initialSourceOrder !== 0) {
         invalid();
       }
     } else if (
-      claims.get(key(checkpoint.connectionId, checkpoint.previousBoundaryEventId)) !==
+      claims.get(checkpoint.connectionId)?.get(checkpoint.previousBoundaryEventId) !==
       checkpoint.initialSourceOrder
     ) {
       invalid();
@@ -195,6 +201,117 @@ function collectCheckpointClaims(
         head.providerEventId,
         checkpoint.sourceOrder - head.precedingEventCount
       );
+    }
+  }
+}
+
+function capturesByScan(data: DurableRecovery) {
+  const captures = new Map<string, DurableRecovery['agentSourcePage']>();
+  for (const page of data.agentSourcePage) {
+    if (page.phase === 'CAPTURE') {
+      const id = key(page.connectionId, page.scanId);
+      const pages = captures.get(id) ?? [];
+      pages.push(page);
+      captures.set(id, pages);
+    }
+  }
+  return captures;
+}
+function capturePageClaims(
+  page: DurableRecovery['agentSourcePage'][number],
+  heads: Map<string, Head>,
+  offset: number | undefined,
+  highwater: number,
+  claims: Claims
+) {
+  const evidence = agentSourcePageEvidenceSchema.safeParse(page.evidence);
+  if (!evidence.success) {
+    invalid();
+  }
+  for (const entry of evidence.data.entries) {
+    offset ??= heads.get(entry.providerEventId)?.precedingEventCount;
+    if (offset === undefined) {
+      invalid();
+    }
+    claim(claims, page.connectionId, entry.providerEventId, highwater - offset);
+    if (entry.eventId) {
+      offset++;
+    }
+    if (offset > highwater) {
+      invalid();
+    }
+  }
+  return offset;
+}
+function collectCaptureClaims(
+  data: DurableRecovery,
+  markers: ReturnType<typeof collectMarkers>,
+  headsByScan: Map<string, Head[]>,
+  claims: Claims
+) {
+  for (const [id, pages] of capturesByScan(data)) {
+    const marker = markers.get(id);
+    if (marker?.order == null) {
+      continue;
+    }
+    pages.sort((a, b) => a.ordinal - b.ordinal);
+    // Runtime entriesFor/orderForHead walk retained entries in capture order.
+    // Complete checkpoints may have compacted a prefix: their permanent offset
+    // anchors the retained suffix, rather than falsely restarting at highwater.
+    const heads = new Map((headsByScan.get(id) ?? []).map((head) => [head.providerEventId, head]));
+    let offset: number | undefined = pages[0]?.ordinal === 0 ? 0 : undefined;
+    let previous: number | undefined;
+    for (const page of pages) {
+      if (previous !== undefined && page.ordinal !== previous + 1) {
+        invalid();
+      }
+      previous = page.ordinal;
+      offset = capturePageClaims(page, heads, offset, marker.order, claims);
+    }
+  }
+}
+
+function assertCursorInitialization(
+  state: DurableRecovery['agentSourceState'][number],
+  claims: Claims
+) {
+  // prepareBaseline initializes falsy cursors only at zero highwater. It can then
+  // assign any requested head ordinal zero, contradicting retained positive proof.
+  if (state.cursor || state.lastSourceOrder !== 0) {
+    return;
+  }
+  for (const order of claims.get(state.connectionId)?.values() ?? []) {
+    if (order > 0) {
+      invalid();
+    }
+  }
+}
+
+function assertCommittedCursorClaims(data: DurableRecovery, claims: Claims) {
+  for (const state of data.agentSourceState) {
+    assertCursorInitialization(state, claims);
+    const cursor = agentGithubCursorSchema.safeParse(state.cursor);
+    // Truthy opaque legacy bytes cannot pass the runtime parser; unlike falsy
+    // values above they do not enter initialization or authorize new claims.
+    if (!cursor.success) {
+      continue;
+    }
+    const { scan, committedHeadEventId } = cursor.data;
+    if (
+      scan &&
+      (scan.previousBoundaryEventId !== committedHeadEventId ||
+        (scan.phase !== 'FINALIZE' && scan.finalizedCount !== 0))
+    ) {
+      invalid();
+    }
+    // Finalization advances highwater in chunks before committing the new head.
+    const committedOrder =
+      state.lastSourceOrder - (scan?.phase === 'FINALIZE' ? scan.finalizedCount : 0);
+    const retainedOrder =
+      committedHeadEventId === null ? 0 : claims.get(state.connectionId)?.get(committedHeadEventId);
+    // Do not add the imported cursor as an independent checkpoint boundary witness.
+    if (retainedOrder === undefined || retainedOrder !== committedOrder) {
+      invalid();
     }
   }
 }

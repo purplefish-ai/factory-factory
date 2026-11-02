@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
@@ -7,7 +8,6 @@ import {
 } from '@/backend/testing/integration-db';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
-import { dataBackupService } from '../orchestration/data-backup.service';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

@@ -1,13 +1,13 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
-import { getClosedSessionArchiveKey } from '../lifecycle/closed-session-identity';
 
 let db: IntegrationDatabase;
 let recovery: typeof import('./archive-recovery');

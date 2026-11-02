@@ -140,3 +140,92 @@ it('rejects a checkpoint that uses its own captured head as its previous-boundar
   data.agentSourceBaseline = [];
   expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
 });
+
+it('checks legacy finalized capture orders even without a checkpoint for that interval', () => {
+  const data = compactInterval();
+  const marker = data.agentSourcePage[0]!;
+  data.agentSourcePage.push(
+    {
+      ...marker,
+      id: 'legacy-capture',
+      scanId: 'legacy',
+      ordinal: 0,
+      phase: 'CAPTURE',
+      sourceOrder: null,
+      evidence: {
+        ids: ['C', 'A'],
+        entries: [
+          { providerEventId: 'C', eventId: 'old-event' },
+          { providerEventId: 'A', eventId: null },
+        ],
+      },
+    },
+    {
+      ...marker,
+      id: 'legacy-marker',
+      scanId: 'legacy',
+      ordinal: 2,
+      evidence: { ids: ['C'], entries: [] },
+    }
+  );
+  expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
+});
+it('accepts a retained capture suffix after prefix-page compaction', () => {
+  const data = compactInterval();
+  data.agentSourceBaseline[0]!.sourceOrder = 4;
+  Object.assign(data.agentSourceCheckpoint[0]!, {
+    entryCount: 3,
+    executableCount: 2,
+    verifiedCount: 4,
+    initialSourceOrder: 4,
+  });
+  data.agentSourceHead.push(
+    { ...data.agentSourceHead[0]!, providerEventId: 'X', position: 1, precedingEventCount: 1 },
+    { ...data.agentSourceHead[0]!, providerEventId: 'Y', position: 2, precedingEventCount: 1 }
+  );
+  data.agentSourcePage.push({
+    ...data.agentSourcePage[0]!,
+    id: 'suffix',
+    ordinal: 1,
+    phase: 'CAPTURE',
+    sourceOrder: null,
+    evidence: {
+      ids: ['X', 'Y', 'B'],
+      entries: [
+        { providerEventId: 'X', eventId: null },
+        { providerEventId: 'Y', eventId: 'event-Y' },
+      ],
+    },
+  });
+  expect(() => validateRecoverySourceProof(data)).not.toThrow();
+});
+it.each(['CAPTURE', 'VERIFY', 'FINALIZE'] as const)(
+  'uses the committed boundary order for a %s cursor',
+  (phase) => {
+    const data = compactInterval();
+    data.agentSourceState[0]!.lastSourceOrder = phase === 'FINALIZE' ? 1006 : 6;
+    data.agentSourceState[0]!.cursor = {
+      version: 1,
+      provider: 'GITHUB',
+      committedHeadEventId: 'A',
+      scan: {
+        id: 'next-scan',
+        fixedHeadEventId: 'new-head',
+        previousBoundaryEventId: 'A',
+        phase,
+        nextPage: 1,
+        observationCount: 1,
+        verifiedCount: 0,
+        finalizedCount: phase === 'FINALIZE' ? 1000 : 0,
+        resumePage: 1,
+        resumeIds: [],
+        overlapOffset: null,
+        verifyResumeCount: 0,
+        verifySeekingOverlap: false,
+      },
+    };
+    expect(() => validateRecoverySourceProof(data)).not.toThrow();
+    data.agentSourceState[0]!.lastSourceOrder++;
+    expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
+  }
+);

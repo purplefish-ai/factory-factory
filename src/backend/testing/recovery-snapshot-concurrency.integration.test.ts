@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { PrismaClient } from '@prisma-gen/client';
-import { dataBackupService } from '../orchestration/data-backup.service';
 
 const state = vi.hoisted(() => ({ prisma: undefined as unknown }));
 vi.mock('@/backend/db', () => ({

@@ -725,49 +725,101 @@ it('never upgrades unknown historical coverage when an event workspace is reused
   ).toMatchObject({ childHistoryVersion: null });
 });
 
-it('revokes complete child history when backup import skips an existing event workspace', async () => {
+it('preserves complete local child history when backup import skips an existing event workspace', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
     typeof import('@/backend/orchestration/data-backup.service')
   >('@/backend/orchestration/data-backup.service');
   const backup = await dataBackupService.exportData('fixture');
-  expect(
-    await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
-  ).toMatchObject({ childHistoryVersion: 1 });
+  const localWorkspace = await db.prisma.workspace.findUniqueOrThrow({
+    where: { id: h.claim.reservedWorkspaceId },
+  });
+  const localChildren = await db.prisma.workspaceChildOrigin.findMany({
+    where: { parentWorkspaceId: localWorkspace.id },
+  });
+  const parent = backup.data.workspaces[0]!;
+  // A valid source graph can contain a child absent from this destination.
+  // Neither that child nor its provenance may borrow the colliding local parent.
+  backup.data.workspaces.push({
+    ...parent,
+    id: 'source-only-child',
+    name: 'Source child',
+    parentWorkspaceId: parent.id,
+    creationSource: 'CHILD_WORKSPACE',
+    creationMetadata: null,
+  });
+  backup.data.durable!.workspaceChildOrigin.push({
+    parentWorkspaceId: parent.id,
+    childWorkspaceId: 'source-only-child',
+    createdAt: parent.createdAt,
+  });
+  const origin = await db.prisma.workspaceLaunchOrigin.findUnique({
+    where: { runId: h.claim.runId },
+  });
+  expect(origin).toMatchObject({ childHistoryVersion: 1 });
   const imported = await dataBackupService.importData(backup);
-  expect(imported.workspaces.skipped).toBe(1);
-  expect(await observe(h.claim)).toBe('HELD');
+  expect(imported.workspaces.skipped).toBe(2);
+  expect(await db.prisma.workspace.findUnique({ where: { id: localWorkspace.id } })).toEqual(
+    localWorkspace
+  );
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'source-only-child' } })).toBeNull();
+  expect(
+    await db.prisma.workspaceChildOrigin.findMany({
+      where: { parentWorkspaceId: localWorkspace.id },
+    })
+  ).toEqual(localChildren);
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
-  ).toMatchObject({ childHistoryVersion: null });
+  ).toEqual(origin);
+  expect(await observe(h.claim)).toBe('SETTLED');
 });
 
-it('retains imported child ownership after later deletion', async () => {
+it('retains imported child ownership and the settlement fence after later deletion', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
     typeof import('@/backend/orchestration/data-backup.service')
   >('@/backend/orchestration/data-backup.service');
+  const { readChildHistoryClearForTest } = await vi.importActual<
+    typeof import('@/backend/services/agent-definition/resources/testing/agent-child-history.test-support')
+  >('@/backend/services/agent-definition/resources/testing/agent-child-history.test-support');
+  const child = await h.creation.create({
+    type: 'CHILD_WORKSPACE',
+    projectId: h.workspaceSource.projectId,
+    parentWorkspaceId: h.claim.reservedWorkspaceId,
+    name: 'Imported child',
+  });
+  const retained = await db.prisma.workspaceChildOrigin.findMany({
+    where: { parentWorkspaceId: h.claim.reservedWorkspaceId },
+  });
   const backup = await dataBackupService.exportData('fixture');
-  const parent = backup.data.workspaces[0]!;
-  backup.data.workspaces = [
-    {
-      ...parent,
-      id: 'imported-child',
-      name: 'Imported child',
-      parentWorkspaceId: h.claim.reservedWorkspaceId,
-      creationSource: 'CHILD_WORKSPACE',
-      creationMetadata: null,
-    },
-  ];
-  backup.data.agentSessions = [];
-  expect((await dataBackupService.importData(backup)).workspaces.imported).toBe(1);
+  // Restore a closed graph into an empty destination. Imported children cannot
+  // borrow a skipped local parent, and imported running work remains inert.
+  await db.prisma.agentDefinition.deleteMany();
+  await db.prisma.agentEvent.deleteMany();
+  await db.prisma.agentConnection.deleteMany();
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await db.prisma.workspaceLaunchOrigin.deleteMany();
+  await db.prisma.workspaceChildOrigin.deleteMany();
+  await db.prisma.agentSessionLaunchOrigin.deleteMany();
+  expect((await dataBackupService.importData(backup)).workspaces.imported).toBe(2);
+  const importedRun = await db.prisma.agentRun.findUniqueOrThrow({
+    where: { id: h.claim.runId },
+    include: { agentDefinition: true },
+  });
+  expect(importedRun.status).toBe('CANCELLED');
+  expect(retained).toEqual([expect.objectContaining({ childWorkspaceId: child.id })]);
+  expect(
+    await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: importedRun.id } })
+  ).toMatchObject({ childHistoryVersion: 1 });
+  expect(await readChildHistoryClearForTest(db.prisma, importedRun.id)).toBe(false);
+  await h.workspace.workspaceDataService.delete(child.id);
   expect(
     await db.prisma.workspaceChildOrigin.findMany({
       where: { parentWorkspaceId: h.claim.reservedWorkspaceId },
     })
-  ).toEqual([expect.objectContaining({ childWorkspaceId: 'imported-child' })]);
-  await h.workspace.workspaceDataService.delete('imported-child');
-  expect(await observe(h.claim)).toBe('HELD');
+  ).toEqual(retained);
+  expect(await readChildHistoryClearForTest(db.prisma, importedRun.id)).toBe(false);
 });
 
 it('serializes child creation and its retained origin before parent settlement', async () => {

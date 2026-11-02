@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { configService } from '@/backend/services/config.service';
 import { type PrismaClient } from '@prisma-gen/client';
-import { dataBackupService } from '../orchestration/data-backup.service';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,

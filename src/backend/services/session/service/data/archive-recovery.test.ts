@@ -3,24 +3,26 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
-import { archiveRecoverySchema } from '@/shared/schemas/archive-recovery.schema';
-import type { ClosedSession, Prisma } from '@prisma-gen/client';
-import { stageSessionArchiveRecovery } from '../../resources/archive-recovery';
-import { getClosedSessionArchiveKey } from '../lifecycle/closed-session-identity';
-import { closedSessionPersistenceService } from '../lifecycle/closed-session-persistence.service';
+import { stageSessionArchiveRecovery } from '@/backend/services/session/resources/archive-recovery';
+import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/lifecycle/closed-session-persistence.service';
 import {
   archiveDigest,
   closedSessionArchivePath,
   resolveClosedSessionTranscriptPath,
-} from '../lifecycle/closed-session-storage';
+} from '@/backend/services/session/service/lifecycle/closed-session-storage';
+import { archiveRecoverySchema } from '@/shared/schemas/archive-recovery.schema';
+import type { ClosedSession, Prisma } from '@prisma-gen/client';
 import {
   exportSessionArchives,
   publishRestoredSessionArchives,
   restoreSessionArchives,
 } from './archive-recovery';
 
-vi.mock('../../resources/archive-recovery', () => ({ stageSessionArchiveRecovery: vi.fn() }));
-vi.mock('../lifecycle/closed-session-persistence.service', () => ({
+vi.mock('@/backend/services/session/resources/archive-recovery', () => ({
+  stageSessionArchiveRecovery: vi.fn(),
+}));
+vi.mock('@/backend/services/session/service/lifecycle/closed-session-persistence.service', () => ({
   closedSessionPersistenceService: { recoverById: vi.fn() },
 }));
 let directory: string;

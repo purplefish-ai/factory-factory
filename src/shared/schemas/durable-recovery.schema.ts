@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { storedAgentRunContextSchema } from '../agent-run-context';
+import { storedAgentRunContextSchema } from '@/shared/agent-run-context';
 import {
   frozenSubmittedIntentSchema,
   frozenIntentSettingsSchema,

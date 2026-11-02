@@ -1,1 +1,1 @@
-export { restoreAgentConfigRecovery } from '../resources/agent-config-recovery';
+export { restoreAgentConfigRecovery } from '@/backend/services/agent-definition/resources/agent-config-recovery';

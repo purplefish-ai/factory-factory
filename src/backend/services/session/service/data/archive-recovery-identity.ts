@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
 import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
 import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
-import { getClosedSessionArchiveKey } from '../lifecycle/closed-session-identity';
 
 const identitySnapshotSchema = closedSessionTranscriptSchema.extend({
   metadata: closedSessionTranscriptSchema.shape.metadata.extend({

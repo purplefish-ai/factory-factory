@@ -1,9 +1,9 @@
+import { restoreRecoverySessionOrigins } from '@/backend/services/session/resources/agent-session-launch-origin.accessor';
+import { restoreRecoveryChatIntents } from '@/backend/services/session/resources/chat-intent.accessor';
+import { restoreRecoveryLifecycleEvents } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import type { RecoveryImportedIds } from '@/shared/recovery-graph';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { Prisma } from '@prisma-gen/client';
-import { restoreRecoverySessionOrigins } from '../../resources/agent-session-launch-origin.accessor';
-import { restoreRecoveryChatIntents } from '../../resources/chat-intent.accessor';
-import { restoreRecoveryLifecycleEvents } from '../../resources/session-lifecycle-event.accessor';
 
 export async function restoreRetainedSessionRecovery(
   tx: Prisma.TransactionClient,
@@ -17,4 +17,4 @@ export async function restoreRetainedSessionRecovery(
   await restoreRecoveryLifecycleEvents(tx, data, ids);
 }
 
-export { validateRecoveryChatIntentFingerprints } from '../../resources/chat-intent.accessor';
+export { validateRecoveryChatIntentFingerprints } from '@/backend/services/session/resources/chat-intent.accessor';

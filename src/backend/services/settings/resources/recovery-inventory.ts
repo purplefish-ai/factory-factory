@@ -2,55 +2,147 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import type { RecoveryImportReport } from '@/shared/recovery-import-report';
 export type { RecoveryImportReport } from '@/shared/recovery-import-report';
 import { z } from 'zod';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { Prisma } from '@prisma-gen/client';
 
 const identifier = z.union([z.string(), z.number().int()]);
 const record = z.record(z.string(), z.unknown());
-type Group = { model: string; table: string; columns: string[]; values: (string | number)[][] };
-const compoundKeys: Record<string, string[]> = {
-  agentSourceState: ['connectionId'],
-  agentSourceCheckpoint: ['connectionId', 'scanId'],
-  agentSourceHead: ['connectionId', 'scanId', 'providerEventId'],
-  workspaceLaunchOrigin: ['runId'],
-  agentSessionLaunchOrigin: ['runId'],
-  workspaceChildOrigin: ['parentWorkspaceId', 'childWorkspaceId'],
+type ScalarField<Model extends Prisma.ModelName> = Extract<
+  keyof Prisma.TypeMap['model'][Model]['payload']['scalars'],
+  string
+>;
+type DurableKey = Exclude<keyof DurableRecovery, 'jsonStorage'>;
+type DurableRow<Key extends DurableKey> = DurableRecovery[Key] extends readonly (infer Row)[]
+  ? Row
+  : never;
+type DurableDescriptors = {
+  [Key in DurableKey]: {
+    model: Prisma.ModelName;
+    table: string;
+    keys: readonly { field: Extract<keyof DurableRow<Key>, string>; column: string }[];
+  };
 };
+function descriptor<
+  const Model extends Prisma.ModelName,
+  const Table extends string,
+  const Keys extends readonly [
+    { field: ScalarField<NoInfer<Model>>; column: string },
+    ...{ field: ScalarField<NoInfer<Model>>; column: string }[],
+  ],
+>(model: Model, table: Table, keys: Keys) {
+  return { model, table, keys };
+}
+
+// Wire groups never supply SQL identifiers. Every model/table/ordered primary
+// key is explicit, scalar-checked by Prisma, and exhaustively keyed by the wire.
+// Independent schema + migrated SQLite coverage verifies @map/@@map and PKs.
+export const durableRecoveryInventoryDescriptors = {
+  agentSourceCheckpoint: descriptor('AgentSourceCheckpoint', 'AgentSourceCheckpoint', [
+    { field: 'connectionId', column: 'connectionId' },
+    { field: 'scanId', column: 'scanId' },
+  ]),
+  agentSourceHead: descriptor('AgentSourceHead', 'AgentSourceHead', [
+    { field: 'connectionId', column: 'connectionId' },
+    { field: 'scanId', column: 'scanId' },
+    { field: 'providerEventId', column: 'providerEventId' },
+  ]),
+  chatIntent: descriptor('ChatIntent', 'ChatIntent', [{ field: 'id', column: 'id' }]),
+  promptDispatchAttempt: descriptor('PromptDispatchAttempt', 'PromptDispatchAttempt', [
+    { field: 'id', column: 'id' },
+  ]),
+  periodicTask: descriptor('PeriodicTask', 'PeriodicTask', [{ field: 'id', column: 'id' }]),
+  periodicTaskExecution: descriptor('PeriodicTaskExecution', 'PeriodicTaskExecution', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentDefinition: descriptor('AgentDefinition', 'AgentDefinition', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentConnection: descriptor('AgentConnection', 'AgentConnection', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentTrigger: descriptor('AgentTrigger', 'AgentTrigger', [{ field: 'id', column: 'id' }]),
+  agentRun: descriptor('AgentRun', 'AgentRun', [{ field: 'id', column: 'id' }]),
+  agentProposal: descriptor('AgentProposal', 'AgentProposal', [{ field: 'id', column: 'id' }]),
+  agentSourceState: descriptor('AgentSourceState', 'AgentSourceState', [
+    { field: 'connectionId', column: 'connectionId' },
+  ]),
+  agentSourcePage: descriptor('AgentSourcePage', 'AgentSourcePage', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentSourceBaseline: descriptor('AgentSourceBaseline', 'AgentSourceBaseline', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentEvent: descriptor('AgentEvent', 'AgentEvent', [{ field: 'id', column: 'id' }]),
+  agentEvaluation: descriptor('AgentEvaluation', 'AgentEvaluation', [
+    { field: 'id', column: 'id' },
+  ]),
+  agentInitialDelivery: descriptor('AgentInitialDelivery', 'AgentInitialDelivery', [
+    { field: 'id', column: 'id' },
+  ]),
+  workspaceNotification: descriptor('WorkspaceNotification', 'workspace_notifications', [
+    { field: 'id', column: 'id' },
+  ]),
+  workspaceLaunchOrigin: descriptor('WorkspaceLaunchOrigin', 'WorkspaceLaunchOrigin', [
+    { field: 'runId', column: 'runId' },
+  ]),
+  workspaceChildOrigin: descriptor('WorkspaceChildOrigin', 'WorkspaceChildOrigin', [
+    { field: 'parentWorkspaceId', column: 'parentWorkspaceId' },
+    { field: 'childWorkspaceId', column: 'childWorkspaceId' },
+  ]),
+  agentSessionLaunchOrigin: descriptor('AgentSessionLaunchOrigin', 'AgentSessionLaunchOrigin', [
+    { field: 'runId', column: 'runId' },
+  ]),
+  sessionLifecycleEvent: descriptor('SessionLifecycleEvent', 'SessionLifecycleEvent', [
+    { field: 'id', column: 'id' },
+  ]),
+  decisionLog: descriptor('DecisionLog', 'DecisionLog', [{ field: 'id', column: 'id' }]),
+} satisfies DurableDescriptors;
+export const archiveRecoveryInventoryDescriptor = descriptor('ClosedSession', 'ClosedSession', [
+  { field: 'id', column: 'id' },
+]);
+
+type InventoryDescriptor =
+  | (typeof durableRecoveryInventoryDescriptors)[DurableKey]
+  | typeof archiveRecoveryInventoryDescriptor;
+type Group = InventoryDescriptor & { values: (string | number)[][] };
+type StaticIdentifier =
+  | InventoryDescriptor['table']
+  | InventoryDescriptor['keys'][number]['column'];
+function isDurableKey(key: string): key is DurableKey {
+  return Object.hasOwn(durableRecoveryInventoryDescriptors, key);
+}
 function groups(data: ExportData['data']): Group[] {
   const result: Group[] = [];
-  for (const [name, rows] of Object.entries(data.durable ?? {})) {
-    if (name === 'jsonStorage' || !Array.isArray(rows)) {
-      continue;
+  if (data.durable) {
+    for (const name of Object.keys(durableRecoveryInventoryDescriptors)) {
+      if (!isDurableKey(name)) {
+        throw new Error('Unknown recovery inventory descriptor');
+      }
+      const entry = durableRecoveryInventoryDescriptors[name];
+      result.push({
+        ...entry,
+        values: data.durable[name].map((row) => {
+          const parsed = record.parse(row);
+          return entry.keys.map(({ field }) => identifier.parse(parsed[field]));
+        }),
+      });
     }
-    const model = name.charAt(0).toUpperCase() + name.slice(1);
-    const columns = compoundKeys[name] ?? ['id'];
-    result.push({
-      model,
-      table: name === 'workspaceNotification' ? 'workspace_notifications' : model,
-      columns,
-      values: rows.map((row: unknown) => {
-        const parsed = record.parse(row);
-        return columns.map((column) => identifier.parse(parsed[column]));
-      }),
-    });
   }
   if (data.archives) {
     result.push({
-      model: 'ClosedSession',
-      table: 'ClosedSession',
-      columns: ['id'],
+      ...archiveRecoveryInventoryDescriptor,
       values: data.archives.entries.map((row) => [row.id]),
     });
   }
   return result;
 }
-// Names come exclusively from the parsed strict durable schema and fixed column map.
-const quoted = (name: string) => Prisma.raw(`"${name}"`);
+const quoted = (name: StaticIdentifier) => Prisma.raw(`"${name}"`);
 async function existing(tx: Prisma.TransactionClient, group: Group): Promise<Set<string>> {
   const found = new Set<string>();
   for (let start = 0; start < group.values.length; start += 200) {
     const keys = group.values.slice(start, start + 200);
-    const columns = Prisma.join(group.columns.map(quoted));
+    const columns = Prisma.join(group.keys.map(({ column }) => quoted(column)));
     const predicates = keys.map((key) => Prisma.sql`(${Prisma.join(key)})`);
     const rows = z.array(z.object({ identity: z.string() })).parse(
       await tx.$queryRaw`

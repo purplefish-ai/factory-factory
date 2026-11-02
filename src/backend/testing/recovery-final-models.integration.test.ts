@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { configService } from '@/backend/services/config.service';
+import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
 import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
-import { dataBackupService } from '../orchestration/data-backup.service';
-import { getClosedSessionArchiveKey } from '../services/session/service/lifecycle/closed-session-identity';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,

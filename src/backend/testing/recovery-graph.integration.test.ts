@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { configService } from '@/backend/services/config.service';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { type PrismaClient } from '@prisma-gen/client';
-import { dataBackupService } from '../orchestration/data-backup.service';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -235,5 +236,80 @@ it.each(['missing-parent', 'workspace'])(
       /required parent|ancestry cycle/i
     );
     expect(await db.prisma.project.count()).toBe(0);
+  }
+);
+
+it('rejects lifecycle history bound to a session in another imported workspace before any writes', async () => {
+  await db.prisma.workspace.create({
+    data: { id: 'other-workspace', projectId: 'project', name: 'Other' },
+  });
+  await db.prisma.sessionLifecycleEvent.create({
+    data: {
+      id: 'lifecycle',
+      workspaceId: 'workspace',
+      sessionId: 'session',
+      kind: 'TURN_INTERRUPTED',
+      reason: 'PROVIDER_ERROR',
+      message: 'Original session failure',
+      dedupeKey: 'failure',
+    },
+  });
+  const backup = await dataBackupService.exportData('test');
+  backup.data.durable!.sessionLifecycleEvent[0]!.workspaceId = 'other-workspace';
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await expect(dataBackupService.importData(backup)).rejects.toThrow(
+    /SessionLifecycleEvent.sessionId/
+  );
+  expect(await db.prisma.project.count()).toBe(0);
+  expect(await db.prisma.sessionLifecycleEvent.count()).toBe(0);
+});
+
+it('retains lifecycle history for a matching live session and a deleted session', async () => {
+  const rows = await Promise.all(
+    ['session', 'deleted-session'].map((sessionId) =>
+      db.prisma.sessionLifecycleEvent.create({
+        data: {
+          id: `lifecycle-${sessionId}`,
+          workspaceId: 'workspace',
+          sessionId,
+          kind: 'TURN_INTERRUPTED',
+          reason: 'PROVIDER_ERROR',
+          message: 'Retained failure',
+          dedupeKey: 'failure',
+        },
+      })
+    )
+  );
+  const backup = await dataBackupService.exportData('test');
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  const result = await dataBackupService.importData(backup);
+  expect(result.recovery.models).toContainEqual({
+    model: 'SessionLifecycleEvent',
+    imported: 2,
+    skipped: 0,
+  });
+  expect(await db.prisma.sessionLifecycleEvent.findMany({ orderBy: { id: 'asc' } })).toEqual(
+    rows.sort((a, b) => a.id.localeCompare(b.id))
+  );
+});
+
+it.each([4, 5, 6, 7] as const)(
+  'keeps legacy v%s missing-parent recovery as a reported skip',
+  async (schemaVersion) => {
+    const backup = await dataBackupService.exportData('test');
+    backup.meta.recovery = undefined;
+    backup.data.durable = undefined;
+    backup.data.archives = undefined;
+    backup.data.agentSessions = [];
+    backup.data.workspaces[0]!.parentWorkspaceId = 'missing-parent';
+    await db.prisma.workspace.deleteMany();
+    await db.prisma.project.deleteMany();
+    const legacy = exportDataSchema.parse({ ...backup, meta: { ...backup.meta, schemaVersion } });
+    const result = await dataBackupService.importData(legacy);
+    expect(result.projects.imported).toBe(1);
+    expect(result.workspaces).toEqual({ imported: 0, skipped: 1 });
+    expect(await db.prisma.workspace.count()).toBe(0);
   }
 );

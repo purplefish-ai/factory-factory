@@ -1,4 +1,11 @@
 import { open } from 'node:fs/promises';
+import { stageSessionArchiveRecovery } from '@/backend/services/session/resources/archive-recovery';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/lifecycle/closed-session-persistence.service';
+import {
+  archiveDigest,
+  closedSessionArchivePath,
+  resolveClosedSessionTranscriptPath,
+} from '@/backend/services/session/service/lifecycle/closed-session-storage';
 import {
   archiveRecoverySchema,
   MAX_ARCHIVE_ENTRIES,
@@ -7,13 +14,6 @@ import {
   type ArchiveRecovery,
 } from '@/shared/schemas/archive-recovery.schema';
 import type { ClosedSession, Prisma } from '@prisma-gen/client';
-import { stageSessionArchiveRecovery } from '../../resources/archive-recovery';
-import { closedSessionPersistenceService } from '../lifecycle/closed-session-persistence.service';
-import {
-  archiveDigest,
-  closedSessionArchivePath,
-  resolveClosedSessionTranscriptPath,
-} from '../lifecycle/closed-session-storage';
 import { validateModernArchiveIdentity } from './archive-recovery-identity';
 
 /** Bounded exact UTF-8 reads; a concurrent truncate/growth fails this export. */

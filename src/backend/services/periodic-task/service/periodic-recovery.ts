@@ -1,1 +1,1 @@
-export { restorePeriodicRecovery } from '../resources/periodic-recovery';
+export { restorePeriodicRecovery } from '@/backend/services/periodic-task/resources/periodic-recovery';

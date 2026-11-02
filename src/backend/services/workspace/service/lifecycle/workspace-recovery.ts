@@ -1,13 +1,13 @@
 export {
   restoreWorkspaceScheduleLinks,
   restoreRecoveryNotifications,
-} from '../../resources/workspace-recovery';
+} from '@/backend/services/workspace/resources/workspace-recovery';
 
+import { restoreRecoveryChildOrigins } from '@/backend/services/workspace/resources/workspace-child-origin.accessor';
+import { restoreRecoveryWorkspaceOrigins } from '@/backend/services/workspace/resources/workspace-launch-origin.accessor';
 import type { RecoveryImportedIds } from '@/shared/recovery-graph';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { Prisma } from '@prisma-gen/client';
-import { restoreRecoveryChildOrigins } from '../../resources/workspace-child-origin.accessor';
-import { restoreRecoveryWorkspaceOrigins } from '../../resources/workspace-launch-origin.accessor';
 
 export async function restoreRetainedWorkspaceRecovery(
   tx: Prisma.TransactionClient,
