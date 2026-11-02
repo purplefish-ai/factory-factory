@@ -8,13 +8,16 @@ import {
 
 describe('provider busy classification', () => {
   it.each([
-    new Error('A turn is already in progress for this session'),
-    {
-      code: -32_600,
-      message: 'Invalid request',
-      data: { reason: 'A turn is already in progress for this session' },
-    },
-  ])('recognizes an unsent busy response: %j', (error) => {
+    ['Error instance', new Error('A turn is already in progress for this session')],
+    [
+      'structured ACP reason',
+      {
+        code: -32_600,
+        message: 'Invalid request',
+        data: { reason: 'A turn is already in progress for this session' },
+      },
+    ],
+  ] as const)('recognizes an unsent busy response: %s', (_shape, error) => {
     expect(isTurnAlreadyInProgressError(error)).toBe(true);
   });
   it('does not classify ambiguous provider errors as unsent', () => {
