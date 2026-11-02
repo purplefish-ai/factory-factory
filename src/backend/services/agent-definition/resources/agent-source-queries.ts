@@ -108,15 +108,55 @@ export async function historicalHeadOrder(tx: Tx, connectionId: string, head: st
   if (head === null) {
     return 0;
   }
-  const matches = z.array(z.object({ scanId: z.string() })).parse(
-    await tx.$queryRaw`
-    SELECT DISTINCT page."scanId" FROM "AgentSourcePage" page,
-      json_each(json_extract(page."evidence", '$.entries')) item
+  const rejected = await tx.agentSourceCheckpoint.findFirst({
+    where: { connectionId, status: 'INVALID' },
+    select: { scanId: true },
+  });
+  if (rejected) {
+    throw new ApplicationError('CONFLICT', 'Invalid historical source proof requires recovery.');
+  }
+  const indexed = await tx.agentSourceHead.findFirst({
+    where: {
+      connectionId,
+      providerEventId: head,
+      checkpoint: { status: 'COMPLETE' },
+    },
+    include: { checkpoint: true },
+  });
+  if (indexed?.checkpoint.sourceOrder != null) {
+    return indexed.checkpoint.sourceOrder - indexed.precedingEventCount;
+  }
+  // Initial heads have no captured interval. Their durable baseline is also an exact witness.
+  const baseline = await tx.agentSourceBaseline.findFirst({
+    where: { connectionId, headEventId: head, sourceOrder: { not: null } },
+  });
+  const legacy = await legacyHeadOrder(tx, connectionId, head);
+  if (legacy !== null && baseline?.sourceOrder != null && legacy !== baseline.sourceOrder) {
+    throw new ApplicationError(
+      'CONFLICT',
+      'Conflicting historical source ordinals require recovery.'
+    );
+  }
+  return legacy ?? baseline?.sourceOrder ?? null;
+}
+
+async function legacyHeadOrder(tx: Tx, connectionId: string, head: string) {
+  const matches = z
+    .array(z.object({ scanId: z.string(), checkpointStatus: z.string().nullable() }))
+    .parse(
+      await tx.$queryRaw`
+    SELECT DISTINCT page."scanId", checkpoint."status" AS "checkpointStatus" FROM "AgentSourcePage" page
+    LEFT JOIN "AgentSourceCheckpoint" checkpoint ON checkpoint."connectionId" = page."connectionId" AND checkpoint."scanId" = page."scanId"
+    CROSS JOIN json_each(json_extract(page."evidence", '$.entries')) item
     WHERE page."connectionId" = ${connectionId} AND page."phase" = 'CAPTURE'
       AND json_extract(item.value, '$.providerEventId') = ${head}
   `
-  );
-  for (const { scanId } of matches) {
+    );
+  let resolved: number | null = null;
+  for (const { scanId, checkpointStatus } of matches) {
+    if (checkpointStatus === 'INVALID') {
+      throw new ApplicationError('CONFLICT', 'Invalid historical source proof requires recovery.');
+    }
     const completed = await tx.agentSourcePage.findFirst({
       where: { connectionId, scanId, phase: 'FINALIZED' },
     });
@@ -124,14 +164,26 @@ export async function historicalHeadOrder(tx: Tx, connectionId: string, head: st
       continue;
     }
     const entries = await entriesFor(tx, connectionId, scanId);
-    let order = completed.sourceOrder;
-    for (const entry of entries) {
-      if (entry.providerEventId === head) {
-        return order;
-      }
-      if (entry.eventId) {
-        order--;
-      }
+    const order = orderForHead(entries, head, completed.sourceOrder);
+    if (resolved !== null && order !== null && resolved !== order) {
+      throw new ApplicationError(
+        'CONFLICT',
+        'Conflicting historical source ordinals require recovery.'
+      );
+    }
+    resolved = order ?? resolved;
+  }
+  return resolved;
+}
+
+function orderForHead(entries: AgentSourceEntry[], head: string, highwater: number) {
+  let order = highwater;
+  for (const entry of entries) {
+    if (entry.providerEventId === head) {
+      return order;
+    }
+    if (entry.eventId) {
+      order--;
     }
   }
   return null;

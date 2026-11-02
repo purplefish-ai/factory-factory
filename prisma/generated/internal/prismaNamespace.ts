@@ -420,6 +420,8 @@ export const ModelName = {
   AgentRun: 'AgentRun',
   AgentSourceState: 'AgentSourceState',
   AgentSourcePage: 'AgentSourcePage',
+  AgentSourceCheckpoint: 'AgentSourceCheckpoint',
+  AgentSourceHead: 'AgentSourceHead',
   AgentSourceBaseline: 'AgentSourceBaseline',
   AgentEvent: 'AgentEvent',
   AgentEvaluation: 'AgentEvaluation',
@@ -445,7 +447,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2151,6 +2153,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    AgentSourceCheckpoint: {
+      payload: Prisma.$AgentSourceCheckpointPayload<ExtArgs>
+      fields: Prisma.AgentSourceCheckpointFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentSourceCheckpointFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentSourceCheckpointFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentSourceCheckpointFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentSourceCheckpointFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        findMany: {
+          args: Prisma.AgentSourceCheckpointFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>[]
+        }
+        create: {
+          args: Prisma.AgentSourceCheckpointCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        createMany: {
+          args: Prisma.AgentSourceCheckpointCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentSourceCheckpointCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentSourceCheckpointDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        update: {
+          args: Prisma.AgentSourceCheckpointUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentSourceCheckpointDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentSourceCheckpointUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentSourceCheckpointUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentSourceCheckpointUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceCheckpointPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentSourceCheckpointAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentSourceCheckpoint>
+        }
+        groupBy: {
+          args: Prisma.AgentSourceCheckpointGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSourceCheckpointGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentSourceCheckpointCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSourceCheckpointCountAggregateOutputType> | number
+        }
+      }
+    }
+    AgentSourceHead: {
+      payload: Prisma.$AgentSourceHeadPayload<ExtArgs>
+      fields: Prisma.AgentSourceHeadFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AgentSourceHeadFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AgentSourceHeadFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        findFirst: {
+          args: Prisma.AgentSourceHeadFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AgentSourceHeadFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        findMany: {
+          args: Prisma.AgentSourceHeadFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>[]
+        }
+        create: {
+          args: Prisma.AgentSourceHeadCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        createMany: {
+          args: Prisma.AgentSourceHeadCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AgentSourceHeadCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>[]
+        }
+        delete: {
+          args: Prisma.AgentSourceHeadDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        update: {
+          args: Prisma.AgentSourceHeadUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        deleteMany: {
+          args: Prisma.AgentSourceHeadDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AgentSourceHeadUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AgentSourceHeadUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>[]
+        }
+        upsert: {
+          args: Prisma.AgentSourceHeadUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AgentSourceHeadPayload>
+        }
+        aggregate: {
+          args: Prisma.AgentSourceHeadAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAgentSourceHead>
+        }
+        groupBy: {
+          args: Prisma.AgentSourceHeadGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSourceHeadGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AgentSourceHeadCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AgentSourceHeadCountAggregateOutputType> | number
+        }
+      }
+    }
     AgentSourceBaseline: {
       payload: Prisma.$AgentSourceBaselinePayload<ExtArgs>
       fields: Prisma.AgentSourceBaselineFieldRefs
@@ -3356,6 +3506,35 @@ export const AgentSourcePageScalarFieldEnum = {
 export type AgentSourcePageScalarFieldEnum = (typeof AgentSourcePageScalarFieldEnum)[keyof typeof AgentSourcePageScalarFieldEnum]
 
 
+export const AgentSourceCheckpointScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  status: 'status',
+  nextOrdinal: 'nextOrdinal',
+  entryCount: 'entryCount',
+  executableCount: 'executableCount',
+  verifiedCount: 'verifiedCount',
+  headEventId: 'headEventId',
+  boundaryKnown: 'boundaryKnown',
+  previousBoundaryEventId: 'previousBoundaryEventId',
+  initialSourceOrder: 'initialSourceOrder',
+  sourceOrder: 'sourceOrder'
+} as const
+
+export type AgentSourceCheckpointScalarFieldEnum = (typeof AgentSourceCheckpointScalarFieldEnum)[keyof typeof AgentSourceCheckpointScalarFieldEnum]
+
+
+export const AgentSourceHeadScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  providerEventId: 'providerEventId',
+  position: 'position',
+  precedingEventCount: 'precedingEventCount'
+} as const
+
+export type AgentSourceHeadScalarFieldEnum = (typeof AgentSourceHeadScalarFieldEnum)[keyof typeof AgentSourceHeadScalarFieldEnum]
+
+
 export const AgentSourceBaselineScalarFieldEnum = {
   id: 'id',
   connectionId: 'connectionId',
@@ -3952,6 +4131,8 @@ export type GlobalOmitConfig = {
   agentRun?: Prisma.AgentRunOmit
   agentSourceState?: Prisma.AgentSourceStateOmit
   agentSourcePage?: Prisma.AgentSourcePageOmit
+  agentSourceCheckpoint?: Prisma.AgentSourceCheckpointOmit
+  agentSourceHead?: Prisma.AgentSourceHeadOmit
   agentSourceBaseline?: Prisma.AgentSourceBaselineOmit
   agentEvent?: Prisma.AgentEventOmit
   agentEvaluation?: Prisma.AgentEvaluationOmit

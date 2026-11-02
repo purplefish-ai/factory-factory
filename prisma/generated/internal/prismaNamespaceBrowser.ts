@@ -74,6 +74,8 @@ export const ModelName = {
   AgentRun: 'AgentRun',
   AgentSourceState: 'AgentSourceState',
   AgentSourcePage: 'AgentSourcePage',
+  AgentSourceCheckpoint: 'AgentSourceCheckpoint',
+  AgentSourceHead: 'AgentSourceHead',
   AgentSourceBaseline: 'AgentSourceBaseline',
   AgentEvent: 'AgentEvent',
   AgentEvaluation: 'AgentEvaluation',
@@ -526,6 +528,35 @@ export const AgentSourcePageScalarFieldEnum = {
 } as const
 
 export type AgentSourcePageScalarFieldEnum = (typeof AgentSourcePageScalarFieldEnum)[keyof typeof AgentSourcePageScalarFieldEnum]
+
+
+export const AgentSourceCheckpointScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  status: 'status',
+  nextOrdinal: 'nextOrdinal',
+  entryCount: 'entryCount',
+  executableCount: 'executableCount',
+  verifiedCount: 'verifiedCount',
+  headEventId: 'headEventId',
+  boundaryKnown: 'boundaryKnown',
+  previousBoundaryEventId: 'previousBoundaryEventId',
+  initialSourceOrder: 'initialSourceOrder',
+  sourceOrder: 'sourceOrder'
+} as const
+
+export type AgentSourceCheckpointScalarFieldEnum = (typeof AgentSourceCheckpointScalarFieldEnum)[keyof typeof AgentSourceCheckpointScalarFieldEnum]
+
+
+export const AgentSourceHeadScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  providerEventId: 'providerEventId',
+  position: 'position',
+  precedingEventCount: 'precedingEventCount'
+} as const
+
+export type AgentSourceHeadScalarFieldEnum = (typeof AgentSourceHeadScalarFieldEnum)[keyof typeof AgentSourceHeadScalarFieldEnum]
 
 
 export const AgentSourceBaselineScalarFieldEnum = {

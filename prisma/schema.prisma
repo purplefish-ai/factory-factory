@@ -790,6 +790,7 @@ model AgentSourceState {
   updatedAt      DateTime        @updatedAt
   pages          AgentSourcePage[]
   baselines      AgentSourceBaseline[]
+  checkpoints    AgentSourceCheckpoint[]
 }
 
 /// Immutable ordered feed/control identities. PR and unsupported content is never retained.
@@ -807,6 +808,42 @@ model AgentSourcePage {
   createdAt DateTime @default(now())
 
   @@unique([connectionId, scanId, ordinal])
+  @@index([connectionId, phase, scanId, ordinal])
+}
+
+/// Retained interval proof. Only COMPLETE rows authorize historical reads and page compaction.
+model AgentSourceCheckpoint {
+  connectionId String
+  scanId String
+  source AgentSourceState @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
+  status String @default("BUILDING")
+  nextOrdinal Int @default(0)
+  entryCount Int @default(0)
+  executableCount Int @default(0)
+  verifiedCount Int @default(0)
+  headEventId String?
+  boundaryKnown Boolean @default(false)
+  previousBoundaryEventId String?
+  initialSourceOrder Int?
+  sourceOrder Int?
+  heads AgentSourceHead[]
+
+  @@id([connectionId, scanId])
+  @@index([connectionId, status])
+}
+
+/// Every captured provider identity, including unsupported/control heads, in API order.
+model AgentSourceHead {
+  connectionId String
+  scanId String
+  providerEventId String
+  position Int
+  precedingEventCount Int // Canonical ordinal = completed checkpoint highwater minus this offset
+  checkpoint AgentSourceCheckpoint @relation(fields: [connectionId, scanId], references: [connectionId, scanId], onDelete: Cascade)
+
+  @@id([connectionId, scanId, providerEventId])
+  @@unique([connectionId, scanId, position])
+  @@index([connectionId, providerEventId])
 }
 
 /// Prepared provider head; an ordinal is assigned only after all older captured events.
@@ -820,6 +857,7 @@ model AgentSourceBaseline {
   createdAt DateTime @default(now())
 
   @@index([connectionId, sourceOrder])
+  @@index([connectionId, headEventId])
 }
 
 model AgentEvent {

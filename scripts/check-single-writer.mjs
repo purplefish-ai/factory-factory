@@ -531,6 +531,10 @@ const OWNED_SIDE_TABLES = {
   agentSourceState: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   agentSourcePage: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   agentSourceBaseline: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
+  agentSourceCheckpoint:
+    'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor.ts',
+  agentSourceHead:
+    'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor.ts',
   workspacePRDedicatedSession:
     'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
   sessionLifecycleEvent:
