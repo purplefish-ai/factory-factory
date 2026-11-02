@@ -237,6 +237,23 @@ function writeToConsole(stream: ConsoleStream, write: () => void): void {
   }
 }
 
+// Never route this fallback through the logger or retry a broken pipe.
+function writeFatalRecordToStderr(record: string): void {
+  try {
+    const bytes = Buffer.from(record);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const written = writeSync(2, bytes, offset, bytes.length - offset);
+      if (written <= 0) {
+        break;
+      }
+      offset += written;
+    }
+  } catch {
+    // Both terminal sinks are unavailable; shutdown must still proceed.
+  }
+}
+
 /**
  * Logger class for structured logging
  */
@@ -304,13 +321,7 @@ class Logger {
         mkdirSync(dirname(path), { recursive: true });
         appendFileSync(path, record);
       } catch {
-        // A single direct write preserves the cause when the file is unavailable.
-        // Never route this fallback through the logger or retry a broken pipe.
-        try {
-          writeSync(2, record);
-        } catch {
-          // Both terminal sinks are unavailable; shutdown must still proceed.
-        }
+        writeFatalRecordToStderr(record);
       }
     } else if (this.config.prettyPrint) {
       this.prettyOutput(entry);
@@ -386,7 +397,9 @@ class Logger {
     }
   }
 
-  /** Write one terminal error directly to the file, bypassing console sinks. */
+  /**
+   * Write one terminal record synchronously, falling back to stderr if the file fails.
+   */
   fatal(message: string, errorOrContext?: Error | Record<string, unknown>): void {
     this.log(
       'error',

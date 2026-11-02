@@ -3,15 +3,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createLogger } from './logger.service';
 
+const fallback = vi.hoisted(() => ({
+  write: vi.fn<(fd: number, bytes: Uint8Array, offset: number, length: number) => number>(),
+}));
+
 vi.mock('node:fs', () => ({
   appendFileSync: vi.fn(),
-  writeSync: vi.fn(),
+  writeSync: fallback.write,
   mkdirSync: vi.fn(),
   existsSync: vi.fn(() => true),
   createWriteStream: vi.fn(),
 }));
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  fallback.write.mockImplementation((_fd, _bytes, _offset, length) => length);
+});
 
 describe('fatal log fallback', () => {
   it('keeps healthy fatal writes off stderr', () => {
@@ -31,9 +38,15 @@ describe('fatal log fallback', () => {
 
       createLogger('fatal-fallback').fatal('terminal failure', new Error('original cause'));
 
-      expect(writeSync).toHaveBeenCalledExactlyOnceWith(2, expect.any(String));
-      const [, record] = vi.mocked(writeSync).mock.calls[0]!;
-      expect(record).toEqual(expect.stringMatching(/\n$/));
+      expect(writeSync).toHaveBeenCalledExactlyOnceWith(
+        2,
+        expect.any(Buffer),
+        0,
+        expect.any(Number)
+      );
+      const [, bytes] = fallback.write.mock.calls[0]!;
+      const record = Buffer.from(bytes).toString('utf8');
+      expect(record).toMatch(/\n$/);
       expect(
         z
           .object({ message: z.string(), error: z.object({ message: z.string() }) })
@@ -55,7 +68,53 @@ describe('fatal log fallback', () => {
     expect(() => createLogger('fatal-fallback').fatal('terminal failure')).not.toThrow();
 
     expect(appendFileSync).toHaveBeenCalledOnce();
-    expect(writeSync).toHaveBeenCalledExactlyOnceWith(2, expect.any(String));
+    expect(writeSync).toHaveBeenCalledExactlyOnceWith(2, expect.any(Buffer), 0, expect.any(Number));
+    expect(stderr).not.toHaveBeenCalled();
+  });
+  it('finishes short writes by byte offset without corrupting Unicode', () => {
+    vi.mocked(appendFileSync).mockImplementation(() => {
+      throw new Error('filesystem unavailable');
+    });
+    const pieces: Buffer[] = [];
+    fallback.write.mockImplementation((_fd, bytes, offset, length) => {
+      const written = Math.min(3, length);
+      pieces.push(Buffer.from(bytes.subarray(offset, offset + written)));
+      return written;
+    });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    createLogger('fatal-fallback').fatal(
+      'terminal failure 👋日本語',
+      new Error('original cause 👋')
+    );
+
+    expect(fallback.write.mock.calls.length).toBeGreaterThan(1);
+    const [, originalRecord] = vi.mocked(appendFileSync).mock.calls[0]!;
+    expect(Buffer.concat(pieces)).toEqual(Buffer.from(String(originalRecord)));
+    expect(
+      z
+        .object({ message: z.string(), error: z.object({ message: z.string() }) })
+        .parse(JSON.parse(Buffer.concat(pieces).toString('utf8')))
+    ).toEqual({ message: 'terminal failure 👋日本語', error: { message: 'original cause 👋' } });
+    expect(appendFileSync).toHaveBeenCalledOnce();
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 2])('stops when stderr makes no progress after %s bytes', (progress) => {
+    vi.mocked(appendFileSync).mockImplementation(() => {
+      throw new Error('filesystem unavailable');
+    });
+    if (progress > 0) {
+      fallback.write.mockReturnValueOnce(progress);
+    }
+    fallback.write.mockReturnValue(0);
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    expect(() => createLogger('fatal-fallback').fatal('terminal failure')).not.toThrow();
+
+    expect(fallback.write).toHaveBeenCalledTimes(progress > 0 ? 2 : 1);
+    expect(fallback.write.mock.calls.at(-1)?.[2]).toBe(progress);
+    expect(appendFileSync).toHaveBeenCalledOnce();
     expect(stderr).not.toHaveBeenCalled();
   });
 });

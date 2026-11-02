@@ -65,10 +65,11 @@ Further uncaught exceptions and unhandled rejections during cleanup do not write
 more fatal records or restart cleanup. Its terminal error is appended
 synchronously to `logs/server.log`, without a console echo, so an immediate
 failure exit retains the original cause when the filesystem is available. If the
-file append fails, one synchronous write to file descriptor 2 attempts to
-preserve the same record; a failure there is contained without retry or
-recursive logging. Ordinary console logging disables a stdout/stderr sink after
-a write failure; sink failures are never logged back through that sink.
+file append fails, a synchronous fallback to file descriptor 2 attempts to
+preserve the same record. Short writes continue from the next byte; an error or
+zero progress stops the fallback without recursive logging. Ordinary console
+logging disables a stdout/stderr sink after a write failure; sink failures are
+never logged back through that sink.
 
 Fatal cleanup has a 30-second deadline, after which the standalone backend exits
 with status 1. This bounds failed-process cleanup without changing normal job
