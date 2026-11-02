@@ -6,11 +6,13 @@ import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import type { RecoveryImportReport } from '@/shared/recovery-import-report';
 import {
   assertRecoveryWireBudget,
   MAX_RECOVERY_HTTP_BODY_BYTES,
 } from '@/shared/recovery-wire-budget';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { DataImportResultDialog } from './data-import-result-dialog';
 
 type ParsedExportData = z.infer<typeof exportDataSchema>;
 
@@ -34,6 +36,7 @@ export function DataImportButton({
   children,
 }: DataImportButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [report, setReport] = useState<RecoveryImportReport | null>(null);
   const [confirmState, setConfirmState] = useState<ImportConfirmState>({
     open: false,
     data: null,
@@ -52,7 +55,18 @@ export function DataImportButton({
         `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
       ].join('\n');
 
-      toast.success('Import completed', { description: summary, duration: 10_000 });
+      const recovery = results.recovery;
+      const skipped = recovery.skipped.length;
+      const imported = recovery.models.reduce((sum, row) => sum + row.imported, 0);
+      const description = `${summary}\nDurable history and archives: ${imported} imported, ${skipped} skipped`;
+      if (skipped > 0) {
+        toast.warning('Import completed with skipped history', { description, duration: 10_000 });
+      } else {
+        toast.success('Import completed', { description, duration: 10_000 });
+      }
+      if (recovery.models.some((row) => row.imported + row.skipped > 0)) {
+        setReport(recovery);
+      }
       setConfirmState({ open: false, data: null, summary: '' });
 
       // Invalidate all queries to refresh data
@@ -158,6 +172,7 @@ export function DataImportButton({
         className="hidden"
       />
 
+      <DataImportResultDialog report={report} onClose={() => setReport(null)} />
       <ConfirmDialog
         open={confirmState.open}
         onOpenChange={(open) => {

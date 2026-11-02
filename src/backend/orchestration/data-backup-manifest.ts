@@ -1,7 +1,9 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { validateRecoverySourceProof } from '@/backend/services/agent-definition';
 import { prismaModelNames, type PrismaModelName } from '@/backend/services/registry';
+import { validateRecoveryIdentityUniqueness } from '@/backend/services/settings';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
+import { validateRecoveryGraph } from './data-backup-graph-validation';
 import { validateRecoveryJsonStorage } from './data-backup-json-storage';
 
 type Coverage = {
@@ -239,6 +241,8 @@ export function validateRecoveryManifest(input: ExportData) {
     }
     return;
   }
+  validateRecoveryIdentityUniqueness(input.data);
+  validateRecoveryGraph(input.data);
   validateRecoveryJsonStorage(input.data);
   if (input.data.durable) {
     validateRecoverySourceProof(input.data.durable);

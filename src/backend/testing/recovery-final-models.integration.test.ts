@@ -61,15 +61,25 @@ async function roundtrip() {
   return backup;
 }
 it('retains complete ordered prompt attempts, original submitted settings and frozen provider identity without enqueueing', async () => {
+  const settings = {
+    selectedModel: 'original',
+    reasoningEffort: null,
+    thinkingEnabled: false,
+    planModeEnabled: false,
+  };
   const submitted = {
     id: 'message',
     text: 'original request',
     timestamp: '2026-01-01T00:00:00.000Z',
-    settings: { selectedModel: 'original' },
+    settings,
   };
   const members = [
     { messageId: 'message', owner: 'human', message: submitted },
-    { messageId: 'external', owner: 'external', message: { text: 'background' } },
+    {
+      messageId: 'external',
+      owner: 'external',
+      message: { ...submitted, id: 'external', text: 'background' },
+    },
   ];
   const providerIdentity = {
     provider: 'CODEX',
@@ -82,7 +92,7 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
       sessionId: 'session',
       members,
       content: 'frozen prompt',
-      effectiveSettings: { selectedModel: 'later' },
+      effectiveSettings: { ...settings, selectedModel: 'later' },
       providerIdentity,
       sendGeneration: 19,
       status: 'uncertain',
@@ -96,7 +106,7 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
       messageId: 'message',
       fingerprint: 'fingerprint',
       submitted,
-      desired: { selectedModel: 'later' },
+      desired: { ...settings, selectedModel: 'later' },
       revision: 3,
       status: 'uncertain',
       attemptId: 'attempt',
@@ -109,7 +119,7 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
       messageId: 'waiting',
       fingerprint: 'waiting-fingerprint',
       submitted: { ...submitted, id: 'waiting' },
-      desired: {},
+      desired: settings,
       status: 'queued',
     },
   });
@@ -125,7 +135,7 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
   });
   expect(await db.prisma.chatIntent.findUnique({ where: { id: 42 } })).toMatchObject({
     submitted,
-    desired: { selectedModel: 'later' },
+    desired: { ...settings, selectedModel: 'later' },
     revision: 3,
     status: 'uncertain',
     attemptId: 'attempt',
@@ -265,8 +275,23 @@ it('rejects malformed frozen prompt membership atomically before importing works
     sessionId: 'session',
     messageId: 'dangling',
     fingerprint: 'hash',
-    submitted: {},
-    desired: {},
+    submitted: {
+      id: 'dangling',
+      text: 'original',
+      timestamp: new Date().toISOString(),
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    },
+    desired: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
     revision: 0,
     status: 'uncertain',
     attemptId: 'missing-attempt',

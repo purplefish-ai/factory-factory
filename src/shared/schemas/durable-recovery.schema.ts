@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { storedAgentRunContextSchema } from '../agent-run-context';
+import {
+  frozenSubmittedIntentSchema,
+  frozenIntentSettingsSchema,
+  submittedIntentSchema,
+} from './chat-intent.schema';
 import { recoveryJsonStorageSchema } from './recovery-json-storage.schema';
 
 // Explicit scalar projections: relation objects and credentials never enter a backup.
@@ -318,18 +323,29 @@ export const agentSourceHeadRecoverySchema = z.strictObject({
   position: z.number().int(),
   precedingEventCount: z.number().int(),
 });
-export const chatIntentRecoverySchema = z.strictObject({
-  id: z.number().int().positive(),
-  sessionId: z.string(),
-  messageId: z.string(),
-  fingerprint: z.string(),
-  submitted: z.json(),
-  desired: z.json(),
-  revision: z.number().int(),
-  status: z.enum(['queued', 'uncertain', 'committed', 'cancelled', 'failed']),
-  attemptId: z.string().nullable(),
-  createdAt: z.iso.datetime(),
-});
+export const chatIntentRecoverySchema = z
+  .strictObject({
+    id: z.number().int().positive(),
+    sessionId: z.string(),
+    messageId: z.string(),
+    fingerprint: z.string(),
+    submitted: frozenSubmittedIntentSchema,
+    desired: frozenIntentSettingsSchema,
+    revision: z.number().int(),
+    status: z.enum(['queued', 'uncertain', 'committed', 'cancelled', 'failed']),
+    attemptId: z.string().nullable(),
+    createdAt: z.iso.datetime(),
+  })
+  .superRefine((row, ctx) => {
+    const submitted = submittedIntentSchema.safeParse(row.submitted);
+    if (submitted.success && submitted.data.id !== row.messageId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['submitted', 'id'],
+        message: 'Submitted intent identity does not match messageId',
+      });
+    }
+  });
 export const promptDispatchAttemptRecoverySchema = z.strictObject({
   id: z.string(),
   sessionId: z.string(),
@@ -339,7 +355,7 @@ export const promptDispatchAttemptRecoverySchema = z.strictObject({
       .catchall(z.json())
   ),
   content: z.json(),
-  effectiveSettings: z.json(),
+  effectiveSettings: frozenIntentSettingsSchema,
   providerIdentity: z.json(),
   sendGeneration: z.number().int(),
   status: z.enum(['uncertain', 'committed', 'cancelled', 'queued']),

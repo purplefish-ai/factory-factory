@@ -25,6 +25,11 @@ import {
   restoreRetainedSessionRecovery,
 } from '@/backend/services/session';
 import {
+  readRecoveryInventory,
+  reportRecoveryImport,
+  type RecoveryImportReport,
+} from '@/backend/services/settings';
+import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
   type WorkspaceForExport,
@@ -82,6 +87,7 @@ export interface ImportCounter {
 }
 
 export interface ImportResults {
+  recovery: RecoveryImportReport;
   projects: ImportCounter;
   workspaces: ImportCounter;
   agentSessions: ImportCounter;
@@ -745,6 +751,7 @@ class DataBackupService {
     // Import in dependency order within a transaction for atomicity
     let importedArchiveIds: string[] = [];
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
+      const recoveryBefore = await readRecoveryInventory(tx, input.data);
       const jsonNulls = input.data.durable
         ? recoveryJsonNullLookup(input.data.durable.jsonStorage)
         : () => false;
@@ -834,6 +841,7 @@ class DataBackupService {
         agentSessions,
         terminalSessions,
         userSettings,
+        recovery: await reportRecoveryImport(tx, input.data, recoveryBefore),
       };
     });
 

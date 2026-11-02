@@ -342,19 +342,26 @@ separately when those are needed; the logical package does not restore them.
 Import persists the graph atomically. A colliding project must match repository
 identity before descendants can attach. Existing workspace IDs are skipped with
 their imported descendants; no imported child/session borrows a local workspace
-by ID alone. Missing parents and cycles are skipped. Saved schedules, agent
-definitions, triggers, connections and PR monitoring restore disabled or paused.
-Unfinished scheduled executions become failed history for explicit review. Run
-snapshots (including atomic expired-context markers), initial-send evidence,
-source pages/checkpoints/heads/baselines, launch origins, interruption history
-and decisions are retained. Unresolved imported runs require explicit review and
-unfinished sends remain ambiguous. Matched evaluations without an admitted run
-restore as skipped review-required history with their original reason and
-explanation retained, so reenabling does not admit the imported decision.
-Pending workspace notifications retain their real delivery timestamps and
-message intent with `recoveryHeld` set; normal pending-list, count and by-ID
-delivery admission exclude held rows. The additive migration defaults existing
-notifications to unheld and does not change ordinary delivery behavior.
+by ID alone. Version 8 rejects missing required foreign-key parents, ownership
+mismatches, duplicate identities and workspace cycles before writing. Retained
+non-FK origins and deleted child/session references may still outlive their
+source rows. Legacy packages retain their earlier skip behavior. The completion
+report lists imported/skipped durable and archive counts plus every skipped
+identity, distinguishing existing IDs from unique-identity or parent conflicts;
+the UI warns about skips and offers the full report for download. Saved
+schedules, agent definitions, triggers, connections and PR monitoring restore
+disabled or paused. Unfinished scheduled executions become failed history for
+explicit review. Run snapshots (including atomic expired-context markers),
+initial-send evidence, source pages/checkpoints/heads/baselines, launch origins,
+interruption history and decisions are retained. Unresolved imported runs
+require explicit review and unfinished sends remain ambiguous. Matched
+evaluations without an admitted run restore as skipped review-required history
+with their original reason and explanation retained, so reenabling does not
+admit the imported decision. Pending workspace notifications retain their real
+delivery timestamps and message intent with `recoveryHeld` set; normal
+pending-list, count and by-ID delivery admission exclude held rows. The additive
+migration defaults existing notifications to unheld and does not change ordinary
+delivery behavior.
 
 Frozen prompt attempts preserve ordered membership, submitted content, accepted
 settings revisions, provider/account identity and evidence. Queued human intents
