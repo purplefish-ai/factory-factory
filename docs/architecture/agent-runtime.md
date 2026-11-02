@@ -1147,8 +1147,8 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents remain
-unactivatable until operator recovery, lossless predelete result capture,
-retention, native capability validation and UI gates exist.
+unactivatable until operator recovery, lossless predelete result capture, native
+capability validation and UI gates exist.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or
