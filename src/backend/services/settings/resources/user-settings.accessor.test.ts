@@ -17,6 +17,17 @@ describe('userSettingsAccessor.update', () => {
     vi.clearAllMocks();
   });
 
+  it.each([undefined, false, true])(
+    'preserves child workspace preference %s on first write',
+    async (enabled) => {
+      mockUpsert.mockImplementation(
+        async ({ create }: { create: Record<string, unknown> }) => create
+      );
+      const settings = await userSettingsAccessor.update({ childWorkspacesEnabled: enabled });
+      expect(settings.childWorkspacesEnabled).toBe(enabled ?? true);
+    }
+  );
+
   it('preserves ratchetEnabled when update creates the settings', async () => {
     mockUpsert.mockImplementation(async ({ create }: { create: { ratchetEnabled?: boolean } }) => ({
       ...create,

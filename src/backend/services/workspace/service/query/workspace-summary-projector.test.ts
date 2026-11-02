@@ -87,6 +87,30 @@ const derivedState = {
 };
 
 describe('HTTP workspace summary projector', () => {
+  it('preserves cross-project parent navigation and child counts in the public summary', () => {
+    const parentWorkspace = {
+      id: 'parent',
+      name: 'Authentication refactor',
+      projectId: 'other-project',
+      projectName: 'API',
+      projectSlug: 'api',
+    };
+    const row = projectWorkspaceSummary(
+      { ...source(), parentWorkspace, childWorkspaceCount: 2 },
+      {
+        sessionSummaries: [],
+        pendingRequestType: null,
+        derivedState,
+        gitStats: null,
+        lastActivityAt: null,
+      }
+    );
+    expect(WorkspaceSummarySchema.parse(serializeWorkspaceSummary(row))).toMatchObject({
+      parentWorkspace,
+      childWorkspaceCount: 2,
+    });
+  });
+
   it('omits retired loop fields while preserving workspace, PR binding and Date', () => {
     const workspace = source();
     const row = projectWorkspaceSummary(workspace, {

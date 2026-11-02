@@ -12,6 +12,7 @@ import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
+import { ChildWorkspaceSettingsSection } from './ChildWorkspaceSettingsSection';
 import { CliAuthSection } from './CliAuthSection';
 import { DataBackupSection } from './DataBackupSection';
 import { IdeSettingsSection } from './IdeSettingsSection';
@@ -25,6 +26,7 @@ import { WorktreeCleanupSection } from './WorktreeCleanupSection';
 const onRequest = fn<(path: string, input: unknown) => void>();
 const defaultSettings = {
   playSoundOnComplete: true,
+  childWorkspacesEnabled: true,
   preferredIde: 'cursor',
   customIdeCommand: null as string | null,
   defaultSessionProvider: 'CLAUDE',
@@ -610,4 +612,73 @@ export const ManagedCodexLogin: Story = {
       <ProviderCliWarning provider="CODEX" />
     </SettingsStoryProvider>
   ),
+};
+
+export const ChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const toggle = await within(canvasElement).findByRole('switch', {
+      name: 'Enable child workspaces',
+    });
+    await expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    await userEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+  },
+};
+export const DisabledChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ childWorkspacesEnabled: false }}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+};
+export const LoadingChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider loading>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+};
+export const RejectedChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.update']}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const toggle = await within(canvasElement).findByRole('switch', {
+      name: 'Enable child workspaces',
+    });
+    await expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        childWorkspacesEnabled: false,
+      })
+    );
+    await within(canvasElement.ownerDocument.body).findByText(
+      'Failed to update settings: Request rejected: userSettings.update'
+    );
+    await expect(toggle).toBeChecked();
+  },
+};
+export const FailedChildWorkspaceSettings: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      'Could not load child workspace settings.'
+    );
+    await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
+  },
 };

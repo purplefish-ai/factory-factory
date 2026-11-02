@@ -16,6 +16,7 @@ const toolResponseSchema = z.object({
 type ToolResponse = z.infer<typeof toolResponseSchema>;
 
 async function callToolWithHttpResponse(options: {
+  childWorkspacesEnabled?: boolean;
   body: unknown;
   status: number;
   toolName:
@@ -34,6 +35,21 @@ async function callToolWithHttpResponse(options: {
   let requestMethod: string | undefined;
   let requestBody: unknown;
   const server = createServer((req, res) => {
+    if (req.url?.startsWith('/api/trpc/userSettings.get')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          result: {
+            data: {
+              json: {
+                childWorkspacesEnabled: options.childWorkspacesEnabled ?? true,
+              },
+            },
+          },
+        })
+      );
+      return;
+    }
     requestMethod = req.method;
     let rawBody = '';
     req.setEncoding('utf8');
@@ -108,6 +124,17 @@ async function callToolWithHttpResponse(options: {
 }
 
 describe('child workspace MCP tRPC errors', () => {
+  it('rejects child tools when disabled without calling the workspace API', async () => {
+    const { response, requestMethod } = await callToolWithHttpResponse({
+      childWorkspacesEnabled: false,
+      status: 200,
+      toolName: 'spawn_child_workspace',
+      body: { result: { data: { json: {} } } },
+    });
+    expect(response.result.isError).toBe(true);
+    expect(requestMethod).toBeUndefined();
+  });
+
   it('binds proposals to the current workspace and returns a renderable reference', async () => {
     const { requestBody, response } = await callToolWithHttpResponse({
       status: 200,
@@ -234,11 +261,35 @@ describe('child workspace MCP tRPC errors', () => {
   });
 });
 
-it.each([null, 'parent-workspace'])(
-  'advertises the exact workspace/authoring catalog and rejects recovery controls (parent=%s)',
-  async (parentWorkspaceId) => {
+it.each([
+  { parentWorkspaceId: null, enabled: true, settingsFailure: null },
+  { parentWorkspaceId: 'parent-workspace', enabled: true, settingsFailure: null },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: null },
+  { parentWorkspaceId: 'parent-workspace', enabled: false, settingsFailure: null },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: 'http' },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: 'malformed' },
+])(
+  'advertises safe tools and rejects recovery controls (parent=$parentWorkspaceId, enabled=$enabled, failure=$settingsFailure)',
+  async ({ parentWorkspaceId, enabled, settingsFailure }) => {
     let calls = 0;
-    const server = createServer((_req, res) => {
+    const server = createServer((req, res) => {
+      if (req.url?.startsWith('/api/trpc/userSettings.get')) {
+        if (settingsFailure) {
+          res.statusCode = settingsFailure === 'http' ? 503 : 200;
+          res.end(
+            JSON.stringify(
+              settingsFailure === 'http'
+                ? { error: { json: { message: 'Settings unavailable' } } }
+                : { result: { data: { json: { childWorkspacesEnabled: 'invalid' } } } }
+            )
+          );
+          return;
+        }
+        res.end(
+          JSON.stringify({ result: { data: { json: { childWorkspacesEnabled: enabled } } } })
+        );
+        return;
+      }
       calls += 1;
       res.end('{}');
     });
@@ -290,6 +341,19 @@ it.each([null, 'parent-workspace'])(
       ];
       const messages = [
         JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'tools/list' }),
+        ...(settingsFailure
+          ? [
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1000,
+                method: 'tools/call',
+                params: {
+                  name: 'spawn_child_workspace',
+                  arguments: { projectId: 'project', name: 'Child' },
+                },
+              }),
+            ]
+          : []),
         ...forbidden.flatMap((name, index) =>
           ['RESOLVE', 'ABANDON', 'RETRY'].map((action, actionIndex) =>
             JSON.stringify({
@@ -343,22 +407,28 @@ it.each([null, 'parent-workspace'])(
         );
       const names = responses.find((row) => row.id === 0)!.result!.tools.map((tool) => tool.name);
       expect(names).toEqual([
-        ...(parentWorkspaceId
-          ? ['send_message_to_parent']
-          : [
-              'list_projects',
-              'spawn_child_workspace',
-              'send_message_to_child',
-              'archive_child_workspace',
-            ]),
+        ...(!enabled
+          ? []
+          : parentWorkspaceId
+            ? ['send_message_to_parent']
+            : [
+                'list_projects',
+                'spawn_child_workspace',
+                'send_message_to_child',
+                'archive_child_workspace',
+              ]),
         'list_agent_sources',
         'propose_agent',
         'get_agent_proposal',
       ]);
-      expect(responses.filter((row) => row.id !== 0)).toHaveLength(forbidden.length * 3);
-      expect(
-        responses.filter((row) => row.id !== 0).every((row) => row.error?.code === -32_601)
-      ).toBe(true);
+      const recoveryResponses = responses.filter((row) => row.id > 0 && row.id < 1000);
+      expect(recoveryResponses).toHaveLength(forbidden.length * 3);
+      expect(recoveryResponses.every((row) => row.error?.code === -32_601)).toBe(true);
+      if (settingsFailure) {
+        expect(responses.find((row) => row.id === 1000)).toMatchObject({
+          error: { code: -32_603 },
+        });
+      }
       expect(calls).toBe(0);
     } finally {
       server.close();

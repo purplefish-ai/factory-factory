@@ -40,6 +40,7 @@ vi.mock('./admin/index', () => ({
   ProjectSettingsSection: () => createElement('section', null, 'Factory Configuration'),
   AppInfoSection: () => createElement('section', null, 'App Info'),
   ChatProviderDefaultsSection: () => createElement('section', null, 'Chat Defaults'),
+  ChildWorkspaceSettingsSection: () => createElement('section', null, 'Child Workspaces'),
   CliAuthSection: () => createElement('section', null, 'CLI Authentication'),
   DataBackupSection: () => createElement('section', null, 'Data Backup'),
   IdeSettingsSection: () => createElement('section', null, 'IDE Settings'),
