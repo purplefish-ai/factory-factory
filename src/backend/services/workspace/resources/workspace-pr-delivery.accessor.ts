@@ -34,7 +34,7 @@ export function projectDeliveryEvents(
   const byId = new Map(deliveries.map((delivery) => [delivery.id, delivery]));
   return events.map((event) => {
     const id = event.batchId ?? event.deliveryId;
-    return projectDeliveryEvent(event, id ? byId.get(id) : undefined);
+    return projectDeliveryEvent(event, id === null ? undefined : byId.get(id));
   });
 }
 
@@ -50,7 +50,7 @@ export async function readDeliveryEvents(
     ...new Set(
       events.flatMap((event) => {
         const id = event.batchId ?? event.deliveryId;
-        return id ? [id] : [];
+        return id === null ? [] : [id];
       })
     ),
   ];

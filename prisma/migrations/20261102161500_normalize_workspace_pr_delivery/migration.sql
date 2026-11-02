@@ -21,7 +21,7 @@ CREATE INDEX "WorkspacePRDelivery_workspaceId_state_idx" ON "WorkspacePRDelivery
 ALTER TABLE "WorkspacePREvent" ADD COLUMN "batchId" TEXT REFERENCES "WorkspacePRDelivery"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 CREATE INDEX "WorkspacePREvent_batchId_idx" ON "WorkspacePREvent"("batchId");
 CREATE TEMP TABLE valid_pr_delivery AS
-SELECT e.deliveryId AS id FROM WorkspacePREvent e WHERE e.deliveryId IS NOT NULL AND
+SELECT e.deliveryId AS id FROM WorkspacePREvent e WHERE e.deliveryId IS NOT NULL AND length(e.deliveryId)>0 AND
 NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.workspaceId IS NOT e.workspaceId)
  AND NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.state IS NOT e.state)
  AND NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.deliverySessionId IS NOT e.deliverySessionId)

@@ -40,6 +40,7 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
     db.exec("UPDATE WorkspacePREvent SET deliveryProviderSessionId=NULL WHERE id='f'");
     insert.run('g', 'g', 'PENDING', 'oversized', 'x'.repeat(16_385), null);
     insert.run('h', 'h', 'PENDING', 'bad-provider', 'frozen', null);
+    insert.run('i', 'i', 'PENDING', '', 'frozen', null);
     db.exec("UPDATE WorkspacePREvent SET deliveryProvider='unsupported' WHERE id='h'");
     db.close();
     db = undefined;
@@ -89,6 +90,7 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
     expect(
       db.prepare("SELECT id,state FROM WorkspacePRDelivery WHERE state='BLOCKED' ORDER BY id").all()
     ).toEqual([
+      { id: '', state: 'BLOCKED' },
       { id: 'bad-provider', state: 'BLOCKED' },
       { id: 'inconsistent', state: 'BLOCKED' },
       { id: 'missing-provider', state: 'BLOCKED' },
