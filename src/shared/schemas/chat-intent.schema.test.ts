@@ -170,3 +170,64 @@ it.each([
     );
   }
 );
+
+it.each(['separate', 'shared'] as const)(
+  'validates large uncertain intent sets in $0 attempts with linear identity probes and exact whole-attempt membership',
+  (layout) => {
+    const count = 512;
+    const intents = Array.from({ length: count }, (_, index) => ({
+      ...intent,
+      id: index + 1,
+      messageId: `message-${index}`,
+      submitted: { ...submitted, id: `message-${index}` },
+      attemptId: `attempt-${index}`,
+      revision: index,
+    }));
+    if (layout === 'shared') {
+      for (const row of intents) {
+        row.attemptId = 'shared-attempt';
+      }
+    }
+    const members = intents.map((row) => ({
+      messageId: row.messageId,
+      owner: 'human',
+      revision: row.revision,
+      message: row.submitted,
+    }));
+    const attempts =
+      layout === 'shared'
+        ? [{ ...attempt, id: 'shared-attempt', members }]
+        : intents.map((row, index) => ({
+            ...attempt,
+            id: row.attemptId,
+            members: [members[index]!],
+          }));
+    let probes = 0;
+    const countedSchema = durableRecoverySchema.safeExtend({
+      chatIntent: durableRecoverySchema.shape.chatIntent.transform((rows) =>
+        rows.map(
+          (row) =>
+            new Proxy(row, {
+              get(target, field, receiver) {
+                if (['status', 'attemptId', 'sessionId', 'messageId'].includes(String(field))) {
+                  probes++;
+                }
+                return Reflect.get(target, field, receiver);
+              },
+            })
+        )
+      ),
+    });
+    const data = { ...durable(), chatIntent: intents, promptDispatchAttempt: attempts };
+    const decoded = countedSchema.parse(data);
+    // Identity access is measured after Zod decoding, independent of time or hardware.
+    expect(probes).toBeLessThanOrEqual(count * 16);
+    expect(decoded.promptDispatchAttempt).toEqual(attempts);
+    const invalid = { ...data, chatIntent: intents.slice(1) };
+    expect(durableRecoverySchema.safeParse(invalid).error?.issues).toContainEqual(
+      expect.objectContaining({
+        message: 'Uncertain dispatch is missing its complete uncertain human membership',
+      })
+    );
+  }
+);

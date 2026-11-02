@@ -32,13 +32,16 @@ afterEach(async () => {
   }
 });
 
-async function fixture() {
+async function fixture(importGate?: () => Promise<void>) {
   const imports: ExportData[] = [];
+  const resetUsageStats = vi.fn();
   const appContext = unsafeCoerce<AppContext>({
     services: {
+      rateLimiter: { resetUsageStats },
       dataBackupService: {
-        importData: (input: ExportData) => {
+        importData: async (input: ExportData) => {
           imports.push(input);
+          await importGate?.();
           return {
             projects: { imported: 0, skipped: 0 },
             workspaces: { imported: 0, skipped: 0 },
@@ -82,7 +85,7 @@ async function fixture() {
     }
     return nativeFetch(new URL(path, url), init);
   });
-  return { app, imports, sent, client: createTrpcClient(), port: address.port };
+  return { app, imports, sent, resetUsageStats, client: createTrpcClient(), port: address.port };
 }
 
 function backup(text: string): ExportData {
@@ -114,9 +117,9 @@ describe('recovery HTTP JSON budget', () => {
     assertRecoveryWireBudget(input);
     expect(Buffer.byteLength(text)).toBeLessThan(11 * 1024 * 1024);
     await expect(f.client.admin.importData.mutate(input)).resolves.toMatchObject({ success: true });
-    expect(f.sent[0]?.path).toBe('/api/trpc/admin.importData?batch=1');
+    expect(f.sent[0]?.path).toBe('/api/trpc/admin.importData');
     expect(f.sent[0]?.bytes).toBeGreaterThan(10 * 1024 * 1024);
-    expect(f.sent[0]?.body).toEqual({ 0: superjson.serialize(input) });
+    expect(f.sent[0]?.body).toEqual(superjson.serialize(input));
     expect(f.imports[0]?.data.userSettings?.customIdeCommand).toBe(text);
   });
 
@@ -194,21 +197,74 @@ describe('recovery HTTP JSON budget', () => {
     expect(f.imports).toHaveLength(0);
   });
 
-  it('rejects combined import routes and unexpected batch indices with a readable client error', async () => {
+  it('isolates a valid import from an ordinary mutation started in the same batch window', async () => {
     const f = await fixture();
-    const results = await Promise.allSettled([
-      f.client.admin.importData.mutate(backup('small')),
-      f.client.admin.resetApiUsageStats.mutate(),
+    const input = backup('small');
+    await expect(
+      Promise.all([
+        f.client.admin.importData.mutate(input),
+        f.client.admin.resetApiUsageStats.mutate(),
+        f.client.admin.resetApiUsageStats.mutate(),
+      ])
+    ).resolves.toEqual([
+      expect.objectContaining({ success: true }),
+      { success: true, message: 'API usage statistics reset' },
+      { success: true, message: 'API usage statistics reset' },
     ]);
-    expect(results).toHaveLength(2);
-    for (const result of results) {
-      expect(result).toMatchObject({
-        status: 'rejected',
-        reason: { message: 'Recovery imports must be sent as a single request.' },
+    expect(f.imports).toEqual([input]);
+    expect(f.resetUsageStats).toHaveBeenCalledTimes(2);
+    expect(f.sent.map((row) => row.path).sort()).toEqual([
+      '/api/trpc/admin.importData',
+      '/api/trpc/admin.resetApiUsageStats,admin.resetApiUsageStats?batch=1',
+    ]);
+  });
+
+  it('cancels an isolated import without cancelling a same-window ordinary mutation', async () => {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const f = await fixture(async () => {
+      started.resolve();
+      await release.promise;
+    });
+    const cancellation = new AbortController();
+    const pending = f.client.admin.importData.mutate(backup('cancelled request'), {
+      signal: cancellation.signal,
+    });
+    const cancelled = expect(pending).rejects.toMatchObject({
+      message: expect.stringMatching(/abort/i),
+    });
+    const ordinary = f.client.admin.resetApiUsageStats.mutate();
+    try {
+      await started.promise;
+      cancellation.abort();
+      await cancelled;
+      await expect(ordinary).resolves.toEqual({
+        success: true,
+        message: 'API usage statistics reset',
       });
+      expect(f.resetUsageStats).toHaveBeenCalledOnce();
+      expect(f.sent.map((row) => row.path).sort()).toEqual([
+        '/api/trpc/admin.importData',
+        '/api/trpc/admin.resetApiUsageStats?batch=1',
+      ]);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([pending, ordinary]);
     }
-    expect(f.imports).toHaveLength(0);
+  });
+
+  it('rejects malicious combined import routes and unexpected batch indices with readable errors', async () => {
+    const f = await fixture();
     const input = superjson.serialize(backup('small'));
+    const combined = await supertest(f.app)
+      .post('/api/trpc/admin.importData,admin.resetApiUsageStats?batch=1')
+      .send({ 0: input, 1: superjson.serialize(undefined) })
+      .expect(400);
+    expect(combined.body.error.json.message).toBe(
+      'Recovery imports must be sent as a single request.'
+    );
+    expect(f.imports).toHaveLength(0);
+    expect(f.resetUsageStats).not.toHaveBeenCalled();
     const response = await supertest(f.app)
       .post('/api/trpc/admin.importData?batch=1')
       .send({ 0: input, 1: input })
