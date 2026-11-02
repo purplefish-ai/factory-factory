@@ -392,11 +392,13 @@ export const durableRecoverySchema = z
     decisionLog: z.array(decisionLogRecoverySchema),
   })
   .superRefine((data, ctx) => {
-    const attempts = new Map(data.promptDispatchAttempt.map((row) => [row.id, row]));
+    const attempts = indexDispatchAttempts(data.promptDispatchAttempt);
+    const uncertainHumans = indexUncertainHumans(data.chatIntent);
     for (const intent of data.chatIntent) {
       validateIntentMembership(intent, attempts, ctx);
     }
     for (const attempt of data.promptDispatchAttempt) {
+      const humanIds = uncertainHumans.get(attempt.id)?.get(attempt.sessionId);
       const ids = attempt.members.map((member) => member.messageId);
       if (new Set(ids).size !== ids.length) {
         ctx.addIssue({ code: 'custom', message: 'Duplicate frozen dispatch member' });
@@ -404,15 +406,7 @@ export const durableRecoverySchema = z
       if (
         attempt.status === 'uncertain' &&
         attempt.members.some(
-          (member) =>
-            member.owner === 'human' &&
-            !data.chatIntent.some(
-              (row) =>
-                row.status === 'uncertain' &&
-                row.attemptId === attempt.id &&
-                row.sessionId === attempt.sessionId &&
-                row.messageId === member.messageId
-            )
+          (member) => member.owner === 'human' && !humanIds?.has(member.messageId)
         )
       ) {
         ctx.addIssue({
@@ -426,10 +420,11 @@ export type DurableRecovery = z.infer<typeof durableRecoverySchema>;
 
 function validateIntentMembership(
   intent: z.infer<typeof chatIntentRecoverySchema>,
-  attempts: ReadonlyMap<string, z.infer<typeof promptDispatchAttemptRecoverySchema>>,
+  attempts: ReadonlyMap<string, DispatchAttemptMembership>,
   ctx: z.RefinementCtx
 ) {
-  const attempt = intent.attemptId ? attempts.get(intent.attemptId) : undefined;
+  const membership = intent.attemptId ? attempts.get(intent.attemptId) : undefined;
+  const attempt = membership?.attempt;
   if (intent.status === 'uncertain' && attempt?.status !== 'uncertain') {
     ctx.addIssue({
       code: 'custom',
@@ -440,15 +435,47 @@ function validateIntentMembership(
     return;
   }
   if (
-    !attempt ||
-    attempt.sessionId !== intent.sessionId ||
-    !attempt.members.some(
-      (member) => member.owner === 'human' && member.messageId === intent.messageId
-    )
+    !membership ||
+    membership.attempt.sessionId !== intent.sessionId ||
+    !membership.humanIds.has(intent.messageId)
   ) {
     ctx.addIssue({
       code: 'custom',
       message: 'Chat intent has missing or foreign frozen dispatch membership',
     });
   }
+}
+
+type DispatchAttemptMembership = {
+  attempt: z.infer<typeof promptDispatchAttemptRecoverySchema>;
+  humanIds: ReadonlySet<string>;
+};
+function indexDispatchAttempts(rows: z.infer<typeof promptDispatchAttemptRecoverySchema>[]) {
+  return new Map<string, DispatchAttemptMembership>(
+    rows.map((attempt) => [
+      attempt.id,
+      {
+        attempt,
+        humanIds: new Set(
+          attempt.members
+            .filter((member) => member.owner === 'human')
+            .map((member) => member.messageId)
+        ),
+      },
+    ])
+  );
+}
+function indexUncertainHumans(rows: z.infer<typeof chatIntentRecoverySchema>[]) {
+  const attempts = new Map<string, Map<string, Set<string>>>();
+  for (const row of rows) {
+    if (row.status !== 'uncertain' || !row.attemptId) {
+      continue;
+    }
+    const sessions = attempts.get(row.attemptId) ?? new Map<string, Set<string>>();
+    const members = sessions.get(row.sessionId) ?? new Set<string>();
+    members.add(row.messageId);
+    sessions.set(row.sessionId, members);
+    attempts.set(row.attemptId, sessions);
+  }
+  return attempts;
 }
