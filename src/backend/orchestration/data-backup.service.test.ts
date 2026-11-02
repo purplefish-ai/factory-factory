@@ -60,6 +60,10 @@ const mockTx = vi.hoisted(() => ({
     create: vi.fn(),
   },
 }));
+vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
+  withBackupSnapshot: (_source: unknown, read: (tx: typeof mockTx) => Promise<unknown>) =>
+    read(mockTx),
+}));
 
 vi.mock('@/backend/db', () => ({
   prisma: {

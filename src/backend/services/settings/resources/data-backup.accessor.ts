@@ -12,6 +12,7 @@ import type {
   TerminalSession,
   UserSettings,
 } from '@prisma-gen/client';
+import { withBackupSnapshot } from './backup-snapshot';
 import { readDurableRecovery } from './durable-recovery';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
@@ -45,7 +46,7 @@ export interface DataBackupSnapshot {
 
 class DataBackupAccessor {
   getSnapshotForExport(): Promise<DataBackupSnapshot> {
-    return prisma.$transaction(async (tx) => {
+    return withBackupSnapshot(prisma, async (tx) => {
       const [projects, workspaces, agentSessions, terminalSessions, userSettings, accounts] =
         await Promise.all([
           tx.project.findMany({ orderBy: { createdAt: 'asc' } }),
