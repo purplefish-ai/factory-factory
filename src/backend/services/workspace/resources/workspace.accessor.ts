@@ -397,11 +397,12 @@ class WorkspaceAccessor {
     if (!row) {
       return null;
     }
+    const selectedPr = selectWorkspacePR(row.prs);
     return {
       status: row.status,
       initCompletedAt: row.initCompletedAt,
-      prUrl: selectWorkspacePR(row.prs)?.url ?? null,
-      prNumber: selectWorkspacePR(row.prs)?.number ?? null,
+      prUrl: selectedPr?.url ?? null,
+      prNumber: selectedPr?.number ?? null,
     };
   }
 
