@@ -4,6 +4,7 @@ import type {
   SessionFileLogger,
   SessionLoadService,
 } from '@/backend/services/session';
+import { frameSessionReplay, SessionReplayLimitError } from './session-replay-framing';
 
 interface SessionLoadAdapterDependencies {
   loadService: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
@@ -28,11 +29,25 @@ export async function executeSessionLoad(
     loadRequestId: loadRequestId ?? null,
     replayEventCount: replay.replayEvents.length,
   });
-  deps.eventBus.publishToSession(sessionId, {
-    type: 'session_replay_batch',
-    replayEvents: replay.replayEvents,
-    ...(loadRequestId ? { loadRequestId } : {}),
-  });
+  try {
+    for (const frame of frameSessionReplay({
+      type: 'session_replay_batch',
+      replayEvents: replay.replayEvents,
+      ...(loadRequestId ? { loadRequestId } : {}),
+    })) {
+      deps.eventBus.publishToSession(sessionId, frame);
+    }
+  } catch (error) {
+    if (!(error instanceof SessionReplayLimitError)) {
+      throw error;
+    }
+    deps.eventBus.publishToSession(sessionId, {
+      type: 'error',
+      code: 413,
+      loadRequestId,
+      message: error.message,
+    });
+  }
   await deps.loadService.completeLoad(prepared);
   return { replies: [] };
 }

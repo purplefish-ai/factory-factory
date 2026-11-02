@@ -45,7 +45,6 @@ export function WorkspaceDetailContainer() {
   const {
     rightPanelVisible,
     setRightPanelVisible,
-    setActiveTopTab,
     activeTabId,
     selectTab,
     tabs,
@@ -274,11 +273,6 @@ export function WorkspaceDetailContainer() {
     inputRef,
   });
 
-  const handleOpenAgents = useCallback(() => {
-    setActiveTopTab('agents');
-    setRightPanelVisible(true);
-  }, [setActiveTopTab, setRightPanelVisible]);
-
   const transcriptIdentity = `${workspaceId}/main/${selectedDbSessionId ?? 'none'}`;
   const transcriptReady =
     persistence.ready && selectedDbSessionId !== null && runtimeSessionId === selectedDbSessionId;
@@ -309,7 +303,6 @@ export function WorkspaceDetailContainer() {
     codexAccountId: sessions?.find((session) => session.id === selectedDbSessionId)?.codexAccountId,
     resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
     onWorkspaceFileLink: handleWorkspaceFileLink,
-    onOpenAgents: handleOpenAgents,
     onOpenSubagent: openSubagentTab,
     parentSessionName: sessions?.find((session) => session.id === selectedDbSessionId)?.name,
     messages,

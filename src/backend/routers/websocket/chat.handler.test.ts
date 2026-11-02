@@ -612,6 +612,12 @@ describe('createChatUpgradeHandler', () => {
 
     expect(wsB.send).toHaveBeenCalledTimes(1);
     expect(wsA.send).not.toHaveBeenCalled();
+    expect(contextB.sessionFileLogger.log).not.toHaveBeenCalledWith(
+      'session-b',
+      'OUT_TO_CLIENT',
+      expect.anything()
+    );
+    wsB.send.mock.calls[0]?.[1]?.();
     expect(contextB.sessionFileLogger.log).toHaveBeenCalledWith(
       'session-b',
       'OUT_TO_CLIENT',
@@ -893,6 +899,14 @@ describe('createChatUpgradeHandler', () => {
       JSON.stringify({ type: 'error', message: 'Invalid message format' }),
       expect.any(Function)
     );
+    expect(sessionFileLogger.log).not.toHaveBeenCalledWith(
+      'session-1',
+      'OUT_TO_CLIENT',
+      expect.anything()
+    );
+    for (const [, flushed] of ws.send.mock.calls) {
+      flushed?.();
+    }
     expect(sessionFileLogger.log).toHaveBeenCalledWith('session-1', 'OUT_TO_CLIENT', {
       type: 'error',
       message: 'Invalid message format',

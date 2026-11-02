@@ -546,13 +546,18 @@ describe('attachChatTransport', () => {
     sessionEventBus.publishToSession('s1', payload);
     expect(fileLogger.log).not.toHaveBeenCalled();
 
+    const ws = new MockWebSocket();
     registry.register('conn-1', {
-      ws: asWs(new MockWebSocket()),
+      ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
     });
     sessionEventBus.publishToSession('s1', payload);
 
+    expect(fileLogger.log).not.toHaveBeenCalled();
+    const callback = ws.send.mock.calls[0]?.[1];
+    expect(callback).toBeTypeOf('function');
+    callback?.();
     expect(fileLogger.log).toHaveBeenCalledWith('s1', 'OUT_TO_CLIENT', payload);
   });
 

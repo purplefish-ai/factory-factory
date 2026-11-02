@@ -1,11 +1,13 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionLoadService } from '@/backend/services/session';
 import { SessionEventBus } from '@/backend/services/session';
+import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import { ChatConnectionRegistry } from './chat-connection-registry';
 import { executeSessionLoad } from './chat-load-adapter';
+import * as replayFraming from './session-replay-framing';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -92,6 +94,56 @@ describe('executeSessionLoad', () => {
       },
       'activation',
     ]);
+  });
+
+  it('bounds every replay frame even when one tool body exceeds the frame limit', async () => {
+    const test = setup();
+    test.deps.loadService.captureReplay = () => ({
+      sessionRuntime: runtime,
+      replayEvents: [
+        {
+          type: 'agent_message',
+          messageId: 'large-tool',
+          order: 7,
+          data: {
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                { type: 'tool_result', tool_use_id: 'call', content: '👋"\\'.repeat(100_000) },
+              ],
+            },
+          },
+        },
+      ],
+    });
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'large' }, test.deps);
+    const outbound = test.calls.filter(
+      (call): call is { payload: unknown } =>
+        typeof call === 'object' && call !== null && 'payload' in call
+    );
+    expect(outbound.length).toBeGreaterThan(1);
+    expect(
+      Math.max(...outbound.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
+    ).toBeLessThanOrEqual(128 * 1024);
+  });
+
+  it('settles a hard framing limit with a correlated terminal error while completing application work', async () => {
+    const test = setup();
+    const framing = vi.spyOn(replayFraming, 'frameSessionReplay').mockImplementation(() => {
+      throw new replayFraming.SessionReplayLimitError(
+        'Session replay exceeds the 128 MiB transport limit'
+      );
+    });
+    try {
+      await executeSessionLoad({ sessionId: 's1', loadRequestId: 'too-large' }, test.deps);
+      expect(test.calls[0]).toMatchObject({
+        payload: { type: 'error', code: 413, loadRequestId: 'too-large' },
+      });
+      expect(test.calls.at(-1)).toBe('activation');
+    } finally {
+      framing.mockRestore();
+    }
   });
 
   it('returns missing-session outcomes without replay, runtime, or activation', async () => {
@@ -239,14 +291,23 @@ describe('executeSessionLoad', () => {
     );
     const connect = () => {
       const frames: unknown[] = [];
+      const assembler = new SessionReplayAssembler();
       const ws = Object.assign(new EventEmitter(), {
         readyState: WS_READY_STATE.OPEN,
         bufferedAmount: 0,
         close: () => ws.emit('close'),
         terminate: () => undefined,
-        send: (payload: string) => {
-          frames.push(JSON.parse(payload));
-          ws.bufferedAmount += Buffer.byteLength(payload);
+        send: (payload: string, callback: (error?: Error) => void) => {
+          const value = assembler.accept(JSON.parse(payload));
+          if (value !== null) {
+            frames.push(value);
+          }
+          const bytes = Buffer.byteLength(payload);
+          ws.bufferedAmount += bytes;
+          queueMicrotask(() => {
+            ws.bufferedAmount -= bytes;
+            callback();
+          });
         },
       });
       registry.register('requester', {
@@ -259,24 +320,25 @@ describe('executeSessionLoad', () => {
     const first = connect();
     registry.expectReplay(first.ws as unknown as WebSocket, 'first');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
-    expect(first.frames).toHaveLength(3);
+    await vi.waitFor(() => expect(first.frames).toHaveLength(3));
     expect(first.frames[0]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'first',
       replayEvents: [{ type: 'assistant_text_delta', text: replayText }],
     });
+    registry.expectReplay(first.ws as unknown as WebSocket, 'first');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
-    expect(first.frames).toHaveLength(5);
+    await vi.waitFor(() => expect(first.frames).toHaveLength(6));
     first.ws.bufferedAmount += 1024 * 1024;
     registry.broadcastToSession('s1', {
       type: 'session_delta',
       data: { type: 'slash_commands', slashCommands: [] },
     });
-    expect(first.frames).toHaveLength(5);
+    expect(first.frames).toHaveLength(6);
     const second = connect();
     registry.expectReplay(second.ws as unknown as WebSocket, 'second');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
-    expect(second.frames).toHaveLength(3);
+    await vi.waitFor(() => expect(second.frames).toHaveLength(3));
     expect(second.frames[0]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'second',

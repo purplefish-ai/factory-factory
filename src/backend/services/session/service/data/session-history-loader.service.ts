@@ -469,6 +469,7 @@ class ClaudeSessionHistoryLoaderService {
     workingDir: string;
     /** Parse only transcript lines containing this text, found by a byte search. */
     onlyLinesContaining?: string;
+    isCurrent?: () => boolean;
   }): Promise<ClaudeSessionHistoryLoadResult> {
     if (!params.providerSessionId) {
       return { status: 'skipped', reason: 'missing_provider_session_id' };
@@ -488,7 +489,8 @@ class ClaudeSessionHistoryLoaderService {
     const readResult = await this.readHistoryFromFile(
       filePath,
       params.providerSessionId,
-      params.onlyLinesContaining
+      params.onlyLinesContaining,
+      params.isCurrent
     );
     if (readResult.hadReadError) {
       return { status: 'error', reason: 'read_failed', filePath };
@@ -499,7 +501,8 @@ class ClaudeSessionHistoryLoaderService {
   private async readHistoryFromFile(
     filePath: string,
     providerSessionId: string,
-    containing?: string
+    containing?: string,
+    isCurrent?: () => boolean
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     const history: HistoryMessage[] = [];
     const fallbackBaseTimestampMs = Date.now();
@@ -508,6 +511,7 @@ class ClaudeSessionHistoryLoaderService {
     await readNonEmptyJsonlLines({
       filePath,
       containing,
+      isCurrent,
       onLine: (trimmed, lineNumber) => {
         const entry = parseHistoryEntry({ line: trimmed, filePath, lineNumber });
         if (!(entry && isEntryEligible(entry, providerSessionId))) {

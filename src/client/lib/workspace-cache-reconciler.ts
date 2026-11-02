@@ -307,7 +307,8 @@ export class ProjectWorkspaceCacheReconciler {
       return false;
     }
     if (
-      (message.type === 'snapshot_full' || message.type === 'snapshot_error') &&
+      (message.type === 'snapshot_full' ||
+        (message.type === 'snapshot_error' && message.projectId !== undefined)) &&
       message.projectId !== this.projectId
     ) {
       return false;

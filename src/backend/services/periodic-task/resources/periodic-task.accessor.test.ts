@@ -571,9 +571,26 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
     prismaMock.periodicTask.findUnique.mockReset();
+    prismaMock.periodicTask.findUnique.mockResolvedValue({
+      id: 'task-1',
+      projectId: 'project-1',
+      name: 'Agent',
+      prompt: 'Instructions',
+      isEnabled: true,
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: null,
+      nextRunAt: new Date('2026-02-28T15:00:00Z'),
+      createdAt: new Date('2026-01-31T12:00:00Z'),
+    });
     prismaMock.periodicTask.update.mockReset();
     prismaMock.periodicTask.updateMany.mockReset();
     prismaMock.periodicTaskExecution.create.mockReset();
+    prismaMock.periodicTaskExecution.create.mockImplementation(async ({ data }) => ({
+      id: 'exec-1',
+      ...data,
+    }));
     prismaMock.$transaction.mockReset();
     prismaMock.$transaction.mockImplementation(async (operation) => operation(prismaMock));
   });
@@ -582,6 +599,28 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
     vi.useRealTimers();
   });
 
+  function reserveCanonical(schedule: {
+    cadence: 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    scheduledTime: string | null;
+    timezone: string | null;
+    scheduledDayOfMonth: number | null;
+    dueAt: Date;
+  }) {
+    const lookup = prismaMock.periodicTask.findUnique.getMockImplementation();
+    prismaMock.periodicTask.findUnique.mockImplementationOnce(async () => ({
+      id: 'task-1',
+      projectId: 'project-1',
+      name: 'Agent',
+      prompt: 'Instructions',
+      isEnabled: true,
+      createdAt: new Date('2026-01-31T12:00:00Z'),
+      ...(await lookup?.()),
+      ...schedule,
+      nextRunAt: schedule.dueAt,
+    }));
+    return periodicTaskAccessor.reserveExecutionAndMarkDispatched('task-1');
+  }
+
   it('creates the execution and advances the schedule in one transaction', async () => {
     const execution = {
       id: 'exec-1',
@@ -589,38 +628,34 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       workspaceId: null,
       status: 'RUNNING',
     };
-    prismaMock.periodicTaskExecution.create.mockResolvedValue(execution);
+
     prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
-      periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-        {
-          periodicTaskId: 'task-1',
-          workspaceId: null,
-          status: 'RUNNING',
-        },
-        {
-          cadence: 'DAILY',
-          scheduledTime: '09:00',
-          timezone: 'UTC',
-          scheduledDayOfMonth: null,
-          dueAt: new Date('2026-02-28T15:00:00.000Z'),
-        }
-      )
-    ).resolves.toBe(execution);
+      reserveCanonical({
+        cadence: 'DAILY',
+        scheduledTime: '09:00',
+        timezone: 'UTC',
+        scheduledDayOfMonth: null,
+        dueAt: new Date('2026-02-28T15:00:00.000Z'),
+      })
+    ).resolves.toMatchObject(execution);
 
     expect(prismaMock.periodicTaskExecution.create).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         periodicTaskId: 'task-1',
         workspaceId: null,
         status: 'RUNNING',
-      },
+      }),
     });
     expect(prismaMock.periodicTask.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'task-1',
         isEnabled: true,
-        nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        nextRunAt: {
+          equals: new Date('2026-02-28T15:00:00.000Z'),
+          lte: new Date('2026-02-28T15:00:00.000Z'),
+        },
         project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
@@ -637,20 +672,13 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
     prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-        {
-          periodicTaskId: 'task-1',
-          workspaceId: null,
-          status: 'RUNNING',
-        },
-        {
-          cadence: 'DAILY',
-          scheduledTime: '09:00',
-          timezone: 'UTC',
-          scheduledDayOfMonth: null,
-          dueAt: new Date('2026-02-28T15:00:00.000Z'),
-        }
-      )
+      reserveCanonical({
+        cadence: 'DAILY',
+        scheduledTime: '09:00',
+        timezone: 'UTC',
+        scheduledDayOfMonth: null,
+        dueAt: new Date('2026-02-28T15:00:00.000Z'),
+      })
     ).resolves.toBeNull();
 
     expect(prismaMock.periodicTaskExecution.create).not.toHaveBeenCalled();
@@ -663,34 +691,24 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       scheduledDayOfMonth: null,
       timezone,
     });
-    prismaMock.periodicTaskExecution.create.mockResolvedValue({
-      id: 'exec-1',
-      periodicTaskId: 'task-1',
-      workspaceId: null,
-      status: 'RUNNING',
-    });
     prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
 
-    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-      {
-        periodicTaskId: 'task-1',
-        workspaceId: null,
-        status: 'RUNNING',
-      },
-      {
-        cadence: 'MONTHLY',
-        scheduledTime: '09:00',
-        timezone,
-        scheduledDayOfMonth: null,
-        dueAt: new Date('2026-02-28T15:00:00.000Z'),
-      }
-    );
+    await reserveCanonical({
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone,
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2026-02-28T15:00:00.000Z'),
+    });
 
     expect(prismaMock.periodicTask.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'task-1',
         isEnabled: true,
-        nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        nextRunAt: {
+          equals: new Date('2026-02-28T15:00:00.000Z'),
+          lte: new Date('2026-02-28T15:00:00.000Z'),
+        },
         project: { isArchived: false },
         executions: { none: { status: 'RUNNING' } },
       },
@@ -732,11 +750,7 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
   ): Promise<Date> {
     vi.setSystemTime(new Date(dispatchedAt));
     prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.periodicTaskExecution.create.mockResolvedValue({ id: 'exec-1' });
-    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-      { periodicTaskId: 'task-1', workspaceId: null, status: 'RUNNING' },
-      schedule
-    );
+    await reserveCanonical(schedule);
     return reservedNextRunAt();
   }
 
@@ -783,18 +797,14 @@ describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
       });
     });
     prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.periodicTaskExecution.create.mockResolvedValue({ id: 'exec-1' });
 
-    await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-      { periodicTaskId: 'task-1', workspaceId: null, status: 'RUNNING' },
-      {
-        cadence: 'MONTHLY',
-        scheduledTime: '09:00',
-        timezone: 'UTC',
-        scheduledDayOfMonth: null,
-        dueAt: new Date('2026-01-31T09:00:00.000Z'),
-      }
-    );
+    await reserveCanonical({
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: null,
+      dueAt: new Date('2026-01-31T09:00:00.000Z'),
+    });
 
     const data = prismaMock.periodicTask.updateMany.mock.calls[0]?.[0].data;
     expect(data.lastRunAt).toEqual(new Date('2026-02-28T09:00:01.000Z'));

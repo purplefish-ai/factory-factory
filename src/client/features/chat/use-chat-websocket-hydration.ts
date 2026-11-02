@@ -97,7 +97,7 @@ export function scheduleConnectLoadingStart(options: {
 
 const HydrationLoadErrorSchema = z.object({
   type: z.literal('error'),
-  code: z.literal(413),
+  code: z.union([z.literal(413), z.literal(409)]),
   loadRequestId: z.string(),
   message: z.string().max(512),
 });

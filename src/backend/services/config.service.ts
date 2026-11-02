@@ -576,12 +576,13 @@ class ConfigService {
   }
 
   /**
-   * Get debug configuration
+   * Get the validated authoritative frame and logical replay byte budget.
    */
   getWebSocketConfig(): { maxFrameBytes: number } {
     return { maxFrameBytes: this.config.websocketMaxFrameBytes };
   }
 
+  /** Get debug configuration. */
   getDebugConfig(): DebugConfig {
     return { ...this.config.debug };
   }

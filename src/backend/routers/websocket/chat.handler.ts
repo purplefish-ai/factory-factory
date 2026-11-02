@@ -103,10 +103,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
   function sendChatError(ws: WebSocket, dbSessionId: string | null, message: string): void {
     const errorResponse = { type: 'error', message };
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
-    }
-    sendStateful(ws, JSON.stringify(errorResponse), logger, 'chat error');
+    sendStateful(ws, JSON.stringify(errorResponse), logger, 'chat error', {
+      onFlushed: (error) => {
+        if (!error && dbSessionId) {
+          sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
+        }
+      },
+    });
   }
 
   // ==========================================================================

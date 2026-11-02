@@ -127,20 +127,23 @@ describe('useProjectSnapshotSync', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps HTTP fallback and displays a bounded snapshot load error without changing cache', () => {
-    useProjectSnapshotSync('proj-1');
-    mockListInvalidate.mockClear();
-    const message = 'Project snapshot exceeds WEBSOCKET_MAX_FRAME_BYTES';
-    capturedOptions?.onMessage?.({
-      type: 'snapshot_error',
-      projectId: 'proj-1',
-      code: 'FRAME_TOO_LARGE',
-      message,
-    });
-    expect(mockToastError).toHaveBeenCalledWith(message);
-    expect(mockListInvalidate).toHaveBeenCalledExactlyOnceWith({ projectId: 'proj-1' });
-    expect(mockSetData).not.toHaveBeenCalled();
-  });
+  it.each([true, false])(
+    'keeps HTTP fallback for a bounded snapshot error (project ID included=%s)',
+    (includeProjectId) => {
+      useProjectSnapshotSync('proj-1');
+      mockListInvalidate.mockClear();
+      const message = 'Project snapshot exceeds WEBSOCKET_MAX_FRAME_BYTES';
+      capturedOptions?.onMessage?.({
+        type: 'snapshot_error',
+        ...(includeProjectId ? { projectId: 'proj-1' } : {}),
+        code: 'FRAME_TOO_LARGE',
+        message,
+      });
+      expect(mockToastError).toHaveBeenCalledWith(message);
+      expect(mockListInvalidate).toHaveBeenCalledExactlyOnceWith({ projectId: 'proj-1' });
+      expect(mockSetData).not.toHaveBeenCalled();
+    }
+  );
 
   it('sets URL to null when projectId is undefined', () => {
     useProjectSnapshotSync(undefined);

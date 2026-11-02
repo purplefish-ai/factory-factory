@@ -159,40 +159,50 @@ Synchronous and asynchronous write failures also retire that viewer. Other
 viewers and application work continue; reconnect runs the existing correlated
 load/replay or current full-snapshot path.
 
-A full snapshot, session snapshot, or replay batch can exceed the ordinary
-backlog budget on an empty connection. `WEBSOCKET_MAX_FRAME_BYTES`, read through
-`configService`, sets its absolute UTF-8 frame ceiling: **32 MiB by default**
-(33554432 bytes). Valid overrides are integer byte counts from 1 MiB through 256
-MiB, inclusive; missing or invalid values use the default. This permits
-realistic large history/project baselines while bounding queued state per
-viewer. Serialization still happens before measurement, so the limit bounds
+A full snapshot, session snapshot, or legacy replay batch can exceed the
+ordinary backlog budget on an empty connection. `WEBSOCKET_MAX_FRAME_BYTES`,
+read through `configService`, sets its absolute UTF-8 frame ceiling: **32 MiB by
+default** (33554432 bytes). Valid overrides are integer byte counts from 1 MiB
+through 256 MiB, inclusive; missing or invalid values use the default. This
+permits realistic large history/project baselines while bounding queued state
+per viewer. Serialization still happens before measurement, so the limit bounds
 outgoing frames rather than the cost of constructing authoritative state.
 
-Load correlation IDs and snapshot project selectors are bounded to 128 UTF-16
-code units at admission, so even Unicode identifiers fit the small error
-envelope without losing correlation. An excessive replay returns a small `error`
-with code 413 and the requesting `loadRequestId`; the client ends loading,
-cancels automatic load retries and keeps unhydrated controls disabled. Other
-already-hydrated viewers keep their live updates. An excessive project baseline
-returns `snapshot_error` with `FRAME_TOO_LARGE`; the client shows its
-explanation and refreshes via the existing HTTP fallback. Both keep the socket
-open and suppress subsequent baseline-dependent updates to the viewer missing
-its baseline. Independent command replies and workspace notifications remain
-available. Only a baseline accepted by that viewer can release the guard. They
-do not reconnect to the same rejected state. Increase the configured limit
-within its supported range, restart the backend, and explicitly reconnect to
-retry; snapshots remain available over HTTP. A successfully accepted baseline
-releases that guard.
+Load correlation IDs are bounded to 128 UTF-16 code units at admission so even
+escaped identifiers fit the small error envelope without losing correlation.
+Existing persisted/imported project IDs remain valid; snapshot errors omit an
+overlong project ID and use the current connection scope for HTTP fallback. An
+excessive replay returns a small `error` with code 413 and the requesting
+`loadRequestId`; the client ends loading, cancels automatic load retries and
+keeps unhydrated controls disabled. Other already-hydrated viewers keep their
+live updates. An excessive project baseline returns `snapshot_error` with
+`FRAME_TOO_LARGE`; the client shows its explanation and refreshes via the
+existing HTTP fallback. Both keep the socket open and suppress subsequent
+baseline-dependent updates to the viewer missing its baseline. Independent
+command replies and workspace notifications remain available. Only a baseline
+accepted by that viewer can release the guard. They do not reconnect to the same
+rejected state. Increase the configured limit within its supported range,
+restart the backend, and explicitly reconnect to retry; snapshots remain
+available over HTTP. A successfully accepted baseline releases that guard.
 
-A retry of the same loadRequestId while its large replay is still queued reuses
-that pending baseline and ordered deltas; it does not enqueue a duplicate large
-frame or interrupt a valid slow load. A large frame's write callback releases
-its allowance. While it is pending, completion metadata and subsequent deltas
-share an additional 1 MiB budget; a second large frame is not admitted to a
-nonempty queue. Close, successful flush, and retirement clean up the frame
-listener; close or deadline expiry cleans up the termination timer and listener.
+Replay retains the responsive history loading and 128 KiB wire chunks. The
+configured budget also bounds the logical replay; the existing 128 MiB replay
+assembly ceiling remains an absolute upper bound. A viewer queues one bounded
+replay sequence, writes one chunk at a time as local write callbacks finish, and
+holds at most 1 MiB of dependent updates until the complete baseline is written.
+Serialized replay storage is bounded by twice its declared source size plus 1
+KiB per bounded chunk for base64/envelope overhead. Independent command replies
+and notifications remain available. A retry of the same pending load reuses its
+sequence; a newer distinct request explicitly supersedes and settles the older
+request with a correlated 409 error. Neither coalesced retries nor failed writes
+create OUT_TO_CLIENT records. These records describe successful local socket
+writes, not application-level peer receipts.
+
+A large full frame's write callback releases its allowance. Completion metadata
+and subsequent deltas share an additional 1 MiB budget. Close, successful flush,
+and retirement clean up listeners, pending queues and termination timers.
 Snapshot deltas still wait for the full baseline to be admitted, and replay
-keeps its existing loadRequestId.
+keeps its existing request IDs, message identities and ordering.
 
 Passive loading does not initialize an ACP runtime. A stored initial message may
 subsequently be enqueued and dispatched through the normal message path.
@@ -245,10 +255,15 @@ array and changed message objects; in-place appends and truncation are detected
 by length, but same-length in-place edits are unsupported.
 
 Tool activity starts collapsed behind a category summary such as “Read files,
-ran commands”, including sequences with only one call. Expanding the summary
-reveals chronological actions; each action expands to its full input and output.
-Failures appear within those expanded actions, without a failure count or error
-styling on the summary. Pending activity keeps its running indicator.
+ran commands”. A single read shows “Read file Button.tsx”; a single command
+shows its executable and, for recognized command-line tools, its first
+subcommand, such as “Ran python3” or “Ran git cherry-pick”. Shell wrappers such
+as `sh -ec 'git status'` show the underlying command, “Ran git status”.
+Summaries omit command arguments and directory paths. Multiple reads or commands
+use the generic plural labels. Expanding the summary reveals chronological
+actions; each action expands to its full input and output. Failures appear
+within those expanded actions, without a failure count or error styling on the
+summary. Pending activity keeps its running indicator.
 
 Running sub-agent, background-process and completed sub-agent disclosures
 remember explicit expand/collapse choices per session in browser memory,

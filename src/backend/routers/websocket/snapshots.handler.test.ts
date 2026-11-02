@@ -185,13 +185,30 @@ function sentMessages(ws: MockWebSocket) {
 // ============================================================================
 
 describe('createSnapshotsUpgradeHandler', () => {
-  it('rejects overlong project IDs before snapshot upgrade so error envelopes remain bounded', () => {
-    const ws = new MockWebSocket();
-    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
-    const result = callHandler(handler, ws, 'p'.repeat(129));
-    expect(result.wss.handleUpgrade).not.toHaveBeenCalled();
-    expect(result.socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
-  });
+  it.each([256, 2 * 1024 * 1024])(
+    'preserves long project-ID sync or returns a bounded error (%s)',
+    async (length) => {
+      const ws = new MockWebSocket();
+      const handler = createSnapshotsUpgradeHandler(
+        createAppContextMock({ frameLimit: () => 1024 * 1024 })
+      );
+      const projectId = 'p'.repeat(length);
+      const result = callHandler(handler, ws, projectId);
+      expect(result.wss.handleUpgrade).toHaveBeenCalledTimes(1);
+      await waitForInitialSnapshot(ws);
+      if (length === 256) {
+        expect(sentMessages(ws)[0]).toMatchObject({ type: 'snapshot_full', projectId });
+      } else {
+        expect(sentMessages(ws)[0]).toMatchObject({
+          type: 'snapshot_error',
+          code: 'FRAME_TOO_LARGE',
+        });
+        expect(sentMessages(ws)[0]).not.toHaveProperty('projectId');
+        expect(Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(1024);
+      }
+      expect(ws.close).not.toHaveBeenCalled();
+    }
+  );
 
   it.each([-1, 0, 1])(
     'bounds snapshot_full at the UTF8 frame ceiling (extra byte %s)',

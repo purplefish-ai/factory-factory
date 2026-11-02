@@ -161,7 +161,7 @@ export const SnapshotRemovedMessageSchema = z.object({
 
 export const SnapshotErrorMessageSchema = z.object({
   type: z.literal('snapshot_error'),
-  projectId: z.string(),
+  projectId: z.string().optional(),
   code: z.literal('FRAME_TOO_LARGE'),
   message: z.string().max(512),
 });

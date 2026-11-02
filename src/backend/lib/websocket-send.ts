@@ -96,7 +96,7 @@ export const WEBSOCKET_RETIRE_DEADLINE_MS = 5000;
 export interface StatefulSendOptions {
   allowLargeFrame?: boolean;
   maxFrameBytes?: number;
-  onFlushed?: () => void;
+  onFlushed?: (error?: Error) => void;
 }
 
 const retiredSockets = new WeakSet<WebSocket>();
@@ -121,7 +121,7 @@ function exceedsBacklog(
   );
 }
 
-function retireStatefulViewer(ws: WebSocket, logger: SendErrorLogger): void {
+export function retireStatefulViewer(ws: WebSocket, logger: SendErrorLogger): void {
   if (retiredSockets.has(ws)) {
     return;
   }
@@ -205,7 +205,7 @@ export function sendStateful(
   try {
     ws.send(message, (error) => {
       ownLargeFrame?.cleanup();
-      options.onFlushed?.();
+      options.onFlushed?.(error);
       if (error) {
         logger.error(`Failed to send ${description}`, toError(error));
         retireStatefulViewer(ws, logger);
@@ -213,7 +213,7 @@ export function sendStateful(
     });
     return !retiredSockets.has(ws);
   } catch (error) {
-    options.onFlushed?.();
+    options.onFlushed?.(toError(error));
     logger.error(`Failed to send ${description}`, toError(error));
     retireStatefulViewer(ws, logger);
     return false;
