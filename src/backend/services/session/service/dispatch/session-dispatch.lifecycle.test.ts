@@ -150,7 +150,6 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       },
     });
   });
-
   it('leaves queued messages untouched while the session is stopping', async () => {
     mockSessionService.isSessionStopping.mockReturnValue(true);
 
@@ -160,7 +159,6 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
-
   it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
     mockSessionService.getSessionClient.mockReturnValue({});
     let resolveSession!: (session: {
@@ -175,12 +173,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         resolveSession = resolve;
       })
     );
-
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
-
     mockSessionService.isSessionStopping.mockReturnValue(true);
     resolveSession({
       workspace: {
@@ -190,11 +186,9 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       },
     });
     await dispatchPromise;
-
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
-
   it('does not reject a queued message when stop begins during permanent gate evaluation', async () => {
     sessionDispatchService.configure({
       initPolicy: {
@@ -213,12 +207,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         resolveSession = resolve;
       })
     );
-
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await vi.waitFor(() => {
       expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
     });
-
     mockSessionService.isSessionStopping.mockReturnValue(true);
     resolveSession({
       workspace: {
@@ -228,7 +220,6 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       },
     });
     await dispatchPromise;
-
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
@@ -424,13 +415,23 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       id: 'workspace-notification-notif-parent',
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
-    // Duplicate at the head of the queue, a regular message behind it.
-    mockSessionDomainService.peekNextMessage
-      .mockReturnValueOnce(notificationMessage)
-      .mockReturnValue(queuedMessage);
-    mockNotificationDeliveryService.claimForDispatch
-      .mockReturnValueOnce({ status: 'duplicate' })
-      .mockReturnValue({ status: 'not_notification' });
+    // Reads are stable; only the actual duplicate-removal operation advances the queue.
+    let removed = false;
+    mockSessionDomainService.peekNextMessage.mockImplementation(() =>
+      removed ? queuedMessage : notificationMessage
+    );
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() =>
+      removed ? [queuedMessage] : [notificationMessage, queuedMessage]
+    );
+    mockNotificationDeliveryService.removeBlockedFromQueue.mockImplementationOnce(() => {
+      removed = true;
+      return true;
+    });
+    mockNotificationDeliveryService.claimForDispatch.mockImplementation((_id, messageId) =>
+      messageId === notificationMessage.id
+        ? { status: 'duplicate' }
+        : { status: 'not_notification' }
+    );
 
     await sessionDispatchService.tryDispatchNextMessage('s1');
 

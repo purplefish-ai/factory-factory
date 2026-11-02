@@ -299,15 +299,17 @@ export class SessionDispatchService {
       return;
     }
 
-    if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId) !== peeked) {
-      await this.dependencies.backgroundDelivery.fail(
-        peeked,
-        new Error('Turn in progress: human message queued during preparation')
-      );
-      return;
-    }
     await guard?.check();
     guard?.assertCurrent?.();
+    if (sessionDomainService.peekNextMessage(dbSessionId) !== peeked) {
+      if (peeked.source) {
+        await this.dependencies.backgroundDelivery.fail(
+          peeked,
+          new Error('Turn in progress: human message queued during preparation')
+        );
+      }
+      return 'retry';
+    }
     let notificationUnavailable = false;
     const batch = await collectDispatchBatch({
       sessionId: dbSessionId,

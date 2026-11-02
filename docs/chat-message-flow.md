@@ -116,17 +116,19 @@ settings. New human input precedes both PR events and workspace notifications.
 When a held external entry leads a retained queue, selection restores human
 priority without changing eligible delivery retry order. The unresolved mixed
 attempt and external FIFO remain intact; no frozen receipt or member record is
-released. Selected members are held out of hydration and cancellation until the
-batch exits; a rejected removal cannot cancel a durable member behind the
-dispatcher. The configuration owner serializes accepted edits, desired-revision
-refresh, provider configuration, atomic claim and the native turn. Claim
-compares every human's desired revision and provider identity. A revision
-conflict requeues the whole unsent batch. Later edits wait behind that turn, so
-the frozen settings and native configuration snapshot describe the actual
-invocation. Ordinary prompt sends share this admission queue and cannot occupy
-the prompt limiter while a frozen batch is waiting to invoke the provider.
-Runtime retirement rejects the old queue without blocking a replacement; a
-claimed mixed batch remains uncertain and retains its external delivery claims.
+released. Async preparation and batch removal recheck head identity; a displaced
+notification remains pending for retry. Selected members are held out of
+hydration and cancellation until the batch exits; a rejected removal cannot
+cancel a durable member behind the dispatcher. The configuration owner
+serializes accepted edits, desired-revision refresh, provider configuration,
+atomic claim and the native turn. Claim compares every human's desired revision
+and provider identity. A revision conflict requeues the whole unsent batch.
+Later edits wait behind that turn, so the frozen settings and native
+configuration snapshot describe the actual invocation. Ordinary prompt sends
+share this admission queue and cannot occupy the prompt limiter while a frozen
+batch is waiting to invoke the provider. Runtime retirement rejects the old
+queue without blocking a replacement; a claimed mixed batch remains uncertain
+and retains its external delivery claims.
 
 Before invoking a provider, a transaction creates one `PromptDispatchAttempt`
 with complete ordered membership (including background messages), assembled

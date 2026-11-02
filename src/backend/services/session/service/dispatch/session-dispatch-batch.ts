@@ -23,13 +23,23 @@ export async function getDispatchableHead(
   sessionId: string,
   isHeld: (message: QueuedMessage) => Promise<boolean>
 ): Promise<QueuedMessage | undefined> {
-  const first = sessionDomainService.peekNextMessage(sessionId);
-  if (!(first && (await isHeld(first)))) {
-    return first;
+  for (;;) {
+    const first = sessionDomainService.peekNextMessage(sessionId);
+    if (!first) {
+      return undefined;
+    }
+    const held = await isHeld(first);
+    if (sessionDomainService.peekNextMessage(sessionId) !== first) {
+      continue;
+    }
+    if (!held) {
+      return first;
+    }
+    sessionDomainService.prioritizeQueuedHumanMessages(sessionId);
+    if (sessionDomainService.peekNextMessage(sessionId) === first) {
+      return undefined;
+    }
   }
-  sessionDomainService.prioritizeQueuedHumanMessages(sessionId);
-  const candidate = sessionDomainService.peekNextMessage(sessionId);
-  return candidate && !(await isHeld(candidate)) ? candidate : undefined;
 }
 
 /** Slash commands must remain standalone so providers interpret them as commands. */
@@ -102,11 +112,11 @@ async function releasePreparedBackgrounds(
 }
 
 function takeDispatchBatch(sessionId: string, messages: QueuedMessage[]): boolean {
-  if (messages.length > 1) {
-    return sessionDomainService.takeQueuedMessages(sessionId, messages);
-  }
   if (sessionDomainService.peekNextMessage(sessionId) !== messages[0]) {
     return false;
+  }
+  if (messages.length > 1) {
+    return sessionDomainService.takeQueuedMessages(sessionId, messages);
   }
   const message = sessionDomainService.dequeueNext(sessionId, { emitSnapshot: false });
   if (!message) {
@@ -282,6 +292,10 @@ export async function acknowledgeSentBatch(input: {
   }
 }
 
+function isAdditionalBackground(message: QueuedMessage, messages: QueuedMessage[]): boolean {
+  return Boolean(message.source && messages.some((item) => item.source));
+}
+
 /** Freeze one next-turn batch while retaining notification claims until its send settles. */
 export async function collectDispatchBatch(input: {
   sessionId: string;
@@ -300,13 +314,18 @@ export async function collectDispatchBatch(input: {
     return { messages, release };
   }
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
+  // Priority insertion may displace the captured first object during preparation.
+  // Leave the complete queue untouched; batch admission will retry the current head.
+  if (snapshot[0] !== input.first) {
+    return { messages, release };
+  }
   try {
     for (const message of snapshot.slice(1)) {
       if (await isBatchBoundary(message, input.isCurrent, input.isHeld)) {
         break;
       }
       // One PR claim already covers all pending facts for this conversation.
-      if (message.source && messages.some((item) => item.source)) {
+      if (isAdditionalBackground(message, messages)) {
         break;
       }
       const reason = await dropBlockedNotification(
