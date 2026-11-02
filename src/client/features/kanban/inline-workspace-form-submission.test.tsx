@@ -160,8 +160,13 @@ describe('workspace creation submission recovery', () => {
       await act(async () => {
         context = await options().onMutate(input);
       });
+      // The setup card in Working owns progress; To Do must not keep a second copy.
+      expect(form.textarea.closest('[hidden]')).not.toBeNull();
+      expect(mocks.workspaceListCache?.workspaces).toHaveLength(1);
       actFlushSync(() => options().onError(new Error('Git is unavailable'), input, context!));
-      expect(form.textarea.value).toBe('Keep all of this task');
+      expect(form.textarea.closest('[hidden]')).toBeNull();
+      expect(form.container.querySelector('textarea')?.value).toBe('Keep all of this task');
+      expect(mocks.workspaceListCache?.workspaces).toHaveLength(0);
       expect(
         [...form.container.querySelectorAll('[role="alert"]')].some((el) =>
           el.textContent?.includes('Git is unavailable')
@@ -205,6 +210,7 @@ describe('workspace creation submission recovery', () => {
     actFlushSync(() => first.root.unmount());
     const resumed = renderForm();
     try {
+      expect(resumed.textarea.closest('[hidden]')).not.toBeNull();
       launch(resumed.container);
       expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledTimes(1);
       actFlushSync(() => original.onError(new Error('Creation interrupted'), input, context!));

@@ -8,6 +8,7 @@ import { trpc, type AppRouter } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { InlineWorkspaceForm } from './inline-workspace-form';
+import { KanbanCard } from './kanban-card';
 import {
   createWorkspaceCreationDraft,
   WORKSPACE_DRAFT_DATABASE_NAME,
@@ -121,10 +122,16 @@ function previewResponse(path: string, input: unknown, provider: ChatProvider) {
   };
   return responses[path] ?? {};
 }
-function previewShouldWait(path: string, loading: boolean, catalogLoading: boolean) {
+function previewShouldWait(
+  path: string,
+  loading: boolean,
+  catalogLoading: boolean,
+  creationPending: boolean
+) {
   return (
     (path === 'userSettings.get' && loading) ||
-    (path === 'userSettings.getProviderOptions' && catalogLoading)
+    (path === 'userSettings.getProviderOptions' && catalogLoading) ||
+    (path === 'workspace.create' && creationPending)
   );
 }
 
@@ -132,12 +139,13 @@ function previewLink(
   provider: ChatProvider,
   loading: boolean,
   catalogLoading: boolean,
-  creationError?: string
+  creationError?: string,
+  creationPending = false
 ): TRPCLink<AppRouter> {
   return () =>
     ({ op }) =>
       observable((observer) => {
-        if (previewShouldWait(op.path, loading, catalogLoading)) {
+        if (previewShouldWait(op.path, loading, catalogLoading, creationPending)) {
           return;
         }
         if (op.type === 'mutation') {
@@ -152,6 +160,18 @@ function previewLink(
       });
 }
 
+function WorkspaceLaunchProgress({ projectId }: { projectId: string }) {
+  const { data } = trpc.workspace.listForProject.useQuery({ projectId });
+  return (
+    <section aria-label="Working" className="space-y-3">
+      <h3 className="font-semibold text-sm">Working</h3>
+      {data?.workspaces.map((workspace) => (
+        <KanbanCard key={workspace.id} workspace={workspace} projectSlug="preview" />
+      ))}
+    </section>
+  );
+}
+
 /** All requests stay inside this preview transport, including launch button clicks. */
 function WorkspaceCreationPreviewSession({
   provider = 'CODEX',
@@ -161,6 +181,7 @@ function WorkspaceCreationPreviewSession({
   startCollapsed = false,
   projectId = 'preview-project',
   creationError,
+  creationPending = false,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
@@ -169,6 +190,7 @@ function WorkspaceCreationPreviewSession({
   startCollapsed?: boolean;
   projectId?: string;
   creationError?: string;
+  creationPending?: boolean;
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -176,7 +198,7 @@ function WorkspaceCreationPreviewSession({
   );
   const [client] = useState(() =>
     trpc.createClient({
-      links: [previewLink(provider, loading, catalogLoading, creationError)],
+      links: [previewLink(provider, loading, catalogLoading, creationError, creationPending)],
     })
   );
   return (
@@ -188,6 +210,7 @@ function WorkspaceCreationPreviewSession({
             width: compact ? 'min(20rem, calc(100vw - 2rem))' : 'min(40rem, calc(100vw - 2rem))',
           }}
         >
+          {creationPending && <h3 className="font-semibold text-sm mb-3">To Do</h3>}
           {open ? (
             <InlineWorkspaceForm
               projectId={projectId}
@@ -209,6 +232,7 @@ function WorkspaceCreationPreviewSession({
               New Task
             </Button>
           )}
+          {creationPending && <WorkspaceLaunchProgress projectId={projectId} />}
         </div>
       </trpc.Provider>
     </QueryClientProvider>
@@ -223,8 +247,9 @@ function WorkspaceCreationPreview(props: {
   startCollapsed?: boolean;
   projectId?: string;
   creationError?: string;
+  creationPending?: boolean;
 }) {
-  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -241,6 +266,23 @@ export const SavedClaudeDefaults: Story = { args: { provider: 'CLAUDE' } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = { args: { loading: true } };
 export const CatalogLoading: Story = { args: { catalogLoading: true } };
+export const LaunchInProgress: Story = {
+  args: { projectId: 'preview-launch-pending', creationPending: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const launch = await canvas.findByRole('button', { name: /^Launch$/ });
+    await waitFor(() => expect(launch).toBeEnabled());
+    await userEvent.type(canvas.getByRole('textbox'), 'Smooth workspace launch');
+    await userEvent.click(launch);
+    await waitFor(() => expect(canvas.queryByRole('textbox')).not.toBeInTheDocument());
+    await expect(
+      await within(canvas.getByRole('region', { name: 'Working' })).findByText(
+        'Setting up workspace'
+      )
+    ).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /^Launch$/ })).not.toBeInTheDocument();
+  },
+};
 export const Narrow: Story = {
   args: { compact: true },
   parameters: { viewport: { value: 'mobile1' } },
@@ -397,7 +439,9 @@ export const SubmissionError: Story = {
     await userEvent.type(input, 'Keep these instructions while I fix the repository.');
     await userEvent.click(launch);
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Repository is unavailable');
-    await expect(input).toHaveValue('Keep these instructions while I fix the repository.');
+    await expect(canvas.getByRole('textbox')).toHaveValue(
+      'Keep these instructions while I fix the repository.'
+    );
   },
 };
 export const SubmissionErrorNarrow: Story = {
