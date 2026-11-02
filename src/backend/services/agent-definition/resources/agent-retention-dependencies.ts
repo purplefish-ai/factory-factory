@@ -6,16 +6,20 @@ import {
   agentEventPayloadSchema,
   agentPendingActivationSchema,
   agentSourceHealthSchema,
+  type AgentActivationBoundary,
 } from '@/shared/agent-runtime';
 import { agentGithubCursorSchema } from '@/shared/agent-source-state';
-import { agentTriggerInputSchema } from '@/shared/schemas/agent-definition.schema';
+import {
+  agentTriggerInputSchema,
+  type AgentTriggerInput,
+} from '@/shared/schemas/agent-definition.schema';
+import { Prisma } from '@prisma-gen/client';
 import type {
   AgentConnection,
   AgentEvent,
   AgentEvaluation,
   AgentSourceState,
   AgentTrigger,
-  Prisma,
 } from '@prisma-gen/client';
 
 export type RetentionReason =
@@ -35,6 +39,18 @@ export async function retentionDependency(
   assertCurrent: () => void,
   limit: number
 ): Promise<RetentionReason | null> {
+  if (event.payload === null) {
+    // Prisma reads JSON null and SQL NULL as the same JS value. Only SQL NULL
+    // is the completed payload-pruning marker; JSON null is malformed proof.
+    const jsonNull = await tx.agentEvent.findFirst({
+      where: { id: event.id, payload: { equals: Prisma.JsonNull } },
+      select: { id: true },
+    });
+    assertCurrent();
+    if (jsonNull) {
+      return 'INVALID_STORED_DATA';
+    }
+  }
   const active = await tx.agentRun.findFirst({
     where: { eventId: event.id, status: { in: ['QUEUED', 'RUNNING'] } },
     select: { id: true },
@@ -59,8 +75,21 @@ export async function retentionDependency(
   if (pending) {
     return 'UNRESOLVED_DECISION';
   }
+  const connection = await tx.agentConnection.findUnique({
+    where: { id: event.connectionId },
+    include: { sourceState: true },
+  });
+  assertCurrent();
+  if (!connection) {
+    return 'INVALID_STORED_DATA';
+  }
+  const sourceReason = sourceDependency(connection, event, identity);
+  if (sourceReason) {
+    return sourceReason;
+  }
   const triggers = await tx.agentTrigger.findMany({
     where: { connectionId: event.connectionId },
+    include: { agentDefinition: { select: { definitionRevision: true } } },
     take: limit + 1,
     orderBy: { id: 'asc' },
   });
@@ -69,20 +98,21 @@ export async function retentionDependency(
     return 'DEPENDENCY_LIMIT';
   }
   for (const trigger of triggers) {
-    const reason = triggerDependency(trigger);
+    const reason = triggerDependency(trigger, connection, event);
     if (reason) {
       return reason;
     }
   }
-  const connection = await tx.agentConnection.findUnique({
-    where: { id: event.connectionId },
-    include: { sourceState: true },
-  });
-  assertCurrent();
-  return sourceDependency(connection, event, identity);
+  return null;
 }
 
-function triggerDependency(trigger: AgentTrigger): RetentionReason | null {
+type RetentionTrigger = AgentTrigger & { agentDefinition: { definitionRevision: number } };
+
+function triggerDependency(
+  trigger: RetentionTrigger,
+  connection: AgentConnection,
+  event: AgentEvent
+): RetentionReason | null {
   if (trigger.activationState === 'STARTING') {
     return 'ACTIVATION_DEPENDENCY';
   }
@@ -96,18 +126,49 @@ function triggerDependency(trigger: AgentTrigger): RetentionReason | null {
   });
   const needsBoundary = trigger.activationState === 'ACTIVE' || trigger.activationBoundary !== null;
   const boundary = agentActivationBoundarySchema.safeParse(trigger.activationBoundary);
-  const provider = trigger.type === 'GITHUB_ISSUE' ? 'GITHUB' : 'SLACK';
   if (
     !settings.success ||
-    (needsBoundary && !(boundary.success && boundary.data.provider === provider)) ||
-    !validPendingActivation(trigger)
+    (needsBoundary && !boundary.success) ||
+    !validPendingActivation(trigger) ||
+    !validTriggerSource(settings.data, boundary.success ? boundary.data : null, connection, event)
   ) {
     return 'INVALID_STORED_DATA';
   }
   return null;
 }
 
-function validPendingActivation(trigger: AgentTrigger) {
+function validTriggerSource(
+  settings: AgentTriggerInput,
+  boundary: AgentActivationBoundary | null,
+  connection: AgentConnection,
+  event: AgentEvent
+) {
+  if (settings.type === 'GITHUB_ISSUE') {
+    return (
+      connection.provider === 'GITHUB' &&
+      settings.config.repositoryIds.some((id) => connection.externalId === `gh:${id}`) &&
+      (boundary === null || boundary.provider === 'GITHUB')
+    );
+  }
+  if (settings.type !== 'SLACK_MESSAGE' || connection.provider !== 'SLACK') {
+    return false;
+  }
+  if (boundary === null) {
+    return true;
+  }
+  if (boundary.provider !== 'SLACK' || boundary.workspaceId !== connection.externalId) {
+    return false;
+  }
+  if (event.payload === null) {
+    return true;
+  }
+  const payload = agentEventPayloadSchema.safeParse(event.payload);
+  return (
+    payload.success && payload.data.provider === 'SLACK' && payload.data.appId === boundary.appId
+  );
+}
+
+function validPendingActivation(trigger: RetentionTrigger) {
   if (trigger.pendingActivation === null) {
     return true;
   }
@@ -115,6 +176,7 @@ function validPendingActivation(trigger: AgentTrigger) {
   return (
     pending.success &&
     pending.data.connectionId === trigger.connectionId &&
+    pending.data.definitionRevision === trigger.agentDefinition.definitionRevision &&
     pending.data.activationGeneration === trigger.activationGeneration &&
     pending.data.triggerRevision === trigger.triggerRevision
   );
@@ -128,7 +190,7 @@ function sourceDependency(
   if (!connection) {
     return 'INVALID_STORED_DATA';
   }
-  if (event.payload !== null && !agentEventPayloadSchema.safeParse(event.payload).success) {
+  if (!validSourcePayload(connection, event)) {
     return 'INVALID_STORED_DATA';
   }
   const source = connection.sourceState;
@@ -189,4 +251,19 @@ export function validRetentionEvaluation(
         run.agentDefinitionId === evaluation.agentDefinitionId &&
         run.eventId === evaluation.eventId))
   );
+}
+
+function validSourcePayload(connection: AgentConnection, event: AgentEvent) {
+  if (event.payload === null) {
+    return true;
+  }
+  const payload = agentEventPayloadSchema.safeParse(event.payload);
+  if (!payload.success || payload.data.provider !== connection.provider) {
+    return false;
+  }
+  const externalId =
+    payload.data.provider === 'GITHUB'
+      ? `gh:${payload.data.repositoryId}`
+      : payload.data.workspaceId;
+  return externalId === connection.externalId;
 }

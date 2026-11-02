@@ -289,6 +289,14 @@ it.each(['QUEUED', 'RUNNING'] as const)(
   'retains %s event dependencies despite old deadlines and finished delivery',
   async (status) => {
     const { run, event, eventId } = await terminal();
+    const finishedAt = new Date();
+    await db.prisma.agentInitialDelivery.update({
+      where: { runId: run.id },
+      data: { state: 'FINISHED', finishedAt },
+    });
+    expect(
+      await db.prisma.agentInitialDelivery.findUniqueOrThrow({ where: { runId: run.id } })
+    ).toMatchObject({ state: 'FINISHED', finishedAt });
     await db.prisma.agentRun.update({
       where: { id: run.id },
       data: {
@@ -604,7 +612,6 @@ it('aborts while queued behind a real ledger lock without starting a later mutat
 
 it('rejects ancient replay after its tombstone expires through actual evaluation and admission', async () => {
   const { event, eventId } = await terminal();
-  const decision = await db.prisma.agentEvaluation.findFirstOrThrow();
   const input = fixture.github();
   input.payload.occurredAt = event.occurredAt.toISOString();
   time(event.identityExpiresAt);
@@ -617,26 +624,18 @@ it('rejects ancient replay after its tombstone expires through actual evaluation
     status: 'REJECTED',
     reason: 'EVENT_EXPIRED',
   });
-  // Even a restored stale decision with misleading future expiry cannot bypass
-  // admission's independent absolute occurredAt fence.
-  const { id: _id, ...oldDecision } = decision;
-  const snapshot = runtime.agentEvaluationSnapshotSchema.parse(oldDecision.configurationSnapshot);
-  const restored = await db.prisma.agentEvaluation.create({
-    data: {
-      ...oldDecision,
-      classifier: Prisma.DbNull,
-      eventId: replay.eventId,
-      runId: null,
-      configurationSnapshot: { ...snapshot, input: { ...snapshot.input, eventId: replay.eventId } },
-    },
-  });
   await db.prisma.agentEvent.update({
     where: { id: replay.eventId },
     data: { payloadExpiresAt: new Date(Date.now() + DAY), sourceOrder: 1 },
   });
+  const recorded = await fixture.evaluation(replay.eventId);
+  expect(recorded.status).toBe('RECORDED');
+  if (!('evaluationId' in recorded)) {
+    throw new Error('Replay evaluation was not recorded');
+  }
   expect(
     await runtime.admitRun({
-      evaluationId: restored.id,
+      evaluationId: recorded.evaluationId,
       definitionRevision: 1,
       triggerRevision: 1,
       activationGeneration: 1,
@@ -685,3 +684,255 @@ it.each(['evaluation', 'payload', 'identity'] as const)(
     }
   }
 );
+
+it.each(['database', 'json'] as const)(
+  'characterizes %s null payload storage and Prisma filters on real SQLite',
+  async (kind) => {
+    const { eventId } = await terminal();
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: kind === 'database' ? Prisma.DbNull : Prisma.JsonNull },
+    });
+    expect((await row(eventId)).payload).toBeNull();
+    const stored = await db.prisma
+      .$queryRaw`SELECT payload IS NULL AS "sqlNull", typeof(payload) AS "storageType", json_type(payload) AS "jsonType" FROM AgentEvent WHERE id = ${eventId}`;
+    expect(stored).toEqual(
+      kind === 'database'
+        ? [{ sqlNull: 1n, storageType: 'null', jsonType: null }]
+        : [{ sqlNull: 0n, storageType: 'text', jsonType: 'null' }]
+    );
+    expect(
+      await db.prisma.agentEvent.count({
+        where: { id: eventId, payload: { equals: Prisma.DbNull } },
+      })
+    ).toBe(kind === 'database' ? 1 : 0);
+    expect(
+      await db.prisma.agentEvent.count({
+        where: { id: eventId, payload: { equals: Prisma.JsonNull } },
+      })
+    ).toBe(kind === 'json' ? 1 : 0);
+  }
+);
+
+it.each(['evaluation', 'payload', 'identity'] as const)(
+  'preserves malformed JSON-null proof during the %s batch while collecting real SQL-null',
+  async (kind) => {
+    const { event, eventId } = await terminal();
+    if (kind === 'identity') {
+      await db.prisma.agentEvaluation.deleteMany();
+    }
+    const { agentLedgerRetentionAccessor } = await vi.importActual<
+      typeof import('./agent-ledger-retention.accessor')
+    >('./agent-ledger-retention.accessor');
+    time(event.identityExpiresAt);
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: Prisma.JsonNull },
+    });
+    const malformed = await agentLedgerRetentionAccessor.pruneBatch(kind, null, () => undefined);
+    expect(malformed).toMatchObject({
+      inspected: 1,
+      changed: 0,
+      retained: { INVALID_STORED_DATA: 1 },
+    });
+    expect(
+      await db.prisma.agentEvent.count({
+        where: { id: eventId, payload: { equals: Prisma.JsonNull } },
+      })
+    ).toBe(1);
+    expect(await db.prisma.agentEvaluation.count()).toBe(kind === 'identity' ? 0 : 1);
+    await db.prisma.agentEvent.update({ where: { id: eventId }, data: { payload: Prisma.DbNull } });
+    const pruned = await agentLedgerRetentionAccessor.pruneBatch(
+      kind,
+      malformed.cursor,
+      () => undefined
+    );
+    expect(pruned).toMatchObject({
+      inspected: kind === 'payload' ? 0 : 1,
+      changed: kind === 'payload' ? 0 : 1,
+    });
+    expect(await db.prisma.agentEvent.count()).toBe(kind === 'identity' ? 0 : 1);
+  }
+);
+
+it('retains paused pending proof from a different owning definition revision', async () => {
+  const { event, eventId } = await terminal();
+  await db.prisma.agentTrigger.updateMany({
+    data: {
+      activationState: 'PAUSED',
+      pendingActivation: {
+        version: 1,
+        activationGeneration: 1,
+        definitionRevision: 2,
+        triggerRevision: 1,
+        connectionId: fixture.connectionId,
+        nonce: 'stale-definition',
+        expiresAt: new Date(0).toISOString(),
+        channels: [],
+      },
+    },
+  });
+  time(event.identityExpiresAt);
+  const batches = await prune();
+  expect((await row(eventId)).payload).not.toBeNull();
+  expect(await db.prisma.agentEvaluation.count()).toBe(1);
+  expect(batches.every((batch) => batch.changed === 0)).toBe(true);
+  await db.prisma.agentDefinition.update({
+    where: { id: fixture.definitionId },
+    data: { definitionRevision: 2 },
+  });
+  await prune();
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+});
+
+function slackPayload() {
+  return runtime.agentEventPayloadSchema.parse({
+    version: 1,
+    provider: 'SLACK',
+    occurredAt: new Date().toISOString(),
+    observedAt: new Date().toISOString(),
+    sourceUrl: 'https://slack.com/archives/C/p1',
+    actorId: 'human',
+    workspaceId: 'T',
+    appId: 'A',
+    channelId: 'C',
+    action: 'message',
+    eventTs: '1.0',
+    threadTs: null,
+    actorType: 'HUMAN',
+    subtype: null,
+    text: 'Retained source text',
+  });
+}
+const slackBoundary = {
+  provider: 'SLACK',
+  workspaceId: 'T',
+  appId: 'A',
+  channels: [{ channelId: 'C', eventTs: '1.0' }],
+};
+async function configureSlackSource(eventId: string) {
+  await db.prisma.agentConnection.update({
+    where: { id: fixture.connectionId },
+    data: { provider: 'SLACK', externalId: 'T' },
+  });
+  await db.prisma.agentTrigger.updateMany({
+    data: {
+      type: 'SLACK_MESSAGE',
+      config: { version: 1, channelIds: ['C'] },
+      activationBoundary: slackBoundary,
+    },
+  });
+  await db.prisma.agentEvent.update({ where: { id: eventId }, data: { payload: slackPayload() } });
+}
+it.each([
+  'cross-provider',
+  'repository',
+  'connection',
+  'trigger',
+  'pruned-trigger',
+  'slack-workspace',
+  'slack-app',
+  'pruned-slack-boundary',
+] as const)('retains schema-valid but inconsistent %s source identities', async (corruption) => {
+  const { event, eventId } = await terminal();
+  if (corruption.startsWith('slack') || corruption === 'pruned-slack-boundary') {
+    await configureSlackSource(eventId);
+  }
+  if (corruption === 'cross-provider') {
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: slackPayload() },
+    });
+  }
+  if (corruption === 'repository') {
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: { ...fixture.github().payload, repositoryId: 'other' } },
+    });
+  }
+  if (corruption === 'connection') {
+    await db.prisma.agentConnection.update({
+      where: { id: fixture.connectionId },
+      data: { externalId: 'gh:other' },
+    });
+  }
+  if (corruption === 'trigger' || corruption === 'pruned-trigger') {
+    await db.prisma.agentTrigger.updateMany({
+      data: {
+        type: 'SLACK_MESSAGE',
+        config: { version: 1, channelIds: ['C'] },
+        activationBoundary: slackBoundary,
+      },
+    });
+    if (corruption === 'pruned-trigger') {
+      await db.prisma.agentEvent.update({
+        where: { id: eventId },
+        data: { payload: Prisma.DbNull },
+      });
+    }
+  }
+  if (corruption === 'slack-workspace') {
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: { ...slackPayload(), workspaceId: 'other' } },
+    });
+  }
+  if (corruption === 'slack-app') {
+    await db.prisma.agentEvent.update({
+      where: { id: eventId },
+      data: { payload: { ...slackPayload(), appId: 'other' } },
+    });
+  }
+  if (corruption === 'pruned-slack-boundary') {
+    await db.prisma.agentEvent.update({ where: { id: eventId }, data: { payload: Prisma.DbNull } });
+    await db.prisma.agentTrigger.updateMany({
+      data: { activationBoundary: { ...slackBoundary, workspaceId: 'other' } },
+    });
+  }
+  const before = await row(eventId);
+  time(event.identityExpiresAt);
+  expect((await prune()).every((batch) => batch.changed === 0)).toBe(true);
+  expect(await row(eventId)).toEqual(before);
+  expect(await db.prisma.agentEvaluation.count()).toBe(1);
+});
+
+it.each([false, true])(
+  'collects consistent Slack source proof including SQL-null payload (already pruned: %s)',
+  async (pruned) => {
+    const { event, eventId } = await terminal();
+    await configureSlackSource(eventId);
+    // A different channel can simply be a filter non-match, not identity corruption.
+    await db.prisma.agentTrigger.updateMany({
+      data: { config: { version: 1, channelIds: ['other-channel'] } },
+    });
+    if (pruned) {
+      await db.prisma.agentEvent.update({
+        where: { id: eventId },
+        data: { payload: Prisma.DbNull },
+      });
+    }
+    time(event.identityExpiresAt);
+    await prune();
+    expect(await db.prisma.agentEvent.count()).toBe(0);
+    expect(await db.prisma.agentEvaluation.count()).toBe(0);
+  }
+);
+
+it('rolls back shutdown during the new persisted-null dependency read', async () => {
+  const { event, eventId } = await terminal();
+  await db.prisma.agentEvent.update({ where: { id: eventId }, data: { payload: Prisma.DbNull } });
+  time(event.identityExpiresAt);
+  const controller = new AbortController();
+  afterQuery = (model, operation) => {
+    if (model === 'AgentEvent' && operation === 'findFirst') {
+      controller.abort();
+    }
+  };
+  expect(await retention.pruneExpired(controller.signal)).toEqual([]);
+  expect(controller.signal.aborted).toBe(true);
+  expect(await db.prisma.agentEvaluation.count()).toBe(1);
+  expect(await db.prisma.agentEvent.count()).toBe(1);
+  afterQuery = undefined;
+  await prune();
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+});
