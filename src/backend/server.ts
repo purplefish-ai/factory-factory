@@ -93,6 +93,7 @@ export function createServer(application: Application, requestedPort?: number): 
   let cleanupStarted = false;
   let eventLoopMonitorStarted = false;
   let cleanupPromise: Promise<void> | null = null;
+  let archiveRecoveryPromise: Promise<void> | null = null;
 
   const app = express();
 
@@ -426,6 +427,8 @@ export function createServer(application: Application, requestedPort?: number): 
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
       await services.agentRuntime?.stop();
+      // Archive recovery still uses sessions, run scripts, caches and the database.
+      await archiveRecoveryPromise;
 
       clearInterval(heartbeatInterval);
       if (indexHtmlReloadInterval !== null) {
@@ -512,12 +515,6 @@ export function createServer(application: Application, requestedPort?: number): 
         await runStartupTask('Failed to recover stale run script states on startup', () =>
           runScriptStateMachine.recoverStaleStates()
         );
-
-        // Resume workspace archives abandoned by a prior process exit.
-        await runStartupTask(
-          'Failed to recover stale archiving workspaces on startup',
-          recoverStaleArchivingOnStartup
-        );
       };
 
       try {
@@ -525,6 +522,16 @@ export function createServer(application: Application, requestedPort?: number): 
         eventLoopMonitorStarted = true;
         await bindServerWithPortFallback();
         await runStartupReconciliation();
+        if (cleanupStarted) {
+          throw new Error('Server startup interrupted by shutdown');
+        }
+
+        // Git worktree cleanup can outlast the CLI startup deadline. Keep these
+        // workspaces ARCHIVING while recovery runs without delaying readiness.
+        archiveRecoveryPromise = runStartupTask(
+          'Failed to recover stale archiving workspaces on startup',
+          recoverStaleArchivingOnStartup
+        );
 
         snapshotReconciliation.start();
         services.workspaceMetadata?.start();

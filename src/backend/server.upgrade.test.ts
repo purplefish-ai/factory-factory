@@ -474,7 +474,7 @@ describe('server websocket upgrade routing', () => {
     expect(application.services.agentRuntime.start).toHaveBeenCalledOnce();
   });
 
-  it('rejects concurrent start calls without running startup cleanup', async () => {
+  it.each([false, true])('rejects interrupted startup (shutdown=%s)', async (stopDuringStartup) => {
     const harness = createTestHarness();
     let reconciliationStarted!: () => void;
     let continueReconciliation!: () => void;
@@ -484,7 +484,7 @@ describe('server websocket upgrade routing', () => {
     const continueReconciliationPromise = new Promise<void>((resolve) => {
       continueReconciliation = resolve;
     });
-    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
+    vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockImplementationOnce(
       async () => {
         reconciliationStarted();
         await continueReconciliationPromise;
@@ -501,6 +501,18 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
     expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
+    if (stopDuringStartup) {
+      await server.stop();
+      expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+      continueReconciliation();
+      await expect(startPromise).rejects.toThrow('Server startup interrupted by shutdown');
+      expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+      expect(harness.lifecycle.recoverStaleArchivingWorkspaces).not.toHaveBeenCalled();
+      expect(harness.lifecycle.snapshotReconciliation.start).not.toHaveBeenCalled();
+      expect(harness.services.agentRuntime.start).not.toHaveBeenCalled();
+      expect(server.getHttpServer().listening).toBe(false);
+      return;
+    }
     continueReconciliation();
     await expect(startPromise).resolves.toBe('http://localhost:0');
     expect(server.getHttpServer().listening).toBe(true);
@@ -578,6 +590,74 @@ describe('server websocket upgrade routing', () => {
       'Recovered stale agent session states on startup',
       { recoveredCount: 3 }
     );
+  });
+
+  it('serves requests and signals readiness while archive recovery is pending', async () => {
+    const harness = createTestHarness({ isRunScriptProxyEnabled: true });
+    let finishRecovery!: () => void;
+    const recovery = new Promise<void>((resolve) => {
+      finishRecovery = resolve;
+    });
+    harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
+      await recovery;
+      return { archived: [], failed: [] };
+    });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const server = createTestServer(harness.application, 0);
+    try {
+      const started = server.start();
+      await vi.waitFor(() => expect(writeSpy).toHaveBeenCalledWith('BACKEND_PORT:0\n'));
+      await started;
+      expect((await request(server.getHttpServer()).get('/health')).status).toBe(200);
+
+      const socket = { destroy: vi.fn(), write: vi.fn() };
+      server
+        .getHttpServer()
+        .emit(
+          'upgrade',
+          { headers: { host: 'localhost:3001' }, url: '/chat?sessionId=s1' },
+          socket,
+          Buffer.alloc(0)
+        );
+      expect(handlers.chat).toHaveBeenCalledOnce();
+      expect(socket.destroy).not.toHaveBeenCalled();
+    } finally {
+      finishRecovery();
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('drains archive recovery before shutting down its dependencies', async () => {
+    const harness = createTestHarness();
+    let finishRecovery!: () => void;
+    const recovery = new Promise<void>((resolve) => {
+      finishRecovery = resolve;
+    });
+    harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
+      await recovery;
+      return { archived: [], failed: [] };
+    });
+    const server = createTestServer(harness.application, 0);
+    try {
+      let ready = false;
+      const started = server.start().then(() => {
+        ready = true;
+      });
+      await vi.waitFor(() => expect(ready).toBe(true));
+      await started;
+
+      const stopped = server.stop();
+      await vi.waitFor(() => expect(harness.services.agentRuntime.stop).toHaveBeenCalledOnce());
+      expect(harness.services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
+      expect(harness.services.runScriptService.cleanup).not.toHaveBeenCalled();
+      expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
+
+      finishRecovery();
+      await stopped;
+      expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+    } finally {
+      finishRecovery();
+    }
   });
 
   it('gates HTTP requests and websocket upgrades while startup reconciliation is pending', async () => {

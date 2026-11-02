@@ -415,6 +415,14 @@ recovery. Requests that lose the conditional state transition re-read the
 workspace and retry once if it has rolled back to an archivable state. Other
 invalid transitions and cleanup failures remain errors.
 
+Startup archive recovery runs in the background after essential session and
+workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket
+readiness or the CLI startup signal; affected workspaces remain ARCHIVING until
+recovery completes or marks them FAILED. Shutdown drains that recovery before
+closing its session, run-script, cache, and database dependencies. If shutdown
+begins during essential reconciliation, startup aborts before launching archive
+recovery or starting background services.
+
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses
