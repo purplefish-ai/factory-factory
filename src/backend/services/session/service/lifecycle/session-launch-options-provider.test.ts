@@ -12,7 +12,10 @@ describe('account-aware launch probe boundary', () => {
   it('resolves an explicit account before passing only its environment to ACP', async () => {
     const env = { CODEX_HOME: '/managed/profile' };
     mocks.preview.mockResolvedValue({ accountId: 'saved', env });
-    mocks.probe.mockResolvedValue({ provider: 'CODEX', model: 'model' });
+    mocks.probe.mockReturnValue({
+      result: Promise.resolve({ provider: 'CODEX', model: 'model' }),
+      drained: Promise.resolve(),
+    });
     await fetchAccountSessionLaunchOptions({
       provider: 'CODEX',
       model: 'model',
@@ -22,7 +25,10 @@ describe('account-aware launch probe boundary', () => {
     expect(mocks.probe).toHaveBeenCalledExactlyOnceWith({ provider: 'CODEX', model: 'model', env });
   });
   it('keeps Claude discovery independent of Codex accounts', async () => {
-    mocks.probe.mockResolvedValue({ provider: 'CLAUDE', model: 'sonnet' });
+    mocks.probe.mockReturnValue({
+      result: Promise.resolve({ provider: 'CLAUDE', model: 'sonnet' }),
+      drained: Promise.resolve(),
+    });
     await fetchAccountSessionLaunchOptions({ provider: 'CLAUDE', model: 'sonnet' });
     expect(mocks.preview).not.toHaveBeenCalled();
     expect(mocks.probe).toHaveBeenCalledExactlyOnceWith({ provider: 'CLAUDE', model: 'sonnet' });
