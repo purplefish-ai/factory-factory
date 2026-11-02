@@ -1,6 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { ChatIntentRevisionChangedError } from '@/backend/services/session/resources/chat-intent.accessor';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
@@ -95,16 +99,31 @@ function takeDispatchBatch(sessionId: string, messages: QueuedMessage[]): boolea
   return true;
 }
 
-export async function dispatchCollectedBatch(input: {
+type CollectedBatchInput = {
+  chatIntent?: SessionChatIntentService;
   sessionId: string;
   batch: Awaited<ReturnType<typeof collectDispatchBatch>>;
   backgroundDelivery: SessionDispatchDependencies['backgroundDelivery'];
   isCurrent(): boolean;
   send(messages: QueuedMessage[]): Promise<void>;
-  onError(message: QueuedMessage, error: unknown): void;
+  onError(message: QueuedMessage, error: unknown): void | Promise<void>;
   onSuccess(): void;
-}): Promise<'retry' | undefined> {
+};
+
+export async function dispatchCollectedBatch(
+  input: CollectedBatchInput
+): Promise<'retry' | undefined> {
   const { messages } = input.batch;
+  const releaseProjection = input.chatIntent?.holdProjection(input.sessionId, [...messages]);
+  if (input.chatIntent && !releaseProjection) {
+    await releasePreparedBackgrounds(
+      messages,
+      input.backgroundDelivery,
+      new Error('Queued cancellation is settling')
+    );
+    input.batch.release();
+    return 'retry';
+  }
   try {
     if (!input.isCurrent()) {
       await releasePreparedBackgrounds(
@@ -128,20 +147,49 @@ export async function dispatchCollectedBatch(input: {
       await input.send(messages);
       input.onSuccess();
     } catch (error) {
-      // Requeue from the end so a busy provider preserves FIFO order.
-      const backwards = [...messages].reverse();
-      await releasePreparedBackgrounds(
-        backwards,
-        input.backgroundDelivery,
-        error,
-        input.isCurrent() ? 'failed' : 'cancelled'
-      );
-      for (const message of backwards) {
-        input.onError(message, error);
-      }
+      return await handleFailedBatch(input, messages, error);
     }
   } finally {
+    releaseProjection?.();
     input.batch.release();
+  }
+  return undefined;
+}
+
+async function handleFailedBatch(
+  input: CollectedBatchInput,
+  messages: QueuedMessage[],
+  error: unknown
+): Promise<'retry' | undefined> {
+  // Requeue from the end so a busy provider preserves FIFO order.
+  const backwards = [...messages].reverse();
+  error = input.chatIntent?.protectClaimedBatchFailure(input.sessionId, messages, error) ?? error;
+  if (
+    error instanceof ChatIntentRevisionChangedError ||
+    (error instanceof PromptNotInvokedError && input.isCurrent())
+  ) {
+    await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
+    if (!input.isCurrent()) {
+      for (const message of backwards) {
+        await input.onError(message, error);
+      }
+      return;
+    }
+    for (const message of backwards) {
+      sessionDomainService.requeueFront(input.sessionId, message);
+    }
+    return 'retry';
+  }
+  if (!(error instanceof UncertainChatDispatchError)) {
+    await releasePreparedBackgrounds(
+      backwards,
+      input.backgroundDelivery,
+      error,
+      input.isCurrent() ? 'failed' : 'cancelled'
+    );
+  }
+  for (const message of backwards) {
+    await input.onError(message, error);
   }
   return undefined;
 }
@@ -224,6 +272,7 @@ export async function collectDispatchBatch(input: {
   first: QueuedMessage;
   notifications: SessionDispatchNotificationDeliveryService;
   prepareBackground(message: QueuedMessage): Promise<boolean>;
+  isHeld?(message: QueuedMessage): Promise<boolean>;
   guard?: SessionCallerGuard;
   isCurrent(): boolean;
 }) {
@@ -236,7 +285,7 @@ export async function collectDispatchBatch(input: {
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
   try {
     for (const message of snapshot.slice(1)) {
-      if (!input.isCurrent() || isCommand(message)) {
+      if (!input.isCurrent() || isCommand(message) || (await input.isHeld?.(message))) {
         break;
       }
       // One PR claim already covers all pending facts for this conversation.
@@ -267,7 +316,10 @@ export async function collectDispatchBatch(input: {
 }
 
 export async function prepareBackgroundForDispatch(
-  dependencies: Pick<SessionDispatchDependencies, 'runtimeManager' | 'backgroundDelivery'>,
+  dependencies: Pick<
+    SessionDispatchDependencies,
+    'runtimeManager' | 'backgroundDelivery' | 'chatIntent'
+  >,
   dbSessionId: string,
   peeked: QueuedMessage,
   isCurrent: () => boolean,
@@ -275,6 +327,9 @@ export async function prepareBackgroundForDispatch(
 ): Promise<boolean> {
   if (!peeked.source) {
     return true;
+  }
+  if (await dependencies.chatIntent?.store.hasUncertainAttempt(dbSessionId)) {
+    return false;
   }
   if (
     dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||

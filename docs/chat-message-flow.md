@@ -74,6 +74,78 @@ the bus.
 pending-request access. Agent stream translation belongs to the ACP processor;
 it does not attach legacy `ClaudeClient` listeners.
 
+## Durable human acceptance and batched dispatch
+
+`SessionChatIntentService` owns accepted human input; the runtime queue is a
+projection. Before publishing ACCEPTED it stores a `ChatIntent`, uniquely keyed
+by `(sessionId, messageId)`, with the submitted text, voice flag, settings and
+attachment bytes. A fingerprint excludes server acceptance time but includes all
+submitted content. Identical retries return the recorded state, even when the
+queue is now full; a conflicting payload is rejected explicitly. Workspace
+initial prompts and session-creation initial text use deterministic IDs and the
+same durable owner. Durable initial entry points require that owner and fail
+closed if composition has not installed it. Trusted provisioning retries recover
+existing initial input before rebuilding mutable linked-issue content; submitted
+retry APIs still reject conflicting payloads. Failed initial acceptance rolls
+back a newly created session. Loading safely queued durable human input triggers
+dispatch after configuration publication; a browse-only load without queued
+human intent stays passive. Legacy in-memory input cannot be backfilled.
+
+Submitted payloads remain immutable. Accepted later model, reasoning, thinking
+and planning edits update separate desired settings/revisions for older queued
+humans. Restart hydration restores those desired settings. The dispatcher still
+combines consecutive messages into one prompt, preserves slash-command
+boundaries and human priority, and uses the last human's effective settings.
+Selected members are held out of hydration and cancellation until the batch
+exits; a rejected removal cannot cancel a durable member behind the dispatcher.
+The configuration owner serializes accepted edits, desired-revision refresh,
+provider configuration, atomic claim and the native turn. Claim compares every
+human's desired revision and provider identity. A revision conflict requeues the
+whole unsent batch. Later edits wait behind that turn, so the frozen settings
+and native configuration snapshot describe the actual invocation. Ordinary
+prompt sends share this admission queue and cannot occupy the prompt limiter
+while a frozen batch is waiting to invoke the provider. Runtime retirement
+rejects the old queue without blocking a replacement; a claimed mixed batch
+remains uncertain and retains its external delivery claims.
+
+Before invoking a provider, a transaction creates one `PromptDispatchAttempt`
+with complete ordered membership (including background messages), assembled
+content, effective settings, provider/account identity and lifecycle generation.
+Each frozen member explicitly records human or external recovery ownership,
+derived from its persisted intent membership. All durable human members are
+claimed together. Successful provider completion settles the attempt and every
+member together. Steering follows the same protocol; an explicit provider
+`promptRequired` response is evidence that the injection did not occur and
+releases that claim for normal dispatch.
+
+The claim is already potentially sent: a crash between persistence and provider
+invocation cannot prove non-delivery. Only explicit local proof produced before
+entering the provider RPC can return the entire batch to queued (or cancelled
+when stopped). That settlement also clears the live claim marker; missing proof
+is always uncertain. Interrupted or failed invocations remain uncertain, appear
+as recoverable failed input, and are never automatically replayed, together or
+member by member. Check provider history before submitting replacement input.
+Trusted-local `session.listUncertainDispatches` exposes the full membership
+identifiers and frozen provider/settings identity.
+`session.resolveUncertainDispatch` resolves an entire human-only batch as
+confirmed committed or cancelled after manual history review; neither choice
+requeues any member. Mixed external batches fail closed and require the existing
+external delivery owners to reconcile their ledgers. Full batch proof remains
+stored without an age-based purge. Unresolved attempts hold automatic external
+delivery and notification transcript recovery for that session; existing
+PR/notification ledgers retain their replay and acknowledgment authority. This
+does not migrate AgentRun initial delivery.
+
+Queued cancellation and explicit stop persist cancellation before discarding the
+runtime queue. Unexpected process exit records queued input as failed; managed
+runtime replacement and backend shutdown preserve queued input. Stop cannot
+cancel the proof of an already uncertain attempt. Explicit session/workspace
+deletion cascades these records. Permission callbacks remain process-local and
+are never restored as durable requests.
+
+Resolving a human-only uncertain attempt also wakes the dispatcher, allowing
+unrelated external work held behind that proof to proceed under its own ledger.
+
 ## Session commands
 
 The `set_model`, `set_config_option`, `set_thinking_budget`, and
@@ -121,8 +193,9 @@ Registering a chat WebSocket does not hydrate history. The client explicitly
 sends `load_session`, whose transport adapter runs these application stages:
 
 1. `prepareLoad` reads the `AgentSession`, hydrates provider history, and merges
-   durable lifecycle events. History fences, transcript writes, hydration flags,
-   and retry cooldowns use the same application domain that supplies replay.
+   durable lifecycle events and accepted chat intent. History fences, transcript
+   writes, hydration flags, and retry cooldowns use the same application domain
+   that supplies replay.
 2. `captureReplay` synchronously reads the current runtime, recovers interrupted
    tool calls for stopped sessions, and captures domain replay data. The adapter
    immediately publishes the `session_replay_batch` envelope on the existing
@@ -287,15 +360,16 @@ does not substitute for checking momentum behavior on an actual iOS device.
 
 ## Sources of truth
 
-| Concern                                               | Source                                                                                                                                                                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                           |
-| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                      |
-| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
-| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                             |
-| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                             |
-| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                             |
-| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                             |
+| Concern                                                       | Source                                                                                                                                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runtime queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                           |
+| Provider event translation                                    | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                      |
+| History hydration and replay                                  | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
+| Outbound event envelopes                                      | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                             |
+| WebSocket subscriptions and delivery                          | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                             |
+| Client transport and event reduction                          | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                             |
+| Durable accepted humans and aggregate provider attempts       | `ChatIntent`, `PromptDispatchAttempt`, and `SessionChatIntentService`                                                                                                                                              |
+| Persisted provider identity and lifecycle history             | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                             |
 
 Focused history and recovery coverage remains in `load-session.handler.test.ts`
 and `load-session.handler.recovery.test.ts`.

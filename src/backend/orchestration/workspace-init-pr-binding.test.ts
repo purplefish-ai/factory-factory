@@ -27,7 +27,9 @@ describe('workspace startup PR binding recovery', () => {
     'keeps startup and human dispatch successful when monitoring binding fails (persistent: %s)',
     async (persistent) => {
       setupHappyPath({ creationMetadata: { initialPrompt: 'Implement the issue' } });
-      vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
+      vi.mocked(sessionDomainService.enqueueInitialMessageDurably).mockResolvedValue({
+        position: 0,
+      });
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-main', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
@@ -43,7 +45,7 @@ describe('workspace startup PR binding recovery', () => {
       expect(bindIssueMonitoringSession).toHaveBeenCalledTimes(2);
       expect(bindIssueMonitoringSession).toHaveBeenLastCalledWith(WORKSPACE_ID, 'session-main');
       expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
-      expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledTimes(1);
+      expect(sessionDomainService.enqueueInitialMessageDurably).toHaveBeenCalledTimes(1);
       expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
       expect(mockLogger.warn).not.toHaveBeenCalledWith(

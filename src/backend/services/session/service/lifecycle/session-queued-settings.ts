@@ -23,7 +23,12 @@ export class SessionQueuedSettings {
     private readonly enqueue: (
       sessionId: string,
       operation: () => Promise<void>
-    ) => Promise<void> = (_sessionId, operation) => operation()
+    ) => Promise<void> = (_sessionId, operation) => operation(),
+    private readonly persist?: (
+      sessionId: string,
+      requestedAt: number,
+      settings: Partial<Settings>
+    ) => Promise<void>
   ) {}
 
   capture(
@@ -87,6 +92,7 @@ export class SessionQueuedSettings {
             return;
           }
           const settings = readSettings(config);
+          await this.persist?.(sessionId, requestedAt, settings);
           for (const key of Object.keys(settings) as Array<keyof Settings>) {
             edits.values.set(key, { requestedAt, settings: { [key]: settings[key] } });
           }

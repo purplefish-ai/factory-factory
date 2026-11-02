@@ -27,11 +27,13 @@ export interface PreparedSessionLoad {
   loadRequestId?: string;
   provider: 'CLAUDE' | 'CODEX';
   worktreePath: string | null;
+  dispatchRestoredInput?: boolean;
 }
 export type SessionLoadResult =
   | PreparedSessionLoad
   | { status: 'error'; outcome: SessionCommandOutcome };
 export interface SessionLoadDependencies {
+  hydrateChatIntent?(sessionId: string): Promise<boolean>;
   findSession(sessionId: string): Promise<SessionLoadRecord | null>;
   hydrateProviderHistory(sessionId: string, session: SessionLoadRecord): Promise<void>;
   hydrateLifecycleEvents(sessionId: string): Promise<void>;
@@ -72,12 +74,14 @@ export class SessionLoadService {
     }
     await this.deps.hydrateProviderHistory(sessionId, session);
     await this.deps.hydrateLifecycleEvents(sessionId);
+    const dispatchRestoredInput = await this.deps.hydrateChatIntent?.(sessionId);
     return {
       status: 'ready',
       sessionId,
       loadRequestId,
       provider: session.provider,
       worktreePath: session.workspace.worktreePath,
+      ...(dispatchRestoredInput ? { dispatchRestoredInput: true } : {}),
     };
   }
 
@@ -120,6 +124,9 @@ export class SessionLoadService {
     }
     const text = this.deps.domain.consumeInitialMessage(sessionId);
     if (!text) {
+      if (prepared.dispatchRestoredInput) {
+        await this.deps.tryDispatchNextMessage(sessionId);
+      }
       return;
     }
     const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;

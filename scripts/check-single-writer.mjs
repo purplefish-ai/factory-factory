@@ -527,6 +527,8 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
  * that gap for the workspace side tables and other single-writer models.
  */
 const OWNED_SIDE_TABLES = {
+  chatIntent: 'src/backend/services/session/resources/chat-intent.accessor.ts',
+  promptDispatchAttempt: 'src/backend/services/session/resources/chat-intent.accessor.ts',
   agentEvent: 'src/backend/services/agent-definition/resources/agent-event.accessor.ts',
   agentSourceState: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   agentSourcePage: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',

@@ -7,9 +7,14 @@ import { removeTranscriptMessageById } from './session-transcript';
 
 export function enqueueMessage(
   store: SessionStore,
-  message: QueuedMessage
+  message: QueuedMessage,
+  options?: { restoreAccepted?: boolean }
 ): { position: number } | { error: string } {
-  if (store.queue.length >= SERVICE_LIMITS.sessionStoreMaxQueueSize) {
+  const existing = store.queue.findIndex((item) => item.id === message.id);
+  if (existing >= 0) {
+    return { position: existing };
+  }
+  if (!options?.restoreAccepted && store.queue.length >= SERVICE_LIMITS.sessionStoreMaxQueueSize) {
     return { error: `Queue full (max ${SERVICE_LIMITS.sessionStoreMaxQueueSize} messages)` };
   }
 

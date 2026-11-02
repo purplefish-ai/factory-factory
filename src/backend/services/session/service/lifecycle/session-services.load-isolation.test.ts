@@ -19,6 +19,7 @@ vi.mock('@/backend/services/session/service/data/session-history-loader.service'
 function createLoad(domain: SessionDomainService) {
   return createSessionLoadService({
     domain,
+    hydrateChatIntent: () => Promise.resolve(false),
     config: {
       getSessionConfigProjection: async () => ({
         currentProjection: () => ({

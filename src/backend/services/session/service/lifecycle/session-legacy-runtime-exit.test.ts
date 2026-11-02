@@ -3,6 +3,26 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
+// Legacy exit fixtures isolate configuration admission, covered with real handles separately.
+vi.mock('./session.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./session.service')>();
+  return {
+    ...actual,
+    SessionService: class extends actual.SessionService {
+      constructor(options: import('./session.service').SessionServiceDependencies) {
+        super({ ...options, admitPrompt: undefined });
+      }
+    },
+  };
+});
+vi.mock('@/backend/services/session/service/chat/session-chat-intent', () => ({
+  sessionChatIntentService: {
+    cancel: vi.fn(),
+    override: vi.fn(),
+    configureAdmissionGuard: vi.fn(),
+    store: { hasUncertainAttempt: vi.fn().mockResolvedValue(false) },
+  },
+}));
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockRecordRatchetSessionEnd = vi.fn();

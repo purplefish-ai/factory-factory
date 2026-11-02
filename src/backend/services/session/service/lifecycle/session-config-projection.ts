@@ -54,3 +54,23 @@ export type SessionConfigReadContext = {
   catalog?: Promise<CodexModelCatalogEntry[] | null>;
   retirements: number;
 };
+
+export async function readConfirmedConfigProjection(
+  read: () => Promise<ResolvedSessionConfigProjection>
+): Promise<SessionConfigProjection> {
+  let resolved = await read();
+  for (;;) {
+    const current = resolved.currentProjection();
+    if ('retry' in current) {
+      resolved = await current.retry;
+      continue;
+    }
+    return current;
+  }
+}
+
+export async function readConfirmedConfigOptions(
+  read: () => Promise<ResolvedSessionConfigProjection>
+): Promise<SessionConfigOption[]> {
+  return (await readConfirmedConfigProjection(read)).configOptions;
+}

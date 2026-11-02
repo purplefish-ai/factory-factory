@@ -1,5 +1,6 @@
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
+import { sessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent';
 import {
   SessionLoadService,
   type SessionLoadDependencies,
@@ -46,6 +47,7 @@ export {
 };
 
 export const sessionDispatchService = new SessionDispatchService({
+  chatIntent: sessionChatIntentService,
   eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
   configService: sessionConfigService,
@@ -75,6 +77,12 @@ export function createSessionLoadService(
 ): SessionLoadService {
   return new SessionLoadService({
     ...ports,
+    hydrateChatIntent:
+      ports.hydrateChatIntent ??
+      (async (sessionId) => {
+        await sessionChatIntentService.hydrate(sessionId);
+        return sessionChatIntentService.hasQueuedInput(sessionId);
+      }),
     findSession: (sessionId) => agentSessionAccessor.findById(sessionId),
     hydrateProviderHistory: createProviderHistoryHydrator(ports.domain),
     getCachedCommands: (provider) => slashCommandCacheService.getCachedCommands(provider),

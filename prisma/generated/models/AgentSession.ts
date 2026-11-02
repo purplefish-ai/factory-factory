@@ -292,6 +292,8 @@ export type AgentSessionWhereInput = {
   providerMetadata?: Prisma.JsonNullableFilter<"AgentSession">
   createdAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
+  chatIntents?: Prisma.ChatIntentListRelationFilter
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptListRelationFilter
   dedicatedPRBinding?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringListRelationFilter
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
@@ -314,6 +316,8 @@ export type AgentSessionOrderByWithRelationInput = {
   providerMetadata?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  chatIntents?: Prisma.ChatIntentOrderByRelationAggregateInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptOrderByRelationAggregateInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionOrderByWithRelationInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringOrderByRelationAggregateInput
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
@@ -339,6 +343,8 @@ export type AgentSessionWhereUniqueInput = Prisma.AtLeast<{
   providerMetadata?: Prisma.JsonNullableFilter<"AgentSession">
   createdAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentSession"> | Date | string
+  chatIntents?: Prisma.ChatIntentListRelationFilter
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptListRelationFilter
   dedicatedPRBinding?: Prisma.XOR<Prisma.WorkspacePRDedicatedSessionNullableScalarRelationFilter, Prisma.WorkspacePRDedicatedSessionWhereInput> | null
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringListRelationFilter
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
@@ -403,6 +409,8 @@ export type AgentSessionCreateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
   workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
@@ -425,6 +433,8 @@ export type AgentSessionUncheckedCreateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
@@ -443,6 +453,8 @@ export type AgentSessionUpdateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
@@ -465,6 +477,8 @@ export type AgentSessionUncheckedUpdateInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
@@ -596,6 +610,11 @@ export type AgentSessionSumOrderByAggregateInput = {
   providerProcessPid?: Prisma.SortOrder
 }
 
+export type AgentSessionScalarRelationFilter = {
+  is?: Prisma.AgentSessionWhereInput
+  isNot?: Prisma.AgentSessionWhereInput
+}
+
 export type AgentSessionCreateNestedManyWithoutWorkspaceInput = {
   create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutWorkspaceInput, Prisma.AgentSessionUncheckedCreateWithoutWorkspaceInput> | Prisma.AgentSessionCreateWithoutWorkspaceInput[] | Prisma.AgentSessionUncheckedCreateWithoutWorkspaceInput[]
   connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutWorkspaceInput | Prisma.AgentSessionCreateOrConnectWithoutWorkspaceInput[]
@@ -720,6 +739,34 @@ export type EnumSessionProviderFieldUpdateOperationsInput = {
   set?: $Enums.SessionProvider
 }
 
+export type AgentSessionCreateNestedOneWithoutChatIntentsInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedCreateWithoutChatIntentsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutChatIntentsInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+}
+
+export type AgentSessionUpdateOneRequiredWithoutChatIntentsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedCreateWithoutChatIntentsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutChatIntentsInput
+  upsert?: Prisma.AgentSessionUpsertWithoutChatIntentsInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSessionUpdateToOneWithWhereWithoutChatIntentsInput, Prisma.AgentSessionUpdateWithoutChatIntentsInput>, Prisma.AgentSessionUncheckedUpdateWithoutChatIntentsInput>
+}
+
+export type AgentSessionCreateNestedOneWithoutPromptDispatchAttemptsInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedCreateWithoutPromptDispatchAttemptsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutPromptDispatchAttemptsInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+}
+
+export type AgentSessionUpdateOneRequiredWithoutPromptDispatchAttemptsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentSessionCreateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedCreateWithoutPromptDispatchAttemptsInput>
+  connectOrCreate?: Prisma.AgentSessionCreateOrConnectWithoutPromptDispatchAttemptsInput
+  upsert?: Prisma.AgentSessionUpsertWithoutPromptDispatchAttemptsInput
+  connect?: Prisma.AgentSessionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSessionUpdateToOneWithWhereWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUpdateWithoutPromptDispatchAttemptsInput>, Prisma.AgentSessionUncheckedUpdateWithoutPromptDispatchAttemptsInput>
+}
+
 export type AgentSessionCreateWithoutWorkspaceInput = {
   id?: string
   name?: string | null
@@ -734,6 +781,8 @@ export type AgentSessionCreateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
   codexAccount?: Prisma.CodexAccountCreateNestedOneWithoutSessionsInput
@@ -754,6 +803,8 @@ export type AgentSessionUncheckedCreateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
@@ -818,6 +869,8 @@ export type AgentSessionCreateWithoutPrMonitoringBindingsInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
   workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
   codexAccount?: Prisma.CodexAccountCreateNestedOneWithoutSessionsInput
@@ -839,6 +892,8 @@ export type AgentSessionUncheckedCreateWithoutPrMonitoringBindingsInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
 }
 
@@ -872,6 +927,8 @@ export type AgentSessionUpdateWithoutPrMonitoringBindingsInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
   codexAccount?: Prisma.CodexAccountUpdateOneWithoutSessionsNestedInput
@@ -893,6 +950,8 @@ export type AgentSessionUncheckedUpdateWithoutPrMonitoringBindingsInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
 }
 
@@ -910,6 +969,8 @@ export type AgentSessionCreateWithoutDedicatedPRBindingInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
   workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
   codexAccount?: Prisma.CodexAccountCreateNestedOneWithoutSessionsInput
@@ -931,6 +992,8 @@ export type AgentSessionUncheckedCreateWithoutDedicatedPRBindingInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
 
@@ -964,6 +1027,8 @@ export type AgentSessionUpdateWithoutDedicatedPRBindingInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
   codexAccount?: Prisma.CodexAccountUpdateOneWithoutSessionsNestedInput
@@ -985,6 +1050,8 @@ export type AgentSessionUncheckedUpdateWithoutDedicatedPRBindingInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
 
@@ -1002,6 +1069,8 @@ export type AgentSessionCreateWithoutCodexAccountInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
   workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
@@ -1022,6 +1091,8 @@ export type AgentSessionUncheckedCreateWithoutCodexAccountInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
 }
@@ -1049,6 +1120,206 @@ export type AgentSessionUpdateWithWhereUniqueWithoutCodexAccountInput = {
 export type AgentSessionUpdateManyWithWhereWithoutCodexAccountInput = {
   where: Prisma.AgentSessionScalarWhereInput
   data: Prisma.XOR<Prisma.AgentSessionUpdateManyMutationInput, Prisma.AgentSessionUncheckedUpdateManyWithoutCodexAccountInput>
+}
+
+export type AgentSessionCreateWithoutChatIntentsInput = {
+  id?: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptCreateNestedManyWithoutSessionInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
+  codexAccount?: Prisma.CodexAccountCreateNestedOneWithoutSessionsInput
+}
+
+export type AgentSessionUncheckedCreateWithoutChatIntentsInput = {
+  id?: string
+  workspaceId: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  codexAccountId?: string | null
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedCreateNestedManyWithoutSessionInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type AgentSessionCreateOrConnectWithoutChatIntentsInput = {
+  where: Prisma.AgentSessionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedCreateWithoutChatIntentsInput>
+}
+
+export type AgentSessionUpsertWithoutChatIntentsInput = {
+  update: Prisma.XOR<Prisma.AgentSessionUpdateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedUpdateWithoutChatIntentsInput>
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedCreateWithoutChatIntentsInput>
+  where?: Prisma.AgentSessionWhereInput
+}
+
+export type AgentSessionUpdateToOneWithWhereWithoutChatIntentsInput = {
+  where?: Prisma.AgentSessionWhereInput
+  data: Prisma.XOR<Prisma.AgentSessionUpdateWithoutChatIntentsInput, Prisma.AgentSessionUncheckedUpdateWithoutChatIntentsInput>
+}
+
+export type AgentSessionUpdateWithoutChatIntentsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
+  codexAccount?: Prisma.CodexAccountUpdateOneWithoutSessionsNestedInput
+}
+
+export type AgentSessionUncheckedUpdateWithoutChatIntentsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  codexAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
+}
+
+export type AgentSessionCreateWithoutPromptDispatchAttemptsInput = {
+  id?: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentCreateNestedManyWithoutSessionInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringCreateNestedManyWithoutRecipientInput
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutAgentSessionsInput
+  codexAccount?: Prisma.CodexAccountCreateNestedOneWithoutSessionsInput
+}
+
+export type AgentSessionUncheckedCreateWithoutPromptDispatchAttemptsInput = {
+  id?: string
+  workspaceId: string
+  name?: string | null
+  workspacePrId?: string | null
+  workflow: string
+  model?: string
+  status?: $Enums.SessionStatus
+  provider: $Enums.SessionProvider
+  codexAccountId?: string | null
+  providerSessionId?: string | null
+  providerProjectPath?: string | null
+  providerProcessPid?: number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedCreateNestedManyWithoutSessionInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedCreateNestedOneWithoutSessionInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedCreateNestedManyWithoutRecipientInput
+}
+
+export type AgentSessionCreateOrConnectWithoutPromptDispatchAttemptsInput = {
+  where: Prisma.AgentSessionWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedCreateWithoutPromptDispatchAttemptsInput>
+}
+
+export type AgentSessionUpsertWithoutPromptDispatchAttemptsInput = {
+  update: Prisma.XOR<Prisma.AgentSessionUpdateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedUpdateWithoutPromptDispatchAttemptsInput>
+  create: Prisma.XOR<Prisma.AgentSessionCreateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedCreateWithoutPromptDispatchAttemptsInput>
+  where?: Prisma.AgentSessionWhereInput
+}
+
+export type AgentSessionUpdateToOneWithWhereWithoutPromptDispatchAttemptsInput = {
+  where?: Prisma.AgentSessionWhereInput
+  data: Prisma.XOR<Prisma.AgentSessionUpdateWithoutPromptDispatchAttemptsInput, Prisma.AgentSessionUncheckedUpdateWithoutPromptDispatchAttemptsInput>
+}
+
+export type AgentSessionUpdateWithoutPromptDispatchAttemptsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
+  codexAccount?: Prisma.CodexAccountUpdateOneWithoutSessionsNestedInput
+}
+
+export type AgentSessionUncheckedUpdateWithoutPromptDispatchAttemptsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workspacePrId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workflow?: Prisma.StringFieldUpdateOperationsInput | string
+  model?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumSessionStatusFieldUpdateOperationsInput | $Enums.SessionStatus
+  provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
+  codexAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProjectPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  providerProcessPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
+  prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
 
 export type AgentSessionCreateManyWorkspaceInput = {
@@ -1082,6 +1353,8 @@ export type AgentSessionUpdateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
   codexAccount?: Prisma.CodexAccountUpdateOneWithoutSessionsNestedInput
@@ -1102,6 +1375,8 @@ export type AgentSessionUncheckedUpdateWithoutWorkspaceInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
@@ -1154,6 +1429,8 @@ export type AgentSessionUpdateWithoutCodexAccountInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUpdateManyWithoutRecipientNestedInput
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutAgentSessionsNestedInput
@@ -1174,6 +1451,8 @@ export type AgentSessionUncheckedUpdateWithoutCodexAccountInput = {
   providerMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatIntents?: Prisma.ChatIntentUncheckedUpdateManyWithoutSessionNestedInput
+  promptDispatchAttempts?: Prisma.PromptDispatchAttemptUncheckedUpdateManyWithoutSessionNestedInput
   dedicatedPRBinding?: Prisma.WorkspacePRDedicatedSessionUncheckedUpdateOneWithoutSessionNestedInput
   prMonitoringBindings?: Prisma.WorkspacePRMonitoringUncheckedUpdateManyWithoutRecipientNestedInput
 }
@@ -1201,10 +1480,14 @@ export type AgentSessionUncheckedUpdateManyWithoutCodexAccountInput = {
  */
 
 export type AgentSessionCountOutputType = {
+  chatIntents: number
+  promptDispatchAttempts: number
   prMonitoringBindings: number
 }
 
 export type AgentSessionCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  chatIntents?: boolean | AgentSessionCountOutputTypeCountChatIntentsArgs
+  promptDispatchAttempts?: boolean | AgentSessionCountOutputTypeCountPromptDispatchAttemptsArgs
   prMonitoringBindings?: boolean | AgentSessionCountOutputTypeCountPrMonitoringBindingsArgs
 }
 
@@ -1216,6 +1499,20 @@ export type AgentSessionCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types
    * Select specific fields to fetch from the AgentSessionCountOutputType
    */
   select?: Prisma.AgentSessionCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * AgentSessionCountOutputType without action
+ */
+export type AgentSessionCountOutputTypeCountChatIntentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ChatIntentWhereInput
+}
+
+/**
+ * AgentSessionCountOutputType without action
+ */
+export type AgentSessionCountOutputTypeCountPromptDispatchAttemptsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PromptDispatchAttemptWhereInput
 }
 
 /**
@@ -1242,6 +1539,8 @@ export type AgentSessionSelect<ExtArgs extends runtime.Types.Extensions.Internal
   providerMetadata?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  chatIntents?: boolean | Prisma.AgentSession$chatIntentsArgs<ExtArgs>
+  promptDispatchAttempts?: boolean | Prisma.AgentSession$promptDispatchAttemptsArgs<ExtArgs>
   dedicatedPRBinding?: boolean | Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>
   prMonitoringBindings?: boolean | Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -1309,6 +1608,8 @@ export type AgentSessionSelectScalar = {
 
 export type AgentSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "name" | "workspacePrId" | "workflow" | "model" | "status" | "provider" | "codexAccountId" | "providerSessionId" | "providerProjectPath" | "providerProcessPid" | "providerMetadata" | "createdAt" | "updatedAt", ExtArgs["result"]["agentSession"]>
 export type AgentSessionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  chatIntents?: boolean | Prisma.AgentSession$chatIntentsArgs<ExtArgs>
+  promptDispatchAttempts?: boolean | Prisma.AgentSession$promptDispatchAttemptsArgs<ExtArgs>
   dedicatedPRBinding?: boolean | Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>
   prMonitoringBindings?: boolean | Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -1327,6 +1628,8 @@ export type AgentSessionIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types
 export type $AgentSessionPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "AgentSession"
   objects: {
+    chatIntents: Prisma.$ChatIntentPayload<ExtArgs>[]
+    promptDispatchAttempts: Prisma.$PromptDispatchAttemptPayload<ExtArgs>[]
     dedicatedPRBinding: Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs> | null
     prMonitoringBindings: Prisma.$WorkspacePRMonitoringPayload<ExtArgs>[]
     workspace: Prisma.$WorkspacePayload<ExtArgs>
@@ -1742,6 +2045,8 @@ readonly fields: AgentSessionFieldRefs;
  */
 export interface Prisma__AgentSessionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  chatIntents<T extends Prisma.AgentSession$chatIntentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$chatIntentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ChatIntentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  promptDispatchAttempts<T extends Prisma.AgentSession$promptDispatchAttemptsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$promptDispatchAttemptsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PromptDispatchAttemptPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   dedicatedPRBinding<T extends Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$dedicatedPRBindingArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDedicatedSessionClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDedicatedSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   prMonitoringBindings<T extends Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSession$prMonitoringBindingsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspacePRMonitoringPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
@@ -2186,6 +2491,54 @@ export type AgentSessionDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.
    * Limit how many AgentSessions to delete.
    */
   limit?: number
+}
+
+/**
+ * AgentSession.chatIntents
+ */
+export type AgentSession$chatIntentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ChatIntent
+   */
+  select?: Prisma.ChatIntentSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ChatIntent
+   */
+  omit?: Prisma.ChatIntentOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ChatIntentInclude<ExtArgs> | null
+  where?: Prisma.ChatIntentWhereInput
+  orderBy?: Prisma.ChatIntentOrderByWithRelationInput | Prisma.ChatIntentOrderByWithRelationInput[]
+  cursor?: Prisma.ChatIntentWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ChatIntentScalarFieldEnum | Prisma.ChatIntentScalarFieldEnum[]
+}
+
+/**
+ * AgentSession.promptDispatchAttempts
+ */
+export type AgentSession$promptDispatchAttemptsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PromptDispatchAttempt
+   */
+  select?: Prisma.PromptDispatchAttemptSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PromptDispatchAttempt
+   */
+  omit?: Prisma.PromptDispatchAttemptOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PromptDispatchAttemptInclude<ExtArgs> | null
+  where?: Prisma.PromptDispatchAttemptWhereInput
+  orderBy?: Prisma.PromptDispatchAttemptOrderByWithRelationInput | Prisma.PromptDispatchAttemptOrderByWithRelationInput[]
+  cursor?: Prisma.PromptDispatchAttemptWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PromptDispatchAttemptScalarFieldEnum | Prisma.PromptDispatchAttemptScalarFieldEnum[]
 }
 
 /**

@@ -46,6 +46,7 @@ function createPendingWorkspaceNotification(
 }
 
 type HarnessOptions = {
+  isRecoveryHeld?: (sessionId: string) => Promise<boolean>;
   pending?: ReturnType<typeof createPendingWorkspaceNotification>[];
   transcript?: ChatMessage[];
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
@@ -72,6 +73,7 @@ function createHarness(options: HarnessOptions = {}) {
     emitDelta: vi.fn(),
   };
   const service = new SessionNotificationDeliveryService({
+    isRecoveryHeld: options.isRecoveryHeld,
     notificationPort,
     queuePort,
     transcriptPort,
@@ -787,4 +789,20 @@ it('awaits the current destination fence before enqueuing or appending recovered
   });
   expect(h.queuePort.enqueue).not.toHaveBeenCalled();
   expect(h.transcriptPort.appendClaudeEvent).not.toHaveBeenCalled();
+});
+
+it('does not infer delivery or enqueue while a durable prompt batch has an uncertain outcome', async () => {
+  const h = createHarness({
+    pending: [createPendingWorkspaceNotification()],
+    isRecoveryHeld: () => Promise.resolve(true),
+  });
+  expect(
+    await h.service.recoverPending({
+      sessionId: 'session',
+      workspaceId: 'workspace-1',
+      assertAllowed: () => undefined,
+    })
+  ).toEqual({ dispatchableCount: 0 });
+  expect(h.notificationPort.markDelivered).not.toHaveBeenCalled();
+  expect(h.queuePort.enqueue).not.toHaveBeenCalled();
 });

@@ -38,7 +38,7 @@ import {
   setupHappyPath,
 } from './workspace-init.test-harness';
 
-const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
+const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessageDurably);
 
 function createDeferredPromise<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -795,7 +795,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -829,7 +829,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -866,7 +866,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -910,7 +910,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -943,7 +943,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -973,7 +973,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -991,7 +991,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1021,7 +1021,7 @@ describe('initializeWorkspaceWorktree', () => {
           },
         })
       );
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1070,7 +1070,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1098,7 +1098,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1121,7 +1121,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1154,7 +1154,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1187,7 +1187,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1214,7 +1214,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1242,7 +1242,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      enqueueInitialMessage.mockReturnValue({ error: 'queue full' });
+      enqueueInitialMessage.mockResolvedValue({ error: 'queue full' });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1328,7 +1328,7 @@ describe('initializeWorkspaceWorktree', () => {
           url: 'https://github.com/owner/repo/issues/42',
         })
       );
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
+      enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 

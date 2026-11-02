@@ -44,6 +44,19 @@ function message(id: string, source?: QueuedMessage['source']): QueuedMessage {
 }
 
 describe('session-queue', () => {
+  it('deduplicates a queued ID before checking capacity without replacing newer settings', () => {
+    const store = createStore();
+    const original = message('human');
+    enqueueMessage(store, original);
+    original.settings.selectedModel = 'newer-model';
+    while (store.queue.length < SERVICE_LIMITS.sessionStoreMaxQueueSize) {
+      enqueueMessage(store, message(`fill-${store.queue.length}`));
+    }
+    expect(enqueueMessage(store, message('human'))).toEqual({ position: 0 });
+    expect(store.queue.filter((item) => item.id === 'human')).toEqual([original]);
+    expect(original.settings.selectedModel).toBe('newer-model');
+  });
+
   it('enqueues and returns queue position', () => {
     const store = createStore();
     const result = enqueueMessage(store, {
