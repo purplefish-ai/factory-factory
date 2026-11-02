@@ -112,7 +112,10 @@ export class SessionService {
       if (!configurationPermit && this.admitPrompt) {
         return this.admitPrompt(
           sessionId,
-          (permit) => this.sendSessionMessage(sessionId, content, guard, permit),
+          (permit) => {
+            this.assertPromptGeneration(sessionId, generation);
+            return this.sendSessionMessage(sessionId, content, guard, permit);
+          },
           guard
         );
       }
