@@ -14,6 +14,7 @@ import {
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
+import { sessionChatIntentService } from '../chat/session-chat-intent';
 import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
@@ -89,6 +90,7 @@ export const providerUsageService = new ProviderUsageService({
 });
 
 export const sessionConfigService = new SessionConfigService({
+  chatIntent: sessionChatIntentService,
   eventAuthority: eventSessionAuthority,
   codexModelCatalogService,
   repository: sessionRepository,
@@ -130,7 +132,12 @@ export const eventOwnedWork = new EventOwnedWork(
   sessionDomainService
 );
 
+sessionChatIntentService.configureAdmissionGuard(
+  (id) => !sessionLifecycleGate.isSessionStopping(id)
+);
+
 export const sessionNotificationDeliveryService = new SessionNotificationDeliveryService({
+  isRecoveryHeld: (id) => sessionChatIntentService.store.hasUncertainAttempt(id),
   notificationPort: workspaceNotificationService,
   queuePort: sessionDomainService,
   transcriptPort: sessionDomainService,
@@ -169,6 +176,7 @@ const sessionProviderIdentityService = new SessionProviderIdentityService({
 });
 
 const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
+  chatIntent: sessionChatIntentService,
   eventAuthority: eventSessionAuthority,
   providerIdentityService: sessionProviderIdentityService,
   repository: sessionRepository,
@@ -199,8 +207,9 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
   lifecycleGate: sessionLifecycleGate,
   workflowFinalizer: sessionWorkflowFinalizer,
   getRuntimeSnapshot: (sessionId) => sessionLifecycleServiceInstance.getRuntimeSnapshot(sessionId),
-  onBeforeStopSession: (sessionId) => {
+  onBeforeStopSession: async (sessionId) => {
     sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId);
+    await sessionChatIntentService.cancel(sessionId);
   },
 });
 

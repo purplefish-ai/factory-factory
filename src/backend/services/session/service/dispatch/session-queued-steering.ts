@@ -1,13 +1,18 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/acp-steering';
 import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
-import { MessageState, type AgentContentItem } from '@/shared/acp-protocol';
+import { MessageState, type AgentContentItem, type QueuedMessage } from '@/shared/acp-protocol';
+import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
+import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
+import { prepareDurableAttempt } from './session-durable-attempt';
 import { buildMessageContent } from './session-message-content';
 import { QueuedMessageNotFoundError } from './session-steering-errors';
 
 const logger = createLogger('session-steering');
 
 interface SteeringPorts {
+  chatIntent?(): SessionChatIntentService | undefined;
+  generation?(sessionId: string): number;
   isPromptInFlight(sessionId: string): boolean;
   captureGuard(sessionId: string): () => boolean;
   isAllowed(sessionId: string): Promise<boolean>;
@@ -56,6 +61,7 @@ export class SessionQueuedSteering {
     const token = Symbol();
     this.pending.set(sessionId, { token, messageId });
     let resumeDispatch = true;
+    const releaseProjection = this.ports.chatIntent?.()?.holdProjection(sessionId, [message]);
     try {
       if (!(await this.ports.isAllowed(sessionId))) {
         throw new Error('Session is not ready for steering');
@@ -67,7 +73,7 @@ export class SessionQueuedSteering {
         return;
       }
       const content = buildMessageContent(message);
-      const result = await this.ports.send(sessionId, content);
+      const result = await this.sendSteering(sessionId, message, content, isCurrent);
       if (result.outcome === 'promptRequired') {
         return;
       }
@@ -84,13 +90,42 @@ export class SessionQueuedSteering {
         newState: MessageState.COMMITTED,
       });
     } catch (error) {
-      // A missing acknowledgment has an uncertain delivery outcome. Keep the
-      // message available for explicit retry without restarting the stopped agent.
-      resumeDispatch = !(error instanceof AcpSteeringTimeoutError);
+      resumeDispatch = this.handleSteerError(sessionId, message, error);
       throw error;
     } finally {
+      releaseProjection?.();
       this.releaseClaim(sessionId, token, isCurrent, resumeDispatch);
     }
+  }
+
+  private async sendSteering(
+    sessionId: string,
+    message: QueuedMessage,
+    content: string | AgentContentItem[],
+    isCurrent: () => boolean
+  ) {
+    const attempt = await prepareDurableAttempt({
+      owner: this.ports.chatIntent?.(),
+      sessionId,
+      messages: [message],
+      content,
+      settings: message.settings,
+      generation: this.ports.generation?.(sessionId) ?? 0,
+      isCurrent,
+    });
+    return attempt.invoke(
+      () => this.ports.send(sessionId, content),
+      (result) => (result.outcome === 'injected' ? 'committed' : 'queued')
+    );
+  }
+
+  private handleSteerError(sessionId: string, message: QueuedMessage, error: unknown): boolean {
+    if (error instanceof UncertainChatDispatchError) {
+      domain.takeQueuedMessages(sessionId, [message]);
+      domain.failMessage(sessionId, message, error.message);
+      return false;
+    }
+    return !(error instanceof AcpSteeringTimeoutError);
   }
 
   private hasPendingSteer(sessionId: string, messageId: string): boolean {

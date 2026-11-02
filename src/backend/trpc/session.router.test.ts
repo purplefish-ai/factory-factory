@@ -19,7 +19,7 @@ const mockSessionDataService = vi.hoisted(() => ({
 }));
 
 const mockSessionDomainService = vi.hoisted(() => ({
-  storeInitialMessage: vi.fn(),
+  storeInitialMessageDurably: vi.fn(),
 }));
 
 const mockSessionProviderResolverService = vi.hoisted(() => ({
@@ -51,7 +51,7 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
   };
   const sessionDomainService = {
     clearSession: vi.fn(),
-    storeInitialMessage: mockSessionDomainService.storeInitialMessage,
+    storeInitialMessageDurably: mockSessionDomainService.storeInitialMessageDurably,
   };
   const cliHealthService = {
     checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
@@ -380,7 +380,10 @@ describe('sessionRouter', () => {
       explicitProvider: undefined,
     });
     expect(cliHealthService.checkHealth).toHaveBeenCalledWith();
-    expect(mockSessionDomainService.storeInitialMessage).toHaveBeenCalledWith('s3', 'Start here');
+    expect(mockSessionDomainService.storeInitialMessageDurably).toHaveBeenCalledWith(
+      's3',
+      'Start here'
+    );
   });
 
   it('blocks creating a session when the selected provider is unavailable', async () => {
@@ -432,7 +435,7 @@ describe('sessionRouter', () => {
       })
     ).resolves.toEqual({ id: 's-started', workspaceId: 'w1', status: 'RUNNING' });
 
-    expect(mockSessionDomainService.storeInitialMessage).toHaveBeenCalledWith(
+    expect(mockSessionDomainService.storeInitialMessageDurably).toHaveBeenCalledWith(
       's-started',
       'Stored before start'
     );

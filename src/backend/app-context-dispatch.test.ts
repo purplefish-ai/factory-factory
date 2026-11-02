@@ -81,6 +81,13 @@ function setupInitialization(services: ReturnType<typeof createGraph>['services'
 
 describe('application queue producer composition', () => {
   beforeEach(() => {
+    // These composition fixtures use placeholder sessions; durable storage has SQLite coverage.
+    const store = sessionDomainService.chatIntent!.store;
+    vi.spyOn(store, 'find').mockResolvedValue(undefined);
+    vi.spyOn(store, 'read').mockResolvedValue([]);
+    vi.spyOn(store, 'accept').mockImplementation((_id, message) =>
+      Promise.resolve({ status: 'queued', message })
+    );
     clearWorkspaceInitOrchestratorStateForTests();
     vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
   });

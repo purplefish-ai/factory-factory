@@ -4,7 +4,6 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockRecordRatchetSessionEnd = vi.fn();
@@ -24,6 +23,14 @@ vi.mock('@/backend/services/session/resources/agent-session-launch-origin.access
 }));
 vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
+vi.mock('../chat/session-chat-intent', () => ({
+  sessionChatIntentService: {
+    cancel: vi.fn(),
+    override: vi.fn(),
+    configureAdmissionGuard: vi.fn(),
+    store: { hasUncertainAttempt: vi.fn().mockResolvedValue(false) },
+  },
+}));
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   const RuntimeQuiescence =
@@ -92,7 +99,6 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
     closeSession: (...args: unknown[]) => mockAcpTraceLoggerCloseSession(...args),
   },
 }));
-
 import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -105,7 +111,6 @@ import {
   sessionService,
 } from './session-services';
 import { sessionRepository } from './session.repository';
-
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',
   purpose: 'active',
@@ -202,15 +207,12 @@ describe('SessionService', () => {
       isPromptInFlight: false,
       configOptions: [],
     });
-
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
-
     await sessionLifecycleService.startSession('session-1', { initialPrompt: 'Hello' });
     expect(sessionRepository.markWorkspaceHasHadSessions).toHaveBeenCalledWith('workspace-1');
     expect(acpRuntimeManager.getOrCreateClient).toHaveBeenCalledWith(
@@ -227,7 +229,6 @@ describe('SessionService', () => {
       status: SessionStatus.RUNNING,
     });
   });
-
   it('starts a session without sending a prompt when initial prompt is empty', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -240,7 +241,6 @@ describe('SessionService', () => {
       provider: 'CLAUDE',
       providerSessionId: null,
     });
-
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
@@ -251,29 +251,23 @@ describe('SessionService', () => {
       description: null,
       projectId: 'project-1',
     });
-
     const acpHandle = unsafeCoerce<AcpProcessHandle>({
       getPid: vi.fn().mockReturnValue(123),
       isPromptInFlight: false,
       configOptions: [],
     });
-
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
-
     await sessionLifecycleService.startSession('session-1', { initialPrompt: '' });
-
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.RUNNING,
     });
     expect(acpRuntimeManager.sendPrompt).not.toHaveBeenCalled();
   });
-
   it('delegates to ACP runtime for new session creation', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -687,7 +681,11 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
 
     const stopPromise = sessionLifecycleService.stopSession('session-race-test');
-    await Promise.resolve();
+    await vi.waitFor(() =>
+      expect(vi.mocked(sessionRepository.getSessionById).mock.results.at(-1)?.value).toBe(
+        stopLoad.promise
+      )
+    );
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
     await acpHandlers.onRuntimeExit!({

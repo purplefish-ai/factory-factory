@@ -429,7 +429,9 @@ export const ModelName = {
   WorkspaceNotification: 'WorkspaceNotification',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
   AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
-  WorkspaceChildOrigin: 'WorkspaceChildOrigin'
+  WorkspaceChildOrigin: 'WorkspaceChildOrigin',
+  ChatIntent: 'ChatIntent',
+  PromptDispatchAttempt: 'PromptDispatchAttempt'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -445,7 +447,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin" | "chatIntent" | "promptDispatchAttempt"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2891,6 +2893,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ChatIntent: {
+      payload: Prisma.$ChatIntentPayload<ExtArgs>
+      fields: Prisma.ChatIntentFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ChatIntentFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ChatIntentFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        findFirst: {
+          args: Prisma.ChatIntentFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ChatIntentFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        findMany: {
+          args: Prisma.ChatIntentFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>[]
+        }
+        create: {
+          args: Prisma.ChatIntentCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        createMany: {
+          args: Prisma.ChatIntentCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ChatIntentCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>[]
+        }
+        delete: {
+          args: Prisma.ChatIntentDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        update: {
+          args: Prisma.ChatIntentUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        deleteMany: {
+          args: Prisma.ChatIntentDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ChatIntentUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ChatIntentUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>[]
+        }
+        upsert: {
+          args: Prisma.ChatIntentUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ChatIntentPayload>
+        }
+        aggregate: {
+          args: Prisma.ChatIntentAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateChatIntent>
+        }
+        groupBy: {
+          args: Prisma.ChatIntentGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ChatIntentGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ChatIntentCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ChatIntentCountAggregateOutputType> | number
+        }
+      }
+    }
+    PromptDispatchAttempt: {
+      payload: Prisma.$PromptDispatchAttemptPayload<ExtArgs>
+      fields: Prisma.PromptDispatchAttemptFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PromptDispatchAttemptFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PromptDispatchAttemptFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        findFirst: {
+          args: Prisma.PromptDispatchAttemptFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PromptDispatchAttemptFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        findMany: {
+          args: Prisma.PromptDispatchAttemptFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>[]
+        }
+        create: {
+          args: Prisma.PromptDispatchAttemptCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        createMany: {
+          args: Prisma.PromptDispatchAttemptCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PromptDispatchAttemptCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>[]
+        }
+        delete: {
+          args: Prisma.PromptDispatchAttemptDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        update: {
+          args: Prisma.PromptDispatchAttemptUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        deleteMany: {
+          args: Prisma.PromptDispatchAttemptDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PromptDispatchAttemptUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PromptDispatchAttemptUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>[]
+        }
+        upsert: {
+          args: Prisma.PromptDispatchAttemptUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PromptDispatchAttemptPayload>
+        }
+        aggregate: {
+          args: Prisma.PromptDispatchAttemptAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePromptDispatchAttempt>
+        }
+        groupBy: {
+          args: Prisma.PromptDispatchAttemptGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PromptDispatchAttemptGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PromptDispatchAttemptCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PromptDispatchAttemptCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -3508,6 +3658,39 @@ export const WorkspaceChildOriginScalarFieldEnum = {
 export type WorkspaceChildOriginScalarFieldEnum = (typeof WorkspaceChildOriginScalarFieldEnum)[keyof typeof WorkspaceChildOriginScalarFieldEnum]
 
 
+export const ChatIntentScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  messageId: 'messageId',
+  fingerprint: 'fingerprint',
+  submitted: 'submitted',
+  desired: 'desired',
+  revision: 'revision',
+  status: 'status',
+  attemptId: 'attemptId',
+  createdAt: 'createdAt'
+} as const
+
+export type ChatIntentScalarFieldEnum = (typeof ChatIntentScalarFieldEnum)[keyof typeof ChatIntentScalarFieldEnum]
+
+
+export const PromptDispatchAttemptScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  members: 'members',
+  content: 'content',
+  effectiveSettings: 'effectiveSettings',
+  providerIdentity: 'providerIdentity',
+  sendGeneration: 'sendGeneration',
+  status: 'status',
+  evidence: 'evidence',
+  createdAt: 'createdAt',
+  settledAt: 'settledAt'
+} as const
+
+export type PromptDispatchAttemptScalarFieldEnum = (typeof PromptDispatchAttemptScalarFieldEnum)[keyof typeof PromptDispatchAttemptScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -3962,6 +4145,8 @@ export type GlobalOmitConfig = {
   workspaceLaunchOrigin?: Prisma.WorkspaceLaunchOriginOmit
   agentSessionLaunchOrigin?: Prisma.AgentSessionLaunchOriginOmit
   workspaceChildOrigin?: Prisma.WorkspaceChildOriginOmit
+  chatIntent?: Prisma.ChatIntentOmit
+  promptDispatchAttempt?: Prisma.PromptDispatchAttemptOmit
 }
 
 /* Types for Logging */

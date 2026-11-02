@@ -12,6 +12,7 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
+import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { EventSessionAuthority } from './event-session-authority';
 import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
@@ -26,6 +27,7 @@ import type { SessionRepository } from './session.repository';
 const logger = createLogger('session');
 
 type RuntimeExitCoordinatorDependencies = {
+  chatIntent?: Pick<SessionChatIntentService, 'cancel'>;
   eventAuthority?: EventSessionAuthority;
   providerIdentityService: Pick<SessionProviderIdentityService, 'reconcile'>;
   repository: Pick<SessionRepository, 'getSessionById' | 'updateSession'>;
@@ -179,6 +181,9 @@ export class SessionRuntimeExitCoordinator {
     bulkShutdownReserved: boolean
   ): Promise<void> {
     try {
+      if (!deliberate) {
+        await this.dependencies.chatIntent?.cancel(event.sessionId, undefined, 'failed');
+      }
       this.dependencies.sessionDomainService.markProcessExit(
         event.sessionId,
         event.exitCode,

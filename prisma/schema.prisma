@@ -508,6 +508,8 @@ model CodexAccount {
 }
 
 model AgentSession {
+  chatIntents ChatIntent[]
+  promptDispatchAttempts PromptDispatchAttempt[]
   dedicatedPRBinding WorkspacePRDedicatedSession?
   prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
   id                  String        @id @default(cuid())
@@ -989,4 +991,41 @@ model WorkspaceChildOrigin {
   createdAt DateTime @default(now())
 
   @@id([parentWorkspaceId, childWorkspaceId])
+}
+
+// Session-owned accepted HUMAN input. Submitted bytes never change.
+model ChatIntent {
+  id Int @id @default(autoincrement())
+  sessionId String
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId String
+  fingerprint String
+  submitted Json
+  desired Json
+  revision Int @default(0)
+  status String @default("queued")
+  attemptId String?
+  attempt PromptDispatchAttempt? @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@unique([sessionId, messageId])
+  @@index([sessionId, status, id])
+  @@index([attemptId])
+}
+
+// One provider effect, including its complete ordered background membership.
+model PromptDispatchAttempt {
+  id String @id @default(cuid())
+  sessionId String
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  members Json
+  content Json
+  effectiveSettings Json
+  providerIdentity Json
+  sendGeneration Int
+  status String @default("uncertain")
+  evidence String?
+  createdAt DateTime @default(now())
+  settledAt DateTime?
+  intents ChatIntent[]
+  @@index([sessionId, status])
 }

@@ -83,7 +83,9 @@ export const ModelName = {
   WorkspaceNotification: 'WorkspaceNotification',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
   AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
-  WorkspaceChildOrigin: 'WorkspaceChildOrigin'
+  WorkspaceChildOrigin: 'WorkspaceChildOrigin',
+  ChatIntent: 'ChatIntent',
+  PromptDispatchAttempt: 'PromptDispatchAttempt'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -678,6 +680,39 @@ export const WorkspaceChildOriginScalarFieldEnum = {
 } as const
 
 export type WorkspaceChildOriginScalarFieldEnum = (typeof WorkspaceChildOriginScalarFieldEnum)[keyof typeof WorkspaceChildOriginScalarFieldEnum]
+
+
+export const ChatIntentScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  messageId: 'messageId',
+  fingerprint: 'fingerprint',
+  submitted: 'submitted',
+  desired: 'desired',
+  revision: 'revision',
+  status: 'status',
+  attemptId: 'attemptId',
+  createdAt: 'createdAt'
+} as const
+
+export type ChatIntentScalarFieldEnum = (typeof ChatIntentScalarFieldEnum)[keyof typeof ChatIntentScalarFieldEnum]
+
+
+export const PromptDispatchAttemptScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  members: 'members',
+  content: 'content',
+  effectiveSettings: 'effectiveSettings',
+  providerIdentity: 'providerIdentity',
+  sendGeneration: 'sendGeneration',
+  status: 'status',
+  evidence: 'evidence',
+  createdAt: 'createdAt',
+  settledAt: 'settledAt'
+} as const
+
+export type PromptDispatchAttemptScalarFieldEnum = (typeof PromptDispatchAttemptScalarFieldEnum)[keyof typeof PromptDispatchAttemptScalarFieldEnum]
 
 
 export const SortOrder = {

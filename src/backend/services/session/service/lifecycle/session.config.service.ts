@@ -128,8 +128,10 @@ export class SessionConfigService {
       },
       options.eventAuthority?.assertOrdinary.bind(options.eventAuthority)
     );
-    this.queuedSettings = new SessionQueuedSettings(this.runtimeManager, (sessionId, operation) =>
-      this.configUpdates.run(sessionId, operation)
+    this.queuedSettings = new SessionQueuedSettings(
+      this.runtimeManager,
+      (sessionId, operation) => this.configUpdates.run(sessionId, operation),
+      options.chatIntent?.override.bind(options.chatIntent)
     );
   }
 

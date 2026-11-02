@@ -4,6 +4,7 @@ import type { SessionBackgroundDeliveryService } from '@/backend/services/sessio
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 
 export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };
 
@@ -53,6 +54,7 @@ export interface SessionDispatchLifecycleDependencies {
 
 /** Method-level capabilities supplied by the session composition root. */
 export interface SessionDispatchDependencies {
+  chatIntent?: SessionChatIntentService;
   eventAuthority?: { assertOrdinary(sessionId: string): Promise<void> };
   runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
   configService: Pick<

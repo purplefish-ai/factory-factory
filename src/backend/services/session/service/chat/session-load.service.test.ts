@@ -344,3 +344,13 @@ describe('SessionLoadService', () => {
     expect(test.calls).toEqual(['history', 'lifecycle', 'prepare']);
   });
 });
+it('activates safely hydrated durable human input even when the legacy initial-message map is empty', async () => {
+  const test = setup();
+  test.deps.hydrateChatIntent = () => Promise.resolve(true);
+  const prepared = await test.service.prepareLoad({ sessionId: 'session' });
+  if (prepared.status !== 'ready') {
+    throw new Error('load failed');
+  }
+  await test.service.completeLoad(prepared);
+  expect(test.calls.filter((call) => call === 'dispatch')).toHaveLength(1);
+});

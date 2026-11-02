@@ -175,6 +175,10 @@ const ACCESSOR_POLICIES = {
     owner: 'session',
     module: 'src/backend/services/session/resources/closed-session.accessor',
   },
+  ChatIntentAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/chat-intent.accessor',
+  },
   sessionLifecycleEventAccessor: {
     owner: 'session',
     module: 'src/backend/services/session/resources/session-lifecycle-event.accessor',

@@ -84,9 +84,9 @@ describe('workspace initialization startup order', () => {
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
-    vi.mocked(sessionDomainService.enqueueInitialMessage)
-      .mockReturnValueOnce({ position: 0 })
-      .mockReturnValueOnce(null);
+    vi.mocked(sessionDomainService.enqueueInitialMessageDurably)
+      .mockResolvedValueOnce({ position: 0 })
+      .mockResolvedValueOnce(null);
     vi.mocked(workspaceStateMachine.markReady).mockRejectedValueOnce(
       new Error('Setup interrupted')
     );
@@ -113,7 +113,7 @@ describe('workspace initialization startup order', () => {
     const issue = deferred<Awaited<ReturnType<typeof githubCLIService.getIssue>>>();
     const setupFinished = deferred<{ success: boolean }>();
     vi.mocked(githubCLIService.getIssue).mockReturnValue(issue.promise);
-    vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
+    vi.mocked(sessionDomainService.enqueueInitialMessageDurably).mockResolvedValue({ position: 0 });
     vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
       unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
     );
@@ -136,9 +136,9 @@ describe('workspace initialization startup order', () => {
       setupFinished.resolve({ success: true });
       await initialization;
     }
-    expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledOnce();
+    expect(sessionDomainService.enqueueInitialMessageDurably).toHaveBeenCalledOnce();
     expect(
-      vi.mocked(sessionDomainService.enqueueInitialMessage).mock.invocationCallOrder[0]
+      vi.mocked(sessionDomainService.enqueueInitialMessageDurably).mock.invocationCallOrder[0]
     ).toBeLessThan(vi.mocked(workspaceStateMachine.markReady).mock.invocationCallOrder[0]!);
   });
 
@@ -161,7 +161,7 @@ describe('workspace initialization startup order', () => {
         unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
       );
       await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(sessionDomainService.enqueueInitialMessage).not.toHaveBeenCalled();
+      expect(sessionDomainService.enqueueInitialMessageDurably).not.toHaveBeenCalled();
     } finally {
       issue.resolve(
         unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
@@ -170,7 +170,7 @@ describe('workspace initialization startup order', () => {
       await initialization;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    expect(sessionDomainService.enqueueInitialMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.enqueueInitialMessageDurably).not.toHaveBeenCalled();
     expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
   });
 
@@ -179,7 +179,7 @@ describe('workspace initialization startup order', () => {
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
-    vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
+    vi.mocked(sessionDomainService.enqueueInitialMessageDurably).mockResolvedValue({ position: 0 });
     vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
       unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
     );
@@ -193,7 +193,7 @@ describe('workspace initialization startup order', () => {
     const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
     try {
       await setupEntered.promise;
-      expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledExactlyOnceWith(
+      expect(sessionDomainService.enqueueInitialMessageDurably).toHaveBeenCalledExactlyOnceWith(
         'session-1',
         expect.objectContaining({ text: 'Fix the queued startup message' })
       );
@@ -211,7 +211,7 @@ describe('workspace initialization startup order', () => {
       setupFinished.resolve({ success: true });
       await initialization;
     }
-    expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledTimes(1);
+    expect(sessionDomainService.enqueueInitialMessageDurably).toHaveBeenCalledTimes(1);
     expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
     expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
   });

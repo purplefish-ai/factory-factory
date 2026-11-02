@@ -78,7 +78,7 @@ export interface SessionCommandConfigService extends SessionModelCommandService 
 export interface SessionExecutionCommandServices {
   domain: Pick<
     SessionDomainService,
-    'markError' | 'rejectMessage' | 'enqueue' | 'emitDelta' | 'removeQueuedMessage'
+    'markError' | 'rejectMessage' | 'enqueue' | 'emitDelta' | 'removeQueuedMessage' | 'chatIntent'
   >;
   lifecycle: Pick<SessionLifecycleService, 'getSessionOptions' | 'stopSession'>;
   backgroundDelivery: Pick<SessionBackgroundDeliveryService, 'captureResumeGuard' | 'userResume'>;

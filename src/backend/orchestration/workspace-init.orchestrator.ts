@@ -153,14 +153,14 @@ async function markLinearIssueStartedIfApplicable(
  * Enqueue an auto-generated message through the session queue pipeline.
  * Used for rename instructions and initial prompts during workspace init.
  */
-function enqueueAutoMessage(
+async function enqueueAutoMessage(
   sessionId: string,
   workspaceId: string,
   text: string,
   model: string,
   attachments?: MessageAttachment[]
-): void {
-  const messageId = `auto-init-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+): Promise<void> {
+  const messageId = `auto-init-${sessionId}`;
   const queued = {
     id: messageId,
     text,
@@ -173,7 +173,7 @@ function enqueueAutoMessage(
       planModeEnabled: false,
     },
   };
-  const enqueueResult = sessionDomainService.enqueueInitialMessage(sessionId, queued);
+  const enqueueResult = await sessionDomainService.enqueueInitialMessageDurably(sessionId, queued);
   if (!enqueueResult) {
     return;
   }
@@ -358,7 +358,7 @@ async function prepareDefaultAgentSession(
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
     if (messageToEnqueue) {
-      enqueueAutoMessage(
+      await enqueueAutoMessage(
         session.id,
         workspaceId,
         messageToEnqueue.text,

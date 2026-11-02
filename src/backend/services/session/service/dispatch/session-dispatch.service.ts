@@ -9,13 +9,13 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
+import { MessageState, type QueuedMessage } from '@/shared/acp-protocol';
+import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
 import {
   acknowledgeSentBatch,
   prepareBackgroundForDispatch,
   collectDispatchBatch,
   dispatchCollectedBatch,
-  prepareBatchContents,
   combineBatchContents,
 } from './session-dispatch-batch';
 import { isClaudeCompactionClient, isThinkingBudgetClient } from './session-dispatch-client';
@@ -24,6 +24,11 @@ import type {
   SessionDispatchLifecycleDependencies,
   DispatchOptions,
 } from './session-dispatch.types';
+import {
+  publishDispatchedBatch,
+  getPermanentBlockedDispatchReason,
+} from './session-dispatched-publication';
+import { prepareDurableAttempt, prepareDurableBatchContents } from './session-durable-attempt';
 import { buildMessageContent } from './session-message-content';
 import { SessionQueuedSteering } from './session-queued-steering';
 
@@ -38,6 +43,8 @@ type DispatchGateResult =
 
 export class SessionDispatchService {
   private readonly steering = new SessionQueuedSteering({
+    chatIntent: () => this.dependencies.chatIntent,
+    generation: (id) => this.lifecycle.gate.getGeneration(id),
     isPromptInFlight: (id) => this.dependencies.runtimeManager.isSessionPromptInFlight(id),
     captureGuard: (id) => {
       const generation = this.lifecycle.gate.getGeneration(id);
@@ -150,14 +157,7 @@ export class SessionDispatchService {
     this.dispatchInProgress.delete(dbSessionId);
   }
 
-  /**
-   * Try to dispatch the next queued message to Claude.
-   * Auto-starts the client if needed.
-   * Uses a guard to prevent concurrent dispatch calls for the same session.
-   *
-   * The message stays in the queue (visible in snapshots) until we're ready
-   * to dispatch, so a page refresh during auto-start won't lose it.
-   */
+  /** Keep the queue visible through auto-start; serialize each session dispatch. */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
     const stopGeneration = this.lifecycle.gate.getGeneration(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
@@ -180,6 +180,7 @@ export class SessionDispatchService {
     const dispatchToken = this.reserveDispatchToken(dbSessionId);
 
     try {
+      await this.dependencies.chatIntent?.hydrate(dbSessionId);
       // Loop: a dropped duplicate notification advances to the next queued message.
       let outcome: 'continue' | 'done' = 'continue';
       while (outcome === 'continue') {
@@ -197,6 +198,23 @@ export class SessionDispatchService {
    * notification ('continue' — caller should examine the new head), otherwise
    * dispatch it ('done').
    */
+  private async getDispatchableHead(sessionId: string): Promise<QueuedMessage | undefined> {
+    const message = sessionDomainService.peekNextMessage(sessionId);
+    return message && !(await this.isExternalDeliveryHeld(sessionId, message))
+      ? message
+      : undefined;
+  }
+
+  private async isExternalDeliveryHeld(
+    sessionId: string,
+    message: QueuedMessage
+  ): Promise<boolean> {
+    return Boolean(
+      (message.source || this.lifecycle.notificationDelivery.isNotificationMessage(message.id)) &&
+      (await this.dependencies.chatIntent?.store.hasUncertainAttempt(sessionId))
+    );
+  }
+
   private async dispatchHeadOfQueue(
     dbSessionId: string,
     stopGeneration: number,
@@ -205,7 +223,7 @@ export class SessionDispatchService {
     await guard?.check();
     guard?.assertCurrent?.();
     // Peek first — message stays in queue (visible in snapshots during auto-start).
-    const peeked = sessionDomainService.peekNextMessage(dbSessionId);
+    const peeked = await this.getDispatchableHead(dbSessionId);
     if (!peeked) {
       this.turnInProgressRetryAttempts.delete(dbSessionId);
       return 'done';
@@ -261,7 +279,7 @@ export class SessionDispatchService {
       return;
     }
     if (dispatchGate.policy !== 'allowed') {
-      this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
+      await this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
       return;
     }
 
@@ -296,6 +314,7 @@ export class SessionDispatchService {
       sessionId: dbSessionId,
       first: peeked,
       notifications: this.lifecycle.notificationDelivery,
+      isHeld: (message) => this.isExternalDeliveryHeld(dbSessionId, message),
       guard,
       prepareBackground: async (message) => {
         try {
@@ -323,6 +342,7 @@ export class SessionDispatchService {
       throw error;
     }
     return dispatchCollectedBatch({
+      chatIntent: this.dependencies.chatIntent,
       sessionId: dbSessionId,
       batch,
       backgroundDelivery: this.dependencies.backgroundDelivery,
@@ -336,8 +356,14 @@ export class SessionDispatchService {
       },
       send: (messages) =>
         this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration, guard),
-      onError: (message, error) =>
-        this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client),
+      onError: async (message, error) => {
+        this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client);
+        if (
+          !(message.source || sessionDomainService.getQueueSnapshot(dbSessionId).includes(message))
+        ) {
+          await this.dependencies.chatIntent?.cancel(dbSessionId, message.id, 'failed');
+        }
+      },
       onSuccess: () => {
         this.turnInProgressRetryAttempts.delete(dbSessionId);
       },
@@ -415,14 +441,9 @@ export class SessionDispatchService {
     );
   }
 
-  // ============================================================================
   // Private: Dispatch Helpers
-  // ============================================================================
 
-  /**
-   * Handle a dispatch error. Permanent input errors are rejected, provider-busy
-   * errors are re-queued with backoff, and all other errors fail for explicit retry.
-   */
+  /** Reject invalid input, requeue busy sends, and require explicit retry for other failures. */
   private handleDispatchError(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -430,6 +451,12 @@ export class SessionDispatchService {
     stopGeneration: number,
     capturedClient?: unknown
   ): void {
+    if (error instanceof UncertainChatDispatchError) {
+      if (!msg.source) {
+        sessionDomainService.failMessage(dbSessionId, msg, error.message);
+      }
+      return;
+    }
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
@@ -649,9 +676,11 @@ export class SessionDispatchService {
   ): Promise<void> {
     await guard?.check();
     guard?.assertCurrent?.();
-    const contents = prepareBatchContents(
+    const contents = await prepareDurableBatchContents(
+      this.dependencies.chatIntent,
+      dbSessionId,
       messages,
-      (message) => buildMessageContent(message),
+      buildMessageContent,
       (message, error) => this.handleDispatchError(dbSessionId, message, error, stopGeneration)
     );
     const msg =
@@ -688,39 +717,29 @@ export class SessionDispatchService {
     sessionDomainService.markRunning(dbSessionId);
 
     const content = combineBatchContents(messages, contents);
-    const dispatched = messages.map((message) => {
-      if (!message.source) {
-        message.settings = { ...msg.settings };
-      }
-      const order = sessionDomainService.allocateOrder(dbSessionId);
-      const userMessage = {
-        text: message.text,
-        timestamp: message.timestamp,
-        attachments: message.attachments,
-        settings: {
-          ...msg.settings,
-          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
-        },
-        order,
-      };
-      sessionDomainService.emitDelta(dbSessionId, {
-        type: 'message_state_changed',
-        id: message.id,
-        newState: MessageState.DISPATCHED,
-        userMessage,
-      });
-      return { message, order, userMessage };
+    const attempt = await prepareDurableAttempt({
+      owner: this.dependencies.chatIntent,
+      sessionId: dbSessionId,
+      messages,
+      content,
+      settings: msg.settings,
+      generation: stopGeneration,
+      isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+      guard,
     });
+    const dispatched = publishDispatchedBatch(dbSessionId, messages, msg.settings);
 
     if (isCompactCommand && compactionClient) {
       compactionClient.startCompaction();
     }
 
     try {
-      const sendPromise = this.dependencies.promptService.sendSessionMessage(
-        dbSessionId,
-        content,
-        ...(guard ? ([guard] as const) : [])
+      const sendPromise = attempt.invoke(() =>
+        this.dependencies.promptService.sendSessionMessage(
+          dbSessionId,
+          content,
+          ...(guard ? ([guard] as const) : [])
+        )
       );
       // Persist immediately after dispatch so refresh/replay keeps this user message
       // visible while the provider is still working on the turn.
@@ -894,10 +913,10 @@ export class SessionDispatchService {
     return trimmed === '/compact' || trimmed.startsWith('/compact ');
   }
 
-  private handleBlockedDispatchGate(
+  private async handleBlockedDispatchGate(
     dbSessionId: string,
     dispatchGate: Exclude<DispatchGateResult, { policy: 'allowed' }>
-  ): void {
+  ): Promise<void> {
     if (!(dispatchGate.policy === 'blocked' && dispatchGate.permanent)) {
       return;
     }
@@ -909,6 +928,7 @@ export class SessionDispatchService {
       return;
     }
 
+    await this.dependencies.chatIntent?.cancel(dbSessionId, blockedMessage.id, 'failed');
     sessionDomainService.emitDelta(dbSessionId, {
       type: 'message_state_changed',
       id: blockedMessage.id,
@@ -916,21 +936,6 @@ export class SessionDispatchService {
       errorMessage:
         dispatchGate.reason ?? 'Cannot send messages for this workspace in its current state.',
     });
-  }
-
-  private getPermanentBlockedDispatchReason(workspace: {
-    status?: string | null;
-    worktreePath?: string | null;
-  }): string | null {
-    if (workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED') {
-      return 'Workspace is archived or archiving and cannot accept new messages.';
-    }
-
-    if (workspace.status === 'FAILED' && !workspace.worktreePath) {
-      return 'Workspace setup failed before worktree creation. Retry setup before sending messages.';
-    }
-
-    return null;
   }
 
   private async evaluateDispatchGate(dbSessionId: string): Promise<DispatchGateResult> {
@@ -952,7 +957,7 @@ export class SessionDispatchService {
       if (dispatchPolicy === 'allowed') {
         return { policy: 'allowed' };
       }
-      const reason = this.getPermanentBlockedDispatchReason(session.workspace);
+      const reason = getPermanentBlockedDispatchReason(session.workspace);
       return {
         policy: 'blocked',
         permanent: !!reason,

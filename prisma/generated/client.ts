@@ -247,3 +247,13 @@ export type AgentSessionLaunchOrigin = Prisma.AgentSessionLaunchOriginModel
  * Workspace-owned child creation facts survive archive, deletion and import.
  */
 export type WorkspaceChildOrigin = Prisma.WorkspaceChildOriginModel
+/**
+ * Model ChatIntent
+ * 
+ */
+export type ChatIntent = Prisma.ChatIntentModel
+/**
+ * Model PromptDispatchAttempt
+ * 
+ */
+export type PromptDispatchAttempt = Prisma.PromptDispatchAttemptModel
