@@ -70,6 +70,15 @@ export const WorkspaceStatusReasonSchema = z.object({
   needsUser: z.boolean(),
 });
 
+export const WorkspaceParentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  projectSlug: z.string(),
+});
+export type WorkspaceParent = z.infer<typeof WorkspaceParentSchema>;
+
 /** Flat board/sidebar contract. */
 export const WorkspaceSummarySchema = z.object({
   ...WorkspacePRSelectionSchema.shape,
@@ -106,6 +115,8 @@ export const WorkspaceSummarySchema = z.object({
   linearIssueIdentifier: z.string().nullable(),
   linearIssueUrl: z.string().nullable(),
   creationSource: z.nativeEnum(WorkspaceCreationSource),
+  parentWorkspace: WorkspaceParentSchema.nullable().optional(),
+  childWorkspaceCount: z.number().int().nonnegative().optional(),
   sessionSummaries: z.array(WorkspaceSessionSummarySchema),
   pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
   gitStats: WorkspaceGitStatsSchema.nullable(),

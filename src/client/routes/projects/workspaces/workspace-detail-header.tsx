@@ -9,7 +9,12 @@ import {
   useAppHeader,
 } from '@/client/components/app-header-context';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
-import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
+import {
+  RunScriptButton,
+  RunScriptPortBadge,
+  WorkspaceParentLink,
+  WorkspaceFamilyMenu,
+} from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -83,6 +88,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
   });
 
   const isArchived = workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
+  const hasFamily = Boolean(workspace.parentWorkspace || workspace.childWorkspaceCount);
 
   useAppHeader({ title: '' });
 
@@ -90,7 +96,11 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
     <>
       <HeaderLeftStartSlot>
         <div className="flex min-w-0 flex-1 items-center gap-0.5">
-          <div className="min-w-0 max-w-[50%] shrink md:max-w-[40%]">
+          <div
+            className={
+              hasFamily ? 'min-w-0 max-w-[25%] shrink' : 'min-w-0 max-w-[50%] shrink md:max-w-[40%]'
+            }
+          >
             <ProjectHeaderNavigation
               showTrailingSlash
               triggerId="workspace-detail-project-select"
@@ -104,6 +114,13 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               }
             />
           </div>
+          {workspace.parentWorkspace && (
+            <WorkspaceParentLink
+              parent={workspace.parentWorkspace}
+              projectId={workspace.projectId}
+              breadcrumb
+            />
+          )}
           {isEditing ? (
             <input
               ref={inputRef}
@@ -131,11 +148,12 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                 projectSlug={slug}
                 projectId={workspace.projectId}
                 currentWorkspaceId={workspaceId}
-                currentWorkspaceLabel={getWorkspaceHeaderLabel(
-                  workspace.branchName,
-                  workspace.name,
-                  isMobile
-                )}
+                compact={hasFamily}
+                currentWorkspaceLabel={
+                  workspace.parentWorkspace
+                    ? workspace.name
+                    : getWorkspaceHeaderLabel(workspace.branchName, workspace.name, isMobile)
+                }
                 currentWorkspaceName={workspace.name}
               />
               {!isArchived && (
@@ -160,6 +178,14 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                 <InfoIcon className="h-3 w-3" />
               </Button>
             </div>
+          )}
+          {hasFamily && (
+            <WorkspaceFamilyMenu
+              key={workspaceId}
+              workspace={workspace}
+              projectSlug={slug}
+              iconOnly={isMobile}
+            />
           )}
         </div>
       </HeaderLeftStartSlot>

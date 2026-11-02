@@ -103,6 +103,26 @@ function completeEntry() {
 }
 
 describe('accepted summary hydration', () => {
+  it('streams family metadata, ignores identical parent objects and clears removed relationships', () => {
+    const value = store();
+    const parentWorkspace = {
+      id: 'parent',
+      name: 'Parent',
+      projectId: 'other',
+      projectName: 'Other',
+      projectSlug: 'other',
+    };
+    value.upsert('ws', { ...seed(), parentWorkspace, childWorkspaceCount: 0 }, 'family', 100);
+    expect(value.getByWorkspaceId('ws')).toMatchObject({ parentWorkspace, childWorkspaceCount: 0 });
+    expect(
+      value.upsert('ws', { parentWorkspace: { ...parentWorkspace } }, 'same family', 200).changed
+    ).toBe(false);
+    value.upsert('ws', { parentWorkspace: null, childWorkspaceCount: 2 }, 'removed parent', 300);
+    expect(value.getByWorkspaceId('ws')).toMatchObject({
+      parentWorkspace: null,
+      childWorkspaceCount: 2,
+    });
+  });
   it('keeps an older summary complete when its optional launch provider arrives later', () => {
     const value = store();
     value.upsert('ws', seed(), 'legacy complete summary', 100);

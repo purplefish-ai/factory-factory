@@ -9,6 +9,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Workspace: Story = {};
+export const WorkspaceFamily: Story = { args: { variant: 'family' } };
 export const TabletWorkspace: Story = {
   globals: { viewport: { value: 'tablet', isRotated: false } },
 };

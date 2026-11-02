@@ -13,6 +13,7 @@ import {
   SelectLabel,
   SelectTrigger,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { groupWorkspaceSwitcherItems } from './utils';
 
 const workspaceDropdownItemClassName =
@@ -59,12 +60,14 @@ export function WorkspaceSwitcherDropdown({
   currentWorkspaceId,
   currentWorkspaceLabel,
   currentWorkspaceName,
+  compact = false,
 }: {
   projectSlug: string;
   projectId: string;
   currentWorkspaceId: string;
   currentWorkspaceLabel: string;
   currentWorkspaceName: string;
+  compact?: boolean;
 }) {
   const navigate = useNavigate();
   const { data: projectState } = useProjectWorkspaceQuery(projectId);
@@ -88,17 +91,26 @@ export function WorkspaceSwitcherDropdown({
         id="workspace-detail-workspace-select"
         title={currentWorkspaceName}
         aria-label={`Open workspace menu (${queueSummaryLabel})`}
-        className="h-7 min-w-0 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden"
+        className={cn(
+          'h-7 min-w-0 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden',
+          compact && 'gap-1'
+        )}
       >
         <span className="workspace-switcher-label flex-1 min-w-0 truncate text-foreground font-semibold">
           {currentWorkspaceLabel}
         </span>
-        <span className="shrink-0" aria-hidden>
+        <span className={cn('shrink-0', compact && 'hidden')} aria-hidden>
           <span className="ml-1 hidden text-[10px] font-normal text-muted-foreground tabular-nums @[72rem]/header:block">
             {grouped.working.length} wk · {grouped.waiting.length} wait
           </span>
         </span>
-        <span className="ml-0.5 inline-flex shrink-0 items-center text-current md:ml-2" aria-hidden>
+        <span
+          className={cn(
+            'ml-0.5 inline-flex shrink-0 items-center text-current',
+            !compact && 'md:ml-2'
+          )}
+          aria-hidden
+        >
           <CaretUpDownIcon className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5" />
         </span>
       </SelectTrigger>
