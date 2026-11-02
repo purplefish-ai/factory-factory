@@ -27,7 +27,7 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
     });
     db = new Database(databasePath);
     db.exec(`INSERT INTO Project(id,name,slug,repoPath,worktreeBasePath,updatedAt) VALUES('p','P','p','/tmp/p','/tmp/w',1000);
-      INSERT INTO Workspace(id,projectId,name,updatedAt) VALUES('w','p','W',1000);`);
+      INSERT INTO Workspace(id,projectId,name,updatedAt) VALUES('w','p','W',1000),('other','p','Other',1000);`);
     const insert = db.prepare(`INSERT INTO WorkspacePREvent
       (id,workspaceId,kind,deduplicationKey,payload,state,attempts,deliveryId,deliverySessionId,deliveryProvider,deliveryProviderSessionId,deliveryBindingRevision,deliveryText,claimedAt,deliveredAt,createdAt)
       VALUES(?,'w','MONITORING_ENABLED',?,'{}',?,2,?,'session','CLAUDE','provider',7,?,1234,?,1000)`);
@@ -42,6 +42,12 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
     insert.run('h', 'h', 'PENDING', 'bad-provider', 'frozen', null);
     insert.run('i', 'i', 'PENDING', '', 'frozen', null);
     db.exec("UPDATE WorkspacePREvent SET deliveryProvider='unsupported' WHERE id='h'");
+    insert.run('late', 'late', 'PENDING', 'cross-workspace', 'frozen', null);
+    insert.run('early-b', 'early-b', 'PENDING', 'cross-workspace', 'frozen', null);
+    insert.run('early-a', 'early-a', 'PENDING', 'cross-workspace', 'frozen', null);
+    db.exec(
+      "UPDATE WorkspacePREvent SET workspaceId='other' WHERE id IN ('late','early-b'); UPDATE WorkspacePREvent SET createdAt=2000 WHERE id='late'"
+    );
     db.close();
     db = undefined;
     cpSync(join(source, migration), join(migrationsPath, migration), { recursive: true });
@@ -92,6 +98,7 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
     ).toEqual([
       { id: '', state: 'BLOCKED' },
       { id: 'bad-provider', state: 'BLOCKED' },
+      { id: 'cross-workspace', state: 'BLOCKED' },
       { id: 'inconsistent', state: 'BLOCKED' },
       { id: 'missing-provider', state: 'BLOCKED' },
       { id: 'oversized', state: 'BLOCKED' },
@@ -101,6 +108,22 @@ it('backfills complete batches once, preserving receipts and blocking inconsiste
         .prepare("SELECT deliveryText FROM WorkspacePREvent WHERE id IN ('d','e') ORDER BY id")
         .all()
     ).toEqual([{ deliveryText: 'first' }, { deliveryText: 'different' }]);
+    expect(
+      db
+        .prepare('SELECT workspaceId,eventIds,state FROM WorkspacePRDelivery WHERE id=?')
+        .get('cross-workspace')
+    ).toEqual({ workspaceId: 'w', eventIds: '["early-a","early-b","late"]', state: 'BLOCKED' });
+    expect(
+      db
+        .prepare(
+          "SELECT id,deliveryId,state,deliveryText FROM WorkspacePREvent WHERE id IN ('late','early-a','early-b') ORDER BY id"
+        )
+        .all()
+    ).toEqual([
+      { id: 'early-a', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+      { id: 'early-b', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+      { id: 'late', deliveryId: 'cross-workspace', state: 'PENDING', deliveryText: 'frozen' },
+    ]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   } finally {
     db?.close();

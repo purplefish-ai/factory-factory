@@ -12,7 +12,12 @@ import {
 function iso(date: Date | null): string | null {
   return date?.toISOString() ?? null;
 }
-export function exportPRBackupState(workspace: WorkspaceForExport) {
+export function exportPRBackupState(
+  workspace: Pick<
+    WorkspaceForExport,
+    'prs' | 'prDiscovery' | 'prMonitoring' | 'prEvents' | 'prDeliveries'
+  >
+) {
   return {
     prs: workspace.prs.map(({ workspaceId: _workspaceId, ...pr }) =>
       prAssociationBackupSchema.parse({

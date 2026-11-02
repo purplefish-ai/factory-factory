@@ -278,9 +278,10 @@ quarantined evidence. Delivery rows are durable external-effect recovery proof
 and must be retained with their full event membership in any future recovery
 manifest.
 
-Frozen legacy metadata without a receipt ID remains inert: it blocks new claims,
-and resume, supersession and cancellation preserve its original evidence. Empty
-receipt IDs are quarantined rather than treated as new delivery requests.
+Frozen legacy metadata without a receipt ID blocks new claims but never
+authorizes a resend. Resume, supersession and cancellation preserve its original
+evidence. Empty receipt IDs are quarantined rather than treated as new delivery
+requests.
 
 ### Observations and events
 
