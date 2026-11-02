@@ -74,6 +74,12 @@ interface CacheEntry {
   snapshot: WorkspaceGitStateSnapshot;
 }
 
+interface SnapshotCalculation {
+  generation: number;
+  promise: Promise<WorkspaceGitStateSnapshot>;
+  refresh?: { watcher: WatcherRecord; promise: Promise<WorkspaceGitStateSnapshot> };
+}
+
 interface WatcherRecord {
   worktreePath: string;
   mode: 'healthy' | 'fallback';
@@ -222,9 +228,8 @@ export class WorkspaceGitStateService {
   private readonly readFile: ReadFile;
   private readonly watchPath: WatchPath;
   private readonly cache = new Map<string, CacheEntry>();
-  private readonly inFlight = new Map<string, Promise<WorkspaceGitStateSnapshot>>();
+  private readonly inFlight = new Map<string, SnapshotCalculation>();
   private readonly generations = new Map<string, number>();
-  private readonly activeCalculations = new Map<string, number>();
   private readonly watchers = new Map<string, WatcherRecord>();
   private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
 
@@ -257,12 +262,33 @@ export class WorkspaceGitStateService {
     }
 
     const existing = this.inFlight.get(key);
+    const generation = this.generations.get(key) ?? 0;
     if (existing !== undefined) {
-      return existing;
+      if (existing.generation === generation) {
+        return existing.promise;
+      }
+      // Keep physical work registered until it settles. All readers following
+      // invalidation share one fresh calculation, started after the old one.
+      if (existing.refresh?.watcher !== watcher) {
+        existing.refresh = {
+          watcher,
+          promise: existing.promise.then(
+            (snapshot) =>
+              this.watchers.get(normalizedInput.worktreePath) === watcher
+                ? this.getSnapshot(normalizedInput)
+                : snapshot,
+            (error: unknown) => {
+              if (this.watchers.get(normalizedInput.worktreePath) === watcher) {
+                return this.getSnapshot(normalizedInput);
+              }
+              throw error;
+            }
+          ),
+        };
+      }
+      return existing.refresh.promise;
     }
 
-    const generation = this.generations.get(key) ?? 0;
-    this.activeCalculations.set(key, (this.activeCalculations.get(key) ?? 0) + 1);
     const calculation = watcher.setup
       .then(() => this.calculate(normalizedInput))
       .then((snapshot) => {
@@ -272,18 +298,10 @@ export class WorkspaceGitStateService {
         return snapshot;
       })
       .finally(() => {
-        if (this.inFlight.get(key) === calculation) {
-          this.inFlight.delete(key);
-        }
-        const activeCount = this.activeCalculations.get(key) ?? 0;
-        if (activeCount <= 1) {
-          this.activeCalculations.delete(key);
-          this.generations.delete(key);
-        } else {
-          this.activeCalculations.set(key, activeCount - 1);
-        }
+        this.inFlight.delete(key);
+        this.generations.delete(key);
       });
-    this.inFlight.set(key, calculation);
+    this.inFlight.set(key, { generation, promise: calculation });
     return calculation;
   }
 
@@ -361,7 +379,6 @@ export class WorkspaceGitStateService {
       ...this.cache.keys(),
       ...this.inFlight.keys(),
       ...this.generations.keys(),
-      ...this.activeCalculations.keys(),
     ]);
     for (const key of keys) {
       if (!shouldInvalidate(key)) {
@@ -369,8 +386,7 @@ export class WorkspaceGitStateService {
       }
       this.cache.delete(key);
       this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
-      this.inFlight.delete(key);
-      if (!this.activeCalculations.has(key)) {
+      if (!this.inFlight.has(key)) {
         this.generations.delete(key);
       }
     }
@@ -587,11 +603,15 @@ export class WorkspaceGitStateService {
   private async calculate(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
     const limitGit = pLimit(SNAPSHOT_GIT_CONCURRENCY);
     const runGit: RunGit = (args, cwd) => limitGit(() => this.runGit(args, cwd));
-    const [statusResult, base, upstream] = await Promise.all([
+    const sections = [
       runGit(['--no-optional-locks', 'status', '--porcelain'], input.worktreePath),
       this.calculateBase(input, runGit),
       this.calculateUpstream(input.worktreePath, runGit),
-    ]);
+    ] as const;
+    // A rejected command must not release ownership while sibling Git work
+    // continues. Drain every section before publishing or rejecting this run.
+    await Promise.allSettled(sections);
+    const [statusResult, base, upstream] = await Promise.all(sections);
     const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
     const status: WorkspaceGitStateSnapshot['status'] = {
       files: statusFiles,
@@ -611,10 +631,12 @@ export class WorkspaceGitStateService {
   ): Promise<WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats }> {
     const mergeBase = await this.findMergeBase(input, runGit);
     const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-    const [numstatResult, nameStatusResult] = await Promise.all([
+    const diffs = [
       runGit(diffArgs, input.worktreePath),
       mergeBase ? runGit(['diff', '--name-status', mergeBase], input.worktreePath) : null,
-    ]);
+    ] as const;
+    await Promise.allSettled(diffs);
+    const [numstatResult, nameStatusResult] = await Promise.all(diffs);
     const base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats } = {
       mergeBase,
       noMergeBase: mergeBase === null,

@@ -574,6 +574,15 @@ the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
 
+Git snapshots keep one running calculation per worktree/default-branch pair.
+Invalidation clears the cached result and fences the running generation without
+detaching its Git commands. Readers arriving after invalidation share one fresh
+calculation after the running work settles; bursts before that refresh starts
+coalesce into the same refresh. A stale completion is never cached. Removal and
+stop retire queued refreshes, and rejected commands drain their sibling commands
+before releasing ownership. The existing three-command per-snapshot and
+six-command service budgets still apply across independent workspace keys.
+
 The board provider and its children are keyed by project ID. Switching projects
 resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
 the initial mobile tab. Archive results arriving after a switch still reconcile
