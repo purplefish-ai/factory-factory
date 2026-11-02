@@ -10,7 +10,11 @@ import { shouldPollPR } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
 import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
 import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import {
+  deriveWorkspacePRSelection,
+  selectWorkspacePR,
+  type WorkspacePullRequest,
+} from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma as PrismaValues } from '@prisma-gen/client';
 import type { Prisma, WorkspacePR, WorkspaceStatus } from '@prisma-gen/client';
@@ -100,8 +104,9 @@ export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: bo
   const prs = attached.map(serializeWorkspacePR);
   const prSummary = deriveWorkspacePRSummary(prs, enabled);
   return {
-    ...flattenWorkspacePR(selectActiveWorkspacePR(attached)),
+    ...flattenWorkspacePR(selectWorkspacePR(attached)),
     prs,
+    ...deriveWorkspacePRSelection(prs),
     prSummary,
     prState: prSummary.state,
     prCiStatus: prSummary.ciStatus,
@@ -126,6 +131,7 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
   };
 }
 
+/** Narrow legacy reads already order their rows by ID. */
 export function selectActiveWorkspacePR<T extends { state: PRState }>(prs: T[]): T | undefined {
   return prs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ?? prs[0];
 }

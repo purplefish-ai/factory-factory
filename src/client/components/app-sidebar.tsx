@@ -25,6 +25,7 @@ import {
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
+import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -88,7 +89,10 @@ const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
           <WorkspaceItemContent
             workspace={workspace}
             onOpenPr={() => {
-              window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+              const pr = getWorkspaceSelectedPR(workspace);
+              if (pr) {
+                window.open(pr.url, '_blank', 'noopener,noreferrer');
+              }
             }}
             onOpenIssue={() => {
               const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;

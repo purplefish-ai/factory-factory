@@ -28,7 +28,7 @@ import type {
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSelection, type WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
@@ -581,6 +581,17 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     );
 
     let changed = false;
+    // Derived from accepted collection facts: no independent clock, hydration or drift policy.
+    if (entry.prs) {
+      const selection = deriveWorkspacePRSelection(entry.prs);
+      if (
+        entry.selectedPrId !== selection.selectedPrId ||
+        !isDeepStrictEqual(entry.selectedPr, selection.selectedPr)
+      ) {
+        Object.assign(entry, selection);
+        changed = true;
+      }
+    }
     if (entry.isWorking !== derivedState.isWorking) {
       entry.isWorking = derivedState.isWorking;
       changed = true;
