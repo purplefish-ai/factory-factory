@@ -11,6 +11,8 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 const LogStreamMessageSchema = z.object({
   type: z.literal('output'),
   data: z.string().optional(),
+  /** Set on the frame carrying the server's retained buffer, sent first on each connection. */
+  replay: z.boolean().optional(),
 });
 
 const LOG_ROLLING_OUTPUT_OPTIONS = {
@@ -18,40 +20,6 @@ const LOG_ROLLING_OUTPUT_OPTIONS = {
   truncationMarker: WORKSPACE_LOG_TRUNCATION_MARKER,
 };
 const LOG_OUTPUT_FLUSH_INTERVAL_MS = 100;
-/** Shortest replayed prefix accepted as already-seen output rather than new output. */
-const MIN_REPLAY_OVERLAP_CHARS = 1024;
-
-/**
- * The server sends its retained buffer (the tail of the stream) on every
- * connection, so after a reconnect the first message repeats output this
- * client already shows. Return only the part of it that has not been seen.
- */
-function unseenReplayOutput(seen: string, replay: string): string {
-  if (!seen) {
-    return replay;
-  }
-  const minOverlap = Math.min(seen.length, MIN_REPLAY_OVERLAP_CHARS);
-  if (replay.length < minOverlap) {
-    return replay;
-  }
-  if (replay.startsWith(seen)) {
-    return replay.slice(seen.length);
-  }
-  // The server retained less than this client has seen: find where the
-  // replay's head sits in the seen output, preferring the longest overlap.
-  const anchor = replay.slice(0, minOverlap);
-  for (
-    let start = seen.indexOf(anchor, Math.max(0, seen.length - replay.length));
-    start !== -1;
-    start = seen.indexOf(anchor, start + 1)
-  ) {
-    const overlap = seen.slice(start);
-    if (replay.startsWith(overlap)) {
-      return replay.slice(overlap.length);
-    }
-  }
-  return replay;
-}
 
 // =============================================================================
 // Types
@@ -69,10 +37,11 @@ export interface UseLogStreamResult {
 interface LogStreamBuffer {
   streamKey: string;
   output: RollingOutputBuffer;
-  /** Server output received so far (no connection banners), for replay de-duplication. */
-  serverOutput: string;
-  /** The next message on a fresh connection may be the server's buffer replay. */
-  replayPending: boolean;
+  /**
+   * Set on a reconnect until the connection's first message: a replay frame
+   * then replaces the output this buffer already shows, which it repeats.
+   */
+  replaceOnReplay: boolean;
 }
 
 interface PendingOutputFlush {
@@ -112,8 +81,7 @@ export function useLogStream(
     () => ({
       streamKey,
       output: new RollingOutputBuffer(LOG_ROLLING_OUTPUT_OPTIONS),
-      serverOutput: '',
-      replayPending: false,
+      replaceOnReplay: false,
     }),
     [streamKey]
   );
@@ -165,23 +133,22 @@ export function useLogStream(
 
   const handleMessage = useCallback(
     (message: z.infer<typeof LogStreamMessageSchema>) => {
-      if (!message.data || committedStreamBufferRef.current !== streamBuffer) {
+      if (committedStreamBufferRef.current !== streamBuffer) {
         return;
       }
-      let data = message.data;
-      if (streamBuffer.replayPending) {
-        streamBuffer.replayPending = false;
-        data = unseenReplayOutput(streamBuffer.serverOutput, data);
-      }
-      if (!data) {
+      const replaceOutput = streamBuffer.replaceOnReplay && message.replay === true;
+      streamBuffer.replaceOnReplay = false;
+      if (!message.data) {
         return;
       }
-      const serverOutput = streamBuffer.serverOutput + data;
-      streamBuffer.serverOutput =
-        serverOutput.length > WORKSPACE_LOG_OUTPUT_MAX_CHARS * 2
-          ? serverOutput.slice(-WORKSPACE_LOG_OUTPUT_MAX_CHARS)
-          : serverOutput;
-      appendOutput(data);
+      if (replaceOutput) {
+        // The replay is the server's retained history, which includes what
+        // this buffer showed before the disconnect; show it once.
+        streamBuffer.output.clear();
+        appendOutput(`Reconnected!\n\n${message.data}`);
+        return;
+      }
+      appendOutput(message.data);
     },
     [appendOutput, streamBuffer]
   );
@@ -191,8 +158,9 @@ export function useLogStream(
       return;
     }
     setHasDisconnected(false);
-    streamBuffer.replayPending = true;
-    appendOutput(streamBuffer.output.toString() ? 'Reconnected!\n\n' : 'Connected!\n\n');
+    const isReconnect = streamBuffer.output.toString() !== '';
+    streamBuffer.replaceOnReplay = isReconnect;
+    appendOutput(isReconnect ? 'Reconnected!\n\n' : 'Connected!\n\n');
   }, [appendOutput, streamBuffer]);
 
   const handleDisconnected = useCallback(() => {

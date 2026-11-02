@@ -50,8 +50,9 @@ export interface ChatInputProps {
   pendingMessageCount?: number;
   // Controlled attachments (for recovery on rejection)
   attachments?: MessageAttachment[];
-  // Called when attachments change
-  onAttachmentsChange?: (attachments: MessageAttachment[]) => void;
+  // Called when attachments change. Functional updaters must be resolved against the
+  // owner's latest value (e.g. a React state setter), not a render snapshot.
+  onAttachmentsChange?: (attachments: React.SetStateAction<MessageAttachment[]>) => void;
   // Slash commands for autocomplete
   slashCommands?: CommandInfo[];
   slashCommandsLoaded?: boolean;
@@ -118,24 +119,9 @@ export const ChatInput = memo(function ChatInput({
   // If only `attachments` is passed without `onAttachmentsChange`, component is uncontrolled (uses internal state)
   const isControlled = onAttachmentsChange !== undefined;
   const attachments = isControlled ? (controlledAttachments ?? []) : internalAttachments;
-  // Async paste/drop/upload conversions apply their updater after later edits may
-  // have landed, so controlled updaters must see the latest value, not a render's.
-  const latestControlledAttachmentsRef = useRef(controlledAttachments ?? []);
-  latestControlledAttachmentsRef.current = controlledAttachments ?? [];
-  const setAttachments = useCallback(
-    (updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])) => {
-      if (isControlled) {
-        // In controlled mode, always use the external setter
-        const currentValue = latestControlledAttachmentsRef.current;
-        const newValue = typeof updater === 'function' ? updater(currentValue) : updater;
-        latestControlledAttachmentsRef.current = newValue;
-        onAttachmentsChange(newValue);
-      } else {
-        setInternalAttachments(updater);
-      }
-    },
-    [isControlled, onAttachmentsChange]
-  );
+  // Forward updaters unresolved: async paste/drop/upload conversions apply them after
+  // later edits, so only the owner of the state can resolve them against its latest value.
+  const setAttachments = onAttachmentsChange ?? setInternalAttachments;
 
   // Slash commands hook
   const slash = useSlashCommands({

@@ -152,6 +152,35 @@ describe('StartupScriptService', () => {
     expect(mockClearInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
   });
 
+  // Pipes split output at arbitrary byte offsets; a script killed mid-character
+  // leaves an incomplete sequence that must surface as U+FFFD, not vanish.
+  it('decodes UTF-8 split across chunks and flushes partial output on stream end', async () => {
+    const line = Buffer.from('✓ installed\n');
+    const truncated = Buffer.from('warn é');
+    mockSpawn.mockImplementation(() => {
+      const proc = new FakeProc();
+      queueMicrotask(() => {
+        proc.stdout.emit('data', line.subarray(0, 1));
+        proc.stdout.emit('data', line.subarray(1));
+        proc.stdout.emit('end');
+        proc.stderr.emit('data', truncated.subarray(0, -1));
+        proc.stderr.emit('end');
+        proc.emit('close', 0);
+      });
+      return proc;
+    });
+
+    const result = await service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      { startupScriptCommand: 'pnpm install', startupScriptTimeout: 5 } as never
+    );
+
+    expect(result.stdout).toBe('✓ installed\n');
+    expect(result.stderr).toBe('warn �');
+    const streamed = mockAppendInitOutput.mock.calls.map(([, output]) => output).join('');
+    expect(streamed).toContain('✓ installed\nwarn �');
+  });
+
   // A desktop/`ff serve` backend runs with NODE_ENV=production; a setup script
   // like `npm install` inheriting it silently omits devDependencies.
   it("runs setup scripts without Factory Factory's own runtime env", async () => {

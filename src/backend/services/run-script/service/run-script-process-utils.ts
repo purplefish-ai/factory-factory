@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
+import type { Readable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 import treeKill from 'tree-kill';
 import { toError } from '@/backend/lib/error-utils';
@@ -14,16 +15,33 @@ type Logger = ReturnType<typeof createLogger>;
 /**
  * Decodes one output stream's chunks as UTF-8. Pipes split output at arbitrary
  * byte offsets, so a multi-byte character can span two chunks; decoding each
- * chunk independently would replace both halves with U+FFFD.
+ * chunk independently would replace both halves with U+FFFD. When the stream
+ * ends or closes (an errored stream is destroyed and emits 'close'), an
+ * incomplete trailing sequence is flushed as U+FFFD rather than dropped.
  */
-export function decodeOutputChunks(onOutput: (output: string) => void): (data: Buffer) => void {
+export function decodeOutputStream(
+  stream: Readable | null | undefined,
+  onOutput: (output: string) => void
+): void {
+  if (!stream) {
+    return;
+  }
   const decoder = new StringDecoder('utf8');
-  return (data) => {
-    const output = decoder.write(data);
+  const emit = (output: string) => {
     if (output) {
       onOutput(output);
     }
   };
+  let ended = false;
+  const flush = () => {
+    if (!ended) {
+      ended = true;
+      emit(decoder.end());
+    }
+  };
+  stream.on('data', (data: Buffer) => emit(decoder.write(data)));
+  stream.once('end', flush);
+  stream.once('close', flush);
 }
 
 export function shouldRejectStopWithoutProcess(

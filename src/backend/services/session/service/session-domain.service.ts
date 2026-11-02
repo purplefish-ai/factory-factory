@@ -452,8 +452,8 @@ export class SessionDomainService extends EventEmitter {
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
-    // An unexpected exit discards the queue; return typed human input for retry
-    // instead of silently dropping it. Background and notification messages own
+    // An exit that does not preserve the queue discards it; return typed human
+    // input for retry instead of silently dropping it. Background and notification messages own
     // their own recovery.
     const discardedHumanMessages = options?.preserveQueuedInput
       ? []
@@ -474,12 +474,12 @@ export class SessionDomainService extends EventEmitter {
       },
     });
 
+    const notSentReason =
+      code === 0
+        ? 'Message was not sent because the agent process exited.'
+        : 'Message was not sent because the agent process exited unexpectedly.';
     for (const message of discardedHumanMessages) {
-      this.failMessage(
-        sessionId,
-        message,
-        'Message was not sent because the agent process exited unexpectedly.'
-      );
+      this.failMessage(sessionId, message, notSentReason);
     }
 
     if (pendingRequest) {

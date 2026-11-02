@@ -495,6 +495,99 @@ it('accepts a changed head without superseding an in-flight frozen failure', asy
   ).toEqual(changed.eventIds);
 });
 
+async function freezeReviewThenPush(workspaceId: string) {
+  const prId = `${workspaceId}-pr`;
+  const sessionId = `${workspaceId}-main`;
+  const target = { workspaceId, prId };
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'project',
+      name: workspaceId,
+      status: 'READY',
+      worktreePath: db.tempDir,
+      prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
+      prs: { create: { id: prId, url: redObservation.url } },
+    },
+  });
+  await db.prisma.agentSession.create({
+    data: {
+      id: sessionId,
+      workspaceId,
+      workflow: 'implement',
+      provider: 'CODEX',
+      providerSessionId: `${sessionId}-provider`,
+    },
+  });
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId },
+    data: { recipientSessionId: sessionId },
+  });
+  const review = {
+    identity: 'comment:7',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'Rename this helper',
+    path: 'src/a.ts',
+    line: 3,
+    url: `${redObservation.url}#discussion_r7`,
+    activityAt: redObservation.observedAt,
+  };
+  const green = { ...redObservation, ciStatus: 'SUCCESS' as const, actionableReviews: [review] };
+  const pushed = { ...green, headSha: 'pushed-head', observedAt: '2026-10-08T00:05:00.000Z' };
+  await workspacePrSnapshotService.acceptMonitoredObservation({
+    target,
+    expectedPrRevision: 0,
+    expectedEventEpoch: 1,
+    observation: green,
+  });
+  const prepared = await preparePRDelivery({
+    sessionId,
+    request: { workspaceId, prId, bindingRevision: 1 },
+  });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected a frozen review delivery');
+  }
+  // The agent pushes while the review prompt is still in flight.
+  const afterPush = await workspacePrSnapshotService.acceptMonitoredObservation({
+    target,
+    expectedPrRevision: 1,
+    expectedEventEpoch: 1,
+    observation: pushed,
+  });
+  expect(afterPush.eventIds).toHaveLength(1);
+  const refresh = () =>
+    workspacePrSnapshotService.acceptMonitoredObservation({
+      target,
+      expectedPrRevision: 2,
+      expectedEventEpoch: 1,
+      observation: { ...pushed, observedAt: '2026-10-08T00:07:00.000Z' },
+    });
+  return { sessionId, prId, delivery: prepared.delivery, reemitted: afterPush.eventIds, refresh };
+}
+
+it('does not repeat review feedback received by a delivery in flight during a push', async () => {
+  const flow = await freezeReviewThenPush('review-push-received');
+  await prBackgroundDeliveryPort.complete(flow.delivery);
+  expect(await flow.refresh()).toMatchObject({ applied: true, eventIds: [] });
+  expect(await workspacePRMonitoringService.listPending('review-push-received')).toEqual([]);
+});
+
+it('retains review feedback when a delivery in flight during a push is cancelled', async () => {
+  const workspaceId = 'review-push-cancelled';
+  const flow = await freezeReviewThenPush(workspaceId);
+  await prBackgroundDeliveryPort.fail(flow.delivery, new Error('Temporary transport failure'));
+  await workspacePRMonitoringService.cancelRecoveredDelivery(
+    flow.delivery.deliveryId,
+    flow.sessionId
+  );
+  await flow.refresh();
+  const pending = await workspacePRMonitoringService.listPending(workspaceId);
+  expect(pending.map((e) => [e.id, e.kind, e.deliveryId])).toEqual([
+    [flow.reemitted[0], 'REVIEW_FEEDBACK', null],
+  ]);
+});
+
 it('queues a committed failure after an empty idle wake without waiting for another poll', async () => {
   const workspaceId = 'post-idle-observation';
   const prId = 'post-idle-pr';

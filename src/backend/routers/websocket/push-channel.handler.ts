@@ -4,6 +4,9 @@
  * Shared implementation for push-only, workspace-scoped log channels (dev
  * logs, post-run logs): on connect, send the existing output buffer, then
  * stream new output until the socket closes.
+ *
+ * The buffer frame carries `replay: true` so a reconnecting client can replace
+ * the output it already shows instead of appending the repeated history.
  */
 
 import type { AppContext } from '@/backend/app-context';
@@ -46,7 +49,12 @@ export function createPushChannelUpgradeHandler(
           workspaceId,
           bufferSize: outputBuffer.length,
         });
-        safeSend(ws, JSON.stringify({ type: 'output', data: outputBuffer }), logger, 'log output');
+        safeSend(
+          ws,
+          JSON.stringify({ type: 'output', data: outputBuffer, replay: true }),
+          logger,
+          'log output'
+        );
       }
 
       const unsubscribe = subscribeToOutput(workspaceId, (data) => {

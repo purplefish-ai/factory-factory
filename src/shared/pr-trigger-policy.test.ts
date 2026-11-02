@@ -322,14 +322,76 @@ describe('review feedback across pushes', () => {
     expect(afterPush.events.filter((e) => e.kind === 'REVIEW_FEEDBACK')).toEqual([]);
   });
 
-  it('does not duplicate feedback frozen in flight when the head changes', () => {
+  it('keeps feedback frozen in flight across a push until its receipt is proven', () => {
     const first = reduce(green);
     const frozen = first.events.map((e) => ({ ...e, id: 'frozen-review' }));
     const afterPush = reduce(pushed, green, {
       inFlightEvents: frozen,
       transitionSequence: first.nextTransitionSequence,
     });
-    expect(afterPush.events.filter((e) => e.kind === 'REVIEW_FEEDBACK')).toEqual([]);
+    const reemitted = afterPush.events.map((e) => ({ ...e, id: 'reemitted-review' }));
+    expect(reemitted.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
+    // Receipt recovery may cancel the frozen claim and requeue its stale-head
+    // payload as a fresh row; that row is superseded, so the re-emission must
+    // survive or the feedback never reaches the agent.
+    const requeued = frozen.map((e) => ({ ...e, id: 'requeued-review' }));
+    const afterCancel = reduce(pushed, pushed, {
+      pendingEvents: [...requeued, ...reemitted],
+      transitionSequence: afterPush.nextTransitionSequence,
+    });
+    expect(afterCancel.supersededEventIds).toEqual(['requeued-review']);
+    expect(afterCancel.events).toEqual([]);
+  });
+
+  it('drops the in-flight re-emission once the frozen delivery is received', () => {
+    const first = reduce(green);
+    const frozen = first.events.map((e) => ({ ...e, id: 'frozen-review' }));
+    const afterPush = reduce(pushed, green, {
+      inFlightEvents: frozen,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    const reemitted = afterPush.events.map((e) => ({
+      ...e,
+      id: 'reemitted-review',
+      createdAt: new Date('2026-10-08T00:05:00.000Z'),
+    }));
+    const received = frozen.map((e) => ({
+      ...e,
+      deliveredAt: new Date('2026-10-08T00:06:00.000Z'),
+    }));
+    const afterReceipt = reduce(pushed, pushed, {
+      deliveredEvents: received,
+      pendingEvents: reemitted,
+      transitionSequence: afterPush.nextTransitionSequence,
+    });
+    expect(afterReceipt.supersededEventIds).toEqual(['reemitted-review']);
+    expect(afterReceipt.events).toEqual([]);
+  });
+
+  it('keeps a re-opened thread queued after its earlier delivery', () => {
+    const first = reduce(green);
+    const delivered = first.events.map((e) => ({
+      ...e,
+      id: 'delivered-review',
+      deliveredAt: new Date('2026-10-08T00:01:00.000Z'),
+    }));
+    const resolved = { ...green, actionableReviews: [], resolvedReviewIds: [review.identity] };
+    const reopened = reduce(green, resolved, {
+      deliveredEvents: delivered,
+      transitionSequence: first.nextTransitionSequence,
+    });
+    const queued = reopened.events.map((e) => ({
+      ...e,
+      id: 'reopened-review',
+      createdAt: new Date('2026-10-08T00:03:00.000Z'),
+    }));
+    expect(queued.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
+    const refreshed = reduce(green, green, {
+      deliveredEvents: delivered,
+      pendingEvents: queued,
+      transitionSequence: reopened.nextTransitionSequence,
+    });
+    expect(refreshed.supersededEventIds).toEqual([]);
   });
 
   it('re-emits undelivered feedback that a new head supersedes', () => {

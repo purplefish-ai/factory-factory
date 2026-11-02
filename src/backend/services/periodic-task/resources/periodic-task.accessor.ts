@@ -347,6 +347,39 @@ function computeNextRunAfter(
   return next;
 }
 
+/**
+ * The first slot after `now` of the series through `slot`: the earliest of its
+ * slots still ahead when `slot` is, otherwise the first one after `now`. This
+ * keeps a series' weekday and time of day, unlike starting from `now`.
+ */
+function computeFirstRunInSeries(
+  cadence: PeriodicTaskCadence,
+  slot: Date,
+  now: Date,
+  scheduledTime: string | null,
+  timezone: string | null,
+  scheduledDayOfMonth: number | null
+): Date {
+  if (slot <= now) {
+    return computeNextRunAfter(cadence, slot, now, scheduledTime, timezone, scheduledDayOfMonth);
+  }
+  let first = slot;
+  for (let periods = -1; ; periods--) {
+    const earlier = advanceRunAt(
+      cadence,
+      slot,
+      periods,
+      scheduledTime,
+      timezone,
+      scheduledDayOfMonth
+    );
+    if (earlier <= now) {
+      return first;
+    }
+    first = earlier;
+  }
+}
+
 async function buildDispatchedTaskData(
   id: string,
   { cadence, scheduledTime, timezone, scheduledDayOfMonth, dueAt }: PeriodicTaskDispatchSchedule
@@ -415,9 +448,28 @@ type PeriodicTaskWithExecutions = PeriodicTask & {
 };
 
 /**
+ * A slot of an edited weekly schedule on the existing series' weekday. Weekly
+ * slots repeat from a slot's calendar date and no weekday is stored, so the
+ * pending `nextRunAt` (in the old timezone) carries it. Null when there is no
+ * weekly series to continue or no fixed local time to apply.
+ */
+function editedWeeklySlot(
+  existing: PeriodicTask,
+  scheduledTime: string | null,
+  timezone: string | null
+): Date | null {
+  if (existing.cadence !== 'WEEKLY' || !existing.nextRunAt || !scheduledTime || !timezone) {
+    return null;
+  }
+  const weekday = getTimeZoneDateParts(existing.nextRunAt, existing.timezone ?? timezone);
+  return dateFromTimeZoneDateTime(weekday, parseScheduledTime(scheduledTime), timezone);
+}
+
+/**
  * Schedule fields for an edit. The agent form resubmits the schedule with every
  * save, so an unchanged schedule keeps its pending slot instead of skipping or
- * shifting it; a changed one starts at its first slot still ahead.
+ * shifting it; a changed one starts at its first slot still ahead, keeping a
+ * weekly schedule's weekday.
  */
 function buildScheduleUpdate(
   existing: PeriodicTask,
@@ -441,13 +493,17 @@ function buildScheduleUpdate(
     timezone,
     existing.cadence === 'MONTHLY' ? existing.createdAt : now
   );
+  const weeklySlot =
+    cadence === 'WEEKLY' ? editedWeeklySlot(existing, scheduledTime, timezone) : null;
 
   return {
     ...(input.cadence !== undefined && { cadence: input.cadence }),
     ...(input.scheduledTime !== undefined && { scheduledTime: input.scheduledTime }),
     ...(input.timezone !== undefined && { timezone: input.timezone }),
     ...(cadence === 'MONTHLY' && { scheduledDayOfMonth }),
-    nextRunAt: computeFirstRunAfter(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
+    nextRunAt: weeklySlot
+      ? computeFirstRunInSeries(cadence, weeklySlot, now, scheduledTime, timezone, null)
+      : computeFirstRunAfter(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
   };
 }
 
@@ -549,13 +605,26 @@ export const periodicTaskAccessor = {
       if (cadence === 'MONTHLY') {
         data.scheduledDayOfMonth = scheduledDayOfMonth;
       }
-      data.nextRunAt = computeFirstRunAfter(
-        cadence,
-        new Date(),
-        task.scheduledTime,
-        task.timezone,
-        scheduledDayOfMonth
-      );
+      // Continue the paused series (its weekday, day and time) from the pending
+      // slot; an overdue one moves to the first slot still ahead rather than
+      // running at once. Rows without one start from now.
+      const now = new Date();
+      data.nextRunAt = task.nextRunAt
+        ? computeFirstRunInSeries(
+            cadence,
+            task.nextRunAt,
+            now,
+            task.scheduledTime,
+            task.timezone,
+            scheduledDayOfMonth
+          )
+        : computeFirstRunAfter(
+            cadence,
+            now,
+            task.scheduledTime,
+            task.timezone,
+            scheduledDayOfMonth
+          );
     }
     return await prisma.periodicTask.update({ where: { id }, data });
   },

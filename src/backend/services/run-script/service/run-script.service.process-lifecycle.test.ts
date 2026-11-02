@@ -259,6 +259,36 @@ describe('RunScriptService process lifecycle', () => {
     expect(service.getOutputBuffer('ws-1')).toContain(line.toString());
   });
 
+  // A process killed mid-character leaves an incomplete sequence buffered in
+  // the decoder; surface it as U+FFFD on stream end rather than dropping it.
+  it('flushes partial UTF-8 output from run and postRun streams when they end', async () => {
+    mockReconcileWorkspaceCommandCache.mockResolvedValue({
+      ...COMMANDS,
+      runScriptPostRunCommand: 'pnpm watch:assets',
+    });
+    const runChild = new FakeChildProcess(1001);
+    const postRunChild = new FakeChildProcess(1002);
+    mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(postRunChild);
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptStatus: 'IDLE',
+      ...COMMANDS,
+    });
+    const service = new RunScriptService();
+    await expect(service.startRunScript('ws-1')).resolves.toMatchObject({ success: true });
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledTimes(2));
+
+    const truncated = Buffer.from('ready ➜');
+    for (const stream of [runChild.stdout, runChild.stderr, postRunChild.stdout]) {
+      stream.emit('data', truncated.subarray(0, -1));
+      stream.emit('end');
+    }
+
+    expect(service.getOutputBuffer('ws-1')).toContain('ready �ready �');
+    expect(service.getPostRunOutputBuffer('ws-1')).toContain('ready �');
+  });
+
   // The dev-logs WebSocket (push-channel.handler.ts) subscribes once per
   // connection and keeps the socket open across runs, so stopping must not drop
   // its subscription.

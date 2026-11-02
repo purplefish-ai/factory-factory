@@ -248,7 +248,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
       expect.any(Function)
     );
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'output', data: 'buffered post-run logs\n' })
+      JSON.stringify({ type: 'output', data: 'buffered post-run logs\n', replay: true })
     );
     expect(postRunLogsConnections.subscribers(workspaceId).has(ws as unknown as WebSocket)).toBe(
       true

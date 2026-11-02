@@ -38,11 +38,15 @@ function image(id: string): MessageAttachment {
 }
 
 let latestAttachments: MessageAttachment[] = [];
+let setHostAttachments: React.Dispatch<React.SetStateAction<MessageAttachment[]>> = () => {
+  throw new Error('Host not rendered');
+};
 
 // Mirrors the workspace composer: attachments live in the parent's state.
 function Host() {
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   latestAttachments = attachments;
+  setHostAttachments = setAttachments;
   return (
     <ChatInput onSend={vi.fn()} attachments={attachments} onAttachmentsChange={setAttachments} />
   );
@@ -62,16 +66,26 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('ChatInput controlled attachments', () => {
-  it('keeps every pasted attachment when an image finishes converting after a later paste', async () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const client = trpc.createClient({ links: [] });
-    latestAttachments = [];
+async function renderHost() {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = trpc.createClient({ links: [] });
+  latestAttachments = [];
 
-    const paste = async () => {
+  await act(() =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <trpc.Provider client={client} queryClient={queryClient}>
+          <Host />
+        </trpc.Provider>
+      </QueryClientProvider>
+    )
+  );
+
+  return {
+    paste: async () => {
       const textarea = container.querySelector('textarea');
       if (!textarea) {
         throw new Error('Missing composer textarea');
@@ -79,28 +93,28 @@ describe('ChatInput controlled attachments', () => {
       await act(() => {
         textarea.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }));
       });
-    };
+    },
+    cleanup: async () => {
+      await act(() => root.unmount());
+      queryClient.clear();
+      container.remove();
+    },
+  };
+}
 
+describe('ChatInput controlled attachments', () => {
+  it('keeps every pasted attachment when an image finishes converting after a later paste', async () => {
+    const host = await renderHost();
     try {
-      await act(() =>
-        root.render(
-          <QueryClientProvider client={queryClient}>
-            <trpc.Provider client={client} queryClient={queryClient}>
-              <Host />
-            </trpc.Provider>
-          </QueryClientProvider>
-        )
-      );
-
       // A screenshot paste starts converting asynchronously...
       clipboard.hasImage = true;
-      await paste();
+      await host.paste();
       expect(clipboard.pendingImages).toHaveLength(1);
 
       // ...while the user pastes a large log, which attaches immediately.
       clipboard.hasImage = false;
       clipboard.text = 'stack trace';
-      await paste();
+      await host.paste();
       expect(latestAttachments.map((attachment) => attachment.id)).toEqual(['text-stack trace']);
 
       // The screenshot conversion finishes afterwards.
@@ -114,9 +128,31 @@ describe('ChatInput controlled attachments', () => {
         'screenshot',
       ]);
     } finally {
-      await act(() => root.unmount());
-      queryClient.clear();
-      container.remove();
+      await host.cleanup();
+    }
+  });
+
+  it('keeps a parent attachment write that lands before the composer re-renders', async () => {
+    const host = await renderHost();
+    try {
+      clipboard.hasImage = true;
+      await host.paste();
+      expect(clipboard.pendingImages).toHaveLength(1);
+
+      // The workspace drop zone appends through the parent's setter, and the
+      // paste conversion finishes before React renders that write.
+      await act(async () => {
+        setHostAttachments((previous) => [...previous, image('dropped')]);
+        clipboard.pendingImages[0]?.([image('screenshot')]);
+        await Promise.resolve();
+      });
+
+      expect(latestAttachments.map((attachment) => attachment.id)).toEqual([
+        'dropped',
+        'screenshot',
+      ]);
+    } finally {
+      await host.cleanup();
     }
   });
 });

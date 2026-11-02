@@ -20,6 +20,7 @@ import {
   executeEventStartupScript,
   type EventStartupScriptOptions,
 } from './event-startup-script';
+import { decodeOutputStream } from './run-script-process-utils';
 
 const logger = createLogger('startup-script');
 
@@ -357,13 +358,12 @@ class StartupScriptService {
         }, gracePeriodMs);
       }, timeoutMs);
 
-      const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
+      const appendOutput = (target: 'stdout' | 'stderr', str: string): void => {
         // Keep draining inherited pipes without retaining output or interrupting
         // background descendants that write after provisioning has completed.
         if (settled) {
           return;
         }
-        const str = data.toString();
         const maxSize = SERVICE_LIMITS.startupScriptOutputMaxBytes;
         const keepSize = SERVICE_LIMITS.startupScriptOutputTailBytes;
 
@@ -383,8 +383,8 @@ class StartupScriptService {
         }
       };
 
-      proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
-      proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
+      decodeOutputStream(proc.stdout, (output) => appendOutput('stdout', output));
+      decodeOutputStream(proc.stderr, (output) => appendOutput('stderr', output));
 
       const finish = async (
         code: number | null,

@@ -271,9 +271,12 @@ The reducer emits changed CI failures, recovery after a delivered failure,
 actionable review additions or edits, conflict transitions, and merge/close
 transitions. Check details, head SHA, and transition sequence distinguish reruns
 and recurrences. An unchanged red observation never sends another prompt merely
-because the agent left CI red. Unfrozen obsolete facts are superseded; frozen
-retry messages keep the original text and UUID. A destination-only switch
-preserves queued facts so the new recipient can receive them.
+because the agent left CI red. A new head re-emits undelivered review feedback
+but not feedback already delivered. Feedback in flight during a push is
+re-emitted so a cancelled claim cannot lose it; the copy is superseded once that
+delivery is received. Unfrozen obsolete facts are superseded; frozen retry
+messages keep the original text and UUID. A destination-only switch preserves
+queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
