@@ -701,8 +701,14 @@ export class SessionDomainService extends EventEmitter {
     return !store.historySuspended && store.historyProviderSessionId === providerSessionId;
   }
 
-  createProviderHistoryFence(sessionId: string, providerSessionId: string): (() => boolean) | null {
-    if (!this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
+  createProviderHistoryFence(
+    sessionId: string,
+    providerSessionId: string | null
+  ): (() => boolean) | null {
+    if (providerSessionId === null && this.repairedProviderHistoryIdentities.has(sessionId)) {
+      return null;
+    }
+    if (providerSessionId && !this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
       return null;
     }
     const store = this.registry.getOrCreate(sessionId);
@@ -710,7 +716,7 @@ export class SessionDomainService extends EventEmitter {
     return () =>
       this.registry.isCurrentStore(sessionId, store) &&
       !store.historySuspended &&
-      store.historyProviderSessionId === providerSessionId &&
+      (store.historyProviderSessionId ?? null) === providerSessionId &&
       (store.historyReadGeneration ?? 0) === generation;
   }
 
