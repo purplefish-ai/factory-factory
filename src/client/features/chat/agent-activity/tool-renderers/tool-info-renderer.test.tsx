@@ -258,10 +258,20 @@ describe('bounded command previews in expanded activity', () => {
 
 describe('single activity summaries', () => {
   it.each([
-    { name: 'Read', status: 'success' as const, label: 'Read file single.ts' },
-    { name: 'Bash', status: 'error' as const, label: 'Ran command' },
-    { name: 'exec_command', status: 'pending' as const, label: 'Running command' },
-  ])('summarizes $name with status $status', ({ name, status, label }) => {
+    {
+      name: 'Read',
+      status: 'success' as const,
+      label: 'Read file single.ts',
+      detailLabel: 'Read single.ts',
+    },
+    { name: 'Bash', status: 'error' as const, label: 'Ran command', detailLabel: 'Failed command' },
+    {
+      name: 'exec_command',
+      status: 'pending' as const,
+      label: 'Running command',
+      detailLabel: 'Running command',
+    },
+  ])('summarizes $name with status $status', ({ name, status, label, detailLabel }) => {
     const container = document.createElement('div');
     const root = createRoot(container);
     const call = { ...createCall('single', name), status };
@@ -280,6 +290,7 @@ describe('single activity summaries', () => {
       flushSync(() => trigger?.click());
       const actionTrigger = container.querySelectorAll('button')[1];
       expect(actionTrigger).toBeDefined();
+      expect(actionTrigger?.querySelector('span[title]')?.textContent).toBe(detailLabel);
       expect(container.textContent).not.toContain('ok');
       flushSync(() => actionTrigger?.click());
       expect(container.textContent).toContain('ok');
