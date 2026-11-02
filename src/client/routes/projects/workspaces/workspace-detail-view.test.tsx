@@ -130,7 +130,11 @@ vi.mock('@/components/ui/sheet', () => ({
 
 vi.mock('@/client/features/workspace', () => ({
   ArchiveWorkspaceDialog: archiveDialogMock,
-  RightPanel: rightPanelMock,
+}));
+
+vi.mock('@/client/features/workspace/right-panel', () => ({ RightPanel: rightPanelMock }));
+
+vi.mock('@/client/features/workspace/workspace-content-view', () => ({
   WorkspaceContentView: (props: {
     children: ReactNode;
     emptyState?: ReactNode;
