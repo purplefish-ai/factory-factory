@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
+import * as ownedProcessGroup from '@/backend/lib/owned-process-group';
 const spawn = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ spawn }));
 import { executeEventStartupScript } from './event-startup-script';
@@ -18,6 +19,7 @@ function setup() {
   const controller = new AbortController();
   const ports = {
     signal: controller.signal,
+    physicalStage: vi.fn(),
     assertCurrent: vi.fn(async () => undefined),
     appendOutput: vi.fn(async () => undefined),
     setPid: vi.fn(async () => undefined),
@@ -75,10 +77,66 @@ it('returns UNKNOWN on timeout when cleanup cannot prove process disappearance',
   }).catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(6000);
   expect(await task).toMatchObject({ kind: 'TIMED_OUT', cleanup: 'UNKNOWN' });
+  expect(h.ports.clearPid).not.toHaveBeenCalled();
+  expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
   if (process.platform !== 'win32') {
     expect(signal).toHaveBeenCalledWith(-4321, 'SIGKILL');
   }
 });
+it('retains the original PID while cleanup is pending and after UNKNOWN without a null write', async () => {
+  const h = setup();
+  let storedPid: number | null = null;
+  const history: Array<number | null> = [];
+  let release!: () => void;
+  const cleanup = new Promise<'UNKNOWN'>((resolve) => {
+    release = () => resolve('UNKNOWN');
+  });
+  const stop = vi.spyOn(ownedProcessGroup, 'stopOwnedProcessGroup').mockReturnValue(cleanup);
+  const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw new Error('No host signals');
+  });
+  h.ports.setPid.mockImplementation(() => {
+    storedPid = h.child.pid;
+    history.push(storedPid);
+    return Promise.resolve(undefined);
+  });
+  h.ports.clearPid.mockImplementation(() => {
+    storedPid = null;
+    history.push(storedPid);
+    return Promise.resolve(undefined);
+  });
+  let settled = false;
+  const task = executeEventStartupScript({
+    cwd: '/test',
+    args: ['-c', 'task'],
+    timeoutMs: 10_000,
+    ...h.ports,
+  })
+    .catch((error: unknown) => error)
+    .then((result) => {
+      settled = true;
+      return result;
+    });
+  try {
+    await vi.waitFor(() => expect(storedPid).toBe(4321));
+    h.controller.abort();
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    expect(storedPid).toBe(4321);
+    expect(history).toEqual([4321]);
+    release();
+    expect(await task).toMatchObject({ cleanup: 'UNKNOWN' });
+    expect(storedPid).toBe(4321);
+    expect(history).toEqual([4321]);
+    expect(h.ports.clearPid).not.toHaveBeenCalled();
+    expect(signals).not.toHaveBeenCalled();
+  } finally {
+    h.controller.abort();
+    release();
+    await task;
+  }
+});
+
 it('does not spawn when the current claim check fails', async () => {
   const h = setup();
   spawn.mockClear();
@@ -160,7 +218,7 @@ it.each(['output', 'pid'] as const)(
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const write = phase === 'output' ? h.ports.appendOutput : h.ports.clearPid;
+    const write = phase === 'output' ? h.ports.appendOutput : h.ports.setPid;
     write.mockImplementation(() => pending.then(() => undefined));
     const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('unconfirmed'), { code: 'EPERM' });
@@ -189,6 +247,7 @@ it.each(['output', 'pid'] as const)(
       h.controller.abort();
       await nextTurn();
       expect(done).toBe(false);
+      expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
       release();
       expect(await task).toMatchObject({ kind: 'ABORTED', cleanup: 'UNKNOWN' });
       if (process.platform !== 'win32') {

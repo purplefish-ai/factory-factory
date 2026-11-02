@@ -123,6 +123,7 @@ export type AgentRunCountAggregateOutputType = {
   reasonCode: number
   result: number
   effectiveExecution: number
+  launchPreparation: number
   definitionSnapshot: number
   triggerSnapshot: number
   input: number
@@ -232,6 +233,7 @@ export type AgentRunCountAggregateInputType = {
   reasonCode?: true
   result?: true
   effectiveExecution?: true
+  launchPreparation?: true
   definitionSnapshot?: true
   triggerSnapshot?: true
   input?: true
@@ -352,6 +354,7 @@ export type AgentRunGroupByOutputType = {
   reasonCode: string | null
   result: runtime.JsonValue | null
   effectiveExecution: runtime.JsonValue | null
+  launchPreparation: runtime.JsonValue | null
   definitionSnapshot: runtime.JsonValue
   triggerSnapshot: runtime.JsonValue | null
   input: runtime.JsonValue
@@ -408,6 +411,7 @@ export type AgentRunWhereInput = {
   reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   result?: Prisma.JsonNullableFilter<"AgentRun">
   effectiveExecution?: Prisma.JsonNullableFilter<"AgentRun">
+  launchPreparation?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -447,6 +451,7 @@ export type AgentRunOrderByWithRelationInput = {
   reasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
   result?: Prisma.SortOrderInput | Prisma.SortOrder
   effectiveExecution?: Prisma.SortOrderInput | Prisma.SortOrder
+  launchPreparation?: Prisma.SortOrderInput | Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -493,6 +498,7 @@ export type AgentRunWhereUniqueInput = Prisma.AtLeast<{
   reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   result?: Prisma.JsonNullableFilter<"AgentRun">
   effectiveExecution?: Prisma.JsonNullableFilter<"AgentRun">
+  launchPreparation?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -531,6 +537,7 @@ export type AgentRunOrderByWithAggregationInput = {
   reasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
   result?: Prisma.SortOrderInput | Prisma.SortOrder
   effectiveExecution?: Prisma.SortOrderInput | Prisma.SortOrder
+  launchPreparation?: Prisma.SortOrderInput | Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -572,6 +579,7 @@ export type AgentRunScalarWhereWithAggregatesInput = {
   reasonCode?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   result?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
   effectiveExecution?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
+  launchPreparation?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonWithAggregatesFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableWithAggregatesFilter<"AgentRun">
   input?: Prisma.JsonWithAggregatesFilter<"AgentRun">
@@ -602,6 +610,7 @@ export type AgentRunCreateInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -640,6 +649,7 @@ export type AgentRunUncheckedCreateInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -672,6 +682,7 @@ export type AgentRunUpdateInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -710,6 +721,7 @@ export type AgentRunUncheckedUpdateInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -745,6 +757,7 @@ export type AgentRunCreateManyInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -775,6 +788,7 @@ export type AgentRunUpdateManyMutationInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -807,6 +821,7 @@ export type AgentRunUncheckedUpdateManyInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -871,6 +886,7 @@ export type AgentRunCountOrderByAggregateInput = {
   reasonCode?: Prisma.SortOrder
   result?: Prisma.SortOrder
   effectiveExecution?: Prisma.SortOrder
+  launchPreparation?: Prisma.SortOrder
   definitionSnapshot?: Prisma.SortOrder
   triggerSnapshot?: Prisma.SortOrder
   input?: Prisma.SortOrder
@@ -1176,6 +1192,7 @@ export type AgentRunCreateWithoutWorkspaceInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1213,6 +1230,7 @@ export type AgentRunUncheckedCreateWithoutWorkspaceInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1260,6 +1278,7 @@ export type AgentRunUpdateWithoutWorkspaceInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1297,6 +1316,7 @@ export type AgentRunUncheckedUpdateWithoutWorkspaceInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1328,6 +1348,7 @@ export type AgentRunCreateWithoutAgentDefinitionInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1364,6 +1385,7 @@ export type AgentRunUncheckedCreateWithoutAgentDefinitionInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1427,6 +1449,7 @@ export type AgentRunScalarWhereInput = {
   reasonCode?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   result?: Prisma.JsonNullableFilter<"AgentRun">
   effectiveExecution?: Prisma.JsonNullableFilter<"AgentRun">
+  launchPreparation?: Prisma.JsonNullableFilter<"AgentRun">
   definitionSnapshot?: Prisma.JsonFilter<"AgentRun">
   triggerSnapshot?: Prisma.JsonNullableFilter<"AgentRun">
   input?: Prisma.JsonFilter<"AgentRun">
@@ -1457,6 +1480,7 @@ export type AgentRunCreateWithoutTriggerInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1492,6 +1516,7 @@ export type AgentRunUncheckedCreateWithoutTriggerInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1549,6 +1574,7 @@ export type AgentRunCreateWithoutEventInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1585,6 +1611,7 @@ export type AgentRunUncheckedCreateWithoutEventInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1642,6 +1669,7 @@ export type AgentRunCreateWithoutEvaluationsInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1679,6 +1707,7 @@ export type AgentRunUncheckedCreateWithoutEvaluationsInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1726,6 +1755,7 @@ export type AgentRunUpdateWithoutEvaluationsInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1763,6 +1793,7 @@ export type AgentRunUncheckedUpdateWithoutEvaluationsInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1794,6 +1825,7 @@ export type AgentRunCreateWithoutInitialDeliveryInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1831,6 +1863,7 @@ export type AgentRunUncheckedCreateWithoutInitialDeliveryInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1878,6 +1911,7 @@ export type AgentRunUpdateWithoutInitialDeliveryInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1915,6 +1949,7 @@ export type AgentRunUncheckedUpdateWithoutInitialDeliveryInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1948,6 +1983,7 @@ export type AgentRunCreateManyAgentDefinitionInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1978,6 +2014,7 @@ export type AgentRunUpdateWithoutAgentDefinitionInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2014,6 +2051,7 @@ export type AgentRunUncheckedUpdateWithoutAgentDefinitionInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2048,6 +2086,7 @@ export type AgentRunUncheckedUpdateManyWithoutAgentDefinitionInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2079,6 +2118,7 @@ export type AgentRunCreateManyTriggerInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2109,6 +2149,7 @@ export type AgentRunUpdateWithoutTriggerInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2144,6 +2185,7 @@ export type AgentRunUncheckedUpdateWithoutTriggerInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2177,6 +2219,7 @@ export type AgentRunUncheckedUpdateManyWithoutTriggerInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2209,6 +2252,7 @@ export type AgentRunCreateManyEventInput = {
   reasonCode?: string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2239,6 +2283,7 @@ export type AgentRunUpdateWithoutEventInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2275,6 +2320,7 @@ export type AgentRunUncheckedUpdateWithoutEventInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2309,6 +2355,7 @@ export type AgentRunUncheckedUpdateManyWithoutEventInput = {
   reasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   result?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   effectiveExecution?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  launchPreparation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   definitionSnapshot?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   triggerSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   input?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -2373,6 +2420,7 @@ export type AgentRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   reasonCode?: boolean
   result?: boolean
   effectiveExecution?: boolean
+  launchPreparation?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -2413,6 +2461,7 @@ export type AgentRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exte
   reasonCode?: boolean
   result?: boolean
   effectiveExecution?: boolean
+  launchPreparation?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -2450,6 +2499,7 @@ export type AgentRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exte
   reasonCode?: boolean
   result?: boolean
   effectiveExecution?: boolean
+  launchPreparation?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -2487,6 +2537,7 @@ export type AgentRunSelectScalar = {
   reasonCode?: boolean
   result?: boolean
   effectiveExecution?: boolean
+  launchPreparation?: boolean
   definitionSnapshot?: boolean
   triggerSnapshot?: boolean
   input?: boolean
@@ -2497,7 +2548,7 @@ export type AgentRunSelectScalar = {
   completedAt?: boolean
 }
 
-export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "triggerId" | "idempotencyKey" | "status" | "eventId" | "definitionRevision" | "triggerRevision" | "activationGeneration" | "launchPhase" | "reservedWorkspaceId" | "reservedSessionId" | "initialMessageId" | "workerGeneration" | "attemptGeneration" | "attemptCount" | "nextAttemptAt" | "leaseExpiresAt" | "expiresAt" | "reasonCode" | "result" | "effectiveExecution" | "definitionSnapshot" | "triggerSnapshot" | "input" | "workspaceId" | "errorMessage" | "createdAt" | "startedAt" | "completedAt", ExtArgs["result"]["agentRun"]>
+export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "triggerId" | "idempotencyKey" | "status" | "eventId" | "definitionRevision" | "triggerRevision" | "activationGeneration" | "launchPhase" | "reservedWorkspaceId" | "reservedSessionId" | "initialMessageId" | "workerGeneration" | "attemptGeneration" | "attemptCount" | "nextAttemptAt" | "leaseExpiresAt" | "expiresAt" | "reasonCode" | "result" | "effectiveExecution" | "launchPreparation" | "definitionSnapshot" | "triggerSnapshot" | "input" | "workspaceId" | "errorMessage" | "createdAt" | "startedAt" | "completedAt", ExtArgs["result"]["agentRun"]>
 export type AgentRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   trigger?: boolean | Prisma.AgentRun$triggerArgs<ExtArgs>
@@ -2553,6 +2604,7 @@ export type $AgentRunPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     reasonCode: string | null
     result: runtime.JsonValue | null
     effectiveExecution: runtime.JsonValue | null
+    launchPreparation: runtime.JsonValue | null
     definitionSnapshot: runtime.JsonValue
     triggerSnapshot: runtime.JsonValue | null
     input: runtime.JsonValue
@@ -3012,6 +3064,7 @@ export interface AgentRunFieldRefs {
   readonly reasonCode: Prisma.FieldRef<"AgentRun", 'String'>
   readonly result: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly effectiveExecution: Prisma.FieldRef<"AgentRun", 'Json'>
+  readonly launchPreparation: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly definitionSnapshot: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly triggerSnapshot: Prisma.FieldRef<"AgentRun", 'Json'>
   readonly input: Prisma.FieldRef<"AgentRun", 'Json'>

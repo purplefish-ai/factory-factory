@@ -63,6 +63,7 @@ function owned<T>(
   ) => Promise<T>,
   assertCurrent?: () => void
 ) {
+  assertCurrent?.();
   const claim = agentClaimResultSchema.options[0].parse(input);
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`UPDATE "Workspace" SET "updatedAt" = "updatedAt" WHERE 0`;

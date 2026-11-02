@@ -3236,6 +3236,7 @@ export const AgentRunScalarFieldEnum = {
   reasonCode: 'reasonCode',
   result: 'result',
   effectiveExecution: 'effectiveExecution',
+  launchPreparation: 'launchPreparation',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',

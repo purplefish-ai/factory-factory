@@ -1,7 +1,16 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { mkdir, readFile, rm, writeFile, lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+const scriptProcess = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: scriptProcess.spawn,
+}));
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -19,6 +28,8 @@ let init: typeof import('./event-workspace-init.orchestrator').initializeEventWo
 let worktreePath: string;
 const initTasks = new Set<ReturnType<typeof init>>();
 beforeEach(async () => {
+  const native = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  scriptProcess.spawn.mockReset().mockImplementation(native.spawn);
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false);
   worktreePath = join(db.tempDir, `workspace-${h.claim.reservedWorkspaceId}`);
@@ -26,7 +37,7 @@ beforeEach(async () => {
   // Controlled Git fixture: the pre-created directory holds test config, not a retained worktree.
   vi.spyOn(h.workspace.gitOpsService, 'prepareWorktreeCreation').mockResolvedValue({
     worktreePath,
-    canonicalBasePath: db.tempDir,
+    canonicalBasePath: await realpath(db.tempDir),
   });
   const module = await vi.importActual<typeof import('./event-workspace-init.orchestrator')>(
     './event-workspace-init.orchestrator'
@@ -41,7 +52,25 @@ beforeEach(async () => {
     return task;
   };
   vi.spyOn(h.workspace.gitOpsService, 'ensureBaseBranchExists').mockResolvedValue();
-  vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockResolvedValue();
+  vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockImplementation(async (path) => {
+    await rm(path, { recursive: true, force: true });
+  });
+  vi.spyOn(h.workspace.gitOpsService, 'confirmWorktreeAbsent').mockImplementation(
+    async (path, project, expected) => {
+      if ((await realpath(project.worktreeBasePath)) !== expected) {
+        throw new Error('Changed canonical base');
+      }
+      try {
+        await lstat(path);
+        return false;
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+          return true;
+        }
+        throw error;
+      }
+    }
+  );
   vi.spyOn(h.workspace.gitOpsService, 'createWorktree').mockResolvedValue({
     worktreePath,
     branchName: 'event-test',
@@ -62,6 +91,22 @@ afterEach(async () => {
   }
 });
 const input = (signal = new AbortController().signal) => ({ claim: h.claim, signal });
+it('requires positive canonical absence after owned removal resolves', async () => {
+  const cancellation = new AbortController();
+  vi.mocked(h.workspace.gitOpsService.createWorktree).mockImplementation(() => {
+    cancellation.abort();
+    return Promise.resolve({ worktreePath, branchName: 'owned' });
+  });
+  const proof = vi
+    .spyOn(h.workspace.gitOpsService, 'confirmWorktreeAbsent')
+    .mockRejectedValue(new Error('Canonical base is unavailable'));
+  expect(await init(input(cancellation.signal))).toMatchObject({
+    status: 'ABORTED',
+    cleanup: 'UNKNOWN',
+  });
+  expect(h.workspace.gitOpsService.removeWorktree).toHaveBeenCalledOnce();
+  expect(proof).toHaveBeenCalledWith(worktreePath, expect.any(Object), await realpath(db.tempDir));
+});
 it('initializes the reserved event workspace without default session startup or legacy auto-init', async () => {
   const linearContext =
     await vi.importActual<typeof import('./linear-config.helper')>('./linear-config.helper');
@@ -106,7 +151,7 @@ it('drains late Git creation after abort without registering its path or publish
     await creating.wait();
     return { worktreePath, branchName: 'event-test' };
   });
-  const removed = vi.spyOn(h.workspace.gitOpsService, 'removeWorktree').mockResolvedValue();
+  const removed = vi.mocked(h.workspace.gitOpsService.removeWorktree);
   const cancellation = new AbortController();
   let done = false;
   const task = init(input(cancellation.signal)).then((result) => {
@@ -393,14 +438,34 @@ it('never creates or removes a candidate rejected by the Git owner as preexistin
   expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
 });
 
-it('preserves STALE when the durable fence changes only at script PID cleanup', async () => {
+it('returns STALE when confirmed abort cleanup reaches the durable PID-clear fence', async () => {
   await writeFile(
     join(worktreePath, 'factory-factory.json'),
-    JSON.stringify({ scripts: { setup: 'printf cleanup-boundary' } })
+    JSON.stringify({ scripts: { setup: 'controlled-script' } })
   );
+  const child = Object.assign(new EventEmitter(), {
+    pid: 12_345,
+    exitCode: null,
+    signalCode: null,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn(),
+  });
+  scriptProcess.spawn.mockReturnValue(unsafeCoerce<ChildProcess>(child));
+  const cleanup = boundary();
+  const groups = await vi.importActual<typeof import('@/backend/lib/owned-process-group')>(
+    '@/backend/lib/owned-process-group'
+  );
+  const stop = vi.spyOn(groups, 'stopOwnedProcessGroup').mockImplementation(async () => {
+    await cleanup.wait();
+    return 'LOCAL_RUNTIME_GROUP_STOPPED';
+  });
+  const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw new Error('No host signals');
+  });
   const owner = h.workspace.eventWorkspaceInitService;
   const writePid = owner.scriptPid;
-  const cleanup = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
+  const pidWrites = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
     if (args[2]) {
       await db.prisma.agentRun.update({
         where: { id: h.claim.runId },
@@ -409,8 +474,53 @@ it('preserves STALE when the durable fence changes only at script PID cleanup', 
     }
     return writePid(...args);
   });
+  const publication = vi.spyOn(owner, 'finish');
+  const cancellation = new AbortController();
+  const task = init(input(cancellation.signal));
+  const workspace = () => h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId);
+  try {
+    await vi.waitFor(async () =>
+      expect(await workspace()).toMatchObject({ status: 'PROVISIONING', initScriptPid: 12_345 })
+    );
+    cancellation.abort();
+    await cleanup.entered;
+    expect(pidWrites.mock.calls.filter((args) => args[2])).toHaveLength(0);
+    cleanup.release();
+    expect(await task).toMatchObject({ status: 'STALE', cleanup: 'CONFIRMED' });
+    expect(pidWrites.mock.calls.filter((args) => args[2])).toHaveLength(1);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(await workspace()).toMatchObject({
+      status: 'PROVISIONING',
+      initScriptPid: 12_345,
+      initCompletedAt: null,
+    });
+    expect(publication).not.toHaveBeenCalled();
+    expect(signals).not.toHaveBeenCalled();
+  } finally {
+    cancellation.abort();
+    cleanup.release();
+    await task;
+  }
+});
+
+it('preserves STALE when the durable fence changes at READY PID-clearing publication', async () => {
+  await writeFile(
+    join(worktreePath, 'factory-factory.json'),
+    JSON.stringify({ scripts: { setup: 'printf cleanup-boundary' } })
+  );
+  const owner = h.workspace.eventWorkspaceInitService;
+  const finish = owner.finish;
+  const cleanup = vi.spyOn(owner, 'finish').mockImplementation(async (...args) => {
+    if (args[1] === 'READY') {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { workerGeneration: { increment: 1 } },
+      });
+    }
+    return finish(...args);
+  });
   expect(await init(input())).toMatchObject({ status: 'STALE' });
-  expect(cleanup.mock.calls.some((args) => args[2])).toBe(true);
+  expect(cleanup.mock.calls.some((args) => args[1] === 'READY')).toBe(true);
   expect(
     await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
   ).toMatchObject({ status: 'PROVISIONING' });
@@ -466,7 +576,11 @@ it.each(['absent', 'inspection-failed'] as const)(
         status: 'FAILED',
         cleanup: proof === 'absent' ? 'CONFIRMED' : 'UNKNOWN',
       });
-      expect(checked).toHaveBeenCalledWith(worktreePath, expect.any(Object), db.tempDir);
+      expect(checked).toHaveBeenCalledWith(
+        worktreePath,
+        expect.any(Object),
+        await realpath(db.tempDir)
+      );
       expect(h.workspace.gitOpsService.removeWorktree).not.toHaveBeenCalled();
     } finally {
       inspection.release();

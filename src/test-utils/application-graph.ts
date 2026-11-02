@@ -213,6 +213,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionFileLogger: { log: vi.fn() },
     sessionLifecycleEventService: {},
     sessionLifecycleService: {
+      stopAllClients: vi.fn().mockResolvedValue(undefined),
       getRuntimeSnapshot: vi.fn(() => ({
         phase: 'idle',
         processState: 'stopped',

@@ -97,10 +97,23 @@ it to the successful evaluation attempt number. Provisioning must continue that
 same budget rather than start another four attempts. Non-dispatching decisions
 retain an explicitly marked configuration snapshot that admission cannot use.
 
-The runtime has an optional injected launch-claim consumer. Until a launcher is
-wired, evaluation/admission and queue maintenance run but no run is claimed. A
-wired consumer owns settlement of every committed claim and shutdown drains that
-consumer before runtime dependencies stop.
+The application installs a durable event launch consumer. A committed claim is
+registered before asynchronous work begins; the evaluation job returns after
+that handoff, allowing up to the configured global capacity to progress
+independently. The separate `agent-launch-maintenance` job uses the five-second
+cadence to renew sixty-second leases and recover bounded pages even while
+evaluation is stalled. Shutdown closes admission, drains committed handoffs,
+aborts and joins owned setup, and interrupts initial provider work before
+session and database teardown. Session teardown retains the final observation
+drain. Application disposal also drains sessions before account dependencies.
+
+Provisioning retries retain RUNNING capacity, frozen snapshots, identities and
+account; they never return to the authoring-sensitive QUEUED state. Retry-After
+extends the remaining shared retry delay. Only typed transient failures retry.
+The original fifteen-minute setup deadline is retained across safe retries.
+Unknown cleanup keeps capacity and forbids retry. Public activation and ongoing
+run settlement remain separate prerequisites; saved agents cannot yet be
+enabled.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule

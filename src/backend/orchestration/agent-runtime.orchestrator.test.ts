@@ -7,6 +7,43 @@ afterEach(async () => {
   jobRunner.reset();
   vi.useRealTimers();
 });
+it('renews independently of stalled evaluation and closes admission before draining owned tasks', async () => {
+  vi.useFakeTimers();
+  const calls: string[] = [];
+  let release!: () => void;
+  const evaluation = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const runtime = createAgentRuntime(
+    { pollCycle: async () => undefined },
+    {
+      maintainQueue: async () => undefined,
+      evaluatePendingEvents: async (signal) => {
+        signal.addEventListener('abort', release, { once: true });
+        await evaluation;
+      },
+      claimNextRun: async () => ({ status: 'DEFERRED', reason: 'EMPTY' }),
+    },
+    {
+      maintain: () => {
+        calls.push('renew');
+        return Promise.resolve();
+      },
+      closeAdmission: () => {
+        calls.push('close');
+      },
+      stop: () => {
+        calls.push('drain');
+        return Promise.resolve();
+      },
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(15_000);
+  expect(calls.filter((call) => call === 'renew')).toHaveLength(4);
+  await runtime.stop();
+  expect(calls.slice(-2)).toEqual(['close', 'drain']);
+});
 it('aborts and drains intake on stop, then restarts with a fresh signal', async () => {
   vi.useFakeTimers();
   const signals: AbortSignal[] = [];

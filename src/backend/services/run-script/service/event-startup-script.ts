@@ -3,14 +3,18 @@ import type { Readable } from 'node:stream';
 import { stopOwnedProcessGroup } from '@/backend/lib/owned-process-group';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
+import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
 
 export class EventSetupError extends Error {
+  readonly failure: ReturnType<typeof classifyEventPreparationFailure>;
   constructor(
     readonly kind: 'FAILED' | 'ABORTED' | 'TIMED_OUT',
     readonly cleanup: 'CONFIRMED' | 'UNKNOWN',
-    message: string
+    message: string,
+    cause?: unknown
   ) {
-    super(message);
+    super(message, { cause });
+    this.failure = classifyEventPreparationFailure(cause);
   }
 }
 export type EventStartupScriptOptions = {
@@ -19,6 +23,7 @@ export type EventStartupScriptOptions = {
   appendOutput(text: string): Promise<void>;
   setPid(pid: number): Promise<void>;
   clearPid(pid: number): Promise<void>;
+  physicalStage?(active: boolean): void;
 };
 /** Event-only execution: foreground work is joined; cancellation requires owned-group proof. */
 export async function executeEventStartupScript(
@@ -32,6 +37,7 @@ export async function executeEventStartupScript(
     env: { ...configService.getChildProcessEnv(), WORKSPACE_PATH: input.cwd },
     detached: process.platform !== 'win32',
   });
+  input.physicalStage?.(true);
   const group = { child, ownedProcessGroup: process.platform !== 'win32' ? child.pid : undefined };
   let writes = Promise.resolve();
   let outputError: unknown;
@@ -71,19 +77,25 @@ export async function executeEventStartupScript(
     }
     finishing = true;
     clearTimeout(drainTimeout);
+    if (stopping === undefined) {
+      input.physicalStage?.(false);
+    }
     await writes;
-    await clearPid();
     if (input.signal.aborted) {
       abort();
     }
     const cleanup = stopping !== undefined ? await stopping : 'CONFIRMED';
+    // Successful foreground completion is published by the initializer's guarded READY write.
+    // Only immutable group-stop proof permits clearing here; UNKNOWN preserves the original PID.
+    if (stopping !== undefined && cleanup === 'CONFIRMED') {
+      await clearPid();
+    }
     settled = true;
     clearTimeout(timeout);
     input.signal.removeEventListener('abort', abort);
-    if (failure || error || outputError) {
-      reject(
-        new EventSetupError(failure ?? 'FAILED', cleanup, error?.message ?? failureMessage(failure))
-      );
+    const failed = scriptFailure(failure, error, outputError, cleanup);
+    if (failed) {
+      reject(failed);
     } else {
       resolve(scriptResult(code, stderr));
     }
@@ -93,6 +105,7 @@ export async function executeEventStartupScript(
       return;
     }
     failure = kind;
+    input.physicalStage?.(true);
     stopping = Promise.resolve().then(async () => {
       const proof = await stopOwnedProcessGroup(group);
       if (proof === 'UNKNOWN') {
@@ -107,7 +120,10 @@ export async function executeEventStartupScript(
         ? ('CONFIRMED' as const)
         : ('UNKNOWN' as const);
     });
-    void stopping.then(() => finish(null));
+    void stopping.then(() => {
+      input.physicalStage?.(false);
+      return finish(null);
+    });
   }
   const abort = () =>
     stop(
@@ -185,4 +201,20 @@ function failureMessage(kind: EventSetupError['kind'] | undefined) {
     return 'Event setup script aborted';
   }
   return 'Event setup script failed';
+}
+
+function scriptFailure(
+  kind: EventSetupError['kind'] | undefined,
+  error: Error | undefined,
+  outputError: unknown,
+  cleanup: 'CONFIRMED' | 'UNKNOWN'
+) {
+  return kind || error || outputError
+    ? new EventSetupError(
+        kind ?? 'FAILED',
+        cleanup,
+        error?.message ?? failureMessage(kind),
+        outputError ?? error
+      )
+    : null;
 }
