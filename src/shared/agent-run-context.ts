@@ -11,6 +11,8 @@ export const expiredAgentRunContextSchema = z.strictObject({
   state: z.literal('EXPIRED'),
   expiredAt: z.iso.datetime(),
 });
+// These containers project context fields from a full AgentRun. Other row fields
+// are intentionally omitted; the context payloads themselves remain strict.
 export const retainedAgentRunContextSchema = z.object({
   contextExpiredAt: z.null(),
   definitionSnapshot: agentDefinitionInputSchema,

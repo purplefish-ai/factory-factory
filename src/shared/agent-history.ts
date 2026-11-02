@@ -21,9 +21,10 @@ const reason = z
   .nullable();
 export const agentRunHistorySchema = z.strictObject({
   id,
-  context: z
-    .union([z.strictObject({ state: z.literal('RETAINED') }), expiredAgentRunContextSchema])
-    .default({ state: 'RETAINED' }),
+  context: z.union([
+    z.strictObject({ state: z.literal('RETAINED') }),
+    expiredAgentRunContextSchema,
+  ]),
   agentId: id,
   triggerId: id.nullable(),
   eventId: id.nullable(),

@@ -5,6 +5,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { initialDeliveryEvidenceSchema } from '@/shared/event-agent-delivery';
+import { Prisma } from '@prisma-gen/client';
 import { createLedgerFixture } from './testing/agent-ledger.test-support';
 
 let db: IntegrationDatabase;
@@ -245,6 +246,15 @@ it('bounds metrics and rotates past retained candidates, excluding already expir
     inspected: 100,
     changed: 0,
   });
+  const expired = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: eligible.id } });
+  expect((await prune()).find((batch) => batch.kind === 'runContext')).toMatchObject({
+    inspected: 2,
+    changed: 0,
+    retained: { ACTIVE_RUN: 2 },
+  });
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: eligible.id } })).toEqual(
+    expired
+  );
 });
 function deferred() {
   let resolve!: () => void;
@@ -652,3 +662,43 @@ it('bounds a mixed fixture preview, measures its impact and preserves the mainte
   };
   process.stdout.write(`RUN_CONTEXT_FIXTURE_MEASUREMENT ${JSON.stringify(measurement)}\n`);
 }, 30_000);
+
+it.each(['launchPreparation', 'effectiveExecution', 'result', 'deliveryEvidence'] as const)(
+  'retains malformed JSON null %s while preserving legitimate SQL null',
+  async (field) => {
+    const run = await terminal();
+    const writeNull = async (value: typeof Prisma.JsonNull | typeof Prisma.DbNull) => {
+      if (field === 'deliveryEvidence') {
+        await db.prisma.agentInitialDelivery.update({
+          where: { runId: run.id },
+          data: { evidence: value },
+        });
+      } else {
+        await db.prisma.agentRun.update({ where: { id: run.id }, data: { [field]: value } });
+      }
+    };
+    await writeNull(Prisma.JsonNull);
+    const before = await read();
+    const delivery = await db.prisma.agentInitialDelivery.findUniqueOrThrow({
+      where: { runId: run.id },
+    });
+    expect(
+      await retention.inspectRunContexts({ retentionDays: 1 }, new AbortController().signal)
+    ).toMatchObject({
+      inspected: 1,
+      eligible: 0,
+      retained: { INVALID_STORED_DATA: 1 },
+    });
+    enable();
+    await prune();
+    expect(await read()).toEqual(before);
+    expect(
+      await db.prisma.agentInitialDelivery.findUniqueOrThrow({ where: { runId: run.id } })
+    ).toEqual(delivery);
+    await writeNull(Prisma.DbNull);
+    expect((await prune()).find((batch) => batch.kind === 'runContext')).toMatchObject({
+      inspected: 1,
+      changed: 1,
+    });
+  }
+);

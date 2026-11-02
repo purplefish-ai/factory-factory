@@ -39,3 +39,32 @@ it('retains complete legacy snapshots without a rewrite', () => {
   };
   expect(storedAgentRunContextSchema.parse(retained)).toEqual(retained);
 });
+
+it.each(['definitionSnapshot', 'triggerSnapshot', 'input'] as const)(
+  'rejects a stale expired timestamp in %s',
+  (field) => {
+    expect(
+      storedAgentRunContextSchema.safeParse({
+        ...row,
+        [field]: { ...expired, expiredAt: '2026-11-03T00:00:00.000Z' },
+      }).success
+    ).toBe(false);
+  }
+);
+
+it('validates an expired context projection from a complete run record', () => {
+  expect(
+    storedAgentRunContextSchema.parse({
+      ...row,
+      id: 'run',
+      status: 'COMPLETED',
+      result: { version: 1, summary: '', pullRequests: [] },
+    })
+  ).toEqual(row);
+  expect(
+    storedAgentRunContextSchema.safeParse({
+      ...row,
+      input: { ...expired, unexpectedSensitiveText: 'Not permitted inside snapshots' },
+    }).success
+  ).toBe(false);
+});

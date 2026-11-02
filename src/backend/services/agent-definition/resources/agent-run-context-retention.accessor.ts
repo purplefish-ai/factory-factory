@@ -13,7 +13,7 @@ import {
 } from '@/shared/event-agent-delivery';
 import { eventAgentExecutionSchema } from '@/shared/event-agent-launch';
 import { eventLaunchPreparationSchema } from '@/shared/event-agent-preparation';
-import { type Prisma } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 import type { RetentionBatch } from './agent-ledger-retention.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
@@ -166,6 +166,25 @@ async function dependency(
   const reason = contextDependency(run);
   if (reason) {
     return reason;
+  }
+  // Prisma reads SQL NULL and JSON null as JS null. Only SQL NULL means absent
+  // optional context/control evidence; a persisted JSON null is malformed proof.
+  const malformedNull = await tx.agentRun.findFirst({
+    where: {
+      id: run.id,
+      OR: [
+        { launchPreparation: { equals: Prisma.JsonNull } },
+        { effectiveExecution: { equals: Prisma.JsonNull } },
+        { result: { equals: Prisma.JsonNull } },
+        { triggerSnapshot: { equals: Prisma.JsonNull } },
+        { initialDelivery: { is: { evidence: { equals: Prisma.JsonNull } } } },
+      ],
+    },
+    select: { id: true },
+  });
+  assertCurrent();
+  if (malformedNull) {
+    return 'INVALID_STORED_DATA';
   }
   if (run.event) {
     const eventReason = await retentionDependency(tx, run.event, false, assertCurrent, limit);
