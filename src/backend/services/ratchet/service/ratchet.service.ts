@@ -277,7 +277,7 @@ export class RatchetService extends EventEmitter {
   ) {
     for (const pr of config.workspace.prs) {
       signal.throwIfAborted();
-      if (!shouldPollPR(pr)) {
+      if (!shouldPollPR(pr, config.eventEpoch)) {
         continue;
       }
       try {

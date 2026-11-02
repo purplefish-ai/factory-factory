@@ -110,3 +110,103 @@ it('applies terminal backoff in stale scheduling without disabling monitoring or
   expect(enabled[0]?.enabled).toBe(true);
   expect(enabled[0]?.workspace.prs).toHaveLength(5);
 });
+
+it.each(['enable', 'recipient'] as const)(
+  'initializes saved terminal facts for the new monitoring epoch after %s changes',
+  async (change) => {
+    const workspaceId = `epoch-${change}`;
+    await db.prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        projectId: 'polling-project',
+        name: workspaceId,
+        status: 'READY',
+        prMonitoring: { create: { enabled: change === 'recipient' } },
+      },
+    });
+    for (const id of ['first', 'second']) {
+      await db.prisma.agentSession.create({
+        data: {
+          id: `${workspaceId}-${id}`,
+          workspaceId,
+          workflow: 'implement',
+          provider: 'CODEX',
+          providerSessionId: id,
+          model: 'custom',
+        },
+      });
+    }
+    await db.prisma.workspacePRMonitoring.update({
+      where: { workspaceId },
+      data: {
+        recipientSessionId: `${workspaceId}-first`,
+      },
+    });
+    const prs = await Promise.all(
+      ['MERGED', 'CLOSED'].map((state, index) =>
+        db.prisma.workspacePR.create({
+          data: {
+            workspaceId,
+            url: `https://github.com/org/repo/pull/${index + 10}`,
+            state: state === 'MERGED' ? 'MERGED' : 'CLOSED',
+          },
+        })
+      )
+    );
+    for (const pr of prs) {
+      await workspacePrAccessor.acceptMonitoredObservation({
+        target: { workspaceId, prId: pr.id },
+        expectedPrRevision: 0,
+        expectedEventEpoch: 0,
+        observation: {
+          ...redObservation,
+          url: pr.url,
+          prState: pr.state === 'MERGED' ? 'MERGED' : 'CLOSED',
+          ciStatus: 'SUCCESS',
+          checks: [],
+          observedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+        },
+      });
+    }
+    await workspacePrMonitoringAccessor.setBinding({
+      workspaceId,
+      enabled: true,
+      expectedBindingRevision: 0,
+      recipientSessionId: `${workspaceId}-${change === 'recipient' ? 'second' : 'first'}`,
+    });
+    const config = await workspacePrMonitoringAccessor.get(workspaceId);
+    expect(config?.eventEpoch).toBe(1);
+    expect(config?.recipientSessionId).toBe(
+      `${workspaceId}-${change === 'recipient' ? 'second' : 'first'}`
+    );
+    expect(
+      (await workspacePrAccessor.findNeedingSync())
+        .filter((pr) => pr.id === workspaceId)
+        .map((pr) => pr.prId)
+        .sort()
+    ).toEqual(prs.map((pr) => pr.id).sort());
+    for (const pr of prs) {
+      await workspacePrAccessor.acceptMonitoredObservation({
+        target: { workspaceId, prId: pr.id },
+        expectedPrRevision: 1,
+        expectedEventEpoch: 1,
+        observation: {
+          ...redObservation,
+          url: pr.url,
+          prState: pr.state === 'MERGED' ? 'MERGED' : 'CLOSED',
+          ciStatus: 'SUCCESS',
+          checks: [],
+          observedAt: new Date().toISOString(),
+        },
+      });
+    }
+    const pending = await db.prisma.workspacePREvent.findMany({
+      where: { workspaceId, state: 'PENDING' },
+    });
+    expect(pending.map((event) => event.kind).sort()).toEqual(['PR_CLOSED', 'PR_MERGED']);
+    expect(pending.every((event) => event.deduplicationKey.includes(':epoch:1:'))).toBe(true);
+    expect(
+      (await workspacePrAccessor.findNeedingSync()).filter((pr) => pr.id === workspaceId)
+    ).toEqual([]);
+  }
+);

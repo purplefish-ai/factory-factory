@@ -366,3 +366,33 @@ it('eliminates recurring observations for four initialized merged PRs across thi
   expect(observe).toHaveBeenCalledTimes(0);
   expect(wake).toHaveBeenCalledTimes(30);
 });
+
+it('initializes terminal facts for a new monitoring epoch before applying backoff', async () => {
+  const prs = ['MERGED', 'CLOSED'].map((state) => ({
+    ...config.workspace.prs[0],
+    id: state,
+    state,
+    observation: {},
+    observationEpoch: 0,
+    syncedAt: new Date(),
+  }));
+  mocks.listEnabled.mockResolvedValue([{ ...config, eventEpoch: 1, workspace: { prs } }]);
+  const observe = vi.fn().mockImplementation((target) => {
+    const pr = prs.find((pr) => pr.id === target.prId);
+    if (pr) {
+      pr.observationEpoch = 1;
+    }
+    return Promise.resolve(true);
+  });
+  const service = new RatchetService();
+  service.configure({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['MERGED', 'CLOSED']);
+  observe.mockClear();
+  await service.checkAllWorkspaces();
+  expect(observe).not.toHaveBeenCalled();
+});

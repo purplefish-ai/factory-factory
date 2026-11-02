@@ -202,17 +202,20 @@ their reason while preserving transitions already written by successful reads.
 
 Both background schedulers use the persisted per-association observation and
 `syncedAt` timestamp to pace terminal PRs. Once a normalized MERGED observation
-has committed its transition and events, background GitHub observations stop for
-that association. Monitoring stays enabled, and every poll still wakes pending
-deliveries, including terminal events, receipt recovery, and frozen retries.
-Open siblings continue at the normal cadence.
+has committed its transition and events for the current monitoring epoch,
+background GitHub observations stop for that association. Monitoring stays
+enabled, and every poll still wakes pending deliveries, including terminal
+events, receipt recovery, and frozen retries. Open siblings continue at the
+normal cadence.
 
 CLOSED PRs become eligible again after 30 minutes so reopening remains visible
 on the next scheduled pass. Legacy terminal snapshots without a normalized
-observation are initialized before this policy applies. A reopened PR returns to
-the normal cadence. The stale-data scheduler applies the same terminal policy,
-so its three-minute pass cannot bypass the closed-PR backoff. Explicit workspace
-and per-PR refreshes, and delivery preparation's freshness checks, remain
+observation are initialized before this policy applies. Enabling monitoring or
+changing its recipient/destination initializes facts for the new observation
+epoch before terminal backoff applies. A reopened PR returns to the normal
+cadence. The stale-data scheduler applies the same terminal policy, so its
+three-minute pass cannot bypass the closed-PR backoff. Explicit workspace and
+per-PR refreshes, and delivery preparation's freshness checks, remain
 unrestricted.
 
 ### Observations and events
