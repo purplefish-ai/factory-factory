@@ -32,8 +32,10 @@ class MockWebSocket extends EventEmitter {
     this._readyState = state;
   }
 
+  bufferedAmount = 0;
   send = vi.fn();
   close = vi.fn();
+  terminate = vi.fn();
 }
 
 function asWs(mock: MockWebSocket): WebSocket {
@@ -48,6 +50,7 @@ function createTransportDeps(sessionLogger: { log: ReturnType<typeof vi.fn> } = 
   return {
     configService: {
       getDebugConfig: () => ({ chatWebSocket: false }),
+      getWebSocketConfig: () => ({ maxFrameBytes: 33_554_432 }),
     },
     createLogger: () => ({
       debug: vi.fn(),
@@ -69,6 +72,223 @@ describe('ChatConnectionRegistry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registry = new ChatConnectionRegistry();
+  });
+
+  it('does not retire a healthy peer for a permitted large replay belonging to another viewer', () => {
+    const requester = new MockWebSocket();
+    const peer = new MockWebSocket();
+    peer.bufferedAmount = 1;
+    for (const [id, viewer] of [
+      ['requester', requester],
+      ['peer', peer],
+    ] as const) {
+      registry.register(id, { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    }
+    registry.expectReplay(asWs(requester), 'own');
+    expect(
+      registry.broadcastToSession(
+        's1',
+        asMessage({
+          type: 'session_replay_batch',
+          loadRequestId: 'own',
+          replayEvents: [
+            {
+              type: 'assistant_text_delta',
+              messageId: 'm1',
+              order: 1,
+              offset: 0,
+              text: 'x'.repeat(2 * 1024 * 1024),
+            },
+          ],
+        })
+      )
+    ).toBe(1);
+    expect(peer.close).not.toHaveBeenCalled();
+    expect(peer.send).not.toHaveBeenCalled();
+    expect(
+      registry.broadcastToSession(
+        's1',
+        asMessage({ type: 'session_delta', data: { type: 'slash_commands', slashCommands: [] } })
+      )
+    ).toBe(2);
+  });
+
+  it('requires an own replay to unblock state but keeps independent notifications available', () => {
+    const viewer = new MockWebSocket();
+    registry.configure({
+      logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      debugChatWebSocket: false,
+      maxFrameBytes: 1024 * 1024,
+    });
+    registry.register('viewer', { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    registry.expectReplay(asWs(viewer), 'own');
+    registry.broadcastToSession(
+      's1',
+      asMessage({
+        type: 'session_replay_batch',
+        loadRequestId: 'own',
+        replayEvents: [
+          {
+            type: 'assistant_text_delta',
+            messageId: 'm1',
+            order: 1,
+            offset: 0,
+            text: 'x'.repeat(2 * 1024 * 1024),
+          },
+        ],
+      })
+    );
+    registry.broadcastToAll({ type: 'workspace_notification_request', workspaceId: 'w1' });
+    registry.broadcastToSession(
+      's1',
+      asMessage({ type: 'session_replay_batch', loadRequestId: 'other', replayEvents: [] })
+    );
+    registry.broadcastToSession(
+      's1',
+      asMessage({ type: 'session_replay_batch', replayEvents: [] })
+    );
+    registry.broadcastToSession(
+      's1',
+      asMessage({ type: 'session_delta', data: { type: 'slash_commands', slashCommands: [] } })
+    );
+    expect(viewer.send.mock.calls.map(([frame]) => JSON.parse(frame).type)).toEqual([
+      'error',
+      'workspace_notification_request',
+    ]);
+    registry.broadcastToSession(
+      's1',
+      asMessage({ type: 'session_replay_batch', loadRequestId: 'own', replayEvents: [] })
+    );
+    expect(
+      registry.broadcastToSession(
+        's1',
+        asMessage({ type: 'session_delta', data: { type: 'slash_commands', slashCommands: [] } })
+      )
+    ).toBe(1);
+  });
+
+  it('keeps an already hydrated peer live when another viewer cannot load an oversized correlated replay', () => {
+    const requester = new MockWebSocket();
+    const healthy = new MockWebSocket();
+    registry.configure({
+      logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      debugChatWebSocket: false,
+      maxFrameBytes: 1024 * 1024,
+    });
+    for (const [id, viewer] of [
+      ['requester', requester],
+      ['healthy', healthy],
+    ] as const) {
+      registry.register(id, { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    }
+    registry.expectReplay(asWs(requester), 'own-load');
+    registry.broadcastToSession(
+      's1',
+      asMessage({
+        type: 'session_replay_batch',
+        loadRequestId: 'own-load',
+        replayEvents: [
+          {
+            type: 'assistant_text_delta',
+            messageId: 'm1',
+            order: 1,
+            offset: 0,
+            text: 'x'.repeat(2 * 1024 * 1024),
+          },
+        ],
+      })
+    );
+    registry.broadcastToSession(
+      's1',
+      asMessage({ type: 'session_delta', data: { type: 'slash_commands', slashCommands: [] } })
+    );
+    expect(requester.send.mock.calls.map(([frame]) => JSON.parse(frame).type)).toEqual(['error']);
+    expect(healthy.send.mock.calls.map(([frame]) => JSON.parse(frame).type)).toEqual([
+      'session_delta',
+    ]);
+    expect(healthy.close).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, 0, 1])('bounds replay at its UTF8 frame ceiling (extra byte %s)', (extra) => {
+    const viewer = new MockWebSocket();
+    const replay = asMessage({
+      type: 'session_replay_batch',
+      loadRequestId: 'sized-load',
+      replayEvents: [
+        {
+          type: 'assistant_text_delta',
+          messageId: 'm1',
+          order: 1,
+          offset: 0,
+          text: 'é'.repeat(1024 * 1024),
+        },
+      ],
+    });
+    registry.configure({
+      logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      debugChatWebSocket: false,
+      maxFrameBytes: Buffer.byteLength(JSON.stringify(replay)) - extra,
+    });
+    registry.register('viewer', { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    registry.expectReplay(asWs(viewer), 'sized-load');
+    expect(registry.broadcastToSession('s1', replay)).toBe(extra > 0 ? 0 : 1);
+    const messages = viewer.send.mock.calls.map(([message]) => JSON.parse(message));
+    expect(messages[0]).toMatchObject(
+      extra > 0 ? { type: 'error', code: 413, loadRequestId: 'sized-load' } : replay
+    );
+    expect(viewer.close).not.toHaveBeenCalled();
+    if (extra > 0) {
+      registry.broadcastToSession(
+        's1',
+        asMessage({ type: 'session_delta', data: { type: 'slash_commands', slashCommands: [] } })
+      );
+      expect(viewer.send).toHaveBeenCalledTimes(1);
+      expect(Buffer.byteLength(viewer.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(512);
+    }
+  });
+
+  it('retires only the congested viewer and replays a large baseline on reconnect', () => {
+    const slow = new MockWebSocket();
+    const healthy = new MockWebSocket();
+    slow.bufferedAmount = 1024 * 1024;
+    for (const [id, viewer] of [
+      ['slow', slow],
+      ['healthy', healthy],
+    ] as const) {
+      registry.register(id, { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    }
+    const delta = asMessage({
+      type: 'session_delta',
+      data: { type: 'slash_commands', slashCommands: [] },
+    });
+    expect(registry.broadcastToSession('s1', delta)).toBe(1);
+    expect(slow.send).not.toHaveBeenCalled();
+    expect(slow.close).toHaveBeenCalledWith(1013, expect.any(String));
+    slow.emit('close');
+
+    const reconnect = new MockWebSocket();
+    registry.register('slow', { ws: asWs(reconnect), dbSessionId: 's1', workingDir: null });
+    registry.expectReplay(asWs(reconnect), 'reconnect-2');
+    const replay = asMessage({
+      type: 'session_replay_batch',
+      loadRequestId: 'reconnect-2',
+      replayEvents: [
+        {
+          type: 'assistant_text_delta',
+          messageId: 'history',
+          order: 1,
+          offset: 0,
+          text: 'x'.repeat(2 * 1024 * 1024),
+        },
+      ],
+    });
+    registry.broadcastToSession('s1', replay);
+    registry.broadcastToSession('s1', delta);
+    expect(reconnect.send.mock.calls.map(([message]) => JSON.parse(message))).toEqual([
+      replay,
+      delta,
+    ]);
+    expect(reconnect.close).not.toHaveBeenCalled();
   });
 
   describe('connection registration', () => {
@@ -146,8 +366,8 @@ describe('ChatConnectionRegistry', () => {
       const message = asMessage({ type: 'test', data: 'hello' });
       registry.broadcastToSession('s1', message);
 
-      expect(ws1.send).toHaveBeenCalledWith(JSON.stringify(message));
-      expect(ws2.send).toHaveBeenCalledWith(JSON.stringify(message));
+      expect(ws1.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
+      expect(ws2.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
     });
 
     it('does not forward to connections viewing a different session', () => {
@@ -187,7 +407,7 @@ describe('ChatConnectionRegistry', () => {
       expect(() => registry.broadcastToSession('s1', message)).not.toThrow();
 
       expect(throwingWs.send).toHaveBeenCalled();
-      expect(healthyWs.send).toHaveBeenCalledWith(JSON.stringify(message));
+      expect(healthyWs.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
     });
   });
 
@@ -205,9 +425,9 @@ describe('ChatConnectionRegistry', () => {
       registry.broadcastToAll(payload);
 
       const message = JSON.stringify(payload);
-      expect(ws1.send).toHaveBeenCalledWith(message);
-      expect(ws2.send).toHaveBeenCalledWith(message);
-      expect(noSessionWs.send).toHaveBeenCalledWith(message);
+      expect(ws1.send).toHaveBeenCalledWith(message, expect.any(Function));
+      expect(ws2.send).toHaveBeenCalledWith(message, expect.any(Function));
+      expect(noSessionWs.send).toHaveBeenCalledWith(message, expect.any(Function));
     });
   });
 
@@ -261,7 +481,7 @@ describe('attachChatTransport', () => {
     const payload = asMessage({ type: 'session_delta', data: { type: 'noop' } });
     sessionEventBus.publishToSession('s1', payload);
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify(payload));
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify(payload), expect.any(Function));
   });
 
   it('delivers all-client broadcasts published on the bus', () => {
@@ -277,7 +497,8 @@ describe('attachChatTransport', () => {
     sessionEventBus.publishToAllClients({ type: 'workspace_notification_request' });
 
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'workspace_notification_request' })
+      JSON.stringify({ type: 'workspace_notification_request' }),
+      expect.any(Function)
     );
   });
 
@@ -325,13 +546,18 @@ describe('attachChatTransport', () => {
     sessionEventBus.publishToSession('s1', payload);
     expect(fileLogger.log).not.toHaveBeenCalled();
 
+    const ws = new MockWebSocket();
     registry.register('conn-1', {
-      ws: asWs(new MockWebSocket()),
+      ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
     });
     sessionEventBus.publishToSession('s1', payload);
 
+    expect(fileLogger.log).not.toHaveBeenCalled();
+    const callback = ws.send.mock.calls[0]?.[1];
+    expect(callback).toBeTypeOf('function');
+    callback?.();
     expect(fileLogger.log).toHaveBeenCalledWith('s1', 'OUT_TO_CLIENT', payload);
   });
 

@@ -19,6 +19,8 @@ import { createChatUpgradeHandler } from './chat.handler';
 
 class Socket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
+  terminate = vi.fn();
   send = vi.fn();
   close = vi.fn();
 }
@@ -100,6 +102,7 @@ function setup() {
       configService: {
         getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
         getDebugConfig: () => ({ chatWebSocket: false }),
+        getWebSocketConfig: () => ({ maxFrameBytes: 33_554_432 }),
       },
     },
   });

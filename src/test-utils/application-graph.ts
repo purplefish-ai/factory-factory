@@ -405,6 +405,7 @@ const fakeSystemConfig = {
   shellPath: '/bin/sh',
   databasePath: '/tmp/factory-factory/data.db',
   healthCheckIntervalMs: 1000,
+  websocketMaxFrameBytes: 33_554_432,
   maxSessionsPerWorkspace: 2,
   prDiscovery: { candidateLimit: 50, repositoryLimit: 10 },
   logger: { level: 'debug' as const, prettyPrint: false, serviceName: 'test' },
@@ -443,6 +444,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     getChildProcessEnv: vi.fn(() => ({ APPLICATION_LABEL: label })),
     getSystemConfig: vi.fn(() => graphSystemConfig),
     getWorktreeBaseDir: vi.fn(() => graphSystemConfig.worktreeBaseDir),
+    getWebSocketConfig: vi.fn(() => ({ maxFrameBytes: graphSystemConfig.websocketMaxFrameBytes })),
     getMaxSessionsPerWorkspace: vi.fn(() => graphSystemConfig.maxSessionsPerWorkspace),
     getCorsConfig: vi.fn(() => graphSystemConfig.cors),
   }) satisfies typeof configService;

@@ -30,6 +30,7 @@ import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
   parseHydrationBatch,
+  parseHydrationLoadError,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
 
@@ -238,11 +239,31 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout]
   );
 
+  const handleLoadError = useCallback(
+    (data: unknown): boolean => {
+      const loadError = parseHydrationLoadError(data);
+      if (loadError) {
+        if (loadError.loadRequestId !== currentLoadRequestIdRef.current) {
+          return true;
+        }
+        currentLoadRequestIdRef.current = null;
+        exhaustedLoadRequestIdRef.current = loadError.loadRequestId;
+        clearLoadTimeout();
+        clearConnectLoadingTimeout();
+        chat.dispatch({ type: 'SESSION_LOADING_END' });
+        chat.handleMessage(data);
+        return true;
+      }
+      return false;
+    },
+    [chat.handleMessage, chat.dispatch, clearLoadTimeout, clearConnectLoadingTimeout]
+  );
+
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
     (raw: unknown) => {
       const data = replayAssembler.current.accept(raw);
-      if (data === null) {
+      if (data === null || handleLoadError(data)) {
         return;
       }
       const batch = parseHydrationBatch(data);
@@ -273,7 +294,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
+    [chat.handleMessage, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId, handleLoadError]
   );
 
   // Handle connection established - request session data and available sessions
