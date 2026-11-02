@@ -19,12 +19,12 @@ import type {
 } from '@prisma-gen/client';
 import {
   readDeliveryEvents,
+  prDeliveryMembershipSchema,
   projectDeliveryEvent,
   projectDeliveryEvents,
   exportDeliveryEvents,
 } from './workspace-pr-delivery.accessor';
 
-const membershipSchema = z.array(z.string().min(1)).min(1);
 // Frozen legacy metadata without a receipt cannot authorize another effect.
 const unboundLegacyEvidenceWhere = {
   batchId: null,
@@ -148,7 +148,7 @@ async function validDeliveryMembers(tx: Prisma.TransactionClient, delivery: Work
   if (delivery.state === 'BLOCKED') {
     return null;
   }
-  const parsed = membershipSchema.safeParse(delivery.eventIds);
+  const parsed = prDeliveryMembershipSchema.safeParse(delivery.eventIds);
   const rows = await tx.workspacePREvent.findMany({
     where: { OR: [{ batchId: delivery.id }, { deliveryId: delivery.id }] },
   });

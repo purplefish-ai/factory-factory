@@ -54,7 +54,10 @@ SELECT e.deliveryId, e.workspaceId,
  CASE WHEN valid.id IS NOT NULL THEN e.claimedAt END,
  CASE WHEN valid.id IS NOT NULL THEN e.deliveredAt END
 FROM WorkspacePREvent e LEFT JOIN valid_pr_delivery valid ON valid.id=e.deliveryId
-WHERE e.deliveryId IS NOT NULL GROUP BY e.deliveryId;
+WHERE e.deliveryId IS NOT NULL AND e.id = (
+ SELECT first_event.id FROM WorkspacePREvent first_event
+ WHERE first_event.deliveryId=e.deliveryId ORDER BY first_event.createdAt,first_event.id LIMIT 1
+);
 UPDATE WorkspacePREvent SET batchId=deliveryId WHERE deliveryId IS NOT NULL;
 -- Null the redundant compatible columns only after a proven valid backfill.
 UPDATE WorkspacePREvent SET state='PENDING',attempts=0,deliveryId=NULL,deliverySessionId=NULL,deliveryProvider=NULL,deliveryProviderSessionId=NULL,deliveryBindingRevision=NULL,deliveryText=NULL,claimedAt=NULL,deliveredAt=NULL

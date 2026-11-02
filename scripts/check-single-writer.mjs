@@ -563,7 +563,7 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
   'deleteMany',
 ]);
 
-/** The relation field each owned side table hangs off `Workspace` under. */
+/** Relation field names matched in any nested data payload, including dependent models. */
 const SIDE_TABLE_RELATIONS = {
   dedicatedSession: 'workspacePRDedicatedSession',
   dedicatedPRBinding: 'workspacePRDedicatedSession',

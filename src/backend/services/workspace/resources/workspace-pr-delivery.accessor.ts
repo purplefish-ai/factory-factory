@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Prisma, WorkspacePRDelivery, WorkspacePREvent } from '@prisma-gen/client';
 
-const membershipSchema = z.array(z.string().min(1)).min(1);
+export const prDeliveryMembershipSchema = z.array(z.string().min(1)).min(1);
 export function projectDeliveryEvent(
   event: WorkspacePREvent,
   delivery?: WorkspacePRDelivery
@@ -66,14 +66,19 @@ export function exportDeliveryEvents(
   deliveries: WorkspacePRDelivery[]
 ) {
   for (const delivery of deliveries) {
-    const ids = membershipSchema.parse(delivery.eventIds);
+    const ids = prDeliveryMembershipSchema.parse(delivery.eventIds);
     const members = events.filter(
       (event) => event.batchId === delivery.id || event.deliveryId === delivery.id
     );
     if (
       ids.length !== new Set(ids).size ||
       members.length !== ids.length ||
-      members.some((event) => !ids.includes(event.id) || event.workspaceId !== delivery.workspaceId)
+      members.some(
+        (event) =>
+          !ids.includes(event.id) ||
+          event.workspaceId !== delivery.workspaceId ||
+          event.batchId !== delivery.id
+      )
     ) {
       throw new Error('Cannot export incomplete PR delivery membership');
     }
