@@ -10,6 +10,8 @@ import {
   type InitialDeliveryFence,
   type ProviderSource,
   type RuntimeStopEvidence,
+  type ExpectedEventRuntime,
+  type EventRunResolution,
 } from '@/shared/event-agent-delivery';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
 import { EventSessionFenceError } from './event-session-fence-error';
@@ -17,7 +19,13 @@ import { EventSessionFenceError } from './event-session-fence-error';
 export type EventInitialPermit = Readonly<{
   attempt: InitialAttempt;
   execution: EventAgentExecution;
+  previousResolution?: EventRunResolution;
 }>;
+type InitialOperation = {
+  attempt: InitialAttempt;
+  permit?: EventInitialPermit;
+  cancelled: boolean;
+};
 function blocked(): never {
   throw new EventSessionFenceError();
 }
@@ -25,7 +33,7 @@ type EventSessionOrigin = { runId: string; execution: EventAgentExecution };
 /** Local permits never replace the durable owner read, including before recovery. */
 export class EventSessionAuthority {
   private owner: InitialDeliveryOwnerPort | undefined;
-  private readonly active = new Map<string, EventInitialPermit>();
+  private readonly active = new Map<string, InitialOperation>();
   private readonly attemptGuards = new WeakMap<EventInitialPermit, () => void>();
   private closing = false;
   private observationEpoch = 0;
@@ -33,6 +41,10 @@ export class EventSessionAuthority {
   constructor(private readonly findOrigin: (id: string) => Promise<EventSessionOrigin | null>) {}
   configure(owner: InitialDeliveryOwnerPort): void {
     this.owner = owner;
+  }
+  /** Monitoring shares the final session observation drain and closure epoch. */
+  observeOwnedWork<T>(operation: (assertCurrent: () => void) => Promise<T>): Promise<T> {
+    return this.observe(operation);
   }
   async read(
     sessionId: string,
@@ -101,7 +113,7 @@ export class EventSessionAuthority {
     return check;
   }
   assertCurrent(permit: EventInitialPermit): void {
-    if (this.active.get(permit.attempt.sessionId) !== permit) {
+    if (this.active.get(permit.attempt.sessionId)?.permit !== permit) {
       blocked();
     }
     this.attemptGuards.get(permit)?.();
@@ -109,29 +121,53 @@ export class EventSessionAuthority {
   invalidate(sessionId: string): void {
     this.active.delete(sessionId);
   }
+  /** Exact synchronous revocation also covers admission still awaiting its durable read. */
+  cancelInitial(attempt: InitialAttempt): void {
+    const operation = this.active.get(attempt.sessionId);
+    if (operation && isDeepStrictEqual(operation.attempt, attempt)) {
+      operation.cancelled = true;
+      this.active.delete(attempt.sessionId);
+    }
+  }
   async runInitial<T>(
     input: InitialAttempt,
     operation: (permit: EventInitialPermit) => Promise<T>,
     assertOwnerCurrent: () => void = () => undefined
   ): Promise<T> {
     const attempt = initialAttemptSchema.parse(input);
-    const fence = await this.read(attempt.sessionId);
-    if (
-      this.closing ||
-      fence?.state !== 'PENDING' ||
-      !isDeepStrictEqual(fence.attempt, attempt) ||
-      this.active.has(attempt.sessionId)
-    ) {
+    if (this.closing || this.active.has(attempt.sessionId)) {
       blocked();
     }
-    const permit = { attempt, execution: fence.execution };
-    assertOwnerCurrent();
-    this.attemptGuards.set(permit, assertOwnerCurrent);
-    this.active.set(attempt.sessionId, permit);
+    const admission: InitialOperation = { attempt, cancelled: false };
+    const check = () => {
+      if (this.closing || this.active.get(attempt.sessionId) !== admission) {
+        blocked();
+      }
+      assertOwnerCurrent();
+    };
+    this.active.set(attempt.sessionId, admission);
     try {
+      const fence = await this.read(attempt.sessionId, check);
+      check();
+      if (fence?.state !== 'PENDING' || !isDeepStrictEqual(fence.attempt, attempt)) {
+        blocked();
+      }
+      const previous = fence.evidence?.resolution;
+      const permit: EventInitialPermit = {
+        attempt,
+        execution: fence.execution,
+        previousResolution: previous?.action === 'RETRY' ? previous : undefined,
+      };
+      admission.permit = permit;
+      this.attemptGuards.set(permit, () => {
+        if (admission.cancelled) {
+          blocked();
+        }
+        assertOwnerCurrent();
+      });
       return await operation(permit);
     } finally {
-      if (this.active.get(attempt.sessionId) === permit) {
+      if (this.active.get(attempt.sessionId) === admission) {
         this.active.delete(attempt.sessionId);
       }
     }
@@ -196,16 +232,31 @@ export class EventSessionAuthority {
   recordStop(
     sessionId: string,
     evidence: RuntimeStopEvidence,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    expected?: ExpectedEventRuntime,
+    assertInitialCurrent?: () => void
   ): Promise<void> {
     return this.observe(async (assertCurrent) => {
+      assertInitialCurrent?.();
       const fence = await this.read(sessionId, assertCurrent);
+      assertInitialCurrent?.();
       if (!(fence && this.owner)) {
+        blocked();
+      }
+      expected?.assertCurrent();
+      if (
+        expected &&
+        !(
+          isDeepStrictEqual(fence.attempt, expected.attempt) &&
+          isDeepStrictEqual(fence.evidence?.source, expected.source)
+        )
+      ) {
         blocked();
       }
       assertCurrent();
       await this.owner.stop(fence.attempt, evidence);
       assertCurrent();
+      assertInitialCurrent?.();
       if (fence.state === 'SENDING' || fence.state === 'ACCEPTED') {
         await this.owner.ambiguous(fence.attempt);
       }

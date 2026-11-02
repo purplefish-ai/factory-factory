@@ -428,7 +428,8 @@ export const ModelName = {
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
-  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin'
+  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
+  WorkspaceChildOrigin: 'WorkspaceChildOrigin'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -444,7 +445,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2816,6 +2817,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WorkspaceChildOrigin: {
+      payload: Prisma.$WorkspaceChildOriginPayload<ExtArgs>
+      fields: Prisma.WorkspaceChildOriginFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceChildOriginFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceChildOriginFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceChildOriginFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceChildOriginFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceChildOriginFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceChildOriginCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceChildOriginCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceChildOriginCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceChildOriginDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceChildOriginUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceChildOriginDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceChildOriginUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceChildOriginUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceChildOriginUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceChildOriginPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceChildOriginAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceChildOrigin>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceChildOriginGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceChildOriginGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceChildOriginCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceChildOriginCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -3401,6 +3476,7 @@ export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotification
 
 
 export const WorkspaceLaunchOriginScalarFieldEnum = {
+  childHistoryVersion: 'childHistoryVersion',
   runId: 'runId',
   workspaceId: 'workspaceId',
   projectId: 'projectId',
@@ -3419,6 +3495,15 @@ export const AgentSessionLaunchOriginScalarFieldEnum = {
 } as const
 
 export type AgentSessionLaunchOriginScalarFieldEnum = (typeof AgentSessionLaunchOriginScalarFieldEnum)[keyof typeof AgentSessionLaunchOriginScalarFieldEnum]
+
+
+export const WorkspaceChildOriginScalarFieldEnum = {
+  parentWorkspaceId: 'parentWorkspaceId',
+  childWorkspaceId: 'childWorkspaceId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceChildOriginScalarFieldEnum = (typeof WorkspaceChildOriginScalarFieldEnum)[keyof typeof WorkspaceChildOriginScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -3874,6 +3959,7 @@ export type GlobalOmitConfig = {
   workspaceNotification?: Prisma.WorkspaceNotificationOmit
   workspaceLaunchOrigin?: Prisma.WorkspaceLaunchOriginOmit
   agentSessionLaunchOrigin?: Prisma.AgentSessionLaunchOriginOmit
+  workspaceChildOrigin?: Prisma.WorkspaceChildOriginOmit
 }
 
 /* Types for Logging */

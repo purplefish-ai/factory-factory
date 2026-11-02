@@ -35,6 +35,23 @@ export type ObservedAcpPrompt = {
 };
 
 export class AcpRuntimeManager {
+  /** Reads only an installed live runtime; never starts one to obtain identity. */
+  getRuntimeSource(sessionId: string): ProviderSource | null {
+    const handle = this.supervisor.getClient(sessionId);
+    if (!handle || handle.eventLifecycleGeneration === undefined) {
+      return null;
+    }
+    return {
+      version: 1,
+      provider: handle.provider,
+      providerSessionId: handle.acpSessionId,
+      runtimeIncarnationId: this.supervisor.getRuntimeIncarnation(sessionId, handle),
+      lifecycleGeneration: handle.eventLifecycleGeneration,
+    };
+  }
+  getRuntimeStopSource(sessionId: string): ProviderSource | null {
+    return this.supervisor.getRuntimeStopSource(sessionId);
+  }
   private readonly clientFactory: AcpClientFactory;
   private readonly promptController: AcpPromptController;
   private readonly configController = new AcpRuntimeConfigController();

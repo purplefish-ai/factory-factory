@@ -20,11 +20,22 @@ export type WorkspaceLaunchOriginModel = runtime.Types.Result.DefaultSelection<P
 
 export type AggregateWorkspaceLaunchOrigin = {
   _count: WorkspaceLaunchOriginCountAggregateOutputType | null
+  _avg: WorkspaceLaunchOriginAvgAggregateOutputType | null
+  _sum: WorkspaceLaunchOriginSumAggregateOutputType | null
   _min: WorkspaceLaunchOriginMinAggregateOutputType | null
   _max: WorkspaceLaunchOriginMaxAggregateOutputType | null
 }
 
+export type WorkspaceLaunchOriginAvgAggregateOutputType = {
+  childHistoryVersion: number | null
+}
+
+export type WorkspaceLaunchOriginSumAggregateOutputType = {
+  childHistoryVersion: number | null
+}
+
 export type WorkspaceLaunchOriginMinAggregateOutputType = {
+  childHistoryVersion: number | null
   runId: string | null
   workspaceId: string | null
   projectId: string | null
@@ -32,6 +43,7 @@ export type WorkspaceLaunchOriginMinAggregateOutputType = {
 }
 
 export type WorkspaceLaunchOriginMaxAggregateOutputType = {
+  childHistoryVersion: number | null
   runId: string | null
   workspaceId: string | null
   projectId: string | null
@@ -39,6 +51,7 @@ export type WorkspaceLaunchOriginMaxAggregateOutputType = {
 }
 
 export type WorkspaceLaunchOriginCountAggregateOutputType = {
+  childHistoryVersion: number
   runId: number
   workspaceId: number
   projectId: number
@@ -47,7 +60,16 @@ export type WorkspaceLaunchOriginCountAggregateOutputType = {
 }
 
 
+export type WorkspaceLaunchOriginAvgAggregateInputType = {
+  childHistoryVersion?: true
+}
+
+export type WorkspaceLaunchOriginSumAggregateInputType = {
+  childHistoryVersion?: true
+}
+
 export type WorkspaceLaunchOriginMinAggregateInputType = {
+  childHistoryVersion?: true
   runId?: true
   workspaceId?: true
   projectId?: true
@@ -55,6 +77,7 @@ export type WorkspaceLaunchOriginMinAggregateInputType = {
 }
 
 export type WorkspaceLaunchOriginMaxAggregateInputType = {
+  childHistoryVersion?: true
   runId?: true
   workspaceId?: true
   projectId?: true
@@ -62,6 +85,7 @@ export type WorkspaceLaunchOriginMaxAggregateInputType = {
 }
 
 export type WorkspaceLaunchOriginCountAggregateInputType = {
+  childHistoryVersion?: true
   runId?: true
   workspaceId?: true
   projectId?: true
@@ -107,6 +131,18 @@ export type WorkspaceLaunchOriginAggregateArgs<ExtArgs extends runtime.Types.Ext
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: WorkspaceLaunchOriginAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: WorkspaceLaunchOriginSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: WorkspaceLaunchOriginMinAggregateInputType
@@ -137,16 +173,21 @@ export type WorkspaceLaunchOriginGroupByArgs<ExtArgs extends runtime.Types.Exten
   take?: number
   skip?: number
   _count?: WorkspaceLaunchOriginCountAggregateInputType | true
+  _avg?: WorkspaceLaunchOriginAvgAggregateInputType
+  _sum?: WorkspaceLaunchOriginSumAggregateInputType
   _min?: WorkspaceLaunchOriginMinAggregateInputType
   _max?: WorkspaceLaunchOriginMaxAggregateInputType
 }
 
 export type WorkspaceLaunchOriginGroupByOutputType = {
+  childHistoryVersion: number | null
   runId: string
   workspaceId: string
   projectId: string
   createdAt: Date
   _count: WorkspaceLaunchOriginCountAggregateOutputType | null
+  _avg: WorkspaceLaunchOriginAvgAggregateOutputType | null
+  _sum: WorkspaceLaunchOriginSumAggregateOutputType | null
   _min: WorkspaceLaunchOriginMinAggregateOutputType | null
   _max: WorkspaceLaunchOriginMaxAggregateOutputType | null
 }
@@ -170,6 +211,7 @@ export type WorkspaceLaunchOriginWhereInput = {
   AND?: Prisma.WorkspaceLaunchOriginWhereInput | Prisma.WorkspaceLaunchOriginWhereInput[]
   OR?: Prisma.WorkspaceLaunchOriginWhereInput[]
   NOT?: Prisma.WorkspaceLaunchOriginWhereInput | Prisma.WorkspaceLaunchOriginWhereInput[]
+  childHistoryVersion?: Prisma.IntNullableFilter<"WorkspaceLaunchOrigin"> | number | null
   runId?: Prisma.StringFilter<"WorkspaceLaunchOrigin"> | string
   workspaceId?: Prisma.StringFilter<"WorkspaceLaunchOrigin"> | string
   projectId?: Prisma.StringFilter<"WorkspaceLaunchOrigin"> | string
@@ -177,6 +219,7 @@ export type WorkspaceLaunchOriginWhereInput = {
 }
 
 export type WorkspaceLaunchOriginOrderByWithRelationInput = {
+  childHistoryVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   runId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   projectId?: Prisma.SortOrder
@@ -189,24 +232,29 @@ export type WorkspaceLaunchOriginWhereUniqueInput = Prisma.AtLeast<{
   AND?: Prisma.WorkspaceLaunchOriginWhereInput | Prisma.WorkspaceLaunchOriginWhereInput[]
   OR?: Prisma.WorkspaceLaunchOriginWhereInput[]
   NOT?: Prisma.WorkspaceLaunchOriginWhereInput | Prisma.WorkspaceLaunchOriginWhereInput[]
+  childHistoryVersion?: Prisma.IntNullableFilter<"WorkspaceLaunchOrigin"> | number | null
   projectId?: Prisma.StringFilter<"WorkspaceLaunchOrigin"> | string
   createdAt?: Prisma.DateTimeFilter<"WorkspaceLaunchOrigin"> | Date | string
 }, "runId" | "workspaceId">
 
 export type WorkspaceLaunchOriginOrderByWithAggregationInput = {
+  childHistoryVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   runId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   projectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.WorkspaceLaunchOriginCountOrderByAggregateInput
+  _avg?: Prisma.WorkspaceLaunchOriginAvgOrderByAggregateInput
   _max?: Prisma.WorkspaceLaunchOriginMaxOrderByAggregateInput
   _min?: Prisma.WorkspaceLaunchOriginMinOrderByAggregateInput
+  _sum?: Prisma.WorkspaceLaunchOriginSumOrderByAggregateInput
 }
 
 export type WorkspaceLaunchOriginScalarWhereWithAggregatesInput = {
   AND?: Prisma.WorkspaceLaunchOriginScalarWhereWithAggregatesInput | Prisma.WorkspaceLaunchOriginScalarWhereWithAggregatesInput[]
   OR?: Prisma.WorkspaceLaunchOriginScalarWhereWithAggregatesInput[]
   NOT?: Prisma.WorkspaceLaunchOriginScalarWhereWithAggregatesInput | Prisma.WorkspaceLaunchOriginScalarWhereWithAggregatesInput[]
+  childHistoryVersion?: Prisma.IntNullableWithAggregatesFilter<"WorkspaceLaunchOrigin"> | number | null
   runId?: Prisma.StringWithAggregatesFilter<"WorkspaceLaunchOrigin"> | string
   workspaceId?: Prisma.StringWithAggregatesFilter<"WorkspaceLaunchOrigin"> | string
   projectId?: Prisma.StringWithAggregatesFilter<"WorkspaceLaunchOrigin"> | string
@@ -214,6 +262,7 @@ export type WorkspaceLaunchOriginScalarWhereWithAggregatesInput = {
 }
 
 export type WorkspaceLaunchOriginCreateInput = {
+  childHistoryVersion?: number | null
   runId: string
   workspaceId: string
   projectId: string
@@ -221,6 +270,7 @@ export type WorkspaceLaunchOriginCreateInput = {
 }
 
 export type WorkspaceLaunchOriginUncheckedCreateInput = {
+  childHistoryVersion?: number | null
   runId: string
   workspaceId: string
   projectId: string
@@ -228,6 +278,7 @@ export type WorkspaceLaunchOriginUncheckedCreateInput = {
 }
 
 export type WorkspaceLaunchOriginUpdateInput = {
+  childHistoryVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   runId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -235,6 +286,7 @@ export type WorkspaceLaunchOriginUpdateInput = {
 }
 
 export type WorkspaceLaunchOriginUncheckedUpdateInput = {
+  childHistoryVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   runId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -242,6 +294,7 @@ export type WorkspaceLaunchOriginUncheckedUpdateInput = {
 }
 
 export type WorkspaceLaunchOriginCreateManyInput = {
+  childHistoryVersion?: number | null
   runId: string
   workspaceId: string
   projectId: string
@@ -249,6 +302,7 @@ export type WorkspaceLaunchOriginCreateManyInput = {
 }
 
 export type WorkspaceLaunchOriginUpdateManyMutationInput = {
+  childHistoryVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   runId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -256,6 +310,7 @@ export type WorkspaceLaunchOriginUpdateManyMutationInput = {
 }
 
 export type WorkspaceLaunchOriginUncheckedUpdateManyInput = {
+  childHistoryVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   runId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -263,13 +318,19 @@ export type WorkspaceLaunchOriginUncheckedUpdateManyInput = {
 }
 
 export type WorkspaceLaunchOriginCountOrderByAggregateInput = {
+  childHistoryVersion?: Prisma.SortOrder
   runId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   projectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
+export type WorkspaceLaunchOriginAvgOrderByAggregateInput = {
+  childHistoryVersion?: Prisma.SortOrder
+}
+
 export type WorkspaceLaunchOriginMaxOrderByAggregateInput = {
+  childHistoryVersion?: Prisma.SortOrder
   runId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   projectId?: Prisma.SortOrder
@@ -277,15 +338,21 @@ export type WorkspaceLaunchOriginMaxOrderByAggregateInput = {
 }
 
 export type WorkspaceLaunchOriginMinOrderByAggregateInput = {
+  childHistoryVersion?: Prisma.SortOrder
   runId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   projectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
+export type WorkspaceLaunchOriginSumOrderByAggregateInput = {
+  childHistoryVersion?: Prisma.SortOrder
+}
+
 
 
 export type WorkspaceLaunchOriginSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  childHistoryVersion?: boolean
   runId?: boolean
   workspaceId?: boolean
   projectId?: boolean
@@ -293,6 +360,7 @@ export type WorkspaceLaunchOriginSelect<ExtArgs extends runtime.Types.Extensions
 }, ExtArgs["result"]["workspaceLaunchOrigin"]>
 
 export type WorkspaceLaunchOriginSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  childHistoryVersion?: boolean
   runId?: boolean
   workspaceId?: boolean
   projectId?: boolean
@@ -300,6 +368,7 @@ export type WorkspaceLaunchOriginSelectCreateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["workspaceLaunchOrigin"]>
 
 export type WorkspaceLaunchOriginSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  childHistoryVersion?: boolean
   runId?: boolean
   workspaceId?: boolean
   projectId?: boolean
@@ -307,18 +376,20 @@ export type WorkspaceLaunchOriginSelectUpdateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["workspaceLaunchOrigin"]>
 
 export type WorkspaceLaunchOriginSelectScalar = {
+  childHistoryVersion?: boolean
   runId?: boolean
   workspaceId?: boolean
   projectId?: boolean
   createdAt?: boolean
 }
 
-export type WorkspaceLaunchOriginOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"runId" | "workspaceId" | "projectId" | "createdAt", ExtArgs["result"]["workspaceLaunchOrigin"]>
+export type WorkspaceLaunchOriginOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"childHistoryVersion" | "runId" | "workspaceId" | "projectId" | "createdAt", ExtArgs["result"]["workspaceLaunchOrigin"]>
 
 export type $WorkspaceLaunchOriginPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "WorkspaceLaunchOrigin"
   objects: {}
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    childHistoryVersion: number | null
     runId: string
     workspaceId: string
     projectId: string
@@ -406,8 +477,8 @@ export interface WorkspaceLaunchOriginDelegate<ExtArgs extends runtime.Types.Ext
    * // Get first 10 WorkspaceLaunchOrigins
    * const workspaceLaunchOrigins = await prisma.workspaceLaunchOrigin.findMany({ take: 10 })
    * 
-   * // Only select the `runId`
-   * const workspaceLaunchOriginWithRunIdOnly = await prisma.workspaceLaunchOrigin.findMany({ select: { runId: true } })
+   * // Only select the `childHistoryVersion`
+   * const workspaceLaunchOriginWithChildHistoryVersionOnly = await prisma.workspaceLaunchOrigin.findMany({ select: { childHistoryVersion: true } })
    * 
    */
   findMany<T extends WorkspaceLaunchOriginFindManyArgs>(args?: Prisma.SelectSubset<T, WorkspaceLaunchOriginFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspaceLaunchOriginPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -451,9 +522,9 @@ export interface WorkspaceLaunchOriginDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Create many WorkspaceLaunchOrigins and only return the `runId`
-   * const workspaceLaunchOriginWithRunIdOnly = await prisma.workspaceLaunchOrigin.createManyAndReturn({
-   *   select: { runId: true },
+   * // Create many WorkspaceLaunchOrigins and only return the `childHistoryVersion`
+   * const workspaceLaunchOriginWithChildHistoryVersionOnly = await prisma.workspaceLaunchOrigin.createManyAndReturn({
+   *   select: { childHistoryVersion: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -542,9 +613,9 @@ export interface WorkspaceLaunchOriginDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Update zero or more WorkspaceLaunchOrigins and only return the `runId`
-   * const workspaceLaunchOriginWithRunIdOnly = await prisma.workspaceLaunchOrigin.updateManyAndReturn({
-   *   select: { runId: true },
+   * // Update zero or more WorkspaceLaunchOrigins and only return the `childHistoryVersion`
+   * const workspaceLaunchOriginWithChildHistoryVersionOnly = await prisma.workspaceLaunchOrigin.updateManyAndReturn({
+   *   select: { childHistoryVersion: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -746,6 +817,7 @@ export interface Prisma__WorkspaceLaunchOriginClient<T, Null = never, ExtArgs ex
  * Fields of the WorkspaceLaunchOrigin model
  */
 export interface WorkspaceLaunchOriginFieldRefs {
+  readonly childHistoryVersion: Prisma.FieldRef<"WorkspaceLaunchOrigin", 'Int'>
   readonly runId: Prisma.FieldRef<"WorkspaceLaunchOrigin", 'String'>
   readonly workspaceId: Prisma.FieldRef<"WorkspaceLaunchOrigin", 'String'>
   readonly projectId: Prisma.FieldRef<"WorkspaceLaunchOrigin", 'String'>

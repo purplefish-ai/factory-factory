@@ -39,6 +39,7 @@ import {
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
+import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
 import { workspaceLaunchOriginAccessor } from './workspace-launch-origin.accessor';
 import { projectConversationSummary } from './workspace-metadata.accessor';
 import {
@@ -239,7 +240,9 @@ export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProje
 
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<WorkspaceWithRatchet> {
-    return this.insertWorkspace(data, prisma);
+    return data.parentWorkspaceId
+      ? prisma.$transaction((tx) => this.insertWorkspace(data, tx))
+      : this.insertWorkspace(data, prisma);
   }
 
   private async insertWorkspace(
@@ -280,6 +283,7 @@ class WorkspaceAccessor {
       },
       include: sideTables,
     });
+    await workspaceChildOriginAccessor.retain(tx, created);
     return flatten(created);
   }
 

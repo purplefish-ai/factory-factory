@@ -218,3 +218,8 @@ export type WorkspaceLaunchOrigin = Prisma.WorkspaceLaunchOriginModel
  * Session-owned retained identity and immutable launch intent, never credentials.
  */
 export type AgentSessionLaunchOrigin = Prisma.AgentSessionLaunchOriginModel
+/**
+ * Model WorkspaceChildOrigin
+ * Workspace-owned child creation facts survive archive, deletion and import.
+ */
+export type WorkspaceChildOrigin = Prisma.WorkspaceChildOriginModel

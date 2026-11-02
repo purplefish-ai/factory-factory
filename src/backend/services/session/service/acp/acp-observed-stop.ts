@@ -39,6 +39,13 @@ export class AcpObservedStop {
   has(id: string): boolean {
     return this.eventOwnedHandles.has(id) || this.spawnedGroups.has(id);
   }
+  getSource(id: string): ProviderSource | null {
+    const handle = this.eventOwnedHandles.get(id);
+    if (!this.canStopTarget(id, handle)) {
+      return null;
+    }
+    return handle ? this.source(handle) : (this.observedStops.get(id)?.source ?? null);
+  }
   registerSpawn(
     id: string,
     child: ChildProcess,
@@ -63,10 +70,11 @@ export class AcpObservedStop {
     return async () => (await this.stopObservedRuntime(id, 'SYSTEM_STOP')).status;
   }
   register(id: string, handle: AcpProcessHandle, owned: boolean | undefined): void {
+    this.spawnedGroups.delete(id);
+    this.eventOwnedHandles.delete(id);
+    this.observedStops.delete(id);
     if (owned) {
-      this.spawnedGroups.delete(id);
       this.eventOwnedHandles.set(id, handle);
-      this.observedStops.delete(id);
     }
   }
   async cleanupUnexpectedExit(id: string, incarnationId: string): Promise<void> {
@@ -223,6 +231,9 @@ export class AcpObservedStop {
     this.port.markManaged(handle.child);
     attemptUnprovenDirectStop(handle);
     const status = await stopOwnedRuntimeGroup(handle, { assertOwned });
+    if (!this.canStopTarget(sessionId, handle, expected)) {
+      return unknown;
+    }
     const evidence: RuntimeStopEvidence = {
       ...unknown,
       source,

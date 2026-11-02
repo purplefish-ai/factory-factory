@@ -120,17 +120,22 @@ async function recoveryPage(tx: Prisma.TransactionClient, excluded: string[]) {
 }
 export const agentLaunchRecoveryAccessor = {
   /** Observation takeover never creates a new send attempt or spends provisioning budget. */
-  adopt: (claim: EventLaunchClaim) =>
+  adopt: (claim: EventLaunchClaim, assertCurrent?: () => void) =>
     ledgerTransaction(async (tx) => {
       const run = await currentLaunch(tx, claim, 'EXPIRED');
+      assertCurrent?.();
       snapshot(run);
-      return takeOwnership(tx, run, false);
+      const adopted = await takeOwnership(tx, run, false);
+      assertCurrent?.();
+      return adopted;
     }),
-  renew: (claim: EventLaunchClaim) =>
+  renew: (claim: EventLaunchClaim, assertCurrent?: () => void) =>
     ledgerTransaction(async (tx) => {
       const run = await currentLaunch(tx, claim);
+      assertCurrent?.();
       const leaseExpiresAt = lease();
       await tx.agentRun.update({ where: { id: run.id }, data: { leaseExpiresAt } });
+      assertCurrent?.();
       return leaseExpiresAt;
     }),
   dispose: (claim: EventLaunchClaim, input: EventLaunchDisposition, assertCurrent?: () => void) => {

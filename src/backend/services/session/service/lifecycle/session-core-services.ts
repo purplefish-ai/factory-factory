@@ -7,7 +7,10 @@ import {
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
-import { EventInitialDispatcher } from '@/backend/services/session/service/dispatch/event-initial-dispatch';
+import {
+  EventInitialDispatcher,
+  EventInitialDispatchInterrupted,
+} from '@/backend/services/session/service/dispatch/event-initial-dispatch';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
@@ -15,6 +18,7 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { ClaudeModelCatalogService } from './claude-model-catalog.service';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { CodexModelCatalogService } from './codex-model-catalog.service';
+import { EventOwnedWork } from './event-owned-work';
 import { eventSessionAuthority } from './event-session-authority';
 import { ProviderUsageService } from './provider-usage.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
@@ -120,6 +124,11 @@ export type SessionPromptService = Pick<
 export const sessionLifecycleGate = new SessionLifecycleGate({
   isRuntimeStopInProgress: (sessionId) => acpRuntimeManager.isStopInProgress(sessionId),
 });
+export const eventOwnedWork = new EventOwnedWork(
+  acpRuntimeManager,
+  sessionLifecycleGate,
+  sessionDomainService
+);
 
 export const sessionNotificationDeliveryService = new SessionNotificationDeliveryService({
   notificationPort: workspaceNotificationService,
@@ -140,6 +149,7 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
 });
 
 const sessionPromptCoordinator = new SessionService({
+  ownedWork: eventOwnedWork,
   eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
@@ -226,10 +236,20 @@ sessionLifecycleServiceInstance = new SessionLifecycleService({
 export { sessionLifecycleServiceInstance as sessionLifecycleService };
 
 const initialDispatcher = new EventInitialDispatcher({
-  interrupt: (id, cause) => sessionTerminationCoordinator.interruptEventInitial(id, cause),
+  interrupt: (id, cause, assertInitialCurrent) =>
+    sessionTerminationCoordinator.interruptEventInitial(id, cause, undefined, assertInitialCurrent),
   authority: eventSessionAuthority,
-  start: (id, permit) =>
-    sessionLifecycleServiceInstance.getOrCreateSessionClient(id, { eventInitial: permit }),
+  start: (id, permit) => {
+    if (permit.previousResolution) {
+      try {
+        eventOwnedWork.assertRetryReady(permit.attempt, permit.previousResolution);
+      } catch {
+        // No authority to stop anything when the prior runtime proof was lost.
+        throw new EventInitialDispatchInterrupted('UNKNOWN');
+      }
+    }
+    return sessionLifecycleServiceInstance.getOrCreateSessionClient(id, { eventInitial: permit });
+  },
   send: (id, text, permit) => sessionPromptCoordinator.sendInitialSessionMessage(id, text, permit),
   commit: (id, message) => sessionDomainService.commitSentUserMessage(id, message),
 });

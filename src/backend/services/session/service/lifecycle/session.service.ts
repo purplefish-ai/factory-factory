@@ -9,6 +9,7 @@ import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { withEventEvidenceDeadline } from './event-evidence-deadline';
+import type { EventOwnedWork } from './event-owned-work';
 import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -22,6 +23,7 @@ const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 export type SessionServiceDependencies = {
   eventAuthority?: EventSessionAuthority;
+  ownedWork?: EventOwnedWork;
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   acpEventProcessor: AcpEventProcessor;
@@ -35,6 +37,7 @@ export type SessionServiceDependencies = {
 
 export class SessionService {
   private readonly eventAuthority?: EventSessionAuthority;
+  private readonly ownedWork?: EventOwnedWork;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
   private readonly acpEventProcessor: AcpEventProcessor;
@@ -50,6 +53,7 @@ export class SessionService {
 
   constructor(options: SessionServiceDependencies) {
     this.eventAuthority = options.eventAuthority;
+    this.ownedWork = options.ownedWork;
     this.runtimeManager = options.runtimeManager;
     this.sessionDomainService = options.sessionDomainService;
     this.acpEventProcessor = options.acpEventProcessor;
@@ -339,8 +343,9 @@ export class SessionService {
     }
     return {
       lifecycleGeneration: generation,
-      createObservation: (source, assertRuntime) =>
-        authority.observation(permit, source, () => {
+      createObservation: (source, assertRuntime) => {
+        this.ownedWork?.begin(permit.attempt, source, Boolean(permit.previousResolution));
+        return authority.observation(permit, source, () => {
           assertRuntime();
           if (
             !this.lifecycleGate.isGenerationCurrent(sessionId, generation) ||
@@ -348,7 +353,8 @@ export class SessionService {
           ) {
             throw new Error('Initial lifecycle changed');
           }
-        }),
+        });
+      },
     };
   }
   private async stopTimedOutInitial(
