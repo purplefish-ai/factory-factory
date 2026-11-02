@@ -579,10 +579,10 @@ Invalidation clears the cached result and fences the running generation without
 detaching its Git commands. Readers arriving after invalidation share one fresh
 calculation after the running work settles; bursts before that refresh starts
 coalesce into the same refresh. A stale completion is never cached. Removal and
-stop retire queued refreshes, and command errors reach callers immediately while
-sibling commands drain before releasing ownership. The existing three-command
-per-snapshot and six-command service budgets still apply across independent
-workspace keys.
+stop retire queued refreshes, and rejected Git commands reach callers
+immediately while sibling commands drain before releasing ownership. The
+existing three-command per-snapshot and six-command service budgets still apply
+across independent workspace keys.
 
 The board provider and its children are keyed by project ID. Switching projects
 resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
