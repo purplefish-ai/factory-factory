@@ -36,7 +36,7 @@ vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/chat/session-chat-intent', () => ({
   sessionChatIntentService: {
-    cancel: vi.fn(),
+    cancel: vi.fn().mockResolvedValue(undefined),
     override: vi.fn(),
     configureAdmissionGuard: vi.fn(),
     store: { hasUncertainAttempt: vi.fn().mockResolvedValue(false) },
