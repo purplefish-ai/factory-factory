@@ -8,9 +8,15 @@
  * instead of the console. Only errors are also written to stderr for visibility.
  */
 
-import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
+import {
+  appendFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  type WriteStream,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { expandEnvVars } from '@/backend/lib/env';
 import { LoggerEnvSchema } from './env-schemas';
 
@@ -202,6 +208,26 @@ function getDefaultConfig(): LoggerConfig {
   };
 }
 
+// Share sink state across logger instances. Never report a sink error through
+// the logger: doing so can recursively fail on the same broken pipe.
+const failedConsoleStreams = new WeakSet<NodeJS.WriteStream>();
+const monitoredConsoleStreams = new WeakSet<NodeJS.WriteStream>();
+
+function writeToConsole(stream: NodeJS.WriteStream, write: () => void): void {
+  if (failedConsoleStreams.has(stream)) {
+    return;
+  }
+  if (!monitoredConsoleStreams.has(stream)) {
+    monitoredConsoleStreams.add(stream);
+    stream.on('error', () => failedConsoleStreams.add(stream));
+  }
+  try {
+    write();
+  } catch {
+    failedConsoleStreams.add(stream);
+  }
+}
+
 /**
  * Logger class for structured logging
  */
@@ -238,7 +264,8 @@ class Logger {
     level: LogLevel,
     message: string,
     context?: Record<string, unknown>,
-    error?: Error
+    error?: Error,
+    fatal = false
   ): void {
     if (!this.shouldLog(level)) {
       return;
@@ -259,7 +286,17 @@ class Logger {
       entry.error = error;
     }
 
-    if (this.config.prettyPrint) {
+    if (fatal) {
+      // The terminal record must survive an immediate process.exit, even when
+      // ordinary asynchronous file writes are still queued. Do not echo it.
+      try {
+        const path = getLogFilePath();
+        mkdirSync(dirname(path), { recursive: true });
+        appendFileSync(path, `${safeStringify(entry)}\n`);
+      } catch {
+        // Best effort when the filesystem itself is unavailable.
+      }
+    } else if (this.config.prettyPrint) {
       this.prettyOutput(entry);
     } else {
       this.jsonOutput(entry);
@@ -285,7 +322,7 @@ class Logger {
 
     // In production, only surface errors in the terminal
     if (entry.level === 'error') {
-      console.error(safeStringify(entry));
+      writeToConsole(process.stderr, () => console.error(safeStringify(entry)));
     }
   }
 
@@ -320,15 +357,28 @@ class Logger {
     }
 
     if (entry.level === 'error') {
-      console.error(output);
-      if (entry.error?.stack) {
-        console.error(entry.error.stack);
-      }
+      writeToConsole(process.stderr, () => {
+        console.error(output);
+        if (entry.error?.stack) {
+          console.error(entry.error.stack);
+        }
+      });
     } else if (entry.level === 'warn') {
-      console.warn(output);
+      writeToConsole(process.stderr, () => console.warn(output));
     } else {
-      console.log(output);
+      writeToConsole(process.stdout, () => console.log(output));
     }
+  }
+
+  /** Write one terminal error directly to the file, bypassing console sinks. */
+  fatal(message: string, errorOrContext?: Error | Record<string, unknown>): void {
+    this.log(
+      'error',
+      message,
+      errorOrContext instanceof Error ? undefined : errorOrContext,
+      errorOrContext instanceof Error ? errorOrContext : undefined,
+      true
+    );
   }
 
   /**
