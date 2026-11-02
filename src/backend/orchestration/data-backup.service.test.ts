@@ -24,17 +24,18 @@ vi.mock('@/backend/services/codex-accounts', async (importOriginal) => ({
 import {
   type AgentSession,
   type Project,
+  type Prisma,
   SessionProvider,
   type TerminalSession,
   type UserSettings,
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
-
 const mockTx = vi.hoisted(() => ({
   $queryRaw: vi.fn(async () => []),
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
+  decisionLog: { groupBy: vi.fn(async () => []) },
   workspacePR: { findMany: vi.fn(async () => []) },
   project: {
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
@@ -64,7 +65,6 @@ vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
   withBackupSnapshot: (_source: unknown, read: (tx: typeof mockTx) => Promise<unknown>) =>
     read(mockTx),
 }));
-
 vi.mock('@/backend/db', () => ({
   prisma: {
     project: {
@@ -117,11 +117,7 @@ const mockProject: Project = {
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
-/**
- * A workspace row as the export reads it: the row plus its ratchet, PR cache and
- * run-script group, which the v4 format carries as flat `ratchet*`, `pr*` and
- * `runScript*` workspace fields.
- */
+// Workspace plus nested ratchet/PR/run-script groups, whose fields were flat in v4.
 type WorkspaceForExport = import('@/backend/services/settings').WorkspaceForExport;
 
 const mockWorkspace: WorkspaceForExport = {
@@ -454,7 +450,11 @@ describe('DataBackupService', () => {
     }
     Object.assign(mockTx.project, { findMany: prisma.project.findMany });
     Object.assign(mockTx.workspace, { findMany: prisma.workspace.findMany });
-    Object.assign(mockTx.agentSession, { findMany: prisma.agentSession.findMany });
+    Object.assign(mockTx.agentSession, {
+      findMany: vi.fn((args: Prisma.AgentSessionFindManyArgs) =>
+        args.where ? Promise.resolve([]) : prisma.agentSession.findMany(args)
+      ),
+    });
     Object.assign(mockTx.terminalSession, { findMany: prisma.terminalSession.findMany });
     Object.assign(mockTx.userSettings, { findFirst: prisma.userSettings.findFirst });
     Object.assign(mockTx, {

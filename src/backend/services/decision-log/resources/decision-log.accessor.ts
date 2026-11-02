@@ -58,18 +58,33 @@ export async function restoreRecoveryDecisions(
     { source: new Set(data.durable?.agentDefinition.map((row) => row.id)), imported: definitions },
   ];
   for (const row of data.durable?.decisionLog ?? []) {
-    const existingOwner =
-      (await tx.agentSession.findUnique({ where: { id: row.agentId } })) ??
-      (await tx.agentRun.findUnique({ where: { id: row.agentId } })) ??
-      (await tx.agentDefinition.findUnique({ where: { id: row.agentId } }));
     if (
       owners.filter((owner) => owner.source.has(row.agentId)).length > 1 ||
       owners.some((owner) => owner.source.has(row.agentId) && !owner.imported.has(row.agentId)) ||
-      (!owners.some((owner) => owner.source.has(row.agentId)) && !!existingOwner) ||
+      (await hasForeignRecoveryOwner(tx, row.agentId, ids, definitions)) ||
       (await tx.decisionLog.findUnique({ where: { id: row.id } }))
     ) {
       continue;
     }
     await tx.decisionLog.create({ data: row });
   }
+}
+
+/** Generic decision IDs must not expose imported proof under any local owner type. */
+async function hasForeignRecoveryOwner(
+  tx: Prisma.TransactionClient,
+  id: string,
+  ids: RecoveryImportedIds,
+  definitions: ReadonlySet<string>
+) {
+  const [session, run, definition] = await Promise.all([
+    tx.agentSession.findUnique({ where: { id }, select: { id: true } }),
+    tx.agentRun.findUnique({ where: { id }, select: { id: true } }),
+    tx.agentDefinition.findUnique({ where: { id }, select: { id: true } }),
+  ]);
+  return Boolean(
+    (session && !ids.sessions.has(id)) ||
+    (run && !ids.runs.has(id)) ||
+    (definition && !definitions.has(id))
+  );
 }

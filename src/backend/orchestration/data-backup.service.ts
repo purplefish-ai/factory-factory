@@ -15,7 +15,10 @@ import {
   restoreCodexAccountMetadata,
   resolveRestoredCodexAccountId as restoredAccountId,
 } from '@/backend/services/codex-accounts';
-import { restoreRecoveryDecisions } from '@/backend/services/decision-log';
+import {
+  restoreRecoveryDecisions,
+  readRecoveryOwnerConflicts,
+} from '@/backend/services/decision-log';
 import { createLogger } from '@/backend/services/logger.service';
 import { restorePeriodicRecovery } from '@/backend/services/periodic-task';
 import {
@@ -768,12 +771,24 @@ class DataBackupService {
     let importedArchiveIds: string[] = [];
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const recoveryBefore = await readRecoveryInventory(tx, input.data);
+      const ownerConflicts = await readRecoveryOwnerConflicts(tx, input.data);
+      const candidateData = {
+        ...input.data,
+        agentSessions: input.data.agentSessions.filter((row) => !ownerConflicts.has(row.id)),
+      };
+      const candidateDurable = input.data.durable && {
+        ...input.data.durable,
+        agentDefinition: input.data.durable.agentDefinition.filter(
+          (row) => !ownerConflicts.has(row.id)
+        ),
+        agentRun: input.data.durable.agentRun.filter((row) => !ownerConflicts.has(row.id)),
+      };
       const jsonNulls = input.data.durable
         ? recoveryJsonNullLookup(input.data.durable.jsonStorage)
         : () => false;
       const acceptedProjectIds = new Set<string>();
       const projects = await importProjects(input.data.projects, tx, acceptedProjectIds);
-      const graph = await selectRecoveryGraph(input.data, tx, acceptedProjectIds);
+      const graph = await selectRecoveryGraph(candidateData, tx, acceptedProjectIds);
       const importedWorkspaceIds: string[] = [];
       const childEdges = new Set(
         input.data.durable?.workspaceChildOrigin.map((row) =>
@@ -807,7 +822,7 @@ class DataBackupService {
       agentSessions.skipped += input.data.agentSessions.length - graph.agentSessions.length;
       terminalSessions.skipped +=
         input.data.terminalSessions.length - graph.terminalSessions.length;
-      if (input.data.durable) {
+      if (input.data.durable && candidateDurable) {
         const taskIds = await restorePeriodicRecovery(
           tx,
           input.data.durable,
@@ -828,12 +843,12 @@ class DataBackupService {
         );
         const agentParents = await restoreAgentConfigRecovery(
           tx,
-          input.data.durable,
+          candidateDurable,
           acceptedProjectIds
         );
         const runIds = await restoreAgentHistoryRecovery(
           tx,
-          input.data.durable,
+          candidateDurable,
           agentParents,
           new Set(importedWorkspaceIds)
         );

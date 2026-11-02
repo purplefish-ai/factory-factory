@@ -355,13 +355,19 @@ uncertain frozen prompt attempt must retain an uncertain intent in the same
 session, so explicit recovery can resolve the complete attempt. Legacy packages
 retain their earlier skip behavior.
 
-The completion report lists imported/skipped durable, archive, PR association,
-dedicated binding, frozen delivery and fact counts plus every skipped identity,
-distinguishing existing IDs from unique-identity or parent conflicts; the UI
-warns about skips and offers the full report for download. Project query refresh
-and navigation requested by the import action wait until this report is
-dismissed. A conflicting PR delivery or member skips the complete frozen batch;
-a partial batch never borrows a local receipt.
+Generic decision-history IDs are reserved across sessions, agent definitions and
+runs. An imported owner is skipped if its ID belongs to any local owner or
+retained local decision history, including deleted owners. Ambiguous incoming
+cross-type IDs are also skipped; dependent history follows the accepted owner
+sets. This prevents either installation from adopting the other's history.
+
+The completion report lists imported/skipped session, durable, archive, PR
+association, dedicated binding, frozen delivery and fact counts plus every
+skipped identity, distinguishing existing IDs from unique-identity or parent
+conflicts; the UI warns about skips and offers the full report for download.
+Project query refresh and navigation requested by the import action wait until
+this report is dismissed. A conflicting PR delivery or member skips the complete
+frozen batch; a partial batch never borrows a local receipt.
 
 Saved schedules, agent definitions, triggers, connections and PR monitoring
 restore disabled or paused. Unfinished scheduled executions become failed
