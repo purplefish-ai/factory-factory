@@ -1,5 +1,5 @@
 import { nullablePrismaJson } from '@/backend/lib/prisma-json';
-import { remapRecoveryExecution } from '@/shared/recovery-account-identity';
+import { validateRecoveryExecution } from '@/shared/recovery-account-identity';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import {
   recoveryJsonNullLookup,
@@ -61,7 +61,6 @@ async function conflictingDelivery(
 }
 function inertRunData(
   row: Run,
-  accounts: ReadonlyMap<string, string>,
   nulls: RecoveryJsonNullLookup
 ): Prisma.AgentRunUncheckedCreateInput {
   const unresolved = row.status === 'QUEUED' || row.status === 'RUNNING';
@@ -90,7 +89,7 @@ function inertRunData(
     effectiveExecution:
       row.effectiveExecution === null
         ? nullablePrismaJson(null, nulls('AgentRun', row.id, 'effectiveExecution'))
-        : remapRecoveryExecution(row.effectiveExecution, accounts),
+        : validateRecoveryExecution(row.effectiveExecution),
     launchPreparation: nullablePrismaJson(
       row.launchPreparation,
       nulls('AgentRun', row.id, 'launchPreparation')
@@ -103,8 +102,7 @@ async function restoreRuns(
   data: DurableRecovery,
   parents: Parents,
   events: ReadonlySet<string>,
-  workspaces: ReadonlySet<string>,
-  accounts: ReadonlyMap<string, string>
+  workspaces: ReadonlySet<string>
 ) {
   const nulls = recoveryJsonNullLookup(data.jsonStorage);
   const runs = new Set<string>();
@@ -123,7 +121,7 @@ async function restoreRuns(
     ) {
       continue;
     }
-    await tx.agentRun.create({ data: inertRunData(row, accounts, nulls) });
+    await tx.agentRun.create({ data: inertRunData(row, nulls) });
     runs.add(row.id);
   }
   return runs;
@@ -181,12 +179,11 @@ export async function restoreAgentHistoryRecovery(
   tx: Prisma.TransactionClient,
   data: DurableRecovery,
   parents: Parents,
-  workspaces: ReadonlySet<string>,
-  accounts: ReadonlyMap<string, string>
+  workspaces: ReadonlySet<string>
 ) {
   await restoreRecoverySources(tx, data, parents.connections);
   const events = await restoreRecoveryEvents(tx, data, parents.connections);
-  const runs = await restoreRuns(tx, data, parents, events, workspaces, accounts);
+  const runs = await restoreRuns(tx, data, parents, events, workspaces);
   await restoreRunEvidence(tx, data, parents, events, runs);
   for (const row of data.agentProposal) {
     if (

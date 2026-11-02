@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket/chat-message.schema';
+import { Prisma } from '@prisma-gen/client';
 import type { PrismaClient, ChatIntent } from '@prisma-gen/client';
 
 const submittedSchema = z.object({
@@ -302,3 +304,74 @@ export class ChatIntentAccessor {
 }
 
 export const chatIntentAccessor = new ChatIntentAccessor(() => prisma);
+
+/** Additive recovery preserves whole provider effects, never borrows local members. */
+export async function restoreRecoveryChatIntents(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  sessions: ReadonlySet<string>
+) {
+  const attempts = await restoreRecoveryAttempts(tx, data, sessions);
+  for (const row of data.chatIntent) {
+    if (
+      !sessions.has(row.sessionId) ||
+      (row.attemptId && !attempts.has(row.attemptId)) ||
+      (await tx.chatIntent.findFirst({
+        where: { OR: [{ id: row.id }, { sessionId: row.sessionId, messageId: row.messageId }] },
+      }))
+    ) {
+      continue;
+    }
+    await tx.chatIntent.create({
+      data: {
+        ...row,
+        status: row.status === 'queued' ? 'failed' : row.status,
+        submitted: row.submitted ?? Prisma.JsonNull,
+        desired: row.desired ?? Prisma.JsonNull,
+      },
+    });
+  }
+}
+
+async function restoreRecoveryAttempts(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  sessions: ReadonlySet<string>
+) {
+  const attempts = new Set<string>();
+  const rejected = new Set<string>();
+  for (const intent of data.chatIntent) {
+    if (
+      await tx.chatIntent.findFirst({
+        where: {
+          OR: [{ id: intent.id }, { sessionId: intent.sessionId, messageId: intent.messageId }],
+        },
+      })
+    ) {
+      if (intent.attemptId) {
+        rejected.add(intent.attemptId);
+      }
+    }
+  }
+  for (const row of data.promptDispatchAttempt) {
+    if (
+      !sessions.has(row.sessionId) ||
+      rejected.has(row.id) ||
+      (await tx.promptDispatchAttempt.findUnique({ where: { id: row.id } }))
+    ) {
+      continue;
+    }
+    await tx.promptDispatchAttempt.create({
+      data: {
+        ...row,
+        status: row.status === 'queued' ? 'cancelled' : row.status,
+        members: row.members,
+        content: row.content ?? Prisma.JsonNull,
+        effectiveSettings: row.effectiveSettings ?? Prisma.JsonNull,
+        providerIdentity: row.providerIdentity ?? Prisma.JsonNull,
+      },
+    });
+    attempts.add(row.id);
+  }
+  return attempts;
+}

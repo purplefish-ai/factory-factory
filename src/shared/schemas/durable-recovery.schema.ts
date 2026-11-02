@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { storedAgentRunContextSchema } from '../agent-run-context';
 import { recoveryJsonStorageSchema } from './recovery-json-storage.schema';
 
 // Explicit scalar projections: relation objects and credentials never enter a backup.
@@ -73,47 +74,67 @@ export const agentTriggerRecoverySchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
-export const agentRunRecoverySchema = z.strictObject({
-  id: z.string(),
-  agentDefinitionId: z.string(),
-  triggerId: z.string().nullable(),
-  idempotencyKey: z.string(),
-  status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'PR_CREATED', 'FAILED', 'CANCELLED']),
-  eventId: z.string().nullable(),
-  definitionRevision: z.number().int(),
-  triggerRevision: z.number().int(),
-  activationGeneration: z.number().int(),
-  launchPhase: z.enum([
-    'RESERVED',
-    'PROVISIONING',
-    'READY',
-    'DISPATCHING',
-    'ACTIVE',
-    'NEEDS_ATTENTION',
-    'FINISHED',
-  ]),
-  reservedWorkspaceId: z.string().nullable(),
-  reservedSessionId: z.string().nullable(),
-  initialMessageId: z.string().nullable(),
-  workerGeneration: z.number().int(),
-  attemptGeneration: z.number().int(),
-  attemptCount: z.number().int(),
-  nextAttemptAt: z.iso.datetime().nullable(),
-  leaseExpiresAt: z.iso.datetime().nullable(),
-  expiresAt: z.iso.datetime().nullable(),
-  reasonCode: z.string().nullable(),
-  result: z.json().nullable(),
-  effectiveExecution: z.json().nullable(),
-  launchPreparation: z.json().nullable(),
-  definitionSnapshot: z.json(),
-  triggerSnapshot: z.json().nullable(),
-  input: z.json(),
-  workspaceId: z.string().nullable(),
-  errorMessage: z.string().nullable(),
-  createdAt: z.iso.datetime(),
-  startedAt: z.iso.datetime().nullable(),
-  completedAt: z.iso.datetime().nullable(),
-});
+export const agentRunRecoverySchema = z
+  .strictObject({
+    id: z.string(),
+    agentDefinitionId: z.string(),
+    triggerId: z.string().nullable(),
+    contextExpiredAt: z.iso.datetime().nullable(),
+    idempotencyKey: z.string(),
+    status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'PR_CREATED', 'FAILED', 'CANCELLED']),
+    eventId: z.string().nullable(),
+    definitionRevision: z.number().int(),
+    triggerRevision: z.number().int(),
+    activationGeneration: z.number().int(),
+    launchPhase: z.enum([
+      'RESERVED',
+      'PROVISIONING',
+      'READY',
+      'DISPATCHING',
+      'ACTIVE',
+      'NEEDS_ATTENTION',
+      'FINISHED',
+    ]),
+    reservedWorkspaceId: z.string().nullable(),
+    reservedSessionId: z.string().nullable(),
+    initialMessageId: z.string().nullable(),
+    workerGeneration: z.number().int(),
+    attemptGeneration: z.number().int(),
+    attemptCount: z.number().int(),
+    nextAttemptAt: z.iso.datetime().nullable(),
+    leaseExpiresAt: z.iso.datetime().nullable(),
+    expiresAt: z.iso.datetime().nullable(),
+    reasonCode: z.string().nullable(),
+    result: z.json().nullable(),
+    effectiveExecution: z.json().nullable(),
+    launchPreparation: z.json().nullable(),
+    definitionSnapshot: z.json(),
+    triggerSnapshot: z.json().nullable(),
+    input: z.json(),
+    workspaceId: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    createdAt: z.iso.datetime(),
+    startedAt: z.iso.datetime().nullable(),
+    completedAt: z.iso.datetime().nullable(),
+  })
+  .superRefine((row, ctx) => {
+    const marked = [row.definitionSnapshot, row.triggerSnapshot, row.input].some(
+      (value) =>
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        value.state === 'EXPIRED'
+    );
+    if (
+      (row.contextExpiredAt !== null || marked) &&
+      !storedAgentRunContextSchema.safeParse(row).success
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Expired context must retain its atomic timestamp and markers',
+      });
+    }
+  });
 
 export const agentProposalRecoverySchema = z.strictObject({
   id: z.string(),
@@ -127,6 +148,7 @@ export const agentProposalRecoverySchema = z.strictObject({
 });
 
 export const agentSourceStateRecoverySchema = z.strictObject({
+  authorityRevision: z.number().int(),
   lastSourceOrder: z.number().int(),
   connectionId: z.string(),
   isReady: z.boolean(),
@@ -273,26 +295,129 @@ export const decisionLogRecoverySchema = z.strictObject({
   timestamp: z.iso.datetime(),
 });
 
-export const durableRecoverySchema = z.strictObject({
-  jsonStorage: recoveryJsonStorageSchema,
-  periodicTask: z.array(periodicTaskRecoverySchema),
-  periodicTaskExecution: z.array(periodicTaskExecutionRecoverySchema),
-  agentDefinition: z.array(agentDefinitionRecoverySchema),
-  agentConnection: z.array(agentConnectionRecoverySchema),
-  agentTrigger: z.array(agentTriggerRecoverySchema),
-  agentRun: z.array(agentRunRecoverySchema),
-  agentProposal: z.array(agentProposalRecoverySchema),
-  agentSourceState: z.array(agentSourceStateRecoverySchema),
-  agentSourcePage: z.array(agentSourcePageRecoverySchema),
-  agentSourceBaseline: z.array(agentSourceBaselineRecoverySchema),
-  agentEvent: z.array(agentEventRecoverySchema),
-  agentEvaluation: z.array(agentEvaluationRecoverySchema),
-  agentInitialDelivery: z.array(agentInitialDeliveryRecoverySchema),
-  workspaceNotification: z.array(workspaceNotificationRecoverySchema),
-  workspaceLaunchOrigin: z.array(workspaceLaunchOriginRecoverySchema),
-  workspaceChildOrigin: z.array(workspaceChildOriginRecoverySchema),
-  agentSessionLaunchOrigin: z.array(agentSessionLaunchOriginRecoverySchema),
-  sessionLifecycleEvent: z.array(sessionLifecycleEventRecoverySchema),
-  decisionLog: z.array(decisionLogRecoverySchema),
+export const agentSourceCheckpointRecoverySchema = z.strictObject({
+  connectionId: z.string(),
+  scanId: z.string(),
+  status: z.enum(['BUILDING', 'INDEXED', 'COMPLETE', 'INVALID']),
+  nextOrdinal: z.number().int(),
+  entryCount: z.number().int(),
+  executableCount: z.number().int(),
+  verifiedCount: z.number().int(),
+  verification: z.json().nullable(),
+  headEventId: z.string().nullable(),
+  boundaryKnown: z.boolean(),
+  previousBoundaryEventId: z.string().nullable(),
+  initialSourceOrder: z.number().int().nullable(),
+  sourceOrder: z.number().int().nullable(),
+  validationCursor: z.json().nullable(),
 });
+export const agentSourceHeadRecoverySchema = z.strictObject({
+  connectionId: z.string(),
+  scanId: z.string(),
+  providerEventId: z.string(),
+  position: z.number().int(),
+  precedingEventCount: z.number().int(),
+});
+export const chatIntentRecoverySchema = z.strictObject({
+  id: z.number().int().positive(),
+  sessionId: z.string(),
+  messageId: z.string(),
+  fingerprint: z.string(),
+  submitted: z.json(),
+  desired: z.json(),
+  revision: z.number().int(),
+  status: z.enum(['queued', 'uncertain', 'committed', 'cancelled', 'failed']),
+  attemptId: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+});
+export const promptDispatchAttemptRecoverySchema = z.strictObject({
+  id: z.string(),
+  sessionId: z.string(),
+  members: z.array(
+    z
+      .object({ messageId: z.string(), owner: z.enum(['human', 'external']), message: z.json() })
+      .catchall(z.json())
+  ),
+  content: z.json(),
+  effectiveSettings: z.json(),
+  providerIdentity: z.json(),
+  sendGeneration: z.number().int(),
+  status: z.enum(['uncertain', 'committed', 'cancelled', 'queued']),
+  evidence: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  settledAt: z.iso.datetime().nullable(),
+});
+
+export const durableRecoverySchema = z
+  .strictObject({
+    jsonStorage: recoveryJsonStorageSchema,
+    agentSourceCheckpoint: z.array(agentSourceCheckpointRecoverySchema),
+    agentSourceHead: z.array(agentSourceHeadRecoverySchema),
+    chatIntent: z.array(chatIntentRecoverySchema),
+    promptDispatchAttempt: z.array(promptDispatchAttemptRecoverySchema),
+    periodicTask: z.array(periodicTaskRecoverySchema),
+    periodicTaskExecution: z.array(periodicTaskExecutionRecoverySchema),
+    agentDefinition: z.array(agentDefinitionRecoverySchema),
+    agentConnection: z.array(agentConnectionRecoverySchema),
+    agentTrigger: z.array(agentTriggerRecoverySchema),
+    agentRun: z.array(agentRunRecoverySchema),
+    agentProposal: z.array(agentProposalRecoverySchema),
+    agentSourceState: z.array(agentSourceStateRecoverySchema),
+    agentSourcePage: z.array(agentSourcePageRecoverySchema),
+    agentSourceBaseline: z.array(agentSourceBaselineRecoverySchema),
+    agentEvent: z.array(agentEventRecoverySchema),
+    agentEvaluation: z.array(agentEvaluationRecoverySchema),
+    agentInitialDelivery: z.array(agentInitialDeliveryRecoverySchema),
+    workspaceNotification: z.array(workspaceNotificationRecoverySchema),
+    workspaceLaunchOrigin: z.array(workspaceLaunchOriginRecoverySchema),
+    workspaceChildOrigin: z.array(workspaceChildOriginRecoverySchema),
+    agentSessionLaunchOrigin: z.array(agentSessionLaunchOriginRecoverySchema),
+    sessionLifecycleEvent: z.array(sessionLifecycleEventRecoverySchema),
+    decisionLog: z.array(decisionLogRecoverySchema),
+  })
+  .superRefine((data, ctx) => {
+    const attempts = new Map(data.promptDispatchAttempt.map((row) => [row.id, row]));
+    for (const intent of data.chatIntent) {
+      if (!intent.attemptId) {
+        continue;
+      }
+      const attempt = attempts.get(intent.attemptId);
+      if (
+        !attempt ||
+        attempt.sessionId !== intent.sessionId ||
+        !attempt.members.some(
+          (member) => member.owner === 'human' && member.messageId === intent.messageId
+        )
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Chat intent has missing or foreign frozen dispatch membership',
+        });
+      }
+    }
+    for (const attempt of data.promptDispatchAttempt) {
+      const ids = attempt.members.map((member) => member.messageId);
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({ code: 'custom', message: 'Duplicate frozen dispatch member' });
+      }
+      if (
+        attempt.status === 'uncertain' &&
+        attempt.members.some(
+          (member) =>
+            member.owner === 'human' &&
+            !data.chatIntent.some(
+              (row) =>
+                row.attemptId === attempt.id &&
+                row.sessionId === attempt.sessionId &&
+                row.messageId === member.messageId
+            )
+        )
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Uncertain dispatch is missing its complete human membership',
+        });
+      }
+    }
+  });
 export type DurableRecovery = z.infer<typeof durableRecoverySchema>;

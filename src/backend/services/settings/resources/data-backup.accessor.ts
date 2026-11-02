@@ -6,6 +6,7 @@ import {
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import type {
   AgentSession,
+  ClosedSession,
   Prisma,
   Project,
   TerminalSession,
@@ -39,6 +40,7 @@ export interface DataBackupSnapshot {
   userSettings: UserSettings | null;
   codexAccounts: CodexAccountMetadata[];
   durable: DurableRecovery;
+  closedSessions: ClosedSession[];
 }
 
 class DataBackupAccessor {
@@ -69,6 +71,7 @@ class DataBackupAccessor {
         ]);
       return {
         durable: await readDurableRecovery(tx),
+        closedSessions: await tx.closedSession.findMany({ orderBy: { id: 'asc' } }),
         projects,
         workspaces,
         agentSessions,

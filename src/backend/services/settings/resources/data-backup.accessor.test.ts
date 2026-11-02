@@ -1,7 +1,12 @@
 import { expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => {
   const tx = {
+    closedSession: { findMany: vi.fn(async () => []) },
     $queryRaw: vi.fn(async () => []),
+    agentSourceCheckpoint: { findMany: vi.fn(async () => []) },
+    agentSourceHead: { findMany: vi.fn(async () => []) },
+    chatIntent: { findMany: vi.fn(async () => []) },
+    promptDispatchAttempt: { findMany: vi.fn(async () => []) },
     periodicTask: { findMany: vi.fn(async () => []) },
     periodicTaskExecution: { findMany: vi.fn(async () => []) },
     agentDefinition: { findMany: vi.fn(async () => []) },

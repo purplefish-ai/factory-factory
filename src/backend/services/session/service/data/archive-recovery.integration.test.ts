@@ -1,0 +1,222 @@
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  createIntegrationDatabase,
+  destroyIntegrationDatabase,
+  type IntegrationDatabase,
+} from '@/backend/testing/integration-db';
+import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
+
+let db: IntegrationDatabase;
+let recovery: typeof import('./archive-recovery');
+let storage: typeof import('../lifecycle/closed-session-storage');
+let publisher: typeof import('../lifecycle/closed-session-persistence.service');
+let atomic: typeof import('@/backend/lib/atomic-file');
+let config: typeof import('@/backend/services/config.service').configService;
+const startedAt = '2026-01-01T00:00:00.000Z';
+const completedAt = '2026-01-02T00:00:00.000Z';
+
+beforeAll(async () => {
+  db = await createIntegrationDatabase();
+  vi.stubEnv('BASE_DIR', db.tempDir);
+  recovery = await vi.importActual('./archive-recovery');
+  storage = await vi.importActual('../lifecycle/closed-session-storage');
+  publisher = await vi.importActual('../lifecycle/closed-session-persistence.service');
+  atomic = await vi.importActual('@/backend/lib/atomic-file');
+  ({ configService: config } = await vi.importActual('@/backend/services/config.service'));
+});
+beforeEach(async () => {
+  vi.spyOn(config, 'getBaseDir').mockReturnValue(db.tempDir);
+  const project = await db.prisma.project.create({
+    data: {
+      id: 'project',
+      name: 'recovery',
+      slug: 'recovery',
+      repoPath: '/repo',
+      worktreeBasePath: '/worktrees',
+    },
+  });
+  await db.prisma.workspace.createMany({
+    data: ['workspace', 'other-workspace'].map((id) => ({ id, projectId: project.id, name: id })),
+  });
+});
+afterEach(async () => {
+  await publisher.closedSessionPersistenceService.stopArchiveMaintenance();
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await rm(join(db.tempDir, 'closed-sessions'), { recursive: true, force: true });
+});
+afterAll(async () => {
+  await destroyIntegrationDatabase(db);
+  vi.unstubAllEnvs();
+});
+
+function packageFor(
+  id = 'archive',
+  archiveKey = 'a'.repeat(64),
+  workspaceId = 'workspace'
+): ArchiveRecovery {
+  const transcript = JSON.stringify(
+    {
+      version: 1,
+      sessionId: 'session',
+      workspaceId,
+      metadata: {
+        name: null,
+        workflow: 'ratchet',
+        provider: 'CODEX',
+        codexAccountId: 'unmapped-original-account',
+        providerSessionId: 'original-native-id',
+        model: 'model',
+        startedAt,
+        completedAt,
+      },
+      messages: [],
+    },
+    null,
+    2
+  );
+  return {
+    version: 1,
+    entries: [
+      {
+        id,
+        archiveKey,
+        workspaceId,
+        sessionId: 'session',
+        name: null,
+        workflow: 'ratchet',
+        provider: 'CODEX',
+        model: 'model',
+        startedAt,
+        completedAt,
+        transcript,
+        byteLength: Buffer.byteLength(transcript),
+        sha256: storage.archiveDigest(transcript),
+      },
+    ],
+  };
+}
+
+it('stages PENDING exact bytes without filesystem publication, then completes after commit', async () => {
+  const input = packageFor();
+  const ids = await db.prisma.$transaction((tx) =>
+    recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
+  );
+  expect(ids).toEqual(['archive']);
+  const row = await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } });
+  expect(row).toMatchObject({
+    archiveState: 'PENDING',
+    pendingTranscript: input.entries[0]!.transcript,
+    transcriptHash: input.entries[0]!.sha256,
+  });
+  const path = storage.resolveClosedSessionTranscriptPath(row, null);
+  await expect(readFile(path)).rejects.toThrow();
+  await recovery.publishRestoredSessionArchives(ids);
+  expect(await readFile(path, 'utf8')).toBe(input.entries[0]!.transcript);
+  expect(
+    await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } })
+  ).toMatchObject({ archiveState: 'COMPLETE', pendingTranscript: null });
+});
+
+it('excludes skipped workspace parents and local id/key collisions without borrowing ownership', async () => {
+  const existing = packageFor();
+  await db.prisma.$transaction((tx) =>
+    recovery.restoreSessionArchives(tx, existing, new Set(['workspace']))
+  );
+  const collisionId = packageFor('archive', 'b'.repeat(64), 'other-workspace');
+  const collisionKey = packageFor('other-archive', 'a'.repeat(64), 'other-workspace');
+  const skippedParent = packageFor('third-archive', 'c'.repeat(64), 'other-workspace');
+  for (const input of [collisionId, collisionKey]) {
+    expect(
+      await db.prisma.$transaction((tx) =>
+        recovery.restoreSessionArchives(tx, input, new Set(['other-workspace']))
+      )
+    ).toEqual([]);
+  }
+  expect(
+    await db.prisma.$transaction((tx) =>
+      recovery.restoreSessionArchives(tx, skippedParent, new Set())
+    )
+  ).toEqual([]);
+  expect(await db.prisma.closedSession.count()).toBe(1);
+  expect(
+    await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } })
+  ).toMatchObject({ workspaceId: 'workspace', pendingTranscript: existing.entries[0]!.transcript });
+});
+
+it('rolls back staged archives with the caller transaction', async () => {
+  await expect(
+    db.prisma.$transaction(async (tx) => {
+      await recovery.restoreSessionArchives(tx, packageFor(), new Set(['workspace']));
+      throw new Error('later import failed');
+    })
+  ).rejects.toThrow('later import failed');
+  expect(await db.prisma.closedSession.count()).toBe(0);
+});
+
+it('deduplicates repeated concurrent imports without replacing frozen bytes', async () => {
+  const input = packageFor();
+  const results = await Promise.all(
+    [1, 2].map(() =>
+      db.prisma.$transaction((tx) =>
+        recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
+      )
+    )
+  );
+  expect(results.flat()).toEqual(['archive']);
+  expect(await db.prisma.closedSession.count()).toBe(1);
+});
+
+it('retains durable PENDING bytes after interrupted publication and recovers them after restart', async () => {
+  const input = packageFor();
+  const ids = await db.prisma.$transaction((tx) =>
+    recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
+  );
+  const fail = vi
+    .spyOn(atomic, 'writeFileAtomic')
+    .mockRejectedValueOnce(new Error('publication interrupted'));
+  await expect(recovery.publishRestoredSessionArchives(ids)).rejects.toThrow(
+    'publication interrupted'
+  );
+  fail.mockRestore();
+  expect(
+    await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } })
+  ).toMatchObject({ archiveState: 'PENDING', pendingTranscript: input.entries[0]!.transcript });
+  vi.resetModules();
+  const restarted: typeof publisher = await vi.importActual(
+    '../lifecycle/closed-session-persistence.service'
+  );
+  await restarted.closedSessionPersistenceService.recoverById('archive');
+  const row = await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } });
+  expect(row.archiveState).toBe('COMPLETE');
+  expect(await readFile(storage.resolveClosedSessionTranscriptPath(row, null), 'utf8')).toBe(
+    input.entries[0]!.transcript
+  );
+});
+
+it('fails export when a complete artifact is deleted after the relational snapshot', async () => {
+  const input = packageFor();
+  const ids = await db.prisma.$transaction((tx) =>
+    recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
+  );
+  await recovery.publishRestoredSessionArchives(ids);
+  const snapshot = await db.prisma.closedSession.findMany();
+  const path = storage.resolveClosedSessionTranscriptPath(snapshot[0]!, null);
+  await rm(path);
+  await expect(
+    recovery.exportSessionArchives(snapshot, new Map([['workspace', null]]))
+  ).rejects.toThrow('Incomplete archive export');
+});
+
+it('does not overwrite a different artifact when wire identifiers contain traversal', async () => {
+  const input = packageFor();
+  input.entries[0]!.id = '../outside';
+  await expect(
+    db.prisma.$transaction((tx) =>
+      recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
+    )
+  ).rejects.toThrow();
+  expect(await db.prisma.closedSession.count()).toBe(0);
+});

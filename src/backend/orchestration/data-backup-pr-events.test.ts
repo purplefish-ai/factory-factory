@@ -3,7 +3,7 @@ import { exportPRBackupState } from './data-backup-pr-events';
 
 vi.mock('@/backend/db', () => ({ prisma: {} }));
 
-it('flattens every frozen delivery member into the compatible backup without batchId', () => {
+it('retains exact frozen delivery membership separately from event facts', () => {
   const eventIds = ['frozen-a', 'frozen-b'];
   const workspace: Parameters<typeof exportPRBackupState>[0] = {
     prs: [],
@@ -52,21 +52,21 @@ it('flattens every frozen delivery member into the compatible backup without bat
     ],
   };
   const result = exportPRBackupState(workspace);
-  const events = result.prEvents;
-  expect(events).toHaveLength(2);
-  expect(events?.map((event) => event.id)).toEqual(['frozen-a', 'frozen-b']);
-  for (const event of events ?? []) {
-    expect(event).toMatchObject({
-      deliveryId: 'frozen-receipt',
-      deliveryText: 'exact frozen batch',
+  expect(result.prEvents).toEqual([]);
+  expect(result.prRecovery.events.map((event) => event.id)).toEqual(eventIds);
+  expect(result.prRecovery.events.every((event) => event.batchId === 'frozen-receipt')).toBe(true);
+  expect(result.prRecovery.deliveries).toEqual([
+    expect.objectContaining({
+      id: 'frozen-receipt',
+      eventIds,
+      text: 'exact frozen batch',
       state: 'DISPATCHING',
       attempts: 2,
-      deliverySessionId: 'session-1',
-      deliveryProvider: 'CODEX',
-      deliveryProviderSessionId: 'thread-123',
-      deliveryBindingRevision: 7,
+      sessionId: 'session-1',
+      provider: 'CODEX',
+      providerSessionId: 'thread-123',
+      bindingRevision: 7,
       claimedAt: '2025-01-01T00:01:00.000Z',
-    });
-    expect(event).not.toHaveProperty('batchId');
-  }
+    }),
+  ]);
 });

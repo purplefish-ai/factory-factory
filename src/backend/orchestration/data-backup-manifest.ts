@@ -2,6 +2,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { prismaModelNames, type PrismaModelName } from '@/backend/services/registry';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { validateRecoveryJsonStorage } from './data-backup-json-storage';
+import { validateRecoverySourceProof } from './data-backup-source-proof';
 
 type Coverage = {
   category: 'config' | 'history' | 'evidence' | 'cache' | 'runtime' | 'secret';
@@ -129,17 +130,40 @@ export const recoveryModelCoverage = {
     category: 'evidence',
     handling: 'included',
     reason:
-      'Retained immutable run/session launch intent with supported account identity remapping.',
+      'Retained immutable run/session launch intent with original external account identity; operational session accounts map separately.',
   },
   SessionLifecycleEvent: {
     category: 'history',
     handling: 'included',
     reason: 'Interrupted/stopped turn history and original deduplication identities retained.',
   },
+  ChatIntent: {
+    category: 'evidence',
+    handling: 'included',
+    reason:
+      'Submitted bytes and desired settings revisions retained; queued imports fail closed without enqueueing.',
+  },
+  PromptDispatchAttempt: {
+    category: 'evidence',
+    handling: 'included',
+    reason:
+      'Frozen ordered membership, provider identity and evidence retained; uncertain effects remain held.',
+  },
+  AgentSourceCheckpoint: {
+    category: 'evidence',
+    handling: 'included',
+    reason: 'Retained checkpoint proof and validation progress, restored under disabled intake.',
+  },
+  AgentSourceHead: {
+    category: 'evidence',
+    handling: 'included',
+    reason: 'Exact historical head-to-ordinal identities retained.',
+  },
   ClosedSession: {
     category: 'history',
-    handling: 'excluded',
-    reason: 'Awaiting archive packaging contract; metadata alone cannot recover transcript files.',
+    handling: 'included',
+    reason:
+      'Exact archive identity and checksum bytes; imported pending payloads publish through recoverable app-owned storage.',
   },
   WorkspaceNotification: {
     category: 'evidence',
@@ -151,7 +175,7 @@ export const recoveryModelCoverage = {
     category: 'evidence',
     handling: 'partial',
     reason:
-      'Frozen snapshots, result and reservations retained; unresolved status explicitly imported for review with no automatic execution. Account references remapped.',
+      'Frozen snapshots, result and reservations retained; unresolved status explicitly imported for review with no automatic execution. Frozen account identity is retained; operational session FKs map separately.',
   },
   AgentProposal: {
     category: 'config',
@@ -200,8 +224,8 @@ export function recoveryManifest() {
     models: structuredClone(recoveryModelCoverage),
     limitations: [
       'This is a limited logical export, not a full installation backup.',
-      'Repository/worktree files, native account homes, credentials, encryption keys and provider-owned history are not included.',
-      'A supported full backup retains the complete database and encryption.key together, plus any separately stored files needed for recovery.',
+      'Repository/worktree contents, native account homes, credentials, encryption keys and provider-owned history are not included; captured closed-session transcript bytes are included.',
+      'A supported full backup retains the complete database and encryption.key together, plus the app-owned closed-sessions directory and any legacy transcript files not yet relocated.',
       'Imported automation is inactive. Missing or ambiguous effect evidence never authorizes a resend.',
     ],
   };
@@ -209,12 +233,15 @@ export function recoveryManifest() {
 
 export function validateRecoveryManifest(input: ExportData) {
   if (input.meta.schemaVersion !== 8) {
-    if (input.data.durable) {
+    if (input.data.durable || input.data.archives) {
       throw new ApplicationError('INVALID_INPUT', 'Durable recovery requires schema version 8');
     }
     return;
   }
   validateRecoveryJsonStorage(input.data);
+  if (input.data.durable) {
+    validateRecoverySourceProof(input.data.durable);
+  }
   const declared = new Set(Object.keys(input.meta.recovery?.models ?? {}));
   if (
     declared.size !== prismaModelNames.length ||

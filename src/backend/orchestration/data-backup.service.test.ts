@@ -435,6 +435,11 @@ describe('DataBackupService', () => {
       'workspaceLaunchOrigin',
       'workspaceChildOrigin',
       'agentSessionLaunchOrigin',
+      'closedSession',
+      'chatIntent',
+      'promptDispatchAttempt',
+      'agentSourceCheckpoint',
+      'agentSourceHead',
       'sessionLifecycleEvent',
       'decisionLog',
     ]) {

@@ -19,6 +19,13 @@ export interface CreateClosedSessionInput {
   completedAt: Date;
 }
 
+export type StageClosedSessionRecoveryInput = CreateClosedSessionInput & {
+  id: string;
+  archiveKey: string;
+  pendingTranscript: string;
+  transcriptHash: string;
+};
+
 class PrismaClosedSessionAccessor {
   findBySessionIdWithWorkspace(sessionId: string): Promise<ClosedSessionWithWorkspace[]> {
     return prisma.closedSession.findMany({
@@ -106,6 +113,31 @@ class PrismaClosedSessionAccessor {
         update: {},
       })
     );
+  }
+
+  /** Additive recovery never borrows a local archive's identity or ownership. */
+  async stageRecovery(
+    tx: Prisma.TransactionClient,
+    data: StageClosedSessionRecoveryInput
+  ): Promise<boolean> {
+    if (
+      await tx.closedSession.findFirst({
+        where: { OR: [{ id: data.id }, { archiveKey: data.archiveKey }] },
+        select: { id: true },
+      })
+    ) {
+      return false;
+    }
+    try {
+      await tx.closedSession.create({ data: { ...data, archiveState: 'PENDING' } });
+      return true;
+    } catch (error) {
+      // A competing importer may win the unique ID/key after the initial read.
+      if (error instanceof Error && 'code' in error && error.code === 'P2002') {
+        return false;
+      }
+      throw error;
+    }
   }
 
   findPending(workspaceId: string, limit = 50) {

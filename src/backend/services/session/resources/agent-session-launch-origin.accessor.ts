@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { prisma } from '@/backend/db';
 import { eventAgentExecutionSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
-import { remapRecoveryExecution } from '@/shared/recovery-account-identity';
+import { validateRecoveryExecution } from '@/shared/recovery-account-identity';
 import { retainedReferenceAllowed, type RecoveryImportedIds } from '@/shared/recovery-graph';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { Prisma, AgentRun, AgentSession } from '@prisma-gen/client';
@@ -33,8 +33,7 @@ export const agentSessionLaunchOriginAccessor = {
 export async function restoreRecoverySessionOrigins(
   tx: Prisma.TransactionClient,
   data: ExportData['data'],
-  ids: RecoveryImportedIds,
-  accounts: ReadonlyMap<string, string>
+  ids: RecoveryImportedIds
 ) {
   const sourceSessions = new Set(data.agentSessions.map((row) => row.id));
   const sourceWorkspaces = new Set(data.workspaces.map((row) => row.id));
@@ -71,7 +70,7 @@ export async function restoreRecoverySessionOrigins(
     ) {
       continue;
     }
-    const execution = remapRecoveryExecution(row.execution, accounts);
+    const execution = validateRecoveryExecution(row.execution);
     assertRecoveryOriginBindings(
       row,
       execution,

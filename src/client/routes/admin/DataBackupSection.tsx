@@ -17,7 +17,7 @@ export function DataBackupSection() {
     setIsExporting(true);
     try {
       const data = await utils.admin.exportData.fetch();
-      const json = JSON.stringify(data, null, 2);
+      const json = JSON.stringify(data);
       downloadFile({
         data: json,
         mimeType: 'application/json',
@@ -39,7 +39,7 @@ export function DataBackupSection() {
           Data Backup
         </CardTitle>
         <CardDescription>
-          Export and import database data for backup or migration purposes
+          Export and import logical recovery data with automation paused on restore
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -58,8 +58,13 @@ export function DataBackupSection() {
           <DataImportButton variant="outline" className="w-full sm:w-auto" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Export includes projects, workspaces, session metadata, and user preferences. Caches will
-          be rebuilt automatically after import.
+          Includes workspace and session metadata, automation definitions and history, delivery
+          evidence, and captured closed-session transcripts. Imported automation stays disabled;
+          unresolved messages require review and are never sent automatically.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Credentials, account homes, repository files, and provider-owned history are excluded. A
+          full installation backup also needs the database, encryption.key, and archive files.
         </p>
       </CardContent>
     </Card>

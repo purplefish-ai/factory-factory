@@ -28,6 +28,7 @@ import {
   createRequestLoggerMiddleware,
   securityMiddleware,
 } from './middleware';
+import { createRecoveryJsonBodyMiddleware } from './middleware/recovery-json-body.middleware';
 import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
@@ -229,7 +230,7 @@ export function createServer(application: Application, requestedPort?: number): 
   app.use(securityMiddleware);
   app.use(createCorsMiddleware(application));
   app.use(createRequestLoggerMiddleware(application));
-  app.use(express.json({ limit: '10mb' }));
+  app.use(createRecoveryJsonBodyMiddleware());
   app.use((_req, res, next) => {
     if (!explicitStartupStarted || startupComplete) {
       next();

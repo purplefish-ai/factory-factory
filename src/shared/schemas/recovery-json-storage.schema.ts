@@ -9,6 +9,7 @@ export const nullableRecoveryJsonFields: Readonly<Record<string, readonly string
   AgentTrigger: ['activationBoundary', 'pendingActivation'],
   AgentRun: ['result', 'effectiveExecution', 'launchPreparation', 'triggerSnapshot'],
   AgentSourceState: ['cursor', 'health'],
+  AgentSourceCheckpoint: ['verification', 'validationCursor'],
   AgentEvent: ['payload'],
   AgentEvaluation: ['classifier'],
   AgentInitialDelivery: ['evidence'],

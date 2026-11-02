@@ -16,6 +16,7 @@ import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.s
 import { Prisma } from '@prisma-gen/client';
 import { agentEventAccessor } from './agent-event.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
+import { restoreRecoveryCheckpointProof } from './agent-source-checkpoint.accessor';
 import { agentSourceCheckpointAccessor } from './agent-source-checkpoint.accessor';
 import {
   listTargets,
@@ -439,5 +440,25 @@ export async function restoreRecoverySources(
       continue;
     }
     await tx.agentSourceBaseline.create({ data: row });
+  }
+  await restoreRecoveryCheckpointProof(tx, data, states);
+  await restoreRecoveryAuthorityRevision(tx, data, states);
+}
+async function restoreRecoveryAuthorityRevision(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  states: ReadonlySet<string>
+) {
+  // These graphs are wholly new, identical snapshot authorities. Import writes
+  // fire revision triggers; restore the snapshot revision only after every proof
+  // row exists so its retained validation cursor describes the same authority.
+  for (const row of data.agentSourceState) {
+    if (!states.has(row.connectionId)) {
+      continue;
+    }
+    await tx.agentSourceState.update({
+      where: { connectionId: row.connectionId },
+      data: { authorityRevision: row.authorityRevision, updatedAt: row.updatedAt },
+    });
   }
 }

@@ -15,7 +15,7 @@ export async function readRecoveryJsonStorage(tx: Prisma.TransactionClient) {
   const selects = Object.entries(nullableRecoveryJsonFields).flatMap(([model, fields]) =>
     fields.map(
       (field) =>
-        Prisma.sql`SELECT ${model} AS model, ${identifier(model === 'AgentSourceState' ? 'connectionId' : 'id')} AS id, ${field} AS field FROM ${identifier(model)} WHERE json_type(${identifier(field)}) = 'null'`
+        Prisma.sql`SELECT ${model} AS model, ${model === 'AgentSourceCheckpoint' ? Prisma.sql`json_array("connectionId", "scanId")` : identifier(model === 'AgentSourceState' ? 'connectionId' : 'id')} AS id, ${field} AS field FROM ${identifier(model)} WHERE json_type(${identifier(field)}) = 'null'`
     )
   );
   const jsonNulls = await tx.$queryRaw(Prisma.join(selects, ' UNION ALL '));

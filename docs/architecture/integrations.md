@@ -530,7 +530,10 @@ history. Run/evaluation/send evidence, source continuity proof, proposals and
 retained origins are included according to the recovery manifest. Imported
 unfinished runs require explicit review; ambiguous sends never replay
 automatically. The complete database backup requires the database file together
-with `encryption.key` and separately stored recovery files.
+with `encryption.key`, application-owned `closed-sessions` files, and any legacy
+transcripts not yet relocated. See
+[backup import](workspace-state.md#backup-import) for logical coverage,
+immutable account provenance and recoverable publication.
 
 ### Project-owned saved management
 

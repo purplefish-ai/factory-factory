@@ -19,7 +19,12 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
-  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const {
+    codexAccounts: _accounts,
+    durable: _durable,
+    archives: _archives,
+    ...historicalData
+  } = exported.data;
   return {
     ...exported,
     meta: { ...exported.meta, schemaVersion: 5 },
@@ -40,6 +45,7 @@ function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService
           prReviewLastCommentId: _comment,
           ratchetLastCiRunId: _run,
           ratchetState: _ratchet,
+          prRecovery: _recovery,
           prMonitoring: _monitoring,
           prEvents: _events,
           ...rest
@@ -127,7 +133,7 @@ beforeEach(async () => {
 });
 it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer identity', async () => {
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
   await clearIntegrationDatabase(db.prisma);
   const normalized = exportDataSchema.parse(publishedVersion5(exported));
@@ -152,7 +158,12 @@ it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer 
 
 it('imports published version 6 PRs and discovery without account metadata', async () => {
   const exported = await dataBackupService.exportData('test');
-  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const {
+    codexAccounts: _accounts,
+    durable: _durable,
+    archives: _archives,
+    ...historicalData
+  } = exported.data;
   const historical = {
     ...exported,
     meta: { ...exported.meta, schemaVersion: 6 },
@@ -241,6 +252,8 @@ it('rejects malformed legacy PR URLs without throwing from safeParse', async () 
       meta: { ...exported.meta, schemaVersion: 4 },
       data: {
         ...exported.data,
+        durable: undefined,
+        archives: undefined,
         workspaces: [{ ...workspace, prUrl: 'invalid-url' }],
         agentSessions: [],
       },
@@ -283,7 +296,14 @@ it('imports a version 4 workspace without inventing an empty PR association', as
   const normalized = exportDataSchema.parse({
     ...exported,
     meta: { ...exported.meta, schemaVersion: 4 },
-    data: { ...exported.data, workspaces: [legacy], agentSessions: [], terminalSessions: [] },
+    data: {
+      ...exported.data,
+      durable: undefined,
+      archives: undefined,
+      workspaces: [legacy],
+      agentSessions: [],
+      terminalSessions: [],
+    },
   });
   expect(normalized.data.workspaces[0]?.prs).toEqual([]);
   const result = await dataBackupService.importData(normalized);
@@ -319,6 +339,8 @@ it('backfills only the matching legacy fixer session PR target', async () => {
     meta: { ...exported.meta, schemaVersion: 4 },
     data: {
       ...exported.data,
+      durable: undefined,
+      archives: undefined,
       workspaces: [
         {
           ...workspace,
@@ -371,10 +393,8 @@ it.each(['missing', 'foreign', 'matching'] as const)(
     }
     const result = await dataBackupService.importData(exportDataSchema.parse(exported));
     expect(result.workspaces).toEqual({ imported: 0, skipped: 1 });
-    expect(result.agentSessions).toEqual(
-      association === 'matching' ? { imported: 1, skipped: 0 } : { imported: 0, skipped: 1 }
-    );
-    expect(await db.prisma.agentSession.count()).toBe(association === 'matching' ? 1 : 0);
+    expect(result.agentSessions).toEqual({ imported: 0, skipped: 1 });
+    expect(await db.prisma.agentSession.count()).toBe(0);
   }
 );
 
@@ -413,7 +433,7 @@ it('roundtrips dedicated mode and PR-session bindings in additive version 6 back
     },
   });
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.workspaces[0]?.prMonitoring).toMatchObject({ deliveryMode: 'DEDICATED' });
   expect(exported.data.workspaces[0]?.prs.find((pr) => pr.id === 'a')).toMatchObject({
     dedicatedSession: { sessionId: 'dedicated' },
@@ -626,7 +646,10 @@ it.each(['deliveryProvider', 'deliveryProviderSessionId'] as const)(
         ...exported.data,
         workspaces: exported.data.workspaces.map((workspace) => ({
           ...workspace,
-          prEvents: workspace.prEvents.map((event) => ({ ...event, [field]: null })),
+          prRecovery: {
+            ...workspace.prRecovery!,
+            events: workspace.prRecovery!.events.map((event) => ({ ...event, [field]: null })),
+          },
         })),
       },
     };

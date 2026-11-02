@@ -325,10 +325,19 @@ paths are preserved rather than recomputed for the current machine.
 Logical version-8 exports capture relational rows and account identity metadata
 inside one read transaction. The versioned recovery manifest classifies every
 registered model and explicitly names unsupported coverage. This is a limited
-logical recovery format: filesystem contents, account homes, credentials,
-encryption keys and provider-owned history are excluded. Full database backups
-must retain `encryption.key` together with the database and separately stored
-files needed for recovery.
+logical recovery format: repository/worktree contents, account homes,
+credentials, encryption keys and provider-owned history are excluded. Captured
+closed-session transcripts are included as exact UTF-8 bytes with immutable
+identities and SHA-256 digests. The read transaction captures archive
+references; filesystem reads happen afterward. Missing or changed bytes fail the
+export explicitly.
+
+Full installation backups must retain `encryption.key` together with a
+consistent database snapshot, the application-owned `closed-sessions` directory,
+and legacy transcript files not yet relocated. Stop the application before
+copying SQLite files, or use SQLite's backup API; copying a live database alone
+can omit WAL transactions. Preserve external account homes and repository files
+separately when those are needed; the logical package does not restore them.
 
 Import persists the graph atomically. A colliding project must match repository
 identity before descendants can attach. Existing workspace IDs are skipped with
@@ -336,13 +345,30 @@ their imported descendants; no imported child/session borrows a local workspace
 by ID alone. Missing parents and cycles are skipped. Saved schedules, agent
 definitions, triggers, connections and PR monitoring restore disabled or paused.
 Unfinished scheduled executions become failed history for explicit review. Run
-snapshots, initial-send evidence, source pages/baselines, launch origins,
-interruption history and decisions are retained. Unresolved imported runs
-require explicit review and unfinished sends remain ambiguous. Pending workspace
-notifications retain their real delivery timestamps and message intent with
-`recoveryHeld` set; normal pending-list, count and by-ID delivery admission
-exclude held rows. The additive migration defaults existing notifications to
-unheld and does not change ordinary delivery behavior.
+snapshots (including atomic expired-context markers), initial-send evidence,
+source pages/checkpoints/heads/baselines, launch origins, interruption history
+and decisions are retained. Unresolved imported runs require explicit review and
+unfinished sends remain ambiguous. Pending workspace notifications retain their
+real delivery timestamps and message intent with `recoveryHeld` set; normal
+pending-list, count and by-ID delivery admission exclude held rows. The additive
+migration defaults existing notifications to unheld and does not change ordinary
+delivery behavior.
+
+Frozen prompt attempts preserve ordered membership, submitted content, accepted
+settings revisions, provider/account identity and evidence. Queued human intents
+restore as failed history; uncertain attempts remain uncertain. Frozen run and
+launch account IDs remain source provenance while operational session account
+FKs map to restored profiles requiring authentication. Neither a restart nor
+reenabling automation authorizes replay of imported unresolved effects.
+
+Archive packages reject unsupported versions, duplicate identities, malformed or
+mismatched transcript envelopes, invalid paths, byte lengths and checksums.
+Import commits exact payloads as PENDING in the same database transaction as the
+relational graph, then publishes through the session archive protocol outside
+the transaction. Publication failure is reported; durable pending payloads allow
+restart reconciliation to finish safely. No COMPLETE row is created pointing at
+an unpublished file. Existing archive identities and skipped workspace graphs
+are left untouched.
 
 Process IDs and running script/terminal state are cleared. No import action
 launches an agent or sends a message. Supported legacy versions 4–7 remain

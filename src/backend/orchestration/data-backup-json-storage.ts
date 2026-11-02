@@ -16,6 +16,7 @@ export function validateRecoveryJsonStorage(data: ExportData['data']) {
     AgentTrigger: durable.agentTrigger,
     AgentRun: durable.agentRun,
     AgentSourceState: durable.agentSourceState,
+    AgentSourceCheckpoint: durable.agentSourceCheckpoint,
     AgentEvent: durable.agentEvent,
     AgentEvaluation: durable.agentEvaluation,
     AgentInitialDelivery: durable.agentInitialDelivery,
@@ -28,7 +29,12 @@ export function validateRecoveryJsonStorage(data: ExportData['data']) {
       index = new Map(
         (rowsByModel[marker.model] ?? []).map((input): [string, Record<string, unknown>] => {
           const row = z.record(z.string(), z.unknown()).parse(input);
-          return [z.string().parse(row[primaryKey]), row];
+          return [
+            marker.model === 'AgentSourceCheckpoint'
+              ? JSON.stringify([z.string().parse(row.connectionId), z.string().parse(row.scanId)])
+              : z.string().parse(row[primaryKey]),
+            row,
+          ];
         })
       );
       indexes.set(marker.model, index);

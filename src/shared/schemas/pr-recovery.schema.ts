@@ -53,6 +53,15 @@ export const prRecoverySchema = z
       ids.add(delivery.id);
     }
     for (const event of snapshot.events) {
+      // A normalized batch owns its frozen envelope. Older unbatched rows must
+      // still carry their own complete metadata, as required by v6/v7 imports.
+      const { batchId, ...legacy } = event;
+      if (!(batchId || prEventBackupSchema.safeParse(legacy).success)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Dispatching event requires complete frozen delivery metadata',
+        });
+      }
       if (
         event.kind !== event.payload.kind ||
         (event.batchId && !ids.has(event.batchId)) ||

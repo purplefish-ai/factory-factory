@@ -13,7 +13,7 @@ it('adds recovery opt-in without changing existing delivery timestamps or pendin
     );
     db.exec(
       readFileSync(
-        'prisma/migrations/20261102174500_hold_imported_workspace_notification_intent/migration.sql',
+        'prisma/migrations/20261102210000_hold_imported_workspace_notification_intent/migration.sql',
         'utf8'
       )
     );

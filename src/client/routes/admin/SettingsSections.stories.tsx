@@ -415,6 +415,12 @@ export const Backup: Story = {
       <DataBackupSection />
     </SettingsStoryProvider>
   ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(/Imported automation stays disabled/)).toBeVisible();
+    await expect(canvas.getByText(/Credentials, account homes, repository files/)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Export Data' })).toBeEnabled();
+  },
 };
 
 export const WorktreeCleanup: Story = {

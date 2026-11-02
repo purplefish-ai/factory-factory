@@ -45,6 +45,7 @@ import {
   VOICE_UTTERANCE_END_MS_MAX,
   VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
+import { archiveRecoverySchema } from './archive-recovery.schema';
 import { durableRecoverySchema } from './durable-recovery.schema';
 import { validateBackupPRs, validateLegacyFixerOwnership } from './export-data-pr-validation';
 import {
@@ -284,6 +285,7 @@ const legacyAndCurrentSchema = z.object({
   }),
   data: z.object({
     durable: durableRecoverySchema.optional(),
+    archives: archiveRecoverySchema.optional(),
     projects: z.array(exportedProjectSchema),
     workspaces: z.array(exportedWorkspaceSchema),
     agentSessions: z.array(exportedAgentSessionSchema),
@@ -493,10 +495,13 @@ export const exportDataSchema = z
     ),
   ])
   .superRefine((backup, ctx) => {
-    if (backup.meta.schemaVersion === 8 && !(backup.meta.recovery && backup.data.durable)) {
+    if (
+      backup.meta.schemaVersion === 8 &&
+      !(backup.meta.recovery && backup.data.durable && backup.data.archives)
+    ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Version 8 requires a recovery manifest and durable rows',
+        message: 'Version 8 requires a recovery manifest, durable rows and archive package',
       });
     }
   })

@@ -4,8 +4,7 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-// These legacy prompt/lifecycle fixtures isolate configuration admission; the real
-// shared queue and permit path are exercised by session-prompt-admission.test.ts.
+// Legacy fixtures isolate admission and event ownership; focused authority/admission tests cover their real paths.
 vi.mock('./session.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./session.service')>();
   return {
@@ -30,7 +29,6 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
   getCurrentProcessEnv: () => ({ ...process.env }),
 }));
-// These legacy session fixtures have no retained event owner; event fencing has separate coverage.
 vi.mock('@/backend/services/session/resources/agent-session-launch-origin.accessor', () => ({
   agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
 }));

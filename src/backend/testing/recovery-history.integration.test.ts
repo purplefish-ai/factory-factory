@@ -214,13 +214,14 @@ it('restores event/run/evaluation and source continuity proof while imported unr
     where: { id: original.reservedSessionId },
   });
   expect(restoredSession.codexAccountId).not.toBe('codex-native-default');
-  const mappedExecution = { ...execution, codexAccountId: restoredSession.codexAccountId };
+  // Operational FK uses a reauthentication profile; immutable launch proof keeps the source identity.
+  expect(restoredSession.codexAccountId).not.toBe(execution.codexAccountId);
   expect(await db.prisma.agentRun.findUnique({ where: { id: original.id } })).toMatchObject({
-    effectiveExecution: mappedExecution,
+    effectiveExecution: execution,
   });
   expect(
     await db.prisma.agentSessionLaunchOrigin.findUnique({ where: { runId: original.id } })
-  ).toMatchObject({ sessionId: original.reservedSessionId, execution: mappedExecution });
+  ).toMatchObject({ sessionId: original.reservedSessionId, execution });
   expect(
     await db.prisma.sessionLifecycleEvent.findUnique({ where: { id: 'interruption' } })
   ).toMatchObject({ message: 'Retain interrupted-turn evidence' });

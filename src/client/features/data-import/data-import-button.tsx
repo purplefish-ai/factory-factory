@@ -6,6 +6,10 @@ import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  assertRecoveryWireBudget,
+  MAX_RECOVERY_HTTP_BODY_BYTES,
+} from '@/shared/recovery-wire-budget';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 type ParsedExportData = z.infer<typeof exportDataSchema>;
@@ -84,8 +88,12 @@ export function DataImportButton({
   };
 
   const validateAndParseFile = async (file: File): Promise<ParsedExportData> => {
+    if (file.size > MAX_RECOVERY_HTTP_BODY_BYTES) {
+      throw new Error('Backup file exceeds the 65 MiB file limit.');
+    }
     const text = await file.text();
-    const json = JSON.parse(text);
+    const json: unknown = JSON.parse(text);
+    assertRecoveryWireBudget(json);
 
     // Validate using exportDataSchema
     const result = exportDataSchema.safeParse(json);
@@ -93,6 +101,8 @@ export function DataImportButton({
       throw new Error(`Invalid backup file format: ${result.error.message}`);
     }
 
+    // Schema normalization adds defaults before the mutation is serialized.
+    assertRecoveryWireBudget(result.data);
     return result.data;
   };
 

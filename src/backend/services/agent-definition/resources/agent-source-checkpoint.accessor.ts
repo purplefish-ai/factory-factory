@@ -1,8 +1,11 @@
 import { z } from 'zod';
+import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import {
   agentGithubCursorSchema,
   agentSourcePageEvidenceSchema,
 } from '@/shared/agent-source-state';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.schema';
 import type { AgentSourceCheckpoint, AgentSourcePage, Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import { captureBoundary } from './agent-source-checkpoint-boundary';
@@ -295,3 +298,36 @@ async function compactPages(
 }
 
 export const agentSourceCheckpointAccessor = { checkpointPage, maintainCheckpoints };
+
+export async function restoreRecoveryCheckpointProof(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  states: ReadonlySet<string>
+) {
+  const nulls = recoveryJsonNullLookup(data.jsonStorage);
+  for (const row of data.agentSourceCheckpoint) {
+    if (!states.has(row.connectionId)) {
+      continue;
+    }
+    const id = JSON.stringify([row.connectionId, row.scanId]);
+    await tx.agentSourceCheckpoint.create({
+      data: {
+        ...row,
+        verification: nullablePrismaJson(
+          row.verification,
+          nulls('AgentSourceCheckpoint', id, 'verification')
+        ),
+        validationCursor: nullablePrismaJson(
+          row.validationCursor,
+          nulls('AgentSourceCheckpoint', id, 'validationCursor')
+        ),
+      },
+    });
+  }
+  for (const row of data.agentSourceHead) {
+    if (!states.has(row.connectionId)) {
+      continue;
+    }
+    await tx.agentSourceHead.create({ data: row });
+  }
+}

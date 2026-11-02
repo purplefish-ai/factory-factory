@@ -5,6 +5,7 @@
  * Used when database migrations require a reset.
  */
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import {
   restoreAgentConfigRecovery,
@@ -17,7 +18,12 @@ import {
 import { restoreRecoveryDecisions } from '@/backend/services/decision-log';
 import { createLogger } from '@/backend/services/logger.service';
 import { restorePeriodicRecovery } from '@/backend/services/periodic-task';
-import { restoreRetainedSessionRecovery } from '@/backend/services/session';
+import {
+  exportSessionArchives,
+  restoreSessionArchives,
+  publishRestoredSessionArchives,
+  restoreRetainedSessionRecovery,
+} from '@/backend/services/session';
 import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
@@ -31,6 +37,7 @@ import {
   workspaceChildHistoryService,
 } from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
+import { assertRecoveryWireBudget } from '@/shared/recovery-wire-budget';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
   ExportData,
@@ -53,6 +60,17 @@ type TransactionClient = DataBackupTransactionClient;
 
 const logger = createLogger('data-backup');
 const recoveryJsonSchema = z.json();
+function validateWireBudget(value: unknown): void {
+  try {
+    assertRecoveryWireBudget(value);
+  } catch (cause) {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      cause instanceof Error ? cause.message : 'Invalid recovery package size',
+      { cause }
+    );
+  }
+}
 
 // ============================================================================
 // Types
@@ -549,6 +567,7 @@ class DataBackupService {
       userSettings,
       codexAccounts,
       durable,
+      closedSessions,
     } = await dataBackupAccessor.getSnapshotForExport();
 
     const exportData: ExportData = {
@@ -559,6 +578,10 @@ class DataBackupService {
         schemaVersion: 8,
       },
       data: {
+        archives: await exportSessionArchives(
+          closedSessions,
+          new Map(workspaces.map((row) => [row.id, row.worktreePath]))
+        ),
         durable,
         projects: projects.map((p) => ({
           id: p.id,
@@ -689,6 +712,7 @@ class DataBackupService {
       },
     };
 
+    validateWireBudget(exportData);
     logger.info('Export completed', {
       projectCount: projects.length,
       workspaceCount: workspaces.length,
@@ -707,7 +731,9 @@ class DataBackupService {
    * All imports are wrapped in a transaction for atomicity.
    */
   async importData(input: ExportData): Promise<ImportResults> {
+    validateWireBudget(input);
     input = exportDataSchema.parse(input);
+    validateWireBudget(input);
     validateRecoveryManifest(input);
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
@@ -717,6 +743,7 @@ class DataBackupService {
     });
 
     // Import in dependency order within a transaction for atomicity
+    let importedArchiveIds: string[] = [];
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const jsonNulls = input.data.durable
         ? recoveryJsonNullLookup(input.data.durable.jsonStorage)
@@ -746,7 +773,12 @@ class DataBackupService {
         importedSessionIds,
         jsonNulls
       );
-      await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx, importedSessionIds);
+      await restorePRBackupState(
+        input.data.workspaces,
+        importedWorkspaceIds,
+        tx,
+        importedSessionIds
+      );
       const terminalSessions = await importTerminalSessions(graph.terminalSessions, tx);
       workspaces.skipped += input.data.workspaces.length - graph.workspaces.length;
       agentSessions.skipped += input.data.agentSessions.length - graph.agentSessions.length;
@@ -775,8 +807,7 @@ class DataBackupService {
           tx,
           input.data.durable,
           agentParents,
-          new Set(importedWorkspaceIds),
-          accountIds
+          new Set(importedWorkspaceIds)
         );
         const importedIds = {
           projects: acceptedProjectIds,
@@ -785,8 +816,15 @@ class DataBackupService {
           runs: runIds,
         };
         await restoreRetainedWorkspaceRecovery(tx, input.data, importedIds);
-        await restoreRetainedSessionRecovery(tx, input.data, importedIds, accountIds);
+        await restoreRetainedSessionRecovery(tx, input.data, importedIds);
         await restoreRecoveryDecisions(tx, input.data.durable.decisionLog);
+      }
+      if (input.data.archives) {
+        importedArchiveIds = await restoreSessionArchives(
+          tx,
+          input.data.archives,
+          new Set(importedWorkspaceIds)
+        );
       }
       const userSettings = await importUserSettings(input.data.userSettings, tx);
 
@@ -799,6 +837,8 @@ class DataBackupService {
       };
     });
 
+    // The committed PENDING rows retain exact payloads if publication is interrupted.
+    await publishRestoredSessionArchives(importedArchiveIds);
     logger.info('Import completed', {
       schemaVersion: input.meta.schemaVersion,
       projects: results.projects,

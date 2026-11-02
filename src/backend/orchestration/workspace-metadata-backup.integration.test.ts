@@ -1,4 +1,3 @@
-import { PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   clearIntegrationDatabase,
@@ -6,6 +5,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { PrismaClient } from '@prisma-gen/client';
 import { dataBackupService } from './data-backup.service';
@@ -711,15 +711,56 @@ it('requires complete supported model coverage before opening an import transact
 });
 
 it('skips a dedicated binding when its imported session collides with an unrelated local parent', async () => {
-  await db.prisma.workspacePR.create({ data: { id: 'dedicated-pr', workspaceId: 'workspace', url: 'https://github.com/org/repo/pull/1' } });
-  await db.prisma.agentSession.create({ data: { id: 'colliding-session', workspaceId: 'workspace', workspacePrId: 'dedicated-pr', workflow: PR_DEDICATED_WORKFLOW, provider: 'CLAUDE', model: 'sonnet' } });
-  await db.prisma.workspacePRDedicatedSession.create({ data: { prId: 'dedicated-pr', sessionId: 'colliding-session' } });
+  await db.prisma.workspacePR.create({
+    data: {
+      id: 'dedicated-pr',
+      workspaceId: 'workspace',
+      url: 'https://github.com/org/repo/pull/1',
+    },
+  });
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'colliding-session',
+      workspaceId: 'workspace',
+      workspacePrId: 'dedicated-pr',
+      workflow: PR_DEDICATED_WORKFLOW,
+      provider: 'CLAUDE',
+      model: 'sonnet',
+    },
+  });
+  await db.prisma.workspacePRDedicatedSession.create({
+    data: { prId: 'dedicated-pr', sessionId: 'colliding-session' },
+  });
   const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
   await clearIntegrationDatabase(db.prisma);
-  await db.prisma.project.create({ data: { id: 'local-project', name: 'Local', slug: 'local', repoPath: '/local', worktreeBasePath: '/local-trees' } });
-  await db.prisma.workspace.create({ data: { id: 'local-workspace', projectId: 'local-project', name: 'Local' } });
-  await db.prisma.agentSession.create({ data: { id: 'colliding-session', workspaceId: 'local-workspace', workflow: 'implement', provider: 'CLAUDE', model: 'sonnet' } });
-  await expect(dataBackupService.importData(backup)).resolves.toMatchObject({ agentSessions: { imported: 0, skipped: 1 } });
-  expect(await db.prisma.agentSession.findUnique({ where: { id: 'colliding-session' } })).toMatchObject({ workspaceId: 'local-workspace', workflow: 'implement' });
-  expect(await db.prisma.workspacePRDedicatedSession.findUnique({ where: { prId: 'dedicated-pr' } })).toBeNull();
+  await db.prisma.project.create({
+    data: {
+      id: 'local-project',
+      name: 'Local',
+      slug: 'local',
+      repoPath: '/local',
+      worktreeBasePath: '/local-trees',
+    },
+  });
+  await db.prisma.workspace.create({
+    data: { id: 'local-workspace', projectId: 'local-project', name: 'Local' },
+  });
+  await db.prisma.agentSession.create({
+    data: {
+      id: 'colliding-session',
+      workspaceId: 'local-workspace',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+    },
+  });
+  await expect(dataBackupService.importData(backup)).resolves.toMatchObject({
+    agentSessions: { imported: 0, skipped: 1 },
+  });
+  expect(
+    await db.prisma.agentSession.findUnique({ where: { id: 'colliding-session' } })
+  ).toMatchObject({ workspaceId: 'local-workspace', workflow: 'implement' });
+  expect(
+    await db.prisma.workspacePRDedicatedSession.findUnique({ where: { prId: 'dedicated-pr' } })
+  ).toBeNull();
 });

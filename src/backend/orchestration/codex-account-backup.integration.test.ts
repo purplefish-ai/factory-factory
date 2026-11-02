@@ -55,7 +55,7 @@ beforeEach(async () => {
 });
 it('roundtrips managed bindings into a fresh database and isolates imported native homes', async () => {
   const exported = exportDataSchema.parse(await dataBackupService.exportData('test'));
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.codexAccounts).toHaveLength(2);
   await clearIntegrationDatabase(db.prisma);
   await dataBackupService.importData(exported);
@@ -89,7 +89,12 @@ it('repeatedly roundtrips an imported native fallback identity with one import s
 
 it('imports published version 6 without account fields as legacy native bindings', async () => {
   const exported = await dataBackupService.exportData('test');
-  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+  const {
+    codexAccounts: _accounts,
+    durable: _durable,
+    archives: _archives,
+    ...historicalData
+  } = exported.data;
   const historical = {
     ...exported,
     meta: { ...exported.meta, schemaVersion: 6 },

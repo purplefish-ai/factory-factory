@@ -5,6 +5,12 @@ import { readRecoveryJsonStorage } from './recovery-json-storage';
 export async function readDurableRecovery(tx: Prisma.TransactionClient) {
   const rows = {
     jsonStorage: await readRecoveryJsonStorage(tx),
+    agentSourceCheckpoint: await tx.agentSourceCheckpoint.findMany(),
+    agentSourceHead: await tx.agentSourceHead.findMany(),
+    chatIntent: await tx.chatIntent.findMany({ orderBy: { id: 'asc' } }),
+    promptDispatchAttempt: await tx.promptDispatchAttempt.findMany({
+      orderBy: { createdAt: 'asc' },
+    }),
     periodicTask: await tx.periodicTask.findMany({
       select: {
         id: true,
@@ -86,6 +92,7 @@ export async function readDurableRecovery(tx: Prisma.TransactionClient) {
         id: true,
         agentDefinitionId: true,
         triggerId: true,
+        contextExpiredAt: true,
         idempotencyKey: true,
         status: true,
         eventId: true,
@@ -130,6 +137,7 @@ export async function readDurableRecovery(tx: Prisma.TransactionClient) {
     }),
     agentSourceState: await tx.agentSourceState.findMany({
       select: {
+        authorityRevision: true,
         lastSourceOrder: true,
         connectionId: true,
         isReady: true,

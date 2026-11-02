@@ -71,7 +71,9 @@ async function restoreDedicatedBindings(
   importedSessionIds: ReadonlySet<string>
 ) {
   for (const pr of workspace.prs) {
-    if (pr.dedicatedSession?.sessionId && !importedSessionIds.has(pr.dedicatedSession.sessionId)) continue;
+    if (pr.dedicatedSession?.sessionId && !importedSessionIds.has(pr.dedicatedSession.sessionId)) {
+      continue;
+    }
     if (
       pr.dedicatedSession &&
       !(await sessionDataService.restorePRDedicatedSession(tx, {

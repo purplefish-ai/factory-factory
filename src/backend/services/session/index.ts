@@ -11,3 +11,9 @@ export { withEventEvidenceDeadline } from './service/lifecycle/event-evidence-de
 
 export { EventSessionFenceError } from './service/lifecycle/event-session-fence-error';
 export { restoreRetainedSessionRecovery } from './service/data/session-recovery';
+
+export {
+  exportSessionArchives,
+  restoreSessionArchives,
+  publishRestoredSessionArchives,
+} from './service/data/archive-recovery';
