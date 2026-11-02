@@ -391,3 +391,16 @@ describe('session-replay-builder', () => {
     expect(acceptedMessageIds.at(-1)).toBe(`m-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 2}`);
   });
 });
+
+it('keeps archive prompt provenance out of renderer snapshots without mutating history', () => {
+  const store = createStore();
+  const prompt = [{ type: 'text' as const, text: 'native evidence' }];
+  for (const message of store.transcript) {
+    message.providerPrompt = prompt;
+  }
+  const original = structuredClone(store.transcript);
+  expect(
+    buildSnapshotMessages(store).every((message) => !Object.hasOwn(message, 'providerPrompt'))
+  ).toBe(true);
+  expect(store.transcript).toEqual(original);
+});

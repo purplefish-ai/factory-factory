@@ -529,15 +529,12 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
   // Legacy event copies of the prompt may omit images that the response item kept.
-  const responseUser = turn.messages.find(
-    (item) =>
-      item.source === 'response' &&
-      item.message.type === 'user' &&
-      (item.message.attachments || item.message.providerPrompt !== undefined)
-  )?.message;
+  const responses = turn.messages
+    .filter((item) => item.source === 'response')
+    .map((item) => item.message);
   for (const { source, message } of turn.messages) {
     if (source === 'event' || !eventTypes.has(message.type)) {
-      history.push(restoreCodexEventPrompt(message, responseUser, source === 'event'));
+      history.push(restoreCodexEventPrompt(message, responses, source === 'event'));
     }
   }
   turn.messages = [];

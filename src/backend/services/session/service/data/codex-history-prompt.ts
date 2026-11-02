@@ -22,15 +22,20 @@ export function codexHistoryPrompt(
 /** An event's UI text may omit images or flatten response-item text blocks. */
 export function restoreCodexEventPrompt(
   message: HistoryMessage,
-  response: HistoryMessage | undefined,
+  responses: HistoryMessage[],
   isEvent: boolean
 ): HistoryMessage {
-  if (!(isEvent && message.type === 'user' && response?.type === 'user')) {
+  if (!(isEvent && message.type === 'user')) {
     return message;
   }
+  const users = responses.filter((response) => response.type === 'user');
+  const attachments = users.find((response) => response.attachments?.length)?.attachments;
+  const providerPrompt = users.find(
+    (response) => response.providerPrompt !== undefined
+  )?.providerPrompt;
   return {
     ...message,
-    ...(!message.attachments && response.attachments ? { attachments: response.attachments } : {}),
-    ...(response.providerPrompt !== undefined ? { providerPrompt: response.providerPrompt } : {}),
+    ...(!message.attachments && attachments ? { attachments } : {}),
+    ...(providerPrompt !== undefined ? { providerPrompt } : {}),
   };
 }

@@ -407,17 +407,24 @@ it('keeps a genuinely later provider snapshot distinct after restart', async () 
 it('recovers a real atomic writer exit immediately before rename and removes its staging bytes', async () => {
   await writeFile(providerFile, `${historyEntry('first')}\n`);
   const execute = promisify(execFile);
-  const crash = vi.spyOn(atomic, 'writeFileAtomic').mockImplementationOnce(async (path, bytes) => {
-    const script = `const fs = require('node:fs/promises'); fs.rename = () => process.exit(0); require('node:module').syncBuiltinESMExports(); const { writeFileAtomic } = require(process.argv[1]); writeFileAtomic(process.argv[2], process.argv[3], { temporaryFileTag: 'archive-' + process.pid });`;
-    await execute(process.execPath, [
-      '-e',
-      script,
-      resolve('src/backend/lib/atomic-file.ts'),
-      path,
-      String(bytes),
-    ]);
-    throw new Error('writer exited before rename');
-  });
+  const crash = vi
+    .spyOn(atomic, 'writeFileAtomic')
+    .mockImplementationOnce(async (path, bytes, options) => {
+      expect(options).toMatchObject({
+        durable: true,
+        mode: 0o600,
+        durableDirectoryRoot: db.tempDir,
+      });
+      const script = `const fs = require('node:fs/promises'); fs.rename = () => process.exit(0); require('node:module').syncBuiltinESMExports(); const { writeFileAtomic } = require(process.argv[1]); const options = ${JSON.stringify(options)}; writeFileAtomic(process.argv[2], process.argv[3], { ...options, temporaryFileTag: 'archive-' + process.pid });`;
+      await execute(process.execPath, [
+        '-e',
+        script,
+        resolve('src/backend/lib/atomic-file.ts'),
+        path,
+        String(bytes),
+      ]);
+      throw new Error('writer exited before rename');
+    });
   await close(runtime(true).finalizer);
   expect(crash).toHaveBeenCalledOnce();
   crash.mockRestore();

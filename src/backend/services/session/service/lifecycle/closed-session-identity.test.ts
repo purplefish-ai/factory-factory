@@ -58,6 +58,17 @@ it('uses explicit dispatch provenance without collapsing independent adjacent us
 
 it('ignores presentation IDs, clocks, orders, icon indexes and runtime envelopes', () => {
   const live = message('answer');
+  const status: ChatMessage = {
+    ...live,
+    id: 'runtime-status',
+    message: { type: 'system', status: 'running', model: 'live-model' },
+  };
+  const usage: ChatMessage = {
+    ...live,
+    id: 'runtime-usage',
+    message: { type: 'result', usage: { input_tokens: 17, output_tokens: 5 } },
+  };
+  expect(key([status, live, usage])).toBe(key([live]));
   expect(key([live])).toBe(
     key([
       {

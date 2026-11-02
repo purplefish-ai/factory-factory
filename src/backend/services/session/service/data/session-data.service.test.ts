@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/lifecycle/closed-session-persistence.service';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -91,4 +92,37 @@ describe('sessionDataService', () => {
 
     await expect(sessionDataService.findAgentSessionById('missing-session')).resolves.toBeNull();
   });
+});
+
+it('projects deleted archive metadata without durable transcript bytes', async () => {
+  const row = {
+    id: 'closed',
+    workspaceId: 'workspace',
+    sessionId: 'session',
+    name: null,
+    workflow: 'followup',
+    provider: 'CLAUDE' as const,
+    model: 'model',
+    transcriptPath: 'archive.json',
+    archiveKey: 'key',
+    archiveState: 'COMPLETE',
+    pendingTranscript: 'private durable bytes',
+    transcriptHash: 'hash',
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+  };
+  const deletion = vi
+    .spyOn(closedSessionPersistenceService, 'deleteArchive')
+    .mockResolvedValue(row);
+  try {
+    const result = await sessionDataService.deleteClosedSession('closed');
+    expect(result).not.toHaveProperty('pendingTranscript');
+    expect(result).toMatchObject({
+      id: 'closed',
+      archiveState: 'COMPLETE',
+      transcriptHash: 'hash',
+    });
+  } finally {
+    deletion.mockRestore();
+  }
 });
