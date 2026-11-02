@@ -430,6 +430,7 @@ export const ModelName = {
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification',
+  WorkspaceMailState: 'WorkspaceMailState',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
   AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
   WorkspaceChildOrigin: 'WorkspaceChildOrigin'
@@ -448,7 +449,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePRDelivery" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePRDelivery" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceMailState" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2894,6 +2895,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WorkspaceMailState: {
+      payload: Prisma.$WorkspaceMailStatePayload<ExtArgs>
+      fields: Prisma.WorkspaceMailStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceMailStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceMailStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceMailStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceMailStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceMailStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceMailStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceMailStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceMailStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceMailStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        update: {
+          args: Prisma.WorkspaceMailStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceMailStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceMailStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceMailStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceMailStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceMailStatePayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceMailStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceMailState>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceMailStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceMailStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceMailStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceMailStateCountAggregateOutputType> | number
+        }
+      }
+    }
     WorkspaceLaunchOrigin: {
       payload: Prisma.$WorkspaceLaunchOriginPayload<ExtArgs>
       fields: Prisma.WorkspaceLaunchOriginFieldRefs
@@ -3750,10 +3825,33 @@ export const WorkspaceNotificationScalarFieldEnum = {
   message: 'message',
   direction: 'direction',
   deliveredAt: 'deliveredAt',
+  revision: 'revision',
+  subject: 'subject',
+  preview: 'preview',
+  kind: 'kind',
+  taskKey: 'taskKey',
+  taskRevision: 'taskRevision',
+  readAt: 'readAt',
+  acknowledgedAt: 'acknowledgedAt',
+  supersededAt: 'supersededAt',
   createdAt: 'createdAt'
 } as const
 
 export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
+
+
+export const WorkspaceMailStateScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  notifiedRevision: 'notifiedRevision',
+  wakeAcknowledgedRevision: 'wakeAcknowledgedRevision',
+  claimId: 'claimId',
+  claimRevision: 'claimRevision',
+  wakeAmbiguousAt: 'wakeAmbiguousAt',
+  claimedAt: 'claimedAt'
+} as const
+
+export type WorkspaceMailStateScalarFieldEnum = (typeof WorkspaceMailStateScalarFieldEnum)[keyof typeof WorkspaceMailStateScalarFieldEnum]
 
 
 export const WorkspaceLaunchOriginScalarFieldEnum = {
@@ -4241,6 +4339,7 @@ export type GlobalOmitConfig = {
   periodicTask?: Prisma.PeriodicTaskOmit
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOmit
   workspaceNotification?: Prisma.WorkspaceNotificationOmit
+  workspaceMailState?: Prisma.WorkspaceMailStateOmit
   workspaceLaunchOrigin?: Prisma.WorkspaceLaunchOriginOmit
   agentSessionLaunchOrigin?: Prisma.AgentSessionLaunchOriginOmit
   workspaceChildOrigin?: Prisma.WorkspaceChildOriginOmit

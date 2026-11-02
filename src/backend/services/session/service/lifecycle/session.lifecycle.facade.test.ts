@@ -7,10 +7,7 @@ import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { SessionContextService } from './session-context.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
-import {
-  createLifecycleHarness,
-  createPendingWorkspaceNotification,
-} from './session-lifecycle.test-helpers';
+import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 import type { SessionStartupCoordinator } from './session-startup.coordinator';
 import type { SessionTerminationCoordinator } from './session-termination.coordinator';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
@@ -33,6 +30,9 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },
   workspaceNotificationService: {
     listPendingForDelivery: vi.fn(),
+    claimWake: vi.fn(),
+    settleWake: vi.fn(),
+    releaseWake: vi.fn(),
     markDelivered: vi.fn(),
   },
 }));
@@ -64,9 +64,11 @@ describe('SessionLifecycleFacade', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification(),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 1,
+      claimId: 'claim-1',
+    });
   });
 
   it('forwards its public lifecycle contract to configured collaborators', async () => {
@@ -517,7 +519,7 @@ describe('SessionLifecycleFacade', () => {
     expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
-  it('sends an explicit restart prompt after queued notification dispatch starts', async () => {
+  it('installs the explicit restart assignment before recovered mail', async () => {
     const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness();
 
     await service.restartSession('session-1', {
@@ -531,6 +533,6 @@ describe('SessionLifecycleFacade', () => {
     const sendOrder = sendSessionMessage.mock.invocationCallOrder[0];
     expect(dispatchOrder).toBeDefined();
     expect(sendOrder).toBeDefined();
-    expect(dispatchOrder!).toBeLessThan(sendOrder!);
+    expect(sendOrder!).toBeLessThan(dispatchOrder!);
   });
 });

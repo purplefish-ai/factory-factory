@@ -5,6 +5,9 @@ import { withTimeout } from './acp-runtime-spawn';
 
 const STEERING_TIMEOUT_MS = 10_000;
 
+/** The adapter did not receive input, so an exact armed wake may safely fall back. */
+export class AcpSteeringNotSentError extends Error {}
+
 export class AcpSteeringTimeoutError extends Error {
   constructor() {
     super('Steering acknowledgment timed out. The unresponsive agent runtime was stopped.');
@@ -26,21 +29,40 @@ export function supportsAcpSteering(initializeMeta: unknown): boolean {
 
 export async function steerAcpPrompt(
   handle: AcpProcessHandle,
-  prompt: ContentBlock[]
+  prompt: ContentBlock[],
+  options?: { onLateInjected?: () => Promise<void> }
 ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
   if (!handle.supportsSteering) {
-    throw new Error('The agent adapter does not support steering. The message remains queued.');
+    throw new AcpSteeringNotSentError(
+      'The agent adapter does not support steering. The message remains queued.'
+    );
   }
-  const response = await withTimeout({
-    promise: handle.connection.extMethod('_session/steering', {
-      sessionId: handle.acpSessionId,
-      prompt,
-      _meta: { steering: { idleBehavior: 'promptRequired' } },
-    }),
-    timeoutMs: STEERING_TIMEOUT_MS,
-    description: 'steering request',
-    timeoutError: new AcpSteeringTimeoutError(),
+  const operation = handle.connection.extMethod('_session/steering', {
+    sessionId: handle.acpSessionId,
+    prompt,
+    _meta: { steering: { idleBehavior: 'promptRequired' } },
   });
+  let response: unknown;
+  try {
+    response = await withTimeout({
+      promise: operation,
+      timeoutMs: STEERING_TIMEOUT_MS,
+      description: 'steering request',
+      timeoutError: new AcpSteeringTimeoutError(),
+    });
+  } catch (error) {
+    if (error instanceof AcpSteeringTimeoutError && options?.onLateInjected) {
+      void operation
+        .then(async (late) => {
+          const parsed = steeringResponseSchema.safeParse(late);
+          if (parsed.success && parsed.data.outcome === 'injected') {
+            await options.onLateInjected?.();
+          }
+        })
+        .catch(() => undefined);
+    }
+    throw error;
+  }
   const parsed = steeringResponseSchema.safeParse(response);
   if (!parsed.success) {
     throw new Error('The agent adapter returned an invalid steering response.');

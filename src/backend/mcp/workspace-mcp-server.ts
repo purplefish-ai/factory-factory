@@ -15,7 +15,9 @@
 
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
+import { workspaceMailSendMetadataSchema } from '@/shared/workspace-mail';
 import { AGENT_AUTHORING_TOOLS, callAgentAuthoringTool } from './agent-authoring-tools';
+import { callWorkspaceMailTool, WORKSPACE_MAIL_TOOLS } from './workspace-mail-tools';
 
 // ---------------------------------------------------------------------------
 // Types (minimal MCP protocol subset)
@@ -74,14 +76,17 @@ const SPAWN_TOOL = {
   },
 };
 
+const mailMetadataProperties = z.toJSONSchema(workspaceMailSendMetadataSchema).properties;
+
 const SEND_MSG_TOOL = {
   name: 'send_message_to_parent',
   description:
-    "Send a status update or result back to the parent workspace's active agent session.",
+    'Persist mail in the parent workspace inbox. Use PROGRESS with a taskKey for quiet replaceable updates; use BLOCKER, QUESTION, COMPLETION or INSTRUCTION for actionable mail. Keep reports in artifacts and include pointers.',
   inputSchema: {
     type: 'object',
     properties: {
-      message: { type: 'string', description: 'Message to send (plain text or markdown)' },
+      message: { type: 'string', description: 'Mail body (plain text or markdown)' },
+      ...mailMetadataProperties,
     },
     required: ['message'],
   },
@@ -90,12 +95,13 @@ const SEND_MSG_TOOL = {
 const SEND_MSG_TO_CHILD_TOOL = {
   name: 'send_message_to_child',
   description:
-    "Send a message or instruction to a child workspace's active agent session. Use this to give a running child workspace new instructions, answer its questions, or direct it to change course.",
+    'Persist mail in a child workspace inbox. Use INSTRUCTION for new direction, QUESTION for a decision, and PROGRESS with a taskKey for quiet replaceable status. Mail is retrieved explicitly by the recipient.',
   inputSchema: {
     type: 'object',
     properties: {
       childWorkspaceId: { type: 'string', description: 'ID of the child workspace' },
-      message: { type: 'string', description: 'Message to send' },
+      message: { type: 'string', description: 'Mail body' },
+      ...mailMetadataProperties,
     },
     required: ['childWorkspaceId', 'message'],
   },
@@ -227,21 +233,27 @@ async function handleSendMsgTool(
   args: Record<string, unknown>,
   apiBase: string
 ): Promise<void> {
-  const { error } = await callTrpcMutation(apiBase, 'workspace.sendMessageToParent', {
+  const { result, error } = await callTrpcMutation(apiBase, 'workspace.sendMessageToParent', {
     childWorkspaceId: workspaceId,
     message: args.message,
+    ...workspaceMailSendMetadataSchema.parse(args),
   });
-  if (error) {
+  const mailError =
+    error ??
+    (z.object({ persisted: z.literal(true) }).safeParse(result).success
+      ? undefined
+      : 'Mail was not persisted.');
+  if (mailError) {
     send({
       jsonrpc: '2.0',
       id: req.id,
-      result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+      result: { content: [{ type: 'text', text: `Error: ${mailError}` }], isError: true },
     });
   } else {
     send({
       jsonrpc: '2.0',
       id: req.id,
-      result: { content: [{ type: 'text', text: 'Message sent to parent workspace.' }] },
+      result: { content: [{ type: 'text', text: 'Mail persisted in parent workspace inbox.' }] },
     });
   }
 }
@@ -256,20 +268,24 @@ async function handleSendMsgToChildTool(
     parentWorkspaceId: workspaceId,
     childWorkspaceId: args.childWorkspaceId,
     message: args.message,
+    ...workspaceMailSendMetadataSchema.parse(args),
   });
-  if (error) {
+  const mailError =
+    error ??
+    (z.object({ persisted: z.literal(true) }).safeParse(result).success
+      ? undefined
+      : 'Mail was not persisted.');
+  if (mailError) {
     send({
       jsonrpc: '2.0',
       id: req.id,
-      result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+      result: { content: [{ type: 'text', text: `Error: ${mailError}` }], isError: true },
     });
   } else {
-    const r = result as { delivered?: boolean };
-    const status = r?.delivered ? 'delivered live' : 'queued for next session start';
     send({
       jsonrpc: '2.0',
       id: req.id,
-      result: { content: [{ type: 'text', text: `Message sent to child workspace (${status}).` }] },
+      result: { content: [{ type: 'text', text: 'Mail persisted in child workspace inbox.' }] },
     });
   }
 }
@@ -338,6 +354,18 @@ async function dispatchToolCall(
 ): Promise<void> {
   const params = toolCallSchema.parse(req.params);
   const args = params.arguments;
+  if (WORKSPACE_MAIL_TOOLS.some((tool) => tool.name === params.name)) {
+    const result = await callWorkspaceMailTool({
+      name: params.name,
+      args,
+      workspaceId,
+      apiBase,
+      query: callTrpcQuery,
+      mutate: callTrpcMutation,
+    });
+    send({ jsonrpc: '2.0', id: req.id, result });
+    return;
+  }
   if (AGENT_AUTHORING_TOOLS.some((tool) => tool.name === params.name)) {
     const result = await callAgentAuthoringTool({
       name: params.name,
@@ -425,7 +453,11 @@ async function handleRequest(
       ? [SEND_MSG_TOOL]
       : [LIST_PROJECTS_TOOL, SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
     const childToolsEnabled = await childWorkspacesEnabled(apiBase).catch(() => false);
-    const tools = [...(childToolsEnabled ? workspaceTools : []), ...AGENT_AUTHORING_TOOLS];
+    const tools = [
+      ...(childToolsEnabled ? workspaceTools : []),
+      ...WORKSPACE_MAIL_TOOLS,
+      ...AGENT_AUTHORING_TOOLS,
+    ];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
   }

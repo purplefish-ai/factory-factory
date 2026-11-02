@@ -18,23 +18,27 @@ import {
   prepareBatchContents,
   combineBatchContents,
 } from './session-dispatch-batch';
+import { SessionDispatchClaim } from './session-dispatch-claim';
 import { isClaudeCompactionClient, isThinkingBudgetClient } from './session-dispatch-client';
+import {
+  type DispatchGateResult,
+  getPermanentBlockedDispatchReason,
+} from './session-dispatch-gate';
+import { SessionDispatchRetry } from './session-dispatch-retry';
 import type {
   SessionDispatchDependencies,
   SessionDispatchLifecycleDependencies,
   DispatchOptions,
 } from './session-dispatch.types';
+import {
+  mailRecoveryRetryGuard,
+  steerOwnedWorkspaceMailSignal,
+  requeueFailedWorkspaceMailSignal,
+} from './session-mail-signal-dispatch';
 import { buildMessageContent } from './session-message-content';
 import { SessionQueuedSteering } from './session-queued-steering';
 
 const logger = createLogger('chat-message-handlers');
-const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
-const TURN_IN_PROGRESS_RETRY_MAX_MS = 30_000;
-
-type DispatchGateResult =
-  | { policy: 'allowed' }
-  | { policy: 'manual_resume' }
-  | { policy: 'blocked'; permanent: boolean; reason: string | null };
 
 export class SessionDispatchService {
   private readonly steering = new SessionQueuedSteering({
@@ -44,7 +48,12 @@ export class SessionDispatchService {
       return () => this.isDispatchGenerationCurrent(id, generation);
     },
     isAllowed: async (id) => (await this.evaluateDispatchGateSafely(id)).policy === 'allowed',
-    send: (id, content) => this.dependencies.promptService.steerSessionMessage(id, content),
+    send: (id, content, options) =>
+      this.dependencies.promptService.steerSessionMessage(
+        id,
+        content,
+        ...(options ? [options] : [])
+      ),
     dispatch: (id) => this.tryDispatchNextMessage(id),
   });
   constructor(private readonly dependencies: SessionDispatchDependencies) {}
@@ -52,13 +61,20 @@ export class SessionDispatchService {
     return this.steering.steer(sessionId, messageId);
   }
 
-  /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
-  private dispatchInProgress = new Map<string, number>();
-  /** Monotonic token to invalidate stale dispatch completions. */
-  private nextDispatchToken = 1;
-  /** Retry timers for provider-side busy responses that are not reflected locally yet. */
-  private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private turnInProgressRetryAttempts = new Map<string, number>();
+  /** Only the exact body-free signal held by notification delivery may use this path. */
+  steerWorkspaceMailSignal(sessionId: string, messageId: string): Promise<void> {
+    return steerOwnedWorkspaceMailSignal(
+      sessionId,
+      messageId,
+      this.lifecycle.notificationDelivery,
+      this.steering
+    );
+  }
+
+  private readonly dispatchClaim = new SessionDispatchClaim();
+  private readonly retry = new SessionDispatchRetry((id, options) =>
+    this.tryDispatchNextMessage(id, options)
+  );
   private lifecycleGate: SessionDispatchLifecycleDependencies['gate'] | null = null;
   private startupService: SessionDispatchLifecycleDependencies['startup'] | null = null;
   private notificationDeliveryService:
@@ -85,6 +101,18 @@ export class SessionDispatchService {
     this.lifecycleGate = dependencies.gate;
     this.startupService = dependencies.startup;
     this.notificationDeliveryService = dependencies.notificationDelivery;
+    dependencies.notificationDelivery.configureRetry?.((input) => {
+      const generation = this.lifecycle.gate.getGeneration(input.sessionId);
+      this.retry.schedule(
+        input.sessionId,
+        {
+          guard: mailRecoveryRetryGuard(input, () =>
+            this.isDispatchGenerationCurrent(input.sessionId, generation)
+          ),
+        },
+        Math.max(0, input.retryAt.getTime() - Date.now())
+      );
+    });
   }
 
   private get initPolicy(): SessionInitPolicyBridge {
@@ -121,33 +149,9 @@ export class SessionDispatchService {
 
   resetDispatchState(sessionId: string): void {
     this.steering.reset(sessionId);
-    this.dispatchInProgress.delete(sessionId);
-    this.clearTurnInProgressRetry(sessionId);
+    this.dispatchClaim.reset(sessionId);
+    this.retry.clear(sessionId);
     this.notificationDeliveryService?.resetSession(sessionId);
-  }
-
-  private isDispatchInProgress(dbSessionId: string): boolean {
-    if (!this.dispatchInProgress.has(dbSessionId)) {
-      return false;
-    }
-    if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Dispatch already in progress, skipping', { dbSessionId });
-    }
-    return true;
-  }
-
-  private reserveDispatchToken(dbSessionId: string): number {
-    const token = this.nextDispatchToken;
-    this.nextDispatchToken += 1;
-    this.dispatchInProgress.set(dbSessionId, token);
-    return token;
-  }
-
-  private releaseDispatchToken(dbSessionId: string, token: number): void {
-    if (this.dispatchInProgress.get(dbSessionId) !== token) {
-      return;
-    }
-    this.dispatchInProgress.delete(dbSessionId);
   }
 
   /**
@@ -164,22 +168,29 @@ export class SessionDispatchService {
       return;
     }
 
-    if (this.turnInProgressRetryTimers.has(dbSessionId)) {
+    if (this.retry.has(dbSessionId)) {
       if (options.bypassTurnInProgressBackoff) {
-        this.clearTurnInProgressRetry(dbSessionId);
+        this.retry.clear(dbSessionId);
       } else {
         return;
       }
     }
 
     // Guard against concurrent dispatch calls for the same session
-    if (this.steering.isPending(dbSessionId) || this.isDispatchInProgress(dbSessionId)) {
+    if (this.steering.isPending(dbSessionId) || this.dispatchClaim.request(dbSessionId)) {
       return;
     }
 
-    const dispatchToken = this.reserveDispatchToken(dbSessionId);
+    const dispatchToken = this.dispatchClaim.reserve(dbSessionId);
 
     try {
+      await this.lifecycle.notificationDelivery.recoverSession?.(dbSessionId, async () => {
+        await options.guard?.check();
+        options.guard?.assertCurrent?.();
+        if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+          throw new Error('Session stopped before mail recovery');
+        }
+      });
       // Loop: a dropped duplicate notification advances to the next queued message.
       let outcome: 'continue' | 'done' = 'continue';
       while (outcome === 'continue') {
@@ -188,7 +199,15 @@ export class SessionDispatchService {
         outcome = await this.dispatchHeadOfQueue(dbSessionId, stopGeneration, options.guard);
       }
     } finally {
-      this.releaseDispatchToken(dbSessionId, dispatchToken);
+      const requested = this.dispatchClaim.release(dbSessionId, dispatchToken);
+      if (requested && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+        await this.tryDispatchNextMessage(dbSessionId, options).catch((error) => {
+          logger.debug('Deferred dispatch rejected by original caller authority', {
+            dbSessionId,
+            error,
+          });
+        });
+      }
     }
   }
 
@@ -207,15 +226,18 @@ export class SessionDispatchService {
     // Peek first — message stays in queue (visible in snapshots during auto-start).
     const peeked = sessionDomainService.peekNextMessage(dbSessionId);
     if (!peeked) {
-      this.turnInProgressRetryAttempts.delete(dbSessionId);
+      this.retry.resetAttempts(dbSessionId);
       return 'done';
     }
 
     const claim = this.lifecycle.notificationDelivery.claimForDispatch(dbSessionId, peeked.id);
-    if (claim.status === 'duplicate') {
-      return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
-        ? 'continue'
-        : 'done';
+    switch (claim.status) {
+      case 'quarantined':
+        return 'done';
+      case 'duplicate':
+        return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
+          ? 'continue'
+          : 'done';
     }
 
     try {
@@ -339,7 +361,7 @@ export class SessionDispatchService {
       onError: (message, error) =>
         this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client),
       onSuccess: () => {
-        this.turnInProgressRetryAttempts.delete(dbSessionId);
+        this.retry.resetAttempts(dbSessionId);
       },
     });
   }
@@ -487,7 +509,20 @@ export class SessionDispatchService {
         sessionDomainService.markRunning(dbSessionId);
       }
       sessionDomainService.requeueFront(dbSessionId, msg);
-      this.scheduleTurnInProgressRetry(dbSessionId);
+      this.retry.schedule(dbSessionId);
+      return;
+    }
+
+    if (
+      this.lifecycle.notificationDelivery.isNotificationMessage(msg.id) &&
+      msg.id.startsWith('workspace-mail-wake-')
+    ) {
+      requeueFailedWorkspaceMailSignal(
+        dbSessionId,
+        msg,
+        this.dependencies.runtimeManager.isSessionRunning(dbSessionId),
+        () => this.retry.schedule(dbSessionId)
+      );
       return;
     }
 
@@ -503,7 +538,7 @@ export class SessionDispatchService {
       emitSnapshot: false,
     });
     this.markDispatchError(dbSessionId, errorMessage);
-    this.turnInProgressRetryAttempts.delete(dbSessionId);
+    this.retry.resetAttempts(dbSessionId);
     sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
   }
 
@@ -517,34 +552,6 @@ export class SessionDispatchService {
       return;
     }
     sessionDomainService.markError(sessionId, errorMessage);
-  }
-
-  private scheduleTurnInProgressRetry(dbSessionId: string): void {
-    if (this.turnInProgressRetryTimers.has(dbSessionId)) {
-      return;
-    }
-
-    const attempts = this.turnInProgressRetryAttempts.get(dbSessionId) ?? 0;
-    const delayMs = Math.min(
-      TURN_IN_PROGRESS_RETRY_BASE_MS * 2 ** attempts,
-      TURN_IN_PROGRESS_RETRY_MAX_MS
-    );
-    this.turnInProgressRetryAttempts.set(dbSessionId, attempts + 1);
-
-    const timer = setTimeout(() => {
-      this.turnInProgressRetryTimers.delete(dbSessionId);
-      void this.tryDispatchNextMessage(dbSessionId);
-    }, delayMs);
-    this.turnInProgressRetryTimers.set(dbSessionId, timer);
-  }
-
-  private clearTurnInProgressRetry(dbSessionId: string): void {
-    const timer = this.turnInProgressRetryTimers.get(dbSessionId);
-    if (timer) {
-      clearTimeout(timer);
-      this.turnInProgressRetryTimers.delete(dbSessionId);
-    }
-    this.turnInProgressRetryAttempts.delete(dbSessionId);
   }
 
   private isTurnAlreadyInProgressError(error: unknown): boolean {
@@ -918,21 +925,6 @@ export class SessionDispatchService {
     });
   }
 
-  private getPermanentBlockedDispatchReason(workspace: {
-    status?: string | null;
-    worktreePath?: string | null;
-  }): string | null {
-    if (workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED') {
-      return 'Workspace is archived or archiving and cannot accept new messages.';
-    }
-
-    if (workspace.status === 'FAILED' && !workspace.worktreePath) {
-      return 'Workspace setup failed before worktree creation. Retry setup before sending messages.';
-    }
-
-    return null;
-  }
-
   private async evaluateDispatchGate(dbSessionId: string): Promise<DispatchGateResult> {
     if (this.dependencies.eventAuthority) {
       await this.dependencies.eventAuthority.assertOrdinary(dbSessionId);
@@ -952,7 +944,7 @@ export class SessionDispatchService {
       if (dispatchPolicy === 'allowed') {
         return { policy: 'allowed' };
       }
-      const reason = this.getPermanentBlockedDispatchReason(session.workspace);
+      const reason = getPermanentBlockedDispatchReason(session.workspace);
       return {
         policy: 'blocked',
         permanent: !!reason,

@@ -32,6 +32,7 @@ function createGraph(label: string) {
     setManualDispatchResume: vi.fn(),
     resetDispatchState: vi.fn(),
     steerQueuedMessage: vi.fn(),
+    steerWorkspaceMailSignal: vi.fn(),
     tryDispatchNextMessage(sessionId: string) {
       this.attempts.push(sessionId);
       const message = sessionDomainService.dequeueNext(sessionId);
@@ -180,7 +181,7 @@ describe('application queue producer composition', () => {
   );
 
   it.each(['CHILD_TO_PARENT', 'PARENT_TO_CHILD'] as const)(
-    'queues and delivers %s notifications through each supplied graph',
+    'queues body-free %s mail signals through each supplied graph',
     async (direction) => {
       const first = createGraph('first');
       const second = createGraph('second');
@@ -212,6 +213,12 @@ describe('application queue producer composition', () => {
           createLifecycleTestSession({ id: `session-${id}`, status: SessionStatus.IDLE }),
         ]
       );
+      vi.spyOn(services.workspaceNotificationService, 'claimWake').mockImplementation(
+        async ({ workspaceId }) => ({ workspaceId, revision: 1, claimId: `claim-${workspaceId}` })
+      );
+      vi.spyOn(services.workspaceNotificationService, 'settleWake').mockResolvedValue(true);
+      vi.spyOn(services.workspaceNotificationService, 'releaseWake').mockResolvedValue();
+      vi.spyOn(services.workspaceNotificationService, 'nextWakeRetryAt').mockResolvedValue(null);
       for (const graph of [first, second]) {
         await expect(
           graph.services.deliverWorkspaceNotification({
@@ -228,13 +235,13 @@ describe('application queue producer composition', () => {
               timestamp,
             }),
           })
-        ).resolves.toEqual({ delivered: true });
+        ).resolves.toMatchObject({ delivered: false, queued: true, persisted: true });
       }
       expect(first.delivered).toEqual([
-        { sessionId: 'session-first', text: expect.stringContaining('Graph notification') },
+        { sessionId: 'session-first', text: expect.stringContaining('You have workspace mail') },
       ]);
       expect(second.delivered).toEqual([
-        { sessionId: 'session-second', text: expect.stringContaining('Graph notification') },
+        { sessionId: 'session-second', text: expect.stringContaining('You have workspace mail') },
       ]);
       expect(sessionDomainService.peekNextMessage('session-first')).toBeUndefined();
       expect(sessionDomainService.peekNextMessage('session-second')).toBeUndefined();
@@ -288,6 +295,7 @@ describe('application queue producer composition', () => {
         setManualDispatchResume: vi.fn(),
         resetDispatchState: vi.fn(),
         steerQueuedMessage: vi.fn(),
+        steerWorkspaceMailSignal: vi.fn(),
         tryDispatchNextMessage: dispatch,
       };
       domain.storeInitialMessage('shared-load', `Initial ${label}`);

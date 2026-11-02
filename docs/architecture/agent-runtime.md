@@ -1031,9 +1031,41 @@ Child-workspace MCP requests connect to localhost when the backend binds to an
 IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings. Explicit
 bind addresses remain the connection destination.
 
-Messages are persisted first as `WorkspaceNotification` rows, then delivered
-live to active sessions when available; undelivered rows are delivered at the
-next session start. Max depth is 1 — children cannot have children.
+Messages are persisted as workspace inbox mail. Their bodies are never injected
+automatically into an agent conversation. Agents receive a coalesced, body-free
+“you have workspace mail” signal, inspect summaries with `list_mail`, retrieve
+selected content with `read_mail`, and explicitly acknowledge IDs with
+`ack_mail`. The workspace right panel exposes the same inbox to users.
+
+`PROGRESS` mail is quiet and can supersede older progress for the same sender
+and task key; explicit task revisions prevent late progress from replacing a
+newer revision. `MESSAGE`, `BLOCKER`, `QUESTION`, `COMPLETION` and `INSTRUCTION`
+mail are actionable. Acknowledgement is separate from reading, provider wake
+delivery, and completing the underlying task. Existing delivered notifications
+migrate as acknowledged; pending notifications remain available as mail.
+
+Lists default to 20 summaries (maximum 50), each with a preview of at most 160
+characters. Selected reads default to an 8,192-character total body budget
+(maximum 16,384) across at most 20 IDs. Long messages return continuation
+offsets. Superseded progress is hidden by default and available through the
+explicit history filter. Read and acknowledgement operations are scoped to the
+recipient workspace. The MCP tools bind that recipient to their launch context.
+
+A durable revision and fenced wake claim keep one outstanding notification per
+workspace. New arrivals do not queue repeated prompts while a signal remains
+outstanding. Acknowledging selected mail at an observed revision releases its
+wake latch without acknowledging newer arrivals. Failed/full-queue wake claims
+remain retryable. Supported native steering delivers the small signal during a
+busy turn; unavailable steering retains the queued fallback for turn completion.
+A native-delivery timeout leaves a durable ambiguous wake instead of replaying
+it automatically, including after restart. The inbox exposes an explicit **Retry
+mail notification** action with notice that it may notify the agent again. Only
+that explicit action clears ambiguous delivery for retry; reading mail and
+acknowledging selected IDs remain independent. Explicit startup assignments
+always precede recovered mail signals.
+
+Max workspace depth is 1 — children cannot have child workspaces.
+Provider-native subagents are a separate facility.
 
 Child creation validates the target project's active status before delegating to
 its injected workspace-launch owner. The workspace capsule still validates the

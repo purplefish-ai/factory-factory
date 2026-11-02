@@ -344,3 +344,79 @@ describe('ACP runtime steering', () => {
     await prompt;
   });
 });
+
+it('preserves the active coding turn when a mail signal steering request times out', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  mockInitialize.mockResolvedValue({
+    protocolVersion: 1,
+    agentCapabilities: {},
+    _meta: { steering: { supported: true } },
+  });
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  handle.connection.close = vi.fn();
+  const pending = createDeferred<{ stopReason: string }>();
+  mockPrompt.mockReturnValue(pending.promise);
+  const prompt = manager.sendPrompt('session', input);
+  mockExtMethod.mockReturnValue(new Promise(() => undefined));
+  vi.useFakeTimers();
+  try {
+    const signal = manager
+      .steerSession('session', input, { preserveRuntimeOnTimeout: true })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await signal).toBeInstanceOf(AcpSteeringTimeoutError);
+    expect(handle.connection.close).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    expect(handle.isPromptInFlight).toBe(true);
+    pending.resolve({ stopReason: 'end_turn' });
+    await prompt;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('preserves and reports a late native mail steering receipt after its timeout', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  mockInitialize.mockResolvedValue({
+    protocolVersion: 1,
+    agentCapabilities: {},
+    _meta: { steering: { supported: true } },
+  });
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  handle.connection.close = vi.fn();
+  const pending = createDeferred<{ stopReason: string }>();
+  const receipt = createDeferred<unknown>();
+  mockPrompt.mockReturnValue(pending.promise);
+  mockExtMethod.mockReturnValue(receipt.promise);
+  const prompt = manager.sendPrompt('session', input);
+  const onLateInjected = vi.fn(async () => undefined);
+  vi.useFakeTimers();
+  try {
+    const steering = manager
+      .steerSession('session', input, { preserveRuntimeOnTimeout: true, onLateInjected })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await steering).toBeInstanceOf(AcpSteeringTimeoutError);
+    receipt.resolve({ outcome: 'injected' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onLateInjected).toHaveBeenCalledOnce();
+    expect(handle.connection.close).not.toHaveBeenCalled();
+    expect(mockCancel).not.toHaveBeenCalled();
+    pending.resolve({ stopReason: 'end_turn' });
+    await prompt;
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -3,7 +3,6 @@ import { SessionStartupCancelledError } from '@/backend/services/session/service
 import {
   createDeferred,
   createLifecycleHarness,
-  createPendingWorkspaceNotification,
 } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 
@@ -11,6 +10,9 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },
   workspaceNotificationService: {
     listPendingForDelivery: vi.fn(() => Promise.resolve([])),
+    claimWake: vi.fn(() => Promise.resolve(null)),
+    settleWake: vi.fn(() => Promise.resolve(true)),
+    releaseWake: vi.fn(() => Promise.resolve()),
     findForDelivery: vi.fn(() => Promise.resolve(null)),
     markDelivered: vi.fn(() => Promise.resolve()),
   },
@@ -192,11 +194,11 @@ it('retains a runtime after a valid ordinary startup has reused it and finished'
   expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
 });
 
-it('passes the destination fence into notification recovery before cards are appended', async () => {
+it('passes the destination fence into notification recovery before signals are queued', async () => {
   const h = guardHarness();
-  vi.spyOn(workspaceNotificationService, 'listPendingForDelivery').mockImplementationOnce(() => {
+  vi.spyOn(workspaceNotificationService, 'claimWake').mockImplementationOnce(() => {
     h.invalidate();
-    return Promise.resolve([createPendingWorkspaceNotification()]);
+    return Promise.resolve({ workspaceId: 'workspace-1', revision: 1, claimId: 'claim-1' });
   });
   await expect(
     h.service.startSession('session-1', {

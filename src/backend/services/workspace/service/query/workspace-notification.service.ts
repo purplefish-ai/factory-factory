@@ -1,6 +1,13 @@
 import { workspaceNotificationAccessor } from '@/backend/services/workspace/resources/workspace-notification.accessor';
+import type {
+  AckMailInput,
+  ListMailInput,
+  ReadMailInput,
+  WorkspaceMailSendMetadata,
+  WorkspaceMailWakeClaim,
+} from '@/shared/workspace-mail';
 
-type NotificationInput = {
+type NotificationInput = WorkspaceMailSendMetadata & {
   workspaceId: string;
   sourceWorkspaceId: string;
   sourceWorkspaceName: string;
@@ -9,6 +16,37 @@ type NotificationInput = {
 };
 
 class WorkspaceNotificationService {
+  listMail(input: ListMailInput) {
+    return workspaceNotificationAccessor.listMail(input);
+  }
+  readMail(input: ReadMailInput) {
+    return workspaceNotificationAccessor.readMail(input);
+  }
+  ackMail(input: AckMailInput) {
+    return workspaceNotificationAccessor.ackMail(input);
+  }
+  claimWake(input: { workspaceId: string }) {
+    return workspaceNotificationAccessor.claimWake(input);
+  }
+  settleWake(input: WorkspaceMailWakeClaim) {
+    return workspaceNotificationAccessor.settleWake(input);
+  }
+  releaseWake(input: WorkspaceMailWakeClaim) {
+    return workspaceNotificationAccessor.releaseWake(input);
+  }
+  quarantineWake(input: WorkspaceMailWakeClaim) {
+    return workspaceNotificationAccessor.quarantineWake(input);
+  }
+  disarmWake(input: WorkspaceMailWakeClaim) {
+    return workspaceNotificationAccessor.disarmWake(input);
+  }
+  retryWake(input: { workspaceId: string }) {
+    return workspaceNotificationAccessor.retryWake(input);
+  }
+  nextWakeRetryAt(input: { workspaceId: string }) {
+    return workspaceNotificationAccessor.nextWakeRetryAt(input);
+  }
+
   notifyParent(data: NotificationInput) {
     return workspaceNotificationAccessor.create(data);
   }

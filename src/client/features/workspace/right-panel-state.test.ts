@@ -16,6 +16,9 @@ function memoryStorage(entries: Record<string, string> = {}): Storage {
 }
 
 describe('right panel persisted state', () => {
+  it('restores the Inbox preference', () => {
+    expect(parseStoredTopTab('inbox')).toBe('inbox');
+  });
   it('round-trips the Agents tab', () => {
     expect(parseStoredTopTab('agents')).toBe('agents');
     const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': 'agents' });

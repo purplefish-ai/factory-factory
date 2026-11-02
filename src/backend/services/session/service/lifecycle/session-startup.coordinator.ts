@@ -183,20 +183,13 @@ export class SessionStartupCoordinator {
         this.dependencies.lifecycleGate.establishStartup(lease);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
         options?.assertCurrentSync?.();
-        await dispatchStartupNotifications(
-          this.messageQueueBridge,
-          sessionId,
-          dispatchableNotificationCount,
-          options
-        );
-        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
 
         const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
-        const shouldSendInitialPrompt = this.shouldSendInitialPrompt(
-          dispatchableNotificationCount,
-          options
-        );
-        if (shouldSendInitialPrompt && initialPrompt) {
+        if (
+          initialPrompt &&
+          (dispatchableNotificationCount === 0 ||
+            (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault))
+        ) {
           const guard = startupCallerGuard(options);
           options?.assertCurrentSync?.();
           await this.dependencies.sendSessionMessage(
@@ -205,6 +198,14 @@ export class SessionStartupCoordinator {
             ...(guard ? [guard] : [])
           );
         }
+        await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
+        // Install an explicit assignment before any recovered mail can own a turn.
+        await dispatchStartupNotifications(
+          this.messageQueueBridge,
+          sessionId,
+          dispatchableNotificationCount,
+          options
+        );
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
 
         logger.info('Session started', { sessionId, provider: session.provider });
@@ -607,17 +608,13 @@ export class SessionStartupCoordinator {
     const { dispatchableCount } = await this.dependencies.notificationDelivery.recoverPending({
       sessionId,
       workspaceId: sessionContext.workspaceId,
+      preferSession: true,
       assertAllowed: () =>
         this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
+      assertAllowedSync: options.assertCurrentSync,
     });
     await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
     return { handle, dispatchableNotificationCount: dispatchableCount };
-  }
-
-  private shouldSendInitialPrompt(count: number, options?: StartSessionOptions): boolean {
-    return (
-      count === 0 || (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault)
-    );
   }
 
   private createStartupHandlers(

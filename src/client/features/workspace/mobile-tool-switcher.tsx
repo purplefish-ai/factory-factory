@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 const overflowTools = [
+  { value: 'inbox', label: 'Inbox' },
   { value: 'agents', label: 'Sessions' },
   { value: 'screenshots', label: 'Screenshots' },
   { value: 'periodic-task', label: 'Agent' },
@@ -48,6 +49,7 @@ export function MobileToolSwitcher({
       case 'changes':
       case 'files':
       case 'agents':
+      case 'inbox':
       case 'screenshots':
       case 'periodic-task':
         setActiveTopTab(value);

@@ -11,6 +11,12 @@ import {
   toWorkspaceDerivedStateInput,
 } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import {
+  ackMailInputSchema,
+  listMailInputSchema,
+  readMailInputSchema,
+  workspaceMailSendMetadataSchema,
+} from '@/shared/workspace-mail';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export const workspaceChildrenRouter = router({
@@ -103,6 +109,7 @@ export const workspaceChildrenRouter = router({
       z.object({
         childWorkspaceId: z.string(),
         message: z.string().min(1),
+        ...workspaceMailSendMetadataSchema.shape,
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -130,6 +137,7 @@ export const workspaceChildrenRouter = router({
           projectName: child.project.name,
         },
         message: input.message,
+        ...workspaceMailSendMetadataSchema.parse(input),
         buildUiEvent: ({ sourceWorkspace, message, timestamp }) => ({
           type: 'child_workspace_update',
           childWorkspaceId: sourceWorkspace.id,
@@ -147,6 +155,7 @@ export const workspaceChildrenRouter = router({
         parentWorkspaceId: z.string(),
         childWorkspaceId: z.string(),
         message: z.string().min(1),
+        ...workspaceMailSendMetadataSchema.shape,
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -179,6 +188,7 @@ export const workspaceChildrenRouter = router({
           projectName: parent.project.name,
         },
         message: input.message,
+        ...workspaceMailSendMetadataSchema.parse(input),
         buildUiEvent: ({ sourceWorkspace, message, timestamp }) => ({
           type: 'parent_workspace_update',
           parentWorkspaceId: sourceWorkspace.id,
@@ -218,6 +228,49 @@ export const workspaceChildrenRouter = router({
         input.removeGitIndexLock ? { removeGitIndexLock: true } : {},
         ctx.appContext.services
       );
+    }),
+
+  listMail: publicProcedure
+    .input(listMailInputSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceNotificationService.listMail(input)
+    ),
+
+  readMail: publicProcedure
+    .input(readMailInputSchema)
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.workspaceNotificationService.readMail(input)
+    ),
+
+  ackMail: trustedLocalProcedure.input(ackMailInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.appContext.services.workspaceNotificationService.ackMail(input);
+    // The inbox ACK is durable before attempting a new body-free wake. Recovery
+    // owns retries; do not wait for the recipient's next complete agent turn.
+    void ctx.appContext.services.recoverWorkspaceMail(input.workspaceId).catch((error: unknown) => {
+      ctx.appContext.services
+        .createLogger('workspace-mail')
+        .warn('Mail wake recovery deferred after acknowledgement', {
+          workspaceId: input.workspaceId,
+          error,
+        });
+    });
+    return result;
+  }),
+
+  retryMailWake: trustedLocalProcedure
+    .input(z.object({ workspaceId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const retried = await ctx.appContext.services.workspaceNotificationService.retryWake(input);
+      if (retried) {
+        void ctx.appContext.services
+          .recoverWorkspaceMail(input.workspaceId)
+          .catch((error: unknown) => {
+            ctx.appContext.services
+              .createLogger('workspace-mail')
+              .warn('Explicit mail retry deferred', { workspaceId: input.workspaceId, error });
+          });
+      }
+      return { retried };
     }),
 
   getPendingNotificationCount: publicProcedure

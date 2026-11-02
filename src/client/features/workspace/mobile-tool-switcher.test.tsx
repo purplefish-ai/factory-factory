@@ -36,6 +36,10 @@ describe('mobile tool navigation', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }));
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
     localStorage.clear();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -52,6 +56,7 @@ describe('mobile tool navigation', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     vi.unstubAllGlobals();
   });
 
@@ -66,6 +71,14 @@ describe('mobile tool navigation', () => {
     });
     return tab;
   }
+
+  it('restores Inbox as a selected mobile tool', () => {
+    const Story = mobileToolsStory.component;
+    act(() => root.render(<Story initialTool="inbox" />));
+    const selected = container.querySelector('[role="tab"][aria-selected="true"]');
+    expect(selected?.textContent).toBe('Inbox');
+    expect(container.textContent).toContain('inbox content');
+  });
 
   it('selects Terminal when the story argument changes after hydration', () => {
     const Story = mobileToolsStory.component;

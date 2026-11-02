@@ -12,6 +12,11 @@ const mockFindParentWorkspace = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
 const mockGetAllPendingRequests = vi.hoisted(() => vi.fn());
 const mockGetRuntimeSnapshot = vi.hoisted(() => vi.fn());
+const mockListMail = vi.hoisted(() => vi.fn());
+const mockReadMail = vi.hoisted(() => vi.fn());
+const mockAckMail = vi.hoisted(() => vi.fn());
+const mockRecoverWorkspaceMail = vi.hoisted(() => vi.fn());
+const mockRetryWake = vi.hoisted(() => vi.fn());
 
 import { workspaceChildrenRouter } from './children.trpc';
 
@@ -38,7 +43,12 @@ function createCaller(requestTrust?: {
       findChildrenWithStatus: (...args: unknown[]) => mockFindChildrenWithStatus(...args),
       findParent: (...args: unknown[]) => mockFindParentWorkspace(...args),
     },
+    recoverWorkspaceMail: (...args: unknown[]) => mockRecoverWorkspaceMail(...args),
     workspaceNotificationService: {
+      listMail: (...args: unknown[]) => mockListMail(...args),
+      readMail: (...args: unknown[]) => mockReadMail(...args),
+      ackMail: (...args: unknown[]) => mockAckMail(...args),
+      retryWake: (...args: unknown[]) => mockRetryWake(...args),
       countPending: (...args: unknown[]) => mockCountPending(...args),
     },
     sessionDomainService: {
@@ -478,4 +488,118 @@ describe('workspaceChildrenRouter', () => {
     );
     await expect(caller.getPendingNotificationCount({ workspaceId: 'parent-1' })).resolves.toBe(3);
   });
+});
+
+describe('workspace inbox routes', () => {
+  it('lists summaries with validated bounded inputs', async () => {
+    mockListMail.mockResolvedValue({ items: [], nextCursor: null, revision: 4 });
+    const { caller } = createCaller();
+    await expect(
+      caller.listMail({ workspaceId: 'recipient', cursor: 3, limit: 2, kinds: ['BLOCKER'] })
+    ).resolves.toEqual({ items: [], nextCursor: null, revision: 4 });
+    expect(mockListMail).toHaveBeenCalledWith({
+      workspaceId: 'recipient',
+      cursor: 3,
+      limit: 2,
+      kinds: ['BLOCKER'],
+      includeSuperseded: false,
+    });
+    await expect(caller.listMail({ workspaceId: 'recipient', limit: 51 })).rejects.toThrow();
+  });
+  it('reads only selected recipient IDs within a bounded budget', async () => {
+    mockReadMail.mockResolvedValue({ items: [], revision: 5 });
+    const { caller } = createCaller();
+    await caller.readMail({ workspaceId: 'recipient', ids: ['mail'], maxChars: 256, offset: 8 });
+    expect(mockReadMail).toHaveBeenCalledWith({
+      workspaceId: 'recipient',
+      ids: ['mail'],
+      maxChars: 256,
+      offset: 8,
+    });
+    await expect(
+      caller.readMail({ workspaceId: 'recipient', ids: ['mail'], maxChars: 16_385 })
+    ).rejects.toThrow();
+  });
+  it('acknowledges selected IDs and requests recovery for arrivals after the observed revision', async () => {
+    mockAckMail.mockResolvedValue({ acknowledged: 1, revision: 8 });
+    mockRecoverWorkspaceMail.mockResolvedValue(undefined);
+    const { caller } = createCaller();
+    await expect(
+      caller.ackMail({ workspaceId: 'recipient', ids: ['mail'], throughRevision: 7 })
+    ).resolves.toEqual({ acknowledged: 1, revision: 8 });
+    expect(mockAckMail).toHaveBeenCalledWith({
+      workspaceId: 'recipient',
+      ids: ['mail'],
+      throughRevision: 7,
+    });
+    expect(mockRecoverWorkspaceMail).toHaveBeenCalledWith('recipient');
+  });
+  it('rejects acknowledgement-triggered wake execution from an untrusted client', async () => {
+    mockAckMail.mockClear();
+    mockRecoverWorkspaceMail.mockClear();
+    const { caller } = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+    await expect(
+      caller.ackMail({ workspaceId: 'recipient', ids: ['mail'], throughRevision: 7 })
+    ).rejects.toThrow('trusted local Factory Factory client');
+    expect(mockAckMail).not.toHaveBeenCalled();
+    expect(mockRecoverWorkspaceMail).not.toHaveBeenCalled();
+  });
+  it('forwards typed mail metadata on existing parent/child send operations', async () => {
+    mockFindByIdWithProject.mockResolvedValueOnce(child).mockResolvedValueOnce(parent);
+    mockDeliverWorkspaceNotification.mockResolvedValue({ delivered: false });
+    const { caller } = createCaller();
+    await caller.sendMessageToChild({
+      parentWorkspaceId: 'parent-1',
+      childWorkspaceId: 'child-1',
+      message: 'Report',
+      subject: 'Ready',
+      kind: 'COMPLETION',
+      taskKey: 'audit',
+      taskRevision: 3,
+    });
+    expect(mockDeliverWorkspaceNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Report',
+        subject: 'Ready',
+        kind: 'COMPLETION',
+        taskKey: 'audit',
+        taskRevision: 3,
+      })
+    );
+  });
+});
+
+it('requires explicit trusted retry before recovering an ambiguous mail wake', async () => {
+  mockRetryWake.mockResolvedValue(true);
+  mockRecoverWorkspaceMail.mockResolvedValue({ queued: true });
+  const { caller } = createCaller();
+  await expect(caller.retryMailWake({ workspaceId: 'recipient' })).resolves.toEqual({
+    retried: true,
+  });
+  expect(mockRetryWake).toHaveBeenCalledWith({ workspaceId: 'recipient' });
+  expect(mockRecoverWorkspaceMail).toHaveBeenCalledWith('recipient');
+  mockRetryWake.mockClear();
+  const untrusted = createCaller({
+    remoteAddress: '203.0.113.10',
+    origin: 'https://attacker.example',
+    isLocal: false,
+  }).caller;
+  await expect(untrusted.retryMailWake({ workspaceId: 'recipient' })).rejects.toThrow(
+    'trusted local Factory Factory client'
+  );
+  expect(mockRetryWake).not.toHaveBeenCalled();
+});
+
+it('does not notify again when there is no ambiguous mail wake to retry', async () => {
+  mockRetryWake.mockResolvedValue(false);
+  mockRecoverWorkspaceMail.mockClear();
+  const { caller } = createCaller();
+  await expect(caller.retryMailWake({ workspaceId: 'recipient' })).resolves.toEqual({
+    retried: false,
+  });
+  expect(mockRecoverWorkspaceMail).not.toHaveBeenCalled();
 });

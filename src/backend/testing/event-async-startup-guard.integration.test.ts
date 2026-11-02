@@ -21,14 +21,12 @@ it.each([
       where: { workspaceId: workspace.id },
       data: { deliveryMode: 'DEDICATED', recipientSessionId: null },
     });
-    const notice = await db.prisma.workspaceNotification.create({
-      data: {
-        workspaceId: workspace.id,
-        sourceWorkspaceId: 'source',
-        sourceWorkspaceName: 'Source',
-        sourceProjectName: 'Fixture',
-        message: 'Recovered dedicated update',
-      },
+    const notice = await h.workspace.workspaceNotificationService.notifyParent({
+      workspaceId: workspace.id,
+      sourceWorkspaceId: 'source',
+      sourceWorkspaceName: 'Source',
+      sourceProjectName: 'Fixture',
+      message: 'Recovered dedicated update',
     });
     const { createDefaultApplicationDependencies } =
       await vi.importActual<typeof import('@/backend/app-context')>('@/backend/app-context');
@@ -51,7 +49,7 @@ it.each([
       async function (this: InstanceType<typeof SessionConfigService>, id, ...args) {
         targetId = id;
         baselineConfig = providers[2]!.connection.setSessionConfigOption.mock.calls.length;
-        expect(args[0].timestamp).toBe(notice.createdAt.toISOString());
+        expect(args[0].timestamp).toEqual(expect.any(String));
         await held.wait();
         return configure.call(this, id, ...args);
       }
@@ -99,10 +97,16 @@ it.each([
       expect(result).toBeNull();
     } else {
       expect(result?.id).toBe(targetId);
+      const prompt = JSON.stringify(providers[2]!.connection.prompt.mock.calls[0]);
+      expect(prompt).toContain(`workspace-mail-wake-${workspace.id}:${notice.revision}`);
+      expect(prompt).toContain('You have workspace mail');
+      expect(prompt).not.toContain('Recovered dedicated update');
     }
     expect(
-      (await db.prisma.workspaceNotification.findUniqueOrThrow({ where: { id: notice.id } }))
-        .deliveredAt
-    ).toEqual(revoked ? null : expect.any(Date));
+      await db.prisma.workspaceNotification.findUniqueOrThrow({ where: { id: notice.id } })
+    ).toMatchObject({ deliveredAt: null, acknowledgedAt: null });
+    expect(
+      await db.prisma.workspaceMailState.findUniqueOrThrow({ where: { workspaceId: workspace.id } })
+    ).toMatchObject({ notifiedRevision: revoked ? 0 : notice.revision });
   }
 );

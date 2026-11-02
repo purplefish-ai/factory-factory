@@ -21,7 +21,7 @@ import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import type { AcpClientCreationOperation } from './acp-runtime-quiescence';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
-import { AcpSteeringTimeoutError, steerAcpPrompt } from './acp-steering';
+import { AcpSteeringNotSentError, AcpSteeringTimeoutError, steerAcpPrompt } from './acp-steering';
 import { AcpSubagentBrowser } from './acp-subagent-browser';
 import { stopAcpTarget } from './acp-targeted-stop';
 import type { AcpClientOptions } from './types';
@@ -264,7 +264,8 @@ export class AcpRuntimeManager {
   /** Adds input to the active turn while its original prompt keeps owning completion. */
   async steerSession(
     sessionId: string,
-    prompt: ContentBlock[]
+    prompt: ContentBlock[],
+    options?: { preserveRuntimeOnTimeout?: boolean; onLateInjected?: () => Promise<void> }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
     const handle = this.supervisor.getInstalledHandle(sessionId);
     if (!handle?.isPromptInFlight) {
@@ -276,13 +277,18 @@ export class AcpRuntimeManager {
       !handle.isRunning() ||
       handle.configurationReady !== undefined
     ) {
-      throw new Error(`ACP session is not ready for steering: ${sessionId}`);
+      throw new AcpSteeringNotSentError(`ACP session is not ready for steering: ${sessionId}`);
     }
     try {
-      return await steerAcpPrompt(handle, prompt);
+      return await steerAcpPrompt(handle, prompt, options);
     } catch (error) {
+      if (error instanceof AcpSteeringTimeoutError && options?.preserveRuntimeOnTimeout) {
+        error.message =
+          'Mail signal steering acknowledgment timed out. The active turn continues and the signal remains queued.';
+      }
       if (
         error instanceof AcpSteeringTimeoutError &&
+        !options?.preserveRuntimeOnTimeout &&
         this.supervisor.isCurrentHandle(sessionId, handle)
       ) {
         // A timed-out request may still be accepted. Kill this incarnation before

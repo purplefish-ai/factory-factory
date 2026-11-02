@@ -236,7 +236,11 @@ export async function collectDispatchBatch(input: {
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
   try {
     for (const message of snapshot.slice(1)) {
-      if (!input.isCurrent() || isCommand(message)) {
+      if (
+        !input.isCurrent() ||
+        isCommand(message) ||
+        input.notifications.isMailSignalQuarantined?.(message.id)
+      ) {
         break;
       }
       // One PR claim already covers all pending facts for this conversation.

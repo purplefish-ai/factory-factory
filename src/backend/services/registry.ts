@@ -14,6 +14,7 @@ export const prismaModelNames = [
 
   'WorkspaceRunScript',
   'WorkspaceNotification',
+  'WorkspaceMailState',
   'CodexAccount',
   'AgentSession',
   'AgentSessionLaunchOrigin',
@@ -164,6 +165,7 @@ export const serviceRegistry = {
 
       'WorkspaceRunScript',
       'WorkspaceNotification',
+      'WorkspaceMailState',
     ],
   },
   terminal: {

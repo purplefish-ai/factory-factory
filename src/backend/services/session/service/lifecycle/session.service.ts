@@ -73,7 +73,8 @@ export class SessionService {
 
   async steerSessionMessage(
     sessionId: string,
-    content: string | AgentContentItem[]
+    content: string | AgentContentItem[],
+    options?: { preserveRuntimeOnTimeout?: boolean; onLateInjected?: () => Promise<void> }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
     if (this.eventAuthority) {
@@ -85,7 +86,7 @@ export class SessionService {
       typeof content === 'string'
         ? [{ type: 'text' as const, text: content }]
         : this.toContentBlocks(content, client?.supportsImages() ?? false);
-    return this.runtimeManager.steerSession(sessionId, prompt);
+    return this.runtimeManager.steerSession(sessionId, prompt, ...(options ? [options] : []));
   }
 
   async sendSessionMessage(

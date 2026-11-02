@@ -90,6 +90,7 @@ export {
   sessionDispatchService,
   sessionLifecycleEventService,
   sessionLifecycleService,
+  sessionNotificationDeliveryService,
   sessionPermissionService,
   sessionPromptTurnCompletionService,
   sessionRetryService,

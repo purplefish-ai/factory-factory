@@ -25,14 +25,21 @@ async function callToolWithHttpResponse(options: {
     | 'archive_child_workspace'
     | 'propose_agent'
     | 'list_agent_sources'
-    | 'get_agent_proposal';
+    | 'get_agent_proposal'
+    | 'list_mail'
+    | 'read_mail'
+    | 'ack_mail'
+    | 'send_message_to_child';
+  parentWorkspaceId?: string | null;
   toolArguments?: Record<string, unknown>;
 }): Promise<{
   requestBody: unknown;
   requestMethod: string | undefined;
+  requestUrl: string | undefined;
   response: ToolResponse;
 }> {
   let requestMethod: string | undefined;
+  let requestUrl: string | undefined;
   let requestBody: unknown;
   const server = createServer((req, res) => {
     if (req.url?.startsWith('/api/trpc/userSettings.get')) {
@@ -51,6 +58,7 @@ async function callToolWithHttpResponse(options: {
       return;
     }
     requestMethod = req.method;
+    requestUrl = req.url;
     let rawBody = '';
     req.setEncoding('utf8');
     req.on('data', (chunk) => {
@@ -73,7 +81,7 @@ async function callToolWithHttpResponse(options: {
     const config = getChildWorkspaceMcpServerConfig({
       nodeExecPath: process.execPath,
       workspaceId: 'parent-workspace',
-      parentWorkspaceId: null,
+      parentWorkspaceId: options.parentWorkspaceId ?? null,
       apiBaseUrl: `http://127.0.0.1:${address.port}`,
     });
     const child = spawn(config.command, config.args, {
@@ -115,6 +123,7 @@ async function callToolWithHttpResponse(options: {
     return {
       requestBody,
       requestMethod,
+      requestUrl,
       response: toolResponseSchema.parse(JSON.parse(stdout.trim())),
     };
   } finally {
@@ -417,6 +426,9 @@ it.each([
                 'send_message_to_child',
                 'archive_child_workspace',
               ]),
+        'list_mail',
+        'read_mail',
+        'ack_mail',
         'list_agent_sources',
         'propose_agent',
         'get_agent_proposal',
@@ -436,3 +448,94 @@ it.each([
     }
   }
 );
+
+it.each([null, 'root-workspace'])(
+  'scopes bounded mail listing to MCP workspace (parent=%s)',
+  async (parentWorkspaceId) => {
+    const { requestMethod, requestUrl, response } = await callToolWithHttpResponse({
+      status: 200,
+      parentWorkspaceId,
+      toolName: 'list_mail',
+      childWorkspacesEnabled: false,
+      toolArguments: { workspaceId: 'spoofed-workspace', limit: 2, cursor: 7 },
+      body: { result: { data: { json: { items: [], nextCursor: null, revision: 8 } } } },
+    });
+    expect(requestMethod).toBe('GET');
+    const url = new URL(requestUrl!, 'http://localhost');
+    expect(url.pathname).toBe('/api/trpc/workspace.listMail');
+    expect(JSON.parse(url.searchParams.get('input')!)).toEqual({
+      json: { workspaceId: 'parent-workspace', limit: 2, cursor: 7, includeSuperseded: false },
+    });
+    expect(JSON.parse(response.result.content[0]!.text)).toEqual({
+      items: [],
+      nextCursor: null,
+      revision: 8,
+      wakeAmbiguous: false,
+    });
+  }
+);
+
+it('reads selected mail through the recipient-scoped bounded endpoint', async () => {
+  const { requestMethod, requestBody, response } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'read_mail',
+    toolArguments: { workspaceId: 'spoofed', ids: ['mail-1'], offset: 8, maxChars: 256 },
+    body: { result: { data: { json: { items: [], revision: 9 } } } },
+  });
+  expect(requestMethod).toBe('POST');
+  expect(requestBody).toEqual({
+    json: { workspaceId: 'parent-workspace', ids: ['mail-1'], offset: 8, maxChars: 256 },
+  });
+  expect(response.result.isError).not.toBe(true);
+});
+
+it('acknowledges exact mail IDs at the observed revision', async () => {
+  const { requestBody } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'ack_mail',
+    toolArguments: { workspaceId: 'spoofed', ids: ['mail-1'], throughRevision: 9 },
+    body: { result: { data: { json: { acknowledged: 1, revision: 10 } } } },
+  });
+  expect(requestBody).toEqual({
+    json: { workspaceId: 'parent-workspace', ids: ['mail-1'], throughRevision: 9 },
+  });
+});
+
+it('describes send acceptance as persisted mail rather than live delivery', async () => {
+  const { requestBody, response } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'send_message_to_child',
+    toolArguments: {
+      childWorkspaceId: 'child-1',
+      message: 'Full report',
+      subject: 'Ready',
+      kind: 'COMPLETION',
+      taskKey: 'audit',
+      taskRevision: 3,
+    },
+    body: { result: { data: { json: { delivered: false, persisted: true, queued: true } } } },
+  });
+  expect(requestBody).toEqual({
+    json: {
+      parentWorkspaceId: 'parent-workspace',
+      childWorkspaceId: 'child-1',
+      message: 'Full report',
+      subject: 'Ready',
+      kind: 'COMPLETION',
+      taskKey: 'audit',
+      taskRevision: 3,
+    },
+  });
+  expect(response.result.content[0]!.text).toBe('Mail persisted in child workspace inbox.');
+});
+
+it('does not claim persisted mail when the backend could not store it', async () => {
+  const { response } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'send_message_to_child',
+    toolArguments: { childWorkspaceId: 'child-1', message: 'Report' },
+    body: { result: { data: { json: { delivered: false } } } },
+  });
+  expect(response.result.isError).toBe(true);
+  expect(response.result.content[0]?.text).toContain('not persisted');
+});

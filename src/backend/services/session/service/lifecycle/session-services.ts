@@ -39,6 +39,7 @@ export {
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleService,
+  sessionNotificationDeliveryService,
   sessionPermissionService,
   sessionPromptTurnCompletionService,
   sessionRetryService,
