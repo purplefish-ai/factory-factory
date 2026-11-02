@@ -44,14 +44,16 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
           lastCheckedAt: iso(workspace.prMonitoring.lastCheckedAt),
         })
       : null,
-    prEvents: workspace.prEvents.map((event) =>
-      prEventBackupSchema.parse({
-        ...event,
-        claimedAt: iso(event.claimedAt),
-        deliveredAt: iso(event.deliveredAt),
-        createdAt: event.createdAt.toISOString(),
-      })
-    ),
+    prEvents: workspacePRMonitoringService
+      .exportEvents(workspace.prEvents, workspace.prDeliveries ?? [])
+      .map(({ batchId: _batchId, ...event }) =>
+        prEventBackupSchema.parse({
+          ...event,
+          claimedAt: iso(event.claimedAt),
+          deliveredAt: iso(event.deliveredAt),
+          createdAt: event.createdAt.toISOString(),
+        })
+      ),
   };
 }
 async function restoreDedicatedBindings(

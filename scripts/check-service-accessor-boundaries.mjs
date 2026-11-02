@@ -147,6 +147,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor',
   },
+  workspacePrDeliveryReadAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor',
+  },
   workspacePrEventAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-event.accessor',

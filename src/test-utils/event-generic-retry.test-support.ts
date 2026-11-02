@@ -244,3 +244,11 @@ export async function readyRetryPRFixture() {
   }
   return { other, workspace, guard, port };
 }
+
+/** Read the compatibility ledger from the normalized frozen effect owner. */
+export async function readPRDeliveryEvents(workspaceId: string) {
+  return h.workspace.workspacePRMonitoringService.projectEvents(
+    await db.prisma.workspacePREvent.findMany({ where: { workspaceId } }),
+    await db.prisma.workspacePRDelivery.findMany({ where: { workspaceId } })
+  );
+}

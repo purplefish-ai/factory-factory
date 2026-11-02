@@ -85,7 +85,10 @@ describe('workspaceAccessor', () => {
             select: {
               prEvents: {
                 where: {
-                  state: { in: ['PENDING', 'DISPATCHING'] },
+                  OR: [
+                    { batchId: null, state: { in: ['PENDING', 'DISPATCHING'] } },
+                    { batch: { state: { in: ['PENDING', 'DISPATCHING', 'BLOCKED'] } } },
+                  ],
                   prId: { not: null },
                   pr: { detachedAt: null },
                 },
@@ -122,7 +125,10 @@ describe('workspaceAccessor', () => {
             select: {
               prEvents: {
                 where: {
-                  state: { in: ['PENDING', 'DISPATCHING'] },
+                  OR: [
+                    { batchId: null, state: { in: ['PENDING', 'DISPATCHING'] } },
+                    { batch: { state: { in: ['PENDING', 'DISPATCHING', 'BLOCKED'] } } },
+                  ],
                   prId: { not: null },
                   pr: { detachedAt: null },
                 },
@@ -176,7 +182,10 @@ describe('workspaceAccessor', () => {
           select: {
             prEvents: {
               where: {
-                state: { in: ['PENDING', 'DISPATCHING'] },
+                OR: [
+                  { batchId: null, state: { in: ['PENDING', 'DISPATCHING'] } },
+                  { batch: { state: { in: ['PENDING', 'DISPATCHING', 'BLOCKED'] } } },
+                ],
                 prId: { not: null },
                 pr: { detachedAt: null },
               },

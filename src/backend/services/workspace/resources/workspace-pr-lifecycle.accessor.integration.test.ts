@@ -20,6 +20,16 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 let db: IntegrationDatabase;
+async function readEvent(id: string) {
+  const row = await db.prisma.workspacePREvent.findUnique({ where: { id } });
+  if (!row) {
+    return null;
+  }
+  return workspacePrEventAccessor.projectEvents(
+    [row],
+    await db.prisma.workspacePRDelivery.findMany()
+  )[0];
+}
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
@@ -159,7 +169,7 @@ it('detach cancels unclaimed pending events and removes them from every pending 
     },
   });
   await workspacePrAccessor.detach({ workspaceId: 'w', prId: 'p' });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+  expect(await readEvent('event')).toMatchObject({
     state: 'CANCELLED',
   });
   expect(await workspaceRatchetAccessor.findSnapshotProjection('w')).toMatchObject({
@@ -281,9 +291,7 @@ it('does not preserve explicitly resolved reviews when merging incomplete observ
   });
   const row = await workspacePrAccessor.findByIdentity({ workspaceId: 'w', prId: 'p' });
   expect(row?.observation).toMatchObject({ actionableReviews: [] });
-  expect(
-    await db.prisma.workspacePREvent.findUnique({ where: { id: 'pending-review' } })
-  ).toMatchObject({ state: 'SUPERSEDED' });
+  expect(await readEvent('pending-review')).toMatchObject({ state: 'SUPERSEDED' });
 });
 
 it('records conflict clearance while its detection delivery is frozen in flight', async () => {
@@ -358,7 +366,7 @@ it('keeps events unclaimed until the recipient has a provider conversation ident
     text: 'frozen',
   };
   expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toBeNull();
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+  expect(await readEvent(event.id)).toMatchObject({
     state: 'PENDING',
     attempts: 0,
     deliveryId: null,
@@ -372,7 +380,7 @@ it('keeps events unclaimed until the recipient has a provider conversation ident
   expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toMatchObject({
     attempt: 1,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+  expect(await readEvent(event.id)).toMatchObject({
     state: 'DISPATCHING',
     attempts: 1,
     deliveryProviderSessionId: 'conversation',
@@ -415,7 +423,7 @@ it('preserves a newer user stop when the resume guard expires before its transac
     deliveryPauseReason: 'USER_STOPPED',
     bindingRevision: 4,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'retry' } })).toMatchObject({
+  expect(await readEvent('retry')).toMatchObject({
     attempts: 3,
   });
 });
