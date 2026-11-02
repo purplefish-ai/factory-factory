@@ -246,6 +246,107 @@ describe('due periodic tasks through shared dispatch', () => {
     }
   );
 
+  it('dispatches the canonical prompt and name when edited after the due read', async () => {
+    const stale = await createTask();
+    const read = deferred<void>();
+    const resume = deferred<void>();
+    vi.spyOn(db.prisma.periodicTask, 'findMany').mockImplementationOnce(() => {
+      read.resolve();
+      return unsafeCoerce<ReturnType<typeof db.prisma.periodicTask.findMany>>(
+        resume.promise.then(() => [stale])
+      );
+    });
+    configure(async () => {
+      // Editing after reservation must not replace the admitted configuration.
+      await service.update(stale.id, { name: 'Later name', prompt: 'Later prompt' });
+      return {
+        workspace: await db.prisma.workspace.create({
+          data: { projectId: 'project', name: 'Admitted', periodicTaskId: stale.id },
+        }),
+      };
+    });
+    const cycle = runCycle();
+    await read.promise;
+    await service.update(stale.id, { name: 'Current name', prompt: 'Current prompt' });
+    resume.resolve();
+    await cycle;
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        name: expect.stringContaining('Current name'),
+        prompt: 'Current prompt',
+      }),
+    ]);
+    const history = await service.listExecutions(stale.id);
+    expect(history[0]).toMatchObject({
+      launchSnapshot: expect.objectContaining({
+        version: 1,
+        projectId: 'project',
+        prompt: 'Current prompt',
+        name: events[0]?.name,
+        cadence: 'DAILY',
+        dueAt: stale.nextRunAt.toISOString(),
+      }),
+    });
+  });
+
+  it('defers a calendar edit made while the due read is paused', async () => {
+    const stale = await createTask();
+    const read = deferred<void>();
+    const resume = deferred<void>();
+    vi.spyOn(db.prisma.periodicTask, 'findMany').mockImplementationOnce(() => {
+      read.resolve();
+      return unsafeCoerce<ReturnType<typeof db.prisma.periodicTask.findMany>>(
+        resume.promise.then(() => [stale])
+      );
+    });
+    const launch = vi.fn();
+    configure(launch);
+    const cycle = runCycle();
+    await read.promise;
+    const edited = await service.update(stale.id, {
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+    });
+    resume.resolve();
+    await cycle;
+
+    expect(events).toEqual([]);
+    expect(launch).not.toHaveBeenCalled();
+    expect(await service.listExecutions(stale.id)).toEqual([]);
+    expect(await service.get(stale.id)).toMatchObject({
+      nextRunAt: edited.nextRunAt,
+      lastRunAt: null,
+    });
+  });
+
+  it('does not relaunch after workspace creation succeeds but linking fails', async () => {
+    const task = await createTask();
+    configure(async () => ({
+      workspace: await db.prisma.workspace.create({
+        data: { projectId: 'project', name: 'Admitted', periodicTaskId: task.id },
+      }),
+    }));
+    vi.spyOn(db.prisma.periodicTaskExecution, 'update').mockRejectedValueOnce(
+      new Error('link failed')
+    );
+    await runCycle();
+    expect(await service.listExecutions(task.id)).toEqual([
+      expect.objectContaining({
+        status: 'RUNNING',
+        workspaceId: null,
+        launchSnapshot: expect.any(Object),
+      }),
+    ]);
+    service = new PeriodicTaskService(logger);
+    configure(() => Promise.reject(new Error('Must not replay')));
+    await runCycle();
+    expect(events).toHaveLength(1);
+    expect(await db.prisma.workspace.count()).toBe(1);
+    expect(await db.prisma.periodicTaskExecution.count()).toBe(1);
+  });
+
   it('never replays an unlinked reservation on restart and fails it only after 15 minutes', async () => {
     const task = await createTask();
     const startedAt = new Date();
