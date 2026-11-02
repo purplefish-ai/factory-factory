@@ -113,7 +113,7 @@ export class SessionChatIntentService {
         validateAttachment(attachment);
       }
       await this.hydrateLocked(sessionId);
-      const record = await this.store.accept(
+      const { created, ...record } = await this.store.accept(
         sessionId,
         message,
         this.domain.getQueueLength(sessionId) >= SERVICE_LIMITS.sessionStoreMaxQueueSize
@@ -131,18 +131,30 @@ export class SessionChatIntentService {
       if (this.isStaged(sessionId, message.id)) {
         return { ...record, position: 0 };
       }
-      try {
-        const result = this.domain.enqueue(sessionId, record.message);
-        if ('error' in result) {
-          throw new Error(result.error);
-        }
-        return { ...record, position: result.position };
-      } catch (error) {
-        await this.cancelLocked(sessionId, message.id);
-        this.domain.removeQueuedMessage(sessionId, message.id, { expectedMessage: record.message });
-        throw error;
-      }
+      return this.projectAccepted(sessionId, record, created);
     });
+  }
+
+  private async projectAccepted(
+    sessionId: string,
+    record: IntentRecord,
+    created: boolean
+  ): Promise<IntentRecord & { position: number }> {
+    try {
+      const result = this.domain.enqueue(sessionId, record.message);
+      if ('error' in result) {
+        throw new Error(result.error);
+      }
+      return { ...record, position: result.position };
+    } catch (error) {
+      if (created) {
+        await this.cancelLocked(sessionId, record.message.id);
+        this.domain.removeQueuedMessage(sessionId, record.message.id, {
+          expectedMessage: record.message,
+        });
+      }
+      throw error;
+    }
   }
 
   hasAccepted(sessionId: string, messageId: string): Promise<boolean> {

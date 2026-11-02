@@ -909,17 +909,17 @@ export class SessionConfigService {
       runtimeManager: this.runtimeManager,
       catalog: this.codexModelCatalogService,
       persistSnapshot: this.persistAcpConfigSnapshot.bind(this),
-      beforePersist: (config) => this.queuedSettings.persistBeforePublication(sessionId, config),
       accept: (assertCurrent) => this.configAuthority.accept(sessionId, assertCurrent),
     });
     if (!update) {
       return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
     }
+    await this.queuedSettings.persistBeforePublication(sessionId, update);
     if (
       this.runtimeManager.getClient(sessionId) ||
       this.runtimeManager.getPendingClient?.(sessionId) !== undefined
     ) {
-      return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return update;
     }
     if (!update.accepted.isCurrent()) {
       return;

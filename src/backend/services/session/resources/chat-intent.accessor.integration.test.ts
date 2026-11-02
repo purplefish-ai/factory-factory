@@ -61,6 +61,8 @@ it('concurrent identical acceptance records one immutable payload including atta
     Array.from({ length: 4 }, () => store.accept('s', message(), false))
   );
   expect(results.every((r) => r.status === 'queued')).toBe(true);
+  expect(results.filter((r) => r.created)).toHaveLength(1);
+  expect(results.filter((r) => !r.created)).toHaveLength(3);
   expect(await db.prisma.chatIntent.count()).toBe(1);
   expect((await store.accept('s', message(), true)).status).toBe('queued');
   expect((await store.read('s'))[0]?.message.attachments?.[0]?.data).toBe('durable');
