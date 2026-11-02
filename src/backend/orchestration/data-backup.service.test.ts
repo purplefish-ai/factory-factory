@@ -61,10 +61,10 @@ const mockTx = vi.hoisted(() => ({
     create: vi.fn(),
   },
 }));
-vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
-  withBackupSnapshot: (_source: unknown, read: (tx: typeof mockTx) => Promise<unknown>) =>
-    read(mockTx),
-}));
+vi.mock('@/backend/services/settings/resources/backup-snapshot', () => {
+  const run = (_: unknown, work: (tx: typeof mockTx) => Promise<unknown>) => work(mockTx);
+  return { withBackupSnapshot: run, withBackupImport: run };
+});
 vi.mock('@/backend/db', () => ({
   prisma: {
     project: {

@@ -65,9 +65,9 @@ it('rejects forged model coverage values before opening the import transaction',
     reason: 'Everything is backed up',
   };
   await clear();
-  const transaction = vi.spyOn(db.prisma, '$transaction');
+  const connectionLookup = vi.spyOn(db.prisma, '$queryRaw');
   await expect(dataBackupService.importData(backup)).rejects.toThrow(/coverage/);
-  expect(transaction).not.toHaveBeenCalled();
+  expect(connectionLookup).not.toHaveBeenCalled();
 });
 it('rejects a grandchild graph with a validation error before any destination writes', async () => {
   const backup = await dataBackupService.exportData('test');
@@ -77,11 +77,11 @@ it('rejects a grandchild graph with a validation error before any destination wr
     { ...parent, id: 'grandchild', parentWorkspaceId: 'child' }
   );
   await clear();
-  const transaction = vi.spyOn(db.prisma, '$transaction');
+  const connectionLookup = vi.spyOn(db.prisma, '$queryRaw');
   await expect(dataBackupService.importData(backup)).rejects.toMatchObject({
     code: 'INVALID_INPUT',
   });
-  expect(transaction).not.toHaveBeenCalled();
+  expect(connectionLookup).not.toHaveBeenCalled();
 });
 it.each(['reservedWorkspaceId', 'workspaceId'] as const)(
   'rejects launch origins contradicting retained run %s',
@@ -227,4 +227,13 @@ it('accepts historical coverage reason wording without trusting it as the curren
   expect((await dataBackupService.exportData('test')).meta.recovery!.models.Project!.reason).toBe(
     reason
   );
+});
+
+it('observes the source database lookup when a valid import opens its private writer', async () => {
+  const backup = await dataBackupService.exportData('test');
+  await clear();
+  const connectionLookup = vi.spyOn(db.prisma, '$queryRaw');
+  await dataBackupService.importData(backup);
+  expect(connectionLookup).toHaveBeenCalledTimes(1);
+  expect(connectionLookup.mock.calls[0]?.[0]).toEqual(['PRAGMA database_list']);
 });

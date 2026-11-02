@@ -341,19 +341,26 @@ copying SQLite files, or use SQLite's backup API; copying a live database alone
 can omit WAL transactions. Preserve external account homes and repository files
 separately when those are needed; the logical package does not restore them.
 
-Import persists the graph atomically. A colliding project must match repository
-identity before descendants can attach. Existing workspace IDs are skipped with
-their imported descendants; no imported child/session borrows a local workspace
-by ID alone. Version 8 rejects missing required foreign-key parents, ownership
-mismatches, duplicate identities and workspace cycles before writing. Retained
-non-FK origins and deleted child/session references may still outlive their
-source rows. A run with a retained launch reservation already owned by a local
-run is skipped with its dependent history. A source page or baseline ID
-collision skips the imported connection and its complete source graph; partial
-proof is never attached to local source state. Every human member of an
-uncertain frozen prompt attempt must retain an uncertain intent in the same
-session, so explicit recovery can resolve the complete attempt. Legacy packages
-retain their earlier skip behavior.
+Import persists the graph atomically on a private write connection; ordinary
+application writes cannot join its transaction or be rolled back by its failure.
+SQLite contention or a stale import snapshot returns `CONFLICT` after rolling
+back the entire import. Explicitly retry the whole package on a fresh snapshot;
+there is no automatic replay of imported effects. Connection cleanup preserves
+the primary operation error if closing the connection also fails.
+
+A colliding project must match repository identity before descendants can
+attach. Existing workspace IDs are skipped with their imported descendants; no
+imported child/session borrows a local workspace by ID alone. Version 8 rejects
+missing required foreign-key parents, ownership mismatches, duplicate identities
+and workspace cycles before writing. Retained non-FK origins and deleted
+child/session references may still outlive their source rows. A run with a
+retained launch reservation already owned by a local run is skipped with its
+dependent history. A source page or baseline ID collision skips the imported
+connection and its complete source graph; partial proof is never attached to
+local source state. Every human member of an uncertain frozen prompt attempt
+must retain an uncertain intent in the same session, so explicit recovery can
+resolve the complete attempt. Legacy packages retain their earlier skip
+behavior.
 
 Generic decision-history IDs are reserved across sessions, agent definitions and
 runs. An imported owner is skipped if its ID belongs to any local owner or

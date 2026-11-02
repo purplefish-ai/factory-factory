@@ -49,6 +49,8 @@ vi.mock('@/backend/db', () => ({ prisma: { $transaction: state.transaction } }))
 vi.mock('./backup-snapshot', () => ({
   withBackupSnapshot: (_source: unknown, read: Parameters<typeof state.transaction>[0]) =>
     state.transaction(read),
+  withBackupImport: (_source: unknown, read: Parameters<typeof state.transaction>[0]) =>
+    state.transaction(read),
 }));
 import { dataBackupAccessor } from './data-backup.accessor';
 it('includes account identity metadata in the relational snapshot transaction', async () => {

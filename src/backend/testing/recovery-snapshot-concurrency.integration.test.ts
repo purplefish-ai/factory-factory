@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { withBackupImport } from '@/backend/services/settings/resources/backup-snapshot';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -10,6 +11,7 @@ import { PrismaClient } from '@prisma-gen/client';
 
 const state = vi.hoisted(() => ({
   prisma: undefined as unknown,
+  onProjectWrite: undefined as (() => Promise<void>) | undefined,
   onProjectRead: undefined as
     | ((tryReaderWrite: () => Promise<unknown>) => Promise<void>)
     | undefined,
@@ -34,6 +36,9 @@ vi.mock('@prisma/adapter-better-sqlite3', async (importOriginal) => {
                 })
               );
             }
+            if (query.sql.trimStart().startsWith('INSERT') && query.sql.includes('Project')) {
+              await state.onProjectWrite?.();
+            }
             return result;
           };
         };
@@ -57,6 +62,10 @@ vi.mock('@/backend/db', () => ({
     return state.prisma;
   },
 }));
+afterEach(() => {
+  state.onProjectRead = undefined;
+  state.onProjectWrite = undefined;
+});
 let db: IntegrationDatabase;
 let writer: PrismaClient;
 beforeAll(async () => {
@@ -182,4 +191,92 @@ it('enforces a physically read-only snapshot connection', async () => {
   await dataBackupService.exportData('test');
   state.onProjectRead = undefined;
   expect(checked).toBe(true);
+});
+
+async function incomingBackup(id: string) {
+  state.prisma = db.prisma;
+  await db.prisma.project.create({
+    data: { id, name: id, slug: id, repoPath: `/${id}`, worktreeBasePath: `/${id}-trees` },
+  });
+  const backup = await dataBackupService.exportData('test');
+  await db.prisma.project.delete({ where: { id } });
+  return backup;
+}
+function createOrdinaryProject(id: string) {
+  return db.prisma.project.create({
+    data: { id, name: id, slug: id, repoPath: `/${id}`, worktreeBasePath: `/${id}-trees` },
+  });
+}
+it('keeps an accepted ordinary write when the import later fails before its first write', async () => {
+  const backup = await incomingBackup('import-read-failure');
+  let accepted = false;
+  state.onProjectRead = async () => {
+    state.onProjectRead = undefined;
+    await createOrdinaryProject('accepted-during-import-failure');
+    accepted = true;
+    throw new Error('Injected import read failure');
+  };
+  await expect(dataBackupService.importData(backup)).rejects.toThrow(
+    'Injected import read failure'
+  );
+  expect(accepted).toBe(true);
+  expect(await db.prisma.project.count({ where: { id: 'accepted-during-import-failure' } })).toBe(
+    1
+  );
+  expect(await db.prisma.project.count({ where: { id: 'import-read-failure' } })).toBe(0);
+});
+it('rolls back only import rows and rejects a competing ordinary writer while holding the write lock', async () => {
+  const backup = await incomingBackup('import-write-failure');
+  await db.prisma.$executeRaw`PRAGMA busy_timeout = 0`;
+  let checked = false;
+  state.onProjectWrite = async () => {
+    state.onProjectWrite = undefined;
+    checked = true;
+    await expect(createOrdinaryProject('rejected-competing-write')).rejects.toMatchObject({
+      code: 'P1008',
+    });
+    throw new Error('Injected import write failure');
+  };
+  try {
+    await expect(dataBackupService.importData(backup)).rejects.toThrow(
+      'Injected import write failure'
+    );
+  } finally {
+    await db.prisma.$executeRaw`PRAGMA busy_timeout = 5000`;
+  }
+  expect(checked).toBe(true);
+  expect(await db.prisma.project.count({ where: { id: 'rejected-competing-write' } })).toBe(0);
+  expect(await db.prisma.project.count({ where: { id: 'import-write-failure' } })).toBe(0);
+});
+it('fails closed on a changed import snapshot, preserves the accepted writer and permits explicit retry', async () => {
+  const backup = await incomingBackup('import-retry');
+  state.onProjectRead = async () => {
+    state.onProjectRead = undefined;
+    await createOrdinaryProject('accepted-before-import-write');
+  };
+  await expect(dataBackupService.importData(backup)).rejects.toMatchObject({ code: 'CONFLICT' });
+  expect(await db.prisma.project.count({ where: { id: 'accepted-before-import-write' } })).toBe(1);
+  expect(await db.prisma.project.count({ where: { id: 'import-retry' } })).toBe(0);
+  await dataBackupService.importData(backup);
+  expect(await db.prisma.project.count({ where: { id: 'import-retry' } })).toBe(1);
+});
+
+it('preserves production connection pragmas on the private writer and commits its writes', async () => {
+  await withBackupImport(db.prisma, async (tx) => {
+    await expect(tx.$queryRaw`PRAGMA busy_timeout`).resolves.toEqual([{ timeout: 5000n }]);
+    await expect(tx.$queryRaw`PRAGMA journal_mode`).resolves.toEqual([{ journal_mode: 'wal' }]);
+    await expect(tx.$queryRaw`PRAGMA synchronous`).resolves.toEqual([{ synchronous: 1n }]);
+    await expect(tx.$queryRaw`PRAGMA temp_store`).resolves.toEqual([{ temp_store: 2n }]);
+    await expect(tx.$queryRaw`PRAGMA cache_size`).resolves.toEqual([{ cache_size: -65_536n }]);
+    await tx.project.create({
+      data: {
+        id: 'private-writer-committed',
+        name: 'Private commit',
+        slug: 'private-writer-committed',
+        repoPath: '/private',
+        worktreeBasePath: '/private-trees',
+      },
+    });
+  });
+  expect(await db.prisma.project.count({ where: { id: 'private-writer-committed' } })).toBe(1);
 });
