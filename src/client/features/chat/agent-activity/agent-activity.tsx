@@ -74,18 +74,7 @@ function PRUpdateMessageItem({
   );
 }
 
-function QueuedMessageSteerAction({
-  message,
-  isQueued,
-  onSteer,
-}: Pick<MessageItemProps, 'message' | 'isQueued' | 'onSteer'>) {
-  if (
-    !(isQueued && onSteer) ||
-    message.id.startsWith('workspace-notification-') ||
-    message.text?.trimStart().startsWith('/')
-  ) {
-    return null;
-  }
+function QueuedMessageSteerAction({ onSteer }: { onSteer: () => void }) {
   return (
     <button
       onClick={onSteer}
@@ -111,7 +100,14 @@ function QueuedMessageActions({
   onRemove,
   onSteer,
 }: Pick<MessageItemProps, 'message' | 'isQueued' | 'onRemove' | 'onSteer'>) {
-  const hasQueuedActions = isQueued && Boolean(onSteer || onRemove);
+  const steer =
+    isQueued &&
+    onSteer &&
+    !message.id.startsWith('workspace-notification-') &&
+    !message.text?.trimStart().startsWith('/')
+      ? onSteer
+      : undefined;
+  const hasQueuedActions = isQueued && Boolean(steer || onRemove);
   // Keep the row mounted with a stable inner height while it collapses.
   return (
     <div
@@ -120,11 +116,11 @@ function QueuedMessageActions({
         gridTemplateRows: hasQueuedActions ? '1fr' : '0fr',
         opacity: hasQueuedActions ? 1 : 0,
       }}
-      inert={!isQueued}
+      inert={!hasQueuedActions}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className="flex h-8 items-center justify-end gap-1 mb-1">
-          <QueuedMessageSteerAction message={message} isQueued={isQueued} onSteer={onSteer} />
+        <div className="flex h-9 items-center justify-end gap-1 mb-1 px-0.5">
+          {steer && <QueuedMessageSteerAction onSteer={steer} />}
           {/* Cancel button for queued messages */}
           {isQueued && onRemove && (
             <button

@@ -338,6 +338,26 @@ export const QueuedMessageHandoff: Story = {
   },
 };
 
+const queuedCommand = createUserMessage('/compact');
+export const QueuedCommandWithoutActions: Story = {
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    messages: [queuedCommand],
+    queuedMessageIds: new Set([queuedCommand.id]),
+    onSteerQueuedMessage: () => undefined,
+    loadingSession: false,
+    running: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A queued command without a cancel callback reserves no space for ineligible steering controls.',
+      },
+    },
+  },
+};
+
 export const ShortReadingTranscript: Story = {
   parameters: { layout: 'fullscreen' },
   args: {

@@ -821,6 +821,9 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       { emitSnapshot: false }
     );
     expect(mockSessionDomainService.emitSessionSnapshot).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledBefore(
+      mockSessionDomainService.emitSessionSnapshot
+    );
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
