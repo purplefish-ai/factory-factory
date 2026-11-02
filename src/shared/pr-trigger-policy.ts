@@ -91,7 +91,11 @@ function deliveredReviews(deliveredEvents: readonly PREventSummary[]) {
   );
 }
 
-/** A delivery received after this event was queued, i.e. one in flight when it was re-emitted. */
+/**
+ * A delivery received after this event was queued, i.e. one in flight when it
+ * was re-emitted. Ties are safe: the reducer only queues a review that is not
+ * already delivered, so a same-instant delivery of it is that in-flight one.
+ */
 function receivedSince(event: PREventSummary, deliveredEvents: readonly PREventSummary[]) {
   const queuedAt = event.createdAt;
   return queuedAt ? deliveredEvents.filter((d) => d.deliveredAt && d.deliveredAt >= queuedAt) : [];

@@ -142,8 +142,9 @@ export function useLogStream(
         return;
       }
       if (replaceOutput) {
-        // The replay is the server's retained history, which includes what
-        // this buffer showed before the disconnect; show it once.
+        // The replay is the server's retained tail (500 KiB, a little less than
+        // this buffer keeps), which covers what was shown before the
+        // disconnect; show it once instead of appending a duplicate.
         streamBuffer.output.clear();
         appendOutput(`Reconnected!\n\n${message.data}`);
         return;
