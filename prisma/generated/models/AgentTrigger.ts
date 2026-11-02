@@ -44,6 +44,7 @@ export type AgentTriggerMinAggregateOutputType = {
   description: string | null
   filterInstructions: string | null
   isEnabled: boolean | null
+  isConfigured: boolean | null
   triggerRevision: number | null
   activationGeneration: number | null
   activationState: $Enums.AgentActivationState | null
@@ -59,6 +60,7 @@ export type AgentTriggerMaxAggregateOutputType = {
   description: string | null
   filterInstructions: string | null
   isEnabled: boolean | null
+  isConfigured: boolean | null
   triggerRevision: number | null
   activationGeneration: number | null
   activationState: $Enums.AgentActivationState | null
@@ -75,6 +77,7 @@ export type AgentTriggerCountAggregateOutputType = {
   config: number
   filterInstructions: number
   isEnabled: number
+  isConfigured: number
   triggerRevision: number
   activationGeneration: number
   activationState: number
@@ -104,6 +107,7 @@ export type AgentTriggerMinAggregateInputType = {
   description?: true
   filterInstructions?: true
   isEnabled?: true
+  isConfigured?: true
   triggerRevision?: true
   activationGeneration?: true
   activationState?: true
@@ -119,6 +123,7 @@ export type AgentTriggerMaxAggregateInputType = {
   description?: true
   filterInstructions?: true
   isEnabled?: true
+  isConfigured?: true
   triggerRevision?: true
   activationGeneration?: true
   activationState?: true
@@ -135,6 +140,7 @@ export type AgentTriggerCountAggregateInputType = {
   config?: true
   filterInstructions?: true
   isEnabled?: true
+  isConfigured?: true
   triggerRevision?: true
   activationGeneration?: true
   activationState?: true
@@ -240,6 +246,7 @@ export type AgentTriggerGroupByOutputType = {
   config: runtime.JsonValue
   filterInstructions: string | null
   isEnabled: boolean
+  isConfigured: boolean | null
   triggerRevision: number
   activationGeneration: number
   activationState: $Enums.AgentActivationState
@@ -281,6 +288,7 @@ export type AgentTriggerWhereInput = {
   config?: Prisma.JsonFilter<"AgentTrigger">
   filterInstructions?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   isEnabled?: Prisma.BoolFilter<"AgentTrigger"> | boolean
+  isConfigured?: Prisma.BoolNullableFilter<"AgentTrigger"> | boolean | null
   triggerRevision?: Prisma.IntFilter<"AgentTrigger"> | number
   activationGeneration?: Prisma.IntFilter<"AgentTrigger"> | number
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
@@ -303,6 +311,7 @@ export type AgentTriggerOrderByWithRelationInput = {
   config?: Prisma.SortOrder
   filterInstructions?: Prisma.SortOrderInput | Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
+  isConfigured?: Prisma.SortOrderInput | Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
@@ -329,6 +338,7 @@ export type AgentTriggerWhereUniqueInput = Prisma.AtLeast<{
   config?: Prisma.JsonFilter<"AgentTrigger">
   filterInstructions?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   isEnabled?: Prisma.BoolFilter<"AgentTrigger"> | boolean
+  isConfigured?: Prisma.BoolNullableFilter<"AgentTrigger"> | boolean | null
   triggerRevision?: Prisma.IntFilter<"AgentTrigger"> | number
   activationGeneration?: Prisma.IntFilter<"AgentTrigger"> | number
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
@@ -351,6 +361,7 @@ export type AgentTriggerOrderByWithAggregationInput = {
   config?: Prisma.SortOrder
   filterInstructions?: Prisma.SortOrderInput | Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
+  isConfigured?: Prisma.SortOrderInput | Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
@@ -377,6 +388,7 @@ export type AgentTriggerScalarWhereWithAggregatesInput = {
   config?: Prisma.JsonWithAggregatesFilter<"AgentTrigger">
   filterInstructions?: Prisma.StringNullableWithAggregatesFilter<"AgentTrigger"> | string | null
   isEnabled?: Prisma.BoolWithAggregatesFilter<"AgentTrigger"> | boolean
+  isConfigured?: Prisma.BoolNullableWithAggregatesFilter<"AgentTrigger"> | boolean | null
   triggerRevision?: Prisma.IntWithAggregatesFilter<"AgentTrigger"> | number
   activationGeneration?: Prisma.IntWithAggregatesFilter<"AgentTrigger"> | number
   activationState?: Prisma.EnumAgentActivationStateWithAggregatesFilter<"AgentTrigger"> | $Enums.AgentActivationState
@@ -393,6 +405,7 @@ export type AgentTriggerCreateInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -415,6 +428,7 @@ export type AgentTriggerUncheckedCreateInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -433,6 +447,7 @@ export type AgentTriggerUpdateInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -455,6 +470,7 @@ export type AgentTriggerUncheckedUpdateInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -475,6 +491,7 @@ export type AgentTriggerCreateManyInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -491,6 +508,7 @@ export type AgentTriggerUpdateManyMutationInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -509,6 +527,7 @@ export type AgentTriggerUncheckedUpdateManyInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -542,6 +561,7 @@ export type AgentTriggerCountOrderByAggregateInput = {
   config?: Prisma.SortOrder
   filterInstructions?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
+  isConfigured?: Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
@@ -564,6 +584,7 @@ export type AgentTriggerMaxOrderByAggregateInput = {
   description?: Prisma.SortOrder
   filterInstructions?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
+  isConfigured?: Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
@@ -579,6 +600,7 @@ export type AgentTriggerMinOrderByAggregateInput = {
   description?: Prisma.SortOrder
   filterInstructions?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
+  isConfigured?: Prisma.SortOrder
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
@@ -689,6 +711,10 @@ export type EnumAgentTriggerTypeFieldUpdateOperationsInput = {
   set?: $Enums.AgentTriggerType
 }
 
+export type NullableBoolFieldUpdateOperationsInput = {
+  set?: boolean | null
+}
+
 export type EnumAgentActivationStateFieldUpdateOperationsInput = {
   set?: $Enums.AgentActivationState
 }
@@ -730,6 +756,7 @@ export type AgentTriggerCreateWithoutAgentDefinitionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -750,6 +777,7 @@ export type AgentTriggerUncheckedCreateWithoutAgentDefinitionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -798,6 +826,7 @@ export type AgentTriggerScalarWhereInput = {
   config?: Prisma.JsonFilter<"AgentTrigger">
   filterInstructions?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   isEnabled?: Prisma.BoolFilter<"AgentTrigger"> | boolean
+  isConfigured?: Prisma.BoolNullableFilter<"AgentTrigger"> | boolean | null
   triggerRevision?: Prisma.IntFilter<"AgentTrigger"> | number
   activationGeneration?: Prisma.IntFilter<"AgentTrigger"> | number
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
@@ -814,6 +843,7 @@ export type AgentTriggerCreateWithoutConnectionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -834,6 +864,7 @@ export type AgentTriggerUncheckedCreateWithoutConnectionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -877,6 +908,7 @@ export type AgentTriggerCreateWithoutRunsInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -898,6 +930,7 @@ export type AgentTriggerUncheckedCreateWithoutRunsInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -931,6 +964,7 @@ export type AgentTriggerUpdateWithoutRunsInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -952,6 +986,7 @@ export type AgentTriggerUncheckedUpdateWithoutRunsInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -969,6 +1004,7 @@ export type AgentTriggerCreateWithoutEvaluationsInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -990,6 +1026,7 @@ export type AgentTriggerUncheckedCreateWithoutEvaluationsInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -1023,6 +1060,7 @@ export type AgentTriggerUpdateWithoutEvaluationsInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1044,6 +1082,7 @@ export type AgentTriggerUncheckedUpdateWithoutEvaluationsInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1062,6 +1101,7 @@ export type AgentTriggerCreateManyAgentDefinitionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -1078,6 +1118,7 @@ export type AgentTriggerUpdateWithoutAgentDefinitionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1098,6 +1139,7 @@ export type AgentTriggerUncheckedUpdateWithoutAgentDefinitionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1117,6 +1159,7 @@ export type AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1134,6 +1177,7 @@ export type AgentTriggerCreateManyConnectionInput = {
   config: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: string | null
   isEnabled?: boolean
+  isConfigured?: boolean | null
   triggerRevision?: number
   activationGeneration?: number
   activationState?: $Enums.AgentActivationState
@@ -1150,6 +1194,7 @@ export type AgentTriggerUpdateWithoutConnectionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1170,6 +1215,7 @@ export type AgentTriggerUncheckedUpdateWithoutConnectionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1189,6 +1235,7 @@ export type AgentTriggerUncheckedUpdateManyWithoutConnectionInput = {
   config?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   filterInstructions?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  isConfigured?: Prisma.NullableBoolFieldUpdateOperationsInput | boolean | null
   triggerRevision?: Prisma.IntFieldUpdateOperationsInput | number
   activationGeneration?: Prisma.IntFieldUpdateOperationsInput | number
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
@@ -1247,6 +1294,7 @@ export type AgentTriggerSelect<ExtArgs extends runtime.Types.Extensions.Internal
   config?: boolean
   filterInstructions?: boolean
   isEnabled?: boolean
+  isConfigured?: boolean
   triggerRevision?: boolean
   activationGeneration?: boolean
   activationState?: boolean
@@ -1270,6 +1318,7 @@ export type AgentTriggerSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   config?: boolean
   filterInstructions?: boolean
   isEnabled?: boolean
+  isConfigured?: boolean
   triggerRevision?: boolean
   activationGeneration?: boolean
   activationState?: boolean
@@ -1290,6 +1339,7 @@ export type AgentTriggerSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   config?: boolean
   filterInstructions?: boolean
   isEnabled?: boolean
+  isConfigured?: boolean
   triggerRevision?: boolean
   activationGeneration?: boolean
   activationState?: boolean
@@ -1310,6 +1360,7 @@ export type AgentTriggerSelectScalar = {
   config?: boolean
   filterInstructions?: boolean
   isEnabled?: boolean
+  isConfigured?: boolean
   triggerRevision?: boolean
   activationGeneration?: boolean
   activationState?: boolean
@@ -1319,7 +1370,7 @@ export type AgentTriggerSelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentTriggerOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "type" | "connectionId" | "description" | "config" | "filterInstructions" | "isEnabled" | "triggerRevision" | "activationGeneration" | "activationState" | "activationBoundary" | "pendingActivation" | "createdAt" | "updatedAt", ExtArgs["result"]["agentTrigger"]>
+export type AgentTriggerOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "type" | "connectionId" | "description" | "config" | "filterInstructions" | "isEnabled" | "isConfigured" | "triggerRevision" | "activationGeneration" | "activationState" | "activationBoundary" | "pendingActivation" | "createdAt" | "updatedAt", ExtArgs["result"]["agentTrigger"]>
 export type AgentTriggerInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   connection?: boolean | Prisma.AgentTrigger$connectionArgs<ExtArgs>
@@ -1353,6 +1404,7 @@ export type $AgentTriggerPayload<ExtArgs extends runtime.Types.Extensions.Intern
     config: runtime.JsonValue
     filterInstructions: string | null
     isEnabled: boolean
+    isConfigured: boolean | null
     triggerRevision: number
     activationGeneration: number
     activationState: $Enums.AgentActivationState
@@ -1795,6 +1847,7 @@ export interface AgentTriggerFieldRefs {
   readonly config: Prisma.FieldRef<"AgentTrigger", 'Json'>
   readonly filterInstructions: Prisma.FieldRef<"AgentTrigger", 'String'>
   readonly isEnabled: Prisma.FieldRef<"AgentTrigger", 'Boolean'>
+  readonly isConfigured: Prisma.FieldRef<"AgentTrigger", 'Boolean'>
   readonly triggerRevision: Prisma.FieldRef<"AgentTrigger", 'Int'>
   readonly activationGeneration: Prisma.FieldRef<"AgentTrigger", 'Int'>
   readonly activationState: Prisma.FieldRef<"AgentTrigger", 'AgentActivationState'>

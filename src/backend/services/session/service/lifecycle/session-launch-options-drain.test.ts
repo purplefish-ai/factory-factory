@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { validateAgentExecution } from '@/backend/orchestration/agent-native-validation';
 import * as acpModelSelection from '@/backend/services/session/service/acp/acp-model-selection';
 import { createMockChildProcess } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { createSessionProviderResolverService } from '@/backend/services/session/service/data/session-provider-resolver.service';
 import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
+import { SessionConfigService } from './session.config.service';
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn(), preview: vi.fn() }));
-vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: mocks.spawn,
+}));
 vi.mock('@/backend/services/codex-accounts', () => ({
   codexAccountService: { getPreviewRuntimeContext: mocks.preview },
 }));
@@ -29,7 +35,10 @@ function config(model = 'initial') {
       name: 'Model',
       type: 'select',
       currentValue: model,
-      options: ['initial', ...Array.from({ length: 40 }, (_, i) => `model-${i}`)].map((value) => ({
+      options: [
+        ...new Set([model, 'initial']),
+        ...Array.from({ length: 40 }, (_, i) => `model-${i}`),
+      ].map((value) => ({
         value,
         name: value,
       })),
@@ -53,7 +62,9 @@ function config(model = 'initial') {
   ];
 }
 
-function fakeProvider(options: { stallSelection?: boolean; stallClose?: boolean } = {}) {
+function fakeProvider(
+  options: { stallSelection?: boolean; stallClose?: boolean; nativeModel?: string } = {}
+) {
   const child = createMockChildProcess();
   child.kill = vi.fn(() => true);
   const requests: z.infer<typeof requestSchema>[] = [];
@@ -67,7 +78,7 @@ function fakeProvider(options: { stallSelection?: boolean; stallClose?: boolean 
     if (request.method === 'initialize') {
       reply(request.id, { protocolVersion: 1, agentCapabilities: {}, authMethods: [] });
     } else if (request.method === 'session/new') {
-      reply(request.id, { sessionId: 'probe', configOptions: config() });
+      reply(request.id, { sessionId: 'probe', configOptions: config(options.nativeModel) });
     } else if (request.method === 'session/set_config_option' && !options.stallSelection) {
       reply(request.id, { configOptions: config(z.string().parse(request.params?.value)) });
     } else if (request.method === 'session/close' && !options.stallClose) {
@@ -156,6 +167,116 @@ describe('native launch admission through actual child drain', () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it('confirms a Claude alias against the actual advertised canonical model for preview', async () => {
+    nextOptions = { nativeModel: 'claude-sonnet-4-6' };
+    const options = service();
+    const sessionConfigService = new SessionConfigService({
+      repository: {} as never,
+      runtimeManager: {} as never,
+      codexModelCatalogService: { getModels: vi.fn() },
+      launchOptionsService: options,
+    });
+    const settings = {
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
+    };
+    const ports = {
+      sessionConfigService,
+      userSettingsQueryService: { get: () => Promise.resolve(settings) },
+      sessionProviderResolverService: createSessionProviderResolverService({
+        getDefaultSessionProvider: () => Promise.resolve('CLAUDE'),
+        getModelDefaults: () => Promise.resolve(settings),
+        findWorkspace: () => Promise.resolve(null),
+      }),
+    };
+    const preview = validateAgentExecution(
+      { version: 1, provider: 'CLAUDE', model: 'sonnet' },
+      ports
+    );
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await preview).toMatchObject({
+      status: 'VALIDATED',
+      intent: { requestedModel: 'sonnet', model: 'claude-sonnet-4-6', reasoningEffort: 'low' },
+    });
+    expect(peers).toHaveLength(1);
+    expect(peers[0]!.requests.some((request) => request.method === 'session/prompt')).toBe(false);
+  });
+
+  it('validates typed Codex default intent through the configured public service and actual SDK probe', async () => {
+    nextOptions = { nativeModel: 'gpt-5.4' };
+    let account = 'account-a';
+    mocks.preview.mockImplementation(({ accountId }) =>
+      Promise.resolve({
+        accountId: accountId ?? account,
+        env: { CODEX_HOME: `/fake/${accountId ?? account}` },
+      })
+    );
+    const settings = {
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: 'xhigh',
+    };
+    getSettings.mockImplementation(async () => settings);
+    const options = service();
+    const sessionConfigService = new SessionConfigService({
+      repository: {} as never,
+      runtimeManager: {} as never,
+      codexModelCatalogService: { getModels: vi.fn() },
+      launchOptionsService: options,
+    });
+    const ports = {
+      sessionConfigService,
+      userSettingsQueryService: { get: async () => settings },
+      sessionProviderResolverService: createSessionProviderResolverService({
+        getDefaultSessionProvider: async () => 'CODEX',
+        getModelDefaults: async () => settings,
+        findWorkspace: async () => null,
+      }),
+    };
+    const first = validateAgentExecution({ version: 1 }, ports);
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await first).toMatchObject({
+      status: 'VALIDATED',
+      intent: {
+        provider: 'CODEX',
+        requestedModel: 'default',
+        model: 'gpt-5.4',
+        reasoningEffort: 'low',
+        effortNormalization: 'INHERITED_TO_NATIVE_DEFAULT',
+      },
+    });
+    settings.defaultCodexReasoningEffort = 'high';
+    expect(await validateAgentExecution({ version: 1 }, ports)).toMatchObject({
+      status: 'VALIDATED',
+      intent: { reasoningEffort: 'high', effortNormalization: 'NONE' },
+    });
+    expect(peers).toHaveLength(1);
+    expect(
+      await validateAgentExecution(
+        { version: 1, provider: 'CODEX', reasoningEffort: 'xhigh' },
+        ports
+      )
+    ).toMatchObject({ status: 'UNSUPPORTED' });
+    account = 'account-b';
+    const otherAccount = validateAgentExecution({ version: 1 }, ports);
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await otherAccount).toMatchObject({ status: 'VALIDATED' });
+    expect(peers).toHaveLength(2);
+    expect(mocks.spawn.mock.calls.map((args) => args[2].env.CODEX_HOME)).toEqual([
+      '/fake/account-a',
+      '/fake/account-b',
+    ]);
+    expect(peers.flatMap((peer) => peer.requests).some((r) => r.method === 'session/prompt')).toBe(
+      false
+    );
+    expect(peers[0]!.requests.find((r) => r.method === 'session/new')?.params).toMatchObject({
+      mcpServers: [],
+    });
   });
 
   it('keeps eight timed-out native lifetimes charged through KILL and exit until child close', async () => {

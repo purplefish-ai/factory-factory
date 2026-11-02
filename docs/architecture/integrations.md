@@ -405,6 +405,77 @@ Compact run results and PR links survive workspace and event deletion. Logical
 export/import still excludes the agent tables and credentials; the complete
 supported backup is the database file together with `encryption.key`.
 
+### Project-owned saved management
+
+Trusted-local `agent.list`, `get`, `updateSaved`, `evaluations`, `runs`, and
+`navigationSummary` procedures manage project-owned event definitions even after
+the authoring workspace/proposal is deleted. Inputs carry project ownership;
+foreign IDs are not found. History uses bounded timestamp/ID keyset pages (50 by
+default, at most 100), with independent evaluation and run pages. Navigation
+counts every definition and its latest terminal event-run outcome independently
+of those pages. Archived projects remain readable; writes and discovery require
+an active project. Scheduled-agent APIs and routes retain their existing
+behavior.
+
+`managementRevision` is the shared optimistic save token. Both saved replacement
+and accepted-proposal edits increment it once, including a rename/no-op. Saved
+edits also synchronize a surviving proposal's revision and local-ID
+specification, so a stale editor on either surface conflicts. Execution
+`definitionRevision` still changes only for task/execution edits; claimed
+snapshots are immutable. Saved trigger IDs are persisted IDs, not proposal-local
+IDs. Omitted IDs create new members; omitted existing members retain their
+history rows.
+
+Nullable `AgentTrigger.isConfigured` distinguishes current (`true`), removed
+(`false`), and unknown legacy (`null`) membership. Migration does not infer
+membership from PAUSED, ACTIVE, enabled flags or old runs. Any unknown row makes
+the exact configuration unavailable; bounded candidate records remain
+inspectable. A complete saved replacement establishes the entire membership set.
+Included unknown or reintroduced removed rows take the changed-trigger path:
+advance trigger revision and activation generation, pause, clear
+pending/boundary proof, and cancel affected queued/PENDING work. Known unchanged
+members preserve activation on rename. Historic actor restrictions remain
+visible with an unsupported reason and require explicit removal in a
+replacement.
+
+`projectSources` shares the authoring source policy: actual project repository,
+repository-scoped GitHub connection and verified labels; existing Slack bot
+connection/channel access. No display name proves access. Project/connection
+facts are rechecked after source awaits and inside save transactions.
+Connections remain global installation identities rather than gaining a project
+foreign key.
+
+Explicit `validateDraft` returns per-trigger capability reasons and a separate
+native validation result. It uses the configured public session launch-options
+service, including its bounded no-prompt discovery/cache, native model
+confirmation and Codex preview-account isolation. Intent preserves requested and
+confirmed models, explicit/inherited selections, and pinned reasoning effort.
+Unsupported explicit effort fails; unsupported/absent inherited effort
+normalizes to a supported native default or explicit null. This preview neither
+freezes a future run account nor authorizes activation. Ordinary reads never
+invoke native discovery. Only labeled GitHub events can pass this milestone's
+source capabilities; other GitHub actions, Slack intake, SCHEDULE, semantic and
+actor filters report specific unsupported/unavailable reasons while remaining
+inspectable drafts.
+
+History exposes bounded reasons, nullable start times, separate automatic
+attempts and send generations, preparation/delivery state and durable deadlines,
+immutable initial outcome, compact result/PR links and retained workspace
+provenance. It excludes raw prompts, provider evidence and unrestricted errors.
+Pruned event text or a null event FK does not erase run identity or prove
+completion. The workspace owner's retained-origin read covers creation before
+linkage and deletion; it is provenance, not work proof or permission to retry
+setup.
+
+These APIs do not add activation, operator recovery or UI. Production authoring
+still creates paused definitions. The current runtime has no membership/native-
+intent gate for manually altered ACTIVE-looking legacy records; runtime-wide
+membership enforcement and persisted server-validated native intent remain
+mandatory before activation is delivered. Trusted-local HTTP uses existing
+locality/origin/forwarding checks, not authenticated human-versus-agent
+isolation. The MCP catalog still exposes only source discovery/proposal
+authoring/read tools.
+
 ### Conversational creation
 
 Workspace sessions expose `list_agent_sources`, `propose_agent`, and

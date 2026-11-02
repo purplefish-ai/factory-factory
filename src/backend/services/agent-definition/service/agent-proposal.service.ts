@@ -1,5 +1,6 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { agentProposalAccessor } from '@/backend/services/agent-definition/resources/agent-proposal.accessor';
+import { agentSourceValidationSchema, type AgentSourceValidation } from '@/shared/agent-management';
 import {
   agentProposalSchema,
   createAgentFromProposalSchema,
@@ -19,21 +20,51 @@ export class AgentProposalService {
     }
     return publicProposal(row);
   }
-  async propose(input: unknown, sourceNames: Record<string, string> = {}) {
+  async propose(
+    input: unknown,
+    sourceNames: Record<string, string> = {},
+    evidence?: AgentSourceValidation
+  ) {
     const parsed = proposeAgentInputSchema.parse(input);
     parsed.specification.triggers = parsed.specification.triggers.map((trigger) => ({
       ...trigger,
       id: trigger.id ?? crypto.randomUUID(),
     }));
-    return publicProposal(await agentProposalAccessor.propose({ ...parsed, sourceNames }));
+    return publicProposal(
+      await agentProposalAccessor.propose({
+        ...parsed,
+        sourceNames,
+        evidence: evidence ? agentSourceValidationSchema.parse(evidence) : undefined,
+      })
+    );
   }
-  async create(input: unknown, sourceNames: Record<string, string> = {}) {
+  async create(
+    input: unknown,
+    sourceNames: Record<string, string> = {},
+    evidence?: AgentSourceValidation
+  ) {
     const parsed = createAgentFromProposalSchema.parse(input);
-    return publicProposal(await agentProposalAccessor.create({ ...parsed, sourceNames }));
+    return publicProposal(
+      await agentProposalAccessor.create({
+        ...parsed,
+        sourceNames,
+        evidence: evidence ? agentSourceValidationSchema.parse(evidence) : undefined,
+      })
+    );
   }
-  async update(input: unknown, sourceNames: Record<string, string> = {}) {
+  async update(
+    input: unknown,
+    sourceNames: Record<string, string> = {},
+    evidence?: AgentSourceValidation
+  ) {
     const parsed = createAgentFromProposalSchema.parse(input);
-    return publicProposal(await agentProposalAccessor.update({ ...parsed, sourceNames }));
+    return publicProposal(
+      await agentProposalAccessor.update({
+        ...parsed,
+        sourceNames,
+        evidence: evidence ? agentSourceValidationSchema.parse(evidence) : undefined,
+      })
+    );
   }
   saveGitHubConnection(repositoryId: string, name: string) {
     return agentProposalAccessor.saveGitHubConnection(repositoryId, name);
