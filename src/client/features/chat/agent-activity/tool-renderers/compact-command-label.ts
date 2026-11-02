@@ -75,9 +75,13 @@ export function compactCommandLabel(command: string | string[]): string {
   const words = typeof command === 'string' ? shellWords(command) : command;
   const first = words.findIndex((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
   const args = words.slice(first < 0 ? words.length : first);
-  const executable = args[0]?.split(/[/\\]/).pop() || 'command';
+  const executable =
+    args[0]
+      ?.split(/[/\\]/)
+      .pop()
+      ?.replace(/\.exe$/i, '') || 'command';
   if (SHELLS.has(executable)) {
-    const flag = args.findIndex((word) => word === '-c' || word === '-lc');
+    const flag = args.findIndex((word) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(word));
     const script = args[flag + 1];
     if (flag > 0 && script) {
       return compactCommandLabel(script);

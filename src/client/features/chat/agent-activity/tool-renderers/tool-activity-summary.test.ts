@@ -19,6 +19,9 @@ describe('compact activity summaries', () => {
     ['gh --repo owner/repo pr view 123', 'Ran gh pr'],
     ['pnpm --workspace-root test', 'Ran pnpm test'],
     ['sh -lc "git -C /tmp/repo status --short"', 'Ran git status'],
+    ["sh -ec 'git status'", 'Ran git status'],
+    ['bash -euc "python3 /tmp/check.py"', 'Ran python3'],
+    ['"C:\\Program Files\\Git\\bin\\git.exe" status --short', 'Ran git status'],
     ['git\nprintf status', 'Ran git'],
     ['docker --log-level debug ps', 'Ran docker ps'],
     ['git --unknown-option value status', 'Ran git'],
@@ -52,6 +55,20 @@ describe('compact activity summaries', () => {
       'Read files'
     );
     expect(getToolGroupLabel([call('Read', {})])).toBe('Read files');
+  });
+
+  it('condenses Windows executable names in command arrays', () => {
+    expect(
+      getToolGroupLabel([
+        call('Run', { command: ['C:\\Program Files\\Git\\bin\\git.EXE', 'cherry-pick', 'abc'] }),
+      ])
+    ).toBe('Ran git cherry-pick');
+    expect(
+      getToolGroupLabel([call('Run', { command: ['C:\\Python313\\python.exe', 'check.py'] })])
+    ).toBe('Ran python');
+    expect(getToolGroupLabel([call('Run', { command: ['/bin/sh', '-ec', 'git status'] })])).toBe(
+      'Ran git status'
+    );
   });
 
   it('rolls up commands without listing executables or arguments', () => {

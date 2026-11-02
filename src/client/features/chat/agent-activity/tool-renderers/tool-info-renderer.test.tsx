@@ -276,8 +276,13 @@ describe('single activity summaries', () => {
       const trigger = container.querySelector('button');
       expect(trigger?.textContent).toBe(label + (status === 'pending' ? 'Running' : ''));
       expect(trigger?.className).not.toContain('text-destructive');
+      expect(container.textContent).not.toContain('ok');
       flushSync(() => trigger?.click());
-      expect(container.textContent).toContain(name === 'Read' ? 'single.ts' : 'command');
+      const actionTrigger = container.querySelectorAll('button')[1];
+      expect(actionTrigger).toBeDefined();
+      expect(container.textContent).not.toContain('ok');
+      flushSync(() => actionTrigger?.click());
+      expect(container.textContent).toContain('ok');
     } finally {
       root.unmount();
     }

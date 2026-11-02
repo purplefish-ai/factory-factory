@@ -204,12 +204,13 @@ by length, but same-length in-place edits are unsupported.
 Tool activity starts collapsed behind a category summary such as “Read files,
 ran commands”. A single read shows “Read file Button.tsx”; a single command
 shows its executable and, for recognized command-line tools, its first
-subcommand, such as “Ran python3” or “Ran git cherry-pick”. Summaries omit
-command arguments and directory paths. Multiple reads or commands use the
-generic plural labels. Expanding the summary reveals chronological actions; each
-action expands to its full input and output. Failures appear within those
-expanded actions, without a failure count or error styling on the summary.
-Pending activity keeps its running indicator.
+subcommand, such as “Ran python3” or “Ran git cherry-pick”. Shell wrappers such
+as `sh -ec 'git status'` show the underlying command, “Ran git status”.
+Summaries omit command arguments and directory paths. Multiple reads or commands
+use the generic plural labels. Expanding the summary reveals chronological
+actions; each action expands to its full input and output. Failures appear
+within those expanded actions, without a failure count or error styling on the
+summary. Pending activity keeps its running indicator.
 
 Running sub-agent, background-process and completed sub-agent disclosures
 remember explicit expand/collapse choices per session in browser memory,
