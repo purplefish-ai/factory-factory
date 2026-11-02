@@ -269,7 +269,7 @@ it.each([
   { parentWorkspaceId: null, enabled: false, settingsFailure: 'http' },
   { parentWorkspaceId: null, enabled: false, settingsFailure: 'malformed' },
 ])(
-  'advertises the exact workspace/authoring catalog and rejects recovery controls (parent=%s)',
+  'advertises safe tools and rejects recovery controls (parent=$parentWorkspaceId, enabled=$enabled, failure=$settingsFailure)',
   async ({ parentWorkspaceId, enabled, settingsFailure }) => {
     let calls = 0;
     const server = createServer((req, res) => {
@@ -341,6 +341,19 @@ it.each([
       ];
       const messages = [
         JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'tools/list' }),
+        ...(settingsFailure
+          ? [
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1000,
+                method: 'tools/call',
+                params: {
+                  name: 'spawn_child_workspace',
+                  arguments: { projectId: 'project', name: 'Child' },
+                },
+              }),
+            ]
+          : []),
         ...forbidden.flatMap((name, index) =>
           ['RESOLVE', 'ABANDON', 'RETRY'].map((action, actionIndex) =>
             JSON.stringify({
@@ -408,10 +421,14 @@ it.each([
         'propose_agent',
         'get_agent_proposal',
       ]);
-      expect(responses.filter((row) => row.id !== 0)).toHaveLength(forbidden.length * 3);
-      expect(
-        responses.filter((row) => row.id !== 0).every((row) => row.error?.code === -32_601)
-      ).toBe(true);
+      const recoveryResponses = responses.filter((row) => row.id > 0 && row.id < 1000);
+      expect(recoveryResponses).toHaveLength(forbidden.length * 3);
+      expect(recoveryResponses.every((row) => row.error?.code === -32_601)).toBe(true);
+      if (settingsFailure) {
+        expect(responses.find((row) => row.id === 1000)).toMatchObject({
+          error: { code: -32_603 },
+        });
+      }
       expect(calls).toBe(0);
     } finally {
       server.close();
