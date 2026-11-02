@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { WorkspaceCreationImageDropZone } from './workspace-creation-image-drop-zone';
+
+beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
+afterEach(() => vi.unstubAllGlobals());
 
 it('preserves the sidebar subtree and scroll position when the selected project becomes unavailable', async () => {
   const container = document.createElement('div');

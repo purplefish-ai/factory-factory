@@ -6,10 +6,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { KanbanImageDropZone } from './kanban-image-drop-zone';
 import { useWorkspaceCreationDraft } from './use-workspace-creation-draft';
 
+let discardAttempt: Promise<{ cleared: boolean } | { error: unknown }> | undefined;
+
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   mocks.projectId = crypto.randomUUID();
   openForm.mockClear();
+  discardAttempt = undefined;
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,7 +32,10 @@ function DraftPreview() {
       <button
         type="button"
         onClick={() => {
-          void discardDraft().catch(() => undefined);
+          discardAttempt = discardDraft().then(
+            (cleared) => ({ cleared }),
+            (error: unknown) => ({ error })
+          );
         }}
       >
         Discard draft
@@ -105,6 +111,16 @@ it.each([true, false])(
       });
       await act(() => container.firstElementChild!.dispatchEvent(drop));
       await act(() => container.querySelectorAll('button')[1]!.click());
+      expect(discardAttempt).toBeDefined();
+      await expect(discardAttempt).resolves.toEqual(
+        seeded
+          ? {
+              error: expect.objectContaining({
+                message: expect.stringContaining('could not be cleared'),
+              }),
+            }
+          : { cleared: false }
+      );
       expect(finishRead).toBeDefined();
       await act(async () => {
         finishRead!();
