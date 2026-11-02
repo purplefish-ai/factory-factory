@@ -164,6 +164,13 @@ async function restoreRunEvidence(
     await tx.agentEvaluation.create({
       data: {
         ...row,
+        ...(row.status === 'MATCHED' && row.runId === null
+          ? {
+              status: 'SKIPPED' as const,
+              reasonCode: 'IMPORTED_MATCHED_REQUIRES_REVIEW',
+              explanation: `Imported MATCHED decision held for review; original reason: ${row.reasonCode}.\n${row.explanation}`,
+            }
+          : {}),
         nextAttemptAt: null,
         configurationSnapshot: row.configurationSnapshot ?? Prisma.JsonNull,
         classifier: nullablePrismaJson(

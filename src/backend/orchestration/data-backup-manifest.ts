@@ -1,8 +1,8 @@
 import { ApplicationError } from '@/backend/lib/application-error';
+import { validateRecoverySourceProof } from '@/backend/services/agent-definition';
 import { prismaModelNames, type PrismaModelName } from '@/backend/services/registry';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { validateRecoveryJsonStorage } from './data-backup-json-storage';
-import { validateRecoverySourceProof } from './data-backup-source-proof';
 
 type Coverage = {
   category: 'config' | 'history' | 'evidence' | 'cache' | 'runtime' | 'secret';
@@ -152,7 +152,8 @@ export const recoveryModelCoverage = {
   AgentSourceCheckpoint: {
     category: 'evidence',
     handling: 'included',
-    reason: 'Retained checkpoint proof and validation progress, restored under disabled intake.',
+    reason:
+      'Validated compact checkpoint proof; unfinished validation progress restarts under disabled intake.',
   },
   AgentSourceHead: {
     category: 'evidence',
@@ -207,7 +208,7 @@ export const recoveryModelCoverage = {
     category: 'evidence',
     handling: 'included',
     reason:
-      'Frozen evaluation/configuration snapshots, classifier identity and run references retained; retry timers cleared.',
+      'Frozen evaluation/configuration snapshots, classifier identity and run references retained; unmatched admission is held for review and retry timers cleared.',
   },
   AgentInitialDelivery: {
     category: 'evidence',

@@ -348,11 +348,13 @@ Unfinished scheduled executions become failed history for explicit review. Run
 snapshots (including atomic expired-context markers), initial-send evidence,
 source pages/checkpoints/heads/baselines, launch origins, interruption history
 and decisions are retained. Unresolved imported runs require explicit review and
-unfinished sends remain ambiguous. Pending workspace notifications retain their
-real delivery timestamps and message intent with `recoveryHeld` set; normal
-pending-list, count and by-ID delivery admission exclude held rows. The additive
-migration defaults existing notifications to unheld and does not change ordinary
-delivery behavior.
+unfinished sends remain ambiguous. Matched evaluations without an admitted run
+restore as skipped review-required history with their original reason and
+explanation retained, so reenabling does not admit the imported decision.
+Pending workspace notifications retain their real delivery timestamps and
+message intent with `recoveryHeld` set; normal pending-list, count and by-ID
+delivery admission exclude held rows. The additive migration defaults existing
+notifications to unheld and does not change ordinary delivery behavior.
 
 Frozen prompt attempts preserve ordered membership, submitted content, accepted
 settings revisions, provider/account identity and evidence. Queued human intents
@@ -360,6 +362,13 @@ restore as failed history; uncertain attempts remain uncertain. Frozen run and
 launch account IDs remain source provenance while operational session account
 FKs map to restored profiles requiring authentication. Neither a restart nor
 reenabling automation authorizes replay of imported unresolved effects.
+
+Source proof is checked across retained baselines, markers, all ordinal-bearing
+checkpoint heads and event identities. Null heads can only claim ordinal zero.
+Compacted COMPLETE proofs retain their historical answers without capture pages;
+unfinished checkpoint validation cursors are cleared so bounded domain
+validation restarts safely. Imported validation progress never certifies a
+checkpoint.
 
 Archive packages reject unsupported versions, duplicate identities, malformed or
 mismatched transcript envelopes, invalid paths, byte lengths and checksums.

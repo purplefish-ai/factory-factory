@@ -1,5 +1,6 @@
 import { prisma } from '@/backend/db';
-import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import { retainedReferenceAllowed, type RecoveryImportedIds } from '@/shared/recovery-graph';
+import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { DecisionLog, Prisma } from '@prisma-gen/client';
 
 class DecisionLogAccessor {
@@ -47,10 +48,25 @@ export const decisionLogAccessor = new DecisionLogAccessor();
 
 export async function restoreRecoveryDecisions(
   tx: Prisma.TransactionClient,
-  rows: DurableRecovery['decisionLog']
+  data: ExportData['data'],
+  ids: RecoveryImportedIds,
+  definitions: ReadonlySet<string>
 ) {
-  for (const row of rows) {
-    if (await tx.decisionLog.findUnique({ where: { id: row.id } })) {
+  const sourceOwners = new Set([
+    ...data.agentSessions.map((row) => row.id),
+    ...(data.durable?.agentRun.map((row) => row.id) ?? []),
+    ...(data.durable?.agentDefinition.map((row) => row.id) ?? []),
+  ]);
+  const importedOwners = new Set([...ids.sessions, ...ids.runs, ...definitions]);
+  for (const row of data.durable?.decisionLog ?? []) {
+    const existingOwner =
+      (await tx.agentSession.findUnique({ where: { id: row.agentId } })) ??
+      (await tx.agentRun.findUnique({ where: { id: row.agentId } })) ??
+      (await tx.agentDefinition.findUnique({ where: { id: row.agentId } }));
+    if (
+      !retainedReferenceAllowed(sourceOwners, importedOwners, row.agentId, !!existingOwner) ||
+      (await tx.decisionLog.findUnique({ where: { id: row.id } }))
+    ) {
       continue;
     }
     await tx.decisionLog.create({ data: row });

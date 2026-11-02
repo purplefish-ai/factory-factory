@@ -16,7 +16,12 @@ function claim(claims: Claims, connection: string, identity: string | null, orde
   }
   const id = key(connection, identity);
   const previous = claims.get(id);
-  if (!Number.isSafeInteger(order) || order < 0 || (previous !== undefined && previous !== order)) {
+  if (
+    !Number.isSafeInteger(order) ||
+    order < 0 ||
+    (identity === null && order !== 0) ||
+    (previous !== undefined && previous !== order)
+  ) {
     invalid();
   }
   claims.set(id, order);
@@ -97,6 +102,7 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
     assertCursorFence(checkpoint, state.authorityRevision);
   }
   collectCheckpointClaims(authoritative, states, markers, headsByScan, claims);
+  collectRetainedClaims(data, headsByScan, claims);
   for (const checkpoint of authoritative) {
     if (checkpoint.previousBoundaryEventId === null) {
       if (checkpoint.initialSourceOrder !== 0) {
@@ -108,6 +114,31 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
     ) {
       invalid();
     }
+  }
+}
+
+function collectRetainedClaims(
+  data: DurableRecovery,
+  headsByScan: Map<string, Head[]>,
+  claims: Claims
+) {
+  // Promotion consults every retained head with an ordinal, including unfinished
+  // or invalid intervals. Imported cursors cannot hide contradictory claims.
+  for (const checkpoint of data.agentSourceCheckpoint) {
+    if (checkpoint.sourceOrder === null) {
+      continue;
+    }
+    for (const head of headsByScan.get(key(checkpoint.connectionId, checkpoint.scanId)) ?? []) {
+      claim(
+        claims,
+        checkpoint.connectionId,
+        head.providerEventId,
+        checkpoint.sourceOrder - head.precedingEventCount
+      );
+    }
+  }
+  for (const event of data.agentEvent) {
+    claim(claims, event.connectionId, event.providerEventId, event.sourceOrder);
   }
 }
 

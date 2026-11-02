@@ -817,7 +817,7 @@ class DataBackupService {
         };
         await restoreRetainedWorkspaceRecovery(tx, input.data, importedIds);
         await restoreRetainedSessionRecovery(tx, input.data, importedIds);
-        await restoreRecoveryDecisions(tx, input.data.durable.decisionLog);
+        await restoreRecoveryDecisions(tx, input.data, importedIds, agentParents.definitions);
       }
       if (input.data.archives) {
         importedArchiveIds = await restoreSessionArchives(

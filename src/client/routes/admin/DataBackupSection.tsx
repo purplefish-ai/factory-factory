@@ -65,6 +65,7 @@ export function DataBackupSection() {
         <p className="text-sm text-muted-foreground">
           Credentials, account homes, repository files, and provider-owned history are excluded. A
           full installation backup also needs the database, encryption.key, and archive files.
+          Logical packages are limited to 64 MiB of serialized JSON.
         </p>
       </CardContent>
     </Card>

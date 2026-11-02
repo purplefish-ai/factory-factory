@@ -6,7 +6,7 @@ import {
 } from '@/shared/agent-source-state';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.schema';
-import type { AgentSourceCheckpoint, AgentSourcePage, Prisma } from '@prisma-gen/client';
+import { type AgentSourceCheckpoint, type AgentSourcePage, Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import { captureBoundary } from './agent-source-checkpoint-boundary';
 import { checkpointPromotionStatus } from './agent-source-checkpoint-promotion';
@@ -323,10 +323,15 @@ export async function restoreRecoveryCheckpointProof(
           row.verification,
           nulls('AgentSourceCheckpoint', id, 'verification')
         ),
-        validationCursor: nullablePrismaJson(
-          row.validationCursor,
-          nulls('AgentSourceCheckpoint', id, 'validationCursor')
-        ),
+        // Progress is a runtime optimization, never imported authority. Complete
+        // compacted proof has already been validated without requiring old pages.
+        validationCursor:
+          row.status === 'COMPLETE'
+            ? nullablePrismaJson(
+                row.validationCursor,
+                nulls('AgentSourceCheckpoint', id, 'validationCursor')
+              )
+            : Prisma.DbNull,
       },
     });
   }

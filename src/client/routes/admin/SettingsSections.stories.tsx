@@ -419,6 +419,7 @@ export const Backup: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/Imported automation stays disabled/)).toBeVisible();
     await expect(canvas.getByText(/Credentials, account homes, repository files/)).toBeVisible();
+    await expect(canvas.getByText(/Logical packages are limited to 64 MiB/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Export Data' })).toBeEnabled();
   },
 };

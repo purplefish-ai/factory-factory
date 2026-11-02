@@ -77,7 +77,9 @@ export async function restoreRecoveryLifecycleEvents(
           !!(await tx.agentSession.findUnique({ where: { id: row.sessionId } }))
         )
       ) ||
-      (await tx.sessionLifecycleEvent.findUnique({ where: { id: row.id } }))
+      (await tx.sessionLifecycleEvent.findFirst({
+        where: { OR: [{ id: row.id }, { sessionId: row.sessionId, dedupeKey: row.dedupeKey }] },
+      }))
     ) {
       continue;
     }
