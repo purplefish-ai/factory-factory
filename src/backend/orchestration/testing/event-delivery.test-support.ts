@@ -60,6 +60,10 @@ export async function createEventAdmissionFixture(
   const session = await vi.importActual<typeof import('@/backend/services/session')>(
     '@/backend/services/session'
   );
+  const { captureWorkspaceRunResults } = await vi.importActual<
+    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-deletion.orchestrator');
+  workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
   const execution: EventAgentExecution =
     provider === 'CLAUDE'
       ? {

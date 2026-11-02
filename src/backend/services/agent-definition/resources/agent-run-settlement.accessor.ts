@@ -11,25 +11,11 @@ import type { Prisma } from '@prisma-gen/client';
 import type { EventLaunchClaim } from './agent-execution-binding.accessor';
 import { currentLaunch, launchConflict } from './agent-launch.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
+import { mergeRunResults } from './agent-run-result';
 import { writeRunSettlement } from './agent-run-settlement-writes';
 
 type Result = ReturnType<typeof agentRunResultSchema.parse>;
 type Run = Awaited<ReturnType<typeof currentLaunch>>;
-function mergeResults(stored: unknown, incoming: Result): Result {
-  const previous = stored === null ? null : agentRunResultSchema.parse(stored);
-  return agentRunResultSchema.parse({
-    version: 1,
-    summary: previous?.summary || incoming.summary,
-    pullRequests: [
-      ...new Map(
-        [...(previous?.pullRequests ?? []), ...incoming.pullRequests].map((pr) => [
-          pr.url.toLowerCase(),
-          pr,
-        ])
-      ).values(),
-    ].slice(0, 20),
-  });
-}
 function terminalResult(evidence: InitialDeliveryEvidence, unavailable: boolean) {
   if (evidence.outcome) {
     return evidence.outcome.result;
@@ -148,7 +134,7 @@ export const agentRunSettlementAccessor = {
     return ledgerTransaction(async (tx) => {
       const run = await currentLaunch(tx, claim);
       assertAttempt(run, expected);
-      const merged = mergeResults(run.result, incoming);
+      const merged = mergeRunResults(run.result, incoming);
       const settlement = await settlementFor(tx, run, proof, merged);
       if (settlement) {
         await writeRunSettlement(
