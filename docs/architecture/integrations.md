@@ -419,14 +419,17 @@ Verification persists the live scanner's page/resume state. Discarded shifted
 overlap observations restart proof from the fixed head; unknown identities
 between verified pages and capture after verification fail closed. Live and
 indexed verification share the skipped-identity and shifted-prefix guards.
-Legacy backfill reconstructs that boundary only from independent retained
-baseline/interval evidence; ambiguous proof remains intact. Partial or invalid
-checkpoints never serve historical lookups. Fully indexed intervals wait until
-all legacy finalized intervals have been indexed before conflict checks can
-publish them. Promotion keyset-traverses at most 100 retained authority rows per
-transaction across finalized markers, heads, and baselines. Each row uses unique
-point joins, so repeated head identities or baseline pins cannot turn one row
-into an unbounded conflict probe. A persisted cursor counts the candidate's
+Legacy backfill recovers the boundary identity from retained pages and treats
+its derived ordinal as provisional. Publication requires an independent retained
+witness and agreement from every non-null baseline, finalized marker, and
+indexed head for that boundary, checked within the same bounded authority
+traversal. Conflicting or missing boundary proof remains intact. Partial or
+invalid checkpoints never serve historical lookups. Fully indexed intervals wait
+until all legacy finalized intervals have been indexed before conflict checks
+can publish them. Promotion keyset-traverses at most 100 retained authority rows
+per transaction across finalized markers, heads, and baselines. Each row uses
+unique point joins, so repeated head identities or baseline pins cannot turn one
+row into an unbounded conflict probe. A persisted cursor counts the candidate's
 heads and records the connection authority revision. SQLite triggers advance
 that revision when consulted proof or ordinal claims change; validation restarts
 from the beginning at a new revision. The final chunk and publication share the
