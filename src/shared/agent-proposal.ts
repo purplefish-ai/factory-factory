@@ -4,49 +4,52 @@ import {
   agentTriggerInputSchema,
 } from './schemas/agent-definition.schema';
 
-const paused = {
-  isEnabled: z.literal(false).default(false),
-  id: z
-    .string()
-    .min(1)
-    .max(128)
-    .optional()
-    .describe(
-      'Stable event ID returned by proposals. Preserve it when editing or reordering existing events; omit it only for new events.'
-    ),
-};
-const authoringTriggerSchema = z.discriminatedUnion('type', [
-  agentTriggerInputSchema.options[0].extend(paused),
-  agentTriggerInputSchema.options[1].extend(paused),
-  agentTriggerInputSchema.options[2].extend(paused),
-]);
+export function createAgentSpecificationSchema(idLimit: number) {
+  const paused = {
+    isEnabled: z.literal(false).default(false),
+    id: z
+      .string()
+      .min(1)
+      .max(idLimit)
+      .optional()
+      .describe(
+        'Stable event ID returned by proposals. Preserve it when editing or reordering existing events; omit it only for new events.'
+      ),
+  };
+  const authoringTriggerSchema = z.discriminatedUnion('type', [
+    agentTriggerInputSchema.options[0].extend(paused),
+    agentTriggerInputSchema.options[1].extend(paused),
+    agentTriggerInputSchema.options[2].extend(paused),
+  ]);
 
-export const agentSpecificationSchema = agentDefinitionInputSchema
-  .omit({ isEnabled: true })
-  .extend({
-    name: z.string().trim().min(1).max(200),
-    instructions: z.string().trim().min(1).max(50_000),
-    triggers: z.array(authoringTriggerSchema).min(1).max(20),
-  })
-  .superRefine((specification, ctx) => {
-    const ids = specification.triggers.flatMap((trigger) => (trigger.id ? [trigger.id] : []));
-    if (new Set(ids).size !== ids.length) {
-      ctx.addIssue({ code: 'custom', message: 'Each event needs a unique stable ID.' });
-    }
-    if (
-      specification.triggers.some(
-        (trigger) =>
-          (trigger.type === 'SLACK_MESSAGE' && trigger.config.senderIds) ||
-          (trigger.type === 'GITHUB_ISSUE' && trigger.config.creatorIds)
-      )
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message:
-          'Actor-specific restrictions require actor discovery, which is not available yet. Use channels, repositories, labels, and semantic filters.',
-      });
-    }
-  });
+  return agentDefinitionInputSchema
+    .omit({ isEnabled: true })
+    .extend({
+      name: z.string().trim().min(1).max(200),
+      instructions: z.string().trim().min(1).max(50_000),
+      triggers: z.array(authoringTriggerSchema).min(1).max(20),
+    })
+    .superRefine((specification, ctx) => {
+      const ids = specification.triggers.flatMap((trigger) => (trigger.id ? [trigger.id] : []));
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({ code: 'custom', message: 'Each event needs a unique stable ID.' });
+      }
+      if (
+        specification.triggers.some(
+          (trigger) =>
+            (trigger.type === 'SLACK_MESSAGE' && trigger.config.senderIds) ||
+            (trigger.type === 'GITHUB_ISSUE' && trigger.config.creatorIds)
+        )
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'Actor-specific restrictions require actor discovery, which is not available yet. Use channels, repositories, labels, and semantic filters.',
+        });
+      }
+    });
+}
+export const agentSpecificationSchema = createAgentSpecificationSchema(128);
 
 export const proposeAgentInputSchema = z
   .strictObject({

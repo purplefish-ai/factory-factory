@@ -28,10 +28,12 @@ export type AggregateAgentDefinition = {
 
 export type AgentDefinitionAvgAggregateOutputType = {
   definitionRevision: number | null
+  managementRevision: number | null
 }
 
 export type AgentDefinitionSumAggregateOutputType = {
   definitionRevision: number | null
+  managementRevision: number | null
 }
 
 export type AgentDefinitionMinAggregateOutputType = {
@@ -41,6 +43,7 @@ export type AgentDefinitionMinAggregateOutputType = {
   instructions: string | null
   isEnabled: boolean | null
   definitionRevision: number | null
+  managementRevision: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -52,6 +55,7 @@ export type AgentDefinitionMaxAggregateOutputType = {
   instructions: string | null
   isEnabled: boolean | null
   definitionRevision: number | null
+  managementRevision: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -64,6 +68,7 @@ export type AgentDefinitionCountAggregateOutputType = {
   isEnabled: number
   executionConfig: number
   definitionRevision: number
+  managementRevision: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -72,10 +77,12 @@ export type AgentDefinitionCountAggregateOutputType = {
 
 export type AgentDefinitionAvgAggregateInputType = {
   definitionRevision?: true
+  managementRevision?: true
 }
 
 export type AgentDefinitionSumAggregateInputType = {
   definitionRevision?: true
+  managementRevision?: true
 }
 
 export type AgentDefinitionMinAggregateInputType = {
@@ -85,6 +92,7 @@ export type AgentDefinitionMinAggregateInputType = {
   instructions?: true
   isEnabled?: true
   definitionRevision?: true
+  managementRevision?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -96,6 +104,7 @@ export type AgentDefinitionMaxAggregateInputType = {
   instructions?: true
   isEnabled?: true
   definitionRevision?: true
+  managementRevision?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -108,6 +117,7 @@ export type AgentDefinitionCountAggregateInputType = {
   isEnabled?: true
   executionConfig?: true
   definitionRevision?: true
+  managementRevision?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -207,6 +217,7 @@ export type AgentDefinitionGroupByOutputType = {
   isEnabled: boolean
   executionConfig: runtime.JsonValue
   definitionRevision: number
+  managementRevision: number
   createdAt: Date
   updatedAt: Date
   _count: AgentDefinitionCountAggregateOutputType | null
@@ -242,6 +253,7 @@ export type AgentDefinitionWhereInput = {
   isEnabled?: Prisma.BoolFilter<"AgentDefinition"> | boolean
   executionConfig?: Prisma.JsonFilter<"AgentDefinition">
   definitionRevision?: Prisma.IntFilter<"AgentDefinition"> | number
+  managementRevision?: Prisma.IntFilter<"AgentDefinition"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
@@ -259,6 +271,7 @@ export type AgentDefinitionOrderByWithRelationInput = {
   isEnabled?: Prisma.SortOrder
   executionConfig?: Prisma.SortOrder
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   project?: Prisma.ProjectOrderByWithRelationInput
@@ -279,6 +292,7 @@ export type AgentDefinitionWhereUniqueInput = Prisma.AtLeast<{
   isEnabled?: Prisma.BoolFilter<"AgentDefinition"> | boolean
   executionConfig?: Prisma.JsonFilter<"AgentDefinition">
   definitionRevision?: Prisma.IntFilter<"AgentDefinition"> | number
+  managementRevision?: Prisma.IntFilter<"AgentDefinition"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
@@ -296,6 +310,7 @@ export type AgentDefinitionOrderByWithAggregationInput = {
   isEnabled?: Prisma.SortOrder
   executionConfig?: Prisma.SortOrder
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.AgentDefinitionCountOrderByAggregateInput
@@ -316,6 +331,7 @@ export type AgentDefinitionScalarWhereWithAggregatesInput = {
   isEnabled?: Prisma.BoolWithAggregatesFilter<"AgentDefinition"> | boolean
   executionConfig?: Prisma.JsonWithAggregatesFilter<"AgentDefinition">
   definitionRevision?: Prisma.IntWithAggregatesFilter<"AgentDefinition"> | number
+  managementRevision?: Prisma.IntWithAggregatesFilter<"AgentDefinition"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentDefinition"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"AgentDefinition"> | Date | string
 }
@@ -327,6 +343,7 @@ export type AgentDefinitionCreateInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
@@ -344,6 +361,7 @@ export type AgentDefinitionUncheckedCreateInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -359,6 +377,7 @@ export type AgentDefinitionUpdateInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
@@ -376,6 +395,7 @@ export type AgentDefinitionUncheckedUpdateInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -392,6 +412,7 @@ export type AgentDefinitionCreateManyInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -403,6 +424,7 @@ export type AgentDefinitionUpdateManyMutationInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -415,6 +437,7 @@ export type AgentDefinitionUncheckedUpdateManyInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -437,12 +460,14 @@ export type AgentDefinitionCountOrderByAggregateInput = {
   isEnabled?: Prisma.SortOrder
   executionConfig?: Prisma.SortOrder
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type AgentDefinitionAvgOrderByAggregateInput = {
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
 }
 
 export type AgentDefinitionMaxOrderByAggregateInput = {
@@ -452,6 +477,7 @@ export type AgentDefinitionMaxOrderByAggregateInput = {
   instructions?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -463,12 +489,14 @@ export type AgentDefinitionMinOrderByAggregateInput = {
   instructions?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type AgentDefinitionSumOrderByAggregateInput = {
   definitionRevision?: Prisma.SortOrder
+  managementRevision?: Prisma.SortOrder
 }
 
 export type AgentDefinitionNullableScalarRelationFilter = {
@@ -588,6 +616,7 @@ export type AgentDefinitionCreateWithoutProjectInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutAgentDefinitionInput
@@ -603,6 +632,7 @@ export type AgentDefinitionUncheckedCreateWithoutProjectInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -647,6 +677,7 @@ export type AgentDefinitionScalarWhereInput = {
   isEnabled?: Prisma.BoolFilter<"AgentDefinition"> | boolean
   executionConfig?: Prisma.JsonFilter<"AgentDefinition">
   definitionRevision?: Prisma.IntFilter<"AgentDefinition"> | number
+  managementRevision?: Prisma.IntFilter<"AgentDefinition"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentDefinition"> | Date | string
 }
@@ -658,6 +689,7 @@ export type AgentDefinitionCreateWithoutProposalInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
@@ -674,6 +706,7 @@ export type AgentDefinitionUncheckedCreateWithoutProposalInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -704,6 +737,7 @@ export type AgentDefinitionUpdateWithoutProposalInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
@@ -720,6 +754,7 @@ export type AgentDefinitionUncheckedUpdateWithoutProposalInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -734,6 +769,7 @@ export type AgentDefinitionCreateWithoutTriggersInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
@@ -750,6 +786,7 @@ export type AgentDefinitionUncheckedCreateWithoutTriggersInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -780,6 +817,7 @@ export type AgentDefinitionUpdateWithoutTriggersInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
@@ -796,6 +834,7 @@ export type AgentDefinitionUncheckedUpdateWithoutTriggersInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -810,6 +849,7 @@ export type AgentDefinitionCreateWithoutRunsInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
@@ -826,6 +866,7 @@ export type AgentDefinitionUncheckedCreateWithoutRunsInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -856,6 +897,7 @@ export type AgentDefinitionUpdateWithoutRunsInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
@@ -872,6 +914,7 @@ export type AgentDefinitionUncheckedUpdateWithoutRunsInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -886,6 +929,7 @@ export type AgentDefinitionCreateWithoutEvaluationsInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutAgentDefinitionsInput
@@ -902,6 +946,7 @@ export type AgentDefinitionUncheckedCreateWithoutEvaluationsInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutAgentDefinitionInput
@@ -932,6 +977,7 @@ export type AgentDefinitionUpdateWithoutEvaluationsInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutAgentDefinitionsNestedInput
@@ -948,6 +994,7 @@ export type AgentDefinitionUncheckedUpdateWithoutEvaluationsInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -962,6 +1009,7 @@ export type AgentDefinitionCreateManyProjectInput = {
   isEnabled?: boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: number
+  managementRevision?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -973,6 +1021,7 @@ export type AgentDefinitionUpdateWithoutProjectInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutAgentDefinitionNestedInput
@@ -988,6 +1037,7 @@ export type AgentDefinitionUncheckedUpdateWithoutProjectInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionNestedInput
@@ -1003,6 +1053,7 @@ export type AgentDefinitionUncheckedUpdateManyWithoutProjectInput = {
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   executionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   definitionRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  managementRevision?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1064,6 +1115,7 @@ export type AgentDefinitionSelect<ExtArgs extends runtime.Types.Extensions.Inter
   isEnabled?: boolean
   executionConfig?: boolean
   definitionRevision?: boolean
+  managementRevision?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
@@ -1082,6 +1134,7 @@ export type AgentDefinitionSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
   isEnabled?: boolean
   executionConfig?: boolean
   definitionRevision?: boolean
+  managementRevision?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
@@ -1095,6 +1148,7 @@ export type AgentDefinitionSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
   isEnabled?: boolean
   executionConfig?: boolean
   definitionRevision?: boolean
+  managementRevision?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
@@ -1108,11 +1162,12 @@ export type AgentDefinitionSelectScalar = {
   isEnabled?: boolean
   executionConfig?: boolean
   definitionRevision?: boolean
+  managementRevision?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type AgentDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "instructions" | "isEnabled" | "executionConfig" | "definitionRevision" | "createdAt" | "updatedAt", ExtArgs["result"]["agentDefinition"]>
+export type AgentDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "instructions" | "isEnabled" | "executionConfig" | "definitionRevision" | "managementRevision" | "createdAt" | "updatedAt", ExtArgs["result"]["agentDefinition"]>
 export type AgentDefinitionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   triggers?: boolean | Prisma.AgentDefinition$triggersArgs<ExtArgs>
@@ -1145,6 +1200,7 @@ export type $AgentDefinitionPayload<ExtArgs extends runtime.Types.Extensions.Int
     isEnabled: boolean
     executionConfig: runtime.JsonValue
     definitionRevision: number
+    managementRevision: number
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["agentDefinition"]>
@@ -1582,6 +1638,7 @@ export interface AgentDefinitionFieldRefs {
   readonly isEnabled: Prisma.FieldRef<"AgentDefinition", 'Boolean'>
   readonly executionConfig: Prisma.FieldRef<"AgentDefinition", 'Json'>
   readonly definitionRevision: Prisma.FieldRef<"AgentDefinition", 'Int'>
+  readonly managementRevision: Prisma.FieldRef<"AgentDefinition", 'Int'>
   readonly createdAt: Prisma.FieldRef<"AgentDefinition", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"AgentDefinition", 'DateTime'>
 }

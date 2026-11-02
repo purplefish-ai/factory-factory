@@ -3,6 +3,7 @@ import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orches
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
+import { createAgentManagement } from './orchestration/agent-management.orchestrator';
 import { cliHealthService } from './orchestration/cli-health.service';
 import { dataBackupService } from './orchestration/data-backup.service';
 import {
@@ -43,6 +44,7 @@ import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadat
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
+import { agentManagementService, type AgentManagementService } from './services/agent-definition';
 import { agentProposalService, slackConnectionService } from './services/agent-definition';
 import { codexAccountService } from './services/codex-accounts';
 import { configService } from './services/config.service';
@@ -133,6 +135,8 @@ import { workspaceGitStateService } from './services/workspace-git-state.service
 export type ApplicationServices = BridgeServices & {
   agentRuntime: ReturnType<typeof createAgentRuntime>;
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
+  agentManagement: ReturnType<typeof createAgentManagement>;
+  agentManagementService: AgentManagementService;
   listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
@@ -318,6 +322,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     slackConnectionService,
     agentProposalService,
     agentAuthoring: createAgentAuthoring(() => services),
+    agentManagementService,
+    agentManagement: createAgentManagement(() => services),
     agentRuntime: createAgentRuntime(() => services),
     createLogger,
     dataBackupService,

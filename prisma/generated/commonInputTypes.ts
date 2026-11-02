@@ -569,6 +569,11 @@ export type EnumAgentTriggerTypeFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel> | $Enums.AgentTriggerType
 }
 
+export type BoolNullableFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedBoolNullableFilter<$PrismaModel> | boolean | null
+}
+
 export type EnumAgentActivationStateFilter<$PrismaModel = never> = {
   equals?: $Enums.AgentActivationState | Prisma.EnumAgentActivationStateFieldRefInput<$PrismaModel>
   in?: $Enums.AgentActivationState[]
@@ -584,6 +589,14 @@ export type EnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel = never> = {
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+}
+
+export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedBoolNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedBoolNullableFilter<$PrismaModel>
 }
 
 export type EnumAgentActivationStateWithAggregatesFilter<$PrismaModel = never> = {
@@ -1232,6 +1245,11 @@ export type NestedEnumAgentTriggerTypeFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel> | $Enums.AgentTriggerType
 }
 
+export type NestedBoolNullableFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedBoolNullableFilter<$PrismaModel> | boolean | null
+}
+
 export type NestedEnumAgentActivationStateFilter<$PrismaModel = never> = {
   equals?: $Enums.AgentActivationState | Prisma.EnumAgentActivationStateFieldRefInput<$PrismaModel>
   in?: $Enums.AgentActivationState[]
@@ -1247,6 +1265,14 @@ export type NestedEnumAgentTriggerTypeWithAggregatesFilter<$PrismaModel = never>
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAgentTriggerTypeFilter<$PrismaModel>
+}
+
+export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: boolean | Prisma.BooleanFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedBoolNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedBoolNullableFilter<$PrismaModel>
 }
 
 export type NestedEnumAgentActivationStateWithAggregatesFilter<$PrismaModel = never> = {

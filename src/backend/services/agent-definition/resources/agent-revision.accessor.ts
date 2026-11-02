@@ -1,9 +1,10 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { AgentSpecification } from '@/shared/agent-proposal';
 import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
 } from '@/shared/schemas/agent-definition.schema';
-import { Prisma } from '@prisma-gen/client';
+import { Prisma, type AgentTrigger } from '@prisma-gen/client';
 
 async function pauseRemovedTriggers(
   tx: Prisma.TransactionClient,
@@ -13,13 +14,18 @@ async function pauseRemovedTriggers(
 ) {
   const pausedIds: string[] = [];
   for (const removed of current.triggers.filter((trigger) => !retained.has(trigger.id))) {
-    if (!(executionChanged || removed.isEnabled) && removed.activationState === 'PAUSED') {
+    if (
+      removed.isConfigured === false &&
+      !(executionChanged || removed.isEnabled) &&
+      removed.activationState === 'PAUSED'
+    ) {
       continue;
     }
     pausedIds.push(removed.id);
     await tx.agentTrigger.update({
       where: { id: removed.id },
       data: {
+        isConfigured: false,
         isEnabled: false,
         activationState: 'PAUSED',
         triggerRevision: { increment: 1 },
@@ -30,6 +36,25 @@ async function pauseRemovedTriggers(
     });
   }
   return pausedIds;
+}
+
+function triggerSettingsChanged(
+  previous: AgentTrigger,
+  settings: AgentSpecification['triggers'][number]
+) {
+  const before = agentTriggerInputSchema.safeParse({
+    type: previous.type,
+    connectionId: previous.connectionId,
+    description: previous.description,
+    filterInstructions: previous.filterInstructions,
+    config: previous.config,
+    isEnabled: false,
+  });
+  return (
+    !(previous.isConfigured && before.success) ||
+    JSON.stringify(before.data) !==
+      JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }))
+  );
 }
 
 /** Authoring's literal paused flags are not runtime activation state. */
@@ -43,14 +68,17 @@ async function reviseDefinition(
     where: { id: definitionId },
     include: { triggers: true },
   });
+  assertManagementRevision(current.managementRevision);
+  const previousExecution = agentExecutionConfigSchema.safeParse(current.executionConfig);
   const executionChanged =
+    !previousExecution.success ||
     current.instructions !== definition.instructions ||
-    JSON.stringify(agentExecutionConfigSchema.parse(current.executionConfig)) !==
-      JSON.stringify(definition.executionConfig);
+    JSON.stringify(previousExecution.data) !== JSON.stringify(definition.executionConfig);
   await tx.agentDefinition.update({
     where: { id: definitionId },
     data: {
       ...definition,
+      managementRevision: { increment: 1 },
       ...(executionChanged ? { definitionRevision: { increment: 1 } } : {}),
     },
   });
@@ -61,21 +89,17 @@ async function reviseDefinition(
     const { id, ...settings } = trigger;
     if (!previous) {
       await tx.agentTrigger.create({
-        data: { ...settings, id, agentDefinitionId: definitionId, isEnabled: false },
+        data: {
+          ...settings,
+          id,
+          agentDefinitionId: definitionId,
+          isConfigured: true,
+          isEnabled: false,
+        },
       });
       continue;
     }
-    const before = agentTriggerInputSchema.parse({
-      type: previous.type,
-      connectionId: previous.connectionId,
-      description: previous.description,
-      filterInstructions: previous.filterInstructions,
-      config: previous.config,
-      isEnabled: false,
-    });
-    const changed =
-      JSON.stringify(before) !==
-      JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }));
+    const changed = triggerSettingsChanged(previous, settings);
     if (!(changed || executionChanged)) {
       continue;
     }
@@ -84,6 +108,7 @@ async function reviseDefinition(
       where: { id },
       data: {
         ...settings,
+        isConfigured: true,
         isEnabled: false,
         activationState: 'PAUSED',
         activationGeneration: { increment: 1 },
@@ -125,3 +150,9 @@ async function reviseDefinition(
 }
 
 export const agentRevisionAccessor = { reviseDefinition };
+
+function assertManagementRevision(revision: number) {
+  if (revision >= 2_147_483_647) {
+    throw new ApplicationError('CONFLICT', 'The management revision is exhausted.');
+  }
+}

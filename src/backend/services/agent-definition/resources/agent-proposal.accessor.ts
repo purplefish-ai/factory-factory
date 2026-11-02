@@ -1,7 +1,9 @@
 import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
+import type { AgentSourceValidation } from '@/shared/agent-management';
 import type { AgentSpecification } from '@/shared/agent-proposal';
 import type { Prisma } from '@prisma-gen/client';
+import { validateManagementSources } from './agent-management-write';
 import { agentRevisionAccessor } from './agent-revision.accessor';
 
 type Transaction = Prisma.TransactionClient;
@@ -11,11 +13,17 @@ export type ProposalWrite = {
   revision?: number;
   specification: AgentSpecification;
   sourceNames: Record<string, string>;
+  evidence?: AgentSourceValidation;
 };
 const stale = () =>
   new ApplicationError('CONFLICT', 'This proposal changed. Reload it before continuing.');
 
-async function validate(tx: Transaction, workspaceId: string, spec: AgentSpecification) {
+async function validate(
+  tx: Transaction,
+  workspaceId: string,
+  spec: AgentSpecification,
+  evidence?: AgentSourceValidation
+) {
   const workspace = await tx.workspace.findUnique({
     where: { id: workspaceId },
     include: { project: true },
@@ -30,26 +38,7 @@ async function validate(tx: Transaction, workspaceId: string, spec: AgentSpecifi
   ) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active workspace and project.');
   }
-  for (const trigger of spec.triggers) {
-    if (trigger.type === 'SCHEDULE') {
-      continue;
-    }
-    const connection = await tx.agentConnection.findUnique({
-      where: { id: trigger.connectionId },
-      select: { provider: true, isEnabled: true, credentialsEncrypted: true },
-    });
-    const provider = trigger.type === 'SLACK_MESSAGE' ? 'SLACK' : 'GITHUB';
-    if (
-      !connection?.isEnabled ||
-      connection.provider !== provider ||
-      (provider === 'SLACK' && !connection.credentialsEncrypted)
-    ) {
-      throw new ApplicationError(
-        'PRECONDITION_FAILED',
-        'The event source is unavailable or has the wrong provider. Reconnect it and try again.'
-      );
-    }
-  }
+  await validateManagementSources(tx, workspace.projectId, spec, evidence);
   return workspace.projectId;
 }
 
@@ -70,7 +59,7 @@ export const agentProposalAccessor = {
   },
   propose(input: ProposalWrite) {
     return prisma.$transaction(async (tx) => {
-      await validate(tx, input.workspaceId, input.specification);
+      await validate(tx, input.workspaceId, input.specification, input.evidence);
       const data = { specification: input.specification, sourceNames: input.sourceNames };
       if (!input.proposalId) {
         return tx.agentProposal.create({ data: { ...data, workspaceId: input.workspaceId } });
@@ -109,7 +98,7 @@ export const agentProposalAccessor = {
         }
         return proposal;
       }
-      const projectId = await validate(tx, input.workspaceId, input.specification);
+      const projectId = await validate(tx, input.workspaceId, input.specification, input.evidence);
       const { triggers, ...definition } = input.specification;
       const agent = await tx.agentDefinition.create({
         data: {
@@ -117,7 +106,10 @@ export const agentProposalAccessor = {
           projectId,
           isEnabled: false,
           triggers: {
-            create: triggers.map((trigger) => ownedTrigger(proposal.id, trigger)),
+            create: triggers.map((trigger) => ({
+              ...ownedTrigger(proposal.id, trigger),
+              isConfigured: true,
+            })),
           },
         },
       });
@@ -151,7 +143,7 @@ export const agentProposalAccessor = {
       if (!proposal.agentDefinitionId) {
         throw stale();
       }
-      const projectId = await validate(tx, input.workspaceId, input.specification);
+      const projectId = await validate(tx, input.workspaceId, input.specification, input.evidence);
       const { triggers, ...definition } = input.specification;
       const agent = await tx.agentDefinition.findFirst({
         where: { id: proposal.agentDefinitionId, projectId },

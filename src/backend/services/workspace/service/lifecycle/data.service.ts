@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { workspaceLaunchOriginAccessor } from '@/backend/services/workspace/resources/workspace-launch-origin.accessor';
 import { workspaceMetadataAccessor } from '@/backend/services/workspace/resources/workspace-metadata.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
@@ -24,6 +26,16 @@ class WorkspaceDataService {
 
   subscribeAcceptedBranch(listener: (row: AcceptedWorkspaceBranch) => void): () => void {
     return this.acceptedBranches.subscribe(listener);
+  }
+
+  readEventOrigin(input: { projectId: string; workspaceId: string }) {
+    const parsed = z
+      .strictObject({
+        projectId: z.string().min(1).max(256),
+        workspaceId: z.string().min(1).max(256),
+      })
+      .parse(input);
+    return workspaceLaunchOriginAccessor.read(parsed);
   }
 
   findById(id: string) {
