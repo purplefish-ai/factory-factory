@@ -1405,6 +1405,8 @@ describe('SessionService', () => {
         name: 'Auto-Fix',
         workflow: 'ratchet',
         provider: 'CLAUDE',
+        codexAccountId: undefined,
+        conversationEpoch: 0,
         model: 'sonnet',
         startedAt,
         messages: transcript,

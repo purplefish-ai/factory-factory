@@ -3,7 +3,8 @@ import type { AcpProviderIdentityEvent } from '@/backend/services/session/servic
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { Prisma } from '@prisma-gen/client';
 import type { AcpEventProcessor } from './acp-event-processor';
-import type { closedSessionPersistenceService } from './closed-session-persistence.service';
+import { getClosedSessionConversationEpoch } from './closed-session-identity';
+import { type closedSessionPersistenceService } from './closed-session-persistence.service';
 import type { SessionRepository } from './session.repository';
 
 export class SessionProviderIdentityService {
@@ -57,6 +58,7 @@ export class SessionProviderIdentityService {
           ...(session.providerSessionId ? { providerSessionId: session.providerSessionId } : {}),
           model: session.model,
           startedAt: session.createdAt,
+          conversationEpoch: getClosedSessionConversationEpoch(session.providerMetadata),
           messages,
         });
         event.assertCurrent();

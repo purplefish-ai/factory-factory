@@ -2,14 +2,17 @@ import { vi } from 'vitest';
 
 const renameControl = vi.hoisted(() => ({
   fn: vi.fn(),
+  write: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   renameControl.fn.mockImplementation(actual.rename);
+  renameControl.write.mockImplementation(actual.writeFile);
 
   return {
     ...actual,
+    writeFile: (...args: Parameters<typeof actual.writeFile>) => renameControl.write(...args),
     rename: (...args: Parameters<typeof actual.rename>) => renameControl.fn(...args),
   };
 });
@@ -69,6 +72,38 @@ describe('writeFileAtomic', () => {
       expect(leftoverTmpFiles).toHaveLength(0);
     } finally {
       await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+  it('cleans partially written temporary bytes after a write failure', async () => {
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-atomic-file-'));
+    renameControl.write.mockImplementationOnce(
+      async (...args: Parameters<typeof actual.writeFile>) => {
+        await actual.writeFile(...args);
+        throw new Error('disk full');
+      }
+    );
+    try {
+      await expect(writeFileAtomic(path.join(dir, 'target.json'), 'partial')).rejects.toThrow(
+        'disk full'
+      );
+      expect(await fs.readdir(dir)).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('tags temporary files for owner-aware crash recovery', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-atomic-file-'));
+    try {
+      await writeFileAtomic(path.join(dir, 'target.json'), 'bytes', {
+        ...{ temporaryFileTag: 'archive-owner' },
+      });
+      expect(path.basename(renameControl.fn.mock.calls.at(-1)![0])).toMatch(
+        /^\.tmp-archive-owner-/
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
     }
   });
 });

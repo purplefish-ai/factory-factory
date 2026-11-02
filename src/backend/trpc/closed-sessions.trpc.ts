@@ -1,8 +1,7 @@
-import { readFile, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import type { ClosedSessionTranscript } from '@/backend/services/session';
+import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
 import { publicProcedure, router } from './trpc';
 
 export const closedSessionsRouter = router({
@@ -44,7 +43,7 @@ export const closedSessionsRouter = router({
         });
       }
 
-      if (!closedSession.workspace.worktreePath) {
+      if (!(closedSession.archiveKey || closedSession.workspace.worktreePath)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Workspace has no worktree path',
@@ -52,14 +51,14 @@ export const closedSessionsRouter = router({
       }
 
       // Read transcript from file
-      const transcriptPath = join(
-        closedSession.workspace.worktreePath,
-        closedSession.transcriptPath
+      const transcriptPath = sessionDataService.resolveClosedSessionTranscriptPath(
+        closedSession,
+        closedSession.workspace.worktreePath
       );
 
       try {
         const content = await readFile(transcriptPath, 'utf-8');
-        const transcript: ClosedSessionTranscript = JSON.parse(content);
+        const transcript = closedSessionTranscriptSchema.parse(JSON.parse(content));
 
         return transcript;
       } catch (error) {
@@ -93,19 +92,6 @@ export const closedSessionsRouter = router({
 
     // Delete from database first
     await sessionDataService.deleteClosedSession(input.id);
-
-    // Best-effort delete transcript file (don't throw if it fails)
-    if (closedSession.workspace.worktreePath) {
-      try {
-        const transcriptPath = join(
-          closedSession.workspace.worktreePath,
-          closedSession.transcriptPath
-        );
-        await unlink(transcriptPath);
-      } catch {
-        // Ignore file deletion errors
-      }
-    }
 
     return { success: true };
   }),

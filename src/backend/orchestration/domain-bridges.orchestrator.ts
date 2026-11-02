@@ -135,7 +135,9 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceStateMachine,
   } = services;
   const logger = createLogger('domain-bridges');
-  workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
+  workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults, (workspaceId) =>
+    sessionDataService.cleanupClosedSessionArtifacts(workspaceId)
+  );
 
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);
@@ -155,6 +157,10 @@ export function configureDomainBridges(services: BridgeServices): void {
     }),
   });
   reconciliationService.configure({
+    archives: {
+      maintain: (signal) => sessionDataService.maintainClosedSessionArchives(signal),
+      stop: () => sessionDataService.stopClosedSessionArchiveMaintenance(),
+    },
     workspace: {
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
       findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),

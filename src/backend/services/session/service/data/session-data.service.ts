@@ -24,6 +24,8 @@ import type { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import type { PRTarget } from '@/shared/pr-monitoring';
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
+import { closedSessionPersistenceService } from '../lifecycle/closed-session-persistence.service';
+import { resolveClosedSessionTranscriptPath } from '../lifecycle/closed-session-storage';
 import {
   sessionProviderResolverService,
   type SessionProviderResolverService,
@@ -283,19 +285,40 @@ class SessionDataImplementation {
 
   // Closed sessions
 
-  findClosedSessionsByWorkspaceId(
+  async findClosedSessionsByWorkspaceId(
     workspaceId: string,
     limit: number
   ): Promise<ClosedSessionRecord[]> {
+    await closedSessionPersistenceService.recoverPending(workspaceId);
     return closedSessionAccessor.findByWorkspaceId(workspaceId, limit);
   }
 
-  findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
+  async findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
+    await closedSessionPersistenceService.recoverById(id);
     return closedSessionAccessor.findByIdWithWorkspace(id);
   }
 
+  resolveClosedSessionTranscriptPath(
+    archive: Parameters<typeof resolveClosedSessionTranscriptPath>[0],
+    worktreePath: string | null
+  ): string {
+    return resolveClosedSessionTranscriptPath(archive, worktreePath);
+  }
+
+  cleanupClosedSessionArtifacts(workspaceId: string): Promise<void> {
+    return closedSessionPersistenceService.cleanupDeletedWorkspace(workspaceId);
+  }
+
+  maintainClosedSessionArchives(signal?: AbortSignal): Promise<void> {
+    return closedSessionPersistenceService.maintainArchives(signal);
+  }
+
+  stopClosedSessionArchiveMaintenance(): Promise<void> {
+    return closedSessionPersistenceService.stopArchiveMaintenance();
+  }
+
   deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
-    return closedSessionAccessor.delete(id);
+    return closedSessionPersistenceService.deleteArchive(id);
   }
 }
 

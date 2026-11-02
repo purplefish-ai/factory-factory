@@ -1,7 +1,10 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import type { SessionStopReason } from '@/backend/services/session';
+import {
+  closedSessionPersistenceService,
+  type SessionStopReason,
+} from '@/backend/services/session';
 import {
   workspaceActivityService,
   workspaceDataService,
@@ -166,6 +169,7 @@ async function completeArchive(
   services: ArchiveWorkspaceDependencies
 ) {
   await cleanupWorkspaceRuntimeResources(workspace.id, services, 'archive');
+  await closedSessionPersistenceService.preserveWorkspaceArchives(workspace.id);
 
   try {
     await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, options);

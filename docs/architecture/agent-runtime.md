@@ -99,6 +99,75 @@ native configuration options and each human revision. Ordinary prompts use the
 same admission queue. A retired handle rejects deferred configuration work,
 while unresolved claimed batches retain all delivery owners.
 
+### Closed-session archive completion
+
+The session capsule owns `ClosedSession` metadata, immutable transcript files
+and the completion protocol. A deterministic SHA-256 archive key scopes each
+snapshot to its workspace, logical session, provider, account, provider
+conversation, rollover epoch and captured contents. Concurrent closes and
+retries reserve the same row and frozen bytes; later snapshots retain separate
+copies. Completion timestamps do not change retry identity. The identity uses
+canonical conversation content, not reconstructed chat IDs, order counters,
+timestamps, image-upload display metadata, model/usage envelopes or session
+labels. Native text/image content and tool IDs/inputs remain meaningful; text
+chunk splitting does not. Durable local events retain their IDs/content
+independently of their reconstructed timeline placement. Restart retries reuse
+the first reservation's exact bytes, including its original display fields and
+completion timestamp; canonicalization never rewrites that retained transcript.
+
+A reservation commits `PENDING` metadata, the exact serialized transcript and
+its digest before any file write. Atomic file writing and hash verification
+happen outside database transactions. Only then does a database-only completion
+write publish `COMPLETE` and clear the pending payload. Files are immutable
+artifact generations named by row ID and digest:
+`BASE_DIR/closed-sessions/<sha256(workspaceId)>/<id>.<transcriptHash>.json`. A
+deleted and re-reserved logical archive key gets another row ID and file; a
+stale writer can neither overwrite nor remove its replacement. Failed completion
+retains pending proof or collects its now-unowned artifact.
+
+Every archive mutation, including reservation, deletion and legacy staging, uses
+a transaction. The better-sqlite3 adapter shares one connection and serializes
+transaction starts; awaiting filesystem I/O inside a transaction could otherwise
+enroll and roll back unrelated ordinary writes. Orphan removal rechecks
+ownership inside a transaction and unlinks synchronously without a filesystem
+await between the check and removal.
+
+Keyed database paths are relative to `BASE_DIR`; unkeyed legacy paths remain
+worktree-relative. Transcript and receipt readers resolve these explicitly.
+Metadata lists exclude pending rows. Workspace history reads recover up to 50
+pending copies; direct ID reads recover that pending row. Existing provider
+history availability/empty-history proof and successful persistence remain
+required before active session deletion. Unavailable history never becomes a
+successful closure merely because the local projection is empty.
+
+The existing reconciliation cleanup job retries a rotating page of 50 pending
+rows and collects at most 100 artifact entries per run. A root cursor and one
+current-directory cursor advance across runs, retain at most two handles and
+close on stop. Retained artifacts require only a read; orphan candidates get a
+second check under the writer lock. History reads do not run artifact
+collection. Archive temporary files carry writer PID tags; collection skips
+active local writes and other live writer processes. Failed writes clean their
+temporary bytes immediately; maintenance collects abandoned tagged files after
+writer exit.
+
+Before worktree removal, archive orchestration drains pending copies and
+relocates legacy transcripts in batches of 50, preserving IDs and exact bytes.
+Relocation never unlinks originals; copy/completion failure stops worktree
+cleanup. Already missing originals cannot be reconstructed and require explicit
+resolution. Workspace deletion still cascades archive rows. The orchestration
+bridge then calls session-owned directory cleanup, fencing same-ID restores.
+Individual archive deletion keeps best-effort artifact cleanup; reconciliation
+collects artifacts left by failures, interruption or late writes.
+
+Recovery packaging must include archive rows and their keyed application-owned
+files (or legacy worktree files), preserving IDs, keys, paths, exact digests and
+pending payloads. Pending rows are incomplete recovery proof, never replay
+authority. Metadata alone does not restore a completed transcript. Imports must
+validate artifact paths and digests, preserve immutable identities, and perform
+archive writes in transactions. The additive migration publishes legacy rows
+without fabricating files or identities; relocation requires original bytes.
+This protocol does not restore deleted provider history.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

@@ -26,6 +26,8 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
+const mockMaintainArchives = vi.fn(async (_signal?: AbortSignal) => undefined);
+const mockStopArchives = vi.fn(async () => undefined);
 const mockInitializeWorktree = vi.fn();
 const mockRecoverStaleProvisioningWorkspace = vi.fn();
 
@@ -40,6 +42,7 @@ describe('ReconciliationService', () => {
     vi.useFakeTimers();
     mockRecoverStaleProvisioningWorkspace.mockReset().mockResolvedValue(true);
     reconciliationService.configure({
+      archives: { maintain: mockMaintainArchives, stop: mockStopArchives },
       workspace: {
         initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
         findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
@@ -56,6 +59,14 @@ describe('ReconciliationService', () => {
     await reconciliationService.stopPeriodicCleanup();
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('maintains session archives during cleanup and closes their cursors on stop', async () => {
+    reconciliationService.startPeriodicCleanup();
+    await reconciliationService.cleanupOrphans();
+    expect(mockMaintainArchives).toHaveBeenCalledWith(undefined);
+    await reconciliationService.stopPeriodicCleanup();
+    expect(mockStopArchives).toHaveBeenCalled();
   });
 
   describe('reconcile', () => {
