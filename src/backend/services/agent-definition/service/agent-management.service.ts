@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { agentManagementHistoryAccessor } from '@/backend/services/agent-definition/resources/agent-management-history.accessor';
 import { agentManagementAccessor } from '@/backend/services/agent-definition/resources/agent-management.accessor';
 import { agentRunPageSchema, agentEvaluationPageSchema } from '@/shared/agent-history';
@@ -15,6 +16,7 @@ import {
   agentSavedUpdateSchema,
   agentSourceValidationSchema,
 } from '@/shared/agent-management';
+import { agentRecoveryTargetInputSchema } from '@/shared/event-agent-recovery';
 import { publicReason, runHistoryProjection } from './agent-history-projection';
 import {
   managementProjection,
@@ -22,8 +24,22 @@ import {
   nextManagementCursor,
   readManagementCursor,
 } from './agent-management-projection';
+import { recoveryTargetProjection } from './agent-recovery-target';
 
 export class AgentManagementService {
+  async recoveryTarget(input: unknown) {
+    const parsed = agentRecoveryTargetInputSchema.parse(input);
+    return recoveryTargetProjection(
+      parsed,
+      await agentManagementHistoryAccessor.recoveryTarget(parsed)
+    );
+  }
+  async assertRecoveryScope(input: unknown) {
+    const parsed = agentRecoveryTargetInputSchema.parse(input);
+    if (!(await agentManagementHistoryAccessor.recoveryTarget(parsed))) {
+      throw new ApplicationError('NOT_FOUND', 'Event run not found.');
+    }
+  }
   checkSources(projectId: string, specification: unknown, evidence: unknown) {
     return agentManagementAccessor.checkSources(
       agentManagementIdSchema.parse(projectId),

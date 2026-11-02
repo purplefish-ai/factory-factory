@@ -478,14 +478,16 @@ archived rows; it does not mean ready or running. Null result/preparation
 metadata means no validated public metadata is available, not an empty result,
 completion or cleanup.
 
-These APIs do not add activation, operator recovery or UI. Production authoring
-still creates paused definitions. The current runtime has no membership/native-
-intent gate for manually altered ACTIVE-looking legacy records; runtime-wide
-membership enforcement and persisted server-validated native intent remain
-mandatory before activation is delivered. Trusted-local HTTP uses existing
-locality/origin/forwarding checks, not authenticated human-versus-agent
-isolation. The MCP catalog still exposes only source discovery/proposal
-authoring/read tools.
+These management APIs do not add activation or UI. Exact-context operator
+recovery uses the separate trusted-local transport described in
+[agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
+Production authoring still creates paused definitions. The current runtime has
+no membership or native intent gate for manually altered ACTIVE-looking legacy
+records; runtime-wide membership enforcement and persisted server-validated
+native intent remain mandatory before activation is delivered. Trusted-local
+HTTP uses existing locality/origin/forwarding checks, not authenticated
+human-versus-agent isolation. The MCP catalog still exposes only source
+discovery/proposal authoring/read tools.
 
 ### Conversational creation
 

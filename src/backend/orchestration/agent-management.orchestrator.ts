@@ -16,9 +16,16 @@ import {
   agentProjectSourcesInputSchema,
 } from '@/shared/agent-validation';
 import {
+  agentRecoveryContextSchema,
+  agentRecoveryInputSchema,
+  agentRecoveryInspectionSchema,
+  agentRecoveryResultSchema,
+} from '@/shared/event-agent-recovery';
+import {
   validateAgentExecution,
   type AgentNativeValidationServices,
 } from './agent-native-validation';
+import type { createAgentRuntime } from './agent-runtime.orchestrator';
 import {
   discoverProjectAgentSources,
   resolveProjectAgentSources,
@@ -30,6 +37,7 @@ type Services = AgentSourceServices &
   AgentNativeValidationServices & {
     projectManagementService: { findById(id: string): Promise<AgentSourceProject | null> };
     agentManagementService: AgentManagementService;
+    agentRuntime?: Pick<ReturnType<typeof createAgentRuntime>, 'recovery'>;
     workspaceDataService: Pick<typeof workspaceDataService, 'readEventOrigin'>;
   };
 async function activeProject(projectId: string, services: Services) {
@@ -79,8 +87,58 @@ async function validateTriggers(
   }
   return { results, verified };
 }
+async function recoveryScope(
+  input: { projectId: string; agentId: string; claim: { runId: string } },
+  services: Services
+) {
+  await services.agentManagementService.assertRecoveryScope({
+    projectId: input.projectId,
+    agentId: input.agentId,
+    runId: input.claim.runId,
+  });
+  const recovery = services.agentRuntime?.recovery;
+  if (!recovery) {
+    throw new ApplicationError('PRECONDITION_FAILED', 'Event recovery is unavailable.');
+  }
+  return recovery;
+}
 export function createAgentManagement(getServices: () => Services) {
   return {
+    async inspectRun(input: unknown) {
+      const { agentId, ...context } = agentRecoveryContextSchema.parse(input);
+      const recovery = await recoveryScope({ ...context, agentId }, getServices());
+      try {
+        const inspected = await recovery.inspectRun(context);
+        return agentRecoveryInspectionSchema.parse({
+          projectId: context.projectId,
+          agentId,
+          runId: context.claim.runId,
+          context,
+          run: {
+            status: 'RUNNING',
+            launchPhase: inspected.run.phase,
+            deliveryState: inspected.run.delivery.state,
+            preparationState: inspected.run.preparation?.state ?? null,
+          },
+          blocked: inspected.blocked,
+          retryBlocked: inspected.retryBlocked,
+          retryResourcesAvailable: inspected.retryResourcesAvailable,
+          proofAvailable: inspected.proofAvailable,
+          delivery: inspected.delivery,
+        });
+      } catch {
+        throw new ApplicationError('CONFLICT', 'Event recovery context is unavailable or changed.');
+      }
+    },
+    async resolveAmbiguousRun(input: unknown) {
+      const { agentId, ...context } = agentRecoveryInputSchema.parse(input);
+      const recovery = await recoveryScope({ ...context, agentId }, getServices());
+      try {
+        return agentRecoveryResultSchema.parse(await recovery.resolveAmbiguousRun(context));
+      } catch {
+        throw new ApplicationError('CONFLICT', 'Event recovery context is unavailable or changed.');
+      }
+    },
     async updateSaved(input: unknown) {
       const parsed = agentSavedUpdateSchema.parse(input);
       const services = getServices();
