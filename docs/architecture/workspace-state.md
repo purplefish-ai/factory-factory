@@ -138,6 +138,10 @@ Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
 duplicate submissions. Success clears only the submitted revision; a late
 response cannot clear or close a newer draft or a composer in another project.
+Standard workspace launches collapse the composer immediately while the
+optimistic setup card shows progress in Working. If the standard workspace
+creation request fails, its optimistic card is removed and the composer returns
+with its retained draft and error.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
