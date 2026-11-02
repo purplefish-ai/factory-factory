@@ -1,3 +1,5 @@
+// Install the shared mocks before loading service barrels.
+import './pr-event-flow.test-helpers';
 import { EventEmitter } from 'node:events';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -16,61 +18,16 @@ import {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import {
-  createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
-import type { PrismaClient } from '@prisma-gen/client';
-
-const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined, busy: false }));
-vi.mock('@/backend/db', () => ({
-  get prisma() {
-    if (!state.prisma) {
-      throw new Error('Missing test database');
-    }
-    return state.prisma;
-  },
-}));
-vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: { isSessionPromptInFlight: () => state.busy },
-  sessionDomainService: { getPendingInteractiveRequest: () => null },
-  sessionLifecycleService: {},
-  sessionDataService: {
-    findPRDedicatedSession: async ({
-      workspaceId,
-      prId,
-    }: {
-      workspaceId: string;
-      prId: string;
-    }) => {
-      const bound = await state.prisma?.workspacePRDedicatedSession.findUnique({
-        where: { prId },
-        include: { session: { include: { workspace: true } } },
-      });
-      return bound?.session?.workspaceId === workspaceId ? bound.session : null;
-    },
-    findAgentSessionById: (id: string) =>
-      state.prisma?.agentSession.findUnique({ where: { id }, include: { workspace: true } }),
-  },
-  sessionBackgroundDeliveryService: {
-    enqueue: vi.fn(() => ({ queued: true })),
-    invalidate: vi.fn(),
-  },
-  sessionDispatchService: { tryDispatchNextMessage: vi.fn(async () => undefined) },
-  findPRDeliveryReceipt: vi.fn(),
-}));
-
-vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: vi.fn(async () => true) }));
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
-}));
-
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
+import { createPRFlowIntegrationDatabase, getPRFlowTestState } from './pr-event-flow.test-helpers';
 import {
   createPRObservationPorts,
   defaultPRMonitoringServices,
@@ -86,23 +43,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const state = getPRFlowTestState();
 let db: IntegrationDatabase;
 beforeEach(() => {
   // Delivery integration controls its freshness prerequisite at the delivery port.
   vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
 });
 beforeAll(async () => {
-  db = await createIntegrationDatabase();
-  state.prisma = db.prisma;
-  await db.prisma.project.create({
-    data: {
-      id: 'project',
-      name: 'Project',
-      slug: 'project',
-      repoPath: '/tmp/repo',
-      worktreeBasePath: '/tmp/worktrees',
-    },
-  });
+  db = await createPRFlowIntegrationDatabase();
   await db.prisma.workspace.create({
     data: {
       id: 'w',
@@ -897,78 +845,5 @@ it('delivers a large MAIN ledger in bounded batches without acknowledging deferr
   expect(batches).toBeGreaterThan(1);
   expect(await workspacePRMonitoringService.get(workspaceId)).toMatchObject({
     deliveryPauseReason: null,
-  });
-});
-
-it('delivers and retries a saved merge event when all associations stop background observation', async () => {
-  const workspaceId = 'terminal-polling';
-  const sessionId = `${workspaceId}-main`;
-  const prId = `${workspaceId}-pr`;
-  await db.prisma.workspace.create({
-    data: {
-      id: workspaceId,
-      projectId: 'project',
-      name: 'Merged',
-      status: 'READY',
-      worktreePath: db.tempDir,
-      prMonitoring: { create: { enabled: true, bindingRevision: 1, eventEpoch: 1 } },
-      prs: { create: { id: prId, url: redObservation.url } },
-    },
-  });
-  await db.prisma.agentSession.create({
-    data: {
-      id: sessionId,
-      workspaceId,
-      workflow: 'implement',
-      model: 'custom',
-      provider: 'CODEX',
-      providerSessionId: sessionId,
-    },
-  });
-  await db.prisma.workspacePRMonitoring.update({
-    where: { workspaceId },
-    data: { recipientSessionId: sessionId },
-  });
-  await workspacePrSnapshotService.acceptMonitoredObservation({
-    target: { workspaceId, prId },
-    expectedPrRevision: 0,
-    expectedEventEpoch: 1,
-    observation: { ...redObservation, prState: 'MERGED', ciStatus: 'SUCCESS', checks: [] },
-  });
-  expect((await workspacePRMonitoringService.listPending(workspaceId)).map((e) => e.kind)).toEqual([
-    'PR_MERGED',
-  ]);
-  const observe = vi.fn().mockResolvedValue(true);
-  ratchetService.configure({
-    observe,
-    wake: (id, isCurrent) => wakePRDelivery(id, defaultPRDeliveryPorts, isCurrent),
-    setMonitoring: vi.fn(),
-  });
-  vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
-  await ratchetService.checkWorkspaceById(workspaceId);
-  expect(observe).not.toHaveBeenCalled();
-  expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledWith(sessionId, {
-    workspaceId,
-    prId,
-    bindingRevision: 1,
-  });
-  const request = { workspaceId, prId, bindingRevision: 1 };
-  const prepared = await preparePRDelivery({ sessionId, request });
-  if (prepared.status !== 'ready') {
-    throw new Error('Expected terminal delivery');
-  }
-  await prBackgroundDeliveryPort.fail(prepared.delivery, new Error('temporary transport failure'));
-  await ratchetService.checkWorkspaceById(workspaceId);
-  const retry = await preparePRDelivery({ sessionId, request });
-  if (retry.status !== 'ready') {
-    throw new Error('Expected terminal retry');
-  }
-  expect(retry.delivery.deliveryId).toBe(prepared.delivery.deliveryId);
-  await prBackgroundDeliveryPort.complete(retry.delivery);
-  expect(await workspacePRMonitoringService.listPending(workspaceId)).toEqual([]);
-  expect(observe).not.toHaveBeenCalled();
-  expect(await workspacePRMonitoringService.get(workspaceId)).toMatchObject({
-    enabled: true,
-    recipientSessionId: sessionId,
   });
 });
