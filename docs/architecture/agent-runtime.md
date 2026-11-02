@@ -218,6 +218,17 @@ results are cached for 30 seconds per provider/model, with bounded cache and
 concurrent discovery counts. Failed discovery offers Retry; creation waits for
 confirmed options while model selection remains editable.
 
+Native discovery retains one of its eight admission slots until the disposable
+child emits `close`, including closure of its stdio pipes, and its ACP
+connection is logically closed. Operation/session-close timeouts and TERM/KILL
+requests bound caller results but do not release that native lifetime. SDK
+logical closure alone does not prove child drain. A lifetime that never closes
+remains charged; retries share its bounded failure, or report discovery busy
+when its successful cache entry expires after 30 seconds or is evicted. The
+success timestamp is not refreshed while cleanup remains charged. This tracks
+the owned child and pipes, without claiming containment of every SDK
+continuation or external descendant.
+
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
 change that makes an explicit level unavailable keeps that choice visible and

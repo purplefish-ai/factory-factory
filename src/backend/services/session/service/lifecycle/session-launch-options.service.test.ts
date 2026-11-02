@@ -17,11 +17,29 @@ function native(provider: 'CLAUDE' | 'CODEX', model: string): SessionLaunchOptio
     planMode: { supported: true, selected: false },
   };
 }
+function drainedFetch(
+  fetchOptions: (input: {
+    provider: 'CLAUDE' | 'CODEX';
+    model?: string;
+    codexAccountId?: string;
+  }) => Promise<SessionLaunchOptions>
+) {
+  return (input: Parameters<typeof fetchOptions>[0]) => {
+    const result = fetchOptions(input);
+    return Promise.resolve({
+      result,
+      drained: result.then(
+        () => undefined,
+        () => undefined
+      ),
+    });
+  };
+}
 describe('selected-model launch discovery', () => {
   it('isolates probes for the same model on different Codex accounts', async () => {
     const fetchOptions = vi.fn().mockResolvedValue(native('CODEX', 'model'));
     const service = new SessionLaunchOptionsService({
-      fetchOptions,
+      fetchOptions: drainedFetch(fetchOptions),
       getSettings: vi.fn().mockResolvedValue({}),
     });
     await Promise.all(
@@ -47,7 +65,10 @@ describe('selected-model launch discovery', () => {
       defaultClaudeReasoningEffort: 'xhigh',
       defaultCodexReasoningEffort: 'unavailable',
     });
-    const service = new SessionLaunchOptionsService({ fetchOptions, getSettings });
+    const service = new SessionLaunchOptionsService({
+      fetchOptions: drainedFetch(fetchOptions),
+      getSettings,
+    });
     const [a, b] = await Promise.all([
       service.getOptions({ provider: 'CLAUDE', model: 'sonnet' }),
       service.getOptions({ provider: 'CLAUDE', model: 'sonnet' }),
@@ -70,7 +91,7 @@ describe('selected-model launch discovery', () => {
       .mockRejectedValueOnce(new Error('Provider unavailable'))
       .mockResolvedValue(native('CLAUDE', 'haiku'));
     const service = new SessionLaunchOptionsService({
-      fetchOptions,
+      fetchOptions: drainedFetch(fetchOptions),
       getSettings: vi.fn().mockResolvedValue({}),
     });
     await expect(service.getOptions({ provider: 'CLAUDE', model: 'haiku' })).rejects.toThrow(
@@ -81,11 +102,11 @@ describe('selected-model launch discovery', () => {
     );
     expect(fetchOptions).toHaveBeenCalledTimes(2);
   });
-  it('bounds simultaneous probes and releases admission after they settle', async () => {
+  it('bounds simultaneous probes and releases admission after their lifetimes drain', async () => {
     const pending = createDeferred<SessionLaunchOptions>();
     const fetchOptions = vi.fn().mockReturnValue(pending.promise);
     const service = new SessionLaunchOptionsService({
-      fetchOptions,
+      fetchOptions: drainedFetch(fetchOptions),
       getSettings: vi.fn().mockResolvedValue({}),
     });
     const running = Array.from({ length: 8 }, (_, index) =>
@@ -104,7 +125,7 @@ describe('selected-model launch discovery', () => {
     try {
       const fetchOptions = vi.fn().mockResolvedValue(native('CODEX', 'model'));
       const service = new SessionLaunchOptionsService({
-        fetchOptions,
+        fetchOptions: drainedFetch(fetchOptions),
         getSettings: vi.fn().mockResolvedValue({}),
       });
       const first = await service.getOptions({ provider: 'CODEX', model: 'model' });
@@ -118,5 +139,20 @@ describe('selected-model launch discovery', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('evicts the oldest success when the 33rd distinct result is cached', async () => {
+    const fetchOptions = vi.fn(({ provider, model }) => Promise.resolve(native(provider, model)));
+    const service = new SessionLaunchOptionsService({
+      fetchOptions: drainedFetch(fetchOptions),
+      getSettings: vi.fn().mockResolvedValue({}),
+    });
+    for (let i = 0; i < 33; i++) {
+      await service.getOptions({ provider: 'CODEX', model: `model-${i}` });
+    }
+    await service.getOptions({ provider: 'CODEX', model: 'model-1' });
+    expect(fetchOptions).toHaveBeenCalledTimes(33);
+    await service.getOptions({ provider: 'CODEX', model: 'model-0' });
+    expect(fetchOptions).toHaveBeenCalledTimes(34);
   });
 });

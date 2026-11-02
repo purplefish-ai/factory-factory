@@ -1,4 +1,5 @@
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
+import { createLogger } from '@/backend/services/logger.service';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string; codexAccountId?: string };
 type Defaults = {
@@ -10,12 +11,15 @@ type Defaults = {
 const CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 32;
 const MAX_PENDING_DISCOVERIES = 8;
+const logger = createLogger('session-launch-options');
+type Discovery = { result: Promise<SessionLaunchOptions>; drained: Promise<void> };
+type PendingDiscovery = Discovery & { succeeded: boolean };
 export class SessionLaunchOptionsService {
   private readonly cache = new Map<string, { value: SessionLaunchOptions; capturedAt: number }>();
-  private readonly pending = new Map<string, Promise<SessionLaunchOptions>>();
+  private readonly pending = new Map<string, PendingDiscovery>();
   constructor(
     private readonly deps: {
-      fetchOptions(input: Input): Promise<SessionLaunchOptions>;
+      fetchOptions(input: Input): Promise<Discovery>;
       getSettings(): Promise<Defaults>;
       resolveAccountId?(input: Input): Promise<string>;
     }
@@ -56,25 +60,56 @@ export class SessionLaunchOptionsService {
       return structuredClone(cached.value);
     }
     let pending = this.pending.get(key);
+    if (pending?.succeeded) {
+      // The cached success expired/was evicted while its native lifetime stayed charged.
+      throw new Error('Launch discovery is busy; retry shortly');
+    }
     if (!pending) {
       if (this.pending.size >= MAX_PENDING_DISCOVERIES) {
         throw new Error('Launch discovery is busy; retry shortly');
       }
-      pending = Promise.resolve()
-        .then(() => this.deps.fetchOptions(input))
-        .then((value) => {
-          if (this.cache.size >= MAX_CACHE_ENTRIES) {
-            const oldest = this.cache.keys().next().value;
-            if (oldest !== undefined) {
-              this.cache.delete(oldest);
+      const started = Promise.resolve().then(() => this.deps.fetchOptions(input));
+      const entry: PendingDiscovery = {
+        succeeded: false,
+        drained: started.then(
+          async (discovery) => {
+            await Promise.all([
+              discovery.result.then(
+                () => undefined,
+                () => undefined
+              ),
+              discovery.drained,
+            ]);
+          },
+          () => undefined
+        ),
+        result: started
+          .then((discovery) => discovery.result)
+          .then((value) => {
+            if (this.cache.size >= MAX_CACHE_ENTRIES) {
+              const oldest = this.cache.keys().next().value;
+              if (oldest !== undefined) {
+                this.cache.delete(oldest);
+              }
             }
-          }
-          this.cache.set(key, { value: structuredClone(value), capturedAt: Date.now() });
-          return value;
-        })
-        .finally(() => this.pending.delete(key));
+            this.cache.set(key, { value: structuredClone(value), capturedAt: Date.now() });
+            entry.succeeded = true;
+            return value;
+          }),
+      };
+      pending = entry;
       this.pending.set(key, pending);
+      void entry.drained.then(
+        () => {
+          if (this.pending.get(key) === entry) {
+            this.pending.delete(key);
+          }
+        },
+        (error: unknown) => {
+          logger.warn('Launch discovery drain failed; retaining admission', { error });
+        }
+      );
     }
-    return structuredClone(await pending);
+    return structuredClone(await pending.result);
   }
 }

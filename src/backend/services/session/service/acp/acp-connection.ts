@@ -61,6 +61,7 @@ export function createAcpConnection(handler: AcpClientCallbacks, stream: Stream)
       peer.request(methods.agent.session.setMode, params),
     extMethod: (method: string, params: Record<string, unknown>) => peer.request(method, params),
     close: () => connection.close(),
+    closed: connection.closed,
   };
 }
 
