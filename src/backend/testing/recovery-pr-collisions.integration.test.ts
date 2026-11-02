@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { configService } from '@/backend/services/config.service';
+import { prRecoverySchema } from '@/shared/schemas/pr-recovery.schema';
 import { type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -275,4 +276,72 @@ it('skips a conflicting unbatched fact without dropping a complete ordered froze
     imported: 2,
     skipped: 1,
   });
+});
+
+it('rejects duplicate explicit delivery identities across individually valid workspace snapshots before opening import', async () => {
+  await db.prisma.workspace.create({
+    data: { id: 'second-workspace', projectId: 'project', name: 'Second' },
+  });
+  for (const [workspaceId, receipt] of [
+    ['workspace', 'receipt'],
+    ['second-workspace', 'second-receipt'],
+  ]) {
+    const eventIds = [`${workspaceId}-second`, `${workspaceId}-first`];
+    await db.prisma.workspacePRDelivery.create({
+      data: { id: receipt!, workspaceId: workspaceId!, eventIds, state: 'BLOCKED' },
+    });
+    for (const eventId of eventIds) {
+      await fact(eventId, workspaceId!, receipt!);
+    }
+  }
+  const backup = await dataBackupService.exportData('test');
+  const second = backup.data.workspaces.find((row) => row.id === 'second-workspace')!.prRecovery!;
+  second.deliveries[0]!.id = 'receipt';
+  for (const event of second.events) {
+    event.batchId = 'receipt';
+    if (event.deliveryId) {
+      event.deliveryId = 'receipt';
+    }
+  }
+  for (const workspace of backup.data.workspaces) {
+    expect(() => prRecoverySchema.parse(workspace.prRecovery)).not.toThrow();
+  }
+  await clear();
+  const lookup = vi.spyOn(db.prisma, '$queryRaw');
+  await expect(dataBackupService.importData(backup)).rejects.toMatchObject({
+    code: 'INVALID_INPUT',
+    message: 'Duplicate recovery identity WorkspacePRDelivery: ["receipt"]',
+  });
+  expect(lookup).not.toHaveBeenCalled();
+  expect(await db.prisma.project.count()).toBe(0);
+  expect(await db.prisma.workspacePRDelivery.count()).toBe(0);
+});
+
+it('counts one explicit delivery when multiple normalized facts also repeat its legacy compatibility identity', async () => {
+  await db.prisma.workspacePRDelivery.create({
+    data: {
+      id: 'receipt',
+      workspaceId: 'workspace',
+      eventIds: ['second', 'first'],
+      state: 'BLOCKED',
+    },
+  });
+  for (const id of ['first', 'second']) {
+    await fact(id, 'workspace', 'receipt');
+    await db.prisma.workspacePREvent.update({ where: { id }, data: { deliveryId: 'receipt' } });
+  }
+  const backup = await dataBackupService.exportData('test');
+  const snapshot = backup.data.workspaces[0]!.prRecovery!;
+  expect(snapshot.events.map((row) => row.deliveryId)).toEqual(['receipt', 'receipt']);
+  await clear();
+  const result = await dataBackupService.importData(backup);
+  expect(result.recovery.models).toContainEqual({
+    model: 'WorkspacePRDelivery',
+    imported: 1,
+    skipped: 0,
+  });
+  expect(result.recovery.skipped.filter((row) => row.model === 'WorkspacePRDelivery')).toEqual([]);
+  expect(await db.prisma.workspacePRDelivery.findMany()).toEqual([
+    expect.objectContaining({ id: 'receipt', eventIds: ['second', 'first'], state: 'BLOCKED' }),
+  ]);
 });

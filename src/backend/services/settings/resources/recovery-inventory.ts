@@ -182,16 +182,7 @@ function groups(data: ExportData['data']): Group[] {
   });
   result.push({
     ...prRecoveryInventoryDescriptors.workspacePRDelivery,
-    values: [
-      ...new Set(
-        data.workspaces.flatMap((workspace) => [
-          ...(workspace.prRecovery?.deliveries ?? []).map((row) => row.id),
-          ...(workspace.prRecovery?.events ?? workspace.prEvents).flatMap((row) =>
-            row.deliveryId ? [row.deliveryId] : []
-          ),
-        ])
-      ),
-    ].map((id) => [id]),
+    values: deliveryInventoryIdentities(data).map((id) => [id]),
   });
   result.push({
     ...prRecoveryInventoryDescriptors.workspacePREvent,
@@ -200,6 +191,22 @@ function groups(data: ExportData['data']): Group[] {
     ),
   });
   return result;
+}
+/** Explicit rows retain multiplicity so preflight can reject duplicate identities.
+ * Repeated fact references represent one legacy effect, not additional rows. */
+function deliveryInventoryIdentities(data: ExportData['data']): string[] {
+  const explicit = data.workspaces.flatMap((workspace) =>
+    (workspace.prRecovery?.deliveries ?? []).map((row) => row.id)
+  );
+  const explicitIds = new Set(explicit);
+  const legacyReferences = new Set(
+    data.workspaces.flatMap((workspace) =>
+      (workspace.prRecovery?.events ?? workspace.prEvents).flatMap((row) =>
+        row.deliveryId ? [row.deliveryId] : []
+      )
+    )
+  );
+  return [...explicit, ...[...legacyReferences].filter((id) => !explicitIds.has(id))];
 }
 const quoted = (name: StaticIdentifier) => Prisma.raw(`"${name}"`);
 async function existing(tx: Prisma.TransactionClient, group: Group): Promise<Set<string>> {
