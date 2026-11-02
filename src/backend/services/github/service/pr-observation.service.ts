@@ -6,7 +6,7 @@ import { githubCLIService } from './github-cli.service';
 import { fetchPRReviewFacts } from './pr-review-facts';
 
 interface ObservationPorts {
-  findPR(target: PRTarget): Promise<{ url: string } | null>;
+  findPR(target: PRTarget): Promise<{ url: string; hasMergeConflict?: boolean } | null>;
   readPolicy(): Promise<{ reviewTriggerMode: RatchetReviewTriggerMode }>;
 }
 class PRObservationService {
@@ -65,7 +65,12 @@ class PRObservationService {
       prState: observationState(details),
       ciStatus,
       reviewState: details.reviewDecision,
-      hasMergeConflict: details.mergeStateStatus === 'DIRTY',
+      // UNKNOWN means GitHub is still recomputing mergeability after the base or
+      // head moved; keep the last known conflict rather than reporting it cleared.
+      hasMergeConflict:
+        details.mergeStateStatus === 'UNKNOWN'
+          ? (association.hasMergeConflict ?? false)
+          : details.mergeStateStatus === 'DIRTY',
       checks,
       ...reviewFacts,
     });

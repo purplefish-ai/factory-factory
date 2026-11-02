@@ -38,6 +38,12 @@ export class RollingOutputBuffer {
     this.trimTo(bodyCapacity);
   }
 
+  /** Discards all retained output, including the truncation state. */
+  clear(): void {
+    this.resetChunks();
+    this.truncated = false;
+  }
+
   toString(): string {
     const body = this.bufferedChars === 0 ? '' : this.chunks.slice(this.startIndex).join('');
     return this.truncated ? this.boundedMarker + body : body;

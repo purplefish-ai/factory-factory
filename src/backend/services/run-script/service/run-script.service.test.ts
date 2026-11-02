@@ -391,6 +391,7 @@ describe('RunScriptService.startRunScript', () => {
     expect(mockFindFreePort).toHaveBeenCalledTimes(1);
     expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'pnpm dev --port 5173'], {
       cwd: '/tmp/ws-1',
+      env: expect.any(Object),
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1802,6 +1803,7 @@ describe('RunScriptService.cleanup/postRun internals', () => {
 
     expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo cleanup 3000'], {
       cwd: '/tmp/ws-1',
+      env: expect.any(Object),
       detached: false,
       stdio: 'ignore',
     });
@@ -1889,6 +1891,7 @@ describe('RunScriptService.cleanup/postRun internals', () => {
     await spawnPostRun('echo postrun {port}', 3000);
     expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo postrun 3000'], {
       cwd: '/tmp/ws-1',
+      env: expect.any(Object),
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

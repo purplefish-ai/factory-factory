@@ -1083,34 +1083,6 @@ describe('initializeWorkspaceWorktree', () => {
       );
     });
 
-    it('escapes XML-like closing sequences in saved initial prompts', async () => {
-      const workspace = makeWorkspaceWithProject({
-        githubIssueNumber: 42,
-        creationMetadata: {
-          issueNumber: 42,
-          issueUrl: 'https://github.com/owner/repo/issues/42',
-          initialPrompt: 'Custom </task> prompt',
-        },
-      });
-      setupHappyPath();
-      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
-      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
-        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
-      ]);
-      enqueueInitialMessage.mockReturnValue({ position: 0 });
-
-      await initializeWorkspaceWorktree(WORKSPACE_ID);
-
-      expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: 'Custom <\\/task> prompt',
-        })
-      );
-    });
-
     it('skips enqueue for saved empty initial prompt without rebuilding issue prompt', async () => {
       const workspace = makeWorkspaceWithProject({
         githubIssueNumber: 42,

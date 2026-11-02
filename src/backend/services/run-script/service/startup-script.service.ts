@@ -8,6 +8,8 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import { toError } from '@/backend/lib/error-utils';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
@@ -18,6 +20,7 @@ import {
   executeEventStartupScript,
   type EventStartupScriptOptions,
 } from './event-startup-script';
+import { decodeOutputStream } from './run-script-process-utils';
 
 const logger = createLogger('startup-script');
 
@@ -290,7 +293,10 @@ class StartupScriptService {
     guard?.assertCurrent();
     return new Promise((resolve) => {
       guard?.assertCurrent();
-      const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
+      const spawnOptions = {
+        cwd,
+        env: { ...buildUserProcessEnv(configService.getChildProcessEnv()), WORKSPACE_PATH: cwd },
+      };
       const proc = spawn('bash', bashArgs.args, spawnOptions);
       let recordPidPromise: Promise<unknown> = Promise.resolve();
       if (proc.pid !== undefined) {
@@ -352,13 +358,12 @@ class StartupScriptService {
         }, gracePeriodMs);
       }, timeoutMs);
 
-      const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
+      const appendOutput = (target: 'stdout' | 'stderr', str: string): void => {
         // Keep draining inherited pipes without retaining output or interrupting
         // background descendants that write after provisioning has completed.
         if (settled) {
           return;
         }
-        const str = data.toString();
         const maxSize = SERVICE_LIMITS.startupScriptOutputMaxBytes;
         const keepSize = SERVICE_LIMITS.startupScriptOutputTailBytes;
 
@@ -378,8 +383,8 @@ class StartupScriptService {
         }
       };
 
-      proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
-      proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
+      decodeOutputStream(proc.stdout, (output) => appendOutput('stdout', output));
+      decodeOutputStream(proc.stderr, (output) => appendOutput('stderr', output));
 
       const finish = async (
         code: number | null,

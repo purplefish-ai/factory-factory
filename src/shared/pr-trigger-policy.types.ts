@@ -14,4 +14,7 @@ export interface PREventSummary {
   kind: PRFactPayload['kind'];
   payload: PRFactPayload;
   deduplicationKey?: string;
+  /** Ledger timestamps order an in-flight delivery against later re-emissions. */
+  createdAt?: Date;
+  deliveredAt?: Date | null;
 }

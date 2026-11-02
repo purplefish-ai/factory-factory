@@ -199,7 +199,7 @@ describe('createDevLogsUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'output', data: 'buffered logs\n' })
+      JSON.stringify({ type: 'output', data: 'buffered logs\n', replay: true })
     );
     const outputSubscriber = runScriptService.subscribeToOutput.mock.calls[0]?.[1] as
       | ((data: string) => void)

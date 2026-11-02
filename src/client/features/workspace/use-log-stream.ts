@@ -11,6 +11,8 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 const LogStreamMessageSchema = z.object({
   type: z.literal('output'),
   data: z.string().optional(),
+  /** Set on the frame carrying the server's retained buffer, sent first on each connection. */
+  replay: z.boolean().optional(),
 });
 
 const LOG_ROLLING_OUTPUT_OPTIONS = {
@@ -35,6 +37,11 @@ export interface UseLogStreamResult {
 interface LogStreamBuffer {
   streamKey: string;
   output: RollingOutputBuffer;
+  /**
+   * Set on a reconnect until the connection's first message: a replay frame
+   * then replaces the output this buffer already shows, which it repeats.
+   */
+  replaceOnReplay: boolean;
 }
 
 interface PendingOutputFlush {
@@ -74,6 +81,7 @@ export function useLogStream(
     () => ({
       streamKey,
       output: new RollingOutputBuffer(LOG_ROLLING_OUTPUT_OPTIONS),
+      replaceOnReplay: false,
     }),
     [streamKey]
   );
@@ -125,11 +133,25 @@ export function useLogStream(
 
   const handleMessage = useCallback(
     (message: z.infer<typeof LogStreamMessageSchema>) => {
-      if (message.data) {
-        appendOutput(message.data);
+      if (committedStreamBufferRef.current !== streamBuffer) {
+        return;
       }
+      const replaceOutput = streamBuffer.replaceOnReplay && message.replay === true;
+      streamBuffer.replaceOnReplay = false;
+      if (!message.data) {
+        return;
+      }
+      if (replaceOutput) {
+        // The replay is the server's retained tail (500 KiB, a little less than
+        // this buffer keeps), which covers what was shown before the
+        // disconnect; show it once instead of appending a duplicate.
+        streamBuffer.output.clear();
+        appendOutput(`Reconnected!\n\n${message.data}`);
+        return;
+      }
+      appendOutput(message.data);
     },
-    [appendOutput]
+    [appendOutput, streamBuffer]
   );
 
   const handleConnected = useCallback(() => {
@@ -137,7 +159,9 @@ export function useLogStream(
       return;
     }
     setHasDisconnected(false);
-    appendOutput(streamBuffer.output.toString() ? 'Reconnected!\n\n' : 'Connected!\n\n');
+    const isReconnect = streamBuffer.output.toString() !== '';
+    streamBuffer.replaceOnReplay = isReconnect;
+    appendOutput(isReconnect ? 'Reconnected!\n\n' : 'Connected!\n\n');
   }, [appendOutput, streamBuffer]);
 
   const handleDisconnected = useCallback(() => {

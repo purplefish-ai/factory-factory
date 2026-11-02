@@ -339,4 +339,103 @@ describe('useLogStream', () => {
     expect(resultRef.current?.output).toBe('');
     expect(requestAnimationFrameMock).not.toHaveBeenCalled();
   });
+
+  // The server sends its retained buffer as a `replay` frame on every
+  // connection (push-channel.handler.ts), so a reconnect repeats output this
+  // client already shows.
+  it('replaces shown output with the replayed history after a reconnect', () => {
+    render(true);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'server started\n', replay: true });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'GET / 200\n' });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      // The retained history, including output produced while offline.
+      capturedOptions?.onMessage?.({
+        type: 'output',
+        data: 'server started\nGET / 200\nGET /about 200\n',
+        replay: true,
+      });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'GET /live 200\n' });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      'Reconnected!\n\nserver started\nGET / 200\nGET /about 200\nGET /live 200\n'
+    );
+  });
+
+  it('replaces shown output with a short replay after the server buffer was reset', () => {
+    render(true);
+    const firstRun = 'first run line\n'.repeat(200);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: firstRun, replay: true });
+      // A run-script restart reset the server buffer to the new run's output.
+      capturedOptions?.onMessage?.({ type: 'output', data: 'restarted\n' });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'restarted\n', replay: true });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe('Reconnected!\n\nrestarted\n');
+  });
+
+  it('keeps earlier output and live output intact when a reconnect has no replay', () => {
+    render(true);
+    const earlier = 'server started\n'.repeat(200);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: earlier, replay: true });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      // The server buffer is empty (e.g. the backend restarted), so the first
+      // frame is live output even though it repeats earlier output.
+      capturedOptions?.onMessage?.({ type: 'output', data: `${earlier}listening\n` });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      `Connected!\n\n${earlier}Disconnected. Reconnecting...\n` +
+        `Reconnected!\n\n${earlier}listening\n`
+    );
+  });
+
+  it('appends the replay on a first connect and never trims later live output', () => {
+    render(true);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'tick\n', replay: true });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'tick\n' });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe('Connected!\n\ntick\ntick\n');
+  });
+
+  it('only treats the first frame of a reconnect as replacing history', () => {
+    render(true);
+
+    flushSync(() => {
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'first run\n' });
+      capturedOptions?.onDisconnected?.();
+      capturedOptions?.onConnected?.();
+      capturedOptions?.onMessage?.({ type: 'output', data: 'second run\n' });
+      // A replay-marked frame after live output is not trusted as history.
+      capturedOptions?.onMessage?.({ type: 'output', data: 'late\n', replay: true });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe(
+      'Connected!\n\nfirst run\nDisconnected. Reconnecting...\n' +
+        'Reconnected!\n\nsecond run\nlate\n'
+    );
+  });
 });

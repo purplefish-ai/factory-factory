@@ -257,7 +257,9 @@ function readInitialPromptFromMetadata(
   }
 
   if (typeof metadata.initialPrompt === 'string') {
-    return { provided: true, text: metadata.initialPrompt.replaceAll('</', '<\\/') };
+    // Deliver the user's saved prompt verbatim. Issue launch prompts carry their
+    // own JSON-escaped <issue_data> boundary; rewriting `</` would unclose it.
+    return { provided: true, text: metadata.initialPrompt };
   }
 
   logger.warn('Invalid initial prompt in workspace creation metadata', {
