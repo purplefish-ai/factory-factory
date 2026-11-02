@@ -273,7 +273,12 @@ export function discardWorkspaceCreationDraft(projectId: string): Promise<boolea
   const entry = entryFor(projectId);
   if (!entry.snapshot.hasUnreadableDraft) {
     const revision = entry.snapshot.draft?.revision;
-    return revision ? clearWorkspaceCreationDraft(projectId, revision) : Promise.resolve(false);
+    if (revision) {
+      return clearWorkspaceCreationDraft(projectId, revision);
+    }
+    // A fresh form may already have file reads in flight before it has a saved draft.
+    publish(entry, { generation: entry.snapshot.generation + 1 });
+    return Promise.resolve(false);
   }
   const captured = entry.snapshot;
   return enqueue(entry, async () => {

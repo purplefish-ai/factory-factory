@@ -70,7 +70,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   inputDraft: string;
   setInputDraft: (draft: string) => void;
   inputAttachments: MessageAttachment[];
-  setInputAttachments: (attachments: MessageAttachment[]) => void;
+  inputDraftGeneration: number;
+  setInputAttachments: (attachments: React.SetStateAction<MessageAttachment[]>) => void;
   removeQueuedMessage: (id: string) => void;
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
@@ -120,6 +121,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Local state for input attachments (for recovery on rejection)
   const [inputAttachments, setInputAttachmentsState] = useState<MessageAttachment[]>([]);
+  const [inputDraftGeneration, setInputDraftGeneration] = useState(0);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -170,12 +172,19 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Load persisted attachments when switching sessions.
   useEffect(() => {
-    setInputAttachmentsState(loadInputAttachments(dbSessionId));
+    const restored = loadInputAttachments(dbSessionId);
+    inputAttachmentsRef.current = restored;
+    setInputAttachmentsState(restored);
   }, [dbSessionId]);
 
   // Update attachments and keep sessionStorage in sync.
-  const setInputAttachments = useCallback((attachments: MessageAttachment[]) => {
+  const setInputAttachments = useCallback((update: React.SetStateAction<MessageAttachment[]>) => {
+    const attachments = typeof update === 'function' ? update(inputAttachmentsRef.current) : update;
+    inputAttachmentsRef.current = attachments;
     setInputAttachmentsState(attachments);
+    if (attachments.length === 0) {
+      setInputDraftGeneration((generation) => generation + 1);
+    }
     const persistenceResult = persistInputAttachments(dbSessionIdRef.current, attachments);
     if (!persistenceResult.ok) {
       showAttachmentPersistenceError(persistenceResult.operation);
@@ -184,7 +193,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Clear attachments from both state and persistence.
   const clearInputAttachments = useCallback(() => {
+    inputAttachmentsRef.current = [];
     setInputAttachmentsState([]);
+    setInputDraftGeneration((generation) => generation + 1);
     const persistenceResult = clearPersistedInputAttachments(dbSessionIdRef.current);
     if (!persistenceResult.ok) {
       showAttachmentPersistenceError(persistenceResult.operation);
@@ -342,6 +353,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputDraft,
       setInputDraft,
       inputAttachments,
+      inputDraftGeneration,
       setInputAttachments,
       // Message handler for transport (stable - no deps)
       handleMessage,
@@ -360,6 +372,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputDraft,
       setInputDraft,
       inputAttachments,
+      inputDraftGeneration,
       setInputAttachments,
       handleMessage,
       handleDisconnected,

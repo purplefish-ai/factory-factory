@@ -78,6 +78,7 @@ export interface UseChatWebSocketReturn {
   inputDraft: string;
   // Input attachments (for recovery on rejection)
   inputAttachments: MessageAttachment[];
+  inputDraftGeneration: number;
   // Message queue state
   queuedMessages: QueuedMessage[];
   // Latest thinking content from extended thinking mode
@@ -112,7 +113,7 @@ export interface UseChatWebSocketReturn {
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   setInputDraft: (draft: string) => void;
-  setInputAttachments: (attachments: MessageAttachment[]) => void;
+  setInputAttachments: ReturnType<typeof useChatState>['setInputAttachments'];
   removeQueuedMessage: (id: string) => void;
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
@@ -352,6 +353,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     chatCapabilitiesLoaded: chat.chatCapabilitiesLoaded,
     inputDraft: chat.inputDraft,
     inputAttachments: chat.inputAttachments,
+    inputDraftGeneration: chat.inputDraftGeneration,
     queuedMessages: chat.queuedMessages,
     latestThinking: chat.latestThinking,
     pendingMessages: chat.pendingMessages,

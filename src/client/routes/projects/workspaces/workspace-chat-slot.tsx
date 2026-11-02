@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { WorkspaceChatImageDropZone } from './workspace-chat-image-drop-zone';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 
 /**
@@ -18,7 +19,11 @@ function ConnectedChatContent() {
   if (!props) {
     throw new Error('ConnectedChatContent must be rendered inside ChatContentPropsProvider');
   }
-  return <ChatContent {...props} />;
+  return (
+    <WorkspaceChatImageDropZone {...props}>
+      <ChatContent {...props} />
+    </WorkspaceChatImageDropZone>
+  );
 }
 
 /** A constant element, so memoized parents that receive it as children can bail out. */

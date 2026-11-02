@@ -1,6 +1,11 @@
 import { HeaderRightSlot } from '@/client/components/app-header-context';
 import { ProjectHeader } from '@/client/components/project-header';
-import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/features/kanban';
+import {
+  KanbanBoard,
+  KanbanControls,
+  KanbanImageDropZone,
+  KanbanProvider,
+} from '@/client/features/kanban';
 import type { IssueProvider } from '@/shared/core';
 
 function BoardHeaderSlot({ project }: { project: { id: string; slug: string; name: string } }) {
@@ -43,11 +48,13 @@ export function WorkspacesBoardView({
           }
         }
       />
-      <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
-        <div className="flex-1 min-h-0">
-          <KanbanBoard />
+      <KanbanImageDropZone>
+        <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
+          <div className="flex-1 min-h-0">
+            <KanbanBoard />
+          </div>
         </div>
-      </div>
+      </KanbanImageDropZone>
     </KanbanProvider>
   );
 }

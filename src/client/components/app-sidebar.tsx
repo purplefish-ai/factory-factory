@@ -17,6 +17,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
+import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
 import {
   getProjectSlugFromPath,
   type useAppNavigationData,
@@ -318,7 +319,12 @@ function SidebarInner({
   const navigate = useNavigate();
 
   return (
-    <>
+    <WorkspaceCreationImageDropZone
+      projectId={selectedProjectId}
+      disabled={!canCreateWorkspace}
+      className="flex flex-col"
+      onDropAccepted={() => onShowNewWorkspaceFormChange(true)}
+    >
       {showCloseButton && (
         <header className="flex shrink-0 items-center justify-between border-b px-4 min-h-12 pt-[env(safe-area-inset-top)]">
           <span className="text-sm font-semibold">Workspaces</span>
@@ -425,7 +431,7 @@ function SidebarInner({
           <Logo iconClassName="size-8" textClassName="text-base" />
         </div>
       </SidebarFooter>
-    </>
+    </WorkspaceCreationImageDropZone>
   );
 }
 
