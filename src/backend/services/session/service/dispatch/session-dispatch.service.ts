@@ -725,8 +725,11 @@ export class SessionDispatchService {
       // Persist immediately after dispatch so refresh/replay keeps this user message
       // visible while the provider is still working on the turn.
       for (const { message, order } of dispatched) {
-        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
+        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order, {
+          emitSnapshot: false,
+        });
       }
+      sessionDomainService.emitSessionSnapshot(dbSessionId);
       await sendPromise;
       for (const { message, userMessage } of dispatched) {
         sessionDomainService.emitDelta(dbSessionId, {

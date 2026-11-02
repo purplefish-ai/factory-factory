@@ -74,13 +74,6 @@ function PRUpdateMessageItem({
   );
 }
 
-function getUserMessageActionsClassName(isQueued: boolean | undefined): string {
-  return cn(
-    'flex items-center gap-1 transition-all z-10',
-    isQueued ? 'mb-1 justify-end' : 'absolute -top-1 -right-1 hover-reveal'
-  );
-}
-
 function QueuedMessageSteerAction({
   message,
   isQueued,
@@ -112,6 +105,50 @@ function QueuedMessageSteerAction({
   );
 }
 
+function QueuedMessageActions({
+  message,
+  isQueued,
+  onRemove,
+  onSteer,
+}: Pick<MessageItemProps, 'message' | 'isQueued' | 'onRemove' | 'onSteer'>) {
+  const hasQueuedActions = isQueued && Boolean(onSteer || onRemove);
+  // Keep the row mounted with a stable inner height while it collapses.
+  return (
+    <div
+      className="grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none"
+      style={{
+        gridTemplateRows: hasQueuedActions ? '1fr' : '0fr',
+        opacity: hasQueuedActions ? 1 : 0,
+      }}
+      inert={!isQueued}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className="flex h-8 items-center justify-end gap-1 mb-1">
+          <QueuedMessageSteerAction message={message} isQueued={isQueued} onSteer={onSteer} />
+          {/* Cancel button for queued messages */}
+          {isQueued && onRemove && (
+            <button
+              onClick={onRemove}
+              className={cn(
+                'p-1.5 rounded-md',
+                'bg-background/90 hover:bg-destructive/10',
+                'border border-border hover:border-destructive/50',
+                'shadow-sm',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              )}
+              title="Cancel queued message"
+              type="button"
+              aria-label="Cancel queued message"
+            >
+              <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const MessageItem = memo(function MessageItem({
   message,
   isQueued,
@@ -136,10 +173,9 @@ export const MessageItem = memo(function MessageItem({
       <MessageWrapper>
         {/* Keep queued actions readable outside the faded message content. */}
         <div className="group relative w-full max-w-full">
-          {/* Queued actions reserve a row so they cannot cover message text. */}
-          <div className={getUserMessageActionsClassName(isQueued)}>
+          <div className="absolute -top-1 -right-1 hover-reveal z-10">
             {/* Rewind button for messages with tracked UUIDs */}
-            {userMessageUuid && onRewindToMessage && (
+            {!isQueued && userMessageUuid && onRewindToMessage && (
               <button
                 onClick={() => onRewindToMessage(userMessageUuid)}
                 onMouseDown={(e) => e.preventDefault()}
@@ -157,28 +193,20 @@ export const MessageItem = memo(function MessageItem({
                 <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
               </button>
             )}
-            <QueuedMessageSteerAction message={message} isQueued={isQueued} onSteer={onSteer} />
-            {/* Cancel button for queued messages */}
-            {isQueued && onRemove && (
-              <button
-                onClick={onRemove}
-                className={cn(
-                  'p-1.5 rounded-md',
-                  'bg-background/90 hover:bg-destructive/10',
-                  'border border-border hover:border-destructive/50',
-                  'shadow-sm',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                title="Cancel queued message"
-                type="button"
-                aria-label="Cancel queued message"
-              >
-                <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-              </button>
-            )}
           </div>
+          <QueuedMessageActions
+            message={message}
+            isQueued={isQueued}
+            onRemove={onRemove}
+            onSteer={onSteer}
+          />
           {/* Message content - opacity applied here to fade queued messages without affecting buttons */}
-          <div className={cn('space-y-2', isQueued && 'opacity-50')}>
+          <div
+            className={cn(
+              'space-y-2 transition-opacity duration-150 motion-reduce:transition-none',
+              isQueued && 'opacity-50'
+            )}
+          >
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <AttachmentPreview attachments={message.attachments} readOnly />

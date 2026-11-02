@@ -72,9 +72,8 @@ export class SessionQueuedSteering {
         return;
       }
       // Accepted input is consumed even if stop advanced the generation.
-      const removed = domain.removeQueuedMessage(sessionId, message.id, {
-        expectedMessage: message,
-      });
+      // Publish the removal together with the committed entry, never an empty handoff.
+      const removed = domain.takeQueuedMessages(sessionId, [message]);
       if (!(removed || isCurrent())) {
         return;
       }
