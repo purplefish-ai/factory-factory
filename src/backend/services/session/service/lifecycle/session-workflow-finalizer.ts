@@ -30,7 +30,7 @@ type WorkflowFinalizerDependencies = {
   };
   sessionDomainService: Pick<
     SessionDomainService,
-    'clearSession' | 'getTranscriptSnapshot' | 'getHistoryHydrationSource'
+    'clearSession' | 'getTranscriptSnapshot' | 'getHistoryHydrationSource' | 'getQueueLength'
   >;
   closedSessionPersistenceService: {
     persistClosedSession(input: PersistClosedSessionInput): Promise<void>;
@@ -169,7 +169,8 @@ export class SessionWorkflowFinalizer {
   clearInactiveSession(sessionId: string, reason: 'manual_stop' | 'runtime_exit'): void {
     if (
       this.dependencies.runtimeManager.isSessionRunning(sessionId) ||
-      this.dependencies.countViewers(sessionId) > 0
+      this.dependencies.countViewers(sessionId) > 0 ||
+      this.dependencies.sessionDomainService.getQueueLength(sessionId) > 0
     ) {
       return;
     }

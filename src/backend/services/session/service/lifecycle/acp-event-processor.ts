@@ -331,12 +331,13 @@ export class AcpEventProcessor {
    * Discards a prompt the provider rejected without starting a turn (for example because
    * another turn is in progress). The running turn keeps its tool-call tracking.
    */
-  abandonPromptTurn(sessionId: string, attemptKey: string): void {
+  abandonPromptTurn(sessionId: string, attemptKey: string): boolean {
     if (this.activePromptAttemptKeys.get(sessionId) !== attemptKey) {
-      return;
+      return false;
     }
     this.activePromptAttemptKeys.delete(sessionId);
     this.toolCallsBeforePromptTurn.delete(sessionId);
+    return true;
   }
 
   getWorkspaceId(sessionId: string): string | undefined {

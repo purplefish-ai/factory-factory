@@ -1278,3 +1278,17 @@ An ordinary session starting after a workspace reaches READY does not by itself
 block manual event recovery. Existing READY resource checks and reserved-session
 runtime creation/drain proofs protect the event attempt; setup retry does not
 add a workspace-wide activity ban or new process-stop authority.
+
+Startup carries the same captured caller checks through recovered-notification
+queue dispatch, queue-triggered client creation, configuration and the common
+initial-prompt branch. A guard wait cannot switch the operation to a replacement
+runtime. Both runtime identity and caller currentness are checked synchronously
+at the provider effect; ordinary ready prompts retain their immediate dispatch.
+A rejected, unsent retry restores only its own runtime's idle state.
+
+Owned startup cleanup stops only its captured candidate. Managed runtime exits
+retain queued input; explicit session stop still clears it before stopping the
+runtime, and unmanaged exits retain their existing queue reset. Headless stores
+with queued work remain in memory until consumption, explicit stop or shutdown;
+empty inactive stores can still be evicted. Recovered durable notifications stay
+pending when a guarded dispatch is rejected.

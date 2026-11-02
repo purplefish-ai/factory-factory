@@ -5,12 +5,16 @@ import { codexAccountService } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
-import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
+import {
+  assertConfiguredAcpHandle,
+  withConfiguredAcpHandle,
+} from '@/backend/services/session/service/acp/acp-configured-handle';
 import {
   confirmsAcpModelSelection,
   resolveAcpModelSelection,
 } from '@/backend/services/session/service/acp/acp-model-selection';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
@@ -19,7 +23,6 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
@@ -557,7 +560,7 @@ export class SessionConfigService {
     sessionId: string,
     message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
     supportsThinkingBudget = false,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<QueuedMessage['settings']> {
     return this.configUpdates.run(
       sessionId,
@@ -582,7 +585,7 @@ export class SessionConfigService {
   private async setSessionModelUnserialized(
     sessionId: string,
     model?: string,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<AcceptedQueuedConfig | undefined> {
     if (!model) {
       return;
@@ -625,7 +628,7 @@ export class SessionConfigService {
   private async setSessionCollaborationModeUnserialized(
     sessionId: string,
     mode: 'plan',
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -660,7 +663,7 @@ export class SessionConfigService {
   private async setSessionThinkingBudgetUnserialized(
     sessionId: string,
     maxTokens: number | null,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
@@ -706,7 +709,7 @@ export class SessionConfigService {
   private async setSessionReasoningEffortUnserialized(
     sessionId: string,
     reasoningEffort: string | null,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -730,7 +733,7 @@ export class SessionConfigService {
         source: requestedReasoningEffort ? 'message' : 'settings',
         assertCurrent: () => {
           guard?.assertCurrent();
-          this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+          assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
         },
         guard,
       })
@@ -793,7 +796,7 @@ export class SessionConfigService {
     sessionId: string,
     configId: string,
     value: string,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<AcceptedQueuedConfig | undefined> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -806,7 +809,7 @@ export class SessionConfigService {
     while (acpHandle.configurationReady !== undefined) {
       await acpHandle.configurationReady;
     }
-    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
@@ -828,23 +831,28 @@ export class SessionConfigService {
       );
     }
 
-    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, async () => {
-      await guard?.check();
-      guard?.assertCurrent();
-      return isModeOption
-        ? this.runtimeManager.setSessionMode(sessionId, value)
-        : isModelOption
-          ? this.runtimeManager.setSessionModel(sessionId, value)
-          : this.runtimeManager.setConfigOption(sessionId, configId, value);
-    });
-    await guard?.check();
+    await withConfiguredAcpHandle(
+      this.runtimeManager,
+      sessionId,
+      acpHandle,
+      () =>
+        isModeOption
+          ? this.runtimeManager.setSessionMode(sessionId, value)
+          : isModelOption
+            ? this.runtimeManager.setSessionModel(sessionId, value)
+            : this.runtimeManager.setConfigOption(sessionId, configId, value),
+      guard
+    );
+    if (guard) {
+      await guard.check();
+    }
     guard?.assertCurrent();
 
-    this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     const configOptions = structuredClone(acpHandle.configOptions);
     const accepted = this.acceptConfiguration(sessionId, acpHandle, () => {
       guard?.assertCurrent();
-      this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+      assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     });
     if (
       !(await accepted.persist((assertCurrent) =>
@@ -902,16 +910,6 @@ export class SessionConfigService {
       capabilities: buildCapabilitiesFromConfigOptions(provider, configOptions),
     });
     return update;
-  }
-
-  private assertCurrentConfiguredHandle(sessionId: string, handle: AcpProcessHandle): void {
-    if (
-      this.runtimeManager.getClient(sessionId) !== handle ||
-      this.runtimeManager.isStopInProgress(sessionId) ||
-      handle.configurationReady !== undefined
-    ) {
-      throw new Error('Session runtime changed before configuration update');
-    }
   }
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {

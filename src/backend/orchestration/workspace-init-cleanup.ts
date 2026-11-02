@@ -1,7 +1,11 @@
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleService } from '@/backend/services/session';
-import { terminalService, terminalSessionService } from '@/backend/services/terminal';
+import {
+  terminalService,
+  terminalSessionService,
+  type TerminalInstance,
+} from '@/backend/services/terminal';
 import {
   assertWorktreePathSafe,
   gitOpsService,
@@ -11,6 +15,11 @@ import {
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { WorkspaceWithProject } from './types';
 const logger = createLogger('workspace-init-cleanup');
+export type CapturedDefaultTerminal = {
+  terminalId: string;
+  pid: number;
+  instance?: TerminalInstance;
+};
 type UnregisteredWorktreeCleanupCandidate = {
   project: WorkspaceWithProject['project'];
   worktreeInfo: { worktreePath: string; branchName: string };
@@ -38,7 +47,7 @@ async function markFailedAfterInitFailure(
 export async function handleWorkspaceInitFailure(
   workspaceId: string,
   error: Error,
-  autoCreatedTerminalId?: string,
+  autoCreatedTerminal?: CapturedDefaultTerminal,
   unregisteredWorktreeCleanupCandidate?: UnregisteredWorktreeCleanupCandidate,
   guard?: WorkspaceInitGuard
 ): Promise<void> {
@@ -63,7 +72,7 @@ export async function handleWorkspaceInitFailure(
   } catch {
     return;
   }
-  await cleanupDefaultTerminal(workspaceId, autoCreatedTerminalId, guard);
+  await cleanupDefaultTerminal(workspaceId, autoCreatedTerminal, guard);
   // Guarded initialization starts providers only after READY; startup owns its own cleanup.
   if (guard) {
     return;
@@ -132,29 +141,41 @@ async function cleanupUnregisteredWorktreeAfterInitFailure(
 
 async function cleanupDefaultTerminal(
   workspaceId: string,
-  autoCreatedTerminalId: string | undefined,
+  autoCreatedTerminal: CapturedDefaultTerminal | undefined,
   guard?: WorkspaceInitGuard
 ): Promise<void> {
-  if (autoCreatedTerminalId) {
-    try {
-      terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
-    } catch (destroyError) {
-      logger.warn('Failed to destroy default terminal after init failure', {
+  if (!autoCreatedTerminal) {
+    return;
+  }
+  const { terminalId: autoCreatedTerminalId, pid, instance } = autoCreatedTerminal;
+  try {
+    if (!guard || instance) {
+      terminalService.destroyTerminal(
         workspaceId,
-        terminalId: autoCreatedTerminalId,
-        error: destroyError instanceof Error ? destroyError.message : String(destroyError),
-      });
+        autoCreatedTerminalId,
+        ...(instance ? [instance] : [])
+      );
     }
-    try {
-      await guard?.check();
-      guard?.assertCurrent();
-      await terminalSessionService.releaseSessionPid(workspaceId, autoCreatedTerminalId);
-    } catch (clearPidError) {
-      logger.warn('Failed to clear default terminal PID after init failure', {
-        workspaceId,
-        terminalId: autoCreatedTerminalId,
-        error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
-      });
-    }
+  } catch (destroyError) {
+    logger.warn('Failed to destroy default terminal after init failure', {
+      workspaceId,
+      terminalId: autoCreatedTerminalId,
+      error: destroyError instanceof Error ? destroyError.message : String(destroyError),
+    });
+  }
+  try {
+    await guard?.check();
+    guard?.assertCurrent();
+    await terminalSessionService.releaseSessionPid(
+      workspaceId,
+      autoCreatedTerminalId,
+      ...(guard ? [pid] : [])
+    );
+  } catch (clearPidError) {
+    logger.warn('Failed to clear default terminal PID after init failure', {
+      workspaceId,
+      terminalId: autoCreatedTerminalId,
+      error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
+    });
   }
 }

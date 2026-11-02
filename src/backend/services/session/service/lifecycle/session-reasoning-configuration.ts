@@ -2,9 +2,9 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
-import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { AcceptedConfigCommit } from './session-config-commit-authority';
 import {
   buildCapabilitiesFromConfigOptions,
@@ -13,7 +13,7 @@ import {
 } from './session-config-option-helpers';
 const logger = createLogger('session');
 export type ReasoningEffortTargetParams = {
-  guard?: WorkspaceInitGuard;
+  guard?: SessionCallerGuard;
   sessionId: string;
   handle: AcpProcessHandle;
   targetReasoningEffort: string;
@@ -43,8 +43,11 @@ export async function applyReasoningEffortTarget(
   params: ReasoningEffortTargetParams,
   deps: Dependencies
 ): Promise<void> {
-  await params.guard?.check();
+  if (params.guard) {
+    await params.guard.check();
+  }
   params.guard?.assertCurrent();
+  params.assertCurrent?.();
   const reasoningOption = supportedReasoningOption(params);
   if (!reasoningOption) {
     return;
@@ -60,7 +63,10 @@ export async function applyReasoningEffortTarget(
       params.targetReasoningEffort
     );
   }
-  await params.guard?.check();
+  if (params.guard) {
+    await params.guard.check();
+  }
+  params.guard?.assertCurrent();
   params.assertCurrent?.();
   const configOptions = structuredClone(params.handle.configOptions);
   if (

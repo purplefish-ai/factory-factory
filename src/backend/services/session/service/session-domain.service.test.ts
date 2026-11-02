@@ -336,62 +336,71 @@ describe('SessionDomainService', () => {
     );
   });
 
-  it('markProcessExit clears queue but preserves transcript for reload', () => {
-    const listener = vi.fn();
-    sessionDomainService.on('pending_request_changed', listener);
+  it.each([false, true])(
+    'markProcessExit preserves transcript and retains queue only for managed cleanup=%s',
+    (preserveQueuedInput) => {
+      const listener = vi.fn();
+      sessionDomainService.on('pending_request_changed', listener);
 
-    sessionDomainService.enqueue('s1', {
-      id: 'q1',
-      text: 'queued',
-      timestamp: '2026-02-14T00:00:00.000Z',
-      settings: {
-        selectedModel: null,
-        reasoningEffort: null,
-        thinkingEnabled: false,
-        planModeEnabled: false,
-      },
-    });
+      sessionDomainService.enqueue('s1', {
+        id: 'q1',
+        text: 'queued',
+        timestamp: '2026-02-14T00:00:00.000Z',
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      });
 
-    sessionDomainService.setPendingInteractiveRequest('s1', {
-      requestId: 'r1',
-      toolName: 'AskUserQuestion',
-      toolUseId: 'tu1',
-      input: { question: 'continue?' },
-      planContent: null,
-      timestamp: '2026-02-14T00:00:00.000Z',
-    });
-    listener.mockClear();
-
-    sessionDomainService.injectCommittedUserMessage('s1', 'before-exit');
-    sessionDomainService.markProcessExit('s1', 1);
-
-    const latestSnapshotPayload = publishToSessionMock.mock.calls
-      .map(
-        ([, payload]) =>
-          payload as { type?: string; sessionRuntime?: { phase?: string }; messages?: unknown[] }
-      )
-      .filter((payload) => payload.type === 'session_snapshot')
-      .at(-1);
-
-    expect(latestSnapshotPayload).toBeDefined();
-    expect(latestSnapshotPayload).toMatchObject({
-      type: 'session_snapshot',
-      sessionRuntime: expect.objectContaining({
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-      }),
-      messages: [expect.objectContaining({ source: 'user', text: 'before-exit' })],
-    });
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 's1',
+      sessionDomainService.setPendingInteractiveRequest('s1', {
         requestId: 'r1',
-        hasPending: false,
-      })
-    );
-    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
-  });
+        toolName: 'AskUserQuestion',
+        toolUseId: 'tu1',
+        input: { question: 'continue?' },
+        planContent: null,
+        timestamp: '2026-02-14T00:00:00.000Z',
+      });
+      listener.mockClear();
+
+      sessionDomainService.injectCommittedUserMessage('s1', 'before-exit');
+      sessionDomainService.markProcessExit('s1', 1, { preserveQueuedInput });
+      expect(sessionDomainService.getQueueSnapshot('s1').map((message) => message.id)).toEqual(
+        preserveQueuedInput ? ['q1'] : []
+      );
+
+      const latestSnapshotPayload = publishToSessionMock.mock.calls
+        .map(
+          ([, payload]) =>
+            payload as { type?: string; sessionRuntime?: { phase?: string }; messages?: unknown[] }
+        )
+        .filter((payload) => payload.type === 'session_snapshot')
+        .at(-1);
+
+      expect(latestSnapshotPayload).toBeDefined();
+      expect(latestSnapshotPayload).toMatchObject({
+        type: 'session_snapshot',
+        sessionRuntime: expect.objectContaining({
+          phase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
+        }),
+        messages: [
+          expect.objectContaining({ source: 'user', text: 'before-exit' }),
+          ...(preserveQueuedInput ? [expect.objectContaining({ id: 'q1', text: 'queued' })] : []),
+        ],
+      });
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 's1',
+          requestId: 'r1',
+          hasPending: false,
+        })
+      );
+      expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
+    }
+  );
 
   it('returns transcript snapshot sorted by order', () => {
     sessionDomainService.commitSentUserMessageAtOrder(

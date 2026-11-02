@@ -8,3 +8,5 @@ export {
 } from './service/lifecycle/session-core-services';
 export { EventInitialDispatchInterrupted } from './service/dispatch/event-initial-dispatch';
 export { withEventEvidenceDeadline } from './service/lifecycle/event-evidence-deadline';
+
+export { EventSessionFenceError } from './service/lifecycle/event-session-fence-error';

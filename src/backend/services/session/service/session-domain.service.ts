@@ -444,12 +444,17 @@ export class SessionDomainService extends EventEmitter {
     return true;
   }
 
-  markProcessExit(sessionId: string, code: number | null): void {
+  markProcessExit(
+    sessionId: string,
+    code: number | null,
+    options?: { preserveQueuedInput?: boolean }
+  ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
     handleProcessExit({
       store,
       code,
+      preserveQueuedInput: options?.preserveQueuedInput,
       nowIso: this.nowIso,
       markRuntime: (targetStore, updates) => {
         this.runtimeMachine.markRuntime(targetStore, updates);

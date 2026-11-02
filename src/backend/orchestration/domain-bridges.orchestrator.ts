@@ -230,8 +230,8 @@ export function configureDomainBridges(services: BridgeServices): void {
   sessionLifecycleService.configure({
     workspace: sessionWorkspaceBridge,
     messageQueue: {
-      tryDispatchNextMessage: (sessionId) =>
-        sessionDispatchService.tryDispatchNextMessage(sessionId),
+      tryDispatchNextMessage: (sessionId, options) =>
+        sessionDispatchService.tryDispatchNextMessage(sessionId, ...(options ? [options] : [])),
     },
   });
 

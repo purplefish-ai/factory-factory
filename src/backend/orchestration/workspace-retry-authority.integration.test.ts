@@ -163,7 +163,7 @@ it('rejects a captured FINISHED context at the actual writer after attempt repla
   });
   await expect(
     h.workspace.workspaceStateMachine.startProvisioning(workspaceId, { guard })
-  ).rejects.toThrow();
+  ).rejects.toThrow(/Event initial work prevents setup retry/);
   expect(await db.prisma.workspace.findUnique({ where: { id: workspaceId } })).toMatchObject({
     status: 'FAILED',
     initRetryCount: 0,
@@ -207,9 +207,9 @@ it('rechecks the captured guard after the real initializer predecessor drains', 
   );
   await Promise.resolve();
   await Promise.resolve();
-  vi.spyOn(h.workspace.gitOpsService, 'ensureBaseBranchExists').mockRejectedValue(
-    new Error('Unexpected Git effect')
-  );
+  const git = vi
+    .spyOn(h.workspace.gitOpsService, 'ensureBaseBranchExists')
+    .mockRejectedValue(new Error('Unexpected Git effect'));
   const task = initializeWorkspaceWorktree(workspaceId, { guard });
   const outcome = task.then(
     () => null,
@@ -218,7 +218,8 @@ it('rechecks the captured guard after the real initializer predecessor drains', 
   await db.prisma.agentInitialDelivery.update({ where: { runId }, data: { state: 'PENDING' } });
   release();
   await predecessor;
-  await outcome;
+  expect(await outcome).toMatchObject({ name: 'WorkspaceInitFenceError' });
+  expect(git).not.toHaveBeenCalled();
   expect(await db.prisma.workspace.findUnique({ where: { id: workspaceId } })).toMatchObject({
     status: 'FAILED',
     initRetryCount: 0,
@@ -301,7 +302,9 @@ it('blocks FINISHED while the real initial operation remains active, then allows
     expect(await caller.getInitStatus({ id: workspaceId })).toMatchObject({
       retryAvailability: { status: 'BLOCKED', reason: 'INITIAL_ACTIVE' },
     });
-    await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow();
+    await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow(
+      /Event initial work prevents setup retry/
+    );
   } finally {
     held.release();
     await initial;
@@ -388,7 +391,9 @@ it('projects the same retry budget enforced by the writer', async () => {
   expect(await caller.getInitStatus({ id: workspaceId })).toMatchObject({
     retryAvailability: { status: 'BLOCKED', reason: 'RETRY_LIMIT' },
   });
-  await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow();
+  await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow(
+    'Maximum retry attempts (3) exceeded'
+  );
   expect(initialize).not.toHaveBeenCalled();
 });
 it.each(['mode-read', 'mode-write', 'config'] as const)(
@@ -446,3 +451,68 @@ it.each(['mode-read', 'mode-write', 'config'] as const)(
     expect(scripts).not.toHaveBeenCalled();
   }
 );
+
+it.each(['ordinary', 'event'] as const)(
+  'preserves %s origin-read infrastructure failure semantics without effects',
+  async (kind) => {
+    await finished();
+    if (kind === 'ordinary') {
+      await db.prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { creationSource: 'MANUAL' },
+      });
+    }
+    const outage = new Error('Fixture origin database unavailable');
+    vi.spyOn(h.workspace.workspaceDataService, 'readEventOrigin').mockRejectedValue(outage);
+    await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow(
+      kind === 'ordinary' ? outage.message : /Event initial work/
+    );
+    expect(initialize).not.toHaveBeenCalled();
+    expect(scripts).not.toHaveBeenCalled();
+    expect(await db.prisma.workspace.findUnique({ where: { id: workspaceId } })).toMatchObject({
+      status: 'FAILED',
+      initRetryCount: 0,
+    });
+  }
+);
+
+it('does not label a durable owner conflict as live local initial work', async () => {
+  await finished();
+  const { ApplicationError } = await vi.importActual<
+    typeof import('@/backend/lib/application-error')
+  >('@/backend/lib/application-error');
+  h.session.eventSessionAuthority.configure({
+    ...h.owner.agentInitialDelivery,
+    readFence: () => Promise.reject(new ApplicationError('CONFLICT', 'owner changed')),
+  });
+  expect(await caller.getInitStatus({ id: workspaceId })).toMatchObject({
+    retryAvailability: { status: 'BLOCKED', reason: 'AUTHORITY_UNAVAILABLE' },
+  });
+});
+
+it('does not replay a captured READY warning after its predecessor finishes setup', async () => {
+  await finished();
+  await db.prisma.workspace.update({
+    where: { id: workspaceId },
+    data: { status: 'READY', worktreePath: '/fixture/worktree' },
+  });
+  const { enqueueWorkspaceInitializationTask } = await vi.importActual<
+    typeof import('./workspace-init.orchestrator')
+  >('./workspace-init.orchestrator');
+  const held = boundary();
+  const predecessor = enqueueWorkspaceInitializationTask(workspaceId, () => held.wait());
+  await held.entered;
+  const first = caller.retryInit({ id: workspaceId });
+  const second = caller.retryInit({ id: workspaceId });
+  // Both RPCs must have captured the same READY warning before the tail runs.
+  await vi.waitFor(() => expect(config).not.toHaveBeenCalled());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  held.release();
+  await predecessor;
+  await Promise.allSettled([first, second]);
+  expect(scripts).toHaveBeenCalledTimes(1);
+  expect(config).toHaveBeenCalledTimes(1);
+  expect(await db.prisma.workspace.findUnique({ where: { id: workspaceId } })).toMatchObject({
+    initRetryCount: 1,
+  });
+});

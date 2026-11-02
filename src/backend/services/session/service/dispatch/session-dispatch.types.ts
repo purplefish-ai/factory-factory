@@ -1,11 +1,11 @@
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
-import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
-export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: WorkspaceInitGuard };
+export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };
 
 export interface SessionDispatchStartOptions {
   assertCurrent?: () => Promise<void>;
@@ -67,7 +67,7 @@ export interface SessionDispatchDependencies {
     sendSessionMessage(
       sessionId: string,
       content: string | AgentContentItem[],
-      guard?: WorkspaceInitGuard
+      guard?: SessionCallerGuard
     ): Promise<void>;
   };
   backgroundDelivery: Pick<

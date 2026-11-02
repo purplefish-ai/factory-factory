@@ -76,7 +76,7 @@ vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', 
 }));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
-  enqueueWorkspaceInitializationTask: vi.fn(),
+  enqueueWorkspaceInitializationTask: vi.fn((_id: string, task: () => Promise<unknown>) => task()),
   recoverStaleProvisioningWorkspace: vi.fn(),
   retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
 }));

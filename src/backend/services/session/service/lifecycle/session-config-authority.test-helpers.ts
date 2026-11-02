@@ -4,6 +4,7 @@ import type {
   AgentSessionRecord,
   ProviderIdentityExpectation,
 } from '@/backend/services/session/resources/agent-session.accessor';
+import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import {
   createDeferred,
@@ -76,7 +77,7 @@ export async function settleConfig() {
 }
 
 type Update = Partial<AgentSessionRecord>;
-export function setupAuthority() {
+export function setupAuthority(runtimeManager?: AcpRuntimeManager) {
   let row = unsafeCoerce<AgentSessionRecord>({
     id: 'session',
     provider: 'CODEX',
@@ -193,7 +194,7 @@ export function setupAuthority() {
   };
   const service = new SessionConfigService({
     repository,
-    runtimeManager: unsafeCoerce(runtime),
+    runtimeManager: runtimeManager ?? unsafeCoerce(runtime),
     codexModelCatalogService: {
       getModels: async () => [
         {

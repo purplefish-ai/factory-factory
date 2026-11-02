@@ -216,9 +216,6 @@ export class AcpRuntimeManager {
     ) {
       throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
     }
-    await guard?.check();
-    guard?.assertCurrent();
-    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     const providerSessionId = handle.acpSessionId;
     const assertCurrent = () => {
       if (
@@ -232,6 +229,12 @@ export class AcpRuntimeManager {
         throw new Error('Observed prompt runtime or configuration changed');
       }
     };
+    if (guard) {
+      await guard.check();
+    }
+    assertCurrent();
+    guard?.assertCurrent();
+    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     if (observed) {
       handle.eventLifecycleGeneration = observed.lifecycleGeneration;
     }
@@ -251,7 +254,10 @@ export class AcpRuntimeManager {
       prompt,
       timeoutMs,
       observation,
-      guard?.assertCurrent
+      () => {
+        assertCurrent();
+        guard?.assertCurrent();
+      }
     );
   }
 

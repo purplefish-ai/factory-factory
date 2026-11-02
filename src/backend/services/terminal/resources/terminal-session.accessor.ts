@@ -25,7 +25,15 @@ type TerminalSessionWithWorkspace = Prisma.TerminalSessionGetPayload<{
 }>;
 
 class TerminalSessionAccessor {
-  create(data: CreateTerminalSessionInput): Promise<TerminalSession> {
+  create(data: CreateTerminalSessionInput, assertCurrent?: () => void): Promise<TerminalSession> {
+    if (assertCurrent) {
+      return prisma.$transaction(async (tx) => {
+        assertCurrent();
+        const row = await tx.terminalSession.create({ data });
+        assertCurrent();
+        return row;
+      });
+    }
     return prisma.terminalSession.create({
       data: {
         workspaceId: data.workspaceId,
@@ -33,6 +41,10 @@ class TerminalSessionAccessor {
         pid: data.pid,
       },
     });
+  }
+
+  async deleteIfPidMatches(id: string, pid: number): Promise<void> {
+    await prisma.terminalSession.deleteMany({ where: { id, pid } });
   }
 
   findById(id: string): Promise<TerminalSessionWithWorkspace | null> {

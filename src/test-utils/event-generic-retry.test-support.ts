@@ -1,0 +1,169 @@
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { afterEach, beforeEach, expect, vi } from 'vitest';
+import {
+  createEventDeliveryFixture,
+  releaseEventBoundaries,
+  drainEventFixtureTasks,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
+import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
+import {
+  createIntegrationDatabase,
+  destroyIntegrationDatabase,
+  type IntegrationDatabase,
+} from '@/backend/testing/integration-db';
+
+export let db: IntegrationDatabase;
+export let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
+export let consumer: ReturnType<
+  typeof import('@/backend/orchestration/event-run-consumer.orchestrator').createEventRunConsumer
+>;
+export let providers: ReturnType<typeof fakeEventProvider>[];
+const exitTasks = new Set<Promise<void>>();
+beforeEach(async () => {
+  db = await createIntegrationDatabase();
+  const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
+    '@/backend/services/codex-accounts'
+  );
+  vi.spyOn(accounts.codexAccountService, 'getEnabledAccountIds').mockResolvedValue([
+    'event-test-account',
+  ]);
+  vi.spyOn(accounts.codexAccountService, 'getRuntimeContext').mockImplementation(
+    async (id = 'event-test-account') => ({
+      accountId: id,
+      homeDir: db.tempDir,
+      sessionsDir: db.tempDir,
+      env: {},
+    })
+  );
+  h = await createEventDeliveryFixture(db, 'CODEX');
+  const { SessionRuntimeExitCoordinator } = await vi.importActual<
+    typeof import('@/backend/services/session/service/lifecycle/session-runtime-exit.coordinator')
+  >('@/backend/services/session/service/lifecycle/session-runtime-exit.coordinator');
+  const exit = SessionRuntimeExitCoordinator.prototype.handleExit;
+  vi.spyOn(SessionRuntimeExitCoordinator.prototype, 'handleExit').mockImplementation(function (
+    this: InstanceType<typeof SessionRuntimeExitCoordinator>,
+    event
+  ) {
+    const task = exit.call(this, event);
+    exitTasks.add(task);
+    void task.finally(() => exitTasks.delete(task)).catch(() => undefined);
+    return task;
+  });
+  providers = [];
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw new Error('No host signals');
+  });
+  const factory = await vi.importActual<
+    typeof import('@/backend/services/session/service/acp/acp-client-factory')
+  >('@/backend/services/session/service/acp/acp-client-factory');
+  const { AcpNativeSessionTracker } = await vi.importActual<
+    typeof import('@/backend/services/session/service/acp/acp-native-session-tracker')
+  >('@/backend/services/session/service/acp/acp-native-session-tracker');
+  vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(({ options }) => {
+    const provider = fakeEventProvider(
+      h.session.AcpProcessHandle,
+      options,
+      undefined,
+      new AcpNativeSessionTracker()
+    );
+    providers.push(provider);
+    return Promise.resolve(provider.handle);
+  });
+  const { createEventRunConsumer } = await vi.importActual<
+    typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/event-run-consumer.orchestrator');
+  consumer = createEventRunConsumer();
+}, 30_000);
+afterEach(async () => {
+  try {
+    releaseEventBoundaries();
+    for (const provider of providers) {
+      provider.response.resolve({ stopReason: 'end_turn' });
+    }
+    await consumer.drain();
+    await strictStop();
+    await consumer.stop();
+    await drainEventFixtureTasks();
+    await h.workspace.workspaceActivityService.withNotificationsSuppressed(
+      h.claim.reservedWorkspaceId,
+      async () => {
+        await h.session.acpRuntimeManager.stopAllClients(10);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        while (exitTasks.size > 0) {
+          await Promise.allSettled([...exitTasks]);
+        }
+      }
+    );
+    h.session.sessionPromptTurnCompletionService.clearAll();
+    h.session.sessionDomainService.clearAllSessions();
+  } finally {
+    const signals = vi.mocked(process.kill).mock.calls.slice();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    await destroyIntegrationDatabase(db);
+    expect(signals).toEqual([]);
+  }
+});
+
+const row = () => db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
+export async function context() {
+  const run = await row();
+  return {
+    projectId: h.workspaceSource.projectId,
+    claim: {
+      ...h.claim,
+      workerGeneration: run.workerGeneration,
+      attemptGeneration: run.attemptGeneration,
+    },
+    attempt: (await h.read()).attempt,
+  };
+}
+export async function launch() {
+  await consumer.consumeClaim(h.claim, new AbortController().signal);
+  await vi.waitFor(() => expect(providers).toHaveLength(1));
+  const provider = providers[0];
+  if (!provider) {
+    throw new Error('Initial provider missing');
+  }
+  await provider.called;
+}
+export async function strictStop() {
+  const groups = await vi.importActual<
+    typeof import('@/backend/services/session/service/acp/acp-owned-group')
+  >('@/backend/services/session/service/acp/acp-owned-group');
+  vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockImplementation(({ child }) => {
+    child.kill();
+    return Promise.resolve('LOCAL_RUNTIME_GROUP_STOPPED');
+  });
+}
+
+export async function recoveryWorktree() {
+  const path = join(db.tempDir, 'retry-worktree');
+  await mkdir(path);
+  await db.prisma.workspace.update({
+    where: { id: h.claim.reservedWorkspaceId },
+    data: { worktreePath: path },
+  });
+  return path;
+}
+
+export async function beginIndependentPrompt(sessionId: string, replacement: true | 'inflight') {
+  if (replacement === true) {
+    await h.session.sessionLifecycleService.stopSession(sessionId);
+    await h.session.sessionLifecycleService.startSession(sessionId, { initialPrompt: '' });
+  }
+  const provider = providers[replacement === true ? 3 : 1];
+  if (!provider) {
+    throw new Error('Current provider missing');
+  }
+  const turn =
+    replacement === true
+      ? h.session.sessionService.sendSessionMessage(sessionId, 'New runtime prompt')
+      : h.session.acpRuntimeManager.sendPrompt(sessionId, [
+          { type: 'text', text: 'Independent current prompt' },
+        ]);
+  await provider.called;
+  expect(provider.handle.isPromptInFlight).toBe(true);
+  return { turn, provider };
+}

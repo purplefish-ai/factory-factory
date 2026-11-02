@@ -2,6 +2,7 @@ import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-erro
 /** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
@@ -9,9 +10,9 @@ import { EventSessionFenceError } from '@/backend/services/session/service/lifec
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
-import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import {
   acknowledgeSentBatch,
+  prepareBackgroundForDispatch,
   collectDispatchBatch,
   dispatchCollectedBatch,
   prepareBatchContents,
@@ -199,7 +200,7 @@ export class SessionDispatchService {
   private async dispatchHeadOfQueue(
     dbSessionId: string,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<'continue' | 'done'> {
     await guard?.check();
     guard?.assertCurrent();
@@ -222,6 +223,10 @@ export class SessionDispatchService {
         claim.status === 'claimed' &&
         (await this.lifecycle.notificationDelivery.isAlreadyDelivered(claim.notificationId))
       ) {
+        if (guard) {
+          await guard.check();
+          guard.assertCurrent();
+        }
         return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
           ? 'continue'
           : 'done';
@@ -247,7 +252,7 @@ export class SessionDispatchService {
     dbSessionId: string,
     peeked: QueuedMessage,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<'retry' | undefined> {
     await guard?.check();
     guard?.assertCurrent();
@@ -260,7 +265,7 @@ export class SessionDispatchService {
       return;
     }
 
-    if (!(await this.prepareBackgroundForDispatch(dbSessionId, peeked, stopGeneration))) {
+    if (!(await this.prepareBackgroundForDispatch(dbSessionId, peeked, stopGeneration, guard))) {
       return;
     }
     const clientResult = await this.resolvePreparedClientForDispatch(
@@ -291,9 +296,15 @@ export class SessionDispatchService {
       sessionId: dbSessionId,
       first: peeked,
       notifications: this.lifecycle.notificationDelivery,
+      guard,
       prepareBackground: async (message) => {
         try {
-          return await this.prepareBackgroundForDispatch(dbSessionId, message, stopGeneration);
+          return await this.prepareBackgroundForDispatch(
+            dbSessionId,
+            message,
+            stopGeneration,
+            guard
+          );
         } catch (error) {
           logger.warn('PR preparation deferred; dispatching queued human messages', {
             dbSessionId,
@@ -326,7 +337,7 @@ export class SessionDispatchService {
       send: (messages) =>
         this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration, guard),
       onError: (message, error) =>
-        this.handleDispatchError(dbSessionId, message, error, stopGeneration),
+        this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client),
       onSuccess: () => {
         this.turnInProgressRetryAttempts.delete(dbSessionId);
       },
@@ -347,7 +358,7 @@ export class SessionDispatchService {
     dbSessionId: string,
     peeked: QueuedMessage,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<{ client: unknown } | null> {
     await guard?.check();
     guard?.assertCurrent();
@@ -370,49 +381,38 @@ export class SessionDispatchService {
       return null;
     }
     if (peeked.source && !(await this.dependencies.backgroundDelivery.validate(peeked))) {
+      if (guard) {
+        await guard.check();
+        guard.assertCurrent();
+      }
       await this.dependencies.backgroundDelivery.fail(
         peeked,
         new Error('PR delivery invalidated before dispatch'),
         'cancelled'
       );
+      if (guard) {
+        await guard.check();
+        guard.assertCurrent();
+      }
       sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, { expectedMessage: peeked });
       return null;
     }
     return clientResult;
   }
 
-  private async prepareBackgroundForDispatch(
+  private prepareBackgroundForDispatch(
     dbSessionId: string,
     peeked: QueuedMessage,
-    stopGeneration: number
+    stopGeneration: number,
+    guard?: SessionCallerGuard
   ): Promise<boolean> {
-    if (peeked.source) {
-      if (
-        this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||
-        sessionDomainService.getPendingInteractiveRequest(dbSessionId)
-      ) {
-        return false;
-      }
-      const prepared = await this.dependencies.backgroundDelivery.prepare(dbSessionId, peeked);
-      if (prepared.status === 'discard') {
-        sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, {
-          expectedMessage: peeked,
-        });
-        return false;
-      }
-      if (prepared.status !== 'ready') {
-        return false;
-      }
-      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-        await this.dependencies.backgroundDelivery.fail(
-          peeked,
-          new Error('Session stopped before dispatch'),
-          'cancelled'
-        );
-        return false;
-      }
-    }
-    return true;
+    return prepareBackgroundForDispatch(
+      this.dependencies,
+      dbSessionId,
+      peeked,
+      () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+      guard
+    );
   }
 
   // ============================================================================
@@ -427,7 +427,8 @@ export class SessionDispatchService {
     dbSessionId: string,
     msg: QueuedMessage,
     error: unknown,
-    stopGeneration: number
+    stopGeneration: number,
+    capturedClient?: unknown
   ): void {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
@@ -442,6 +443,13 @@ export class SessionDispatchService {
         emitSnapshot: false,
       });
       sessionDomainService.requeueFront(dbSessionId, msg);
+      if (
+        capturedClient &&
+        this.lifecycle.startup.getSessionClient(dbSessionId) === capturedClient &&
+        !this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId)
+      ) {
+        sessionDomainService.markIdle(dbSessionId, 'alive');
+      }
       return;
     }
 
@@ -555,7 +563,7 @@ export class SessionDispatchService {
   private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<{ client: unknown } | { blocked: 'busy' | 'resume_failed' } | null> {
     let client = this.lifecycle.startup.getSessionClient(dbSessionId);
 
@@ -583,7 +591,7 @@ export class SessionDispatchService {
   private async autoStartClientForQueue(
     dbSessionId: string,
     msg: QueuedMessage,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<boolean> {
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Auto-starting client for queued message', { dbSessionId });
@@ -637,7 +645,7 @@ export class SessionDispatchService {
     messages: QueuedMessage[],
     client: unknown,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<void> {
     await guard?.check();
     guard?.assertCurrent();
@@ -757,7 +765,7 @@ export class SessionDispatchService {
     msg: QueuedMessage,
     client: unknown,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<boolean> {
     if (
       !(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration, guard))
@@ -805,7 +813,7 @@ export class SessionDispatchService {
     msg: QueuedMessage,
     client: unknown,
     stopGeneration: number,
-    guard?: WorkspaceInitGuard
+    guard?: SessionCallerGuard
   ): Promise<boolean> {
     if (msg.source) {
       const valid = await this.dependencies.backgroundDelivery.validate(msg);

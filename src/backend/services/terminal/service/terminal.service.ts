@@ -310,7 +310,10 @@ export class TerminalService {
   /**
    * Create a new terminal instance for a workspace
    */
-  createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
+  createTerminal(
+    options: CreateTerminalOptions,
+    capture?: (instance: TerminalInstance) => void
+  ): Promise<CreateTerminalResult> {
     try {
       const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
       const nodePty = this.getNodePty();
@@ -399,6 +402,7 @@ export class TerminalService {
 
       logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
+      capture?.(instance);
       return Promise.resolve({ terminalId, pid: pty.pid });
     } catch (error) {
       return Promise.reject(error);
@@ -440,14 +444,14 @@ export class TerminalService {
   /**
    * Destroy a terminal instance
    */
-  destroyTerminal(workspaceId: string, terminalId: string): boolean {
+  destroyTerminal(workspaceId: string, terminalId: string, expected?: TerminalInstance): boolean {
     const workspaceTerminals = this.terminals.get(workspaceId);
     if (!workspaceTerminals) {
       return false;
     }
 
     const instance = workspaceTerminals.get(terminalId);
-    if (!instance) {
+    if (!instance || (expected && expected !== instance)) {
       return false;
     }
 

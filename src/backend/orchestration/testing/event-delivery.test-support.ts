@@ -276,7 +276,8 @@ export async function createEventDeliveryFixture(
   session.sessionLifecycleService.configure({
     workspace: activity,
     messageQueue: {
-      tryDispatchNextMessage: (id) => session.sessionDispatchService.tryDispatchNextMessage(id),
+      tryDispatchNextMessage: (id, options) =>
+        session.sessionDispatchService.tryDispatchNextMessage(id, ...(options ? [options] : [])),
     },
   });
   session.sessionDispatchService.configure({

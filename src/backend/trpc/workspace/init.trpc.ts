@@ -239,7 +239,18 @@ export const workspaceInitRouter = router({
         await ctx.appContext.services.enqueueWorkspaceInitializationTask(workspace.id, async () => {
           await guard?.check();
           guard?.assertCurrent();
-          await retryReadyWorkspaceWithWarning(ctx, workspace, worktreePath, maxRetries, guard);
+          const current = await workspaceDataService.findByIdWithProject(workspace.id);
+          if (
+            current?.status !== 'READY' ||
+            current.worktreePath !== worktreePath ||
+            current.initRetryCount !== workspace.initRetryCount ||
+            current.initErrorMessage !== workspace.initErrorMessage
+          ) {
+            return;
+          }
+          await guard?.check();
+          guard?.assertCurrent();
+          await retryReadyWorkspaceWithWarning(ctx, current, worktreePath, maxRetries, guard);
         });
 
         return workspaceDataService.findById(input.id);

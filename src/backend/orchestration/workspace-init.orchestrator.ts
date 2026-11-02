@@ -30,7 +30,7 @@ import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import type { WorkspaceWithProject } from './types';
-import { handleWorkspaceInitFailure } from './workspace-init-cleanup';
+import { handleWorkspaceInitFailure, type CapturedDefaultTerminal } from './workspace-init-cleanup';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import {
   buildInitialPromptFromGitHubIssue,
@@ -493,11 +493,25 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
   }
 }
 
+function cleanupCapturedTerminal(
+  workspaceId: string,
+  terminalId: string,
+  instance: CapturedDefaultTerminal['instance'],
+  guard?: WorkspaceInitGuard
+) {
+  if (!guard || instance) {
+    terminalService.destroyTerminal(workspaceId, terminalId, ...(instance ? [instance] : []));
+  }
+}
+
 async function startDefaultTerminal(
   workspaceId: string,
   worktreePath: string,
   guard?: WorkspaceInitGuard
-): Promise<{ terminalId: string; autoCreated: boolean } | null> {
+): Promise<
+  | ({ terminalId: string; autoCreated: false } | (CapturedDefaultTerminal & { autoCreated: true }))
+  | null
+> {
   try {
     const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
     const existingTerminal = existingTerminals[0];
@@ -510,10 +524,20 @@ async function startDefaultTerminal(
 
     await guard?.check();
     guard?.assertCurrent();
-    const { terminalId, pid } = await terminalService.createTerminal({
-      workspaceId,
-      workingDir: worktreePath,
-    });
+    let instance: CapturedDefaultTerminal['instance'];
+    const { terminalId, pid } = await terminalService.createTerminal(
+      {
+        workspaceId,
+        workingDir: worktreePath,
+      },
+      ...(guard
+        ? ([
+            (created: NonNullable<typeof instance>) => {
+              instance = created;
+            },
+          ] as const)
+        : [])
+    );
 
     let unsubscribeExit: (() => void) | null = null;
     let terminalExited = false;
@@ -547,18 +571,27 @@ async function startDefaultTerminal(
       void clearPersistedTerminalPid();
     });
 
+    let registered: Awaited<ReturnType<typeof terminalSessionService.registerSession>> | undefined;
     try {
       await guard?.check();
       guard?.assertCurrent();
-      await terminalSessionService.registerSession({
-        workspaceId,
-        name: terminalId,
-        pid,
-      });
+      registered = await terminalSessionService.registerSession(
+        {
+          workspaceId,
+          name: terminalId,
+          pid,
+        },
+        ...(guard ? [guard.assertCurrent] : [])
+      );
+      await guard?.check();
+      guard?.assertCurrent();
     } catch (error) {
       unsubscribeExit?.();
       unsubscribeExit = null;
-      terminalService.destroyTerminal(workspaceId, terminalId);
+      cleanupCapturedTerminal(workspaceId, terminalId, instance, guard);
+      if (guard && registered) {
+        await terminalSessionService.removeCapturedSession(registered.id, pid);
+      }
       throw error;
     }
 
@@ -577,6 +610,8 @@ async function startDefaultTerminal(
 
     return {
       terminalId,
+      pid,
+      instance,
       autoCreated: true,
     };
   } catch (error) {
@@ -723,7 +758,7 @@ async function runWorkspaceInitialization(
   let worktreeCreated = false;
   let worktreeRegistered = false;
   let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
-  let autoCreatedTerminalId: string | undefined;
+  let autoCreatedTerminal: CapturedDefaultTerminal | undefined;
   const preparationController = new AbortController();
   let releaseInitialLaunch: (() => void) | undefined;
   let preparedSessionPromise: ReturnType<typeof prepareDefaultAgentSession> | undefined;
@@ -798,7 +833,7 @@ async function runWorkspaceInitialization(
       guard
     );
     if (defaultTerminal?.autoCreated) {
-      autoCreatedTerminalId = defaultTerminal.terminalId;
+      autoCreatedTerminal = defaultTerminal;
     }
 
     // Mark the Linear issue as started; join this non-fatal effect before draining.
@@ -851,7 +886,7 @@ async function runWorkspaceInitialization(
     await handleWorkspaceInitFailure(
       workspaceId,
       toError(error),
-      autoCreatedTerminalId,
+      autoCreatedTerminal,
       unregisteredCandidate(project, createdWorktreeInfo, worktreeRegistered),
       guard
     );

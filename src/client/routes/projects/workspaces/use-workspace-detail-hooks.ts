@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -77,17 +77,20 @@ export function useWorkspaceInitStatus(
     }
   );
 
-  const workspaceInitStatus =
-    initStatus && initStatusError
-      ? {
-          ...initStatus,
-          retryAvailability: {
-            status: 'BLOCKED' as const,
-            reason: 'AUTHORITY_UNAVAILABLE' as const,
-            explanation: 'Setup retry availability could not be checked. Refresh and try again.',
-          },
-        }
-      : initStatus;
+  const workspaceInitStatus = useMemo(
+    () =>
+      initStatus && initStatusError
+        ? {
+            ...initStatus,
+            retryAvailability: {
+              status: 'BLOCKED' as const,
+              reason: 'AUTHORITY_UNAVAILABLE' as const,
+              explanation: 'Setup retry availability could not be checked. Refresh and try again.',
+            },
+          }
+        : initStatus,
+    [initStatus, initStatusError]
+  );
 
   const prevInitStatusRef = useRef<string | undefined>(undefined);
   const prevHasWorktreePathRef = useRef(false);

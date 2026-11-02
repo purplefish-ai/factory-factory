@@ -1,3 +1,17 @@
+const ptySpawn = vi.hoisted(() => vi.fn());
+vi.mock('node:module', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:module')>();
+  return {
+    ...original,
+    createRequire: (...args: Parameters<typeof original.createRequire>) => {
+      const actual = original.createRequire(...args);
+      return Object.assign(
+        (id: string) => (id === 'node-pty' ? { spawn: ptySpawn } : actual(id)),
+        actual
+      );
+    },
+  };
+});
 import { mkdir, stat, access, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -215,7 +229,7 @@ it.each(['preflight', 'running'] as const)(
       preflight.release();
       await writeFile(join(path, 'released'), '');
     }
-    expect(await result).toBeInstanceOf(Error);
+    expect(await result).toMatchObject({ name: 'WorkspaceInitFenceError' });
     if (stage === 'preflight') {
       await expect(access(join(path, 'started'))).rejects.toThrow();
     }
@@ -272,3 +286,140 @@ it('preserves a replacement directory when nested cleanup preflight outlives its
     worktreePath: path,
   });
 });
+
+it.each([false, true])(
+  'cleans only captured terminal after delayed registration loses authority, replacement=%s',
+  async (replacement) => {
+    const workspaceId = h.claim.reservedWorkspaceId;
+    const path = join(db.tempDir, 'terminal-worktree');
+    await mkdir(path);
+    await db.prisma.workspace.update({ where: { id: workspaceId }, data: { worktreePath: path } });
+    const spawned: { pid: number; kill: ReturnType<typeof vi.fn> }[] = [];
+    ptySpawn.mockImplementation(() => {
+      const pty = {
+        pid: 1000 + spawned.length,
+        kill: vi.fn(),
+        onData: () => ({ dispose: () => undefined }),
+        onExit: () => ({ dispose: () => undefined }),
+      };
+      spawned.push(pty);
+      return pty;
+    });
+    vi.mocked(terminal.terminalService.createTerminal).mockRestore();
+    vi.spyOn(Date, 'now').mockReturnValue(12_345);
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    const held = boundary();
+    const register = terminal.terminalSessionService.registerSession.bind(
+      terminal.terminalSessionService
+    );
+    let row: Awaited<ReturnType<typeof register>> | undefined;
+    vi.spyOn(terminal.terminalSessionService, 'registerSession').mockImplementationOnce(
+      async (...args) => {
+        row = await register(...args);
+        await held.wait();
+        return row;
+      }
+    );
+    const task = init.initializeWorkspaceWorktree(workspaceId, { guard });
+    tasks.push(task);
+    await held.entered;
+    if (!row?.name) {
+      throw new Error('Terminal registration not reached');
+    }
+    expect(spawned).toHaveLength(1);
+    if (replacement) {
+      terminal.terminalService.destroyTerminal(workspaceId, row.name);
+      const next = await terminal.terminalService.createTerminal({ workspaceId, workingDir: path });
+      expect(next.terminalId).toBe(row.name);
+      await db.prisma.terminalSession.update({ where: { id: row.id }, data: { pid: next.pid } });
+    }
+    await replace();
+    held.release();
+    await task;
+    if (replacement) {
+      expect(spawned[1]!.kill).not.toHaveBeenCalled();
+      expect(terminal.terminalService.getTerminal(workspaceId, row.name)?.pty.pid).toBe(1001);
+      expect(await db.prisma.terminalSession.findUnique({ where: { id: row.id } })).toMatchObject({
+        pid: 1001,
+      });
+      terminal.terminalService.destroyTerminal(workspaceId, row.name);
+    } else {
+      expect(spawned[0]!.kill).toHaveBeenCalledOnce();
+      expect(terminal.terminalService.getTerminal(workspaceId, row.name)).toBeNull();
+      expect(await db.prisma.terminalSession.findUnique({ where: { id: row.id } })).toBeNull();
+    }
+  }
+);
+
+it.each([false, true])(
+  'clears only captured default-terminal PID after failure cleanup waits, replacement=%s',
+  async (replacement) => {
+    const workspaceId = h.claim.reservedWorkspaceId;
+    const spawned: { pid: number; kill: ReturnType<typeof vi.fn> }[] = [];
+    ptySpawn.mockImplementation(() => {
+      const pty = {
+        pid: 2000 + spawned.length,
+        kill: vi.fn(),
+        onData: () => ({ dispose: () => undefined }),
+        onExit: () => ({ dispose: () => undefined }),
+      };
+      spawned.push(pty);
+      return pty;
+    });
+    vi.mocked(terminal.terminalService.createTerminal).mockRestore();
+    vi.spyOn(Date, 'now').mockReturnValue(12_345);
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    let instance: import('@/backend/services/terminal').TerminalInstance | undefined;
+    const captured = await terminal.terminalService.createTerminal(
+      { workspaceId, workingDir: db.tempDir },
+      (created) => {
+        instance = created;
+      }
+    );
+    const row = await terminal.terminalSessionService.registerSession({
+      workspaceId,
+      name: captured.terminalId,
+      pid: captured.pid,
+    });
+    const held = boundary();
+    const release = terminal.terminalSessionService.releaseSessionPid.bind(
+      terminal.terminalSessionService
+    );
+    vi.spyOn(terminal.terminalSessionService, 'releaseSessionPid').mockImplementationOnce(
+      async (...args) => {
+        await held.wait();
+        await release(...args);
+      }
+    );
+    const { handleWorkspaceInitFailure } = await vi.importActual<
+      typeof import('./workspace-init-cleanup')
+    >('./workspace-init-cleanup');
+    const task = handleWorkspaceInitFailure(
+      workspaceId,
+      new Error('Fixture setup failure'),
+      { ...captured, instance },
+      undefined,
+      guard
+    );
+    tasks.push(task);
+    await held.entered;
+    if (replacement) {
+      const next = await terminal.terminalService.createTerminal({
+        workspaceId,
+        workingDir: db.tempDir,
+      });
+      expect(next.terminalId).toBe(captured.terminalId);
+      await db.prisma.terminalSession.update({ where: { id: row.id }, data: { pid: next.pid } });
+    }
+    held.release();
+    await task;
+    expect(spawned[0]!.kill).toHaveBeenCalledOnce();
+    expect(await db.prisma.terminalSession.findUnique({ where: { id: row.id } })).toMatchObject({
+      pid: replacement ? 2001 : null,
+    });
+    if (replacement) {
+      expect(spawned[1]!.kill).not.toHaveBeenCalled();
+      terminal.terminalService.destroyTerminal(workspaceId, captured.terminalId);
+    }
+  }
+);

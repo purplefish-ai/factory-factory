@@ -17,12 +17,19 @@ class TerminalSessionService {
     return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
 
-  registerSession(data: {
-    workspaceId: string;
-    name?: string;
-    pid?: number;
-  }): Promise<TerminalSession> {
-    return terminalSessionAccessor.create(data);
+  registerSession(
+    data: {
+      workspaceId: string;
+      name?: string;
+      pid?: number;
+    },
+    assertCurrent?: () => void
+  ): Promise<TerminalSession> {
+    return terminalSessionAccessor.create(data, assertCurrent);
+  }
+
+  removeCapturedSession(id: string, pid: number): Promise<void> {
+    return terminalSessionAccessor.deleteIfPidMatches(id, pid);
   }
 
   renameSession(id: string, name: string): Promise<TerminalSession> {

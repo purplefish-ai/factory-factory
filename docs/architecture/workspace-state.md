@@ -648,3 +648,10 @@ writers validate the captured owner under their existing SQLite write lock and
 check local admission again before committing. Stale continuations cannot adopt
 a replacement attempt or publish READY/FAILED; already-started physical work is
 joined and cleanup targets only resources still owned by that operation.
+
+A queued setup-warning retry rechecks the captured READY status, worktree,
+warning and retry count after its predecessor drains. Concurrent requests do not
+replay setup after an earlier retry changes that state. Default-terminal
+registration retains the created PTY instance and row identity; rejected
+registration cleans up that instance only, and PID clearing compares the
+captured PID without treating a stored PID as process-stop authority.

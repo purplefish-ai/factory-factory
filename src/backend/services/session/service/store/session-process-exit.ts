@@ -3,6 +3,7 @@ import type { SessionStore, SnapshotReason } from './session-store.types';
 export function handleProcessExit(options: {
   store: SessionStore;
   code: number | null;
+  preserveQueuedInput?: boolean;
   nowIso: () => string;
   markRuntime: (
     store: SessionStore,
@@ -21,7 +22,9 @@ export function handleProcessExit(options: {
   const { store, code, nowIso, markRuntime, forwardSnapshot } = options;
   const unexpected = code === null || code !== 0;
 
-  store.queue = [];
+  if (!options.preserveQueuedInput) {
+    store.queue = [];
+  }
   store.pendingInteractiveRequest = null;
   store.initialized = false;
 

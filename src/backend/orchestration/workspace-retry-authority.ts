@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { workspaceRetryAuthorityService } from '@/backend/services/agent-definition';
-import { eventSessionAuthority } from '@/backend/services/session';
+import { eventSessionAuthority, EventSessionFenceError } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import type { WorkspaceInitGuard, WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 
@@ -27,15 +27,27 @@ const unavailable = () =>
 export async function captureWorkspaceRetryGuard(
   workspace: Workspace
 ): Promise<WorkspaceInitGuard | undefined> {
+  const target = { projectId: workspace.projectId, workspaceId: workspace.id };
+  let origin: Awaited<ReturnType<typeof workspaceDataService.readEventOrigin>>;
   try {
-    return await capture(workspace);
+    origin = await workspaceDataService.readEventOrigin(target);
+  } catch (error) {
+    if (workspace.creationSource !== 'EVENT_AGENT') {
+      throw error;
+    }
+    throw new WorkspaceInitFenceError();
+  }
+  try {
+    return await capture(workspace, origin);
   } catch {
     throw new WorkspaceInitFenceError();
   }
 }
-async function capture(workspace: Workspace): Promise<WorkspaceInitGuard | undefined> {
+async function capture(
+  workspace: Workspace,
+  origin: Awaited<ReturnType<typeof workspaceDataService.readEventOrigin>>
+): Promise<WorkspaceInitGuard | undefined> {
   const target = { projectId: workspace.projectId, workspaceId: workspace.id };
-  const origin = await workspaceDataService.readEventOrigin(target);
   if (!origin) {
     if (workspace.creationSource === 'EVENT_AGENT') {
       throw new ApplicationError('CONFLICT', 'Event workspace origin is unavailable');
@@ -163,7 +175,7 @@ async function initialAvailability(
   try {
     await eventSessionAuthority.createWorkspaceRetryGuard(context).check();
   } catch (error) {
-    if (!(error instanceof ApplicationError)) {
+    if (!(error instanceof EventSessionFenceError)) {
       return unavailable();
     }
     return blocked(
