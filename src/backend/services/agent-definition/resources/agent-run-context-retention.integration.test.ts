@@ -4,6 +4,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { initialDeliveryEvidenceSchema } from '@/shared/event-agent-delivery';
 import { createLedgerFixture } from './testing/agent-ledger.test-support';
 
 let db: IntegrationDatabase;
@@ -371,4 +372,64 @@ it('retains terminal context with surviving child work/provenance dependencies',
   enable();
   await prune();
   expect(await read()).toEqual(run);
+});
+
+it.each(['missing', 'legacy', 'workspace', 'project'] as const)(
+  'retains sent context with unproven %s child-history coverage',
+  async (corruption) => {
+    const { run } = await sentTerminal();
+    if (corruption === 'missing') {
+      await db.prisma.workspaceLaunchOrigin.delete({ where: { runId: run.id } });
+    } else {
+      await db.prisma.workspaceLaunchOrigin.update({
+        where: { runId: run.id },
+        data: {
+          ...(corruption === 'legacy' ? { childHistoryVersion: null } : {}),
+          ...(corruption === 'workspace' ? { workspaceId: 'other-workspace' } : {}),
+          ...(corruption === 'project' ? { projectId: 'other-project' } : {}),
+        },
+      });
+    }
+    enable();
+    await prune();
+    expect(await read()).toEqual(run);
+  }
+);
+
+it('retains inconsistent abandonment proof even when the initial outcome completed', async () => {
+  const { run } = await sentTerminal();
+  const delivery = await db.prisma.agentInitialDelivery.findUniqueOrThrow({
+    where: { runId: run.id },
+  });
+  const proof = initialDeliveryEvidenceSchema.parse(delivery.evidence);
+  const stop = {
+    version: 1,
+    cause: 'USER_STOP',
+    source: proof.source!,
+    status: 'UNKNOWN',
+    observedAt: new Date().toISOString(),
+  } as const;
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: run.id },
+    data: {
+      state: 'AMBIGUOUS',
+      evidence: {
+        ...proof,
+        stop,
+        resolution: {
+          action: 'ABANDON',
+          attempt: proof.attempt,
+          outcome: proof.outcome!,
+          stop,
+          work: proof.work!,
+          resolvedAt: new Date().toISOString(),
+        },
+      },
+    },
+  });
+  await db.prisma.agentRun.update({ where: { id: run.id }, data: { status: 'CANCELLED' } });
+  const before = await read();
+  enable();
+  await prune();
+  expect(await read()).toEqual(before);
 });

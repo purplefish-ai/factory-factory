@@ -19,8 +19,17 @@ import {
   validRetentionEvaluation,
   type RetentionReason,
 } from './agent-retention-dependencies';
+import {
+  childHistoryIsClear,
+  hasChildWork,
+  hasStoppedRunWork,
+} from './agent-run-settlement.accessor';
 
-const include = { initialDelivery: true, event: true } as const;
+const include = {
+  initialDelivery: true,
+  event: true,
+  agentDefinition: { select: { projectId: true } },
+} as const;
 type Run = Prisma.AgentRunGetPayload<{ include: typeof include }>;
 
 function contextDependency(run: Run): RetentionReason | null {
@@ -104,17 +113,27 @@ function settledProofDependency(
   if (!(proof.outcome || proof.resolution?.action === 'ABANDON')) {
     return 'RECOVERY_DEPENDENCY';
   }
-  if (proof.outcome?.result !== 'COMPLETED' && !stoppedProof(proof)) {
+  if (proof.resolution?.action === 'ABANDON' && !validAbandonment(proof)) {
+    return 'RECOVERY_DEPENDENCY';
+  }
+  if (proof.outcome?.result !== 'COMPLETED' && !hasStoppedRunWork(proof, proof.work)) {
     return 'RECOVERY_DEPENDENCY';
   }
   return null;
 }
 
-function stoppedProof(proof: InitialDeliveryEvidence) {
-  return (
-    proof.work?.mode === 'STOPPED' &&
-    proof.stop?.status === 'LOCAL_RUNTIME_GROUP_STOPPED' &&
-    isDeepStrictEqual(proof.source, proof.stop.source)
+function validAbandonment(proof: InitialDeliveryEvidence) {
+  const resolution = proof.resolution;
+  return !!(
+    resolution &&
+    proof.work &&
+    hasStoppedRunWork(proof, proof.work) &&
+    isDeepStrictEqual(
+      { ...resolution.attempt, workerGeneration: proof.attempt.workerGeneration },
+      proof.attempt
+    ) &&
+    isDeepStrictEqual(resolution.work, proof.work) &&
+    isDeepStrictEqual(resolution.stop, proof.stop)
   );
 }
 
@@ -153,20 +172,13 @@ async function dependency(
       return eventReason;
     }
   }
-  if (run.reservedWorkspaceId) {
-    const child = await tx.workspaceChildOrigin.findFirst({
-      where: { parentWorkspaceId: run.reservedWorkspaceId },
-      select: { childWorkspaceId: true },
-    });
-    assertCurrent();
-    const liveChild = await tx.workspace.findFirst({
-      where: { parentWorkspaceId: run.reservedWorkspaceId },
-      select: { id: true },
-    });
-    assertCurrent();
-    if (child || liveChild) {
-      return 'RECOVERY_DEPENDENCY';
-    }
+  const childHold =
+    run.initialDelivery?.evidence !== null
+      ? !(await childHistoryIsClear(tx, run))
+      : run.reservedWorkspaceId && (await hasChildWork(tx, run.reservedWorkspaceId));
+  assertCurrent();
+  if (childHold) {
+    return 'RECOVERY_DEPENDENCY';
   }
   const evaluations = await tx.agentEvaluation.findMany({
     where: { runId: run.id },
