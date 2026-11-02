@@ -700,3 +700,21 @@ replay setup after an earlier retry changes that state. Default-terminal
 registration retains the created PTY instance and row identity; rejected
 registration cleans up that instance only, and PID clearing compares the
 captured PID without treating a stored PID as process-stop authority.
+
+## Projection field contract
+
+`src/shared/workspace-projection-fields.ts` classifies every raw summary input
+with its merge group, hydration requirement and drift policy. Snapshot group
+merging, completeness checks, metadata schema selection and reconciliation drift
+consume that inventory. Input types derive from the shared summary contract;
+adding a raw field requires an explicit policy. Independent contract fixtures
+check policy semantics rather than importing the production inventory.
+
+The summary schema also supplies common snapshot validators and the HTTP
+projector's public field inventory. Legacy snapshots retain optional metadata,
+PR collections and selection facts, and cannot claim completeness from defaults.
+Selected PR identity and facts derive from accepted collections; they have no
+independent clock or hydration requirement. Name and branch provenance remain
+private and use their existing ordered-write fences. Reconciliation poll-start
+fencing and client connection epochs and optimistic archive fencing are
+unchanged.

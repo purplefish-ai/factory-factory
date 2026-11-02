@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { deriveWorkspacePRSelection } from '@/shared/workspace-pr';
+import {
+  SnapshotFullMessageSchema,
+  SnapshotChangedMessageSchema,
+} from '@/shared/workspace-snapshot';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import { WorkspaceSummarySchema, deserializeWorkspaceSummary } from '@/shared/workspace-summary';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   makeCompleteWorkspaceSnapshotEntry,
   makeWorkspaceSnapshotEntry,
 } from '@/test-utils/workspace-snapshot';
+import { changedSnapshotInput } from '@/test-utils/workspace-snapshot-contract';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
   type ProjectWorkspace,
@@ -584,3 +591,29 @@ it('keeps an authoritative empty snapshot collection empty despite stale aliases
     selectedPr: null,
   });
 });
+
+it.each([false, true])(
+  'projects every HTTP summary field identically from full and delta wire frames (populated: %s)',
+  (populated) => {
+    const input = populated ? changedSnapshotInput() : undefined;
+    const entry = makeCompleteWorkspaceSnapshotEntry({
+      ...input,
+      ...deriveWorkspacePRSelection(input?.prs ?? []),
+    });
+    const http = deserializeWorkspaceSummary(
+      WorkspaceSummarySchema.parse({ ...entry, id: entry.workspaceId })
+    );
+    const full = SnapshotFullMessageSchema.parse({
+      type: 'snapshot_full',
+      projectId: entry.projectId,
+      entries: [entry],
+    });
+    const delta = SnapshotChangedMessageSchema.parse({
+      type: 'snapshot_changed',
+      workspaceId: entry.workspaceId,
+      entry,
+    });
+    expect(projectSnapshotToWorkspace(full.entries[0]!)).toEqual(http);
+    expect(projectSnapshotToWorkspace(delta.entry, http)).toEqual(http);
+  }
+);
