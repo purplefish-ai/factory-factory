@@ -15,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   mockSessionDomainService: {
     peekNextMessage: vi.fn(),
+    captureStoreGuard: vi.fn(() => () => true),
     getQueueSnapshot: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
@@ -55,6 +56,11 @@ const {
     findAgentSessionById: vi.fn(),
   },
   mockNotificationDeliveryService: {
+    configureRetry: vi.fn(),
+    recoverSession: vi.fn(async () => undefined),
+    captureMailSignalReceipt: vi.fn(() => null),
+    isMailSignalQuarantined: vi.fn(() => false),
+    isOwnedMailSignal: vi.fn(() => false),
     recoverPending: vi.fn(),
     claimForDispatch: vi.fn(),
     isAlreadyDelivered: vi.fn(),
@@ -85,6 +91,15 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
 }));
 
 const sessionDispatchService = createTestSessionDispatcher();
+
+function createIdleClient() {
+  return {
+    isCompactingActive: vi.fn().mockReturnValue(false),
+    startCompaction: vi.fn(),
+    endCompaction: vi.fn(),
+    setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {
@@ -356,12 +371,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('fails a message once when ACP reports an internal error', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     const internalError = {
       code: -32_603,
       message: 'Internal error',
@@ -389,12 +399,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('acknowledges a workspace notification after its provider dispatch commits', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     const notificationMessage = {
       ...queuedMessage,
       id: 'workspace-notification-notif-parent',
@@ -412,12 +417,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('drops a duplicate notification and dispatches the next queued message', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     const notificationMessage = {
       ...queuedMessage,
       id: 'workspace-notification-notif-parent',
@@ -446,12 +446,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('removes failed notification transcript evidence when the process has stopped', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     const notificationMessage = {
       ...queuedMessage,
       id: 'workspace-notification-notif-parent',
@@ -517,12 +512,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         ...queuedMessage,
         attachments,
       };
-      const client = {
-        isCompactingActive: vi.fn().mockReturnValue(false),
-        startCompaction: vi.fn(),
-        endCompaction: vi.fn(),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
+      const client = createIdleClient();
       mockSessionService.getSessionClient.mockReturnValue(client);
       mockSessionDomainService.peekNextMessage.mockReturnValue(malformedAttachmentMessage);
       mockSessionDomainService.dequeueNext.mockReturnValue(malformedAttachmentMessage);
@@ -551,12 +541,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('backs off instead of immediately retrying when ACP reports an active turn', async () => {
     vi.useFakeTimers();
     try {
-      const client = {
-        isCompactingActive: vi.fn().mockReturnValue(false),
-        startCompaction: vi.fn(),
-        endCompaction: vi.fn(),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
+      const client = createIdleClient();
       mockSessionService.getSessionClient.mockReturnValue(client);
       mockSessionService.sendSessionMessage
         .mockRejectedValueOnce({
@@ -589,12 +574,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('starts busy-turn backoff at the base delay after a terminal dispatch failure', async () => {
     vi.useFakeTimers();
     try {
-      const client = {
-        isCompactingActive: vi.fn().mockReturnValue(false),
-        startCompaction: vi.fn(),
-        endCompaction: vi.fn(),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
+      const client = createIdleClient();
       const turnInProgressError = {
         code: -32_600,
         message: 'Invalid request',
@@ -629,12 +609,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('lets prompt-turn completion bypass a pending active-turn backoff', async () => {
     vi.useFakeTimers();
     try {
-      const client = {
-        isCompactingActive: vi.fn().mockReturnValue(false),
-        startCompaction: vi.fn(),
-        endCompaction: vi.fn(),
-        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-      };
+      const client = createIdleClient();
       mockSessionService.getSessionClient.mockReturnValue(client);
       mockSessionService.sendSessionMessage
         .mockRejectedValueOnce({
@@ -794,12 +769,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('persists dispatched user message before turn completion', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
 
     let resolveSend: (() => void) | undefined;
@@ -847,12 +817,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('leaves message in queue when dispatch gate evaluation throws', async () => {
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDataService.findAgentSessionById.mockRejectedValue(new Error('db down'));
 
@@ -928,12 +893,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       text: 'after stop',
       timestamp: '2026-02-01T00:00:01.000Z',
     };
-    const client = {
-      isCompactingActive: vi.fn().mockReturnValue(false),
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-    };
+    const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDomainService.peekNextMessage
       .mockReturnValueOnce(queuedMessage)

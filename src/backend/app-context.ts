@@ -227,7 +227,7 @@ export type ApplicationServices = BridgeServices & {
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
-  recoverWorkspaceMail: typeof recoverWorkspaceMail;
+  recoverWorkspaceMail: (workspaceId: string) => ReturnType<typeof recoverWorkspaceMail>;
   workspaceCreationService: WorkspaceCreationService;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]

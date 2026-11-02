@@ -42,10 +42,21 @@ const summarySelect = {
 } satisfies Prisma.WorkspaceNotificationSelect;
 const actionable = { acknowledgedAt: null, supersededAt: null, kind: { not: 'PROGRESS' } };
 const WAKE_LEASE_MS = 30_000;
+function textBoundary(text: string, offset: number): number {
+  const bounded = Math.min(offset, text.length);
+  const current = text.charCodeAt(bounded);
+  const previous = text.charCodeAt(bounded - 1);
+  return current >= 0xdc_00 && current <= 0xdf_ff && previous >= 0xd8_00 && previous <= 0xdb_ff
+    ? bounded - 1
+    : bounded;
+}
 function summarize(row: Prisma.WorkspaceNotificationGetPayload<{ select: typeof summarySelect }>) {
   // SQLite SUBSTR used by the legacy migration counts Unicode code points.
   // The API budget, like JavaScript body offsets, counts UTF-16 code units.
-  return workspaceMailSummarySchema.parse({ ...row, preview: row.preview.slice(0, 160) });
+  return workspaceMailSummarySchema.parse({
+    ...row,
+    preview: row.preview.slice(0, textBoundary(row.preview, 160)),
+  });
 }
 
 class WorkspaceNotificationAccessor {
@@ -97,7 +108,7 @@ class WorkspaceNotificationAccessor {
           sourceWorkspaceName,
           sourceProjectName,
           message,
-          preview: message.slice(0, 160),
+          preview: message.slice(0, textBoundary(message, 160)),
           revision: state.revision,
           direction,
           ...metadata,
@@ -148,8 +159,13 @@ class WorkspaceNotificationAccessor {
         if (!row) {
           return [];
         }
-        const start = Math.min(offset, row.message.length);
-        const body = row.message.slice(start, start + remaining);
+        const start = textBoundary(row.message, offset);
+        const body = row.message.slice(start, textBoundary(row.message, start + remaining));
+        if (maxChars === 1 && remaining > 0 && body.length === 0 && start < row.message.length) {
+          throw new Error(
+            'Mail character budget cannot fit the next Unicode character; increase maxChars to at least 2.'
+          );
+        }
         remaining -= body.length;
         const end = start + body.length;
         return [

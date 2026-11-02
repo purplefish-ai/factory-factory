@@ -87,9 +87,15 @@ export function WorkspaceMailDetail({
           data-mail-ack
           variant="outline"
           size="sm"
-          disabled={acknowledged || observedRevision === null || ack.isPending || read.isPending}
+          disabled={
+            acknowledged ||
+            observedRevision === null ||
+            nextOffset !== null ||
+            ack.isPending ||
+            read.isPending
+          }
           onClick={() => {
-            if (observedRevision === null) {
+            if (observedRevision === null || nextOffset !== null) {
               return;
             }
             setAckError(null);
@@ -100,7 +106,21 @@ export function WorkspaceMailDetail({
                   if (result.acknowledged > 0) {
                     setAcknowledged(true);
                   } else {
-                    setAckError('Refresh the inbox and try again.');
+                    // Zero may be an idempotent success, but only this exact ID can prove it.
+                    read.mutate(
+                      { workspaceId, ids: [mail.id], offset: 0, maxChars: 2 },
+                      {
+                        onSuccess: (result) => {
+                          const item = result.items.find((item) => item.id === mail.id);
+                          if (item?.acknowledgedAt) {
+                            setAcknowledged(true);
+                          } else {
+                            setAckError('Refresh the inbox and try again.');
+                          }
+                        },
+                        onError: (error) => setAckError(error.message),
+                      }
+                    );
                   }
                   void utils.workspace.listMail.invalidate({ workspaceId });
                 },
@@ -118,7 +138,9 @@ export function WorkspaceMailDetail({
         </h2>
         <MailMetadata mail={mail} />
         <p className="my-3 text-xs text-muted-foreground">
-          Acknowledging confirms receipt of this message.
+          {nextOffset !== null
+            ? 'Read the full message before acknowledging receipt.'
+            : 'Acknowledging confirms receipt of this message.'}
         </p>
         {ackError && (
           <p role="alert" className="mb-3 text-sm text-destructive">

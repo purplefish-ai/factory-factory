@@ -1,6 +1,7 @@
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 /** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
+import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
@@ -34,6 +35,8 @@ import {
   mailRecoveryRetryGuard,
   steerOwnedWorkspaceMailSignal,
   requeueFailedWorkspaceMailSignal,
+  sendArmedWorkspaceMailBatch,
+  reportAmbiguousWorkspaceMailFailure,
 } from './session-mail-signal-dispatch';
 import { buildMessageContent } from './session-message-content';
 import { SessionQueuedSteering } from './session-queued-steering';
@@ -101,7 +104,7 @@ export class SessionDispatchService {
     this.lifecycleGate = dependencies.gate;
     this.startupService = dependencies.startup;
     this.notificationDeliveryService = dependencies.notificationDelivery;
-    dependencies.notificationDelivery.configureRetry?.((input) => {
+    dependencies.notificationDelivery.configureRetry((input) => {
       const generation = this.lifecycle.gate.getGeneration(input.sessionId);
       this.retry.schedule(
         input.sessionId,
@@ -154,14 +157,7 @@ export class SessionDispatchService {
     this.notificationDeliveryService?.resetSession(sessionId);
   }
 
-  /**
-   * Try to dispatch the next queued message to Claude.
-   * Auto-starts the client if needed.
-   * Uses a guard to prevent concurrent dispatch calls for the same session.
-   *
-   * The message stays in the queue (visible in snapshots) until we're ready
-   * to dispatch, so a page refresh during auto-start won't lose it.
-   */
+  /** Keep messages queued during preparation so refresh cannot lose them. */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
     const stopGeneration = this.lifecycle.gate.getGeneration(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
@@ -184,7 +180,7 @@ export class SessionDispatchService {
     const dispatchToken = this.dispatchClaim.reserve(dbSessionId);
 
     try {
-      await this.lifecycle.notificationDelivery.recoverSession?.(dbSessionId, async () => {
+      await this.lifecycle.notificationDelivery.recoverSession(dbSessionId, async () => {
         await options.guard?.check();
         options.guard?.assertCurrent?.();
         if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
@@ -344,6 +340,7 @@ export class SessionDispatchService {
       batch.release();
       throw error;
     }
+    const isStoreCurrent = sessionDomainService.captureStoreGuard(dbSessionId);
     return dispatchCollectedBatch({
       sessionId: dbSessionId,
       batch,
@@ -359,6 +356,7 @@ export class SessionDispatchService {
       send: (messages) =>
         this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration, guard),
       onError: (message, error) =>
+        isStoreCurrent() &&
         this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client),
       onSuccess: () => {
         this.retry.resetAttempts(dbSessionId);
@@ -437,10 +435,6 @@ export class SessionDispatchService {
     );
   }
 
-  // ============================================================================
-  // Private: Dispatch Helpers
-  // ============================================================================
-
   /**
    * Handle a dispatch error. Permanent input errors are rejected, provider-busy
    * errors are re-queued with backoff, and all other errors fail for explicit retry.
@@ -456,6 +450,18 @@ export class SessionDispatchService {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
         preservePRUpdateOutcome: true,
+      });
+      return;
+    }
+
+    if (this.lifecycle.notificationDelivery.isMailSignalQuarantined(msg.id)) {
+      reportAmbiguousWorkspaceMailFailure(dbSessionId, msg, error, () => {
+        if (
+          capturedClient === this.lifecycle.startup.getSessionClient(dbSessionId) &&
+          !this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId)
+        ) {
+          this.markDispatchError(dbSessionId, this.formatDispatchError(error));
+        }
       });
       return;
     }
@@ -513,10 +519,7 @@ export class SessionDispatchService {
       return;
     }
 
-    if (
-      this.lifecycle.notificationDelivery.isNotificationMessage(msg.id) &&
-      msg.id.startsWith('workspace-mail-wake-')
-    ) {
+    if (error instanceof AcpSteeringNotSentError && msg.id.startsWith('workspace-mail-wake-')) {
       requeueFailedWorkspaceMailSignal(
         dbSessionId,
         msg,
@@ -644,9 +647,6 @@ export class SessionDispatchService {
     }
   }
 
-  /**
-   * Dispatch a message to the client.
-   */
   private async dispatchMessage(
     dbSessionId: string,
     messages: QueuedMessage[],
@@ -724,11 +724,23 @@ export class SessionDispatchService {
     }
 
     try {
-      const sendPromise = this.dependencies.promptService.sendSessionMessage(
-        dbSessionId,
-        content,
-        ...(guard ? ([guard] as const) : [])
-      );
+      const sendPromise = sendArmedWorkspaceMailBatch({
+        sessionId: dbSessionId,
+        messages,
+        notifications: this.lifecycle.notificationDelivery,
+        assertCurrent: () => {
+          guard?.assertCurrent?.();
+          if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+            throw new AcpSteeringNotSentError('Session stopped before mail dispatch');
+          }
+        },
+        send: () =>
+          this.dependencies.promptService.sendSessionMessage(
+            dbSessionId,
+            content,
+            ...(guard ? ([guard] as const) : [])
+          ),
+      });
       // Persist immediately after dispatch so refresh/replay keeps this user message
       // visible while the provider is still working on the turn.
       for (const { message, order } of dispatched) {

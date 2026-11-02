@@ -243,6 +243,8 @@ describe('application queue producer composition', () => {
       expect(second.delivered).toEqual([
         { sessionId: 'session-second', text: expect.stringContaining('You have workspace mail') },
       ]);
+      expect(first.delivered[0]?.text).not.toContain('Graph notification');
+      expect(second.delivered[0]?.text).not.toContain('Graph notification');
       expect(sessionDomainService.peekNextMessage('session-first')).toBeUndefined();
       expect(sessionDomainService.peekNextMessage('session-second')).toBeUndefined();
       expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();

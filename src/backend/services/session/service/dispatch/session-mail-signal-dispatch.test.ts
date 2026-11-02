@@ -70,6 +70,11 @@ function harness(
     },
     startup,
     notificationDelivery: notifications ?? {
+      configureRetry: () => undefined,
+      recoverSession: async () => undefined,
+      captureMailSignalReceipt: () => null,
+      isMailSignalQuarantined: () => false,
+      isOwnedMailSignal: () => false,
       claimForDispatch: () => ({ status: 'not_notification' }),
       isAlreadyDelivered: async () => false,
       acknowledgeSuccessfulDispatch: async () => undefined,
@@ -205,7 +210,7 @@ it('preserves manual-resume ownership policy when steering a mail signal', async
   expect(sessionDomainService.getQueueLength('session')).toBe(1);
 });
 
-it('retries a failed queued mail signal through bounded dispatch backoff without restarting', async () => {
+it('quarantines failed queued mail after possible acceptance instead of replaying it', async () => {
   vi.useFakeTimers();
   const h = mailHarness();
   await h.notifications.recoverPending({
@@ -215,12 +220,123 @@ it('retries a failed queued mail signal through bounded dispatch backoff without
   });
   h.sendSessionMessage.mockRejectedValueOnce(new Error('temporary provider failure'));
   await h.dispatcher.tryDispatchNextMessage('session');
-  expect(sessionDomainService.getQueueLength('session')).toBe(1);
+  expect(h.notificationPort.quarantineWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(sessionDomainService.getQueueLength('session')).toBe(0);
   expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(120_000);
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  expect(h.notificationPort.disarmWake).not.toHaveBeenCalled();
+  h.dispatcher.resetDispatchState('session');
+});
+
+it.each([true, false])(
+  'reports ambiguous queued delivery while preserving active-provider state %s',
+  async (promptInFlight) => {
+    const h = mailHarness();
+    const emit = vi.spyOn(sessionDomainService, 'emitDelta');
+    await h.notifications.recoverPending({
+      sessionId: 'session',
+      workspaceId: 'workspace',
+      assertAllowed: () => undefined,
+    });
+    h.sendSessionMessage.mockImplementationOnce(() => {
+      h.runtimeManager.isSessionPromptInFlight.mockReturnValue(promptInFlight);
+      return Promise.reject(new Error('receipt lost'));
+    });
+    await h.dispatcher.tryDispatchNextMessage('session');
+    expect(sessionDomainService.getRuntimeSnapshot('session').phase).toBe(
+      promptInFlight ? 'running' : 'error'
+    );
+    expect(emit).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        type: 'error',
+        message: expect.stringContaining('Inspect the inbox'),
+      })
+    );
+  }
+);
+
+it('does not revive a deleted store when queued mail rejects after possible acceptance', async () => {
+  const h = mailHarness();
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  h.sendSessionMessage.mockImplementationOnce(() => {
+    h.stop();
+    h.dispatcher.resetDispatchState('session');
+    sessionDomainService.clearSession('session');
+    return Promise.reject(new Error('receipt lost after deletion'));
+  });
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(Reflect.get(Reflect.get(sessionDomainService, 'registry'), 'stores').has('session')).toBe(
+    false
+  );
+  expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
+});
+
+it('preserves replacement same-ID queued mail and transcript when the previous store send fails', async () => {
+  const h = mailHarness();
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const original = sessionDomainService.peekNextMessage('session')!;
+  const replacement = { ...original, text: 'replacement store mail' };
+  h.sendSessionMessage.mockImplementationOnce(() => {
+    h.stop();
+    h.dispatcher.resetDispatchState('session');
+    sessionDomainService.clearSession('session');
+    sessionDomainService.enqueue('session', replacement);
+    sessionDomainService.commitSentUserMessage('session', replacement);
+    return Promise.reject(new Error('old send failed'));
+  });
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([replacement]);
+  expect(sessionDomainService.getTranscriptSnapshot('session')).toContainEqual(
+    expect.objectContaining({ id: original.id, text: replacement.text })
+  );
+});
+
+it('arms a queued mail receipt durably before calling the provider', async () => {
+  const h = mailHarness();
+  const arming = deferred<boolean>();
+  h.notificationPort.quarantineWake.mockReturnValueOnce(arming.promise);
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const dispatch = h.dispatcher.tryDispatchNextMessage('session');
+  await vi.waitFor(() => expect(h.notificationPort.quarantineWake).toHaveBeenCalledOnce());
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  arming.resolve(true);
+  await dispatch;
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+});
+
+it('disarms proven busy queued mail before safely retrying', async () => {
+  vi.useFakeTimers();
+  const h = mailHarness();
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  h.sendSessionMessage.mockRejectedValueOnce(
+    new Error('A turn is already in progress for this session')
+  );
+  await h.dispatcher.tryDispatchNextMessage('session');
+  expect(h.notificationPort.disarmWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(sessionDomainService.getQueueLength('session')).toBe(1);
   await vi.advanceTimersByTimeAsync(1000);
   expect(h.sendSessionMessage).toHaveBeenCalledTimes(2);
-  expect(h.notificationPort.settleWake).toHaveBeenCalledWith(h.wake);
-  h.dispatcher.resetDispatchState('session');
+  expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
 });
 
 function deferred<T>() {
@@ -370,11 +486,74 @@ it('never lets a late native receipt consume the replacement wake after explicit
   const replacement = sessionDomainService.peekNextMessage('session')!;
   h.notificationPort.settleWake.mockResolvedValueOnce(false);
   await h.steerSessionMessage.mock.calls[0]?.[2]?.onLateInjected?.();
+  expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
   expect(sessionDomainService.getQueueSnapshot('session')).toEqual([replacement]);
   expect(sessionDomainService.getTranscriptSnapshot('session')).not.toContainEqual(
     expect.objectContaining({ id: original.id })
   );
 });
+
+it('records a confirmed late mail injection after stop without starting the runtime', async () => {
+  const h = mailHarness();
+  h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+  h.steerSessionMessage.mockRejectedValueOnce(new AcpSteeringTimeoutError());
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const signal = sessionDomainService.peekNextMessage('session')!;
+  await expect(h.dispatcher.steerWorkspaceMailSignal('session', signal.id)).rejects.toBeInstanceOf(
+    AcpSteeringTimeoutError
+  );
+  h.stop();
+  h.dispatcher.resetDispatchState('session');
+  await h.steerSessionMessage.mock.calls[0]?.[2]?.onLateInjected?.();
+  expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(sessionDomainService.getTranscriptSnapshot('session')).toContainEqual(
+    expect.objectContaining({ id: signal.id, source: 'user' })
+  );
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(h.startup.getOrCreateSessionClient).not.toHaveBeenCalled();
+});
+
+it.each(['deleted', 'replaced'] as const)(
+  'does not revive a %s session store for a late mail receipt',
+  async (state) => {
+    const h = mailHarness();
+    h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
+    h.steerSessionMessage.mockRejectedValueOnce(new AcpSteeringTimeoutError());
+    await h.notifications.recoverPending({
+      sessionId: 'session',
+      workspaceId: 'workspace',
+      assertAllowed: () => undefined,
+    });
+    const signal = sessionDomainService.peekNextMessage('session')!;
+    await expect(
+      h.dispatcher.steerWorkspaceMailSignal('session', signal.id)
+    ).rejects.toBeInstanceOf(AcpSteeringTimeoutError);
+    h.stop();
+    h.dispatcher.resetDispatchState('session');
+    sessionDomainService.clearSession('session');
+    if (state === 'replaced') {
+      sessionDomainService.enqueue('session', {
+        ...signal,
+        id: 'new-task',
+        text: 'replacement store',
+      });
+    }
+    const commit = vi.spyOn(sessionDomainService, 'commitSentUserMessage');
+    const take = vi.spyOn(sessionDomainService, 'takeQueuedMessages');
+    await h.steerSessionMessage.mock.calls[0]?.[2]?.onLateInjected?.();
+    expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+    expect(commit).not.toHaveBeenCalled();
+    expect(take).not.toHaveBeenCalled();
+    expect(sessionDomainService.getQueueLength('session')).toBe(state === 'deleted' ? 0 : 1);
+    expect(
+      Reflect.get(Reflect.get(sessionDomainService, 'registry'), 'stores').has('session')
+    ).toBe(state === 'replaced');
+  }
+);
 
 it('recovers newer eligible mail after the late native receipt clears its prior quarantine', async () => {
   const h = mailHarness();

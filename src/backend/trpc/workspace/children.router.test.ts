@@ -491,6 +491,39 @@ describe('workspaceChildrenRouter', () => {
 });
 
 describe('workspace inbox routes', () => {
+  it('rejects inbox previews and bodies from an untrusted client', async () => {
+    mockListMail.mockClear();
+    mockReadMail.mockClear();
+    const { caller } = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+    await expect(caller.listMail({ workspaceId: 'recipient' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(caller.readMail({ workspaceId: 'recipient', ids: ['mail'] })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockListMail).not.toHaveBeenCalled();
+    expect(mockReadMail).not.toHaveBeenCalled();
+  });
+
+  it('allows inbox reads from a trusted local browser', async () => {
+    const listed = { items: [], nextCursor: null, revision: 0 };
+    const read = { items: [], revision: 0 };
+    mockListMail.mockResolvedValue(listed);
+    mockReadMail.mockResolvedValue(read);
+    const { caller } = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://localhost:3000',
+      isLocal: true,
+    });
+    await expect(caller.listMail({ workspaceId: 'recipient' })).resolves.toEqual(listed);
+    await expect(caller.readMail({ workspaceId: 'recipient', ids: ['mail'] })).resolves.toEqual(
+      read
+    );
+  });
   it('lists summaries with validated bounded inputs', async () => {
     mockListMail.mockResolvedValue({ items: [], nextCursor: null, revision: 4 });
     const { caller } = createCaller();

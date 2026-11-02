@@ -282,7 +282,10 @@ export class SessionDomainService extends EventEmitter {
     messageId: string,
     options?: { expectedMessage?: QueuedMessage; recordCancellation?: boolean }
   ): boolean {
-    const store = this.registry.getOrCreateActive(sessionId);
+    const store = this.registry.getExisting(sessionId);
+    if (!store) {
+      return false;
+    }
     const removed = removeQueuedMessage(store, messageId, options);
     if (!removed) {
       return false;
@@ -322,6 +325,21 @@ export class SessionDomainService extends EventEmitter {
     this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
+  /** Confirm a late provider receipt only in the originally retained conversation store. */
+  captureLateMessageCommit(sessionId: string, message: QueuedMessage): () => boolean {
+    const store = this.registry.getExisting(sessionId);
+    return () => {
+      if (!(store && this.registry.isCurrentStore(sessionId, store))) {
+        return false;
+      }
+      store.queue = store.queue.filter((queued) => queued !== message);
+      const order = store.nextOrder;
+      store.nextOrder += 1;
+      this.commitSentUserMessageWithOrder(store, message, order);
+      return true;
+    };
+  }
+
   commitSentUserMessageAtOrder(
     sessionId: string,
     message: QueuedMessage,
@@ -351,7 +369,10 @@ export class SessionDomainService extends EventEmitter {
     messageId: string,
     options?: { emitSnapshot?: boolean; preservePRUpdateOutcome?: boolean }
   ): boolean {
-    const store = this.registry.getOrCreateActive(sessionId);
+    const store = this.registry.getExisting(sessionId);
+    if (!store) {
+      return false;
+    }
     const removed = removeTranscriptMessageById(store, messageId, options);
     if (removed && options?.emitSnapshot !== false) {
       this.publisher.forwardSnapshot(store, { reason: 'remove_transcript_message' });
@@ -611,6 +632,11 @@ export class SessionDomainService extends EventEmitter {
 
   getQueueLength(sessionId: string): number {
     return this.registry.getQueueLength(sessionId);
+  }
+
+  captureStoreGuard(sessionId: string): () => boolean {
+    const store = this.registry.getExisting(sessionId);
+    return () => Boolean(store && this.registry.isCurrentStore(sessionId, store));
   }
 
   getQueueSnapshot(sessionId: string): QueuedMessage[] {

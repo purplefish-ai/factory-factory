@@ -65,7 +65,11 @@ export type NotificationPersistencePort = {
 export type NotificationQueuePort = {
   hasQueuedMessage(sessionId: string, messageId: string): boolean;
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string };
-  removeQueuedMessage(sessionId: string, messageId: string): boolean;
+  removeQueuedMessage(
+    sessionId: string,
+    messageId: string,
+    options?: { expectedMessage?: QueuedMessage }
+  ): boolean;
 };
 
 export type NotificationTranscriptPort = {
@@ -259,7 +263,15 @@ export class SessionNotificationDeliveryService {
     id: string
   ): Promise<{ dispatchableCount: number }> {
     const claim = await this.notificationPort.claimWake?.({ workspaceId: input.workspaceId });
-    await input.assertAllowed();
+    try {
+      await input.assertAllowed();
+      input.assertAllowedSync?.();
+    } catch (error) {
+      if (claim) {
+        await this.notificationPort.releaseWake?.(claim);
+      }
+      throw error;
+    }
     if (!claim) {
       return { dispatchableCount: 0 };
     }
@@ -311,7 +323,11 @@ export class SessionNotificationDeliveryService {
     );
   }
 
-  captureMailSignalReceipt(sessionId: string, messageId: string): MailSignalReceipt | null {
+  captureMailSignalReceipt(
+    sessionId: string,
+    messageId: string,
+    expectedMessage?: QueuedMessage
+  ): MailSignalReceipt | null {
     const owned = this.mailWakes.get(messageId);
     if (owned?.sessionId !== sessionId) {
       return null;
@@ -333,7 +349,11 @@ export class SessionNotificationDeliveryService {
           return;
         }
         this.ambiguousSignals.add(messageId);
-        this.queuePort.removeQueuedMessage(sessionId, messageId);
+        this.queuePort.removeQueuedMessage(
+          sessionId,
+          messageId,
+          ...(expectedMessage ? [{ expectedMessage }] : [])
+        );
       },
     };
   }
@@ -421,6 +441,11 @@ export class SessionNotificationDeliveryService {
   }
 
   resetSession(sessionId: string): void {
+    const workspaceId = this.sessionWorkspaces.get(sessionId);
+    this.sessionWorkspaces.delete(sessionId);
+    if (workspaceId && this.preferredRecipients.get(workspaceId)?.sessionId === sessionId) {
+      this.preferredRecipients.delete(workspaceId);
+    }
     for (const [notificationId, claim] of this.dispatchClaims) {
       if (claim.sessionId === sessionId) {
         this.dispatchClaims.delete(notificationId);

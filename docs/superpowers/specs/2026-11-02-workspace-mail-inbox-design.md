@@ -48,15 +48,18 @@ user requested native subagents, never child workspaces, for implementation.
 
 Shared schemas/types live in src/shared/workspace-mail.ts. The existing
 workspaceNotificationService remains the workspace capsule facade. It exposes
-listMail({workspaceId,cursor?,limit?,unreadOnly?,kinds?}),
+listMail({workspaceId,cursor?,limit?,unreadOnly?,kinds?,includeSuperseded?}),
 readMail({workspaceId,ids,maxChars?,offset?}),
 ackMail({workspaceId,ids,throughRevision}), and claimWake/settleWake/releaseWake
-with workspaceId and revision. Lists return items, nextCursor and revision.
-Summary items expose id, revision, subject, preview, kind, taskKey/taskRevision,
-source workspace names/IDs, createdAt, readAt, acknowledgedAt and supersededAt.
-Read results expose selected text, offset and nextOffset; total returned body
-text defaults to 8,192 characters and cannot exceed 16,384. Summary pages
-default 20 and cap 50; previews cap 160 characters. ID batches cap 20.
+with workspaceId and revision. Lists return items, nextCursor, revision and
+wakeAmbiguous. The includeSuperseded option defaults to false; enabling it
+includes replaced progress updates. Inbox previews and bodies require the same
+trusted-local boundary as acknowledgement and explicit wake retry. Summary items
+expose id, revision, subject, preview, kind, taskKey/taskRevision, source
+workspace names/IDs, createdAt, readAt, acknowledgedAt and supersededAt. Read
+results expose selected text, offset and nextOffset; total returned body text
+defaults to 8,192 characters and cannot exceed 16,384. Summary pages default 20
+and cap 50; previews cap 160 characters. ID batches cap 20.
 
 The runtime owner and persistence owner may refine the wake-port return shape in
 direct coordination; record the final contract in the implementation ledger. No

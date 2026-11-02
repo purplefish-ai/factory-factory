@@ -29,7 +29,7 @@ export const listMailInputSchema = z.object({
     .describe(
       'Include retained superseded progress history; omitted by default to keep the inbox bounded to current progress.'
     ),
-  kinds: z.array(workspaceMailKindSchema).max(6).optional(),
+  kinds: z.array(workspaceMailKindSchema).min(1).max(6).optional(),
 });
 export const readMailInputSchema = z.object({
   workspaceId,

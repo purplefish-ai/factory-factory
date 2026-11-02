@@ -7,6 +7,10 @@ import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
 import { WorkspaceMailDetail } from './workspace-mail-detail';
 import { MailMetadata } from './workspace-mail-metadata';
 
+function isUnread(mail: WorkspaceMailSummary) {
+  return !(mail.readAt || mail.acknowledgedAt || mail.supersededAt);
+}
+
 export function WorkspaceInboxPanel({ workspaceId }: { workspaceId: string }) {
   // A workspace change discards selection and any in-flight body view.
   return <WorkspaceInbox key={workspaceId} workspaceId={workspaceId} />;
@@ -29,9 +33,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
       mail.data?.pages.flatMap((page) => page.items).map((item) => [item.id, item])
     ).values(),
   ];
-  const unread = items.filter(
-    (item) => !(item.readAt || item.acknowledgedAt || item.supersededAt)
-  ).length;
+  const unread = items.filter(isUnread).length;
 
   if (selected) {
     return (
@@ -114,10 +116,10 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                 onClick={() => setSelected(item)}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className={cn('break-words text-sm', !item.readAt && 'font-semibold')}>
+                  <span className={cn('break-words text-sm', isUnread(item) && 'font-semibold')}>
                     {item.subject || 'Workspace message'}
                   </span>
-                  {!(item.readAt || item.acknowledgedAt || item.supersededAt) && (
+                  {isUnread(item) && (
                     <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
                       Unread
                     </span>

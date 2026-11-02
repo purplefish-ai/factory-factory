@@ -85,6 +85,11 @@ function harness(
     },
     startup,
     notificationDelivery: notifications ?? {
+      configureRetry: () => undefined,
+      recoverSession: async () => undefined,
+      captureMailSignalReceipt: () => null,
+      isMailSignalQuarantined: () => false,
+      isOwnedMailSignal: () => false,
       claimForDispatch: () => ({ status: 'not_notification' }),
       isAlreadyDelivered: async () => false,
       acknowledgeSuccessfulDispatch: async () => undefined,

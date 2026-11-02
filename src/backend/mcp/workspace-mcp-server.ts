@@ -239,7 +239,7 @@ async function handleSendMsgTool(
     ...workspaceMailSendMetadataSchema.parse(args),
   });
   const mailError =
-    error ??
+    error ||
     (z.object({ persisted: z.literal(true) }).safeParse(result).success
       ? undefined
       : 'Mail was not persisted.');
@@ -271,7 +271,7 @@ async function handleSendMsgToChildTool(
     ...workspaceMailSendMetadataSchema.parse(args),
   });
   const mailError =
-    error ??
+    error ||
     (z.object({ persisted: z.literal(true) }).safeParse(result).success
       ? undefined
       : 'Mail was not persisted.');

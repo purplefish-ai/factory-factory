@@ -136,6 +136,11 @@ function setup(provider: ChatProvider) {
     },
     startup: { getSessionClient: () => handle, getOrCreateSessionClient: async () => handle },
     notificationDelivery: {
+      configureRetry: () => undefined,
+      recoverSession: async () => undefined,
+      captureMailSignalReceipt: () => null,
+      isMailSignalQuarantined: () => false,
+      isOwnedMailSignal: () => false,
       claimForDispatch: () => ({ status: 'not_notification' }),
       isAlreadyDelivered: async () => false,
       acknowledgeSuccessfulDispatch: async () => undefined,

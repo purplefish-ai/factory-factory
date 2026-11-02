@@ -230,13 +230,13 @@ export const workspaceChildrenRouter = router({
       );
     }),
 
-  listMail: publicProcedure
+  listMail: trustedLocalProcedure
     .input(listMailInputSchema)
     .query(({ ctx, input }) =>
       ctx.appContext.services.workspaceNotificationService.listMail(input)
     ),
 
-  readMail: publicProcedure
+  readMail: trustedLocalProcedure
     .input(readMailInputSchema)
     .mutation(({ ctx, input }) =>
       ctx.appContext.services.workspaceNotificationService.readMail(input)

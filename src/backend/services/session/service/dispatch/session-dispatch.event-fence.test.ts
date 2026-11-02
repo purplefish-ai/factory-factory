@@ -55,6 +55,11 @@ it.each(['policy', 'unavailable'] as const)(
       },
       startup: { getSessionClient: () => undefined, getOrCreateSessionClient: start },
       notificationDelivery: {
+        configureRetry: vi.fn(),
+        recoverSession: vi.fn(async () => undefined),
+        captureMailSignalReceipt: vi.fn(() => null),
+        isMailSignalQuarantined: vi.fn(() => false),
+        isOwnedMailSignal: vi.fn(() => false),
         recoverPending: async () => ({ dispatchableCount: 0 }),
         claimForDispatch: () => ({ status: 'not_notification' }),
         isAlreadyDelivered: async () => false,

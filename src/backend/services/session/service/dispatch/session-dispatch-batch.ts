@@ -186,7 +186,7 @@ export async function acknowledgeSentBatch(input: {
     try {
       if (message.source) {
         await input.backgroundDelivery.complete(message);
-      } else {
+      } else if (!message.id.startsWith('workspace-mail-wake-')) {
         await input.notifications.acknowledgeSuccessfulDispatch(message.id);
       }
     } catch (error) {
@@ -239,7 +239,7 @@ export async function collectDispatchBatch(input: {
       if (
         !input.isCurrent() ||
         isCommand(message) ||
-        input.notifications.isMailSignalQuarantined?.(message.id)
+        input.notifications.isMailSignalQuarantined(message.id)
       ) {
         break;
       }

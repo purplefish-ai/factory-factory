@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { runMigrations } from '@/backend/migrate';
+import type { WorkspaceMailSendMetadata } from '@/shared/workspace-mail';
 import { PrismaClient } from '@prisma-gen/client';
 
 const state = vi.hoisted(() => ({ client: null as PrismaClient | null }));
@@ -22,7 +23,11 @@ async function workspace() {
   await state.client!.workspace.create({ data: { id, name: id, projectId: 'mail-project' } });
   return id;
 }
-function send(workspaceId: string, message = 'hello', extra = {}) {
+function send(
+  workspaceId: string,
+  message = 'hello',
+  extra: WorkspaceMailSendMetadata & { sourceWorkspaceId?: string } = {}
+) {
   return mail.create({
     workspaceId,
     sourceWorkspaceId: 'sender',
@@ -119,6 +124,53 @@ describe('durable workspace mailbox', () => {
       (await mail.readMail({ workspaceId: id, ids: [b.id], offset: read.items[1]!.nextOffset! }))
         .items[0]?.body
     ).toBe('def');
+  });
+  it('keeps fresh and migrated previews well formed at an odd Unicode boundary', async () => {
+    const id = await workspace();
+    const message = `${'a'.repeat(159)}😀tail`;
+    const sent = await send(id, message);
+    expect(sent.preview).toBe('a'.repeat(159));
+    await state.client!.workspaceNotification.update({
+      where: { id: sent.id },
+      data: { preview: message },
+    });
+    expect((await mail.listMail({ workspaceId: id })).items[0]?.preview).toBe('a'.repeat(159));
+    expect((await mail.readMail({ workspaceId: id, ids: [sent.id] })).items[0]?.preview).toBe(
+      'a'.repeat(159)
+    );
+  });
+  it('preserves emoji across odd body budgets and normalizes offsets inside a surrogate pair', async () => {
+    const id = await workspace();
+    const sent = await send(id, 'a😀b');
+    const first = (await mail.readMail({ workspaceId: id, ids: [sent.id], maxChars: 2 })).items[0]!;
+    expect(first).toMatchObject({ body: 'a', offset: 0, nextOffset: 1 });
+    const second = (
+      await mail.readMail({
+        workspaceId: id,
+        ids: [sent.id],
+        offset: first.nextOffset!,
+        maxChars: 2,
+      })
+    ).items[0]!;
+    expect(second).toMatchObject({ body: '😀', offset: 1, nextOffset: 3 });
+    const last = (await mail.readMail({ workspaceId: id, ids: [sent.id], offset: 3 })).items[0]!;
+    expect(first.body + second.body + last.body).toBe('a😀b');
+    expect(
+      (await mail.readMail({ workspaceId: id, ids: [sent.id], offset: 2, maxChars: 2 })).items[0]
+    ).toMatchObject({ body: '😀', offset: 1, nextOffset: 3 });
+    const emoji = await send(id, '😀');
+    await expect(mail.readMail({ workspaceId: id, ids: [emoji.id], maxChars: 1 })).rejects.toThrow(
+      'increase maxChars'
+    );
+    expect(
+      (await mail.listMail({ workspaceId: id })).items.find((item) => item.id === emoji.id)?.readAt
+    ).toBeNull();
+    const ascii = await send(id, 'x');
+    const batch = await mail.readMail({ workspaceId: id, ids: [ascii.id, emoji.id], maxChars: 2 });
+    expect(batch.items[1]).toMatchObject({ body: '', offset: 0, nextOffset: 0, readAt: null });
+    expect(
+      (await mail.readMail({ workspaceId: id, ids: [emoji.id], maxChars: 2 })).items[0]?.body
+    ).toBe('😀');
   });
   it('keeps newer arrivals pending after stale/scoped acknowledgement and a settled wake', async () => {
     const id = await workspace();

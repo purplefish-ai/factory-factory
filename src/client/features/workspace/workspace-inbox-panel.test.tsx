@@ -212,6 +212,97 @@ describe('WorkspaceInboxPanel', () => {
     await waitForText('Could not acknowledge message');
     expect(container.textContent).not.toContain('Acknowledged');
   });
+  it('confirms an idempotent acknowledgement using the exact selected message', async () => {
+    let acknowledged = false;
+    respond = (path) => {
+      if (path === 'workspace.listMail') {
+        return { items: [summary], revision: 3, nextCursor: null };
+      }
+      if (path === 'workspace.readMail') {
+        return {
+          items: [
+            {
+              ...summary,
+              acknowledgedAt: acknowledged ? new Date() : null,
+              body: 'Report',
+              offset: 0,
+              nextOffset: null,
+            },
+          ],
+          revision: 3,
+        };
+      }
+      acknowledged = true;
+      return { acknowledged: 0, revision: 3 };
+    };
+    render();
+    await waitForText('Review ready');
+    await click('Review ready');
+    await waitForText('Report');
+    await click('Acknowledge');
+    await waitForText('Acknowledged');
+    expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(true);
+    expect(requests.filter((item) => item.path === 'workspace.readMail')).toHaveLength(2);
+    expect(requests.filter((item) => item.path === 'workspace.readMail')[1]?.input).toMatchObject({
+      workspaceId: 'recipient',
+      ids: ['mail-1'],
+    });
+  });
+  it.each(['missing', 'different'] as const)(
+    'does not confirm zero-count acknowledgement from %s message evidence',
+    async (evidence) => {
+      let reads = 0;
+      const firstRead = { ...summary, body: 'Report', offset: 0, nextOffset: null };
+      const recheckItems =
+        evidence === 'missing'
+          ? []
+          : [{ ...firstRead, id: 'other-mail', acknowledgedAt: new Date() }];
+      respond = (path) => {
+        if (path === 'workspace.listMail') {
+          return { items: [summary], revision: 3, nextCursor: null };
+        }
+        if (path === 'workspace.readMail') {
+          reads++;
+          return {
+            items: reads > 1 ? recheckItems : [firstRead],
+            revision: 3,
+          };
+        }
+        return { acknowledged: 0, revision: 3 };
+      };
+      render();
+      await waitForText('Review ready');
+      await click('Review ready');
+      await waitForText('Report');
+      await click('Acknowledge');
+      await waitForText('Could not acknowledge message');
+      expect(reads).toBe(2);
+      expect(container.textContent).not.toContain('Acknowledged');
+    }
+  );
+  it.each(['acknowledged', 'superseded'] as const)(
+    'does not style %s mail as unread',
+    async (state) => {
+      respond = () => ({
+        items: [
+          {
+            ...summary,
+            acknowledgedAt: state === 'acknowledged' ? new Date() : null,
+            supersededAt: state === 'superseded' ? new Date() : null,
+          },
+        ],
+        revision: 3,
+        nextCursor: null,
+      });
+      render();
+      await waitForText('Review ready');
+      expect(container.textContent).toContain('0 unread');
+      const title = [...container.querySelectorAll('span')].find(
+        (item) => item.textContent === 'Review ready'
+      );
+      expect(title?.classList.contains('font-semibold')).toBe(false);
+    }
+  );
   it('retrieves continuation only on request and appends it to the report', async () => {
     respond = (path, input) => {
       if (path === 'workspace.listMail') {
@@ -236,8 +327,12 @@ describe('WorkspaceInboxPanel', () => {
     await click('Review ready');
     await waitForText('first');
     expect(requests.filter((item) => item.path === 'workspace.readMail')).toHaveLength(1);
+    expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(true);
+    await click('Acknowledge');
+    expect(requests.some((item) => item.path === 'workspace.ackMail')).toBe(false);
     await click('Read more');
     await waitForText('firstsecond');
+    expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(false);
     expect(requests.filter((item) => item.path === 'workspace.readMail')[1]?.input).toEqual({
       workspaceId: 'recipient',
       ids: ['mail-1'],

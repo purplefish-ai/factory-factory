@@ -49,7 +49,9 @@ it.each([
       async function (this: InstanceType<typeof SessionConfigService>, id, ...args) {
         targetId = id;
         baselineConfig = providers[2]!.connection.setSessionConfigOption.mock.calls.length;
-        expect(args[0].timestamp).toEqual(expect.any(String));
+        const wakeTimestamp = Date.parse(args[0].timestamp);
+        expect(Number.isFinite(wakeTimestamp)).toBe(true);
+        expect(wakeTimestamp).toBeGreaterThanOrEqual(notice.createdAt.getTime());
         await held.wait();
         return configure.call(this, id, ...args);
       }

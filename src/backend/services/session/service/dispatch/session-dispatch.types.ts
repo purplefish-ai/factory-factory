@@ -7,7 +7,7 @@ import type {
   NotificationDispatchClaim,
 } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
-import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 
 export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };
 
@@ -43,11 +43,15 @@ export interface SessionDispatchNotificationDeliveryService {
     assertAllowedSync?(): void;
     preferSession?: boolean;
   }): Promise<{ dispatchableCount: number }>;
-  configureRetry?(retry: (input: MailRecoveryRetry) => void): void;
-  recoverSession?(sessionId: string, assertAllowed: () => void | Promise<void>): Promise<void>;
-  captureMailSignalReceipt?(sessionId: string, messageId: string): MailSignalReceipt | null;
-  isMailSignalQuarantined?(messageId: string): boolean;
-  isOwnedMailSignal?(sessionId: string, messageId: string, text: string): boolean;
+  configureRetry(retry: (input: MailRecoveryRetry) => void): void;
+  recoverSession(sessionId: string, assertAllowed: () => void | Promise<void>): Promise<void>;
+  captureMailSignalReceipt(
+    sessionId: string,
+    messageId: string,
+    expectedMessage?: QueuedMessage
+  ): MailSignalReceipt | null;
+  isMailSignalQuarantined(messageId: string): boolean;
+  isOwnedMailSignal(sessionId: string, messageId: string, text: string): boolean;
   claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
   isAlreadyDelivered(notificationId: string): Promise<boolean>;
   acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;

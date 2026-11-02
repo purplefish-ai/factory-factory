@@ -136,6 +136,7 @@ export class SessionQueuedSteering {
     }
     // Persist before the RPC: a crash or uncertain failure must never leave an
     // expiring ordinary claim that can replay accepted native input.
+    const commitLateMessage = domain.captureLateMessageCommit(sessionId, message);
     if (!(await mail.receipt.arm())) {
       throw new AcpSteeringNotSentError('Mail wake attempt no longer owns its durable claim');
     }
@@ -146,7 +147,13 @@ export class SessionQueuedSteering {
       const result = await this.ports.send(sessionId, content, {
         preserveRuntimeOnTimeout: true,
         onLateInjected: () =>
-          this.acceptLateMailSignal(sessionId, message, mail.onInjected, isCurrent),
+          this.acceptLateMailSignal(
+            sessionId,
+            message,
+            mail.onInjected,
+            isCurrent,
+            commitLateMessage
+          ),
       });
       if (result.outcome === 'promptRequired') {
         await this.disarmMailAttempt(mail);
@@ -177,16 +184,15 @@ export class SessionQueuedSteering {
     sessionId: string,
     message: QueuedMessage,
     accept: () => Promise<boolean>,
-    isCurrent: () => boolean
+    isCurrent: () => boolean,
+    commitLateMessage: () => boolean
   ): Promise<void> {
     if (!(await accept())) {
       return;
     }
-    const removed = domain.takeQueuedMessages(sessionId, [message]);
-    if (!(removed || isCurrent())) {
+    if (!commitLateMessage()) {
       return;
     }
-    domain.commitSentUserMessage(sessionId, message);
     domain.emitDelta(sessionId, {
       type: 'message_state_changed',
       id: message.id,

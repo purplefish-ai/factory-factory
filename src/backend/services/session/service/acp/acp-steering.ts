@@ -1,9 +1,11 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { withTimeout } from './acp-runtime-spawn';
 
 const STEERING_TIMEOUT_MS = 10_000;
+const logger = createLogger('acp-steering');
 
 /** The adapter did not receive input, so an exact armed wake may safely fall back. */
 export class AcpSteeringNotSentError extends Error {}
@@ -59,7 +61,12 @@ export async function steerAcpPrompt(
             await options.onLateInjected?.();
           }
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          logger.warn('Failed to recover late steering receipt', {
+            sessionId: handle.acpSessionId,
+            error,
+          });
+        });
     }
     throw error;
   }

@@ -29,7 +29,8 @@ async function callToolWithHttpResponse(options: {
     | 'list_mail'
     | 'read_mail'
     | 'ack_mail'
-    | 'send_message_to_child';
+    | 'send_message_to_child'
+    | 'send_message_to_parent';
   parentWorkspaceId?: string | null;
   toolArguments?: Record<string, unknown>;
 }): Promise<{
@@ -539,3 +540,18 @@ it('does not claim persisted mail when the backend could not store it', async ()
   expect(response.result.isError).toBe(true);
   expect(response.result.content[0]?.text).toContain('not persisted');
 });
+
+it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
+  'does not claim persisted mail for an empty backend error from %s',
+  async (toolName) => {
+    const { response } = await callToolWithHttpResponse({
+      status: 200,
+      toolName,
+      parentWorkspaceId: toolName === 'send_message_to_parent' ? 'parent-workspace' : null,
+      toolArguments: { childWorkspaceId: 'child-1', message: 'Report' },
+      body: { error: { message: '' } },
+    });
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0]?.text).toContain('not persisted');
+  }
+);

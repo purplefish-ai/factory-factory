@@ -303,7 +303,7 @@ describe('persistParentNotification', () => {
   });
 });
 
-it('persists lifecycle completion and requests timely body-free wake delivery', async () => {
+it('delegates lifecycle completion to workspace notification delivery', async () => {
   mockFindByIdWithProject.mockResolvedValue(
     unsafeCoerce({
       id: 'child-1',

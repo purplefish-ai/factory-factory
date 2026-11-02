@@ -15,6 +15,7 @@ describe('workspace mail bounds', () => {
       offset: 0,
     });
     expect(listMailInputSchema.safeParse({ workspaceId: 'w', limit: 51 }).success).toBe(false);
+    expect(listMailInputSchema.safeParse({ workspaceId: 'w', kinds: [] }).success).toBe(false);
     expect(
       readMailInputSchema.safeParse({ workspaceId: 'w', ids: Array(21).fill('a') }).success
     ).toBe(false);

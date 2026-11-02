@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   persistChild: vi.fn(),
   persistParent: vi.fn(),
   append: vi.fn(),
+  warn: vi.fn(),
+}));
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({ warn: mocks.warn, debug: vi.fn() }),
 }));
 vi.mock('@/backend/services/session', () => ({
   sessionDataService: { findAgentSessionsByWorkspaceId: mocks.findSessions },
@@ -89,7 +93,7 @@ describe('workspace mail delivery orchestration', () => {
       mocks.recover.mock.invocationCallOrder[0]!
     );
   });
-  it('forwards parent-to-child metadata', async () => {
+  it('forwards parent-to-child metadata and wakes the child workspace', async () => {
     await deliverWorkspaceNotification({
       ...input,
       direction: 'PARENT_TO_CHILD',
@@ -104,6 +108,14 @@ describe('workspace mail delivery orchestration', () => {
         taskRevision: 2,
       })
     );
+    expect(mocks.findSessions).toHaveBeenCalledExactlyOnceWith('child');
+    expect(mocks.recover).toHaveBeenCalledExactlyOnceWith({
+      sessionId: 'active',
+      workspaceId: 'child',
+      preferSession: true,
+      assertAllowed: expect.any(Function),
+    });
+    expect(mocks.dispatch).toHaveBeenCalledExactlyOnceWith('active');
   });
   it('attempts native signal steering during a busy session without waiting for its turn', async () => {
     mocks.findSessions.mockResolvedValue([{ id: 'busy', status: 'RUNNING' }]);
@@ -124,7 +136,7 @@ describe('workspace mail delivery orchestration', () => {
       queued: true,
     });
   });
-  it('kicks queue progress even when a full queue prevented the wake from being queued', async () => {
+  it('kicks queue progress when recovery finds no dispatchable wake', async () => {
     mocks.recover.mockResolvedValue({ dispatchableCount: 0 });
     mocks.snapshot.mockReturnValue([]);
     expect(await recoverWorkspaceMail('parent')).toEqual({ queued: false });
@@ -135,6 +147,21 @@ describe('workspace mail delivery orchestration', () => {
     await expect(deliverWorkspaceNotification(input)).resolves.toMatchObject({
       persisted: true,
       queued: true,
+    });
+  });
+  it('logs a rejected detached dispatch while preserving the persisted-mail result', async () => {
+    const error = new Error('dispatch unavailable');
+    mocks.dispatch.mockRejectedValueOnce(error);
+
+    await expect(deliverWorkspaceNotification(input)).resolves.toEqual({
+      persisted: true,
+      queued: true,
+      delivered: false,
+      notificationId: 'mail-1',
+    });
+    expect(mocks.warn).toHaveBeenCalledExactlyOnceWith('Workspace mail queue progress deferred', {
+      sessionId: 'active',
+      error,
     });
   });
   it('leaves persisted mail for startup when the recipient has no active session', async () => {

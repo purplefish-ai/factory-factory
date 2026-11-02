@@ -11,6 +11,8 @@ function harness() {
     claimWake: vi.fn(async () => wake),
     settleWake: vi.fn(async () => true),
     releaseWake: vi.fn(async () => undefined),
+    quarantineWake: vi.fn(async () => true),
+    disarmWake: vi.fn(async () => true),
   };
   const queuePort = {
     hasQueuedMessage: vi.fn<(sessionId: string, messageId: string) => boolean>(() => false),
@@ -97,6 +99,41 @@ describe('durable workspace mail wakes', () => {
       claim.release();
     }
   });
+});
+
+it('releases a replacement ambiguous claim if authority rejects after acquisition', async () => {
+  const h = harness();
+  await h.recover();
+  h.service
+    .captureMailSignalReceipt('session-1', 'workspace-mail-wake-workspace-1:12')!
+    .quarantine();
+  const replacement = { ...wake, claimId: 'replacement' };
+  const guard = vi
+    .fn()
+    .mockReturnValueOnce(undefined)
+    .mockRejectedValueOnce(new Error('session stopped'));
+  h.notificationPort.claimWake.mockResolvedValueOnce(replacement);
+  await h.recover(guard);
+  expect(h.notificationPort.releaseWake).toHaveBeenCalledExactlyOnceWith(replacement);
+  expect(h.queuePort.enqueue).toHaveBeenCalledTimes(1);
+});
+
+it('forgets reset session recovery mappings and preferred recipient authority', async () => {
+  const h = harness();
+  const authority = vi.fn();
+  await h.service.recoverPending({
+    sessionId: 'session-1',
+    workspaceId: wake.workspaceId,
+    assertAllowed: authority,
+    preferSession: true,
+  });
+  h.service.resetSession('session-1');
+  h.queuePort.hasQueuedMessage.mockReturnValue(true);
+  await h.service.recoverSession('session-1', authority);
+  expect(authority).toHaveBeenCalledTimes(1);
+  // Inspect retained identity maps to cover removal of the captured authority closure.
+  expect(Reflect.get(h.service, 'sessionWorkspaces').size).toBe(0);
+  expect(Reflect.get(h.service, 'preferredRecipients').size).toBe(0);
 });
 
 it('requests one recovery at the durable claim lease expiry after a restart', async () => {

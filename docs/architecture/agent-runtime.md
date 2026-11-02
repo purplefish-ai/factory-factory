@@ -1045,11 +1045,15 @@ delivery, and completing the underlying task. Existing delivered notifications
 migrate as acknowledged; pending notifications remain available as mail.
 
 Lists default to 20 summaries (maximum 50), each with a preview of at most 160
-characters. Selected reads default to an 8,192-character total body budget
-(maximum 16,384) across at most 20 IDs. Long messages return continuation
-offsets. Superseded progress is hidden by default and available through the
-explicit history filter. Read and acknowledgement operations are scoped to the
-recipient workspace. The MCP tools bind that recipient to their launch context.
+UTF-16 units. Selected reads default to an 8,192-unit total body budget (maximum
+16,384) across at most 20 IDs. Previews and chunks preserve surrogate pairs.
+Long messages return continuation offsets; a one-unit budget that cannot fit the
+next character reports an explicit error. The UI enables acknowledgement after
+the complete selected body has been read. Superseded progress is hidden by
+default and available through the explicit history filter. Read and
+acknowledgement operations are scoped to the recipient workspace. Inbox previews
+and bodies require trusted-local access, as do acknowledgement and explicit wake
+retry. The MCP tools bind the recipient to their launch context.
 
 A durable revision and fenced wake claim keep one outstanding notification per
 workspace. New arrivals do not queue repeated prompts while a signal remains
@@ -1057,12 +1061,13 @@ outstanding. Acknowledging selected mail at an observed revision releases its
 wake latch without acknowledging newer arrivals. Failed/full-queue wake claims
 remain retryable. Supported native steering delivers the small signal during a
 busy turn; unavailable steering retains the queued fallback for turn completion.
-A native-delivery timeout leaves a durable ambiguous wake instead of replaying
-it automatically, including after restart. The inbox exposes an explicit **Retry
-mail notification** action with notice that it may notify the agent again. Only
-that explicit action clears ambiguous delivery for retry; reading mail and
-acknowledging selected IDs remain independent. Explicit startup assignments
-always precede recovered mail signals.
+Both queued prompts and native steering persist an uncertainty fence before
+provider submission. A failure after possible provider acceptance leaves a
+durable ambiguous wake instead of replaying it automatically, including after
+restart. The inbox exposes an explicit **Retry mail notification** action with
+notice that it may notify the agent again. Only that explicit action clears
+ambiguous delivery for retry; reading mail and acknowledging selected IDs remain
+independent. Explicit startup assignments always precede recovered mail signals.
 
 Max workspace depth is 1 — children cannot have child workspaces.
 Provider-native subagents are a separate facility.

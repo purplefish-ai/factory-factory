@@ -73,7 +73,7 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
 }));
 vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
   deliverWorkspaceNotification: vi.fn(),
-  recoverWorkspaceMail: vi.fn(),
+  recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
 }));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),

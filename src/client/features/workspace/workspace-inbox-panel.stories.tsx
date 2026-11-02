@@ -21,6 +21,7 @@ type Scenario =
   | 'list-error'
   | 'read-error'
   | 'ack-error'
+  | 'ack-already'
   | 'pagination'
   | 'ambiguous'
   | 'retry-error';
@@ -135,7 +136,7 @@ function createResponses(scenario: Scenario) {
       for (const id of ids) {
         acknowledgedIds.add(id);
       }
-      return { acknowledged: ids.length, revision: 4 };
+      return { acknowledged: scenario === 'ack-already' ? 0 : ids.length, revision: 4 };
     },
   };
   return (path: string, input: unknown) => {
@@ -148,7 +149,11 @@ function createResponses(scenario: Scenario) {
     if (scenario in failedPath && Reflect.get(failedPath, scenario) === path) {
       throw new Error('Connection interrupted. Please try again.');
     }
-    return handlers[path]?.(input);
+    const handler = handlers[path];
+    if (!handler) {
+      throw new Error(`Missing inbox story handler for ${path}`);
+    }
+    return handler(input);
   };
 }
 function storyClientError(error: unknown) {
@@ -220,13 +225,19 @@ export const ReadAndAcknowledge: Story = {
     await expect(await canvas.findByRole('button', { name: /^Acknowledged$/ })).toBeDisabled();
   },
 };
+export const AlreadyAcknowledgedElsewhere: Story = {
+  args: { scenario: 'ack-already' },
+  play: ReadAndAcknowledge.play,
+};
 export const LongReport: Story = {
   args: { scenario: 'long-report' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: /Review ready/ }));
+    await expect(canvas.getByRole('button', { name: /^Acknowledge$/ })).toBeDisabled();
     await userEvent.click(await canvas.findByRole('button', { name: 'Read more' }));
     await expect(await canvas.findByText(/The remaining checks passed/)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /^Acknowledge$/ })).toBeEnabled();
   },
 };
 export const Empty: Story = { args: { scenario: 'empty' } };
