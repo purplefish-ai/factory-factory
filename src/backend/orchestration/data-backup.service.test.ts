@@ -24,17 +24,18 @@ vi.mock('@/backend/services/codex-accounts', async (importOriginal) => ({
 import {
   type AgentSession,
   type Project,
+  type Prisma,
   SessionProvider,
   type TerminalSession,
   type UserSettings,
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
-
 const mockTx = vi.hoisted(() => ({
   $queryRaw: vi.fn(async () => []),
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
+  decisionLog: { groupBy: vi.fn(async () => []) },
   workspacePR: { findMany: vi.fn(async () => []) },
   project: {
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
@@ -60,7 +61,6 @@ const mockTx = vi.hoisted(() => ({
     create: vi.fn(),
   },
 }));
-
 vi.mock('@/backend/db', () => ({
   prisma: {
     project: {
@@ -450,7 +450,11 @@ describe('DataBackupService', () => {
     }
     Object.assign(mockTx.project, { findMany: prisma.project.findMany });
     Object.assign(mockTx.workspace, { findMany: prisma.workspace.findMany });
-    Object.assign(mockTx.agentSession, { findMany: prisma.agentSession.findMany });
+    Object.assign(mockTx.agentSession, {
+      findMany: vi.fn((args: Prisma.AgentSessionFindManyArgs) =>
+        args.where ? Promise.resolve([]) : prisma.agentSession.findMany(args)
+      ),
+    });
     Object.assign(mockTx.terminalSession, { findMany: prisma.terminalSession.findMany });
     Object.assign(mockTx.userSettings, { findFirst: prisma.userSettings.findFirst });
     Object.assign(mockTx, {

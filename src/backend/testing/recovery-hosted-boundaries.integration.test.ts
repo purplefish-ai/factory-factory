@@ -131,7 +131,7 @@ it.each(['reservedWorkspaceId', 'workspaceId'] as const)(
     expect(await db.prisma.project.count()).toBe(0);
   }
 );
-it('does not attach a skipped session decision to an imported run sharing its ID', async () => {
+it('skips an ambiguous source session/run namespace and its decision history', async () => {
   await db.prisma.agentDefinition.create({
     data: { id: 'definition', projectId: 'project', name: 'Agent', instructions: 'go' },
   });
@@ -157,7 +157,7 @@ it('does not attach a skipped session decision to an imported run sharing its ID
   await db.prisma.agentDefinition.deleteMany();
   await db.prisma.decisionLog.deleteMany();
   const result = await dataBackupService.importData(backup);
-  expect(await db.prisma.agentRun.count()).toBe(1);
+  expect(await db.prisma.agentRun.count()).toBe(0);
   expect(await db.prisma.decisionLog.count()).toBe(0);
   expect(result.recovery.skipped).toContainEqual({
     model: 'DecisionLog',

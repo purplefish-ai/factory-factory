@@ -111,6 +111,10 @@ export const archiveRecoveryInventoryDescriptor = descriptor('ClosedSession', 'C
   { field: 'id', column: 'id' },
 ]);
 
+export const sessionRecoveryInventoryDescriptor = descriptor('AgentSession', 'AgentSession', [
+  { field: 'id', column: 'id' },
+]);
+
 export const prRecoveryInventoryDescriptors = {
   workspacePR: descriptor('WorkspacePR', 'WorkspacePR', [{ field: 'id', column: 'id' }]),
   workspacePRDedicatedSession: descriptor(
@@ -129,6 +133,7 @@ export const prRecoveryInventoryDescriptors = {
 type InventoryDescriptor =
   | (typeof durableRecoveryInventoryDescriptors)[DurableKey]
   | typeof archiveRecoveryInventoryDescriptor
+  | typeof sessionRecoveryInventoryDescriptor
   | (typeof prRecoveryInventoryDescriptors)[keyof typeof prRecoveryInventoryDescriptors];
 type Group = InventoryDescriptor & { values: (string | number)[][] };
 type StaticIdentifier =
@@ -160,6 +165,10 @@ function groups(data: ExportData['data']): Group[] {
       values: data.archives.entries.map((row) => [row.id]),
     });
   }
+  result.push({
+    ...sessionRecoveryInventoryDescriptor,
+    values: data.agentSessions.map((row) => [row.id]),
+  });
   const prs = data.workspaces.flatMap((workspace) => workspace.prs);
   result.push({
     ...prRecoveryInventoryDescriptors.workspacePR,

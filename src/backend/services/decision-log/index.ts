@@ -1,2 +1,2 @@
 export * from './service';
-export { restoreRecoveryDecisions } from './service/recovery';
+export { restoreRecoveryDecisions, readRecoveryOwnerConflicts } from './service/recovery';

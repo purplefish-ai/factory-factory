@@ -4,6 +4,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   archiveRecoveryInventoryDescriptor,
+  sessionRecoveryInventoryDescriptor,
   durableRecoveryInventoryDescriptors,
   prRecoveryInventoryDescriptors,
   readRecoveryInventory,
@@ -51,12 +52,14 @@ function metadata(source = schema) {
 const allDescriptors = () => ({
   ...durableRecoveryInventoryDescriptors,
   closedSession: archiveRecoveryInventoryDescriptor,
+  agentSession: sessionRecoveryInventoryDescriptor,
   ...prRecoveryInventoryDescriptors,
 });
 function verifyCoverage(descriptors: Record<string, Descriptor>, models = metadata()) {
   const expectedKeys = [
     ...Object.keys(durableRecoverySchema.shape).filter((key) => key !== 'jsonStorage'),
     'closedSession',
+    'agentSession',
     'workspacePR',
     'workspacePRDedicatedSession',
     'workspacePRDelivery',
