@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, fn, within } from 'storybook/test';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.stories';
@@ -18,6 +19,62 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+/** Long words and sentences must leave every card action inside the tile. */
+export const LongTitles: Story = {
+  args: {
+    column: { id: 'DONE', label: 'Done', description: 'PR merged or closed' },
+    projectSlug: 'my-project',
+    onRename: fn(),
+    onOpenQuickChat: fn(),
+    onToggleRatcheting: fn(),
+    onArchive: fn(),
+    workspaces: [
+      'project-cmvlbh7la000801s6gcy72l5'.repeat(4),
+      'A long workspace title with many words that should wrap across two lines',
+      'AgentWorkspaceWithoutAnyWordBreaks'.repeat(4),
+    ].map((name, index) => ({
+      ...baseWorkspace,
+      id: `long-title-${index}`,
+      name,
+      creationSource: index === 2 ? 'PERIODIC_TASK' : 'MANUAL',
+      kanbanColumn: 'DONE',
+      prState: 'MERGED',
+      statusReason: { code: 'MERGED', label: 'Merged', tone: 'success', needsUser: false },
+    })),
+  },
+  render: (args) => (
+    <div className="flex flex-wrap gap-4">
+      {[280, 440].map((width) => (
+        <div key={width} style={{ width }}>
+          <KanbanColumn {...args} />
+        </div>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const cards = canvasElement.querySelectorAll<HTMLElement>('[data-slot="card"]');
+    await expect(cards).toHaveLength(6);
+    for (const card of cards) {
+      const bounds = card.getBoundingClientRect();
+      const title = card.querySelector<HTMLElement>('[data-slot="card-title"]');
+      await expect(title).not.toBeNull();
+      if (!title) {
+        continue;
+      }
+      await expect(title.getBoundingClientRect().width).toBeGreaterThan(0);
+      await expect(title.getBoundingClientRect().height).toBeLessThanOrEqual(
+        Number.parseFloat(getComputedStyle(title).lineHeight) * 2 + 1
+      );
+      for (const button of within(card).getAllByRole('button')) {
+        const action = button.getBoundingClientRect();
+        await expect(action.left).toBeGreaterThanOrEqual(bounds.left);
+        await expect(action.right).toBeLessThanOrEqual(bounds.right);
+      }
+      await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+    }
+  },
+};
 
 const mockWorkspaces: WorkspaceWithKanban[] = [
   baseWorkspace,

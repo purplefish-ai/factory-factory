@@ -311,6 +311,10 @@ visible and closes the form on success.
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
 plus the columns `WORKING`, `WAITING`, `DONE`.
 
+Card titles wrap within two lines, including names with long unbroken words. The
+header reserves space for its actions so they stay inside the card at narrow
+column widths.
+
 The workspace switcher groups workspaces under Working, Waiting, and Done in
 board order. All WAITING workspaces share one group regardless of pending
 request type; Todo is reserved for the board's issue intake column.
