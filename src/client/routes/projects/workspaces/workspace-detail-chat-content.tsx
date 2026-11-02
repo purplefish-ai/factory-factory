@@ -20,10 +20,12 @@ import { VoiceModeToggle } from '@/client/features/voice';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
+import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 import { InitStatusBanner, type InitStatusBannerProps } from './workspace-init-status-banner';
 
 export interface ChatContentProps {
+  retryAvailability?: WorkspaceRetryAvailability;
   workspaceId: string;
   sessionId: string | null;
   codexAccountId?: string | null;
@@ -181,7 +183,7 @@ function createRunningSubagentList(props: ChatContentProps, state: SubagentListS
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
-  const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
+  const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId, props.retryAvailability);
   const timeline = useSubagentTimelineMessages(
     props.messages,
     props.sessionId,
@@ -255,6 +257,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       <ChatTranscript
         thinkingInFooter
         header={createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
+          retryAvailability: props.retryAvailability,
           retryPending: retryInit.isPending,
           onRetry: retry,
           onPlay: props.resumeQueuedMessages,

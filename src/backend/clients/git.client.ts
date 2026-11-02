@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { gitCommand, gitCommandC } from '@/backend/lib/shell';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 export interface GitWorktreeInfo {
   name: string;
@@ -68,6 +69,7 @@ function parseWorktreeEntries(output: string): GitWorktreeEntry[] {
 }
 
 export interface CreateWorktreeOptions {
+  guard?: WorkspaceInitGuard;
   /** GitHub username or org for branch prefix (e.g., 'martin-purplefish') */
   branchPrefix?: string;
   /** Workspace name to use for branch (e.g., 'tiger' -> 'martin-purplefish/tiger') */
@@ -109,11 +111,14 @@ export class GitClient {
     options: CreateWorktreeOptions = {}
   ): Promise<GitWorktreeInfo> {
     const worktreePath = this.getWorktreePath(name);
+    const guard = options.guard;
     const branchName = await this.generateUniqueBranchName(
       options.branchPrefix,
       options.workspaceName
     );
 
+    await guard?.check();
+    guard?.assertCurrent();
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
     // Check if this is a blank repository (no commits yet)
@@ -121,6 +126,8 @@ export class GitClient {
     if (isBlank) {
       // For blank repositories, create an orphan branch
       // Syntax: git worktree add --orphan -b <branch> <path>
+      await guard?.check();
+      guard?.assertCurrent();
       const result = await gitCommandC(this.baseRepoPath, [
         'worktree',
         'add',
@@ -150,6 +157,8 @@ export class GitClient {
 
     // Fetch the latest from origin to ensure we branch from the most recent commit
     // Non-fatal: if fetch fails (e.g., offline), we fall back to available refs
+    await guard?.check();
+    guard?.assertCurrent();
     const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
     const fetchSucceeded = fetchResult.code === 0;
 
@@ -174,6 +183,8 @@ export class GitClient {
       actualBaseBranch = localBranchName;
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
       'add',
@@ -195,9 +206,13 @@ export class GitClient {
 
   async createWorktreeFromExistingBranch(
     name: string,
-    branchRef: string
+    branchRef: string,
+    options: Pick<CreateWorktreeOptions, 'guard'> = {}
   ): Promise<GitWorktreeInfo> {
+    const guard = options.guard;
     const worktreePath = this.getWorktreePath(name);
+    await guard?.check();
+    guard?.assertCurrent();
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
     const localBranchName = branchRef.startsWith('origin/')
@@ -227,6 +242,8 @@ export class GitClient {
       );
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     const fetchResult = await gitCommandC(this.baseRepoPath, ['fetch', 'origin', localBranchName]);
     const fetchSucceeded = fetchResult.code === 0;
 
@@ -249,6 +266,8 @@ export class GitClient {
         ? ['worktree', 'add', worktreePath, localBranchName]
         : ['worktree', 'add', '-b', localBranchName, worktreePath, checkoutRef];
 
+    await guard?.check();
+    guard?.assertCurrent();
     const result = await gitCommandC(this.baseRepoPath, args);
     if (result.code !== 0) {
       throw new Error(`Failed to create worktree from branch: ${result.stderr || result.stdout}`);

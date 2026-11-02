@@ -1,5 +1,6 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import pLimit, { type LimitFunction } from 'p-limit';
+import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { createLogger } from '@/backend/services/logger.service';
 import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
@@ -7,6 +8,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { withEventEvidenceDeadline } from './event-evidence-deadline';
 import type { EventOwnedWork } from './event-owned-work';
@@ -86,7 +88,11 @@ export class SessionService {
     return this.runtimeManager.steerSession(sessionId, prompt);
   }
 
-  async sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
+  async sendSessionMessage(
+    sessionId: string,
+    content: string | AgentContentItem[],
+    guard?: WorkspaceInitGuard
+  ): Promise<void> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
     if (this.eventAuthority) {
       await this.eventAuthority.assertOrdinary(sessionId);
@@ -98,7 +104,7 @@ export class SessionService {
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt, generation)
+      return this.sendAcpMessage(sessionId, prompt, generation, guard)
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
@@ -168,14 +174,19 @@ export class SessionService {
   private sendAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
-    generation: number
+    generation: number,
+    guard?: WorkspaceInitGuard
   ): Promise<string> {
     return this.withSerializedAcpPrompt(sessionId, async () => {
       if (this.eventAuthority) {
         await this.eventAuthority.assertOrdinary(sessionId);
       }
       this.assertPromptGeneration(sessionId, generation);
-      return this.executeAcpMessage(sessionId, prompt);
+      if (guard) {
+        await guard.check();
+        guard.assertCurrent();
+      }
+      return this.executeAcpMessage(sessionId, prompt, undefined, guard);
     });
   }
 
@@ -252,7 +263,8 @@ export class SessionService {
   private async executeAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
-    permit?: EventInitialPermit
+    permit?: EventInitialPermit,
+    guard?: WorkspaceInitGuard
   ): Promise<string> {
     const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
@@ -277,7 +289,7 @@ export class SessionService {
 
     try {
       const observed = this.initialObservation(sessionId, stopGeneration, permit);
-      const result = await this.sendRuntimePrompt(sessionId, prompt, observed);
+      const result = await this.sendRuntimePrompt(sessionId, prompt, observed, guard);
       promptCompleted = true;
       this.completeSuccessfulPromptTurn({
         sessionId,
@@ -286,6 +298,10 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
+      if (error instanceof WorkspaceInitFenceError) {
+        this.acpEventProcessor.abandonPromptTurn(sessionId, attemptKey);
+        throw error;
+      }
       await this.stopTimedOutInitial(sessionId, error, permit).catch(() => {
         logger.warn('Initial prompt timeout cleanup is unconfirmed', { sessionId });
       });
@@ -302,13 +318,7 @@ export class SessionService {
       this.completeFailedPromptTurn({ sessionId, stopGeneration, attemptKey, error });
       throw error;
     } finally {
-      if (workspaceId && this.workspaceBridge) {
-        if (workspaceActivityGeneration === undefined) {
-          this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
-        } else {
-          this.workspaceBridge.markSessionIdle(workspaceId, sessionId, workspaceActivityGeneration);
-        }
-      }
+      this.finishWorkspaceActivity(workspaceId, sessionId, workspaceActivityGeneration);
       if (
         (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
         !this.lifecycleGate.isSessionStopping(sessionId) &&
@@ -320,11 +330,35 @@ export class SessionService {
     }
   }
 
+  private finishWorkspaceActivity(
+    workspaceId: string | undefined,
+    sessionId: string,
+    workspaceActivityGeneration: number | undefined
+  ) {
+    if (workspaceId && this.workspaceBridge) {
+      if (workspaceActivityGeneration === undefined) {
+        this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+      } else {
+        this.workspaceBridge.markSessionIdle(workspaceId, sessionId, workspaceActivityGeneration);
+      }
+    }
+  }
+
   private sendRuntimePrompt(
     sessionId: string,
     prompt: ContentBlock[],
-    observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt
+    observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt,
+    guard?: WorkspaceInitGuard
   ) {
+    if (guard) {
+      return this.runtimeManager.sendPrompt(
+        sessionId,
+        prompt,
+        DEFAULT_USER_PROMPT_TIMEOUT_MS,
+        observed,
+        guard
+      );
+    }
     return observed
       ? this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS, observed)
       : this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS);

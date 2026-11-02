@@ -1,16 +1,16 @@
+import { spawn } from 'node:child_process';
 /**
  * Startup Script Service
  *
  * Handles execution of startup scripts when workspaces are created.
  * Supports both inline shell commands and script file paths.
  */
-
-import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { Project, Workspace } from '@prisma-gen/client';
 import type { RunScriptWorkspaceBridge } from './bridges';
 import {
@@ -36,6 +36,7 @@ export interface StartupScriptResult {
 }
 
 export interface RunStartupScriptOptions {
+  guard?: WorkspaceInitGuard;
   /**
    * When true, skip all state machine transitions (markReady/markFailed).
    * The caller is responsible for transitioning workspace state.
@@ -115,6 +116,8 @@ class StartupScriptService {
     project: Project,
     options?: RunStartupScriptOptions
   ): Promise<StartupScriptResult> {
+    await options?.guard?.check();
+    options?.guard?.assertCurrent();
     const worktreePath = workspace.worktreePath;
     if (!worktreePath) {
       throw new Error('Workspace has no worktree path');
@@ -146,12 +149,16 @@ class StartupScriptService {
 
     // The first phase clears retry output; subsequent phases keep earlier logs.
     if (!options?.preserveInitOutput) {
-      await this.workspace.clearInitOutput(workspace.id);
+      await this.workspace.clearInitOutput(
+        workspace.id,
+        ...(options?.guard ? ([options.guard] as const) : [])
+      );
     }
 
     // Create output streaming callback with debouncing
     const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(
-      workspace.id
+      workspace.id,
+      options?.guard
     );
 
     try {
@@ -162,9 +169,12 @@ class StartupScriptService {
         project.startupScriptPath,
         timeoutMs,
         SERVICE_TIMEOUT_MS.startupScriptForceKillGrace,
-        outputCallback
+        outputCallback,
+        options?.guard
       );
 
+      await options?.guard?.check();
+      options?.guard?.assertCurrent();
       // Flush any remaining buffered output
       await flushOutput();
 
@@ -176,6 +186,8 @@ class StartupScriptService {
         Date.now() - startTime
       );
     } catch (error) {
+      await options?.guard?.check();
+      options?.guard?.assertCurrent();
       // Flush any remaining buffered output before handling error
       await flushOutput();
 
@@ -239,7 +251,8 @@ class StartupScriptService {
     scriptPath: string | null,
     timeoutMs: number,
     gracePeriodMs = 5000,
-    onOutput?: OutputCallback
+    onOutput?: OutputCallback,
+    guard?: WorkspaceInitGuard
   ): Promise<Omit<StartupScriptResult, 'durationMs'>> {
     // Build the bash arguments based on script type
     const bashArgs = this.buildBashArgs(cwd, command, scriptPath);
@@ -273,18 +286,23 @@ class StartupScriptService {
       }
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     return new Promise((resolve) => {
+      guard?.assertCurrent();
       const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
       const proc = spawn('bash', bashArgs.args, spawnOptions);
       let recordPidPromise: Promise<unknown> = Promise.resolve();
       if (proc.pid !== undefined) {
-        recordPidPromise = this.workspace.setInitScriptPid(workspaceId, proc.pid).catch((error) => {
-          logger.warn('Failed to record startup script PID', {
-            workspaceId,
-            pid: proc.pid,
-            error,
+        recordPidPromise = this.workspace
+          .setInitScriptPid(workspaceId, proc.pid, ...(guard ? ([guard] as const) : []))
+          .catch((error) => {
+            logger.warn('Failed to record startup script PID', {
+              workspaceId,
+              pid: proc.pid,
+              error,
+            });
           });
-        });
       }
 
       const timeoutSignalsSent = new Set<NodeJS.Signals>();
@@ -304,7 +322,11 @@ class StartupScriptService {
         if (proc.pid !== undefined) {
           await recordPidPromise;
           try {
-            await this.workspace.clearInitScriptPid(workspaceId, proc.pid);
+            await this.workspace.clearInitScriptPid(
+              workspaceId,
+              proc.pid,
+              ...(guard ? ([guard] as const) : [])
+            );
           } catch (error) {
             logger.warn('Failed to clear startup script PID', {
               workspaceId,
@@ -499,7 +521,10 @@ class StartupScriptService {
    * Flushes every 500ms or when buffer exceeds 4KB, whichever comes first.
    * Returns both the callback and a flush function to call when script completes.
    */
-  private createDebouncedOutputCallback(workspaceId: string): {
+  private createDebouncedOutputCallback(
+    workspaceId: string,
+    guard?: WorkspaceInitGuard
+  ): {
     callback: OutputCallback;
     flush: () => Promise<void>;
   } {
@@ -521,7 +546,11 @@ class StartupScriptService {
 
       // Write to database and wait for completion
       try {
-        await this.workspace.appendInitOutput(workspaceId, output);
+        if (guard) {
+          await this.workspace.appendInitOutput(workspaceId, output, undefined, guard);
+        } else {
+          await this.workspace.appendInitOutput(workspaceId, output);
+        }
       } catch (error) {
         logger.warn('Failed to append init output', { workspaceId, error });
       }

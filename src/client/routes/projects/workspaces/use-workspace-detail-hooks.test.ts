@@ -289,3 +289,56 @@ describe('resolveSelectedSessionId', () => {
     expect(selected).toBe('s1');
   });
 });
+
+let observed: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
+function RetryStatusProbe({ id }: { id: string }) {
+  observed = useWorkspaceInitStatus(id, undefined, trpc.useUtils()).workspaceInitStatus;
+  return null;
+}
+
+it('polls blocked event authority at READY/FAILED and fails closed on refetch error or workspace switch', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  const status = {
+    status: 'READY',
+    hasWorktreePath: true,
+    initErrorMessage: 'Setup failed',
+    retryAvailability: { status: 'AVAILABLE' },
+  };
+  getInitStatusUseQueryMock.mockReturnValue({ data: status, isPending: false, isError: false });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'one' })));
+  expect(observed?.retryAvailability.status).toBe('AVAILABLE');
+  const interval = getInitStatusUseQueryMock.mock.lastCall?.[1].refetchInterval;
+  expect(interval({ state: { status: 'error', data: status } })).toBe(1000);
+  expect(interval({ state: { data: { status: 'READY' } } })).toBe(1000);
+  for (const currentStatus of ['READY', 'FAILED']) {
+    expect(
+      interval({
+        state: {
+          data: {
+            status: currentStatus,
+            retryAvailability: { status: 'BLOCKED', reason: 'INITIAL_ACTIVE' },
+          },
+        },
+      })
+    ).toBe(1000);
+    expect(
+      interval({
+        state: { data: { status: currentStatus, retryAvailability: { status: 'AVAILABLE' } } },
+      })
+    ).toBe(false);
+  }
+  getInitStatusUseQueryMock.mockReturnValue({ data: status, isPending: false, isError: true });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'one' })));
+  expect(observed?.retryAvailability).toMatchObject({
+    status: 'BLOCKED',
+    reason: 'AUTHORITY_UNAVAILABLE',
+  });
+  getInitStatusUseQueryMock.mockReturnValue({ data: undefined, isPending: true });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'two' })));
+  expect(observed).toBeUndefined();
+  expect(getInitStatusUseQueryMock.mock.lastCall?.[0]).toEqual({ id: 'two' });
+  root.unmount();
+});

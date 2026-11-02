@@ -29,6 +29,9 @@ function createCaller(requestTrust?: {
     requestTrust,
     appContext: {
       services: {
+        enqueueWorkspaceInitializationTask: (_id: string, task: () => Promise<unknown>) => task(),
+        captureWorkspaceRetryGuard: () => Promise.resolve(undefined),
+        readWorkspaceRetryAvailability: () => Promise.resolve({ status: 'AVAILABLE' }),
         configService: {
           getCorsConfig: () => ({
             allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
@@ -84,6 +87,7 @@ describe('workspaceInitRouter', () => {
 
     const caller = createCaller();
     await expect(caller.getInitStatus({ id: 'w1' })).resolves.toEqual({
+      retryAvailability: { status: 'AVAILABLE' },
       status: 'FAILED',
       initErrorMessage: 'boom',
       initOutput: 'out',

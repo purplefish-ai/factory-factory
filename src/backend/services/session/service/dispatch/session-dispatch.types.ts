@@ -3,10 +3,13 @@ import type { SessionBackgroundDeliveryService } from '@/backend/services/sessio
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
-export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean };
+export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: WorkspaceInitGuard };
 
 export interface SessionDispatchStartOptions {
+  assertCurrent?: () => Promise<void>;
+  assertCurrentSync?: () => void;
   resumePolicy?: 'allow_fallback' | 'require_existing';
   thinkingEnabled?: boolean;
   planModeEnabled?: boolean;
@@ -61,7 +64,11 @@ export interface SessionDispatchDependencies {
       sessionId: string,
       content: string | AgentContentItem[]
     ): Promise<{ outcome: 'injected' | 'promptRequired' }>;
-    sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void>;
+    sendSessionMessage(
+      sessionId: string,
+      content: string | AgentContentItem[],
+      guard?: WorkspaceInitGuard
+    ): Promise<void>;
   };
   backgroundDelivery: Pick<
     SessionBackgroundDeliveryService,

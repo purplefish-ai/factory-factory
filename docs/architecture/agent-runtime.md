@@ -1265,3 +1265,16 @@ owned runtime; each caller retains its own stop cause. A caller's timeout does
 not release physical stop fencing while termination is still running. Queued
 quiescence callers recheck the active barrier before taking ownership, and
 creation-internal cleanup continues to use the nonjoining physical primitive.
+
+### Setup retry and event initial authority
+
+Generic workspace setup retry reuses `EventSessionAuthority`'s initial-operation
+admission map and injected durable fence reader. Its captured retry guard checks
+both exact durable attempt identity and synchronous local currentness across
+startup and the final provider prompt boundary. Availability DTOs and retained
+history are explanatory reads, not execution permits.
+
+An ordinary session starting after a workspace reaches READY does not by itself
+block manual event recovery. Existing READY resource checks and reserved-session
+runtime creation/drain proofs protect the event attempt; setup retry does not
+add a workspace-wide activity ban or new process-stop authority.

@@ -67,9 +67,9 @@ class TerminalSessionAccessor {
     });
   }
 
-  async clearPid(workspaceId: string, name: string): Promise<void> {
+  async clearPid(workspaceId: string, name: string, expectedPid?: number): Promise<void> {
     await prisma.terminalSession.updateMany({
-      where: { workspaceId, name },
+      where: { workspaceId, name, ...(expectedPid !== undefined && { pid: expectedPid }) },
       data: { pid: null },
     });
   }

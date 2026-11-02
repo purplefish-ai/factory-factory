@@ -1,3 +1,13 @@
+import type {
+  SessionStartupModePreset,
+  GetOrCreateSessionClientOptions,
+  StartSessionOptions,
+} from './session-startup-options';
+export type {
+  SessionStartupModePreset,
+  GetOrCreateSessionClientOptions,
+  StartSessionOptions,
+} from './session-startup-options';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -58,27 +68,6 @@ const isTerminalConfigFailure = (error: unknown) =>
   error instanceof SessionStartupTargetError;
 
 const logger = createLogger('session');
-
-export type SessionStartupModePreset = 'non_interactive' | 'plan';
-
-export type GetOrCreateSessionClientOptions = {
-  eventInitial?: EventInitialPermit;
-  assertCurrent?: () => Promise<void>;
-  resumePolicy?: 'allow_fallback' | 'require_existing';
-  thinkingEnabled?: boolean;
-  model?: string;
-  reasoningEffort?: string | null;
-  planModeEnabled?: boolean;
-  startupModePreset?: SessionStartupModePreset;
-};
-
-export type StartSessionOptions = {
-  assertCurrent?: () => Promise<void>;
-  initialPrompt?: string;
-  initialPromptIsDefault?: boolean;
-  startupModePreset?: SessionStartupModePreset;
-};
-
 export type SessionStartupCoordinatorDependencies = {
   eventAuthority?: EventSessionAuthority;
   accounts?: SessionCodexAccountPort;
@@ -168,13 +157,18 @@ export class SessionStartupCoordinator {
 
         const { dispatchableNotificationCount } = await this.getOrCreateAcpSessionClient(
           sessionId,
-          { assertCurrent: options?.assertCurrent, startupModePreset: options?.startupModePreset },
+          {
+            assertCurrent: options?.assertCurrent,
+            assertCurrentSync: options?.assertCurrentSync,
+            startupModePreset: options?.startupModePreset,
+          },
           session,
           stopGeneration,
           ownership
         );
         this.dependencies.lifecycleGate.establishStartup(lease);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
+        options?.assertCurrentSync?.();
         await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
         await this.assertCreationAllowed(sessionId, stopGeneration, options?.assertCurrent);
 
@@ -394,6 +388,7 @@ export class SessionStartupCoordinator {
     options: {
       eventInitial?: EventInitialPermit;
       assertCurrent?: () => Promise<void>;
+      assertCurrentSync?: () => void;
       model?: string;
       purpose?: 'active' | 'browse';
       resumePolicy?: 'allow_fallback' | 'require_existing';
@@ -450,6 +445,8 @@ export class SessionStartupCoordinator {
     }
 
     const clientOptions: AcpClientOptions = {
+      assertCurrent: options.assertCurrent,
+      assertCurrentSync: options.assertCurrentSync,
       ownedProcessGroup: await this.dependencies.eventAuthority?.isOwned(sessionId),
       eventLifecycleGeneration: stopGeneration,
       provider: session.provider,
@@ -476,6 +473,7 @@ export class SessionStartupCoordinator {
     }
     assertSessionAccountBinding(session, latest);
     clientOptions.model = options.model ?? latest.model;
+    options.assertCurrentSync?.();
     const creationPromise = this.dependencies.runtimeManager.getOrCreateClient(
       sessionId,
       clientOptions,
@@ -499,6 +497,7 @@ export class SessionStartupCoordinator {
       }
       const configuredHandle = handle;
       const assertConfiguredRuntime = () => {
+        options.assertCurrentSync?.();
         this.assertStartupAllowed(sessionId, stopGeneration);
         if (this.dependencies.runtimeManager.getClient(sessionId) !== configuredHandle) {
           throw new Error('Session runtime changed during configuration');
@@ -725,10 +724,12 @@ export class SessionStartupCoordinator {
           handle = created.handle;
           dispatchableNotificationCount = created.dispatchableNotificationCount;
           await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+          options.assertCurrentSync?.();
           await this.dependencies.repository.updateSession(sessionId, {
             status: SessionStatus.RUNNING,
           });
           await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
+          options.assertCurrentSync?.();
           const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
           this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
             phase: isWorking ? 'running' : 'idle',

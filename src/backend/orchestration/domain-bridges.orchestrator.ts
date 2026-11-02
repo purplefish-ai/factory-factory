@@ -252,11 +252,13 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: {
       markReady: (id) => workspaceStateMachine.markReady(id),
       markFailed: (id, msg) => workspaceStateMachine.markFailed(id, msg),
-      clearInitOutput: (id) => workspaceRunScriptService.clearInitOutput(id),
-      appendInitOutput: (id, output, maxSize) =>
-        workspaceRunScriptService.appendInitOutput(id, output, maxSize),
-      setInitScriptPid: (id, pid) => workspaceRunScriptService.setInitScriptPid(id, pid),
-      clearInitScriptPid: (id, pid) => workspaceRunScriptService.clearInitScriptPid(id, pid),
+      clearInitOutput: (id, guard) => workspaceRunScriptService.clearInitOutput(id, guard),
+      appendInitOutput: (id, output, maxSize, guard) =>
+        workspaceRunScriptService.appendInitOutput(id, output, maxSize, guard),
+      setInitScriptPid: (id, pid, guard) =>
+        workspaceRunScriptService.setInitScriptPid(id, pid, guard),
+      clearInitScriptPid: (id, pid, guard) =>
+        workspaceRunScriptService.clearInitScriptPid(id, pid, guard),
     },
   });
 

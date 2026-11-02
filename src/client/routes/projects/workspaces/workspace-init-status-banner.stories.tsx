@@ -15,6 +15,7 @@ const meta = {
       showDismiss: false,
     },
     retryPending: false,
+    retryAvailability: { status: 'AVAILABLE' },
     onRetry: fn(),
     onPlay: fn(),
   },
@@ -39,3 +40,15 @@ export const RetryingSetup: Story = {
     },
   },
 };
+
+export const EventInitialPending: Story = {
+  args: {
+    retryAvailability: {
+      status: 'BLOCKED',
+      reason: 'INITIAL_PENDING',
+      explanation:
+        'The event initial task has not been sent yet. Setup retry is unavailable while it owns initialization.',
+    },
+  },
+};
+export const AuthorityUnavailable: Story = { args: { retryAvailability: undefined } };

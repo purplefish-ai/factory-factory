@@ -1,3 +1,5 @@
+import type { SessionConfigServiceDependencies } from './session-config-dependencies';
+export type { SessionConfigServiceDependencies } from './session-config-dependencies';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
@@ -17,6 +19,7 @@ import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { CodexModelCatalogService } from './codex-model-catalog.service';
@@ -66,23 +69,13 @@ import {
 } from './session-startup-mode-preset';
 import { applyStartupLaunchPlan } from './session-startup-plan';
 import { configuredReasoningEffort, startupReasoningTarget } from './session-startup-reasoning';
-import { getWorkflowPermissionPreset } from './session-workflow-permissions';
+import { resolvePermissionPresetFromSettings } from './session-workflow-permission-settings';
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
-
 const MAX_CONFIG_READ_RETIREMENTS = 3;
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
-export type SessionConfigServiceDependencies = {
-  eventAuthority?: { assertOrdinary(sessionId: string): Promise<void> };
-  repository: SessionRepository;
-  runtimeManager: AcpRuntimeManager;
-  codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
-  sessionDomainService?: SessionDomainService;
-  launchOptionsService?: Pick<SessionLaunchOptionsService, 'getOptions'>;
-};
 
 export class SessionConfigService {
   private readonly startupPermissions = new SessionStartupPermissions();
@@ -190,8 +183,7 @@ export class SessionConfigService {
         preset,
         this.runtimeManager,
         override,
-        () =>
-          this.resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider),
+        () => resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider),
         {
           assertCurrent,
           confirmTarget: (id, value) => {
@@ -355,11 +347,7 @@ export class SessionConfigService {
 
     const permissionPreset =
       preResolvedPreset ??
-      (await this.resolvePermissionPresetFromSettings(
-        sessionId,
-        session.workflow,
-        session.provider
-      ));
+      (await resolvePermissionPresetFromSettings(sessionId, session.workflow, session.provider));
 
     // Claude plan mode is also its read-only access mode. Preserve planning.
     if (handle.provider === 'CLAUDE' && accessModeOption.currentValue === 'plan') {
@@ -568,15 +556,20 @@ export class SessionConfigService {
   configureQueuedMessage(
     sessionId: string,
     message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
-    supportsThinkingBudget = false
+    supportsThinkingBudget = false,
+    guard?: WorkspaceInitGuard
   ): Promise<QueuedMessage['settings']> {
-    return this.configUpdates.run(sessionId, () =>
-      this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
-        plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan'),
-        thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget),
-        model: (model) => this.setSessionModelUnserialized(sessionId, model),
-        reasoning: (effort) => this.setSessionReasoningEffortUnserialized(sessionId, effort),
-      })
+    return this.configUpdates.run(
+      sessionId,
+      () =>
+        this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
+          plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan', guard),
+          thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget, guard),
+          model: (model) => this.setSessionModelUnserialized(sessionId, model, guard),
+          reasoning: (effort) =>
+            this.setSessionReasoningEffortUnserialized(sessionId, effort, guard),
+        }),
+      guard
     );
   }
 
@@ -588,7 +581,8 @@ export class SessionConfigService {
 
   private async setSessionModelUnserialized(
     sessionId: string,
-    model?: string
+    model?: string,
+    guard?: WorkspaceInitGuard
   ): Promise<AcceptedQueuedConfig | undefined> {
     if (!model) {
       return;
@@ -600,7 +594,8 @@ export class SessionConfigService {
         return await this.setSessionConfigOptionUnserialized(
           sessionId,
           target.configId,
-          target.value
+          target.value,
+          guard
         );
       });
     }
@@ -610,10 +605,15 @@ export class SessionConfigService {
     }
     const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (!snapshot) {
-      return await this.setSessionConfigOptionUnserialized(sessionId, 'model', model);
+      return await this.setSessionConfigOptionUnserialized(sessionId, 'model', model, guard);
     }
     const target = resolveAcpModelSelection(session.provider, snapshot.configOptions, model);
-    return await this.setSessionConfigOptionUnserialized(sessionId, target.configId, target.value);
+    return await this.setSessionConfigOptionUnserialized(
+      sessionId,
+      target.configId,
+      target.value,
+      guard
+    );
   }
 
   async setSessionCollaborationMode(sessionId: string, mode: 'plan'): Promise<void> {
@@ -624,7 +624,8 @@ export class SessionConfigService {
 
   private async setSessionCollaborationModeUnserialized(
     sessionId: string,
-    mode: 'plan'
+    mode: 'plan',
+    guard?: WorkspaceInitGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -647,7 +648,7 @@ export class SessionConfigService {
       return;
     }
 
-    await this.setSessionConfigOptionUnserialized(sessionId, modeOption.id, targetMode);
+    await this.setSessionConfigOptionUnserialized(sessionId, modeOption.id, targetMode, guard);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
@@ -658,7 +659,8 @@ export class SessionConfigService {
 
   private async setSessionThinkingBudgetUnserialized(
     sessionId: string,
-    maxTokens: number | null
+    maxTokens: number | null,
+    guard?: WorkspaceInitGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
@@ -678,7 +680,12 @@ export class SessionConfigService {
           return;
         }
 
-        await this.setSessionConfigOptionUnserialized(sessionId, thoughtOption.id, thinkingBudget);
+        await this.setSessionConfigOptionUnserialized(
+          sessionId,
+          thoughtOption.id,
+          thinkingBudget,
+          guard
+        );
       }
       return;
     }
@@ -698,7 +705,8 @@ export class SessionConfigService {
 
   private async setSessionReasoningEffortUnserialized(
     sessionId: string,
-    reasoningEffort: string | null
+    reasoningEffort: string | null,
+    guard?: WorkspaceInitGuard
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -720,7 +728,11 @@ export class SessionConfigService {
         handle: acpHandle,
         targetReasoningEffort,
         source: requestedReasoningEffort ? 'message' : 'settings',
-        assertCurrent: () => this.assertCurrentConfiguredHandle(sessionId, acpHandle),
+        assertCurrent: () => {
+          guard?.assertCurrent();
+          this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+        },
+        guard,
       })
     );
   }
@@ -780,10 +792,14 @@ export class SessionConfigService {
   private async setSessionConfigOptionUnserialized(
     sessionId: string,
     configId: string,
-    value: string
+    value: string,
+    guard?: WorkspaceInitGuard
   ): Promise<AcceptedQueuedConfig | undefined> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
+      if (guard) {
+        throw new Error('Retry runtime is unavailable');
+      }
       return await this.updateInactiveSessionConfigOption(sessionId, configId, value);
     }
 
@@ -812,19 +828,24 @@ export class SessionConfigService {
       );
     }
 
-    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, () =>
-      isModeOption
+    await withConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle, async () => {
+      await guard?.check();
+      guard?.assertCurrent();
+      return isModeOption
         ? this.runtimeManager.setSessionMode(sessionId, value)
         : isModelOption
           ? this.runtimeManager.setSessionModel(sessionId, value)
-          : this.runtimeManager.setConfigOption(sessionId, configId, value)
-    );
+          : this.runtimeManager.setConfigOption(sessionId, configId, value);
+    });
+    await guard?.check();
+    guard?.assertCurrent();
 
     this.assertCurrentConfiguredHandle(sessionId, acpHandle);
     const configOptions = structuredClone(acpHandle.configOptions);
-    const accepted = this.acceptConfiguration(sessionId, acpHandle, () =>
-      this.assertCurrentConfiguredHandle(sessionId, acpHandle)
-    );
+    const accepted = this.acceptConfiguration(sessionId, acpHandle, () => {
+      guard?.assertCurrent();
+      this.assertCurrentConfiguredHandle(sessionId, acpHandle);
+    });
     if (
       !(await accepted.persist((assertCurrent) =>
         this.snapshotPersistence.persist(sessionId, {
@@ -965,25 +986,6 @@ export class SessionConfigService {
         throw new Error('Session runtime changed before configuration update');
       }
     };
-  }
-
-  private async resolvePermissionPresetFromSettings(
-    sessionId: string,
-    workflow: string,
-    provider: SessionProvider
-  ): Promise<SessionPermissionPreset> {
-    const fallback: SessionPermissionPreset = getWorkflowPermissionPreset(workflow, provider);
-    try {
-      const settings = await userSettingsService.get();
-      return getWorkflowPermissionPreset(workflow, provider, settings);
-    } catch (error) {
-      logger.warn('Failed loading user permission presets; using defaults', {
-        sessionId,
-        workflow,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return fallback;
-    }
   }
 
   private applyReasoningEffortTarget(params: ReasoningEffortTargetParams): Promise<void> {

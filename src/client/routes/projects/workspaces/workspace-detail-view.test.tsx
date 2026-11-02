@@ -165,6 +165,7 @@ function createInitStatus(
   showDismiss: boolean
 ): NonNullable<WorkspaceDetailViewProps['workspaceState']['workspaceInitStatus']> {
   return {
+    retryAvailability: { status: 'AVAILABLE' },
     status: 'READY',
     initErrorMessage: 'Setup failed',
     initOutput: null,

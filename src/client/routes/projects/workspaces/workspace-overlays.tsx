@@ -7,6 +7,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 import { InitOutputPanel } from './init-output-panel';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
@@ -15,6 +16,7 @@ import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 // =============================================================================
 
 interface ScriptFailedBannerProps {
+  retryAvailability?: WorkspaceRetryAvailability;
   workspaceId: string;
   initErrorMessage: string | null;
   initOutput: string | null;
@@ -27,6 +29,7 @@ interface ScriptFailedBannerProps {
 
 export function ScriptFailedBanner({
   workspaceId,
+  retryAvailability,
   initErrorMessage,
   initOutput,
   hasStartupScript,
@@ -36,7 +39,7 @@ export function ScriptFailedBanner({
   onDismiss,
 }: ScriptFailedBannerProps) {
   const [expanded, setExpanded] = useState(false);
-  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
+  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId, retryAvailability);
 
   return (
     <div className="border-b bg-destructive/10 px-4 py-2">
@@ -45,6 +48,13 @@ export function ScriptFailedBanner({
           <WarningIcon className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words whitespace-normal">
             Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}
+            {retryAvailability?.status !== 'AVAILABLE' && (
+              <span className="mt-1 block text-xs">
+                {retryAvailability?.status === 'BLOCKED'
+                  ? retryAvailability.explanation
+                  : 'Checking setup retry availability…'}
+              </span>
+            )}
           </span>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1 self-start sm:justify-end">
@@ -68,7 +78,7 @@ export function ScriptFailedBanner({
             size="sm"
             className="h-6 px-2 text-xs"
             onClick={retry}
-            disabled={retryInit.isPending}
+            disabled={retryInit.isPending || retryAvailability?.status !== 'AVAILABLE'}
           >
             {retryInit.isPending ? (
               <>

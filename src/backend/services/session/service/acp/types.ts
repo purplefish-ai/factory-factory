@@ -19,6 +19,9 @@ export interface AcpMcpServerConfig {
 }
 
 export interface AcpClientOptions {
+  /** Captured caller authority, checked again after creation serialization. */
+  assertCurrent?: () => Promise<void>;
+  assertCurrentSync?: () => void;
   provider: AcpProvider;
   /** Trusted session owner policy; never accepted from a public transport. */
   ownedProcessGroup?: boolean;

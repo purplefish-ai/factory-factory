@@ -120,6 +120,19 @@ describe('application queue producer composition', () => {
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
+  it('carries READY retry authority through the selected graph wrapper', async () => {
+    const graph = createGraph('guarded');
+    const check = vi.fn(() => Promise.reject(new Error('Retry authority changed')));
+    await graph.services.retryQueuedDispatchAfterWorkspaceReady(
+      'workspace-init',
+      'session-init',
+      undefined,
+      unsafeCoerce({ check, assertCurrent: vi.fn() })
+    );
+    expect(check).toHaveBeenCalledOnce();
+    expect(graph.attempts).toEqual([]);
+  });
+
   it.each(['child', 'periodic'] as const)(
     'starts %s initialization with the owning graph dispatcher',
     async (source) => {

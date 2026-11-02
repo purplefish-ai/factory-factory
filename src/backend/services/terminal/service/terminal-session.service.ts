@@ -37,8 +37,8 @@ class TerminalSessionService {
     return terminalSessionAccessor.findWithPid();
   }
 
-  releaseSessionPid(workspaceId: string, name: string): Promise<void> {
-    return terminalSessionAccessor.clearPid(workspaceId, name);
+  releaseSessionPid(workspaceId: string, name: string, expectedPid?: number): Promise<void> {
+    return terminalSessionAccessor.clearPid(workspaceId, name, expectedPid);
   }
 
   async recoverOrphanedSessions(): Promise<number> {

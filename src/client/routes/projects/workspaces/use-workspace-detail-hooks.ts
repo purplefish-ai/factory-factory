@@ -48,21 +48,46 @@ export function useWorkspaceInitStatus(
   workspace: ReturnType<typeof useWorkspaceData>['workspace'],
   utils: ReturnType<typeof trpc.useUtils>
 ) {
-  const { data: workspaceInitStatus, isPending: isInitStatusPending } =
-    trpc.workspace.getInitStatus.useQuery(
-      { id: workspaceId },
-      {
-        refetchInterval: (query) => {
-          const status = query.state.data?.status;
-          return status === 'READY' ||
-            status === 'FAILED' ||
-            status === 'ARCHIVING' ||
-            status === 'ARCHIVED'
-            ? false
-            : 1000;
-        },
-      }
-    );
+  const {
+    data: initStatus,
+    isPending: isInitStatusPending,
+    isError: initStatusError,
+  } = trpc.workspace.getInitStatus.useQuery(
+    { id: workspaceId },
+    {
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        const availability = query.state.data?.retryAvailability;
+        if (query.state.status === 'error' || !availability) {
+          return 1000;
+        }
+        if (
+          availability?.status === 'BLOCKED' &&
+          !['NOT_RETRYABLE', 'RETRY_LIMIT'].includes(availability.reason)
+        ) {
+          return 1000;
+        }
+        return status === 'READY' ||
+          status === 'FAILED' ||
+          status === 'ARCHIVING' ||
+          status === 'ARCHIVED'
+          ? false
+          : 1000;
+      },
+    }
+  );
+
+  const workspaceInitStatus =
+    initStatus && initStatusError
+      ? {
+          ...initStatus,
+          retryAvailability: {
+            status: 'BLOCKED' as const,
+            reason: 'AUTHORITY_UNAVAILABLE' as const,
+            explanation: 'Setup retry availability could not be checked. Refresh and try again.',
+          },
+        }
+      : initStatus;
 
   const prevInitStatusRef = useRef<string | undefined>(undefined);
   const prevHasWorktreePathRef = useRef(false);

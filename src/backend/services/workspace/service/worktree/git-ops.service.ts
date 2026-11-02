@@ -10,6 +10,7 @@ import {
   type WorkspaceGitStats,
   workspaceGitStateService,
 } from '@/backend/services/workspace-git-state.service';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 const logger = createLogger('git-ops');
 
@@ -159,7 +160,11 @@ class GitOpsService {
     }
   }
 
-  async removeWorktree(worktreePath: string, project: ProjectPaths): Promise<void> {
+  async removeWorktree(
+    worktreePath: string,
+    project: ProjectPaths,
+    guard?: WorkspaceInitGuard
+  ): Promise<void> {
     const gitClient = GitClientFactory.forProject({
       repoPath: project.repoPath,
       worktreeBasePath: project.worktreeBasePath,
@@ -194,6 +199,8 @@ class GitOpsService {
     );
     if (registeredWorktree) {
       try {
+        await guard?.check();
+        guard?.assertCurrent();
         await gitClient.deleteWorktree(worktreeName);
       } catch (error) {
         workspaceGitStateService.invalidate(worktreePath);
@@ -205,6 +212,8 @@ class GitOpsService {
 
     if (await pathExists(worktreePath)) {
       try {
+        await guard?.check();
+        guard?.assertCurrent();
         await fs.rm(worktreePath, { recursive: true, force: true });
       } catch (error) {
         workspaceGitStateService.invalidate(worktreePath);
@@ -288,7 +297,7 @@ class GitOpsService {
     project: ProjectPaths,
     worktreeName: string,
     baseBranch: string,
-    options: { branchPrefix?: string; workspaceName: string }
+    options: { branchPrefix?: string; workspaceName: string; guard?: WorkspaceInitGuard }
   ): Promise<{ worktreePath: string; branchName: string }> {
     const gitClient = GitClientFactory.forProject({
       repoPath: project.repoPath,
@@ -307,7 +316,8 @@ class GitOpsService {
   async createWorktreeFromExistingBranch(
     project: ProjectPaths,
     worktreeName: string,
-    branchRef: string
+    branchRef: string,
+    guard?: WorkspaceInitGuard
   ): Promise<{ worktreePath: string; branchName: string }> {
     const gitClient = GitClientFactory.forProject({
       repoPath: project.repoPath,
@@ -318,7 +328,8 @@ class GitOpsService {
     try {
       const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(
         worktreeName,
-        branchRef
+        branchRef,
+        guard ? { guard } : undefined
       );
       return { worktreePath, branchName: worktreeInfo.branchName };
     } finally {

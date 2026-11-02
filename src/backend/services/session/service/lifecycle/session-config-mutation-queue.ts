@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 /** Native RPC, durable state, and configuration publication share one per-session transaction. */
 export class SessionConfigMutationQueue {
@@ -12,7 +13,11 @@ export class SessionConfigMutationQueue {
     private readonly assertAllowed?: (sessionId: string) => Promise<void>
   ) {}
 
-  async run<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+  async run<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    guard?: WorkspaceInitGuard
+  ): Promise<T> {
     const handle = this.runtime.getClient(sessionId);
     const prior = this.updates.get(sessionId) ?? Promise.resolve();
     const update = prior
@@ -26,11 +31,18 @@ export class SessionConfigMutationQueue {
           if (handle) {
             await handle.promptComplete;
             await this.assertAllowed?.(sessionId);
-            return await withConfiguredAcpHandle(this.runtime, sessionId, handle, operation);
+            return await withConfiguredAcpHandle(this.runtime, sessionId, handle, async () => {
+              await guard?.check();
+              guard?.assertCurrent();
+              return operation();
+            });
           } else {
+            await guard?.check();
+            guard?.assertCurrent();
             return await operation();
           }
         } catch (error) {
+          guard?.assertCurrent();
           const current = this.runtime.getClient(sessionId);
           if (
             current &&

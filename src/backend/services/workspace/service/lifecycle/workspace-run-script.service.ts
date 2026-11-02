@@ -4,6 +4,7 @@ import {
   workspaceAccessor,
 } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { RunScriptStatus } from '@/shared/core';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 class WorkspaceRunScriptService {
   registerInitializedWorktree(
@@ -15,7 +16,8 @@ class WorkspaceRunScriptService {
       runScriptCommand: string | null;
       runScriptPostRunCommand: string | null;
       runScriptCleanupCommand: string | null;
-    }
+    },
+    guard?: WorkspaceInitGuard
   ) {
     return workspaceAccessor.registerInitializedWorktree(
       workspaceId,
@@ -28,7 +30,8 @@ class WorkspaceRunScriptService {
         runScriptCommand: data.runScriptCommand,
         runScriptPostRunCommand: data.runScriptPostRunCommand,
         runScriptCleanupCommand: data.runScriptCleanupCommand,
-      }
+      },
+      ...(guard ? ([guard] as const) : [])
     );
   }
 
@@ -38,9 +41,14 @@ class WorkspaceRunScriptService {
       runScriptCommand: string | null;
       runScriptPostRunCommand: string | null;
       runScriptCleanupCommand: string | null;
-    }
+    },
+    guard?: WorkspaceInitGuard
   ) {
-    return workspaceAccessor.setRunScriptCommands(workspaceId, data);
+    return workspaceAccessor.setRunScriptCommands(
+      workspaceId,
+      data,
+      ...(guard ? ([guard] as const) : [])
+    );
   }
 
   findExecutionState(workspaceId: string): Promise<RunScriptExecutionState | null> {
@@ -76,20 +84,25 @@ class WorkspaceRunScriptService {
     return workspaceAccessor.resetStaleRunScriptStatuses();
   }
 
-  clearInitOutput(workspaceId: string) {
-    return workspaceAccessor.clearInitOutput(workspaceId);
+  clearInitOutput(workspaceId: string, guard?: WorkspaceInitGuard) {
+    return workspaceAccessor.clearInitOutput(workspaceId, guard);
   }
 
-  appendInitOutput(workspaceId: string, output: string, maxSize?: number) {
-    return workspaceAccessor.appendInitOutput(workspaceId, output, maxSize);
+  appendInitOutput(
+    workspaceId: string,
+    output: string,
+    maxSize?: number,
+    guard?: WorkspaceInitGuard
+  ) {
+    return workspaceAccessor.appendInitOutput(workspaceId, output, maxSize, guard);
   }
 
-  setInitScriptPid(workspaceId: string, pid: number) {
-    return workspaceAccessor.setInitScriptPid(workspaceId, pid);
+  setInitScriptPid(workspaceId: string, pid: number, guard?: WorkspaceInitGuard) {
+    return workspaceAccessor.setInitScriptPid(workspaceId, pid, guard);
   }
 
-  clearInitScriptPid(workspaceId: string, pid: number) {
-    return workspaceAccessor.clearInitScriptPid(workspaceId, pid);
+  clearInitScriptPid(workspaceId: string, pid: number, guard?: WorkspaceInitGuard) {
+    return workspaceAccessor.clearInitScriptPid(workspaceId, pid, guard);
   }
 }
 

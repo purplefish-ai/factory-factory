@@ -15,7 +15,6 @@ import {
 } from '@/backend/services/session';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
-  assertWorktreePathSafe,
   gitOpsService,
   workspaceDataService,
   workspaceRelationshipsService,
@@ -27,9 +26,11 @@ import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/sh
 import { SessionStatus } from '@/shared/core';
 import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { AttachmentSchema } from '@/shared/websocket';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import type { WorkspaceWithProject } from './types';
+import { handleWorkspaceInitFailure } from './workspace-init-cleanup';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import {
   buildInitialPromptFromGitHubIssue,
@@ -45,12 +46,8 @@ type CreatedWorktreeInfo = {
   branchName: string;
 };
 
-type UnregisteredWorktreeCleanupCandidate = {
-  project: WorkspaceWithProject['project'];
-  worktreeInfo: CreatedWorktreeInfo;
-};
-
 type WorkspaceInitializationOptions = {
+  guard?: WorkspaceInitGuard;
   branchName?: string;
   useExistingBranch?: boolean;
   provisioningAlreadyStarted?: boolean;
@@ -76,9 +73,15 @@ export function clearWorkspaceInitOrchestratorStateForTests(): void {
   workspaceInitializationTails.clear();
 }
 
-async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
+async function startProvisioningOrLog(
+  workspaceId: string,
+  guard?: WorkspaceInitGuard
+): Promise<boolean> {
   try {
-    const started = await workspaceStateMachine.startProvisioning(workspaceId);
+    const started = await workspaceStateMachine.startProvisioning(
+      workspaceId,
+      ...(guard ? ([{ guard }] as const) : [])
+    );
     if (!started) {
       logger.warn('Skipping workspace initialization: retry limit exceeded', { workspaceId });
       return false;
@@ -121,114 +124,18 @@ async function readFactoryConfigSafe(
   }
 }
 
-async function markFailedAfterInitFailure(workspaceId: string, error: Error): Promise<void> {
-  try {
-    await workspaceStateMachine.markFailed(workspaceId, error.message);
-  } catch (markFailedError) {
-    // The workspace may have been deleted mid-provisioning; cleanup must still run.
-    logger.warn('Failed to mark workspace FAILED after init failure', {
-      workspaceId,
-      error: toError(markFailedError).message,
-    });
-  }
-}
-
-async function handleWorkspaceInitFailure(
+async function markLinearIssueStartedIfApplicable(
   workspaceId: string,
-  error: Error,
-  autoCreatedTerminalId?: string,
-  unregisteredWorktreeCleanupCandidate?: UnregisteredWorktreeCleanupCandidate
+  guard?: WorkspaceInitGuard
 ): Promise<void> {
-  logger.error('Failed to initialize workspace worktree', error, { workspaceId });
-  await markFailedAfterInitFailure(workspaceId, error);
-  if (unregisteredWorktreeCleanupCandidate) {
-    await cleanupUnregisteredWorktreeAfterInitFailure(
-      workspaceId,
-      unregisteredWorktreeCleanupCandidate
-    );
-  }
-  if (autoCreatedTerminalId) {
-    try {
-      terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
-    } catch (destroyError) {
-      logger.warn('Failed to destroy default terminal after init failure', {
-        workspaceId,
-        terminalId: autoCreatedTerminalId,
-        error: destroyError instanceof Error ? destroyError.message : String(destroyError),
-      });
-    }
-    try {
-      await terminalSessionService.releaseSessionPid(workspaceId, autoCreatedTerminalId);
-    } catch (clearPidError) {
-      logger.warn('Failed to clear default terminal PID after init failure', {
-        workspaceId,
-        terminalId: autoCreatedTerminalId,
-        error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
-      });
-    }
-  }
-  try {
-    await sessionLifecycleService.stopWorkspaceSessions(workspaceId);
-  } catch (stopError) {
-    logger.warn('Failed to stop Claude sessions after init failure', {
-      workspaceId,
-      error: stopError instanceof Error ? stopError.message : String(stopError),
-    });
-  }
-}
-
-async function cleanupUnregisteredWorktreeAfterInitFailure(
-  workspaceId: string,
-  candidate: UnregisteredWorktreeCleanupCandidate
-): Promise<void> {
-  const { project, worktreeInfo } = candidate;
-
-  try {
-    const workspace = await workspaceDataService.findById(workspaceId);
-    if (workspace?.worktreePath === worktreeInfo.worktreePath) {
-      return;
-    }
-
-    if (workspace?.worktreePath) {
-      logger.warn('Skipping unregistered worktree cleanup because workspace has another path', {
-        workspaceId,
-        createdWorktreePath: worktreeInfo.worktreePath,
-        persistedWorktreePath: workspace.worktreePath,
-      });
-      return;
-    }
-
-    if (workspace?.status === 'PROVISIONING') {
-      logger.info('Skipping unregistered worktree cleanup while workspace is provisioning', {
-        workspaceId,
-        worktreePath: worktreeInfo.worktreePath,
-      });
-      return;
-    }
-
-    await assertWorktreePathSafe(worktreeInfo.worktreePath, project.worktreeBasePath);
-    await gitOpsService.removeWorktree(worktreeInfo.worktreePath, project);
-    logger.info('Removed unregistered worktree after init failure', {
-      workspaceId,
-      worktreePath: worktreeInfo.worktreePath,
-      branchName: worktreeInfo.branchName,
-    });
-  } catch (cleanupError) {
-    logger.warn('Failed to remove unregistered worktree after init failure', {
-      workspaceId,
-      worktreePath: worktreeInfo.worktreePath,
-      error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-    });
-  }
-}
-
-async function markLinearIssueStartedIfApplicable(workspaceId: string): Promise<void> {
   try {
     const ctx = await getWorkspaceLinearContext(workspaceId);
     if (!ctx) {
       return;
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     await linearStateSyncService.markIssueStarted(ctx.apiKey, ctx.linearIssueId);
     logger.info('Marked Linear issue as started', {
       workspaceId,
@@ -402,7 +309,11 @@ async function bindInitialMonitoringSession(workspaceId: string, sessionId: stri
   }
 }
 
-async function prepareDefaultAgentSession(workspaceId: string, signal: AbortSignal) {
+async function prepareDefaultAgentSession(
+  workspaceId: string,
+  signal: AbortSignal,
+  guard?: WorkspaceInitGuard
+) {
   try {
     const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -437,6 +348,8 @@ async function prepareDefaultAgentSession(workspaceId: string, signal: AbortSign
         }
       : initialMessage;
 
+    await guard?.check();
+    guard?.assertCurrent();
     if (signal.aborted) {
       return null;
     }
@@ -470,7 +383,8 @@ async function prepareDefaultAgentSession(workspaceId: string, signal: AbortSign
 async function startDefaultAgentSession(
   workspaceId: string,
   preparedSession: Awaited<ReturnType<typeof prepareDefaultAgentSession>>,
-  dependencies: WorkspaceDispatchDependencies
+  dependencies: WorkspaceDispatchDependencies,
+  guard?: WorkspaceInitGuard
 ): Promise<string | null> {
   if (!preparedSession) {
     return null;
@@ -478,12 +392,25 @@ async function startDefaultAgentSession(
   const { sessionId, startupModePreset, hasInitialPrompt, hasInitialAttachments } = preparedSession;
   try {
     // The initial prompt is already queued; an empty string avoids the default continuation.
-    await sessionLifecycleService.startSession(sessionId, { initialPrompt: '', startupModePreset });
+    await guard?.check();
+    guard?.assertCurrent();
+    await sessionLifecycleService.startSession(sessionId, {
+      initialPrompt: '',
+      startupModePreset,
+      ...(guard && { assertCurrent: guard.check, assertCurrentSync: guard.assertCurrent }),
+    });
+    await guard?.check();
+    guard?.assertCurrent();
     await bindInitialMonitoringSession(workspaceId, sessionId);
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
-    await dependencies.sessionDispatch.tryDispatchNextMessage(sessionId);
+    await guard?.check();
+    guard?.assertCurrent();
+    await dependencies.sessionDispatch.tryDispatchNextMessage(
+      sessionId,
+      ...(guard ? ([{ guard }] as const) : [])
+    );
 
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
@@ -504,13 +431,23 @@ async function startDefaultAgentSession(
 export async function retryQueuedDispatchAfterWorkspaceReady(
   workspaceId: string,
   startedSessionId: string | null,
-  dependencies: WorkspaceDispatchDependencies = defaultWorkspaceDispatchDependencies
+  dependencies: WorkspaceDispatchDependencies = defaultWorkspaceDispatchDependencies,
+  guard?: WorkspaceInitGuard
 ): Promise<void> {
   try {
+    await guard?.check();
+    guard?.assertCurrent();
     // Prefer the specific session we just started; it may now be RUNNING.
     if (startedSessionId) {
+      await guard?.check();
+      guard?.assertCurrent();
       await bindInitialMonitoringSession(workspaceId, startedSessionId);
-      await dependencies.sessionDispatch.tryDispatchNextMessage(startedSessionId);
+      await guard?.check();
+      guard?.assertCurrent();
+      await dependencies.sessionDispatch.tryDispatchNextMessage(
+        startedSessionId,
+        ...(guard ? ([{ guard }] as const) : [])
+      );
       return;
     }
 
@@ -519,8 +456,15 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     });
     const runningSession = runningSessions.find(isPRMonitoringRecipient);
     if (runningSession) {
+      await guard?.check();
+      guard?.assertCurrent();
       await bindInitialMonitoringSession(workspaceId, runningSession.id);
-      await dependencies.sessionDispatch.tryDispatchNextMessage(runningSession.id);
+      await guard?.check();
+      guard?.assertCurrent();
+      await dependencies.sessionDispatch.tryDispatchNextMessage(
+        runningSession.id,
+        ...(guard ? ([{ guard }] as const) : [])
+      );
       return;
     }
 
@@ -532,8 +476,15 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     await bindInitialMonitoringSession(workspaceId, idleSession.id);
-    await dependencies.sessionDispatch.tryDispatchNextMessage(idleSession.id);
+    await guard?.check();
+    guard?.assertCurrent();
+    await dependencies.sessionDispatch.tryDispatchNextMessage(
+      idleSession.id,
+      ...(guard ? ([{ guard }] as const) : [])
+    );
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {
       workspaceId,
@@ -544,7 +495,8 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
 
 async function startDefaultTerminal(
   workspaceId: string,
-  worktreePath: string
+  worktreePath: string,
+  guard?: WorkspaceInitGuard
 ): Promise<{ terminalId: string; autoCreated: boolean } | null> {
   try {
     const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
@@ -556,6 +508,8 @@ async function startDefaultTerminal(
       };
     }
 
+    await guard?.check();
+    guard?.assertCurrent();
     const { terminalId, pid } = await terminalService.createTerminal({
       workspaceId,
       workingDir: worktreePath,
@@ -566,7 +520,13 @@ async function startDefaultTerminal(
     let terminalSessionPersisted = false;
     const clearPersistedTerminalPid = async () => {
       try {
-        await terminalSessionService.releaseSessionPid(workspaceId, terminalId);
+        await guard?.check();
+        guard?.assertCurrent();
+        await terminalSessionService.releaseSessionPid(
+          workspaceId,
+          terminalId,
+          ...(guard ? ([pid] as const) : [])
+        );
       } catch (error) {
         logger.warn('Failed to clear terminal PID after default terminal exit', {
           workspaceId,
@@ -588,6 +548,8 @@ async function startDefaultTerminal(
     });
 
     try {
+      await guard?.check();
+      guard?.assertCurrent();
       await terminalSessionService.registerSession({
         workspaceId,
         name: terminalId,
@@ -638,19 +600,31 @@ async function createWorktreeForWorkspace(
   worktreeName: string,
   baseBranch: string,
   useExistingBranch: boolean,
-  workspaceName: string
+  workspaceName: string,
+  guard?: WorkspaceInitGuard
 ) {
+  await guard?.check();
+  guard?.assertCurrent();
   if (useExistingBranch) {
-    return gitOpsService.createWorktreeFromExistingBranch(project, worktreeName, baseBranch);
+    return gitOpsService.createWorktreeFromExistingBranch(
+      project,
+      worktreeName,
+      baseBranch,
+      ...(guard ? ([guard] as const) : [])
+    );
   }
   const gitHubUsername = await getCachedGitHubUsername();
+  await guard?.check();
+  guard?.assertCurrent();
   return gitOpsService.createWorktree(project, worktreeName, baseBranch, {
+    ...(guard && { guard }),
     branchPrefix: gitHubUsername ?? undefined,
     workspaceName,
   });
 }
 
 export async function resolveWorkspaceWorktree(input: {
+  guard?: WorkspaceInitGuard;
   workspaceWithProject: Pick<
     WorkspaceWithProject,
     'id' | 'name' | 'project' | 'worktreePath' | 'branchName'
@@ -663,6 +637,8 @@ export async function resolveWorkspaceWorktree(input: {
   branchName: string | null;
   created: boolean;
 }> {
+  await input.guard?.check();
+  input.guard?.assertCurrent();
   const workspace = input.workspaceWithProject;
   if (workspace.worktreePath) {
     logger.info('Reusing existing workspace worktree for initialization', {
@@ -687,7 +663,8 @@ export async function resolveWorkspaceWorktree(input: {
     input.worktreeName,
     input.baseBranch,
     input.useExistingBranch,
-    workspace.name
+    workspace.name,
+    input.guard
   );
 
   return {
@@ -713,11 +690,17 @@ async function awaitSessionAndDispatchIfSuccess(
   workspaceId: string,
   agentSessionPromise: Promise<string | null>,
   success: boolean,
-  dependencies: WorkspaceDispatchDependencies
+  dependencies: WorkspaceDispatchDependencies,
+  guard?: WorkspaceInitGuard
 ) {
   const startedSessionId = await agentSessionPromise;
   if (success) {
-    await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId, dependencies);
+    await retryQueuedDispatchAfterWorkspaceReady(
+      workspaceId,
+      startedSessionId,
+      dependencies,
+      guard
+    );
   }
 }
 
@@ -726,8 +709,11 @@ async function runWorkspaceInitialization(
   options: WorkspaceInitializationOptions | undefined,
   dependencies: WorkspaceDispatchDependencies
 ): Promise<void> {
+  const guard = options?.guard;
+  await guard?.check();
+  guard?.assertCurrent();
   if (!options?.provisioningAlreadyStarted) {
-    const startedProvisioning = await startProvisioningOrLog(workspaceId);
+    const startedProvisioning = await startProvisioningOrLog(workspaceId, guard);
     if (!startedProvisioning) {
       return;
     }
@@ -740,25 +726,28 @@ async function runWorkspaceInitialization(
   let autoCreatedTerminalId: string | undefined;
   const preparationController = new AbortController();
   let releaseInitialLaunch: (() => void) | undefined;
+  let preparedSessionPromise: ReturnType<typeof prepareDefaultAgentSession> | undefined;
+  let linearPromise: Promise<void> | undefined;
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
     project = workspaceWithProject.project;
 
     // Fetch issue prompts alongside setup, publishing the queue as soon as it is ready.
-    const preparedSessionPromise = prepareDefaultAgentSession(
+    preparedSessionPromise = prepareDefaultAgentSession(
       workspaceId,
-      preparationController.signal
+      preparationController.signal,
+      guard
     );
 
     const worktreeName = `workspace-${workspaceId}`;
     const baseBranch = options?.branchName ?? project.defaultBranch;
-    const useExistingBranch =
-      options?.useExistingBranch ??
-      (await worktreeLifecycleService.getInitMode(workspaceId)) ??
-      false;
+    const useExistingBranch = await resolveInitMode(workspaceId, options);
 
+    await guard?.check();
+    guard?.assertCurrent();
     const worktreeInfo = await resolveWorkspaceWorktree({
+      ...(guard && { guard }),
       workspaceWithProject,
       worktreeName,
       baseBranch,
@@ -769,52 +758,69 @@ async function runWorkspaceInitialization(
 
     const factoryConfig = await readFactoryConfigSafe(worktreeInfo.worktreePath, workspaceId);
 
+    await guard?.check();
+    guard?.assertCurrent();
     await runScriptConfigPersistenceService.syncWorkspaceCommandsFromFactoryConfig({
       workspaceId,
       factoryConfig,
       persistWorkspaceCommands: (id, commands) => {
         if (worktreeInfo.created) {
-          return workspaceRunScriptService.registerInitializedWorktree(id, {
-            worktreePath: worktreeInfo.worktreePath,
-            branchName: worktreeInfo.branchName,
-            isAutoGeneratedBranch: !useExistingBranch,
+          return workspaceRunScriptService.registerInitializedWorktree(
+            id,
+            {
+              worktreePath: worktreeInfo.worktreePath,
+              branchName: worktreeInfo.branchName,
+              isAutoGeneratedBranch: !useExistingBranch,
+              runScriptCommand: commands.runScriptCommand,
+              runScriptPostRunCommand: commands.runScriptPostRunCommand,
+              runScriptCleanupCommand: commands.runScriptCleanupCommand,
+            },
+            ...(guard ? ([guard] as const) : [])
+          );
+        }
+
+        return workspaceRunScriptService.setCommands(
+          id,
+          {
             runScriptCommand: commands.runScriptCommand,
             runScriptPostRunCommand: commands.runScriptPostRunCommand,
             runScriptCleanupCommand: commands.runScriptCleanupCommand,
-          });
-        }
-
-        return workspaceRunScriptService.setCommands(id, {
-          runScriptCommand: commands.runScriptCommand,
-          runScriptPostRunCommand: commands.runScriptPostRunCommand,
-          runScriptCleanupCommand: commands.runScriptCleanupCommand,
-        });
+          },
+          ...(guard ? ([guard] as const) : [])
+        );
       },
     });
     worktreeRegistered = true;
 
-    const defaultTerminal = await startDefaultTerminal(workspaceId, worktreeInfo.worktreePath);
+    const defaultTerminal = await startDefaultTerminal(
+      workspaceId,
+      worktreeInfo.worktreePath,
+      guard
+    );
     if (defaultTerminal?.autoCreated) {
       autoCreatedTerminalId = defaultTerminal.terminalId;
     }
 
-    // Mark Linear issue as started (fire-and-forget, non-fatal)
-    void markLinearIssueStartedIfApplicable(workspaceId);
+    // Mark the Linear issue as started; join this non-fatal effect before draining.
+    linearPromise = markLinearIssueStartedIfApplicable(workspaceId, guard);
 
     const startupScriptPipelineResult = await executeStartupScriptPipeline({
       workspaceId,
       workspaceWithProject,
       worktreePath: worktreeInfo.worktreePath,
       factoryConfig,
+      ...(guard && { guard }),
       beforeReady: async () => {
         const prepared = await preparedSessionPromise;
+        await guard?.check();
+        guard?.assertCurrent();
         if (prepared) {
           releaseInitialLaunch = sessionDomainService.beginInitialLaunch(prepared.sessionId);
         }
       },
     });
     if (!startupScriptPipelineResult.handled) {
-      await workspaceStateMachine.markReady(workspaceId);
+      await workspaceStateMachine.markReady(workspaceId, ...(guard ? ([{ guard }] as const) : []));
     }
 
     // Provider startup hooks can depend on setup's files and installed tools.
@@ -822,8 +828,9 @@ async function runWorkspaceInitialization(
     const preparedSession = await preparedSessionPromise;
     const agentSessionPromise = startDefaultAgentSession(
       workspaceId,
-      preparedSession,
-      dependencies
+      preparedSession ?? null,
+      dependencies,
+      guard
     ).catch((error) => {
       logger.error('Failed to start default Claude session', {
         workspaceId,
@@ -836,7 +843,8 @@ async function runWorkspaceInitialization(
       workspaceId,
       agentSessionPromise,
       startupScriptPipelineResult.success,
-      dependencies
+      dependencies,
+      guard
     );
   } catch (error) {
     preparationController.abort();
@@ -844,16 +852,14 @@ async function runWorkspaceInitialization(
       workspaceId,
       toError(error),
       autoCreatedTerminalId,
-      project && createdWorktreeInfo && !worktreeRegistered
-        ? { project, worktreeInfo: createdWorktreeInfo }
-        : undefined
+      unregisteredCandidate(project, createdWorktreeInfo, worktreeRegistered),
+      guard
     );
   } finally {
+    await Promise.allSettled([preparedSessionPromise, linearPromise]);
     releaseInitialLaunch?.();
     preparationController.abort();
-    if (worktreeCreated) {
-      await worktreeLifecycleService.clearInitMode(workspaceId);
-    }
+    await clearOwnedInitMode(workspaceId, worktreeCreated, guard);
   }
 }
 
@@ -902,4 +908,40 @@ export function initializeWorkspaceWorktree(
   return enqueueWorkspaceInitializationTask(workspaceId, () =>
     runWorkspaceInitialization(workspaceId, options, dependencies)
   );
+}
+
+async function clearOwnedInitMode(
+  workspaceId: string,
+  worktreeCreated: boolean,
+  guard?: WorkspaceInitGuard
+) {
+  if (worktreeCreated) {
+    try {
+      await guard?.check();
+      guard?.assertCurrent();
+      await worktreeLifecycleService.clearInitMode(
+        workspaceId,
+        ...(guard ? ([guard] as const) : [])
+      );
+    } catch {
+      /* A replacement owns its initialization state. */
+    }
+  }
+}
+
+async function resolveInitMode(
+  workspaceId: string,
+  options: WorkspaceInitializationOptions | undefined
+) {
+  return (
+    options?.useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspaceId)) ?? false
+  );
+}
+
+function unregisteredCandidate(
+  project: WorkspaceWithProject['project'] | undefined,
+  worktreeInfo: CreatedWorktreeInfo | undefined,
+  registered: boolean
+) {
+  return project && worktreeInfo && !registered ? { project, worktreeInfo } : undefined;
 }
