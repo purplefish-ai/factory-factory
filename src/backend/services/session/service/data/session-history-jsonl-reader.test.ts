@@ -125,3 +125,33 @@ describe('readNonEmptyJsonlLines with containing', () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'ENOENT' }));
   });
 });
+
+it('yields within a dense byte block once its cooperative budget expires', async () => {
+  const filePath = writeFile(
+    `${Array.from({ length: 512 }, (_, index) => JSON.stringify({ index })).join('\n')}\n`
+  );
+  let clock = 0;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => ++clock);
+  let delivered = 0;
+  let deliveredAtHeartbeat = Number.POSITIVE_INFINITY;
+  try {
+    await readNonEmptyJsonlLines({
+      filePath,
+      onLine: () => {
+        delivered++;
+        if (delivered === 1) {
+          setImmediate(() => {
+            deliveredAtHeartbeat = delivered;
+          });
+        }
+      },
+      onError: (error) => {
+        throw error;
+      },
+    });
+    expect(delivered).toBe(512);
+    expect(deliveredAtHeartbeat).toBeLessThan(512);
+  } finally {
+    now.mockRestore();
+  }
+});

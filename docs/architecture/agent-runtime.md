@@ -18,6 +18,38 @@ likewise restores user `input_image` data URLs, and images on legacy
 are skipped. Restoration rejects malformed base64 and images above the shared 10
 MiB decoded size limit used for uploads.
 
+Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
+and transcript projection use a 16 ms cooperative target. Projection uses the
+same per-entry builder as synchronous callers and yields between small batches,
+preserving complete content, deterministic IDs, ordering, and timestamps.
+Provider identity checks stop superseded reads and discard unfinished projection
+before publication. A single JSON.parse or projection entry remains atomic;
+particularly large tool results, garbage collection, or host scheduling can
+still exceed the target. This budget improves responsiveness; passive loads
+still await the complete history and can trade throughput for yielding.
+Cancelling one startup consumer leaves a shared, still-current hydration
+available to other consumers.
+
+Cold resumes overlap history hydration with adapter spawning and ACP
+initialization. Provider session loading/creation waits for the history barrier,
+which restores timestamps and establishes replay suppression before provider
+history events can arrive. Stop, shutdown, and initialization failure still
+terminate or fence the candidate before session RPCs. Provider deadlines apply
+to initialization and session creation; the local history barrier retains its
+previous independent wait. Passive chat loads continue to await complete history
+hydration.
+
+Replay batches up to 128 KiB retain their existing envelope. Larger batches use
+normal JSON event frames, with base64 fragments only for a single oversized
+event. Complete envelopes stay below 128 KiB, including large tool results and
+images. The client reconstructs the exact batch atomically before applying the
+existing load-request guard; incomplete, malformed, or out-of-order chunks
+cannot publish a partial transcript. Assembly expires after 30 seconds and
+resets on disconnect, session change, or unmount. The transport rejects batches
+above 128 MiB explicitly. Framing bounds each message, rather than reducing
+total replay bytes or adding pagination; the existing renderer transcript window
+and full backend transcript retention still apply.
+
 Upload validation checks the complete JPEG codestream through its end-of-image
 marker and permits trailing metadata, including Samsung screenshot capture
 information. Truncated image segments and scans remain invalid.

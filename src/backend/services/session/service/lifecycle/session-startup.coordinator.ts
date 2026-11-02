@@ -53,7 +53,7 @@ import {
 } from './session-startup-config-failure';
 import { SessionStartupPersistenceError } from './session-startup-configuration-finalizer';
 import {
-  prepareSessionHistoryForResume,
+  createSessionHistoryBarrier,
   type SessionStartupHistoryDependencies,
 } from './session-startup-history';
 import { dispatchStartupNotifications, startupCallerGuard } from './session-startup-notifications';
@@ -461,18 +461,16 @@ export class SessionStartupCoordinator {
       ownership
     );
 
-    const suppressReplay = await prepareSessionHistoryForResume(
+    const beforeSessionCreation = createSessionHistoryBarrier(
       sessionId,
       sessionContext,
       this.dependencies,
+      () => this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent),
       codexAccountContext
     );
-    await this.assertCreationAllowed(sessionId, stopGeneration, options.assertCurrent);
-    if (suppressReplay !== undefined) {
-      this.dependencies.acpEventProcessor.setReplaySuppression(sessionId, suppressReplay);
-    }
 
     const clientOptions: AcpClientOptions = {
+      beforeSessionCreation,
       assertCurrent: options.assertCurrent,
       assertCurrentSync: options.assertCurrentSync,
       ownedProcessGroup: await this.dependencies.eventAuthority?.isOwned(sessionId),
