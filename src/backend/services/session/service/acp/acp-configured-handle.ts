@@ -7,7 +7,7 @@ export async function withConfiguredAcpHandle<T>(
   sessionId: string,
   handle: AcpProcessHandle,
   operation: () => Promise<T>,
-  guard?: { check(): Promise<void>; assertCurrent(): void }
+  guard?: { check(): Promise<void>; assertCurrent?(): void }
 ): Promise<T> {
   while (handle.configurationReady !== undefined) {
     await handle.configurationReady;
@@ -16,7 +16,7 @@ export async function withConfiguredAcpHandle<T>(
   if (guard) {
     await guard.check();
     assertConfiguredAcpHandle(runtime, sessionId, handle);
-    guard.assertCurrent();
+    guard.assertCurrent?.();
   }
   const result = await operation();
   if (runtime.getClient(sessionId) !== handle || runtime.isStopInProgress(sessionId)) {

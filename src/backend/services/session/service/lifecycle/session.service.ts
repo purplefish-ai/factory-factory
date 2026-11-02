@@ -184,7 +184,7 @@ export class SessionService {
       this.assertPromptGeneration(sessionId, generation);
       if (guard) {
         await guard.check();
-        guard.assertCurrent();
+        guard.assertCurrent?.();
       }
       return this.executeAcpMessage(sessionId, prompt, undefined, guard);
     });

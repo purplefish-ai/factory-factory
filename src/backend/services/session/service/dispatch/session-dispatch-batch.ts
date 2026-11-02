@@ -155,7 +155,7 @@ async function dropDuplicateNotification(
 ) {
   if (guard) {
     await guard.check();
-    guard.assertCurrent();
+    guard.assertCurrent?.();
   }
   const claim = notifications.claimForDispatch(sessionId, messageId);
   if (claim.status === 'claimed') {
@@ -167,7 +167,7 @@ async function dropDuplicateNotification(
   if (duplicate) {
     if (guard) {
       await guard.check();
-      guard.assertCurrent();
+      guard.assertCurrent?.();
     }
     notifications.removeDuplicateFromQueue(sessionId, messageId);
   }
@@ -273,39 +273,48 @@ export async function prepareBackgroundForDispatch(
   isCurrent: () => boolean,
   guard?: SessionCallerGuard
 ): Promise<boolean> {
-  if (peeked.source) {
-    if (
-      dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||
-      sessionDomainService.getPendingInteractiveRequest(dbSessionId)
-    ) {
-      return false;
-    }
-    const prepared = await dependencies.backgroundDelivery.prepare(
-      dbSessionId,
-      peeked,
-      ...(guard ? [guard] : [])
-    );
+  if (!peeked.source) {
+    return true;
+  }
+  if (
+    dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||
+    sessionDomainService.getPendingInteractiveRequest(dbSessionId)
+  ) {
+    return false;
+  }
+  const prepared = await dependencies.backgroundDelivery.prepare(
+    dbSessionId,
+    peeked,
+    ...(guard ? [guard] : [])
+  );
+  try {
     if (guard) {
       await guard.check();
-      guard.assertCurrent();
+      guard.assertCurrent?.();
     }
-    if (prepared.status === 'discard') {
-      sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, {
-        expectedMessage: peeked,
-      });
-      return false;
+  } catch (error) {
+    if (prepared.status === 'ready') {
+      await prepared.releaseOnRejection(error);
     }
-    if (prepared.status !== 'ready') {
-      return false;
-    }
-    if (!isCurrent()) {
-      await dependencies.backgroundDelivery.fail(
-        peeked,
-        new Error('Session stopped before dispatch'),
-        'cancelled'
-      );
-      return false;
-    }
+    throw error;
   }
+  if (prepared.status === 'discard') {
+    sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, {
+      expectedMessage: peeked,
+    });
+    return false;
+  }
+  if (prepared.status !== 'ready') {
+    return false;
+  }
+  if (!isCurrent()) {
+    await dependencies.backgroundDelivery.fail(
+      peeked,
+      new Error('Session stopped before dispatch'),
+      'cancelled'
+    );
+    return false;
+  }
+
   return true;
 }

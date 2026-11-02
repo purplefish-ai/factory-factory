@@ -41,7 +41,8 @@ export interface SessionLifecycleWorkspaceBridge {
 /** Captured caller currentness carried through session configuration and provider effects. */
 export interface SessionCallerGuard {
   check(): Promise<void>;
-  assertCurrent(): void;
+  /** Present only when the caller also owns a synchronous local authority fence. */
+  assertCurrent?(): void;
 }
 
 /** Queued message dispatch callback needed by session lifecycle service */

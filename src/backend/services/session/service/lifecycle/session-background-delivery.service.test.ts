@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { prepareBackgroundForDispatch } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   SessionBackgroundDeliveryService,
@@ -437,11 +438,15 @@ it('does not forget a replacement token when failure begins after replacement en
   expect(sessionDomainService.getQueueLength(sessionId)).toBe(1);
 });
 
-it.each([false, true])(
-  'keeps replacement delivery ownership when an old ready result settles (same receipt=%s)',
-  async (sameReceipt) => {
+it.each([
+  { sameReceipt: false, recoveryFails: false },
+  { sameReceipt: true, recoveryFails: false },
+  { sameReceipt: true, recoveryFails: true },
+])(
+  'keeps replacement delivery ownership when an old ready result settles ($sameReceipt/$recoveryFails)',
+  async ({ sameReceipt, recoveryFails }) => {
     const service = new SessionBackgroundDeliveryService();
-    const sessionId = `late-ready-${sameReceipt}`;
+    const sessionId = `late-ready-${sameReceipt}-${recoveryFails}`;
     const oldDelivery = {
       deliveryId: 'old',
       sessionId,
@@ -464,7 +469,7 @@ it.each([false, true])(
     const fail = vi.fn(async () => ({ paused: false }));
     const recover = vi.fn(() => {
       expect(service.isDeliveryActive(replacementDelivery.deliveryId)).toBe(true);
-      return Promise.resolve();
+      return recoveryFails ? Promise.reject(new Error('Recovery unavailable')) : Promise.resolve();
     });
     let prepares = 0;
     service.configure({
@@ -488,7 +493,11 @@ it.each([false, true])(
     await service.prepare(sessionId, replacement);
 
     release({ status: 'ready', delivery: oldDelivery });
-    await expect(preparing).resolves.toEqual({ status: 'discard' });
+    if (recoveryFails) {
+      await expect(preparing).rejects.toThrow('Recovery unavailable');
+    } else {
+      await expect(preparing).resolves.toEqual({ status: 'discard' });
+    }
 
     expect(recover).toHaveBeenCalledWith(sessionId);
     expect(fail).not.toHaveBeenCalled();
@@ -670,3 +679,107 @@ it('does not validate or settle a replacement claim for an older message object'
   await service.complete(replacement);
   expect(complete).toHaveBeenCalledWith(second);
 });
+
+it.each(['none', 'before-rejection', 'during-release'] as const)(
+  'drains the exact outer-rejected claim with replacement=%s',
+  async (replacement) => {
+    const sessionId = `outer-claim-${replacement}`;
+    const service = new SessionBackgroundDeliveryService();
+    let attempt = 0;
+    const prepare = vi.fn(async () => ({
+      status: 'ready' as const,
+      delivery: {
+        deliveryId: 'frozen-delivery',
+        sessionId,
+        bindingRevision: 1,
+        eventIds: ['event'],
+        text: 'Facts',
+        attempt: ++attempt,
+      },
+    }));
+    let rejectGuard!: (error: Error) => void;
+    let reached!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const rejected = new Promise<void>((_resolve, reject) => {
+      rejectGuard = reject;
+    });
+    let releaseSettlement!: () => void;
+    let settling!: () => void;
+    const settlementEntered = new Promise<void>((resolve) => {
+      settling = resolve;
+    });
+    const settlement = new Promise<void>((resolve) => {
+      releaseSettlement = resolve;
+    });
+    const fail = vi.fn(async () => {
+      settling();
+      await settlement;
+      return { paused: false };
+    });
+    const validate = vi.fn(async () => true);
+    service.configure({
+      prepare,
+      validate,
+      fail,
+      complete: async () => undefined,
+      recover: async () => undefined,
+      pause: async () => undefined,
+      resume: async () => undefined,
+    });
+    service.enqueue(sessionId, request);
+    const message = sessionDomainService.peekNextMessage(sessionId)!;
+    let checks = 0;
+    const reason = new Error('Captured caller rejected after preparation');
+    const dispatch = prepareBackgroundForDispatch(
+      {
+        backgroundDelivery: service,
+        runtimeManager: { isSessionPromptInFlight: () => false, isSessionRunning: () => true },
+      },
+      sessionId,
+      message,
+      () => true,
+      {
+        assertCurrent: () => undefined,
+        check: async () => {
+          if (++checks === 3) {
+            reached();
+            await rejected;
+          }
+        },
+      }
+    ).catch((error: unknown) => error);
+    try {
+      await entered;
+      const old = prepare.mock.results[0]!;
+      const oldResult = await old.value;
+      if (replacement === 'before-rejection') {
+        await service.prepare(sessionId, message);
+      }
+      rejectGuard(reason);
+      if (replacement === 'during-release') {
+        expect(
+          await Promise.race([settlementEntered.then(() => true), dispatch.then(() => false)])
+        ).toBe(true);
+        expect(service.isDeliveryActive('frozen-delivery')).toBe(true);
+        await service.prepare(sessionId, message);
+      }
+      releaseSettlement();
+      expect(await dispatch).toBe(reason);
+      expect(fail).toHaveBeenCalledExactlyOnceWith(oldResult.delivery, reason);
+      expect(service.isDeliveryActive('frozen-delivery')).toBe(replacement !== 'none');
+      expect(sessionDomainService.peekNextMessage(sessionId)).toBe(message);
+      if (replacement !== 'none') {
+        expect(await service.validate(message)).toBe(true);
+        expect(validate).toHaveBeenLastCalledWith(expect.objectContaining({ attempt: 2 }));
+      }
+    } finally {
+      rejectGuard(reason);
+      releaseSettlement();
+      await dispatch;
+      await service.fail(message, new Error('Fixture cleanup'));
+      sessionDomainService.clearSession(sessionId);
+    }
+  }
+);

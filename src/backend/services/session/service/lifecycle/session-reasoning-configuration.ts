@@ -46,7 +46,7 @@ export async function applyReasoningEffortTarget(
   if (params.guard) {
     await params.guard.check();
   }
-  params.guard?.assertCurrent();
+  params.guard?.assertCurrent?.();
   params.assertCurrent?.();
   const reasoningOption = supportedReasoningOption(params);
   if (!reasoningOption) {
@@ -66,7 +66,7 @@ export async function applyReasoningEffortTarget(
   if (params.guard) {
     await params.guard.check();
   }
-  params.guard?.assertCurrent();
+  params.guard?.assertCurrent?.();
   params.assertCurrent?.();
   const configOptions = structuredClone(params.handle.configOptions);
   if (

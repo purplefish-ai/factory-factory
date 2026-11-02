@@ -32,7 +32,10 @@ export async function dispatchStartupNotifications(
 export function startupCallerGuard(
   options?: Pick<StartSessionOptions, 'assertCurrent' | 'assertCurrentSync'>
 ): SessionCallerGuard | undefined {
-  return options?.assertCurrent && options.assertCurrentSync
-    ? { check: options.assertCurrent, assertCurrent: options.assertCurrentSync }
+  return options?.assertCurrent
+    ? {
+        check: options.assertCurrent,
+        ...(options.assertCurrentSync && { assertCurrent: options.assertCurrentSync }),
+      }
     : undefined;
 }

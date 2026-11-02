@@ -39,11 +39,11 @@ export class SessionConfigMutationQueue {
             if (guard) {
               await guard.check();
             }
-            guard?.assertCurrent();
+            guard?.assertCurrent?.();
             return await operation();
           }
         } catch (error) {
-          guard?.assertCurrent();
+          guard?.assertCurrent?.();
           const current = this.runtime.getClient(sessionId);
           if (
             current &&

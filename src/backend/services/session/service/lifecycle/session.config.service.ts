@@ -732,7 +732,7 @@ export class SessionConfigService {
         targetReasoningEffort,
         source: requestedReasoningEffort ? 'message' : 'settings',
         assertCurrent: () => {
-          guard?.assertCurrent();
+          guard?.assertCurrent?.();
           assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
         },
         guard,
@@ -846,12 +846,12 @@ export class SessionConfigService {
     if (guard) {
       await guard.check();
     }
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
 
     assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     const configOptions = structuredClone(acpHandle.configOptions);
     const accepted = this.acceptConfiguration(sessionId, acpHandle, () => {
-      guard?.assertCurrent();
+      guard?.assertCurrent?.();
       assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     });
     if (

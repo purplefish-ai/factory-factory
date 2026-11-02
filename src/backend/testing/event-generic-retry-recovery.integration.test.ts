@@ -12,6 +12,7 @@ import {
   launch,
   strictStop,
   recoveryWorktree,
+  readyRetryPRFixture,
 } from '@/test-utils/event-generic-retry.test-support';
 
 it('rejects manual event RETRY while a generic startup script holds PROVISIONING, then permits READY', async () => {
@@ -809,83 +810,72 @@ it.each([true, false])(
   }
 );
 
-it.each([true, false])(
-  'releases only the actual prepared PR claim before stale token coalescing, revoked=%s',
-  async (revoked) => {
-    await launch();
-    providers[0]!.response.resolve({ stopReason: 'end_turn' });
-    await consumer.drain();
-    await recoveryWorktree();
-    const other = await db.prisma.agentSession.create({
-      data: {
-        workspaceId: h.claim.reservedWorkspaceId,
-        workflow: 'default',
-        provider: 'CODEX',
-        model: 'gpt-5.4',
-        codexAccountId: 'event-test-account',
-        status: 'IDLE',
-      },
-    });
-    await h.session.sessionLifecycleService.startSession(other.id, { initialPrompt: '' });
-    const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
-    const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
-      h.claim.reservedWorkspaceId
-    );
-    if (!workspace) {
-      throw new Error('Missing workspace');
-    }
-    const guard = await captureWorkspaceRetryGuard(workspace);
-    await db.prisma.workspacePRMonitoring.update({
-      where: { workspaceId: workspace.id },
-      data: { enabled: true, bindingRevision: 1, eventEpoch: 1, recipientSessionId: other.id },
-    });
-    const { redObservation } = await vi.importActual<
-      typeof import('@/shared/pr-monitoring.test-helpers')
-    >('@/shared/pr-monitoring.test-helpers');
-    for (const [id, number] of [
-      ['first', 1],
-      ['second', 2],
-    ] as const) {
-      const observation = {
-        ...redObservation,
-        number,
-        url: `https://github.com/org/repo/pull/${number}`,
-      };
-      await db.prisma.workspacePR.create({
-        data: { id, workspaceId: workspace.id, url: observation.url },
-      });
-      expect(
-        await h.workspace.workspacePrSnapshotService.acceptMonitoredObservation({
-          target: { workspaceId: workspace.id, prId: id },
-          expectedPrRevision: 0,
-          expectedEventEpoch: 1,
-          observation,
-        })
-      ).toMatchObject({ applied: true });
-    }
-    const { createPRBackgroundDeliveryPort } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-event-delivery-port')
-    >('@/backend/orchestration/pr-event-delivery-port');
-    const { defaultPRDeliveryPorts } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-delivery-dependencies')
-    >('@/backend/orchestration/pr-delivery-dependencies');
-    const port = createPRBackgroundDeliveryPort({
-      ...defaultPRDeliveryPorts,
-      refreshObservation: async () => true,
-    });
+it.each([
+  ['inner', 'head', true],
+  ['inner', 'head', false],
+  ['outer', 'head', true],
+  ['outer', 'head', false],
+  ['outer', 'batch', true],
+  ['outer', 'batch', false],
+] as const)(
+  'releases exact PR claims at %s guard for %s dispatch, revoked=%s',
+  async (edge, position, revoked) => {
+    const { other, workspace, guard, port } = await readyRetryPRFixture();
     const held = boundary();
     h.session.sessionBackgroundDeliveryService.configure({
       ...port,
       prepare: async (input) => {
         const result = await port.prepare(input);
         expect(result.status).toBe('ready');
-        await held.wait();
+        if (edge === 'inner') {
+          await held.wait();
+        }
         return result;
       },
     });
-    for (const prId of ['first', 'second']) {
+    let published = false;
+    let deliveryId: string | undefined;
+    const prepare = h.session.sessionBackgroundDeliveryService.prepare.bind(
+      h.session.sessionBackgroundDeliveryService
+    );
+    vi.spyOn(h.session.sessionBackgroundDeliveryService, 'prepare').mockImplementation(
+      async (...args) => {
+        const result = await prepare(...args);
+        if (result.status === 'ready') {
+          deliveryId = result.delivery.deliveryId;
+          published = edge === 'outer';
+        }
+        return result;
+      }
+    );
+    const dispatchGuard = {
+      ...guard,
+      check: async () => {
+        await guard.check();
+        if (published) {
+          published = false;
+          await held.wait();
+          await guard.check();
+        }
+      },
+    };
+    const addHuman = () =>
+      h.session.sessionDomainService.enqueue(other.id, {
+        id: 'human-with-prepared-claim',
+        text: 'Retain human input',
+        timestamp: '',
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      });
+    if (position === 'batch') {
+      addHuman();
+    }
+    providers[1]!.connection.setSessionConfigOption.mockClear();
+    for (const prId of edge === 'inner' ? ['first', 'second'] : ['first']) {
       expect(
         h.session.sessionBackgroundDeliveryService.enqueue(other.id, {
           workspaceId: workspace.id,
@@ -894,12 +884,20 @@ it.each([true, false])(
         })
       ).toMatchObject({ queued: true });
     }
-    const before = structuredClone(h.session.sessionDomainService.getQueueSnapshot(other.id));
+    let before = structuredClone(h.session.sessionDomainService.getQueueSnapshot(other.id));
     const dispatch = h.session.sessionDispatchService
-      .tryDispatchNextMessage(other.id, { guard })
+      .tryDispatchNextMessage(other.id, { guard: dispatchGuard })
       .catch((error: unknown) => error);
     try {
       await held.entered;
+      if (edge === 'outer') {
+        expect(deliveryId).toBeDefined();
+        expect(h.session.sessionBackgroundDeliveryService.isDeliveryActive(deliveryId!)).toBe(true);
+        if (revoked && position === 'head') {
+          addHuman();
+        }
+        before = structuredClone(h.session.sessionDomainService.getQueueSnapshot(other.id));
+      }
       expect(
         await db.prisma.workspacePREvent.count({
           where: { workspaceId: workspace.id, state: 'DISPATCHING' },
@@ -918,6 +916,12 @@ it.each([true, false])(
       providers[1]!.response.resolve({ stopReason: 'end_turn' });
     }
     await dispatch;
+    if (deliveryId) {
+      expect(h.session.sessionBackgroundDeliveryService.isDeliveryActive(deliveryId)).toBe(false);
+    }
+    if (revoked) {
+      expect(providers[1]!.connection.setSessionConfigOption).not.toHaveBeenCalled();
+    }
     expect(h.session.sessionDomainService.getQueueSnapshot(other.id)).toEqual(
       revoked ? before : []
     );

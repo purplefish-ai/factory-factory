@@ -25,6 +25,9 @@ beforeEach(async () => {
   const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
     '@/backend/services/codex-accounts'
   );
+  vi.spyOn(accounts.codexAccountService, 'withAccountReservation').mockImplementation(
+    (_options, operation) => operation('event-test-account')
+  );
   vi.spyOn(accounts.codexAccountService, 'getEnabledAccountIds').mockResolvedValue([
     'event-test-account',
   ]);
@@ -166,4 +169,78 @@ export async function beginIndependentPrompt(sessionId: string, replacement: tru
   await provider.called;
   expect(provider.handle.isPromptInFlight).toBe(true);
   return { turn, provider };
+}
+
+export async function readyRetryPRFixture() {
+  await launch();
+  const initial = providers[0];
+  if (!initial) {
+    throw new Error('Initial fixture provider missing');
+  }
+  initial.response.resolve({ stopReason: 'end_turn' });
+  await consumer.drain();
+  await recoveryWorktree();
+  const other = await db.prisma.agentSession.create({
+    data: {
+      workspaceId: h.claim.reservedWorkspaceId,
+      workflow: 'default',
+      provider: 'CODEX',
+      model: 'gpt-5.4',
+      codexAccountId: 'event-test-account',
+      status: 'IDLE',
+    },
+  });
+  await h.session.sessionLifecycleService.startSession(other.id, { initialPrompt: '' });
+  const { captureWorkspaceRetryGuard } = await vi.importActual<
+    typeof import('@/backend/orchestration/workspace-retry-authority')
+  >('@/backend/orchestration/workspace-retry-authority');
+  const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
+    h.claim.reservedWorkspaceId
+  );
+  if (!workspace) {
+    throw new Error('Missing workspace');
+  }
+  const guard = await captureWorkspaceRetryGuard(workspace);
+  await db.prisma.workspacePRMonitoring.update({
+    where: { workspaceId: workspace.id },
+    data: { enabled: true, bindingRevision: 1, eventEpoch: 1, recipientSessionId: other.id },
+  });
+  const { redObservation } = await vi.importActual<
+    typeof import('@/shared/pr-monitoring.test-helpers')
+  >('@/shared/pr-monitoring.test-helpers');
+  for (const [id, number] of [
+    ['first', 1],
+    ['second', 2],
+  ] as const) {
+    const observation = {
+      ...redObservation,
+      number,
+      url: `https://github.com/org/repo/pull/${number}`,
+    };
+    await db.prisma.workspacePR.create({
+      data: { id, workspaceId: workspace.id, url: observation.url },
+    });
+    expect(
+      await h.workspace.workspacePrSnapshotService.acceptMonitoredObservation({
+        target: { workspaceId: workspace.id, prId: id },
+        expectedPrRevision: 0,
+        expectedEventEpoch: 1,
+        observation,
+      })
+    ).toMatchObject({ applied: true });
+  }
+  const { createPRBackgroundDeliveryPort } = await vi.importActual<
+    typeof import('@/backend/orchestration/pr-event-delivery-port')
+  >('@/backend/orchestration/pr-event-delivery-port');
+  const { defaultPRDeliveryPorts } = await vi.importActual<
+    typeof import('@/backend/orchestration/pr-delivery-dependencies')
+  >('@/backend/orchestration/pr-delivery-dependencies');
+  const port = createPRBackgroundDeliveryPort({
+    ...defaultPRDeliveryPorts,
+    refreshObservation: async () => true,
+  });
+  if (!guard) {
+    throw new Error('Missing event retry guard');
+  }
+  return { other, workspace, guard, port };
 }

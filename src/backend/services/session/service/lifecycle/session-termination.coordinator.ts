@@ -303,6 +303,9 @@ export class SessionTerminationCoordinator {
         });
       }
 
+      // The explicit stop reservation still owns this session. Drain input that
+      // arrived while physical termination and finalization were awaited.
+      this.dependencies.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
       try {
         this.dependencies.workflowFinalizer.clearInactiveSession(sessionId, 'manual_stop');
         logger.info('ACP session stopped', {

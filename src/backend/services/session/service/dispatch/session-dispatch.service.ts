@@ -184,7 +184,7 @@ export class SessionDispatchService {
       let outcome: 'continue' | 'done' = 'continue';
       while (outcome === 'continue') {
         await options.guard?.check();
-        options.guard?.assertCurrent();
+        options.guard?.assertCurrent?.();
         outcome = await this.dispatchHeadOfQueue(dbSessionId, stopGeneration, options.guard);
       }
     } finally {
@@ -203,7 +203,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): Promise<'continue' | 'done'> {
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     // Peek first — message stays in queue (visible in snapshots during auto-start).
     const peeked = sessionDomainService.peekNextMessage(dbSessionId);
     if (!peeked) {
@@ -225,7 +225,7 @@ export class SessionDispatchService {
       ) {
         if (guard) {
           await guard.check();
-          guard.assertCurrent();
+          guard.assertCurrent?.();
         }
         return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
           ? 'continue'
@@ -255,7 +255,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): Promise<'retry' | undefined> {
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
@@ -291,7 +291,7 @@ export class SessionDispatchService {
       return;
     }
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     const batch = await collectDispatchBatch({
       sessionId: dbSessionId,
       first: peeked,
@@ -317,7 +317,7 @@ export class SessionDispatchService {
     });
     try {
       await guard?.check();
-      guard?.assertCurrent();
+      guard?.assertCurrent?.();
     } catch (error) {
       batch.release();
       throw error;
@@ -328,7 +328,7 @@ export class SessionDispatchService {
       backgroundDelivery: this.dependencies.backgroundDelivery,
       isCurrent: () => {
         try {
-          guard?.assertCurrent();
+          guard?.assertCurrent?.();
         } catch {
           return false;
         }
@@ -361,7 +361,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): Promise<{ client: unknown } | null> {
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked, guard);
     if (!(clientResult && this.isDispatchGenerationCurrent(dbSessionId, stopGeneration))) {
       await this.releaseStoppedBackground(peeked);
@@ -383,7 +383,7 @@ export class SessionDispatchService {
     if (peeked.source && !(await this.dependencies.backgroundDelivery.validate(peeked))) {
       if (guard) {
         await guard.check();
-        guard.assertCurrent();
+        guard.assertCurrent?.();
       }
       await this.dependencies.backgroundDelivery.fail(
         peeked,
@@ -392,7 +392,7 @@ export class SessionDispatchService {
       );
       if (guard) {
         await guard.check();
-        guard.assertCurrent();
+        guard.assertCurrent?.();
       }
       sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, { expectedMessage: peeked });
       return null;
@@ -622,7 +622,7 @@ export class SessionDispatchService {
       return true;
     } catch (error) {
       await guard?.check();
-      guard?.assertCurrent();
+      guard?.assertCurrent?.();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to auto-start client for queue dispatch', {
         dbSessionId,
@@ -648,7 +648,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): Promise<void> {
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     const contents = prepareBatchContents(
       messages,
       (message) => buildMessageContent(message),
@@ -684,7 +684,7 @@ export class SessionDispatchService {
     }
 
     await guard?.check();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     sessionDomainService.markRunning(dbSessionId);
 
     const content = combineBatchContents(messages, contents);

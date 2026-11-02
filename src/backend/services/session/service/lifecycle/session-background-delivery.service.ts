@@ -100,7 +100,7 @@ export class SessionBackgroundDeliveryService {
   async prepare(sessionId: string, message: QueuedMessage, guard?: SessionCallerGuard) {
     if (guard) {
       await guard.check();
-      guard.assertCurrent();
+      guard.assertCurrent?.();
     }
     if (!(message.source && this.port)) {
       this.forgetToken(message.id);
@@ -112,7 +112,7 @@ export class SessionBackgroundDeliveryService {
     try {
       if (guard) {
         await guard.check();
-        guard.assertCurrent();
+        guard.assertCurrent?.();
       }
       if (result.status === 'discard' && token && [...this.tokens.values()].includes(token)) {
         this.forgetToken(message.id);
@@ -124,16 +124,30 @@ export class SessionBackgroundDeliveryService {
         if (!token || currentToken !== token || token.message !== message) {
           // Receipt recovery checks active deliveries before settling. A direct
           // stale failure could settle a replacement that reused the frozen ID.
-          await this.port.recover(sessionId);
+          await port.recover(sessionId);
           return { status: 'discard' as const };
         }
         message.text = result.delivery.text;
         this.deliveries.set(message.id, { delivery: result.delivery, message });
         this.coalesceMainTokens(sessionId, message, guard);
+        return {
+          ...result,
+          releaseOnRejection: async (error: unknown) => {
+            try {
+              await port.fail(result.delivery, error);
+            } finally {
+              this.forgetCapturedDelivery(message, result.delivery);
+            }
+          },
+        };
       }
       return result;
     } catch (error) {
-      if (result.status === 'ready') {
+      if (
+        result.status === 'ready' &&
+        token?.message === message &&
+        [...this.tokens.values()].includes(token)
+      ) {
         this.forgetCapturedDelivery(message, result.delivery);
         await port.fail(result.delivery, error);
       }
@@ -168,7 +182,7 @@ export class SessionBackgroundDeliveryService {
       ) {
         continue;
       }
-      guard?.assertCurrent();
+      guard?.assertCurrent?.();
       const removed = sessionDomainService.removeQueuedMessage(sessionId, token.messageId, {
         expectedMessage: token.message,
         recordCancellation: false,

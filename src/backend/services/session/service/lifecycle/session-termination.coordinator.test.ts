@@ -640,6 +640,7 @@ describe('SessionTerminationCoordinator races', () => {
       'workspace-idle',
       'clear-acp-state',
       'deliberate-finalization',
+      'clear-queued-work',
       'clear-inactive',
       'close-trace',
       'release-stop',

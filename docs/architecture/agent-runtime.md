@@ -1282,13 +1282,30 @@ add a workspace-wide activity ban or new process-stop authority.
 Startup carries the same captured caller checks through recovered-notification
 queue dispatch, queue-triggered client creation, configuration and the common
 initial-prompt branch. A guard wait cannot switch the operation to a replacement
-runtime. Both runtime identity and caller currentness are checked synchronously
-at the provider effect; ordinary ready prompts retain their immediate dispatch.
-A rejected, unsent retry restores only its own runtime's idle state.
+runtime. Runtime identity and the paired workspace retry caller fence are
+checked synchronously at the provider effect; ordinary ready prompts retain
+their immediate dispatch. A rejected, unsent retry restores only its own
+runtime's idle state.
 
-Owned startup cleanup stops only its captured candidate. Managed runtime exits
-retain queued input; explicit session stop still clears it before stopping the
-runtime, and unmanaged exits retain their existing queue reset. Headless stores
-with queued work remain in memory until consumption, explicit stop or shutdown;
-empty inactive stores can still be evicted. Recovered durable notifications stay
-pending when a guarded dispatch is rejected.
+Paired workspace retry startup cleanup stops only its captured candidate.
+Managed runtime exits retain queued input; explicit session stop still clears it
+before stopping the runtime, and unmanaged exits retain their existing queue
+reset. Headless stores with queued work remain in memory until consumption,
+explicit stop or shutdown; empty inactive stores can still be evicted. Recovered
+durable notifications stay pending when a guarded dispatch is rejected.
+
+A prepared PR delivery carries its captured rejection cleanup through the
+dispatch caller's final authority check. Rejection drains that exact claim
+before returning; cleanup does not look up a replacement delivery by
+queued-message ID.
+
+Startup callers that own only an asynchronous authority check carry that check
+through recovered-notification dispatch. A synchronous caller fence is optional
+on the session dispatch contract; workspace retry guards still require their
+local fence. Async-only dedicated bootstrap retains its existing full-stop
+cleanup: a rejected dispatch leaves durable notifications pending, but that
+cleanup may clear in-memory input. Explicit session stop clears queued work both
+on entry and after physical cleanup, while its stop reservation remains held, so
+input arriving during the stop is cancelled. Captured PR failure settlement
+compares the attempt as well as the existing binding and recipient identity; a
+failed settlement cannot pause a replacement binding.

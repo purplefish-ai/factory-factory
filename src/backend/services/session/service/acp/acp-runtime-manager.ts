@@ -203,7 +203,7 @@ export class AcpRuntimeManager {
     prompt: ContentBlock[],
     timeoutMs?: number,
     observed?: ObservedAcpPrompt,
-    guard?: { check(): Promise<void>; assertCurrent(): void }
+    guard?: { check(): Promise<void>; assertCurrent?(): void }
   ): Promise<{ stopReason: string }> {
     const handle = this.requireInstalledHandle(sessionId);
     while (handle.configurationReady !== undefined || handle.pendingConfigUpdates !== undefined) {
@@ -233,7 +233,7 @@ export class AcpRuntimeManager {
       await guard.check();
     }
     assertCurrent();
-    guard?.assertCurrent();
+    guard?.assertCurrent?.();
     this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     if (observed) {
       handle.eventLifecycleGeneration = observed.lifecycleGeneration;
@@ -256,7 +256,7 @@ export class AcpRuntimeManager {
       observation,
       () => {
         assertCurrent();
-        guard?.assertCurrent();
+        guard?.assertCurrent?.();
       }
     );
   }

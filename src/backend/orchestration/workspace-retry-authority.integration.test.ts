@@ -19,6 +19,7 @@ let runId: string;
 let caller: ReturnType<
   typeof import('@/backend/trpc/workspace/init.trpc').workspaceInitRouter.createCaller
 >;
+let afterRetryCapture: (() => void) | undefined;
 let afterWorkspaceWrite: (() => Promise<void>) | undefined;
 const initialize = vi.fn(async () => undefined);
 const config = vi.fn(async () => null);
@@ -26,6 +27,7 @@ const scripts = vi.fn(async () => ({ handled: true, success: true }));
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   afterWorkspaceWrite = undefined;
+  afterRetryCapture = undefined;
   const observed = db.prisma.$extends({
     query: {
       workspace: {
@@ -76,6 +78,13 @@ beforeEach(async () => {
         services: {
           ...h.workspace,
           ...authority,
+          captureWorkspaceRetryGuard: async (
+            ...args: Parameters<typeof authority.captureWorkspaceRetryGuard>
+          ) => {
+            const guard = await authority.captureWorkspaceRetryGuard(...args);
+            afterRetryCapture?.();
+            return guard;
+          },
           enqueueWorkspaceInitializationTask,
           createLogger,
           initializeWorkspaceWorktree: initialize,
@@ -336,6 +345,7 @@ it('rolls back a real workspace write when initial admission appears during the 
   write.release();
   expect(await outcome).toBeInstanceOf(Error);
   afterWorkspaceWrite = undefined;
+  afterRetryCapture = undefined;
   ownerRead.release();
   await initial;
   expect(await db.prisma.workspace.findUnique({ where: { id: workspaceId } })).toMatchObject({
@@ -502,11 +512,21 @@ it('does not replay a captured READY warning after its predecessor finishes setu
   const held = boundary();
   const predecessor = enqueueWorkspaceInitializationTask(workspaceId, () => held.wait());
   await held.entered;
+  let captures = 0;
+  let bothCaptured!: () => void;
+  const captured = new Promise<void>((resolve) => {
+    bothCaptured = resolve;
+  });
+  afterRetryCapture = () => {
+    if (++captures === 2) {
+      bothCaptured();
+    }
+  };
   const first = caller.retryInit({ id: workspaceId });
   const second = caller.retryInit({ id: workspaceId });
   // Both RPCs must have captured the same READY warning before the tail runs.
-  await vi.waitFor(() => expect(config).not.toHaveBeenCalled());
-  await new Promise<void>((resolve) => setImmediate(resolve));
+  await captured;
+  expect(config).not.toHaveBeenCalled();
   held.release();
   await predecessor;
   await Promise.allSettled([first, second]);

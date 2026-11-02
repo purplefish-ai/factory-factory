@@ -223,6 +223,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     });
     const prepare = vi.spyOn(sessionBackgroundDeliveryService, 'prepare').mockResolvedValue({
       status: 'ready',
+      releaseOnRejection: async () => undefined,
       delivery: {
         deliveryId: 'd',
         sessionId: 's1',
@@ -273,6 +274,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
           }
           return Promise.resolve({
             status: 'ready' as const,
+            releaseOnRejection: async () => undefined,
             delivery: {
               deliveryId: 'd',
               sessionId: 's1',
@@ -314,6 +316,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     );
     const prepare = vi.spyOn(sessionBackgroundDeliveryService, 'prepare').mockResolvedValue({
       status: 'ready',
+      releaseOnRejection: async () => undefined,
       delivery: {
         deliveryId: 'd',
         sessionId: 's1',
@@ -355,6 +358,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessage);
         return {
           status: 'ready',
+          releaseOnRejection: async () => undefined,
           delivery: {
             deliveryId: 'd',
             sessionId: 's1',
@@ -394,6 +398,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue({ providerSessionId: 'existing' });
     const prepare = vi.spyOn(sessionBackgroundDeliveryService, 'prepare').mockResolvedValue({
       status: 'ready',
+      releaseOnRejection: async () => undefined,
       delivery: {
         deliveryId: 'd',
         sessionId: 's1',
