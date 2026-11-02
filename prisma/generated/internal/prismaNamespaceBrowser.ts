@@ -390,6 +390,7 @@ export const UserSettingsScalarFieldEnum = {
   customIdeCommand: 'customIdeCommand',
   playSoundOnComplete: 'playSoundOnComplete',
   notificationSoundPath: 'notificationSoundPath',
+  childWorkspacesEnabled: 'childWorkspacesEnabled',
   workspaceOrder: 'workspaceOrder',
   cachedSlashCommands: 'cachedSlashCommands',
   ratchetEnabled: 'ratchetEnabled',

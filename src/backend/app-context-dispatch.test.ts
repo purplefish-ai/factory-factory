@@ -158,6 +158,9 @@ describe('application queue producer composition', () => {
       vi.spyOn(graph.services.sessionDataService, 'createAgentSession').mockResolvedValue(
         unsafeCoerce({ id: 'session-init' })
       );
+      vi.spyOn(graph.services.userSettingsQueryService, 'get').mockResolvedValueOnce(
+        unsafeCoerce({ childWorkspacesEnabled: true })
+      );
       if (source === 'child') {
         await graph.services.createChildWorkspace({
           parentWorkspaceId: 'parent',

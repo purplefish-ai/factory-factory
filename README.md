@@ -179,6 +179,12 @@ remain connected to Tailscale. Installation does not add offline workspace
 access or keep sessions connected while the phone suspends the app; reopen it to
 reconnect. No app store account or native mobile build is needed.
 
+On desktop, install from Chrome or Edge's address bar or browser menu. With
+Window Controls Overlay enabled, the project/workspace header shares one row
+with the native window controls; drag empty header space to move the window. The
+header leaves room for controls on either side. Browsers that do not support the
+overlay, including Safari web apps, keep their standard title bar.
+
 For builds using relative assets (`VITE_BASE_PATH=./`) behind a path-based
 proxy, also set `VITE_WEB_APP_BASE_PATH` to the absolute deployment prefix (e.g.
 `/machine/example/api/port/3000/`). Installation links then remain stable when

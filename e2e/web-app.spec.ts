@@ -7,6 +7,7 @@ const manifestSchema = z.object({
   start_url: z.string(),
   scope: z.string(),
   display: z.literal('standalone'),
+  display_override: z.tuple([z.literal('window-controls-overlay')]),
   icons: z.array(z.object({ src: z.string(), sizes: z.string(), type: z.literal('image/png') })),
 });
 

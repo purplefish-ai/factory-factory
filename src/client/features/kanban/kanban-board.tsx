@@ -18,6 +18,7 @@ import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
+import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
 
 export function KanbanControls() {
@@ -48,7 +49,18 @@ interface WorkspacesByColumn {
   DONE: WorkspaceWithKanban[];
 }
 
+const EMPTY_WORKSPACES: WorkspaceWithKanban[] = [];
+
 export function KanbanBoard() {
+  const { workspaces, projectId } = useKanban();
+  return (
+    <KanbanFamilyProvider key={projectId} workspaces={workspaces ?? EMPTY_WORKSPACES}>
+      <KanbanBoardContent />
+    </KanbanFamilyProvider>
+  );
+}
+
+function KanbanBoardContent() {
   const {
     projectId,
     projectSlug,

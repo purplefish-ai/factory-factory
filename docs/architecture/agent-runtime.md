@@ -70,6 +70,14 @@ while their provider dispatch is unsettled, including across session stop/reset.
 Only settled transcript evidence can acknowledge delivery; a failed send leaves
 its durable notification pending for a later startup to recover.
 
+Child workspaces are enabled by default. Settings → General → Child Workspaces
+can disable their controls, MCP tools, and creation through the UI or MCP.
+Existing children and notifications are preserved. MCP checks the current
+setting when listing or calling child workspace tools; disabled tools are
+rejected even in running sessions. Start a new conversation after re-enabling if
+its provider has cached the disabled tool catalog. Agent-authoring tools remain
+available.
+
 Child workspace creation offers active projects only and rejects archived target
 projects at the orchestration boundary, including requests from MCP clients or
 stale browser selections. Child inserts also connect only to active projects
@@ -1247,8 +1255,8 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents remain
-unactivatable until operator recovery, lossless predelete result capture,
-retention, native capability validation and UI gates exist.
+unactivatable until operator recovery, lossless predelete result capture, native
+capability validation and UI gates exist.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or

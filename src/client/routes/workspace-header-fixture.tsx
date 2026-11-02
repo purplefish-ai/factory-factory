@@ -25,6 +25,7 @@ const project = {
 const workspace: Partial<WorkspaceHeaderWorkspace> & { id: string } = {
   id: 'header-workspace',
   projectId: project.id,
+  childWorkspaceCount: 0,
   name: 'A deliberately long workspace title for responsive header regression coverage',
   branchName: 'purplefish-ai/our-projects-page-long-workspace-branch',
   status: 'READY',
@@ -70,6 +71,13 @@ const workspace: Partial<WorkspaceHeaderWorkspace> & { id: string } = {
   },
   githubIssueNumber: 3456,
   githubIssueUrl: 'https://github.com/example/repo/issues/3456',
+};
+const familyParent = {
+  id: 'family-parent',
+  name: 'Authentication refactor across several projects',
+  projectId: 'api',
+  projectName: 'API',
+  projectSlug: 'api',
 };
 const navigation: AppNavigationData = {
   projects: undefined,
@@ -129,7 +137,12 @@ function FixtureHeader({ variant }: { variant: string | null }) {
   }
   return (
     <WorkspaceDetailHeaderSlot
-      workspace={workspace as WorkspaceHeaderWorkspace}
+      workspace={
+        {
+          ...workspace,
+          ...(variant === 'family' ? { parentWorkspace: familyParent } : {}),
+        } as WorkspaceHeaderWorkspace
+      }
       workspaceId={workspace.id}
       availableIdes={[{ id: 'vscode', name: 'VS Code' }]}
       preferredIde="vscode"
@@ -182,6 +195,17 @@ export function WorkspaceHeaderFixture({
                     };
                   case 'workspace.listForProject':
                     return [];
+                  case 'workspace.get':
+                    return { ...familyParent, status: 'READY', kanbanColumn: 'WAITING' };
+                  case 'workspace.listChildren':
+                    return [
+                      {
+                        ...workspace,
+                        projectName: project.name,
+                        projectSlug: project.slug,
+                        kanbanColumn: 'WORKING',
+                      },
+                    ];
                   case 'userSettings.get':
                     return { defaultSessionProvider: 'CLAUDE' };
                   case 'admin.checkCLIHealth':

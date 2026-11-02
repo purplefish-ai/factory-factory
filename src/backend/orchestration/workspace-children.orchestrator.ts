@@ -5,7 +5,7 @@ import {
   workspaceDataService,
   workspaceNotificationService,
 } from '@/backend/services/workspace';
-import type { WorkspaceNotification } from '@prisma-gen/client';
+import type { UserSettings, WorkspaceNotification } from '@prisma-gen/client';
 import type {
   ChildWorkspaceLaunchSource,
   WorkspaceLauncher,
@@ -14,6 +14,7 @@ import type {
 const logger = createLogger('workspace-children-orchestrator');
 
 export interface ChildWorkspaceLaunchPorts {
+  getSettings: () => Promise<Pick<UserSettings, 'childWorkspacesEnabled'>>;
   findProject: typeof projectManagementService.findById;
   launchWorkspace: WorkspaceLauncher<ChildWorkspaceLaunchSource>;
 }
@@ -36,6 +37,11 @@ export async function createChildWorkspace(
   input: CreateChildWorkspaceInput,
   ports: ChildWorkspaceLaunchPorts
 ): Promise<string> {
+  const settings = await ports.getSettings();
+  if (!settings.childWorkspacesEnabled) {
+    throw new ApplicationError('PRECONDITION_FAILED', 'Child workspaces are disabled in Settings');
+  }
+
   logger.debug('Creating child workspace', {
     parentWorkspaceId: input.parentWorkspaceId,
     projectId: input.projectId,

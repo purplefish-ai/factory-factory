@@ -39,6 +39,12 @@ const referenceInput = z.strictObject({
   workspaceId: z.string().min(1),
   proposalId: z.string().min(1),
 });
+// Infinite queries add direction even on the first page. The domain list is
+// forward-only, so validate and remove that transport metadata here.
+const agentListQueryInputSchema = agentListInputSchema
+  .extend({ direction: z.literal('forward').optional() })
+  .transform(({ projectId, limit, cursor }) => ({ projectId, limit, cursor }));
+
 export const agentRouter = router({
   recoveryTarget: trustedLocalProcedure
     .input(agentRecoveryTargetInputSchema)
@@ -57,7 +63,7 @@ export const agentRouter = router({
       ctx.appContext.services.agentManagement.resolveAmbiguousRun(input)
     ),
   list: trustedLocalProcedure
-    .input(agentListInputSchema)
+    .input(agentListQueryInputSchema)
     .output(agentListPageSchema)
     .query(({ ctx, input }) => ctx.appContext.services.agentManagementService.list(input)),
   get: trustedLocalProcedure
