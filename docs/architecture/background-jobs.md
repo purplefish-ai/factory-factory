@@ -150,6 +150,15 @@ launch through its workspace link or failure settlement. It does not cancel or
 detach the dispatch promise. An unlinked reservation remains subject to the
 15-minute timeout; restarting the poll does not replay its launch.
 
+The existing reconciliation cleanup job also calls the session-owned archive
+maintenance capability. It retries at most 50 pending closed-session copies with
+a rotating ID cursor and scans at most 100 archive file entries per run. The
+retained root/current-directory cursors close after the job drains on stop.
+History reads recover needed pending copies but do not run artifact collection.
+Orphan candidates are rechecked under the writer lock before removal; completed
+and pending archives are retained, and every archive mutation participates in
+adapter transaction serialization. No new timer or retention expiry is added.
+
 ## Out of scope by design
 
 The `fileLock`, `terminal`, and `rateLimiter` cleanup timers. They are

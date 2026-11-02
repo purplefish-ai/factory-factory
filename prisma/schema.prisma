@@ -580,7 +580,11 @@ model ClosedSession {
   provider        SessionProvider
   model           String
 
-  transcriptPath  String          // Relative path to transcript JSON file
+  transcriptPath  String          // Legacy: worktree relative; keyed archives: base-dir relative
+  archiveKey      String?         @unique // Immutable provider/account/conversation snapshot identity
+  archiveState    String          @default("COMPLETE") // Legacy rows are already published
+  pendingTranscript String?       // Durable original bytes until file completion
+  transcriptHash  String?         // SHA-256 of exact completed bytes
 
   startedAt       DateTime
   completedAt     DateTime        @default(now())
@@ -588,6 +592,7 @@ model ClosedSession {
   @@index([workspaceId])
   @@index([completedAt])
   @@index([sessionId, completedAt])
+  @@index([archiveState, workspaceId])
 }
 
 model UserSettings {

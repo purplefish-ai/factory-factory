@@ -67,6 +67,9 @@ vi.mock('@/backend/services/session', () => ({
     isAnySessionWorking: vi.fn(),
   },
   sessionDataService: {
+    cleanupClosedSessionArtifacts: vi.fn(async () => undefined),
+    maintainClosedSessionArchives: vi.fn(async () => undefined),
+    stopClosedSessionArchiveMaintenance: vi.fn(async () => undefined),
     findAgentSessionById: vi.fn(),
     createAgentSession: vi.fn(),
     deleteAgentSession: vi.fn(),
@@ -229,6 +232,16 @@ function createBridgeServices(
 }
 
 describe('configureDomainBridges', () => {
+  it('wires post-cascade artifact cleanup to the session owner', async () => {
+    configureDomainBridges(createBridgeServices());
+    const callback = vi
+      .mocked(workspaceDataService.configureDeletionCapture)
+      .mock.calls.at(-1)?.[1];
+    expect(callback).toBeDefined();
+    await callback!('workspace');
+    expect(sessionDataService.cleanupClosedSessionArtifacts).toHaveBeenCalledWith('workspace');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

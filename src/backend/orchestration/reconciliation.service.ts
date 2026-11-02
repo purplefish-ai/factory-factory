@@ -34,6 +34,9 @@ const RECONCILIATION_CLEANUP_JOB = 'reconciliation-cleanup';
 class ReconciliationService {
   private _workspace: ReconciliationWorkspaceBridge | null = null;
   private _terminal: ReconciliationTerminalBridge | null = null;
+  private archives:
+    | { maintain(signal?: AbortSignal): Promise<void>; stop(): Promise<void> }
+    | undefined;
   /** The signal of the run currently executing; see `isShuttingDown`. */
   private runSignal: AbortSignal | null = null;
   /** Whether the service itself has been stopped, independent of any run. */
@@ -69,9 +72,11 @@ class ReconciliationService {
   configure(bridges: {
     workspace: ReconciliationWorkspaceBridge;
     terminal: ReconciliationTerminalBridge;
+    archives?: { maintain(signal?: AbortSignal): Promise<void>; stop(): Promise<void> };
   }): void {
     this._workspace = bridges.workspace;
     this._terminal = bridges.terminal;
+    this.archives = bridges.archives;
   }
 
   private get terminal(): ReconciliationTerminalBridge {
@@ -111,6 +116,7 @@ class ReconciliationService {
   async stopPeriodicCleanup(): Promise<void> {
     this.stopped = true;
     await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
+    await this.archives?.stop();
   }
 
   private async runPeriodicReconciliation(): Promise<void> {
@@ -222,6 +228,9 @@ class ReconciliationService {
 
     // Terminal sessions are still PID-tracked and may become orphaned.
     const recoveredCount = await this.terminal.recoverOrphanedSessions();
+    if (!this.isShuttingDown) {
+      await this.archives?.maintain(this.runSignal ?? undefined);
+    }
     if (recoveredCount > 0) {
       logger.info('Marked orphaned terminal sessions as idle', {
         recoveredCount,

@@ -33,6 +33,10 @@ export type ClosedSessionMinAggregateOutputType = {
   provider: $Enums.SessionProvider | null
   model: string | null
   transcriptPath: string | null
+  archiveKey: string | null
+  archiveState: string | null
+  pendingTranscript: string | null
+  transcriptHash: string | null
   startedAt: Date | null
   completedAt: Date | null
 }
@@ -46,6 +50,10 @@ export type ClosedSessionMaxAggregateOutputType = {
   provider: $Enums.SessionProvider | null
   model: string | null
   transcriptPath: string | null
+  archiveKey: string | null
+  archiveState: string | null
+  pendingTranscript: string | null
+  transcriptHash: string | null
   startedAt: Date | null
   completedAt: Date | null
 }
@@ -59,6 +67,10 @@ export type ClosedSessionCountAggregateOutputType = {
   provider: number
   model: number
   transcriptPath: number
+  archiveKey: number
+  archiveState: number
+  pendingTranscript: number
+  transcriptHash: number
   startedAt: number
   completedAt: number
   _all: number
@@ -74,6 +86,10 @@ export type ClosedSessionMinAggregateInputType = {
   provider?: true
   model?: true
   transcriptPath?: true
+  archiveKey?: true
+  archiveState?: true
+  pendingTranscript?: true
+  transcriptHash?: true
   startedAt?: true
   completedAt?: true
 }
@@ -87,6 +103,10 @@ export type ClosedSessionMaxAggregateInputType = {
   provider?: true
   model?: true
   transcriptPath?: true
+  archiveKey?: true
+  archiveState?: true
+  pendingTranscript?: true
+  transcriptHash?: true
   startedAt?: true
   completedAt?: true
 }
@@ -100,6 +120,10 @@ export type ClosedSessionCountAggregateInputType = {
   provider?: true
   model?: true
   transcriptPath?: true
+  archiveKey?: true
+  archiveState?: true
+  pendingTranscript?: true
+  transcriptHash?: true
   startedAt?: true
   completedAt?: true
   _all?: true
@@ -186,6 +210,10 @@ export type ClosedSessionGroupByOutputType = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey: string | null
+  archiveState: string
+  pendingTranscript: string | null
+  transcriptHash: string | null
   startedAt: Date
   completedAt: Date
   _count: ClosedSessionCountAggregateOutputType | null
@@ -220,6 +248,10 @@ export type ClosedSessionWhereInput = {
   provider?: Prisma.EnumSessionProviderFilter<"ClosedSession"> | $Enums.SessionProvider
   model?: Prisma.StringFilter<"ClosedSession"> | string
   transcriptPath?: Prisma.StringFilter<"ClosedSession"> | string
+  archiveKey?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
+  archiveState?: Prisma.StringFilter<"ClosedSession"> | string
+  pendingTranscript?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
+  transcriptHash?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
   startedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
   completedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
@@ -234,6 +266,10 @@ export type ClosedSessionOrderByWithRelationInput = {
   provider?: Prisma.SortOrder
   model?: Prisma.SortOrder
   transcriptPath?: Prisma.SortOrder
+  archiveKey?: Prisma.SortOrderInput | Prisma.SortOrder
+  archiveState?: Prisma.SortOrder
+  pendingTranscript?: Prisma.SortOrderInput | Prisma.SortOrder
+  transcriptHash?: Prisma.SortOrderInput | Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
@@ -241,6 +277,7 @@ export type ClosedSessionOrderByWithRelationInput = {
 
 export type ClosedSessionWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  archiveKey?: string
   AND?: Prisma.ClosedSessionWhereInput | Prisma.ClosedSessionWhereInput[]
   OR?: Prisma.ClosedSessionWhereInput[]
   NOT?: Prisma.ClosedSessionWhereInput | Prisma.ClosedSessionWhereInput[]
@@ -251,10 +288,13 @@ export type ClosedSessionWhereUniqueInput = Prisma.AtLeast<{
   provider?: Prisma.EnumSessionProviderFilter<"ClosedSession"> | $Enums.SessionProvider
   model?: Prisma.StringFilter<"ClosedSession"> | string
   transcriptPath?: Prisma.StringFilter<"ClosedSession"> | string
+  archiveState?: Prisma.StringFilter<"ClosedSession"> | string
+  pendingTranscript?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
+  transcriptHash?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
   startedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
   completedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
-}, "id">
+}, "id" | "archiveKey">
 
 export type ClosedSessionOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -265,6 +305,10 @@ export type ClosedSessionOrderByWithAggregationInput = {
   provider?: Prisma.SortOrder
   model?: Prisma.SortOrder
   transcriptPath?: Prisma.SortOrder
+  archiveKey?: Prisma.SortOrderInput | Prisma.SortOrder
+  archiveState?: Prisma.SortOrder
+  pendingTranscript?: Prisma.SortOrderInput | Prisma.SortOrder
+  transcriptHash?: Prisma.SortOrderInput | Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
   _count?: Prisma.ClosedSessionCountOrderByAggregateInput
@@ -284,6 +328,10 @@ export type ClosedSessionScalarWhereWithAggregatesInput = {
   provider?: Prisma.EnumSessionProviderWithAggregatesFilter<"ClosedSession"> | $Enums.SessionProvider
   model?: Prisma.StringWithAggregatesFilter<"ClosedSession"> | string
   transcriptPath?: Prisma.StringWithAggregatesFilter<"ClosedSession"> | string
+  archiveKey?: Prisma.StringNullableWithAggregatesFilter<"ClosedSession"> | string | null
+  archiveState?: Prisma.StringWithAggregatesFilter<"ClosedSession"> | string
+  pendingTranscript?: Prisma.StringNullableWithAggregatesFilter<"ClosedSession"> | string | null
+  transcriptHash?: Prisma.StringNullableWithAggregatesFilter<"ClosedSession"> | string | null
   startedAt?: Prisma.DateTimeWithAggregatesFilter<"ClosedSession"> | Date | string
   completedAt?: Prisma.DateTimeWithAggregatesFilter<"ClosedSession"> | Date | string
 }
@@ -296,6 +344,10 @@ export type ClosedSessionCreateInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
   workspace: Prisma.WorkspaceCreateNestedOneWithoutClosedSessionsInput
@@ -310,6 +362,10 @@ export type ClosedSessionUncheckedCreateInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
 }
@@ -322,6 +378,10 @@ export type ClosedSessionUpdateInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutClosedSessionsNestedInput
@@ -336,6 +396,10 @@ export type ClosedSessionUncheckedUpdateInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -349,6 +413,10 @@ export type ClosedSessionCreateManyInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
 }
@@ -361,6 +429,10 @@ export type ClosedSessionUpdateManyMutationInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -374,6 +446,10 @@ export type ClosedSessionUncheckedUpdateManyInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -397,6 +473,10 @@ export type ClosedSessionCountOrderByAggregateInput = {
   provider?: Prisma.SortOrder
   model?: Prisma.SortOrder
   transcriptPath?: Prisma.SortOrder
+  archiveKey?: Prisma.SortOrder
+  archiveState?: Prisma.SortOrder
+  pendingTranscript?: Prisma.SortOrder
+  transcriptHash?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
 }
@@ -410,6 +490,10 @@ export type ClosedSessionMaxOrderByAggregateInput = {
   provider?: Prisma.SortOrder
   model?: Prisma.SortOrder
   transcriptPath?: Prisma.SortOrder
+  archiveKey?: Prisma.SortOrder
+  archiveState?: Prisma.SortOrder
+  pendingTranscript?: Prisma.SortOrder
+  transcriptHash?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
 }
@@ -423,6 +507,10 @@ export type ClosedSessionMinOrderByAggregateInput = {
   provider?: Prisma.SortOrder
   model?: Prisma.SortOrder
   transcriptPath?: Prisma.SortOrder
+  archiveKey?: Prisma.SortOrder
+  archiveState?: Prisma.SortOrder
+  pendingTranscript?: Prisma.SortOrder
+  transcriptHash?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   completedAt?: Prisma.SortOrder
 }
@@ -477,6 +565,10 @@ export type ClosedSessionCreateWithoutWorkspaceInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
 }
@@ -489,6 +581,10 @@ export type ClosedSessionUncheckedCreateWithoutWorkspaceInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
 }
@@ -530,6 +626,10 @@ export type ClosedSessionScalarWhereInput = {
   provider?: Prisma.EnumSessionProviderFilter<"ClosedSession"> | $Enums.SessionProvider
   model?: Prisma.StringFilter<"ClosedSession"> | string
   transcriptPath?: Prisma.StringFilter<"ClosedSession"> | string
+  archiveKey?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
+  archiveState?: Prisma.StringFilter<"ClosedSession"> | string
+  pendingTranscript?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
+  transcriptHash?: Prisma.StringNullableFilter<"ClosedSession"> | string | null
   startedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
   completedAt?: Prisma.DateTimeFilter<"ClosedSession"> | Date | string
 }
@@ -542,6 +642,10 @@ export type ClosedSessionCreateManyWorkspaceInput = {
   provider: $Enums.SessionProvider
   model: string
   transcriptPath: string
+  archiveKey?: string | null
+  archiveState?: string
+  pendingTranscript?: string | null
+  transcriptHash?: string | null
   startedAt: Date | string
   completedAt?: Date | string
 }
@@ -554,6 +658,10 @@ export type ClosedSessionUpdateWithoutWorkspaceInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -566,6 +674,10 @@ export type ClosedSessionUncheckedUpdateWithoutWorkspaceInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -578,6 +690,10 @@ export type ClosedSessionUncheckedUpdateManyWithoutWorkspaceInput = {
   provider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   model?: Prisma.StringFieldUpdateOperationsInput | string
   transcriptPath?: Prisma.StringFieldUpdateOperationsInput | string
+  archiveKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  archiveState?: Prisma.StringFieldUpdateOperationsInput | string
+  pendingTranscript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transcriptHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   completedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -593,6 +709,10 @@ export type ClosedSessionSelect<ExtArgs extends runtime.Types.Extensions.Interna
   provider?: boolean
   model?: boolean
   transcriptPath?: boolean
+  archiveKey?: boolean
+  archiveState?: boolean
+  pendingTranscript?: boolean
+  transcriptHash?: boolean
   startedAt?: boolean
   completedAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -607,6 +727,10 @@ export type ClosedSessionSelectCreateManyAndReturn<ExtArgs extends runtime.Types
   provider?: boolean
   model?: boolean
   transcriptPath?: boolean
+  archiveKey?: boolean
+  archiveState?: boolean
+  pendingTranscript?: boolean
+  transcriptHash?: boolean
   startedAt?: boolean
   completedAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -621,6 +745,10 @@ export type ClosedSessionSelectUpdateManyAndReturn<ExtArgs extends runtime.Types
   provider?: boolean
   model?: boolean
   transcriptPath?: boolean
+  archiveKey?: boolean
+  archiveState?: boolean
+  pendingTranscript?: boolean
+  transcriptHash?: boolean
   startedAt?: boolean
   completedAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -635,11 +763,15 @@ export type ClosedSessionSelectScalar = {
   provider?: boolean
   model?: boolean
   transcriptPath?: boolean
+  archiveKey?: boolean
+  archiveState?: boolean
+  pendingTranscript?: boolean
+  transcriptHash?: boolean
   startedAt?: boolean
   completedAt?: boolean
 }
 
-export type ClosedSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sessionId" | "name" | "workflow" | "provider" | "model" | "transcriptPath" | "startedAt" | "completedAt", ExtArgs["result"]["closedSession"]>
+export type ClosedSessionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sessionId" | "name" | "workflow" | "provider" | "model" | "transcriptPath" | "archiveKey" | "archiveState" | "pendingTranscript" | "transcriptHash" | "startedAt" | "completedAt", ExtArgs["result"]["closedSession"]>
 export type ClosedSessionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -664,6 +796,10 @@ export type $ClosedSessionPayload<ExtArgs extends runtime.Types.Extensions.Inter
     provider: $Enums.SessionProvider
     model: string
     transcriptPath: string
+    archiveKey: string | null
+    archiveState: string
+    pendingTranscript: string | null
+    transcriptHash: string | null
     startedAt: Date
     completedAt: Date
   }, ExtArgs["result"]["closedSession"]>
@@ -1098,6 +1234,10 @@ export interface ClosedSessionFieldRefs {
   readonly provider: Prisma.FieldRef<"ClosedSession", 'SessionProvider'>
   readonly model: Prisma.FieldRef<"ClosedSession", 'String'>
   readonly transcriptPath: Prisma.FieldRef<"ClosedSession", 'String'>
+  readonly archiveKey: Prisma.FieldRef<"ClosedSession", 'String'>
+  readonly archiveState: Prisma.FieldRef<"ClosedSession", 'String'>
+  readonly pendingTranscript: Prisma.FieldRef<"ClosedSession", 'String'>
+  readonly transcriptHash: Prisma.FieldRef<"ClosedSession", 'String'>
   readonly startedAt: Prisma.FieldRef<"ClosedSession", 'DateTime'>
   readonly completedAt: Prisma.FieldRef<"ClosedSession", 'DateTime'>
 }

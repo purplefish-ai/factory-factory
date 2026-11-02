@@ -348,6 +348,10 @@ export const ClosedSessionScalarFieldEnum = {
   provider: 'provider',
   model: 'model',
   transcriptPath: 'transcriptPath',
+  archiveKey: 'archiveKey',
+  archiveState: 'archiveState',
+  pendingTranscript: 'pendingTranscript',
+  transcriptHash: 'transcriptHash',
   startedAt: 'startedAt',
   completedAt: 'completedAt'
 } as const

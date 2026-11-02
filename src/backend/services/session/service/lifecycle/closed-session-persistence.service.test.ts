@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
@@ -19,7 +19,8 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('node:fs/promises', () => ({
-  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  unlink: vi.fn(),
 }));
 
 vi.mock('@/backend/lib/atomic-file');
@@ -43,13 +44,16 @@ const createInput = (
 describe('closedSessionPersistenceService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(mkdir).mockResolvedValue(undefined);
+
     vi.mocked(writeFileAtomic).mockResolvedValue(undefined);
-    vi.mocked(closedSessionAccessor.create).mockResolvedValue(
-      unsafeCoerce({
-        id: 'closed-session-1',
-      })
+    vi.mocked(closedSessionAccessor.removeOrphan).mockResolvedValue(undefined);
+    vi.mocked(closedSessionAccessor.reserve).mockImplementation(async (data) =>
+      unsafeCoerce({ ...data, archiveState: 'PENDING' })
     );
+    vi.mocked(writeFileAtomic).mockImplementation((_path, bytes) => {
+      vi.mocked(readFile).mockResolvedValue(bytes.toString());
+      return Promise.resolve();
+    });
   });
 
   it('skips persistence when transcript has no messages', async () => {
@@ -58,8 +62,7 @@ describe('closedSessionPersistenceService', () => {
     ).resolves.toBeUndefined();
 
     expect(writeFileAtomic).not.toHaveBeenCalled();
-    expect(closedSessionAccessor.create).not.toHaveBeenCalled();
-    expect(mkdir).not.toHaveBeenCalled();
+    expect(closedSessionAccessor.reserve).not.toHaveBeenCalled();
   });
   it('retains provider identity even when closure has no local messages', async () => {
     await closedSessionPersistenceService.persistClosedSession(
@@ -70,7 +73,7 @@ describe('closedSessionPersistenceService', () => {
       expect.stringContaining('"providerSessionId": "provider"'),
       expect.anything()
     );
-    expect(closedSessionAccessor.create).toHaveBeenCalledOnce();
+    expect(closedSessionAccessor.reserve).toHaveBeenCalledOnce();
   });
 
   it('rethrows file write errors so callers can handle failures', async () => {
@@ -79,21 +82,17 @@ describe('closedSessionPersistenceService', () => {
     await expect(
       closedSessionPersistenceService.persistClosedSession(createInput())
     ).rejects.toThrow('Disk full');
-    expect(mkdir).toHaveBeenCalledWith('/tmp/work/.context/closed-sessions', {
-      recursive: true,
-    });
-    expect(closedSessionAccessor.create).not.toHaveBeenCalled();
+
+    expect(closedSessionAccessor.complete).not.toHaveBeenCalled();
   });
 
-  it('rethrows database errors after transcript file write', async () => {
-    vi.mocked(closedSessionAccessor.create).mockRejectedValue(new Error('DB locked'));
+  it('rethrows database errors before transcript file write', async () => {
+    vi.mocked(closedSessionAccessor.reserve).mockRejectedValue(new Error('DB locked'));
 
     await expect(
       closedSessionPersistenceService.persistClosedSession(createInput())
     ).rejects.toThrow('DB locked');
-    expect(mkdir).toHaveBeenCalledWith('/tmp/work/.context/closed-sessions', {
-      recursive: true,
-    });
-    expect(writeFileAtomic).toHaveBeenCalledTimes(1);
+
+    expect(writeFileAtomic).not.toHaveBeenCalled();
   });
 });

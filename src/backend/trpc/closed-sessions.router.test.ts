@@ -6,6 +6,7 @@ const mockSessionDataService = vi.hoisted(() => ({
   findClosedSessionsByWorkspaceId: vi.fn(),
   findClosedSessionByIdWithWorkspace: vi.fn(),
   deleteClosedSession: vi.fn(),
+  resolveClosedSessionTranscriptPath: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -20,6 +21,12 @@ function createCaller() {
     appContext: { services: { sessionDataService: mockSessionDataService } },
   } as never);
 }
+
+beforeEach(() => {
+  mockSessionDataService.resolveClosedSessionTranscriptPath.mockReturnValue(
+    '/tmp/worktree/transcripts/closed-1.json'
+  );
+});
 
 describe('closedSessionsRouter', () => {
   beforeEach(() => {
@@ -47,8 +54,18 @@ describe('closedSessionsRouter', () => {
 
   it('returns a parsed transcript when the transcript file exists', async () => {
     const transcript = {
-      messages: [{ role: 'user', content: 'hello' }],
-      sessionSummary: 'Test summary',
+      version: 1,
+      sessionId: 'session',
+      workspaceId: 'ws-1',
+      metadata: {
+        name: null,
+        workflow: 'followup',
+        provider: 'CLAUDE',
+        model: 'model',
+        startedAt: '2026-01-01',
+        completedAt: '2026-01-01',
+      },
+      messages: [{ id: 'm', source: 'user', text: 'hello', timestamp: '2026-01-01', order: 0 }],
     };
     mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
       id: 'closed-1',
@@ -129,7 +146,6 @@ describe('closedSessionsRouter', () => {
 
     await expect(caller.delete({ id: 'closed-1' })).resolves.toEqual({ success: true });
     expect(mockSessionDataService.deleteClosedSession).toHaveBeenCalledWith('closed-1');
-    expect(mockUnlink).toHaveBeenCalledWith('/tmp/worktree/transcripts/closed-1.json');
   });
 
   it('returns success even when transcript unlink fails', async () => {
@@ -154,4 +170,39 @@ describe('closedSessionsRouter', () => {
     );
     expect(mockSessionDataService.deleteClosedSession).not.toHaveBeenCalled();
   });
+});
+
+it('reads application-owned archives without a live worktree', async () => {
+  mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
+    id: 'owned',
+    workspaceId: 'ws-1',
+    archiveKey: 'snapshot-key',
+    transcriptPath: 'owned.json',
+    workspace: { worktreePath: null },
+  });
+  mockSessionDataService.resolveClosedSessionTranscriptPath.mockReturnValue('/app-data/owned.json');
+  mockReadFile.mockResolvedValue(
+    JSON.stringify({
+      version: 1,
+      sessionId: 'session',
+      workspaceId: 'ws-1',
+      metadata: {
+        name: null,
+        workflow: 'followup',
+        provider: 'CLAUDE',
+        model: 'm',
+        startedAt: '2026-01-01',
+        completedAt: '2026-01-01',
+      },
+      messages: [],
+    })
+  );
+  await expect(createCaller().getTranscript({ id: 'owned' })).resolves.toMatchObject({
+    messages: [],
+  });
+  expect(mockSessionDataService.resolveClosedSessionTranscriptPath).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'owned' }),
+    null
+  );
+  expect(mockReadFile).toHaveBeenCalledWith('/app-data/owned.json', 'utf-8');
 });

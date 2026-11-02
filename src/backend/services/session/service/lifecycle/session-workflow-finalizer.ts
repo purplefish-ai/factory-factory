@@ -7,7 +7,8 @@ import type {
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
-import type { PersistClosedSessionInput } from './closed-session-persistence.service';
+import { getClosedSessionConversationEpoch } from './closed-session-identity';
+import { type PersistClosedSessionInput } from './closed-session-persistence.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { schedulePRDiscovery } from './session-pr-discovery.service';
 import { getProviderHistorySessionId } from './session-provider-history-hydrator';
@@ -161,6 +162,7 @@ export class SessionWorkflowFinalizer {
       ...(providerSessionId ? { providerSessionId } : {}),
       model: session.model,
       startedAt: session.createdAt,
+      conversationEpoch: getClosedSessionConversationEpoch(session.providerMetadata),
       messages,
     });
     return true;

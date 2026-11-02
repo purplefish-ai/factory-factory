@@ -227,7 +227,6 @@ describe('SessionService', () => {
       status: SessionStatus.RUNNING,
     });
   });
-
   it('starts a session without sending a prompt when initial prompt is empty', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -273,7 +272,6 @@ describe('SessionService', () => {
     });
     expect(acpRuntimeManager.sendPrompt).not.toHaveBeenCalled();
   });
-
   it('delegates to ACP runtime for new session creation', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -1407,6 +1405,8 @@ describe('SessionService', () => {
         name: 'Auto-Fix',
         workflow: 'ratchet',
         provider: 'CLAUDE',
+        codexAccountId: undefined,
+        conversationEpoch: 0,
         model: 'sonnet',
         startedAt,
         messages: transcript,
