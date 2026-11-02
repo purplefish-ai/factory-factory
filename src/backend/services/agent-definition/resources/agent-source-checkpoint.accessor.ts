@@ -107,6 +107,9 @@ async function verify(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSour
 
 async function complete(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSourcePage) {
   const evidence = agentSourcePageEvidenceSchema.parse(page.evidence);
+  // This is only a provisional claim until promotion checks every retained boundary witness.
+  const initialSourceOrder =
+    page.sourceOrder === null ? null : page.sourceOrder - checkpoint.executableCount;
   if (
     evidence.entries.length ||
     evidence.ids.length !== 1 ||
@@ -115,14 +118,17 @@ async function complete(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSo
     checkpoint.verifiedCount !==
       checkpoint.entryCount + (checkpoint.previousBoundaryEventId ? 1 : 0) ||
     page.sourceOrder === null ||
-    page.sourceOrder - checkpoint.executableCount !== checkpoint.initialSourceOrder ||
+    initialSourceOrder === null ||
+    initialSourceOrder < 0 ||
+    (checkpoint.initialSourceOrder !== null &&
+      initialSourceOrder !== checkpoint.initialSourceOrder) ||
     !Number.isSafeInteger(page.sourceOrder)
   ) {
     return false;
   }
   await tx.agentSourceCheckpoint.update({
     where: { connectionId_scanId: { connectionId: page.connectionId, scanId: page.scanId } },
-    data: { status: 'INDEXED', sourceOrder: page.sourceOrder },
+    data: { status: 'INDEXED', sourceOrder: page.sourceOrder, initialSourceOrder },
   });
   await promoteCheckpoint(tx, page.connectionId, page.scanId);
   return true;
