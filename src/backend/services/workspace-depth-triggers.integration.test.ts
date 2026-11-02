@@ -71,7 +71,9 @@ function insertWorkspace(id: string, parentWorkspaceId: string) {
 describe('workspace depth-1 triggers survive the migration chain', () => {
   it('installs both depth triggers', async () => {
     const triggers = await prisma.$queryRaw<Array<{ name: string }>>`
-      SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name
+      SELECT name FROM sqlite_master WHERE type = 'trigger'
+        AND name IN ('enforce_workspace_depth_1', 'enforce_workspace_depth_1_update')
+      ORDER BY name
     `;
 
     expect(triggers.map((trigger) => trigger.name)).toEqual([

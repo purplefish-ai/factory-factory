@@ -13,9 +13,11 @@ import {
 import type { Prisma } from '@prisma-gen/client';
 import { agentEventAccessor } from './agent-event.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
+import { agentSourceCheckpointAccessor } from './agent-source-checkpoint.accessor';
 import {
   listTargets,
   assertTarget,
+  assertCheckpointProof,
   entriesFor,
   getState,
   getBaseline,
@@ -75,6 +77,7 @@ async function prepareBaseline(connectionId: string, headEventId: string | null)
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
     assertOperational(state);
+    await assertCheckpointProof(tx, connectionId);
     const cursor = state?.cursor ? agentGithubCursorSchema.parse(state.cursor) : null;
     if (!cursor) {
       await initializeSource(tx, connectionId, headEventId, state?.lastSourceOrder ?? 0);
@@ -205,7 +208,7 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
     } else {
       verifyPage(scan, captured, page);
     }
-    await tx.agentSourcePage.create({
+    const savedPage = await tx.agentSourcePage.create({
       data: {
         connectionId,
         scanId: scan.id,
@@ -215,6 +218,10 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
         nextPage: page.nextPage,
         evidence: { ids: page.events.map((item) => item.providerEventId), entries },
       },
+    });
+    await agentSourceCheckpointAccessor.checkpointPage(tx, savedPage, {
+      headEventId: scan.previousBoundaryEventId,
+      sourceOrder: state.lastSourceOrder,
     });
     await tx.agentSourceState.update({
       where: { connectionId },
@@ -296,7 +303,7 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
       lastSourceOrder,
       scan.previousBoundaryEventId
     );
-    await tx.agentSourcePage.create({
+    const finalizedPage = await tx.agentSourcePage.create({
       data: {
         connectionId,
         scanId: scan.id,
@@ -307,6 +314,7 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
         evidence: { ids: [scan.fixedHeadEventId], entries: [] },
       },
     });
+    await agentSourceCheckpointAccessor.checkpointPage(tx, finalizedPage);
     cursor.committedHeadEventId = scan.fixedHeadEventId;
     cursor.scan = null;
   }
@@ -341,6 +349,11 @@ async function assertRequiredBaselines(
       discontinuity();
     }
   }
+}
+function maintainCheckpoints(connectionId: string) {
+  return agentSourceCheckpointAccessor.maintainCheckpoints(connectionId, (tx, ids) =>
+    tx.agentSourcePage.deleteMany({ where: { id: { in: ids } } })
+  );
 }
 async function finalizeNextChunk(connectionId: string) {
   return await ledgerTransaction((tx) => finalizeInTransaction(tx, connectionId));
@@ -379,4 +392,5 @@ export const agentSourceAccessor = {
   savePage,
   finalizeNextChunk,
   finalizeEventOrder,
+  maintainCheckpoints,
 };

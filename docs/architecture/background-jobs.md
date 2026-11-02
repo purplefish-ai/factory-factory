@@ -82,8 +82,11 @@ The `agent-source-poll` job runs immediately, then waits 60 seconds after each
 cycle. It reads at most ten issue-event pages per repository per cycle, shared
 between capture and verification. Its GitHub port uses the existing CLI budget
 and cancellation signal. Shutdown stops and drains this intake before stopping
-provider sessions or disconnecting the database. This job does not evaluate
-events, activate saved triggers, or launch workspaces.
+provider sessions or disconnecting the database. After resolving its repository,
+each target with a valid, non-recovery cursor advances one bounded
+source-checkpoint backfill, authority-validation, or compaction transaction;
+this uses retained database proof and makes no provider requests. This job does
+not evaluate events, activate saved triggers, or launch workspaces.
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,
