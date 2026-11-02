@@ -7,6 +7,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { prEventMarker } from '@/shared/pr-monitoring';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -46,7 +47,12 @@ beforeEach(async () => {
     },
   });
   await db.prisma.workspace.create({
-    data: { id: 'workspace', name: 'durability', projectId: project.id },
+    data: {
+      id: 'workspace',
+      name: 'durability',
+      projectId: project.id,
+      worktreePath: '/work/repo',
+    },
   });
 });
 afterEach(async () => {
@@ -57,6 +63,201 @@ afterEach(async () => {
 });
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
+});
+
+async function withWindowsDirectorySyncUnavailable<T>(work: () => Promise<T>): Promise<T> {
+  const { open } = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  vi.mocked(fs.open).mockImplementation((...args) => {
+    if (String(args[0]) === paths.closedSessionWorkspaceDirectory('workspace')) {
+      return Promise.reject(
+        Object.assign(new Error('Windows directory sync unavailable'), { code: 'EPERM' })
+      );
+    }
+    return open(...args);
+  });
+  try {
+    return await work();
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    vi.mocked(fs.open).mockImplementation(open);
+  }
+}
+
+function persistWindowsArchive() {
+  return service.persistClosedSession({
+    sessionId: 'windows',
+    workspaceId: 'workspace',
+    worktreePath: '/unused',
+    name: null,
+    workflow: 'ratchet',
+    provider: 'CLAUDE',
+    providerSessionId: 'thread',
+    model: 'model',
+    startedAt: new Date(0),
+    messages: [
+      {
+        id: 'message',
+        source: 'user',
+        text: 'immutable Windows proof',
+        order: 0,
+        timestamp: '2026-01-01',
+      },
+    ],
+  });
+}
+
+async function readRetainedWindowsArchive() {
+  const row = await db.prisma.closedSession.findFirstOrThrow();
+  const bytes = row.pendingTranscript;
+  if (bytes === null) {
+    throw new Error('Windows archive discarded its durable DB proof');
+  }
+  expect(row.archiveState).toBe('COMPLETE');
+  expect(bytes).toContain('immutable Windows proof');
+  return { row, bytes, path: paths.resolveClosedSessionTranscriptPath(row, null) };
+}
+
+it('retains Windows COMPLETE proof and repairs a missing or corrupt file cache on use', async () => {
+  const { sessionDataService } = await vi.importActual<
+    typeof import('../data/session-data.service')
+  >('../data/session-data.service');
+  await withWindowsDirectorySyncUnavailable(async () => {
+    await expect(persistWindowsArchive()).resolves.toBeUndefined();
+    const { row, bytes, path } = await readRetainedWindowsArchive();
+    expect(await fs.readFile(path, 'utf8')).toBe(bytes);
+    await persistWindowsArchive();
+    expect(await db.prisma.closedSession.count()).toBe(1);
+    expect((await readRetainedWindowsArchive()).row.id).toBe(row.id);
+    expect((await readRetainedWindowsArchive()).bytes).toBe(bytes);
+    await fs.unlink(path);
+    await service.stopArchiveMaintenance();
+    expect((await sessionDataService.findClosedSessionByIdWithWorkspace(row.id))?.id).toBe(row.id);
+    expect(await fs.readFile(path, 'utf8')).toBe(bytes);
+    await fs.writeFile(path, 'corrupt cache');
+    await sessionDataService.findClosedSessionByIdWithWorkspace(row.id);
+    expect(await fs.readFile(path, 'utf8')).toBe(bytes);
+    expect((await readRetainedWindowsArchive()).bytes).toBe(bytes);
+  });
+});
+
+it('reads the retained DB transcript and provider receipt when its file cache cannot be repaired', async () => {
+  const { sessionDataService } = await vi.importActual<
+    typeof import('../data/session-data.service')
+  >('../data/session-data.service');
+  const { findPRDeliveryReceipt } =
+    await vi.importActual<typeof import('./session-pr-receipt')>('./session-pr-receipt');
+  const { open } = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const claudeDirectory = join(db.tempDir, 'claude');
+  vi.spyOn(config, 'getClaudeConfigDir').mockReturnValue(claudeDirectory);
+  const providerDirectory = join(claudeDirectory, 'projects', '-work-repo');
+  await fs.mkdir(providerDirectory, { recursive: true });
+  await fs.writeFile(
+    join(providerDirectory, 'thread.jsonl'),
+    JSON.stringify({
+      type: 'user',
+      sessionId: 'thread',
+      message: { role: 'user', content: `${prEventMarker('delivery')}\nPR update` },
+    })
+  );
+  await withWindowsDirectorySyncUnavailable(async () => {
+    await persistWindowsArchive();
+    const { row, bytes, path } = await readRetainedWindowsArchive();
+    await fs.unlink(path);
+    vi.mocked(fs.open).mockImplementation((...args) => {
+      if (basename(String(args[0])).startsWith('.tmp-archive-')) {
+        return Promise.reject(new Error('cache filesystem offline'));
+      }
+      return open(...args);
+    });
+    const retained = await sessionDataService.findClosedSessionByIdWithWorkspace(row.id);
+    if (!retained) {
+      throw new Error('Retained Windows archive is not visible');
+    }
+    expect(await sessionDataService.readClosedSessionTranscript(retained, path)).toBe(bytes);
+    expect(await findPRDeliveryReceipt('windows', 'delivery')).toBe('delivered');
+    expect(await findPRDeliveryReceipt('windows', 'other-delivery')).toBe('absent');
+    expect(
+      (await sessionDataService.findClosedSessionsByWorkspaceId('workspace', 20))[0]
+    ).not.toHaveProperty('pendingTranscript');
+    await expect(fs.readFile(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await readRetainedWindowsArchive()).bytes).toBe(bytes);
+    for (const invalid of ['corrupt retained proof', '']) {
+      await db.prisma.closedSession.update({
+        where: { id: row.id },
+        data: { pendingTranscript: invalid },
+      });
+      await expect(sessionDataService.findClosedSessionByIdWithWorkspace(row.id)).rejects.toThrow(
+        'Invalid pending archive proof'
+      );
+      expect(await findPRDeliveryReceipt('windows', 'delivery')).toBe('unavailable');
+    }
+  });
+});
+
+it.skipIf(process.platform === 'win32')(
+  'releases retained Windows bytes only after a later POSIX directory flush',
+  async () => {
+    const archive = await withWindowsDirectorySyncUnavailable(async () => {
+      await persistWindowsArchive();
+      return await readRetainedWindowsArchive();
+    });
+    await service.recoverById(archive.row.id);
+    const complete = await db.prisma.closedSession.findUniqueOrThrow({
+      where: { id: archive.row.id },
+    });
+    expect(complete.archiveState).toBe('COMPLETE');
+    expect(complete.pendingTranscript).toBeNull();
+    expect(await fs.readFile(archive.path, 'utf8')).toBe(archive.bytes);
+  }
+);
+
+it.each([
+  { platformName: 'win32', phase: 'file', code: 'EPERM' },
+  { platformName: 'linux', phase: 'file', code: 'EPERM' },
+  { platformName: 'win32', phase: 'directory', code: 'EIO' },
+  { platformName: 'linux', phase: 'directory', code: 'EPERM' },
+])('never degrades $phase sync $code on $platformName', async ({ platformName, phase, code }) => {
+  const { open } = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: platformName });
+  vi.mocked(fs.open).mockImplementation(async (...args) => {
+    if (
+      phase === 'directory' &&
+      String(args[0]) === paths.closedSessionWorkspaceDirectory('workspace')
+    ) {
+      throw Object.assign(new Error('sync denied'), { code });
+    }
+    const handle = await open(...args);
+    if (phase === 'file' && basename(String(args[0])).startsWith('.tmp-archive-')) {
+      vi.spyOn(handle, 'sync').mockRejectedValue(Object.assign(new Error('sync denied'), { code }));
+    }
+    return handle;
+  });
+  try {
+    await expect(
+      service.persistClosedSession({
+        sessionId: 'sync-denied',
+        workspaceId: 'workspace',
+        worktreePath: '/unused',
+        name: null,
+        workflow: 'ratchet',
+        provider: 'CLAUDE',
+        providerSessionId: 'thread',
+        model: 'model',
+        startedAt: new Date(0),
+        messages: [],
+      })
+    ).rejects.toThrow('sync denied');
+    const row = await db.prisma.closedSession.findFirstOrThrow();
+    expect(row.archiveState).toBe('PENDING');
+    expect(row.pendingTranscript).toBeTruthy();
+    expect(await accessor.findByWorkspaceId('workspace', 20)).toEqual([]);
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    vi.mocked(fs.open).mockImplementation(open);
+  }
 });
 
 it.each(['file', 'directory'])(
@@ -115,7 +316,7 @@ it.each(['file', 'directory'])(
     await service.recoverPending('workspace');
     const complete = await db.prisma.closedSession.findUniqueOrThrow({ where: { id: pending.id } });
     expect(complete.archiveState).toBe('COMPLETE');
-    expect(complete.pendingTranscript).toBeNull();
+    expect(complete.pendingTranscript).toBe(process.platform === 'win32' ? bytes : null);
     expect(await fs.readFile(path, 'utf8')).toBe(bytes);
     expect(await db.prisma.closedSession.count()).toBe(1);
     expect(await fs.readdir(paths.closedSessionWorkspaceDirectory('workspace'))).toEqual([

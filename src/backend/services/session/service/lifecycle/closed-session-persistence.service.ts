@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { unlinkSync, type Dir, type Dirent } from 'node:fs';
 import { opendir, readFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { writeFileAtomic } from '@/backend/lib/atomic-file';
+import { DirectorySyncUnavailableError, writeFileAtomic } from '@/backend/lib/atomic-file';
 import { isProcessRunning } from '@/backend/lib/process-liveness';
 import { createLogger } from '@/backend/services/logger.service';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
@@ -377,38 +377,95 @@ class ClosedSessionPersistenceService {
     const row = await closedSessionAccessor.findPendingById(id);
     if (row) {
       await this.finish(row);
+      return;
+    }
+    const retained = await closedSessionAccessor.findRetainedTranscriptById(id);
+    if (retained) {
+      this.sourceBytes(retained);
+      let valid = false;
+      try {
+        valid =
+          archiveDigest(
+            await readFile(resolveClosedSessionTranscriptPath(retained, null), 'utf-8')
+          ) === retained.transcriptHash;
+      } catch {
+        // A COMPLETE Windows transcript remains durable in the DB if its file
+        // name/cache disappeared during a crash. Rebuild from the first bytes.
+      }
+      // A later POSIX read may finish the directory flush and release the DB
+      // copy. On Windows an intact cache needs no rewrite; the DB stays owned.
+      if (!valid || process.platform !== 'win32') {
+        try {
+          await this.finish(retained);
+        } catch (error) {
+          logger.warn('Retained transcript cache repair deferred', { id, error });
+        }
+      }
     }
   }
 
-  private async finish(row: ClosedSession): Promise<void> {
+  async readTranscript(
+    archive: Pick<ClosedSession, 'archiveState' | 'pendingTranscript' | 'transcriptHash'>,
+    path: string
+  ): Promise<string> {
+    if (archive.archiveState === 'COMPLETE' && archive.pendingTranscript !== null) {
+      return this.sourceBytes(archive);
+    }
+    return await readFile(path, 'utf-8');
+  }
+
+  private sourceBytes(
+    archive: Pick<ClosedSession, 'pendingTranscript' | 'transcriptHash'>
+  ): string {
     if (
-      !(row.pendingTranscript && row.transcriptHash) ||
-      archiveDigest(row.pendingTranscript) !== row.transcriptHash
+      !(archive.pendingTranscript && archive.transcriptHash) ||
+      archiveDigest(archive.pendingTranscript) !== archive.transcriptHash
     ) {
       throw new Error('Invalid pending archive proof');
     }
-    const path = resolveClosedSessionTranscriptPath(row, null);
-    const pendingTranscript = row.pendingTranscript;
-    const directory = dirname(path);
-    this.activeWrites.set(directory, (this.activeWrites.get(directory) ?? 0) + 1);
+    return archive.pendingTranscript;
+  }
+
+  private async publishFile(path: string, bytes: string): Promise<boolean> {
     try {
-      // The row ID and exact digest name this immutable artifact generation.
-      // A re-reserved logical key gets another ID/path, so late writers cannot
-      // overwrite replacements. Filesystem awaits never hold a DB transaction.
-      await writeFileAtomic(path, pendingTranscript, {
+      await writeFileAtomic(path, bytes, {
         encoding: 'utf-8',
         mode: 0o600,
         temporaryFileTag: `archive-${process.pid}`,
         durable: true,
         durableDirectoryRoot: dirname(closedSessionArchivesDirectory()),
       });
-      if (archiveDigest(await readFile(path, 'utf-8')) !== row.transcriptHash) {
+      return true;
+    } catch (error) {
+      if (error instanceof DirectorySyncUnavailableError) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private async finish(row: ClosedSession): Promise<void> {
+    const pendingTranscript = this.sourceBytes(row);
+    const transcriptHash = archiveDigest(pendingTranscript);
+    const path = resolveClosedSessionTranscriptPath(row, null);
+    const directory = dirname(path);
+    this.activeWrites.set(directory, (this.activeWrites.get(directory) ?? 0) + 1);
+    try {
+      // The row ID and exact digest name this immutable artifact generation.
+      // A re-reserved logical key gets another ID/path, so late writers cannot
+      // overwrite replacements. Filesystem awaits never hold a DB transaction.
+      const fileDurable = await this.publishFile(path, pendingTranscript);
+      if (archiveDigest(await readFile(path, 'utf-8')) !== transcriptHash) {
         throw new Error('Archive verification failed');
       }
-      await closedSessionAccessor.complete(row.id, row.transcriptHash);
+      if (fileDurable) {
+        await closedSessionAccessor.complete(row.id, transcriptHash);
+      } else {
+        await closedSessionAccessor.completeWithRetainedTranscript(row.id, transcriptHash);
+      }
     } catch (error) {
       await closedSessionAccessor
-        .removeOrphan(row.id, row.transcriptHash, row.transcriptPath, () => unlinkSync(path))
+        .removeOrphan(row.id, transcriptHash, row.transcriptPath, () => unlinkSync(path))
         .catch(() => undefined);
       throw error;
     } finally {

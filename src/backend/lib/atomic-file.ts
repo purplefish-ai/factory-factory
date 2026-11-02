@@ -12,12 +12,34 @@ export interface WriteFileAtomicOptions {
   durableDirectoryRoot?: string;
 }
 
+/** The file was synced/renamed, but Windows cannot flush this directory handle.
+ * Callers must retain another durable copy before treating publication as complete.
+ */
+export class DirectorySyncUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super('Windows directory sync is unavailable; retain durable source bytes', { cause });
+    this.name = 'DirectorySyncUnavailableError';
+  }
+}
+
 async function syncDirectory(directory: string): Promise<void> {
-  const handle = await fs.open(directory, 'r');
+  let handle: fs.FileHandle | undefined;
   try {
+    handle = await fs.open(directory, 'r');
     await handle.sync();
+  } catch (error) {
+    if (
+      process.platform === 'win32' &&
+      error instanceof Error &&
+      'code' in error &&
+      typeof error.code === 'string' &&
+      ['EPERM', 'EACCES', 'EINVAL', 'ENOTSUP', 'EISDIR', 'EBADF'].includes(error.code)
+    ) {
+      throw new DirectorySyncUnavailableError(error);
+    }
+    throw error;
   } finally {
-    await handle.close();
+    await handle?.close();
   }
 }
 

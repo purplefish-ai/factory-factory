@@ -305,6 +305,10 @@ class SessionDataImplementation {
     return resolveClosedSessionTranscriptPath(archive, worktreePath);
   }
 
+  readClosedSessionTranscript(archive: ClosedSessionWithWorkspace, path: string): Promise<string> {
+    return closedSessionPersistenceService.readTranscript(archive, path);
+  }
+
   cleanupClosedSessionArtifacts(workspaceId: string): Promise<void> {
     return closedSessionPersistenceService.cleanupDeletedWorkspace(workspaceId);
   }

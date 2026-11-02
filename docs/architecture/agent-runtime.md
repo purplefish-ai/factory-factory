@@ -121,8 +121,20 @@ also covers directory entries created by concurrent writers. Sync failures
 retain pending proof. Other atomic-file callers keep their existing defaults.
 Atomic file writing and hash verification happen outside database transactions.
 Only then does a database-only completion write publish `COMPLETE` and clear the
-pending payload. SQLite constrains the state to `PENDING` or `COMPLETE`. Files
-are immutable artifact generations named by row ID and digest:
+pending payload. Windows cannot reliably open or flush directory handles through
+Node's filesystem API. If only that directory operation is unsupported, the file
+has already been synced, renamed and hash-verified; completion retains the exact
+`pendingTranscript` in SQLite as the durable source instead of clearing it. The
+file is then a reconstructable cache. Transcript and receipt readers validate
+the retained digest and use that source even if cache repair fails. Receipt
+lookup still requires a marker in native provider history; the archived local
+prompt is not delivery proof. A later successful POSIX file/directory flush can
+release the database copy. Other write, sync, verification and database errors
+retain `PENDING` and fail closed. Metadata lists never include the retained
+bytes. Recovery export must package retained bytes from both `PENDING` and
+`COMPLETE` rows; a missing Windows cache does not mean those bytes were lost.
+SQLite constrains the state to `PENDING` or `COMPLETE`. Files are immutable
+artifact generations named by row ID and digest:
 `BASE_DIR/closed-sessions/<sha256(workspaceId)>/<id>.<transcriptHash>.json`. A
 deleted and re-reserved logical archive key gets another row ID and file; a
 stale writer can neither overwrite nor remove its replacement. Failed completion
