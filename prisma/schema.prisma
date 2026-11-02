@@ -657,6 +657,7 @@ model AgentDefinition {
   isEnabled          Boolean           @default(false)
   executionConfig    Json              @default("{\"version\":1}") // agentExecutionConfigSchema
   definitionRevision Int               @default(1)
+  managementRevision Int               @default(1)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   triggers           AgentTrigger[]
@@ -712,6 +713,7 @@ model AgentTrigger {
   config               Json // Versioned configuration, validated with agentTriggerInputSchema
   filterInstructions   String?
   isEnabled            Boolean              @default(false)
+  isConfigured         Boolean? // NULL is unknown legacy membership; never inferred from activation
   triggerRevision      Int                  @default(1)
   activationGeneration Int                  @default(0)
   activationState      AgentActivationState @default(PAUSED)

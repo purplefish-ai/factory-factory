@@ -1,4 +1,5 @@
 import { cryptoService } from '@/backend/services/crypto.service';
+import { AgentManagementService } from './service/agent-management.service';
 import { AgentProposalService } from './service/agent-proposal.service';
 import { SlackConnectionService } from './service/slack-connection.service';
 
@@ -55,3 +56,7 @@ export { AgentRunMonitorService } from './service/agent-run-monitor.service';
 export { eventRunRecovery } from './service/agent-run-recovery.service';
 export { eventRunResults } from './service/agent-run-results.service';
 export { AgentLedgerRetentionService } from './service/agent-ledger-retention.service';
+export { AgentManagementService } from './service/agent-management.service';
+export { triggerCapability } from './service/agent-management-projection';
+
+export const agentManagementService = new AgentManagementService();

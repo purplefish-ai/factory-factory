@@ -3232,6 +3232,7 @@ export const AgentDefinitionScalarFieldEnum = {
   isEnabled: 'isEnabled',
   executionConfig: 'executionConfig',
   definitionRevision: 'definitionRevision',
+  managementRevision: 'managementRevision',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -3276,6 +3277,7 @@ export const AgentTriggerScalarFieldEnum = {
   config: 'config',
   filterInstructions: 'filterInstructions',
   isEnabled: 'isEnabled',
+  isConfigured: 'isConfigured',
   triggerRevision: 'triggerRevision',
   activationGeneration: 'activationGeneration',
   activationState: 'activationState',

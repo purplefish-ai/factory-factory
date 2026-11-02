@@ -1,3 +1,4 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { AgentSpecification } from '@/shared/agent-proposal';
 import {
   agentExecutionConfigSchema,
@@ -13,13 +14,18 @@ async function pauseRemovedTriggers(
 ) {
   const pausedIds: string[] = [];
   for (const removed of current.triggers.filter((trigger) => !retained.has(trigger.id))) {
-    if (!(executionChanged || removed.isEnabled) && removed.activationState === 'PAUSED') {
+    if (
+      removed.isConfigured === false &&
+      !(executionChanged || removed.isEnabled) &&
+      removed.activationState === 'PAUSED'
+    ) {
       continue;
     }
     pausedIds.push(removed.id);
     await tx.agentTrigger.update({
       where: { id: removed.id },
       data: {
+        isConfigured: false,
         isEnabled: false,
         activationState: 'PAUSED',
         triggerRevision: { increment: 1 },
@@ -43,6 +49,7 @@ async function reviseDefinition(
     where: { id: definitionId },
     include: { triggers: true },
   });
+  assertManagementRevision(current.managementRevision);
   const executionChanged =
     current.instructions !== definition.instructions ||
     JSON.stringify(agentExecutionConfigSchema.parse(current.executionConfig)) !==
@@ -51,6 +58,7 @@ async function reviseDefinition(
     where: { id: definitionId },
     data: {
       ...definition,
+      managementRevision: { increment: 1 },
       ...(executionChanged ? { definitionRevision: { increment: 1 } } : {}),
     },
   });
@@ -61,7 +69,13 @@ async function reviseDefinition(
     const { id, ...settings } = trigger;
     if (!previous) {
       await tx.agentTrigger.create({
-        data: { ...settings, id, agentDefinitionId: definitionId, isEnabled: false },
+        data: {
+          ...settings,
+          id,
+          agentDefinitionId: definitionId,
+          isConfigured: true,
+          isEnabled: false,
+        },
       });
       continue;
     }
@@ -74,8 +88,9 @@ async function reviseDefinition(
       isEnabled: false,
     });
     const changed =
+      !previous.isConfigured ||
       JSON.stringify(before) !==
-      JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }));
+        JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }));
     if (!(changed || executionChanged)) {
       continue;
     }
@@ -84,6 +99,7 @@ async function reviseDefinition(
       where: { id },
       data: {
         ...settings,
+        isConfigured: true,
         isEnabled: false,
         activationState: 'PAUSED',
         activationGeneration: { increment: 1 },
@@ -125,3 +141,9 @@ async function reviseDefinition(
 }
 
 export const agentRevisionAccessor = { reviseDefinition };
+
+function assertManagementRevision(revision: number) {
+  if (revision >= 2_147_483_647) {
+    throw new ApplicationError('CONFLICT', 'The management revision is exhausted.');
+  }
+}

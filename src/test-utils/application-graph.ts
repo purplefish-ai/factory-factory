@@ -1,6 +1,8 @@
 import { type Mock, vi } from 'vitest';
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
+import { createAgentManagement } from '@/backend/orchestration/agent-management.orchestrator';
 import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
+import { agentManagementService } from '@/backend/services/agent-definition';
 import type {
   PreparedSessionLoad,
   SessionLoadDependencies,
@@ -121,6 +123,8 @@ vi.mock('@/backend/services/config.service', () => ({
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
 vi.mock('@/backend/services/agent-definition', () => ({
   agentProposalService: {},
+  agentManagementService: {},
+  triggerCapability: vi.fn(),
   slackConnectionService: {
     list: vi.fn(async () => []),
     connect: vi.fn(),
@@ -481,6 +485,8 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     slackConnectionService,
     agentProposalService,
     agentAuthoring: createAgentAuthoring((): ApplicationServices => services),
+    agentManagementService,
+    agentManagement: createAgentManagement((): ApplicationServices => services),
     agentRuntime: {
       start: vi.fn(),
       stop: vi.fn().mockResolvedValue(undefined),
