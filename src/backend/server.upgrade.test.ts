@@ -474,7 +474,7 @@ describe('server websocket upgrade routing', () => {
     expect(application.services.agentRuntime.start).toHaveBeenCalledOnce();
   });
 
-  it('rejects concurrent start calls without running startup cleanup', async () => {
+  it.each([false, true])('rejects interrupted startup (shutdown=%s)', async (stopDuringStartup) => {
     const harness = createTestHarness();
     let reconciliationStarted!: () => void;
     let continueReconciliation!: () => void;
@@ -484,7 +484,7 @@ describe('server websocket upgrade routing', () => {
     const continueReconciliationPromise = new Promise<void>((resolve) => {
       continueReconciliation = resolve;
     });
-    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
+    vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockImplementationOnce(
       async () => {
         reconciliationStarted();
         await continueReconciliationPromise;
@@ -501,6 +501,18 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
     expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
+    if (stopDuringStartup) {
+      await server.stop();
+      expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+      continueReconciliation();
+      await expect(startPromise).rejects.toThrow('Server startup interrupted by shutdown');
+      expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+      expect(harness.lifecycle.recoverStaleArchivingWorkspaces).not.toHaveBeenCalled();
+      expect(harness.lifecycle.snapshotReconciliation.start).not.toHaveBeenCalled();
+      expect(harness.services.agentRuntime.start).not.toHaveBeenCalled();
+      expect(server.getHttpServer().listening).toBe(false);
+      return;
+    }
     continueReconciliation();
     await expect(startPromise).resolves.toBe('http://localhost:0');
     expect(server.getHttpServer().listening).toBe(true);

@@ -522,6 +522,9 @@ export function createServer(application: Application, requestedPort?: number): 
         eventLoopMonitorStarted = true;
         await bindServerWithPortFallback();
         await runStartupReconciliation();
+        if (cleanupStarted) {
+          throw new Error('Server startup interrupted by shutdown');
+        }
 
         // Git worktree cleanup can outlast the CLI startup deadline. Keep these
         // workspaces ARCHIVING while recovery runs without delaying readiness.
