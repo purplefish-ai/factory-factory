@@ -1,6 +1,7 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { AgentIssueEventPage } from '@/shared/agent-source';
 import type { AgentSourceEntry, AgentSourceScan } from '@/shared/agent-source-state';
+import { invalidSkippedIdentity, hasUnknownVerificationPrefix } from './agent-source-verification';
 
 export function discontinuity(): never {
   throw new ApplicationError(
@@ -142,7 +143,7 @@ function verifyEntries(scan: AgentSourceScan, expected: string[], page: AgentIss
   for (const item of page.events) {
     if (!started && item.providerEventId !== expected[scan.verifiedCount]) {
       // Head insertion and overlap may move the desired anchor to a later page.
-      if (invalidSkippedIdentity(expected, item.providerEventId, scan.verifiedCount)) {
+      if (invalidSkippedIdentity(expected.indexOf(item.providerEventId), scan.verifiedCount)) {
         discontinuity();
       }
       continue;
@@ -173,11 +174,6 @@ function hasUncapturedTail(
   );
 }
 
-function invalidSkippedIdentity(expected: string[], identity: string, verifiedCount: number) {
-  const position = expected.indexOf(identity);
-  return position > verifiedCount || (verifiedCount > 0 && position < 0);
-}
-
 /** Unknown identities before a resumed overlap may be a shifted head prefix.
  * Re-prove the interval from its fixed head instead of trusting or ignoring them.
  */
@@ -193,8 +189,13 @@ function rewindShiftedOverlap(
   const anchor = page.events.findIndex(
     (item) => item.providerEventId === expected[scan.verifiedCount]
   );
-  const prefix = anchor < 0 ? page.events : page.events.slice(0, anchor);
-  if (!prefix.some((item) => !expected.includes(item.providerEventId))) {
+  if (
+    !hasUnknownVerificationPrefix(
+      page.events.map((item) => item.providerEventId),
+      anchor,
+      (id) => expected.includes(id)
+    )
+  ) {
     return false;
   }
   scan.nextPage = 1;

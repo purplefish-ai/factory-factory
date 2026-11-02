@@ -103,8 +103,8 @@ export async function getBaseline(connectionId: string, id: string) {
     : null;
 }
 
-/** A baseline read can race a newer interval commit. Retained evidence resolves its exact head. */
-export async function historicalHeadOrder(tx: Tx, connectionId: string, head: string | null) {
+/** Rejected proof fences new preparation; already-issued baseline IDs remain readable. */
+export async function assertCheckpointProof(tx: Tx, connectionId: string) {
   const rejected = await tx.agentSourceCheckpoint.findFirst({
     where: { connectionId, status: 'INVALID' },
     select: { scanId: true },
@@ -112,6 +112,11 @@ export async function historicalHeadOrder(tx: Tx, connectionId: string, head: st
   if (rejected) {
     throw new ApplicationError('CONFLICT', 'Invalid historical source proof requires recovery.');
   }
+}
+
+/** A baseline read can race a newer interval commit. Retained evidence resolves its exact head. */
+export async function historicalHeadOrder(tx: Tx, connectionId: string, head: string | null) {
+  await assertCheckpointProof(tx, connectionId);
   if (head === null) {
     return 0;
   }

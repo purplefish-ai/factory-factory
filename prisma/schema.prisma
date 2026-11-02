@@ -822,6 +822,7 @@ model AgentSourceCheckpoint {
   entryCount Int @default(0)
   executableCount Int @default(0)
   verifiedCount Int @default(0)
+  verification Json? // Canonical verifier resume/overlap progress, validated by checkpoint verification schema
   headEventId String?
   boundaryKnown Boolean @default(false)
   previousBoundaryEventId String?

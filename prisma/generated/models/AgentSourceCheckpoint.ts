@@ -82,6 +82,7 @@ export type AgentSourceCheckpointCountAggregateOutputType = {
   entryCount: number
   executableCount: number
   verifiedCount: number
+  verification: number
   headEventId: number
   boundaryKnown: number
   previousBoundaryEventId: number
@@ -148,6 +149,7 @@ export type AgentSourceCheckpointCountAggregateInputType = {
   entryCount?: true
   executableCount?: true
   verifiedCount?: true
+  verification?: true
   headEventId?: true
   boundaryKnown?: true
   previousBoundaryEventId?: true
@@ -251,6 +253,7 @@ export type AgentSourceCheckpointGroupByOutputType = {
   entryCount: number
   executableCount: number
   verifiedCount: number
+  verification: runtime.JsonValue | null
   headEventId: string | null
   boundaryKnown: boolean
   previousBoundaryEventId: string | null
@@ -290,6 +293,7 @@ export type AgentSourceCheckpointWhereInput = {
   entryCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   executableCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   verifiedCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
+  verification?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
   headEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
   boundaryKnown?: Prisma.BoolFilter<"AgentSourceCheckpoint"> | boolean
   previousBoundaryEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
@@ -308,6 +312,7 @@ export type AgentSourceCheckpointOrderByWithRelationInput = {
   entryCount?: Prisma.SortOrder
   executableCount?: Prisma.SortOrder
   verifiedCount?: Prisma.SortOrder
+  verification?: Prisma.SortOrderInput | Prisma.SortOrder
   headEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   boundaryKnown?: Prisma.SortOrder
   previousBoundaryEventId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -330,6 +335,7 @@ export type AgentSourceCheckpointWhereUniqueInput = Prisma.AtLeast<{
   entryCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   executableCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   verifiedCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
+  verification?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
   headEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
   boundaryKnown?: Prisma.BoolFilter<"AgentSourceCheckpoint"> | boolean
   previousBoundaryEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
@@ -348,6 +354,7 @@ export type AgentSourceCheckpointOrderByWithAggregationInput = {
   entryCount?: Prisma.SortOrder
   executableCount?: Prisma.SortOrder
   verifiedCount?: Prisma.SortOrder
+  verification?: Prisma.SortOrderInput | Prisma.SortOrder
   headEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   boundaryKnown?: Prisma.SortOrder
   previousBoundaryEventId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -372,6 +379,7 @@ export type AgentSourceCheckpointScalarWhereWithAggregatesInput = {
   entryCount?: Prisma.IntWithAggregatesFilter<"AgentSourceCheckpoint"> | number
   executableCount?: Prisma.IntWithAggregatesFilter<"AgentSourceCheckpoint"> | number
   verifiedCount?: Prisma.IntWithAggregatesFilter<"AgentSourceCheckpoint"> | number
+  verification?: Prisma.JsonNullableWithAggregatesFilter<"AgentSourceCheckpoint">
   headEventId?: Prisma.StringNullableWithAggregatesFilter<"AgentSourceCheckpoint"> | string | null
   boundaryKnown?: Prisma.BoolWithAggregatesFilter<"AgentSourceCheckpoint"> | boolean
   previousBoundaryEventId?: Prisma.StringNullableWithAggregatesFilter<"AgentSourceCheckpoint"> | string | null
@@ -387,6 +395,7 @@ export type AgentSourceCheckpointCreateInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -405,6 +414,7 @@ export type AgentSourceCheckpointUncheckedCreateInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -421,6 +431,7 @@ export type AgentSourceCheckpointUpdateInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -439,6 +450,7 @@ export type AgentSourceCheckpointUncheckedUpdateInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -456,6 +468,7 @@ export type AgentSourceCheckpointCreateManyInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -471,6 +484,7 @@ export type AgentSourceCheckpointUpdateManyMutationInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -487,6 +501,7 @@ export type AgentSourceCheckpointUncheckedUpdateManyInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -518,6 +533,7 @@ export type AgentSourceCheckpointCountOrderByAggregateInput = {
   entryCount?: Prisma.SortOrder
   executableCount?: Prisma.SortOrder
   verifiedCount?: Prisma.SortOrder
+  verification?: Prisma.SortOrder
   headEventId?: Prisma.SortOrder
   boundaryKnown?: Prisma.SortOrder
   previousBoundaryEventId?: Prisma.SortOrder
@@ -642,6 +658,7 @@ export type AgentSourceCheckpointCreateWithoutSourceInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -658,6 +675,7 @@ export type AgentSourceCheckpointUncheckedCreateWithoutSourceInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -703,6 +721,7 @@ export type AgentSourceCheckpointScalarWhereInput = {
   entryCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   executableCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   verifiedCount?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
+  verification?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
   headEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
   boundaryKnown?: Prisma.BoolFilter<"AgentSourceCheckpoint"> | boolean
   previousBoundaryEventId?: Prisma.StringNullableFilter<"AgentSourceCheckpoint"> | string | null
@@ -718,6 +737,7 @@ export type AgentSourceCheckpointCreateWithoutHeadsInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -735,6 +755,7 @@ export type AgentSourceCheckpointUncheckedCreateWithoutHeadsInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -766,6 +787,7 @@ export type AgentSourceCheckpointUpdateWithoutHeadsInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -783,6 +805,7 @@ export type AgentSourceCheckpointUncheckedUpdateWithoutHeadsInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -798,6 +821,7 @@ export type AgentSourceCheckpointCreateManySourceInput = {
   entryCount?: number
   executableCount?: number
   verifiedCount?: number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: string | null
   boundaryKnown?: boolean
   previousBoundaryEventId?: string | null
@@ -813,6 +837,7 @@ export type AgentSourceCheckpointUpdateWithoutSourceInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -829,6 +854,7 @@ export type AgentSourceCheckpointUncheckedUpdateWithoutSourceInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -845,6 +871,7 @@ export type AgentSourceCheckpointUncheckedUpdateManyWithoutSourceInput = {
   entryCount?: Prisma.IntFieldUpdateOperationsInput | number
   executableCount?: Prisma.IntFieldUpdateOperationsInput | number
   verifiedCount?: Prisma.IntFieldUpdateOperationsInput | number
+  verification?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   boundaryKnown?: Prisma.BoolFieldUpdateOperationsInput | boolean
   previousBoundaryEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -892,6 +919,7 @@ export type AgentSourceCheckpointSelect<ExtArgs extends runtime.Types.Extensions
   entryCount?: boolean
   executableCount?: boolean
   verifiedCount?: boolean
+  verification?: boolean
   headEventId?: boolean
   boundaryKnown?: boolean
   previousBoundaryEventId?: boolean
@@ -911,6 +939,7 @@ export type AgentSourceCheckpointSelectCreateManyAndReturn<ExtArgs extends runti
   entryCount?: boolean
   executableCount?: boolean
   verifiedCount?: boolean
+  verification?: boolean
   headEventId?: boolean
   boundaryKnown?: boolean
   previousBoundaryEventId?: boolean
@@ -928,6 +957,7 @@ export type AgentSourceCheckpointSelectUpdateManyAndReturn<ExtArgs extends runti
   entryCount?: boolean
   executableCount?: boolean
   verifiedCount?: boolean
+  verification?: boolean
   headEventId?: boolean
   boundaryKnown?: boolean
   previousBoundaryEventId?: boolean
@@ -945,6 +975,7 @@ export type AgentSourceCheckpointSelectScalar = {
   entryCount?: boolean
   executableCount?: boolean
   verifiedCount?: boolean
+  verification?: boolean
   headEventId?: boolean
   boundaryKnown?: boolean
   previousBoundaryEventId?: boolean
@@ -953,7 +984,7 @@ export type AgentSourceCheckpointSelectScalar = {
   validationCursor?: boolean
 }
 
-export type AgentSourceCheckpointOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "status" | "nextOrdinal" | "entryCount" | "executableCount" | "verifiedCount" | "headEventId" | "boundaryKnown" | "previousBoundaryEventId" | "initialSourceOrder" | "sourceOrder" | "validationCursor", ExtArgs["result"]["agentSourceCheckpoint"]>
+export type AgentSourceCheckpointOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "status" | "nextOrdinal" | "entryCount" | "executableCount" | "verifiedCount" | "verification" | "headEventId" | "boundaryKnown" | "previousBoundaryEventId" | "initialSourceOrder" | "sourceOrder" | "validationCursor", ExtArgs["result"]["agentSourceCheckpoint"]>
 export type AgentSourceCheckpointInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
   heads?: boolean | Prisma.AgentSourceCheckpoint$headsArgs<ExtArgs>
@@ -980,6 +1011,7 @@ export type $AgentSourceCheckpointPayload<ExtArgs extends runtime.Types.Extensio
     entryCount: number
     executableCount: number
     verifiedCount: number
+    verification: runtime.JsonValue | null
     headEventId: string | null
     boundaryKnown: boolean
     previousBoundaryEventId: string | null
@@ -1418,6 +1450,7 @@ export interface AgentSourceCheckpointFieldRefs {
   readonly entryCount: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
   readonly executableCount: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
   readonly verifiedCount: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
+  readonly verification: Prisma.FieldRef<"AgentSourceCheckpoint", 'Json'>
   readonly headEventId: Prisma.FieldRef<"AgentSourceCheckpoint", 'String'>
   readonly boundaryKnown: Prisma.FieldRef<"AgentSourceCheckpoint", 'Boolean'>
   readonly previousBoundaryEventId: Prisma.FieldRef<"AgentSourceCheckpoint", 'String'>

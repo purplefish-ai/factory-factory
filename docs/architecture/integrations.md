@@ -399,6 +399,10 @@ executable entries. Control-only intervals therefore retain identities even when
 the highwater does not advance. Each capture transaction adds at most 100
 provisional head rows; the finalization transaction publishes their highwater
 only after ordered verification, including the previous committed boundary.
+Verification persists the live scanner's page/resume state. Discarded shifted
+overlap observations restart proof from the fixed head; unknown identities
+between verified pages and capture after verification fail closed. Live and
+indexed verification share the skipped-identity and shifted-prefix guards.
 Legacy backfill reconstructs that boundary only from independent retained
 baseline/interval evidence; ambiguous proof remains intact. Partial or invalid
 checkpoints never serve historical lookups. Fully indexed intervals wait until
@@ -414,9 +418,13 @@ ledger writer lock. Small intervals can publish during finalization; larger
 intervals remain INDEXED with their full pages until maintenance finishes.
 Continuous authority writes can defer completion, but cannot authorize partial
 validation. Conflicting ordinals fail closed and retain their original proof.
-Any rejected interval fences historical preparation and page compaction for that
-connection, since later pages may contain unexamined conflicting heads.
-Already-issued baseline IDs remain readable through `getBaseline`.
+Any rejected interval fences new baseline preparation (including the current
+committed head) and page compaction for that connection, since later pages may
+contain unexamined conflicting heads. Already-issued baseline IDs remain
+readable through `getBaseline`. The verifier progress migration replays older
+BUILDING checkpoints from their retained pages, without deleting their heads or
+interrupting active source scans. INDEXED, COMPLETE, and rejected checkpoints
+retain their existing status.
 
 Each operational target in a poll cycle also advances at most one legacy proof
 page or one authority-validation chunk in a serialized maintenance transaction.

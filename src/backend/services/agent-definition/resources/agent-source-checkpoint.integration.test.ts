@@ -245,6 +245,7 @@ it('rejects a backfill ordinal that conflicts with an already issued baseline', 
 });
 
 it('bounds compaction to100 pages', async () => {
+  const ids = Array.from({ length: 100 }, (_, i) => `control-${i}`);
   await db.prisma.agentSourcePage.createMany({
     data: [
       {
@@ -253,28 +254,49 @@ it('bounds compaction to100 pages', async () => {
         ordinal: 0,
         phase: 'CAPTURE',
         requestPage: 1,
-        evidence: { ids: ['control'], entries: [{ providerEventId: 'control', eventId: null }] },
+        nextPage: 2,
+        evidence: {
+          ids,
+          entries: ids.map((providerEventId) => ({ providerEventId, eventId: null })),
+        },
+      },
+      {
+        connectionId: fixture.connectionId,
+        scanId: 'z-valid',
+        ordinal: 1,
+        phase: 'CAPTURE',
+        requestPage: 2,
+        evidence: { ids: ['tail'], entries: [{ providerEventId: 'tail', eventId: null }] },
       },
       ...Array.from({ length: 104 }, (_, i) => ({
         connectionId: fixture.connectionId,
         scanId: 'z-valid',
-        ordinal: i + 1,
+        ordinal: i + 2,
         phase: 'VERIFY',
         requestPage: 1,
-        evidence: { ids: ['control'], entries: [] },
+        nextPage: 2,
+        evidence: { ids, entries: [] },
       })),
       {
         connectionId: fixture.connectionId,
         scanId: 'z-valid',
-        ordinal: 105,
+        ordinal: 106,
+        phase: 'VERIFY',
+        requestPage: 2,
+        evidence: { ids: ['tail'], entries: [] },
+      },
+      {
+        connectionId: fixture.connectionId,
+        scanId: 'z-valid',
+        ordinal: 107,
         phase: 'FINALIZED',
-        requestPage: 1,
+        requestPage: 2,
         sourceOrder: 0,
-        evidence: { ids: ['control'], entries: [] },
+        evidence: { ids: ['control-0'], entries: [] },
       },
     ],
   });
-  for (let i = 0; i < 106; i++) {
+  for (let i = 0; i < 109; i++) {
     await source.maintainCheckpoints(fixture.connectionId);
   }
   expect(await source.maintainCheckpoints(fixture.connectionId)).toEqual({
@@ -283,11 +305,11 @@ it('bounds compaction to100 pages', async () => {
   });
   expect(await source.maintainCheckpoints(fixture.connectionId)).toEqual({
     indexedPages: 0,
-    deletedPages: 5,
+    deletedPages: 7,
   });
-  expect(
-    (await source.prepareBaseline(fixture.connectionId, 'control')).boundary?.sourceOrder
-  ).toBe(0);
+  expect((await source.prepareBaseline(fixture.connectionId, 'tail')).boundary?.sourceOrder).toBe(
+    0
+  );
 }, 30_000);
 
 it('retains legacy proof when the previous committed boundary is missing from verification', async () => {

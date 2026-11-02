@@ -17,6 +17,7 @@ import { agentSourceCheckpointAccessor } from './agent-source-checkpoint.accesso
 import {
   listTargets,
   assertTarget,
+  assertCheckpointProof,
   entriesFor,
   getState,
   getBaseline,
@@ -76,6 +77,7 @@ async function prepareBaseline(connectionId: string, headEventId: string | null)
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
     assertOperational(state);
+    await assertCheckpointProof(tx, connectionId);
     const cursor = state?.cursor ? agentGithubCursorSchema.parse(state.cursor) : null;
     if (!cursor) {
       await initializeSource(tx, connectionId, headEventId, state?.lastSourceOrder ?? 0);

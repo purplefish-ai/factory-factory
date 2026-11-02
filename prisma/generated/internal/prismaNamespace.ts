@@ -3515,6 +3515,7 @@ export const AgentSourceCheckpointScalarFieldEnum = {
   entryCount: 'entryCount',
   executableCount: 'executableCount',
   verifiedCount: 'verifiedCount',
+  verification: 'verification',
   headEventId: 'headEventId',
   boundaryKnown: 'boundaryKnown',
   previousBoundaryEventId: 'previousBoundaryEventId',

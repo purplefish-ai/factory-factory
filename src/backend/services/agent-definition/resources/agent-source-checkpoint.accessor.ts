@@ -7,6 +7,7 @@ import type { AgentSourceCheckpoint, AgentSourcePage, Prisma } from '@prisma-gen
 import { ledgerTransaction } from './agent-ledger-transaction';
 import { captureBoundary } from './agent-source-checkpoint-boundary';
 import { checkpointPromotionStatus } from './agent-source-checkpoint-promotion';
+import { verifyCheckpointPage } from './agent-source-checkpoint-verification';
 
 type Tx = Prisma.TransactionClient;
 type DeletePages = (tx: Tx, ids: string[]) => Promise<{ count: number }>;
@@ -22,6 +23,9 @@ async function promoteCheckpoint(tx: Tx, connectionId: string, scanId: string) {
 }
 
 async function capture(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSourcePage) {
+  if (checkpoint.verification !== null) {
+    return false;
+  }
   const evidence = agentSourcePageEvidenceSchema.parse(page.evidence);
   let offset = checkpoint.executableCount;
   let position = checkpoint.entryCount;
@@ -84,94 +88,16 @@ async function capture(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSou
   return true;
 }
 
-function invalidSkippedIdentity(position: number | undefined, verifiedCount: number) {
-  return (
-    (position !== undefined && position > verifiedCount) ||
-    (verifiedCount > 0 && position === undefined)
-  );
-}
-
-function verificationMatches(
-  checkpoint: AgentSourceCheckpoint,
-  page: AgentSourcePage,
-  ids: string[],
-  expected: string[],
-  positions: Map<string, number>
-) {
-  let matched = 0;
-  let started = false;
-  for (const id of ids) {
-    if (!expected[matched]) {
-      break;
-    }
-    if (!started && id !== expected[matched]) {
-      const position = positions.get(id);
-      if (invalidSkippedIdentity(position, checkpoint.verifiedCount)) {
-        return null;
-      }
-      continue;
-    }
-    started = true;
-    if (id !== expected[matched]) {
-      return null;
-    }
-    matched++;
-    if (
-      checkpoint.boundaryKnown &&
-      checkpoint.previousBoundaryEventId === null &&
-      checkpoint.verifiedCount + matched === checkpoint.entryCount &&
-      (id !== ids.at(-1) || page.nextPage !== null)
-    ) {
-      return null;
-    }
-  }
-  return matched;
-}
-
 async function verify(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSourcePage) {
-  const evidence = agentSourcePageEvidenceSchema.parse(page.evidence);
-  if (evidence.entries.length) {
-    return false;
-  }
-  const heads = await tx.agentSourceHead.findMany({
-    where: {
-      connectionId: page.connectionId,
-      scanId: page.scanId,
-      position: { gte: checkpoint.verifiedCount },
-    },
-    orderBy: { position: 'asc' },
-    take: 100,
-  });
-  const expected = heads.map((head) => head.providerEventId);
-  if (
-    checkpoint.previousBoundaryEventId &&
-    checkpoint.verifiedCount + expected.length === checkpoint.entryCount &&
-    expected.length < 100
-  ) {
-    expected.push(checkpoint.previousBoundaryEventId);
-  }
-  // One bounded identity lookup distinguishes prior overlap from a gap or future head.
-  const observed = await tx.agentSourceHead.findMany({
-    where: {
-      connectionId: page.connectionId,
-      scanId: page.scanId,
-      providerEventId: { in: evidence.ids },
-    },
-    select: { providerEventId: true, position: true },
-  });
-  const positions = new Map(observed.map((head) => [head.providerEventId, head.position]));
-  if (checkpoint.previousBoundaryEventId) {
-    positions.set(checkpoint.previousBoundaryEventId, checkpoint.entryCount);
-  }
-  const matched = verificationMatches(checkpoint, page, evidence.ids, expected, positions);
-  if (matched === null) {
+  const data = await verifyCheckpointPage(tx, checkpoint, page);
+  if (!data) {
     return false;
   }
   await tx.agentSourceCheckpoint.update({
     where: {
       connectionId_scanId: { connectionId: checkpoint.connectionId, scanId: checkpoint.scanId },
     },
-    data: { verifiedCount: checkpoint.verifiedCount + matched },
+    data,
   });
   return true;
 }
