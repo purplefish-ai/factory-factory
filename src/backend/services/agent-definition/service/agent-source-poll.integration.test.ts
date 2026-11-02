@@ -375,6 +375,13 @@ it.each([false, true])(
       expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
       expect(await db.prisma.agentSourceBaseline.findMany()).toEqual(baselines);
       expect(await state()).toEqual(before);
+      const { agentSourceAccessor } = await vi.importActual<
+        typeof import('../resources/agent-source.accessor')
+      >('../resources/agent-source.accessor');
+      await agentSourceAccessor.maintainCheckpoints(fixture.connectionId);
+      expect(await db.prisma.agentSourcePage.count({ where: { phase: 'CAPTURE' } })).toBe(0);
+      expect(await db.prisma.agentSourceBaseline.count({ where: { headEventId: 'H' } })).toBe(0);
+      expect(await state()).toEqual(before);
       return observed;
     };
     expect((await baseline()).boundary).toEqual({

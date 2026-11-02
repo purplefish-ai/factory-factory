@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentSourceCheckpointAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor',
+  },
   workspaceRetryAuthorityAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/workspace-retry-authority.accessor',

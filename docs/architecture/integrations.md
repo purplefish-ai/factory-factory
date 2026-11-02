@@ -406,12 +406,56 @@ historical events. An already-polled source retains a prepared head in
 have ordinal zero. Retained completed-interval evidence also resolves
 preparation that races a newer commit, even after event rows are pruned. These
 methods do not enable any trigger; trusted activation and its
-revision/generation checks remain separate work. CAPTURE/FINALIZED proof pairs,
-including immutable event-ID markers, and baseline metadata are retained beyond
-event identity expiry. A provider baseline read can still be in flight before
-its pending row exists. These compact provider/control identities have a
-separate lifetime from source text; no source-proof garbage collection or
-current-reference expiry is implemented.
+revision/generation checks remain separate work.
+
+`AgentSourceCheckpoint` and `AgentSourceHead` retain indexed API-order evidence
+for every captured identity, including unsupported/control heads. A head's
+canonical ordinal is its completed interval highwater minus the number of newer
+executable entries. Control-only intervals therefore retain identities even when
+the highwater does not advance. Each capture transaction adds at most 100
+provisional head rows; the finalization transaction publishes their highwater
+only after ordered verification, including the previous committed boundary.
+Verification persists the live scanner's page/resume state. Discarded shifted
+overlap observations restart proof from the fixed head; unknown identities
+between verified pages and capture after verification fail closed. Live and
+indexed verification share the skipped-identity and shifted-prefix guards.
+Legacy backfill reconstructs that boundary only from independent retained
+baseline/interval evidence; ambiguous proof remains intact. Partial or invalid
+checkpoints never serve historical lookups. Fully indexed intervals wait until
+all legacy finalized intervals have been indexed before conflict checks can
+publish them. Promotion keyset-traverses at most 100 retained authority rows per
+transaction across finalized markers, heads, and baselines. Each row uses unique
+point joins, so repeated head identities or baseline pins cannot turn one row
+into an unbounded conflict probe. A persisted cursor counts the candidate's
+heads and records the connection authority revision. SQLite triggers advance
+that revision when consulted proof or ordinal claims change; validation restarts
+from the beginning at a new revision. The final chunk and publication share the
+ledger writer lock. Small intervals can publish during finalization; larger
+intervals remain INDEXED with their full pages until maintenance finishes.
+Continuous authority writes can defer completion, but cannot authorize partial
+validation. Conflicting ordinals fail closed and retain their original proof.
+Any rejected interval fences new baseline preparation (including the current
+committed head) and page compaction for that connection, since later pages may
+contain unexamined conflicting heads. Already-issued baseline IDs remain
+readable through `getBaseline`. The verifier progress migration replays older
+BUILDING checkpoints from their retained pages, without deleting their heads or
+interrupting active source scans. INDEXED, COMPLETE, and rejected checkpoints
+retain their existing status.
+
+Each operational target in a poll cycle also advances at most one legacy proof
+page or one authority-validation chunk in a serialized maintenance transaction.
+Until its entire interval is verified, historical baseline preparation falls
+back to retained CAPTURE/FINALIZED proof. After completion, maintenance can
+remove at most 100 redundant CAPTURE/VERIFY pages per transaction. Proof pages
+for active scans, missing or malformed proof, and incomplete checkpoints remain
+retained. Checkpoint metadata can advance through backfill or become invalid
+without deleting those proof pages. FINALIZED markers, head checkpoints and
+issued baseline rows remain indefinitely, preserving both exact historical head
+lookups and `getBaseline(connectionId, id)` answers after event pruning and page
+compaction. No age or current-reference rule deletes that retained evidence: a
+provider baseline read may still be in flight before its pending row exists.
+Source pages contain compact provider/control identities, not full source text.
+These tables do not change event-ledger replay retention or activation fences.
 
 Defaults are one active run per definition, four globally, 100 waiting runs per
 definition and 24-hour waiting expiry. The first three limits are configurable

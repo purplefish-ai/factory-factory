@@ -113,6 +113,7 @@ export class AgentSourcePollService {
       return;
     }
     const repository = await this.repository(target, signal);
+    await agentSourceAccessor.maintainCheckpoints(target.connectionId);
     await agentSourceAccessor.resume(target.connectionId);
     await this.pollRepository(target, repository, signal);
   }
