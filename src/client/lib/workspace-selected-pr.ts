@@ -38,10 +38,14 @@ export function getWorkspaceSelectedPR(workspace: WorkspacePRSource): WorkspaceP
   };
 }
 
+/** Synthetic scalar-snapshot IDs are display identities, never persisted association IDs. */
+export function getWorkspacePRAssociationId(workspaceId: string, prId: string | undefined) {
+  const legacyId = `legacy-pr-${workspaceId}`;
+  return prId === undefined || prId === legacyId || prId.startsWith(`${legacyId}-`) ? null : prId;
+}
+
 /** Review routing must never submit a scalar adapter's synthetic display identity. */
 export function getWorkspacePRReviewTarget(workspace: WorkspacePRSource) {
   const pr = getWorkspaceSelectedPR(workspace);
-  const legacyId = `legacy-pr-${workspace.id}`;
-  const synthetic = pr?.id === legacyId || pr?.id.startsWith(`${legacyId}-`);
-  return { pr, associationId: pr && !synthetic ? pr.id : null };
+  return { pr, associationId: getWorkspacePRAssociationId(workspace.id, pr?.id) };
 }
