@@ -23,10 +23,24 @@ export async function captureBoundary(
   });
   const anchor = known[0]?.providerEventId;
   const end = anchor ? evidence.ids.indexOf(anchor) : -1;
-  // A continuation page may begin with the boundary and contain no captured head.
-  // Its first identity still requires an independent canonical witness below.
-  const boundary =
-    end >= 0 ? evidence.ids[end + 1] : checkpoint.entryCount > 0 ? evidence.ids[0] : undefined;
+  let boundary = end >= 0 ? evidence.ids[end + 1] : undefined;
+  if (end < 0 && checkpoint.entryCount > 0 && evidence.ids.length) {
+    // A boundary-only continuation ends capture; an overlap-search observation does not.
+    // Legacy replay has the next retained page, so this unique lookup distinguishes them.
+    const next = await tx.agentSourcePage.findUnique({
+      where: {
+        connectionId_scanId_ordinal: {
+          connectionId: page.connectionId,
+          scanId: page.scanId,
+          ordinal: page.ordinal + 1,
+        },
+      },
+      select: { phase: true },
+    });
+    if (next?.phase === 'VERIFY') {
+      boundary = evidence.ids[0];
+    }
+  }
   if (boundary) {
     return { boundaryKnown: true, previousBoundaryEventId: boundary };
   }

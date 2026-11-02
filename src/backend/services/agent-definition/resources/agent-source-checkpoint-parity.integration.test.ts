@@ -248,3 +248,56 @@ it('replays partial pre-upgrade checkpoints without deleting heads or fencing an
     (await source.prepareBaseline(fixture.connectionId, 'head-104')).boundary?.sourceOrder
   ).toBe(0);
 });
+
+it('replays capture overlap-search observations containing only prepended identities', async () => {
+  await db.prisma.agentSourceState.deleteMany();
+  const anchor = await source.prepareBaseline(fixture.connectionId, 'anchor');
+  const pending = await source.prepareBaseline(fixture.connectionId, 'B');
+  const a = { providerEventId: 'A', payload: fixture.github('A').payload };
+  const b = { providerEventId: 'B', payload: null };
+  const c = { providerEventId: 'C', payload: fixture.github('C').payload };
+  const prefix = [
+    { providerEventId: 'new-1', payload: null },
+    { providerEventId: 'new-2', payload: null },
+  ];
+  const middle = [{ providerEventId: 'new-3', payload: null }, a];
+  const tail = [b, c, { providerEventId: 'anchor', payload: null }];
+  await source.savePage(fixture.connectionId, 1, { events: [a, b], nextPage: 2 });
+  await source.resume(fixture.connectionId);
+  await source.savePage(fixture.connectionId, 1, { events: prefix, nextPage: 2 });
+  expect((await source.getState(fixture.connectionId))?.cursor).toMatchObject({
+    scan: { phase: 'CAPTURE', nextPage: 2, overlapOffset: 0 },
+  });
+  expect(await db.prisma.agentSourcePage.findFirst({ where: { ordinal: 1 } })).toMatchObject({
+    phase: 'CAPTURE',
+    evidence: { ids: ['new-1', 'new-2'], entries: [] },
+  });
+  await source.savePage(fixture.connectionId, 2, { events: middle, nextPage: 3 });
+  await source.savePage(fixture.connectionId, 3, { events: tail, nextPage: 4 });
+  await source.savePage(fixture.connectionId, 1, { events: prefix, nextPage: 2 });
+  await source.savePage(fixture.connectionId, 2, { events: middle, nextPage: 3 });
+  await source.savePage(fixture.connectionId, 3, { events: tail, nextPage: 4 });
+  await source.finalizeNextChunk(fixture.connectionId);
+  expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({
+    status: 'COMPLETE',
+    previousBoundaryEventId: 'anchor',
+    sourceOrder: 2,
+  });
+  const issued = await source.getBaseline(fixture.connectionId, pending.id);
+  expect(issued?.boundary?.sourceOrder).toBe(1);
+  await db.prisma.agentSourceCheckpoint.deleteMany();
+  for (let i = 0; i < 10; i++) {
+    await source.maintainCheckpoints(fixture.connectionId);
+  }
+  expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({
+    status: 'COMPLETE',
+    previousBoundaryEventId: 'anchor',
+    initialSourceOrder: 0,
+    sourceOrder: 2,
+  });
+  expect(await source.getBaseline(fixture.connectionId, pending.id)).toEqual(issued);
+  expect(await source.getBaseline(fixture.connectionId, anchor.id)).toEqual(anchor);
+  expect((await source.prepareBaseline(fixture.connectionId, 'B')).boundary?.sourceOrder).toBe(1);
+  expect(await db.prisma.agentSourceHead.count()).toBe(3);
+  expect(await db.prisma.agentSourcePage.count()).toBe(1);
+});
