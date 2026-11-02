@@ -353,7 +353,27 @@ it('roundtrips archive payloads through the full logical import and publishes on
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
     },
-    messages: [],
+    messages: [
+      {
+        id: 'first',
+        source: 'user',
+        timestamp: startedAt.toISOString(),
+        order: 0,
+        text: 'visible first',
+        providerPrompt: [
+          { type: 'text', text: 'exact combined provider prompt' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'eA==' } },
+        ],
+      },
+      {
+        id: 'second',
+        source: 'user',
+        timestamp: startedAt.toISOString(),
+        order: 1,
+        text: 'visible second',
+        providerPrompt: null,
+      },
+    ],
   });
   const digest = (value: string) => createHash('sha256').update(value).digest('hex');
   const transcriptHash = digest(transcript);

@@ -181,6 +181,10 @@ const chatMessage = z
     timestamp: z.string(),
     order: z.number(),
     text: z.string().optional(),
+    providerPrompt: z
+      .union([z.string(), z.array(content)])
+      .nullable()
+      .optional(),
     message: agentMessage.optional(),
     attachments: z.array(AttachmentSchema.passthrough()).optional(),
     settings: ChatSettingsSchema.partial().passthrough().optional(),

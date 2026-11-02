@@ -4,19 +4,12 @@ import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { submittedIntentSchema as submittedSchema } from '@/shared/schemas/chat-intent.schema';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
-import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket/chat-message.schema';
+import { ChatSettingsSchema } from '@/shared/websocket/chat-message.schema';
 import { Prisma } from '@prisma-gen/client';
 import type { PrismaClient, ChatIntent } from '@prisma-gen/client';
 
-const submittedSchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  timestamp: z.string(),
-  attachments: z.array(AttachmentSchema).optional(),
-  voiceMode: z.boolean().optional(),
-  settings: ChatSettingsSchema,
-});
 const dispatchMembersSchema = z.array(
   z.object({ messageId: z.string(), owner: z.enum(['human', 'external']), message: z.json() })
 );

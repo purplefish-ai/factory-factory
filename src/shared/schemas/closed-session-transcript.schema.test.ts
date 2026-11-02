@@ -214,3 +214,39 @@ describe('closed-session transcript nested boundary', () => {
     );
   });
 });
+
+it.each([
+  42,
+  { text: 'not a prompt array' },
+  [{ type: 'text' }],
+  [{ type: 'image', source: { type: 'base64', data: 9 } }],
+])('rejects malformed dispatched provider prompt provenance: %j', (providerPrompt) => {
+  const data = transcript({ type: 'result', result: 'done' });
+  expect(
+    closedSessionTranscriptSchema.safeParse({
+      ...data,
+      messages: [
+        {
+          id: 'user',
+          source: 'user',
+          timestamp,
+          order: 0,
+          text: 'visible request',
+          providerPrompt,
+        },
+      ],
+    }).success
+  ).toBe(false);
+});
+it('preserves first-row frozen provider prompt and covered-row null independently of visible text', () => {
+  const data = transcript({ type: 'result', result: 'done' });
+  const providerPrompt = [
+    { type: 'text', text: 'exact combined provider bytes' },
+    { type: 'image', source: { type: 'base64', data: 'eA==', media_type: 'image/png' } },
+  ];
+  const messages = [
+    { id: 'first', source: 'user', timestamp, order: 0, text: 'first', providerPrompt },
+    { id: 'second', source: 'user', timestamp, order: 1, text: 'second', providerPrompt: null },
+  ];
+  expect(closedSessionTranscriptSchema.parse({ ...data, messages }).messages).toEqual(messages);
+});
