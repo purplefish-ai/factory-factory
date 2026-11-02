@@ -4,7 +4,15 @@ import { WorkspaceHeaderFixture } from './workspace-header-fixture';
 const meta = {
   title: 'Navigation/Responsive App Header',
   component: WorkspaceHeaderFixture,
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'The installed desktop PWA uses Window Controls Overlay to share this header row with native window controls. The header reserves the browser-reported title-bar bounds on either side; empty space drags the window and interactive controls remain clickable. Browser tabs and unsupported installations retain the standard header.',
+      },
+    },
+  },
 } satisfies Meta<typeof WorkspaceHeaderFixture>;
 export default meta;
 type Story = StoryObj<typeof meta>;
