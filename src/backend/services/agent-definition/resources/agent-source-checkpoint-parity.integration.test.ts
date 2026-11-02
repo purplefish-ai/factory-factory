@@ -118,7 +118,7 @@ it('replays a discarded shifted-overlap observation without invalidating a valid
     });
   }
   await source.finalizeNextChunk(fixture.connectionId);
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 6; i++) {
     await source.maintainCheckpoints(fixture.connectionId);
   }
   expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({ status: 'COMPLETE' });
@@ -126,7 +126,7 @@ it('replays a discarded shifted-overlap observation without invalidating a valid
   expect(baseline.boundary?.sourceOrder).toBe(0);
   // Legacy replay must reproduce the same discarded observation and eventual proof.
   await db.prisma.agentSourceCheckpoint.deleteMany();
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 18; i++) {
     await source.maintainCheckpoints(fixture.connectionId);
   }
   expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({ status: 'COMPLETE' });
