@@ -23,7 +23,7 @@ const mailTools = [
     name: 'read_mail',
     path: 'workspace.readMail',
     description:
-      'Read selected inbox message IDs within a total text budget. Fetch only relevant messages; use offset and nextOffset for long messages. Reading does not acknowledge mail or complete its task.',
+      'Read selected inbox message IDs within a total UTF-16 code-unit budget. Fetch only relevant messages; use offset and nextOffset for long messages. Reading does not acknowledge mail or complete its task.',
     input: readMailInputSchema,
     inputSchema: z.toJSONSchema(readMailInputSchema.omit({ workspaceId: true }), { io: 'input' }),
     output: readMailResultSchema,

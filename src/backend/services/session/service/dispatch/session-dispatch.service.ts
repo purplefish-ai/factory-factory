@@ -8,7 +8,10 @@ import { PermanentAttachmentError } from '@/backend/services/session/service/cha
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
-import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
+import {
+  isTurnAlreadyInProgressError,
+  toErrorMessage,
+} from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
@@ -33,8 +36,9 @@ import type {
 } from './session-dispatch.types';
 import {
   mailRecoveryRetryGuard,
+  wrapUnsentDispatchGuard,
   steerOwnedWorkspaceMailSignal,
-  requeueFailedWorkspaceMailSignal,
+  requeueProvenUnsentMessage,
   sendArmedWorkspaceMailBatch,
   reportAmbiguousWorkspaceMailFailure,
 } from './session-mail-signal-dispatch';
@@ -357,7 +361,14 @@ export class SessionDispatchService {
         this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration, guard),
       onError: (message, error) =>
         isStoreCurrent() &&
-        this.handleDispatchError(dbSessionId, message, error, stopGeneration, clientResult.client),
+        this.handleDispatchError(
+          dbSessionId,
+          message,
+          error,
+          stopGeneration,
+          clientResult.client,
+          guard
+        ),
       onSuccess: () => {
         this.retry.resetAttempts(dbSessionId);
       },
@@ -435,16 +446,14 @@ export class SessionDispatchService {
     );
   }
 
-  /**
-   * Handle a dispatch error. Permanent input errors are rejected, provider-busy
-   * errors are re-queued with backoff, and all other errors fail for explicit retry.
-   */
+  /** Reject permanent input, retry proven-unsent work, and quarantine ambiguous mail. */
   private handleDispatchError(
     dbSessionId: string,
     msg: QueuedMessage,
     error: unknown,
     stopGeneration: number,
-    capturedClient?: unknown
+    capturedClient?: unknown,
+    guard?: SessionCallerGuard
   ): void {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
@@ -502,7 +511,7 @@ export class SessionDispatchService {
       return;
     }
 
-    if (this.isTurnAlreadyInProgressError(error)) {
+    if (isTurnAlreadyInProgressError(error)) {
       logger.warn('[Chat WS] ACP turn already in progress, retrying queued message later', {
         dbSessionId,
         messageId: msg.id,
@@ -515,16 +524,16 @@ export class SessionDispatchService {
         sessionDomainService.markRunning(dbSessionId);
       }
       sessionDomainService.requeueFront(dbSessionId, msg);
-      this.retry.schedule(dbSessionId);
+      this.retry.schedule(dbSessionId, { guard });
       return;
     }
 
-    if (error instanceof AcpSteeringNotSentError && msg.id.startsWith('workspace-mail-wake-')) {
-      requeueFailedWorkspaceMailSignal(
+    if (error instanceof AcpSteeringNotSentError) {
+      requeueProvenUnsentMessage(
         dbSessionId,
         msg,
         this.dependencies.runtimeManager.isSessionRunning(dbSessionId),
-        () => this.retry.schedule(dbSessionId)
+        () => this.retry.schedule(dbSessionId, { guard })
       );
       return;
     }
@@ -557,19 +566,11 @@ export class SessionDispatchService {
     sessionDomainService.markError(sessionId, errorMessage);
   }
 
-  private isTurnAlreadyInProgressError(error: unknown): boolean {
-    const message = this.formatDispatchError(error);
-    return message.includes('A turn is already in progress for this session');
-  }
-
   private formatDispatchError(error: unknown): string {
     return toErrorMessage(error);
   }
 
-  /**
-   * Resolve (or auto-start) the client for dispatching a queued message.
-   * Returns null if the message should not be dispatched (requeue reason found).
-   */
+  /** Resolve or start a dispatch client; null means dispatch remains blocked. */
   private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage,
@@ -652,8 +653,9 @@ export class SessionDispatchService {
     messages: QueuedMessage[],
     client: unknown,
     stopGeneration: number,
-    guard?: SessionCallerGuard
+    callerGuard?: SessionCallerGuard
   ): Promise<void> {
+    const guard = wrapUnsentDispatchGuard(callerGuard);
     await guard?.check();
     guard?.assertCurrent?.();
     const contents = prepareBatchContents(

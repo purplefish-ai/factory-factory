@@ -83,7 +83,7 @@ export const readMailResultSchema = z
     revision: z.number().int().nonnegative(),
   })
   .refine((value) => value.items.reduce((total, item) => total + item.body.length, 0) <= 16_384, {
-    message: 'Total mail body text exceeds 16384 characters',
+    message: 'Total mail body text exceeds 16384 UTF-16 code units',
   });
 export type WorkspaceMailReadResult = z.infer<typeof readMailResultSchema>;
 export const ackMailResultSchema = z.object({

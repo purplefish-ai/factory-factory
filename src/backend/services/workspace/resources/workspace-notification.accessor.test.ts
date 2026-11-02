@@ -159,9 +159,12 @@ describe('durable workspace mailbox', () => {
       (await mail.readMail({ workspaceId: id, ids: [sent.id], offset: 2, maxChars: 2 })).items[0]
     ).toMatchObject({ body: '😀', offset: 1, nextOffset: 3 });
     const emoji = await send(id, '😀');
-    await expect(mail.readMail({ workspaceId: id, ids: [emoji.id], maxChars: 1 })).rejects.toThrow(
-      'increase maxChars'
-    );
+    await expect(
+      mail.readMail({ workspaceId: id, ids: [emoji.id], maxChars: 1 })
+    ).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: expect.stringContaining('increase maxChars'),
+    });
     expect(
       (await mail.listMail({ workspaceId: id })).items.find((item) => item.id === emoji.id)?.readAt
     ).toBeNull();

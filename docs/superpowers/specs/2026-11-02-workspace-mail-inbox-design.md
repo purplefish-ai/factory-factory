@@ -58,8 +58,8 @@ trusted-local boundary as acknowledgement and explicit wake retry. Summary items
 expose id, revision, subject, preview, kind, taskKey/taskRevision, source
 workspace names/IDs, createdAt, readAt, acknowledgedAt and supersededAt. Read
 results expose selected text, offset and nextOffset; total returned body text
-defaults to 8,192 characters and cannot exceed 16,384. Summary pages default 20
-and cap 50; previews cap 160 characters. ID batches cap 20.
+defaults to 8,192 UTF-16 code units and cannot exceed 16,384. Summary pages
+default 20 and cap 50; previews cap 160 UTF-16 code units. ID batches cap 20.
 
 The runtime owner and persistence owner may refine the wake-port return shape in
 direct coordination; record the final contract in the implementation ledger. No

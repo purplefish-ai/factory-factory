@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/backend/db';
+import { ApplicationError } from '@/backend/lib/application-error';
 import {
   ackMailInputSchema,
   listMailInputSchema,
@@ -162,7 +163,8 @@ class WorkspaceNotificationAccessor {
         const start = textBoundary(row.message, offset);
         const body = row.message.slice(start, textBoundary(row.message, start + remaining));
         if (maxChars === 1 && remaining > 0 && body.length === 0 && start < row.message.length) {
-          throw new Error(
+          throw new ApplicationError(
+            'INVALID_INPUT',
             'Mail character budget cannot fit the next Unicode character; increase maxChars to at least 2.'
           );
         }

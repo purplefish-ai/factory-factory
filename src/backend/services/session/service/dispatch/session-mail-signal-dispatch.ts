@@ -7,13 +7,41 @@ import type {
   MailRecoveryRetry,
   MailSignalReceipt,
 } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
-import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
+import {
+  isTurnAlreadyInProgressError,
+  toErrorMessage,
+} from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { SessionDispatchNotificationDeliveryService } from './session-dispatch.types';
 import type { SessionQueuedSteering } from './session-queued-steering';
 
 const logger = createLogger('workspace-mail-signal-dispatch');
+
+/** Use only for caller checks performed before the provider prompt RPC. */
+export function wrapUnsentDispatchGuard(
+  guard?: SessionCallerGuard
+): SessionCallerGuard | undefined {
+  if (!guard) {
+    return undefined;
+  }
+  return {
+    check: async () => {
+      try {
+        await guard.check();
+      } catch (error) {
+        throw classifyProvenUnsentFailure(error);
+      }
+    },
+    assertCurrent: () => {
+      try {
+        guard.assertCurrent?.();
+      } catch (error) {
+        throw classifyProvenUnsentFailure(error);
+      }
+    },
+  };
+}
 
 /** The exact body-free signal and session ownership are checked before steering. */
 export async function steerOwnedWorkspaceMailSignal(
@@ -82,7 +110,7 @@ export async function sendArmedWorkspaceMailBatch(input: {
         receipt.quarantine();
       }
     }
-    throw error;
+    throw !attempted ? classifyProvenUnsentFailure(error) : error;
   }
   // Receipt persistence failures cannot turn an accepted provider prompt into a retry.
   for (const receipt of receipts) {
@@ -120,8 +148,14 @@ function isKnownUnsentMailFailure(error: unknown): boolean {
     error instanceof AcpSteeringNotSentError ||
     error instanceof WorkspaceInitFenceError ||
     error instanceof EventSessionFenceError ||
-    toErrorMessage(error).includes('A turn is already in progress for this session')
+    isTurnAlreadyInProgressError(error)
   );
+}
+
+function classifyProvenUnsentFailure(error: unknown): unknown {
+  return isKnownUnsentMailFailure(error)
+    ? error
+    : new AcpSteeringNotSentError(toErrorMessage(error), { cause: error });
 }
 
 export function reportAmbiguousWorkspaceMailFailure(
@@ -175,7 +209,7 @@ export function mailRecoveryRetryGuard(
   };
 }
 
-export function requeueFailedWorkspaceMailSignal(
+export function requeueProvenUnsentMessage(
   sessionId: string,
   message: QueuedMessage,
   isRunning: boolean,

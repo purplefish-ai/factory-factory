@@ -3,12 +3,14 @@ import {
   AcpSteeringNotSentError,
   AcpSteeringTimeoutError,
 } from '@/backend/services/session/service/acp/acp-steering';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
+import { sendArmedWorkspaceMailBatch } from './session-mail-signal-dispatch';
 
 function harness(
   policy: 'allowed' | 'manual_resume' = 'allowed',
@@ -40,8 +42,13 @@ function harness(
   const resolveQueuedMessageSettings = vi.fn(
     (_id: string, message: QueuedMessage) => message.settings
   );
-  const configureQueuedMessage = vi.fn((_id: string, message: QueuedMessage) =>
-    Promise.resolve(message.settings)
+  const configureQueuedMessage = vi.fn(
+    (
+      _id: string,
+      message: QueuedMessage,
+      _supportsThinking?: boolean,
+      _guard?: SessionCallerGuard
+    ) => Promise.resolve(message.settings)
   );
   const backgroundDelivery = {
     prepare: vi.fn(),
@@ -339,6 +346,174 @@ it('disarms proven busy queued mail before safely retrying', async () => {
   expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
 });
 
+it('retains proven-unsent mail after an arming-time authority rejection and retries with original authority', async () => {
+  vi.useFakeTimers();
+  const h = mailHarness();
+  let allowed = true;
+  const guard = {
+    check: vi.fn(() =>
+      allowed ? Promise.resolve() : Promise.reject(new Error('authority revoked'))
+    ),
+    assertCurrent: vi.fn(() => {
+      if (!allowed) {
+        throw new Error('authority revoked');
+      }
+    }),
+  };
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const signal = sessionDomainService.peekNextMessage('session')!;
+  h.notificationPort.quarantineWake.mockImplementationOnce(() => {
+    allowed = false;
+    return Promise.resolve(true);
+  });
+  await h.dispatcher.tryDispatchNextMessage('session', { guard });
+  expect(h.notificationPort.disarmWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([signal]);
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([signal]);
+  allowed = true;
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  expect(h.notificationPort.settleWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+});
+
+it('never retries mail after stop during durable arming', async () => {
+  vi.useFakeTimers();
+  const h = mailHarness();
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  h.notificationPort.quarantineWake.mockImplementationOnce(() => {
+    h.stop();
+    return Promise.resolve(true);
+  });
+  await h.dispatcher.tryDispatchNextMessage('session');
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(h.notificationPort.disarmWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
+});
+
+it('retains mail when the first dequeued guard check rejects before durable arming', async () => {
+  vi.useFakeTimers();
+  const h = mailHarness();
+  let rejectDequeued = true;
+  const guard = {
+    check: () =>
+      rejectDequeued && sessionDomainService.getQueueLength('session') === 0
+        ? Promise.reject(new Error('caller replaced before arming'))
+        : Promise.resolve(),
+  };
+  await h.notifications.recoverPending({
+    sessionId: 'session',
+    workspaceId: 'workspace',
+    assertAllowed: () => undefined,
+  });
+  const signal = sessionDomainService.peekNextMessage('session')!;
+  await h.dispatcher.tryDispatchNextMessage('session', { guard });
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([signal]);
+  expect(h.notificationPort.quarantineWake).not.toHaveBeenCalled();
+  expect(h.sendSessionMessage).not.toHaveBeenCalled();
+  rejectDequeued = false;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+});
+
+it.each(['arming', 'configuration'] as const)(
+  'preserves every mixed-batch message on %s authority rejection',
+  async (boundary) => {
+    vi.useFakeTimers();
+    const h = mailHarness();
+    let allowed = true;
+    const failure = new Error('authority revoked during preparation');
+    const guard = {
+      check: () => (allowed ? Promise.resolve() : Promise.reject(failure)),
+      assertCurrent: () => {
+        if (!allowed) {
+          throw failure;
+        }
+      },
+    };
+    await h.notifications.recoverPending({
+      sessionId: 'session',
+      workspaceId: 'workspace',
+      assertAllowed: () => undefined,
+    });
+    const signal = sessionDomainService.peekNextMessage('session')!;
+    const human = { ...signal, id: 'human-task', text: 'Retain my draft' };
+    sessionDomainService.enqueue('session', human);
+    if (boundary === 'arming') {
+      h.notificationPort.quarantineWake.mockImplementationOnce(() => {
+        allowed = false;
+        return Promise.resolve(true);
+      });
+    } else {
+      h.configureQueuedMessage.mockImplementationOnce(
+        async (_id, message, _supports, capturedGuard) => {
+          await Promise.resolve();
+          allowed = false;
+          await capturedGuard?.check();
+          return message.settings;
+        }
+      );
+    }
+    const fail = vi.spyOn(sessionDomainService, 'failMessage');
+    await h.dispatcher.tryDispatchNextMessage('session', { guard });
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([signal, human]);
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(fail).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.sendSessionMessage).not.toHaveBeenCalled();
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([signal, human]);
+    allowed = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(h.sendSessionMessage).toHaveBeenCalledOnce();
+  }
+);
+
+it.each([false, true])(
+  'classifies failure as proven unsent only before provider invocation %s',
+  async (providerInvoked) => {
+    const h = mailHarness();
+    await h.notifications.recoverPending({
+      sessionId: 'session',
+      workspaceId: 'workspace',
+      assertAllowed: () => undefined,
+    });
+    const failure = new Error('caller authority changed');
+    const send = vi.fn(() => Promise.reject(failure));
+    const result = sendArmedWorkspaceMailBatch({
+      sessionId: 'session',
+      messages: sessionDomainService.getQueueSnapshot('session'),
+      notifications: h.notifications,
+      assertCurrent: () => {
+        if (!providerInvoked) {
+          throw failure;
+        }
+      },
+      send,
+    });
+    if (providerInvoked) {
+      await expect(result).rejects.toBe(failure);
+      expect(send).toHaveBeenCalledOnce();
+      expect(h.notificationPort.disarmWake).not.toHaveBeenCalled();
+    } else {
+      await expect(result).rejects.toMatchObject({ cause: failure });
+      await expect(result).rejects.toBeInstanceOf(AcpSteeringNotSentError);
+      expect(send).not.toHaveBeenCalled();
+      expect(h.notificationPort.disarmWake).toHaveBeenCalledExactlyOnceWith(h.wake);
+    }
+  }
+);
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -346,6 +521,38 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+it('preserves known-unsent provenance when the prompt batch contains no mail receipts', async () => {
+  const h = mailHarness();
+  const failure = new Error('authority changed without mail');
+  const send = vi.fn(async () => undefined);
+  const result = sendArmedWorkspaceMailBatch({
+    sessionId: 'session',
+    messages: [
+      {
+        id: 'human',
+        text: 'Retain my queued request',
+        timestamp: '2026-11-02T00:00:00Z',
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+    ],
+    notifications: h.notifications,
+    assertCurrent: () => {
+      throw failure;
+    },
+    send,
+  });
+  await expect(result).rejects.toBeInstanceOf(AcpSteeringNotSentError);
+  await expect(result).rejects.toMatchObject({ cause: failure });
+  expect(h.notificationPort.quarantineWake).not.toHaveBeenCalled();
+  expect(h.notificationPort.disarmWake).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+});
 
 it('hands an idle native-steer fallback to ordinary dispatch without dropping its owned wake', async () => {
   const h = mailHarness();

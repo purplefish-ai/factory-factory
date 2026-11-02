@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { DeliverWorkspaceNotificationInput } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
@@ -538,6 +539,13 @@ describe('workspace inbox routes', () => {
       includeSuperseded: false,
     });
     await expect(caller.listMail({ workspaceId: 'recipient', limit: 51 })).rejects.toThrow();
+  });
+  it('maps an insufficient Unicode read budget to a client input error', async () => {
+    mockReadMail.mockRejectedValueOnce(new ApplicationError('INVALID_INPUT', 'Increase maxChars'));
+    const { caller } = createCaller();
+    await expect(
+      caller.readMail({ workspaceId: 'recipient', ids: ['mail'], maxChars: 1 })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
   it('reads only selected recipient IDs within a bounded budget', async () => {
     mockReadMail.mockResolvedValue({ items: [], revision: 5 });
