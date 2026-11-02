@@ -7,7 +7,10 @@ import {
   agentRunResultSchema,
 } from './agent-runtime';
 import { eventLaunchPreparationSchema } from './event-agent-preparation';
-import { agentRunStatusSchema } from './schemas/agent-definition.schema';
+import {
+  agentActivationGenerationSchema,
+  agentRunStatusSchema,
+} from './schemas/agent-definition.schema';
 
 const id = agentManagementIdSchema;
 const time = z.iso.datetime().nullable();
@@ -64,7 +67,7 @@ export const agentEvaluationHistorySchema = z.strictObject({
   explanation: z.string().max(500),
   definitionRevision: z.number().int().positive(),
   triggerRevision: z.number().int().positive(),
-  activationGeneration: z.number().int().nonnegative(),
+  activationGeneration: agentActivationGenerationSchema,
   attemptCount: z.number().int().nonnegative(),
   nextAttemptAt: time,
   expiresAt: z.iso.datetime(),

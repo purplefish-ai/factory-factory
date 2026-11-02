@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SessionLaunchOptions } from '@/shared/session-launch';
 import { validateAgentExecution } from './agent-native-validation';
 
 function fixture(
@@ -9,16 +10,21 @@ function fixture(
     model?: string;
   } = {}
 ) {
-  const getLaunchOptions = vi.fn(async () => ({
-    provider: 'CLAUDE' as const,
-    model: options.model ?? 'claude-sonnet-4-6',
-    reasoning: {
-      options: (options.values ?? ['low', 'high']).map((value) => ({ value, label: value })),
-      selected: 'high',
-      defaultValue: options.nativeDefault,
-    },
-    planMode: { supported: true, selected: false },
-  }));
+  const getLaunchOptions = vi.fn(
+    async (input: {
+      provider: 'CLAUDE' | 'CODEX';
+      model: string;
+    }): Promise<SessionLaunchOptions> => ({
+      provider: input.provider,
+      model: options.model ?? (input.provider === 'CODEX' ? 'gpt-6-sol' : 'claude-sonnet-4-6'),
+      reasoning: {
+        options: (options.values ?? ['low', 'high']).map((value) => ({ value, label: value })),
+        selected: 'high',
+        defaultValue: options.nativeDefault,
+      },
+      planMode: { supported: true, selected: false },
+    })
+  );
   return {
     sessionConfigService: { getLaunchOptions },
     userSettingsQueryService: {
@@ -28,10 +34,12 @@ function fixture(
       }),
     },
     sessionProviderResolverService: {
-      resolveDefaultsForWorkspaceCreation: vi.fn(async () => ({
-        provider: 'CLAUDE' as const,
-        model: 'sonnet',
-      })),
+      resolveDefaultsForWorkspaceCreation: vi.fn(
+        async (provider?: 'CLAUDE' | 'CODEX', model?: string) => ({
+          provider: provider ?? 'CLAUDE',
+          model: model ?? 'sonnet',
+        })
+      ),
     },
   };
 }
@@ -106,9 +114,39 @@ describe('explicit native execution preview', () => {
     expect(JSON.stringify(result)).not.toContain('SECRET_TOKEN');
     services.sessionConfigService.getLaunchOptions.mockResolvedValueOnce({
       provider: 'CODEX',
-    } as never);
+      model: 'gpt-6-sol',
+      reasoning: { options: [{ value: 'high', label: 'High' }], defaultValue: 'high' },
+      planMode: { supported: true, selected: false },
+    });
     expect(await validateAgentExecution({ version: 1 }, services)).toMatchObject({
       status: 'UNAVAILABLE',
     });
+  });
+});
+
+it('forwards explicit provider and model over different inherited defaults', async () => {
+  const services = fixture();
+  const result = await validateAgentExecution(
+    { version: 1, provider: 'CODEX', model: 'gpt-6-sol', reasoningEffort: 'low' },
+    services
+  );
+  expect(result).toMatchObject({
+    status: 'VALIDATED',
+    intent: {
+      provider: 'CODEX',
+      requestedModel: 'gpt-6-sol',
+      model: 'gpt-6-sol',
+      providerIntent: 'EXPLICIT',
+      modelIntent: 'EXPLICIT',
+      effortIntent: 'EXPLICIT',
+      reasoningEffort: 'low',
+    },
+  });
+  expect(
+    services.sessionProviderResolverService.resolveDefaultsForWorkspaceCreation
+  ).toHaveBeenCalledWith('CODEX', 'gpt-6-sol');
+  expect(services.sessionConfigService.getLaunchOptions).toHaveBeenCalledWith({
+    provider: 'CODEX',
+    model: 'gpt-6-sol',
   });
 });

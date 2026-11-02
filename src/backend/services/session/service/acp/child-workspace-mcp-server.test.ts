@@ -287,7 +287,7 @@ it('advertises only existing agent authoring tools and rejects management/activa
       ),
     ].join('\n');
     child.stdin.end(`${messages}\n`);
-    expect((await once(child, 'exit'))[0]).toBe(0);
+    expect((await once(child, 'close'))[0]).toBe(0);
     expect(stderr).toBe('');
     const responses = stdout
       .trim()

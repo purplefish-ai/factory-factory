@@ -39,26 +39,6 @@ async function validate(
     throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active workspace and project.');
   }
   await validateManagementSources(tx, workspace.projectId, spec, evidence);
-  for (const trigger of spec.triggers) {
-    if (trigger.type === 'SCHEDULE') {
-      continue;
-    }
-    const connection = await tx.agentConnection.findUnique({
-      where: { id: trigger.connectionId },
-      select: { provider: true, isEnabled: true, credentialsEncrypted: true },
-    });
-    const provider = trigger.type === 'SLACK_MESSAGE' ? 'SLACK' : 'GITHUB';
-    if (
-      !connection?.isEnabled ||
-      connection.provider !== provider ||
-      (provider === 'SLACK' && !connection.credentialsEncrypted)
-    ) {
-      throw new ApplicationError(
-        'PRECONDITION_FAILED',
-        'The event source is unavailable or has the wrong provider. Reconnect it and try again.'
-      );
-    }
-  }
   return workspace.projectId;
 }
 

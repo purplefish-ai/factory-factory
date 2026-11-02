@@ -65,7 +65,7 @@ export const agentRouter = router({
   validateDraft: trustedLocalProcedure
     .input(agentDraftValidationInputSchema)
     .output(agentDraftValidationSchema)
-    .query(({ ctx, input }) => ctx.appContext.services.agentManagement.validateDraft(input)),
+    .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.validateDraft(input)),
   workspaceOrigin: trustedLocalProcedure
     .input(
       z.strictObject({

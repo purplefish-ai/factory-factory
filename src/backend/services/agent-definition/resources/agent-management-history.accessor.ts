@@ -74,7 +74,7 @@ export const agentManagementHistoryAccessor = {
     const rows = await prisma.$queryRaw`
       SELECT COUNT(*) AS totalCount, COALESCE(SUM(CASE WHEN (
         SELECT r.status FROM AgentRun r WHERE r.agentDefinitionId = d.id AND r.triggerId IS NOT NULL
-          AND r.status IN ('COMPLETED', 'FAILED', 'CANCELLED')
+          AND r.status IN ('COMPLETED', 'PR_CREATED', 'FAILED', 'CANCELLED')
         ORDER BY COALESCE(r.completedAt, r.createdAt) DESC, r.id DESC LIMIT 1
       ) = 'FAILED' THEN 1 ELSE 0 END), 0) AS failedCount
       FROM AgentDefinition d WHERE d.projectId = ${projectId}`;

@@ -144,7 +144,7 @@ export function createAgentManagement(getServices: () => Services) {
           projectId: input.projectId,
           workspaceId: run.reservedWorkspaceId,
         });
-        if (origin && origin.runId !== run.id) {
+        if ((!origin && run.workspaceId) || (origin && origin.runId !== run.id)) {
           throw new ApplicationError('NOT_FOUND', 'Event origin does not match the run.');
         }
         if (origin) {

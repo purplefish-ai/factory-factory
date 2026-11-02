@@ -689,3 +689,142 @@ it('round-trips the longest proposal-local ID and server-assigned new linked IDs
   });
   expect((await management.get(saved.input)).specification).toEqual(updated.specification);
 });
+
+it('leaves workspace provenance unconfirmed in owner history until workspace coordination', async () => {
+  const saved = await author();
+  await db.prisma.agentRun.create({
+    data: {
+      agentDefinitionId: saved.input.agentId,
+      idempotencyKey: crypto.randomUUID(),
+      reservedWorkspaceId: saved.authoring.id,
+      workspaceId: saved.authoring.id,
+      definitionSnapshot: {},
+      input: {},
+    },
+  });
+  const page = await new runtime.AgentManagementService().runs(saved.input);
+  expect(page.items[0]).toMatchObject({
+    workspaceId: saved.authoring.id,
+    reservedWorkspaceId: saved.authoring.id,
+    workspaceState: 'RESERVED',
+  });
+});
+
+it('counts a later PR_CREATED as terminal success instead of an older failure', async () => {
+  const saved = await author();
+  for (const [index, status] of (['FAILED', 'PR_CREATED'] as const).entries()) {
+    await db.prisma.agentRun.create({
+      data: {
+        agentDefinitionId: saved.input.agentId,
+        triggerId: `${saved.proposal.id}:first`,
+        idempotencyKey: crypto.randomUUID(),
+        status,
+        completedAt: new Date(Date.UTC(2026, 0, index + 1)),
+        definitionSnapshot: {},
+        input: {},
+      },
+    });
+  }
+  expect(
+    await new runtime.AgentManagementService().navigationSummary({
+      projectId: saved.input.projectId,
+    })
+  ).toMatchObject({ failedCount: 0 });
+});
+
+it.each(['trigger', 'execution', 'both'] as const)(
+  'repairs malformed previous %s data through a complete valid saved replacement',
+  async (malformed) => {
+    const saved = await author();
+    const management = new runtime.AgentManagementService();
+    const original = await management.get(saved.input);
+    const id = `${saved.proposal.id}:first`;
+    await db.prisma.agentDefinition.update({
+      where: { id: saved.input.agentId },
+      data: { isEnabled: true },
+    });
+    await db.prisma.agentTrigger.update({
+      where: { id },
+      data: {
+        isEnabled: true,
+        activationState: 'ACTIVE',
+        activationGeneration: 1,
+        activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
+      },
+    });
+    await fixture.admit(await fixture.event('repair-claimed'), {
+      agentDefinitionId: saved.input.agentId,
+      triggerId: id,
+    });
+    expect((await runtime.claimNextRun()).status).toBe('CLAIMED');
+    const frozen = await db.prisma.agentRun.findFirstOrThrow({
+      where: { agentDefinitionId: saved.input.agentId },
+    });
+    await fixture.admit(await fixture.event('repair-queued'), {
+      agentDefinitionId: saved.input.agentId,
+      triggerId: id,
+    });
+    if (malformed !== 'execution') {
+      await db.prisma.agentTrigger.update({ where: { id }, data: { config: { invalid: true } } });
+    }
+    if (malformed !== 'trigger') {
+      await db.prisma.agentDefinition.update({
+        where: { id: saved.input.agentId },
+        data: { executionConfig: { invalid: true } },
+      });
+    }
+    const update = {
+      ...saved.input,
+      expectedManagementRevision: 1,
+      specification: original.specification!,
+    };
+    await expect(
+      management.updateSaved(
+        {
+          ...update,
+          specification:
+            malformed === 'trigger'
+              ? {
+                  ...original.specification,
+                  triggers: [{ ...original.specification!.triggers[0], config: { invalid: true } }],
+                }
+              : { ...original.specification, executionConfig: { invalid: true } },
+        },
+        saved.evidence
+      )
+    ).rejects.toThrow();
+    expect(
+      (await db.prisma.agentDefinition.findUniqueOrThrow({ where: { id: saved.input.agentId } }))
+        .managementRevision
+    ).toBe(1);
+    const repaired = await management.updateSaved(update, saved.evidence);
+    expect(repaired.managementRevision).toBe(2);
+    expect(repaired.definitionRevision).toBe(malformed === 'trigger' ? 1 : 2);
+    expect(repaired.specification).toEqual(original.specification);
+    expect(await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      isEnabled: false,
+      activationState: 'PAUSED',
+      isConfigured: true,
+      activationGeneration: 2,
+      triggerRevision: malformed === 'execution' ? 1 : 2,
+      activationBoundary: null,
+      pendingActivation: null,
+    });
+    expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: frozen.id } })).toEqual(
+      frozen
+    );
+    expect(
+      await db.prisma.agentRun.count({
+        where: { agentDefinitionId: saved.input.agentId, status: 'CANCELLED' },
+      })
+    ).toBe(1);
+    expect(
+      await db.prisma.agentInitialDelivery.count({
+        where: {
+          state: 'PENDING',
+          run: { agentDefinitionId: saved.input.agentId, status: 'CANCELLED' },
+        },
+      })
+    ).toBe(0);
+  }
+);

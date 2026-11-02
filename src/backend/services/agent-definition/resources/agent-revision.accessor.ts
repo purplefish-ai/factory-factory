@@ -4,7 +4,7 @@ import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
 } from '@/shared/schemas/agent-definition.schema';
-import { Prisma } from '@prisma-gen/client';
+import { Prisma, type AgentTrigger } from '@prisma-gen/client';
 
 async function pauseRemovedTriggers(
   tx: Prisma.TransactionClient,
@@ -38,6 +38,25 @@ async function pauseRemovedTriggers(
   return pausedIds;
 }
 
+function triggerSettingsChanged(
+  previous: AgentTrigger,
+  settings: AgentSpecification['triggers'][number]
+) {
+  const before = agentTriggerInputSchema.safeParse({
+    type: previous.type,
+    connectionId: previous.connectionId,
+    description: previous.description,
+    filterInstructions: previous.filterInstructions,
+    config: previous.config,
+    isEnabled: false,
+  });
+  return (
+    !(previous.isConfigured && before.success) ||
+    JSON.stringify(before.data) !==
+      JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }))
+  );
+}
+
 /** Authoring's literal paused flags are not runtime activation state. */
 async function reviseDefinition(
   tx: Prisma.TransactionClient,
@@ -50,10 +69,11 @@ async function reviseDefinition(
     include: { triggers: true },
   });
   assertManagementRevision(current.managementRevision);
+  const previousExecution = agentExecutionConfigSchema.safeParse(current.executionConfig);
   const executionChanged =
+    !previousExecution.success ||
     current.instructions !== definition.instructions ||
-    JSON.stringify(agentExecutionConfigSchema.parse(current.executionConfig)) !==
-      JSON.stringify(definition.executionConfig);
+    JSON.stringify(previousExecution.data) !== JSON.stringify(definition.executionConfig);
   await tx.agentDefinition.update({
     where: { id: definitionId },
     data: {
@@ -79,18 +99,7 @@ async function reviseDefinition(
       });
       continue;
     }
-    const before = agentTriggerInputSchema.parse({
-      type: previous.type,
-      connectionId: previous.connectionId,
-      description: previous.description,
-      filterInstructions: previous.filterInstructions,
-      config: previous.config,
-      isEnabled: false,
-    });
-    const changed =
-      !previous.isConfigured ||
-      JSON.stringify(before) !==
-        JSON.stringify(agentTriggerInputSchema.parse({ ...settings, isEnabled: false }));
+    const changed = triggerSettingsChanged(previous, settings);
     if (!(changed || executionChanged)) {
       continue;
     }

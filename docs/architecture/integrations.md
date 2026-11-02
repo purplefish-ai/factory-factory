@@ -436,16 +436,21 @@ advance trigger revision and activation generation, pause, clear
 pending/boundary proof, and cancel affected queued/PENDING work. Known unchanged
 members preserve activation on rename. Historic actor restrictions remain
 visible with an unsupported reason and require explicit removal in a
-replacement.
+replacement. A valid complete save can replace malformed previous trigger or
+execution configuration; it follows the same revision, pause and queued-work
+invalidation rules. Invalid new input is still rejected.
 
 `projectSources` shares the authoring source policy: actual project repository,
 repository-scoped GitHub connection and verified labels; existing Slack bot
 connection/channel access. No display name proves access. Project/connection
-facts are rechecked after source awaits and inside save transactions.
-Connections remain global installation identities rather than gaining a project
-foreign key.
+facts are rechecked after source awaits and inside save transactions. Slack
+discovery rechecks enabled credentials and workspace identity after channel and
+repository lookups; stale selected channels fail, and stale connections are
+removed from the discovery list. Connections remain global installation
+identities rather than gaining a project foreign key.
 
-Explicit `validateDraft` returns per-trigger capability reasons and a separate
+Explicit `validateDraft` is a POST mutation so full draft instructions travel in
+the request body. It returns per-trigger capability reasons and a separate
 native validation result. It uses the configured public session launch-options
 service, including its bounded no-prompt discovery/cache, native model
 confirmation and Codex preview-account isolation. Intent preserves requested and
@@ -465,7 +470,13 @@ provenance. It excludes raw prompts, provider evidence and unrestricted errors.
 Pruned event text or a null event FK does not erase run identity or prove
 completion. The workspace owner's retained-origin read covers creation before
 linkage and deletion; it is provenance, not work proof or permission to retry
-setup.
+setup. Public history confirms LIVE only through that retained-origin owner; a
+live run FK with missing reservation or origin returns a bounded NOT_FOUND.
+Never-created reservations remain RESERVED, and runs without workspace claims
+remain UNRESERVED. LIVE means an extant owner-validated workspace row, including
+archived rows; it does not mean ready or running. Null result/preparation
+metadata means no validated public metadata is available, not an empty result,
+completion or cleanup.
 
 These APIs do not add activation, operator recovery or UI. Production authoring
 still creates paused definitions. The current runtime has no membership/native-

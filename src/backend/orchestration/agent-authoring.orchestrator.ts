@@ -50,7 +50,12 @@ export function createAgentAuthoring(getServices: () => Services) {
       const project = await authoringProject(input.workspaceId, services);
       const result = await discoverProjectAgentSources(project, input, services);
       const current = await authoringProject(input.workspaceId, services);
-      if (JSON.stringify(current) !== JSON.stringify(project)) {
+      if (
+        current.id !== project.id ||
+        current.githubOwner !== project.githubOwner ||
+        current.githubRepo !== project.githubRepo ||
+        current.isArchived !== project.isArchived
+      ) {
         throw new ApplicationError('CONFLICT', 'The project sources changed.');
       }
       return result;

@@ -8,6 +8,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 let createAgentManagement: typeof import('@/backend/orchestration/agent-management.orchestrator').createAgentManagement;
+let createAgentAuthoring: typeof import('@/backend/orchestration/agent-authoring.orchestrator').createAgentAuthoring;
 let createContext: typeof import('./trpc').createContext;
 let agentRouter: typeof import('./agent.trpc').agentRouter;
 
@@ -36,9 +37,12 @@ function makeServices() {
     ),
     githubCLIService: { getAgentRepository: async (name: string) => repository(name) },
     sessionProviderResolverService: {
-      resolveDefaultsForWorkspaceCreation: async () => ({
-        provider: 'CLAUDE' as const,
-        model: 'sonnet',
+      resolveDefaultsForWorkspaceCreation: async (
+        provider?: 'CLAUDE' | 'CODEX',
+        model?: string
+      ) => ({
+        provider: provider ?? 'CLAUDE',
+        model: model ?? 'sonnet',
       }),
     },
     userSettingsQueryService: {
@@ -65,6 +69,9 @@ beforeAll(async () => {
   ({ createAgentManagement } = await vi.importActual<
     typeof import('@/backend/orchestration/agent-management.orchestrator')
   >('@/backend/orchestration/agent-management.orchestrator'));
+  ({ createAgentAuthoring } = await vi.importActual<
+    typeof import('@/backend/orchestration/agent-authoring.orchestrator')
+  >('@/backend/orchestration/agent-authoring.orchestrator'));
   runtime = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
     '@/backend/services/agent-definition'
   );
@@ -105,7 +112,11 @@ beforeEach(async () => {
   services = makeServices();
   caller = agentRouter.createCaller({
     appContext: {
-      services: { ...services, agentManagement: createAgentManagement(() => services) },
+      services: {
+        ...services,
+        agentManagement: createAgentManagement(() => services),
+        agentAuthoring: createAgentAuthoring(() => services),
+      },
     },
   } as never);
 });
@@ -224,7 +235,11 @@ it.each([{ origin: 'https://evil.invalid' }, { 'x-forwarded-for': '203.0.113.1' 
       createExpressMiddleware({
         router: agentRouter,
         createContext: createContext({
-          services: { ...services, agentManagement: createAgentManagement(() => services) },
+          services: {
+            ...services,
+            agentManagement: createAgentManagement(() => services),
+            agentAuthoring: createAgentAuthoring(() => services),
+          },
         } as never),
       })
     );
@@ -301,6 +316,9 @@ it('reads retained workspace origins through the public owner before linkage and
     input: { version: 1, context: [] },
   });
   expect(run.workspaceId).toBeNull();
+  expect((await caller.runs(owner)).items[0]?.workspaceState).toBe('LIVE');
+  await db.prisma.agentRun.update({ where: { id: runId }, data: { workspaceId } });
+  expect((await caller.runs(owner)).items[0]?.workspaceState).toBe('LIVE');
   expect(await caller.workspaceOrigin({ projectId, workspaceId })).toMatchObject({
     origin: { runId, workspaceState: 'LIVE' },
     run: { id: runId },
@@ -344,7 +362,11 @@ it.each(['remote', 'origin', 'forwarded'] as const)(
       createExpressMiddleware({
         router: agentRouter,
         createContext: createContext({
-          services: { ...services, agentManagement: createAgentManagement(() => services) },
+          services: {
+            ...services,
+            agentManagement: createAgentManagement(() => services),
+            agentAuthoring: createAgentAuthoring(() => services),
+          },
         } as never),
       })
     );
@@ -396,3 +418,262 @@ it('rejects a history run whose live workspace link disagrees with its reservati
   });
   await expect(caller.runs(owner)).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
+
+it.each(['matching', 'absent'] as const)(
+  'rejects history with a live FK, %s reservation and no retained origin',
+  async (reservation) => {
+    const owner = await save();
+    const ordinary = await db.prisma.workspace.create({ data: { projectId, name: 'Ordinary' } });
+    await db.prisma.agentRun.create({
+      data: {
+        agentDefinitionId: owner.agentId,
+        idempotencyKey: crypto.randomUUID(),
+        reservedWorkspaceId: reservation === 'matching' ? ordinary.id : null,
+        workspaceId: ordinary.id,
+        definitionSnapshot: {},
+        input: {},
+      },
+    });
+    expect(await caller.workspaceOrigin({ projectId, workspaceId: ordinary.id })).toBeNull();
+    await expect(caller.runs(owner)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  }
+);
+
+it('preserves never-created reservations and genuinely unreserved history', async () => {
+  const owner = await save();
+  for (const reservedWorkspaceId of [null, 'never-created-reservation']) {
+    await db.prisma.agentRun.create({
+      data: {
+        agentDefinitionId: owner.agentId,
+        idempotencyKey: crypto.randomUUID(),
+        reservedWorkspaceId,
+        definitionSnapshot: {},
+        input: {},
+      },
+    });
+  }
+  const page = await caller.runs(owner);
+  expect(page.items).toHaveLength(2);
+  expect(page.items.find((run) => run.reservedWorkspaceId)).toMatchObject({
+    workspaceId: null,
+    workspaceState: 'RESERVED',
+  });
+  expect(page.items.find((run) => !run.reservedWorkspaceId)).toMatchObject({
+    workspaceId: null,
+    workspaceState: 'UNRESERVED',
+  });
+});
+
+function discoveryGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+it.each([
+  ['channels', 'disconnect', 'management'],
+  ['github', 'disconnect', 'management'],
+  ['github', 'credentials', 'management'],
+  ['github', 'identity', 'management'],
+  ['github', 'unchanged', 'management'],
+  ['github', 'disconnect', 'authoring'],
+  ['github', 'disconnect', 'list'],
+] as const)(
+  'rechecks Slack after %s lookup for %s through %s discovery',
+  async (phase, change, entrypoint) => {
+    const slack = await db.prisma.agentConnection.create({
+      data: {
+        provider: 'SLACK',
+        externalId: 'team-1',
+        name: 'Team',
+        credentialsEncrypted: 'fake-test-token',
+      },
+    });
+    const reached = discoveryGate();
+    const release = discoveryGate();
+    const hold = async () => {
+      reached.resolve();
+      await release.promise;
+    };
+    const slackRequest = vi.fn(async () => {
+      if (phase === 'channels') {
+        await hold();
+      }
+      return Response.json({
+        ok: true,
+        channels: [{ id: 'C1', name: 'agents', is_member: true, is_archived: false }],
+      });
+    });
+    services.slackConnectionService = new runtime.SlackConnectionService(
+      { encrypt: (value) => value, decrypt: (value) => value },
+      slackRequest
+    );
+    repository.mockImplementationOnce(async () => {
+      if (phase === 'github') {
+        await hold();
+      }
+      return { id: 'repo-1', name: 'org/repo', labels: ['agent'] };
+    });
+    const author = await db.prisma.workspace.create({ data: { projectId, name: 'Author' } });
+    const pending =
+      entrypoint === 'authoring'
+        ? caller.sources({ workspaceId: author.id, connectionId: slack.id })
+        : caller.projectSources({
+            projectId,
+            ...(entrypoint === 'list' ? {} : { connectionId: slack.id }),
+          });
+    const outcome = pending.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error })
+    );
+    await reached.promise;
+    if (change === 'disconnect') {
+      await services.slackConnectionService.disconnect(slack.id);
+    } else if (change !== 'unchanged') {
+      await db.prisma.agentConnection.update({
+        where: { id: slack.id },
+        data: change === 'credentials' ? { credentialsEncrypted: null } : { externalId: 'team-2' },
+      });
+    }
+    release.resolve();
+    const result = await outcome;
+    expect(slackRequest).toHaveBeenCalledTimes(entrypoint === 'list' ? 0 : 1);
+    if (change === 'unchanged') {
+      expect(result).toMatchObject({
+        value: {
+          slack: {
+            connections: [
+              { id: slack.id, workspaceId: 'team-1', isEnabled: true, hasCredentials: true },
+            ],
+            channels: [{ id: 'C1', name: 'agents' }],
+          },
+        },
+      });
+    } else if (entrypoint === 'list') {
+      expect(result).toMatchObject({ value: { slack: { connections: [] } } });
+    } else {
+      expect(result).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    }
+  }
+);
+
+it.each(['missing', 'disabled', 'unknown', 'application'] as const)(
+  'preserves only safe authored GitHub hints for %s discovery failures',
+  async (failure) => {
+    if (failure === 'missing') {
+      await db.prisma.project.update({ where: { id: projectId }, data: { githubRepo: null } });
+    } else if (failure === 'disabled') {
+      await db.prisma.agentConnection.update({
+        where: { id: connectionId },
+        data: { isEnabled: false },
+      });
+    } else {
+      const { ApplicationError } = await vi.importActual<
+        typeof import('@/backend/lib/application-error')
+      >('@/backend/lib/application-error');
+      repository.mockRejectedValueOnce(
+        failure === 'unknown'
+          ? new Error('SECRET_TOKEN gh details')
+          : new ApplicationError('PRECONDITION_FAILED', 'SECRET_TOKEN application details')
+      );
+    }
+    const result = await caller.projectSources({ projectId });
+    expect(result.github).toEqual({
+      error:
+        failure === 'missing'
+          ? 'Configure the project GitHub repository first.'
+          : failure === 'disabled'
+            ? 'This GitHub connection is disabled.'
+            : 'GitHub source discovery failed. Check repository access and retry.',
+    });
+    expect(JSON.stringify(result)).not.toContain('SECRET_TOKEN');
+  }
+);
+
+it.each(['name', 'githubRepo'] as const)(
+  'keeps authoring discovery source checks precise when project %s changes',
+  async (field) => {
+    const author = await db.prisma.workspace.create({ data: { projectId, name: 'Author' } });
+    repository.mockImplementationOnce(async () => {
+      await db.prisma.project.update({ where: { id: projectId }, data: { [field]: 'Changed' } });
+      return { id: 'repo-1', name: 'org/repo', labels: ['agent'] };
+    });
+    const result = caller.sources({ workspaceId: author.id });
+    if (field === 'name') {
+      expect(await result).toMatchObject({ github: { repository: { id: 'repo-1' } } });
+    } else {
+      await expect(result).rejects.toMatchObject({ code: 'CONFLICT' });
+    }
+  }
+);
+
+it.each(['local', 'remote', 'origin', 'forwarded'] as const)(
+  'handles long explicit draft validation through %s POST middleware',
+  async (mode) => {
+    const owner = await save();
+    const app = express();
+    if (mode === 'remote') {
+      app.use((req, _res, next) => {
+        Object.defineProperty(req.socket, 'remoteAddress', { value: '203.0.113.1' });
+        next();
+      });
+    }
+    app.use(
+      '/api/trpc',
+      createExpressMiddleware({
+        router: agentRouter,
+        createContext: createContext({
+          services: { ...services, agentManagement: createAgentManagement(() => services) },
+        } as never),
+      })
+    );
+    native.mockResolvedValueOnce({
+      provider: 'CODEX',
+      model: 'gpt-6-sol',
+      reasoning: { options: [{ value: 'low', label: 'Low' }] },
+      planMode: { supported: true, selected: false },
+    });
+    const draft = {
+      ...specification(),
+      instructions: 'Valid long instructions. '.repeat(1900),
+      executionConfig: {
+        version: 1,
+        provider: 'CODEX',
+        model: 'gpt-6-sol',
+        reasoningEffort: 'low',
+      },
+    };
+    const response = await request(app)
+      .post('/api/trpc/validateDraft')
+      .send({ json: { projectId, specification: draft } })
+      .set(
+        mode === 'origin'
+          ? { Origin: 'https://evil.invalid' }
+          : mode === 'forwarded'
+            ? { 'x-forwarded-for': '203.0.113.1' }
+            : {}
+      );
+    expect(response.status).toBe(mode === 'local' ? 200 : 403);
+    expect((await caller.get(owner)).managementRevision).toBe(1);
+    if (mode === 'local') {
+      expect(response.body.result.data.json.execution).toMatchObject({
+        status: 'VALIDATED',
+        intent: {
+          provider: 'CODEX',
+          requestedModel: 'gpt-6-sol',
+          model: 'gpt-6-sol',
+          reasoningEffort: 'low',
+          providerIntent: 'EXPLICIT',
+          modelIntent: 'EXPLICIT',
+          effortIntent: 'EXPLICIT',
+        },
+      });
+      expect(native).toHaveBeenCalledTimes(1);
+    } else {
+      expect(native).not.toHaveBeenCalled();
+      expect(repository).not.toHaveBeenCalled();
+    }
+  }
+);

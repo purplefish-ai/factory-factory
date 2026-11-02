@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createAgentSpecificationSchema } from './agent-proposal';
 import { agentActivationStateSchema, agentSourceHealthSchema } from './agent-runtime';
 import {
+  agentActivationGenerationSchema,
   agentDefinitionRevisionSchema,
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
@@ -52,7 +53,7 @@ export const managedTriggerSchema = z.strictObject({
   id: agentManagementIdSchema,
   isConfigured: z.boolean().nullable(),
   triggerRevision: agentDefinitionRevisionSchema,
-  activationGeneration: z.number().int().nonnegative(),
+  activationGeneration: agentActivationGenerationSchema,
   activationState: agentActivationStateSchema,
   isEnabled: z.boolean(),
   configuration: agentTriggerInputSchema.nullable(),

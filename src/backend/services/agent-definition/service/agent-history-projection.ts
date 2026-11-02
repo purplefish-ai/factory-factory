@@ -18,7 +18,7 @@ const timestamp = (value: Date | null) => value?.toISOString() ?? null;
 export function runHistoryProjection(
   row: Awaited<ReturnType<typeof agentManagementHistoryAccessor.runs>>[number]
 ) {
-  if (row.reservedWorkspaceId && row.workspaceId && row.reservedWorkspaceId !== row.workspaceId) {
+  if (row.workspaceId && row.reservedWorkspaceId !== row.workspaceId) {
     throw new ApplicationError('NOT_FOUND', 'The run workspace does not match its reservation.');
   }
   const preparation = eventLaunchPreparationSchema.safeParse(row.launchPreparation);
@@ -63,6 +63,7 @@ export function runHistoryProjection(
     reservedWorkspaceId: row.reservedWorkspaceId,
     reservedSessionId: row.reservedSessionId,
     workspaceId: row.workspaceId,
-    workspaceState: row.workspaceId ? 'LIVE' : row.reservedWorkspaceId ? 'RESERVED' : 'UNRESERVED',
+    // Only workspace-owner coordination can confirm LIVE or DELETED provenance.
+    workspaceState: row.reservedWorkspaceId ? 'RESERVED' : 'UNRESERVED',
   });
 }

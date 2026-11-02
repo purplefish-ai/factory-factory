@@ -65,12 +65,36 @@ export async function discoverProjectAgentSources(
   let github: Awaited<ReturnType<typeof githubAgentSource>> | { error: string };
   try {
     github = await githubAgentSource(project, services);
-  } catch {
-    github = { error: 'GitHub source discovery failed. Check repository access and retry.' };
+  } catch (error) {
+    const safeHints = [
+      'Configure the project GitHub repository first.',
+      'This GitHub connection is disabled.',
+    ];
+    github = {
+      error:
+        error instanceof ApplicationError &&
+        error.code === 'PRECONDITION_FAILED' &&
+        safeHints.includes(error.message)
+          ? error.message
+          : 'GitHub source discovery failed. Check repository access and retry.',
+    };
+  }
+  // Channel and later repository discovery may outlive a disconnect or identity change.
+  const current = (await services.slackConnectionService.list()).filter(
+    (connection) =>
+      connection.isEnabled &&
+      connection.hasCredentials &&
+      connections.some(
+        (previous) =>
+          previous.id === connection.id && previous.workspaceId === connection.workspaceId
+      )
+  );
+  if (input.connectionId && !current.some((connection) => connection.id === input.connectionId)) {
+    throw new ApplicationError('NOT_FOUND', 'Slack source changed during discovery.');
   }
   return agentProjectSourcesSchema.parse({
     project: { id: project.id, name: project.name },
-    slack: { connections, ...page },
+    slack: { connections: current, ...page },
     github,
   });
 }
