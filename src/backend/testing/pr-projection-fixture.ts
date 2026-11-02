@@ -1,6 +1,8 @@
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 export const prProjectionDefaults = {
   prs: [],
+  selectedPrId: null,
+  selectedPr: null,
   prSummary: deriveWorkspacePRSummary([], true),
   prUrl: null,
   prNumber: null,

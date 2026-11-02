@@ -20,6 +20,7 @@ import {
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -91,6 +92,7 @@ function IssueAndPullRequestRow({
   issue: IssueLink | null;
   showPR: boolean;
 }) {
+  const selectedPr = getWorkspaceSelectedPR(workspace);
   if (!(issue || showPR || workspace.prs?.length)) {
     return null;
   }
@@ -125,21 +127,22 @@ function IssueAndPullRequestRow({
           compact
         />
       ) : (
-        showPR && (
+        showPR &&
+        selectedPr && (
           <div className="inline-flex items-center gap-1.5">
             <button
               type="button"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+                window.open(selectedPr.url, '_blank', 'noopener,noreferrer');
               }}
               className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
             >
               <GitPullRequestIcon className="h-3 w-3 shrink-0" />
-              <span>#{workspace.prNumber}</span>
+              <span>#{selectedPr.number}</span>
             </button>
-            <PrStateBadge prState={workspace.prState} size="sm" />
+            <PrStateBadge prState={selectedPr.state} size="sm" />
           </div>
         )
       )}
@@ -330,7 +333,8 @@ function CardTitleIcons({
 }
 
 function deriveCardState(workspace: WorkspaceWithKanban) {
-  const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
+  const selectedPr = getWorkspaceSelectedPR(workspace);
+  const showPR = Boolean(selectedPr && selectedPr.state !== 'NONE' && selectedPr.number);
   const issue = deriveIssueLink(workspace);
   const isArchived = workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;

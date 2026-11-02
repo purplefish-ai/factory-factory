@@ -4,7 +4,6 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import {
   projectWorkspacePRCollection,
   selectActiveWorkspacePR,
-  type WorkspacePRFields,
   type WorkspacePRRow,
   type WorkspacePRWriteFields,
   workspacePrAccessor,
@@ -38,8 +37,6 @@ import {
   type EventWorkspaceIdentity,
 } from '@/shared/event-agent-launch';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
-import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
 import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
 import { deleteWorkspace } from './workspace-delete.accessor';
@@ -87,11 +84,9 @@ type Flattened<T> = Omit<
   'prMonitoring' | 'prs' | 'prDiscovery' | 'runScript' | '_count' | 'conversationMetadata'
 > &
   WorkspaceRatchetFields &
-  WorkspacePRFields &
+  ReturnType<typeof projectWorkspacePRCollection> &
   WorkspaceRunScriptFields & {
     ratchetState: RatchetState;
-    prs: WorkspacePullRequest[];
-    prSummary: WorkspacePRSummary;
     conversationSummary: ReturnType<typeof projectConversationSummary>;
   };
 
@@ -169,7 +164,7 @@ type WorkspaceWithProject = Omit<
   Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>,
   'prs' | 'prDiscovery' | 'prMonitoring'
 > &
-  WorkspacePRFields & { prs: WorkspacePullRequest[]; prSummary: WorkspacePRSummary };
+  Omit<ReturnType<typeof projectWorkspacePRCollection>, 'ratchetState'>;
 
 function withProjectAndPR(
   row: Prisma.WorkspaceGetPayload<{ include: WorkspaceWithProjectInclude }>

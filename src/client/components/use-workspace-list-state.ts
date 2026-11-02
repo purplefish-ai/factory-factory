@@ -12,6 +12,8 @@ export type ServerWorkspace = Pick<
   | 'createdAt'
   | 'branchName'
   | 'prs'
+  | 'selectedPrId'
+  | 'selectedPr'
   | 'prUrl'
   | 'prNumber'
   | 'prState'

@@ -165,19 +165,36 @@ newly opened association, including attachment and discovery refreshes. Rejected
 or unchanged observations and later moves between open states (such as `DRAFT` →
 `OPEN`) do not repeat the notification.
 
-Workspace snapshots include the plain `prs` collection and its `prSummary`. PR
-arrays are compared by identity and content, so database row order does not
-trigger drift warnings, version bumps, or snapshot broadcasts. Workspace and
-ratchet snapshot reads order PRs by ID to keep scalar PR selection consistent.
+Workspace reads, HTTP summaries, and snapshots include the plain `prs`
+collection and its `prSummary`, plus derived `selectedPrId` and `selectedPr`.
+Selection uses the existing ID-ascending rule: first nonterminal association
+(including an unsynced `NONE`), otherwise the first historical association, or
+explicit nulls for an empty collection. It is not a saved primary preference.
+`selectedPr` carries that association's own state, CI, review, conflicts and
+sync time. Links and review actions use these facts and review submits the
+association ID; workspace CI/status remains a collection summary. The PR menu
+continues to show and act on each individual association.
+
+Older summary/snapshot payloads may omit selection; client adapters derive it
+from the collection or adapt scalar-only legacy data. The snapshot store derives
+selection from accepted `prs`, so it has no independent timestamp, hydration
+requirement or drift policy. Full and changed payloads carry the same derived
+facts without changing `summaryVersion: 1`. No persistence migration or export
+version change is required. PR arrays are compared by identity and content, so
+database row order does not trigger drift warnings, version bumps, or snapshot
+broadcasts. Workspace and ratchet snapshot reads order PRs by ID to keep scalar
+PR selection consistent.
 
 The PR menu offers per-association refresh, review, and detachment. Detaching
 one association cancels its pending events while leaving sibling monitoring and
 the main conversation intact. Discovery preserves detached associations as
 tombstones; only an explicit attachment clears them.
 
-The ratchet projection and reconciliation select one association for the PR URL,
-number, and sync timestamp, preferring a nonterminal PR. State, CI status, and
-merge conflicts come from the aggregate summary.
+Legacy flat aliases retain their existing mixed semantics at read/transport and
+export adapters: URL, number, review and sync timestamp describe the selected
+association; state, CI status, and merge conflicts describe the aggregate
+summary. Consumers must use `selectedPr` for association facts and `prSummary`
+for collection facts rather than pairing those legacy fields.
 
 The event collector uses one per-lifetime projection worker for PR collection
 and monitoring invalidations. Its narrow database read publishes the complete PR

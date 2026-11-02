@@ -162,10 +162,16 @@ describe('RatchetProjectionWorker', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(read).toHaveBeenCalledTimes(2);
+    // Selection is a derived store output, not an independently published raw input.
+    const {
+      selectedPrId: _selectedPrId,
+      selectedPr: _selectedPr,
+      ...rawPRFields
+    } = prProjectionDefaults;
     expect(publish).toHaveBeenLastCalledWith(
       'ws',
       {
-        ...prProjectionDefaults,
+        ...rawPRFields,
         prUpdatedAt: null,
         ratchetEnabled: true,
         ratchetState: 'CI_FAILED',

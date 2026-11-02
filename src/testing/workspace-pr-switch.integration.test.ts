@@ -16,6 +16,7 @@ import {
 } from '@/backend/services/workspace';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { deriveWorkspaceSidebarStatus, type CIStatus, type PRState } from '@/shared/core';
+import { deriveWorkspacePRSelection } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
@@ -55,6 +56,7 @@ function projection(
       pendingEventCount: 0,
     },
     prs,
+    ...deriveWorkspacePRSelection(prs),
     prSummary,
     prUrl,
     prNumber,

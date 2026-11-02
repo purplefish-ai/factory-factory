@@ -20,7 +20,7 @@ import {
   SESSION_RUNTIME_PROCESS_STATES,
 } from '@/shared/session-runtime';
 import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
-import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
+import { WorkspacePRSelectionSchema, WorkspacePullRequestSchema } from '@/shared/workspace-pr';
 import { WorkspacePRSummarySchema } from '@/shared/workspace-pr-summary';
 import {
   WORKSPACE_PENDING_REQUEST_TYPES,
@@ -72,6 +72,7 @@ export const WorkspaceStatusReasonSchema = z.object({
 
 /** Flat board/sidebar contract. */
 export const WorkspaceSummarySchema = z.object({
+  ...WorkspacePRSelectionSchema.shape,
   conversationSummary: WorkspaceConversationSummarySchema.nullable().optional(),
   id: z.string(),
   projectId: z.string(),
