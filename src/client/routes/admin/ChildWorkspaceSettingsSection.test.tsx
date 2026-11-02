@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 it.each([true, false])(
-  'renders saved enabled=%s and saves the opposite preference',
+  'renders enabled=%s and retains the saved preference while refresh is pending',
   async (enabled) => {
     let settings = { childWorkspacesEnabled: enabled };
     const writes: unknown[] = [];
@@ -30,6 +30,8 @@ it.each([true, false])(
               if (op.path === 'userSettings.update') {
                 writes.push(op.input);
                 settings = { childWorkspacesEnabled: !enabled };
+              } else if (op.path === 'userSettings.get' && writes.length > 0) {
+                return;
               } else if (op.path !== 'userSettings.get') {
                 observer.error(new TRPCClientError(`Unexpected request: ${op.path}`));
                 return;
@@ -73,3 +75,38 @@ it.each([true, false])(
     }
   }
 );
+
+it('shows a read error without offering an unknown toggle state', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = trpc.createClient({
+    links: [
+      () => () =>
+        observable((observer) => {
+          observer.error(new TRPCClientError('Settings unavailable'));
+        }),
+    ],
+  });
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <trpc.Provider client={client} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <ChildWorkspaceSettingsSection />
+          </QueryClientProvider>
+        </trpc.Provider>
+      )
+    );
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not load')
+      );
+    });
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    queryClient.clear();
+  }
+});

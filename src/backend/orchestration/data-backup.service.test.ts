@@ -484,6 +484,7 @@ describe('DataBackupService', () => {
       ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
+          childWorkspacesEnabled: false,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',

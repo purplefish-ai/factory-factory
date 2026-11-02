@@ -651,4 +651,34 @@ export const RejectedChildWorkspaces: Story = {
       <ChildWorkspaceSettingsSection />
     </SettingsStoryProvider>
   ),
+  play: async ({ canvasElement }) => {
+    const toggle = await within(canvasElement).findByRole('switch', {
+      name: 'Enable child workspaces',
+    });
+    await expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        childWorkspacesEnabled: false,
+      })
+    );
+    await within(canvasElement.ownerDocument.body).findByText(
+      'Failed to update settings: Request rejected: userSettings.update'
+    );
+    await expect(toggle).toBeChecked();
+  },
+};
+export const FailedChildWorkspaceSettings: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      'Could not load child workspace settings.'
+    );
+    await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
+  },
 };

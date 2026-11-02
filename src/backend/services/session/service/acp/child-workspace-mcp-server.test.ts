@@ -262,16 +262,29 @@ describe('child workspace MCP tRPC errors', () => {
 });
 
 it.each([
-  { parentWorkspaceId: null, enabled: true },
-  { parentWorkspaceId: 'parent-workspace', enabled: true },
-  { parentWorkspaceId: null, enabled: false },
-  { parentWorkspaceId: 'parent-workspace', enabled: false },
+  { parentWorkspaceId: null, enabled: true, settingsFailure: null },
+  { parentWorkspaceId: 'parent-workspace', enabled: true, settingsFailure: null },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: null },
+  { parentWorkspaceId: 'parent-workspace', enabled: false, settingsFailure: null },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: 'http' },
+  { parentWorkspaceId: null, enabled: false, settingsFailure: 'malformed' },
 ])(
   'advertises the exact workspace/authoring catalog and rejects recovery controls (parent=%s)',
-  async ({ parentWorkspaceId, enabled }) => {
+  async ({ parentWorkspaceId, enabled, settingsFailure }) => {
     let calls = 0;
     const server = createServer((req, res) => {
       if (req.url?.startsWith('/api/trpc/userSettings.get')) {
+        if (settingsFailure) {
+          res.statusCode = settingsFailure === 'http' ? 503 : 200;
+          res.end(
+            JSON.stringify(
+              settingsFailure === 'http'
+                ? { error: { json: { message: 'Settings unavailable' } } }
+                : { result: { data: { json: { childWorkspacesEnabled: 'invalid' } } } }
+            )
+          );
+          return;
+        }
         res.end(
           JSON.stringify({ result: { data: { json: { childWorkspacesEnabled: enabled } } } })
         );

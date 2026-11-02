@@ -9,6 +9,7 @@ import { AgentsPanel } from './agents-panel';
 const mocks = vi.hoisted(() => ({
   childWorkspacesEnabled: true,
   childProps: vi.fn(),
+  settingsQuery: vi.fn(),
   providerProps: vi.fn(),
   queryBacked: false,
   querySubagents: vi.fn<(sessionId: string) => Promise<string>>(),
@@ -18,7 +19,10 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     userSettings: {
       get: {
-        useQuery: () => ({ data: { childWorkspacesEnabled: mocks.childWorkspacesEnabled } }),
+        useQuery: (input?: undefined, options?: { enabled: boolean }) => {
+          mocks.settingsQuery(input, options);
+          return { data: { childWorkspacesEnabled: mocks.childWorkspacesEnabled } };
+        },
       },
     },
   },
@@ -132,7 +136,9 @@ describe('AgentsPanel', () => {
       onOpenSubagent: vi.fn(),
     });
     expect(mocks.childProps).not.toHaveBeenCalled();
-    expect(mocks.providerProps).toHaveBeenCalled();
+    expect(mocks.providerProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sessionId: 'session', enabled: true })
+    );
   });
 
   it('keeps child workspaces workspace-scoped when the selected session changes', () => {
@@ -170,6 +176,7 @@ describe('AgentsPanel', () => {
 
     expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="child-workspaces"]')).toBeNull();
+    expect(mocks.settingsQuery).toHaveBeenLastCalledWith(undefined, { enabled: false });
   });
 
   it('authoritatively refreshes A after switching A to B to A without refetching unchanged A', async () => {

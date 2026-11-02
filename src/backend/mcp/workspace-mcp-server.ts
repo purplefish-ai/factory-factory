@@ -424,10 +424,8 @@ async function handleRequest(
     const workspaceTools = hasParent
       ? [SEND_MSG_TOOL]
       : [LIST_PROJECTS_TOOL, SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
-    const tools = [
-      ...((await childWorkspacesEnabled(apiBase)) ? workspaceTools : []),
-      ...AGENT_AUTHORING_TOOLS,
-    ];
+    const childToolsEnabled = await childWorkspacesEnabled(apiBase).catch(() => false);
+    const tools = [...(childToolsEnabled ? workspaceTools : []), ...AGENT_AUTHORING_TOOLS];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
   }

@@ -7,10 +7,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 
 export function ChildWorkspaceSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const { data: settings, isLoading, isError } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      utils.userSettings.get.setData(undefined, result);
       runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
     },
     onError: (error) => {
@@ -22,7 +23,7 @@ export function ChildWorkspaceSettingsSection() {
     updateSettings.mutate({ childWorkspacesEnabled: checked });
   };
 
-  if (isLoading) {
+  if (isLoading || (isError && !settings)) {
     return (
       <Card>
         <CardHeader>
@@ -30,7 +31,13 @@ export function ChildWorkspaceSettingsSection() {
           <CardDescription>Delegate work to separate child workspaces</CardDescription>
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-10 w-full" />
+          {isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <p role="alert" className="text-sm text-destructive">
+              Could not load child workspace settings. Try refreshing the page.
+            </p>
+          )}
         </CardContent>
       </Card>
     );

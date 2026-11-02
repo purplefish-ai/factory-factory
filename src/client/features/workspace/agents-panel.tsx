@@ -23,7 +23,9 @@ export function AgentsPanel({
   isParentWorkspace,
   onOpenSubagent,
 }: AgentsPanelProps) {
-  const { data: settings } = trpc.userSettings.get.useQuery();
+  const { data: settings } = trpc.userSettings.get.useQuery(undefined, {
+    enabled: isParentWorkspace,
+  });
   return (
     <div className="h-full overflow-y-auto">
       <ProviderSubagentsSection
