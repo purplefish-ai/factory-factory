@@ -9,6 +9,7 @@ import type { QueuedMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatIntentAccessor } from '../../resources/chat-intent.accessor';
 import { AcpClientFactory } from '../acp/acp-client-factory';
+import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import { AcpRuntimeManager } from '../acp/acp-runtime-manager';
 import {
   createTestProcessHandle,
@@ -20,9 +21,11 @@ import {
 import { sessionDataService } from '../data/session-data.service';
 import { SessionDispatchService } from '../dispatch/session-dispatch.service';
 import type { SessionDispatchDependencies } from '../dispatch/session-dispatch.types';
+import { prepareDurableAttempt } from '../dispatch/session-durable-attempt';
 import { setupAuthority, configOptions } from '../lifecycle/session-config-authority.test-helpers';
 import { SessionConfigMutationQueue } from '../lifecycle/session-config-mutation-queue';
 import { SessionDomainService, sessionDomainService as domain } from '../session-domain.service';
+import { UncertainChatDispatchError } from './chat-intent-errors';
 import { createQueueMessageHandler } from './chat-message-handlers/handlers/queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './chat-message-handlers/handlers/remove-queued-message.handler';
 import { SessionChatIntentService } from './session-chat-intent.service';
@@ -259,32 +262,35 @@ it('retains full mixed membership and never releases or resends an ambiguous ext
     'external delivery owner'
   );
 });
-it('rejects conflicting retries to the requester without rejecting the original accepted message', async () => {
-  const handler = createQueueMessageHandler({
-    domain,
-    chatIntent: intents,
-    backgroundDelivery: {
-      captureResumeGuard: () => () => true,
-      userResume: () => Promise.resolve(),
-    },
-    tryDispatchNextMessage: () => Promise.resolve(),
-  });
-  const emit = vi.spyOn(domain, 'emitDelta');
-  const context = { sessionId: 's', workingDir: '/tmp' };
-  await handler(context, { type: 'queue_message', id: 'human', text: 'original' });
-  const conflict = await handler(context, { type: 'queue_message', id: 'human', text: 'conflict' });
-  expect(conflict.replies).toEqual([
-    {
-      type: 'error',
-      error: {
-        kind: 'queue_input_invalid',
-        reason: 'Message id already accepted with different submitted content',
+it.each(['conflict', ''])(
+  'rejects conflicting retries (%s) to the requester without rejecting original accepted input',
+  async (text) => {
+    const handler = createQueueMessageHandler({
+      domain,
+      chatIntent: intents,
+      backgroundDelivery: {
+        captureResumeGuard: () => () => true,
+        userResume: () => Promise.resolve(),
       },
-    },
-  ]);
-  expect(emit).not.toHaveBeenCalledWith('s', expect.objectContaining({ newState: 'REJECTED' }));
-  expect(domain.getQueueSnapshot('s').map((m) => m.text)).toEqual(['original']);
-});
+      tryDispatchNextMessage: () => Promise.resolve(),
+    });
+    const emit = vi.spyOn(domain, 'emitDelta');
+    const context = { sessionId: 's', workingDir: '/tmp' };
+    await handler(context, { type: 'queue_message', id: 'human', text: 'original' });
+    const conflict = await handler(context, { type: 'queue_message', id: 'human', text });
+    expect(conflict.replies).toEqual([
+      {
+        type: 'error',
+        error: {
+          kind: 'queue_input_invalid',
+          reason: 'Message id already accepted with different submitted content',
+        },
+      },
+    ]);
+    expect(emit).not.toHaveBeenCalledWith('s', expect.objectContaining({ newState: 'REJECTED' }));
+    expect(domain.getQueueSnapshot('s').map((m) => m.text)).toEqual(['original']);
+  }
+);
 it('does not rehydrate or retry a selected batch while provider configuration is awaiting', async () => {
   await intents.accept('s', message('one'));
   await intents.accept('s', message('two'));
@@ -681,4 +687,61 @@ it('keeps a claimed mixed batch uncertain when stop retires configuration before
   expect(h.background.complete).not.toHaveBeenCalled();
   response.resolve();
   await vi.waitFor(() => expect(h.background.complete).toHaveBeenCalledOnce());
+});
+
+it('preserves definitive pre-invocation settlement instead of classifying a fenced claim as uncertain', async () => {
+  const msg = message('one');
+  await intents.accept('s', msg);
+  const release = intents.holdProjection('s', [msg]);
+  const fence = new Error('fenced before invoking provider');
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [msg],
+    content: 'one',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+    guard: { check: () => Promise.reject(fence) },
+  });
+  const send = vi.fn();
+  const error = await attempt.invoke(send).catch((failure: unknown) => failure);
+  expect(intents.protectClaimedBatchFailure('s', [msg], error)).not.toBeInstanceOf(
+    UncertainChatDispatchError
+  );
+  expect((await intents.store.read('s'))[0]?.status).toBe('queued');
+  expect(send).not.toHaveBeenCalled();
+  release?.();
+});
+
+it('releases a whole claim only with explicit proof that a local send rejection never entered the provider', async () => {
+  const msg = message('one');
+  await intents.accept('s', msg);
+  const release = intents.holdProjection('s', [msg]);
+  const attempt = await prepareDurableAttempt({
+    owner: intents,
+    sessionId: 's',
+    messages: [msg],
+    content: 'one',
+    settings,
+    generation: 1,
+    isCurrent: () => true,
+  });
+  const rejection = new PromptNotInvokedError(new Error('authority rejected before RPC'));
+  const error = await attempt
+    .invoke(() => Promise.reject(rejection))
+    .catch((failure: unknown) => failure);
+  expect(error).toBe(rejection);
+  expect((await intents.store.read('s'))[0]?.status).toBe('queued');
+  expect(intents.protectClaimedBatchFailure('s', [msg], error)).toBe(rejection);
+  release?.();
+});
+
+it('recovers the original trusted initial submission before rebuilding mutable provisioning input', async () => {
+  domain.chatIntent = intents;
+  await intents.acceptInitial('s', message('auto-init-s', 'original linked issue'));
+  domain.clearAllSessions();
+  const recovered = await domain.recoverInitialMessageDurably('s', 'auto-init-s');
+  expect(recovered?.text).toBe('original linked issue');
+  expect(domain.getQueueSnapshot('s').map((row) => row.text)).toEqual(['original linked issue']);
 });

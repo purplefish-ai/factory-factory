@@ -76,6 +76,16 @@ export class SessionDomainService extends EventEmitter {
       : null;
   }
 
+  recoverInitialMessageDurably(
+    sessionId: string,
+    messageId: string
+  ): Promise<QueuedMessage | null> {
+    if (!this.chatIntent) {
+      throw new Error('Durable chat admission is not configured');
+    }
+    return this.chatIntent.recoverInitial(sessionId, messageId);
+  }
+
   async storeInitialMessageDurably(sessionId: string, text: string): Promise<void> {
     await this.enqueueInitialMessageDurably(sessionId, {
       id: `initial-human-${sessionId}`,

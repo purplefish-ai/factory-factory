@@ -106,7 +106,12 @@ async function createAgentSessionFromInput(
 
   const session = creation.session;
   if (input.initialMessage) {
-    await sessionDomainService.storeInitialMessageDurably(session.id, input.initialMessage);
+    try {
+      await sessionDomainService.storeInitialMessageDurably(session.id, input.initialMessage);
+    } catch (error) {
+      await rollbackCreatedSession(session.id, sessionDataService, sessionDomainService);
+      throw error;
+    }
   }
   return session;
 }
@@ -158,9 +163,10 @@ export const sessionRouter = router({
         resolution: z.enum(['committed', 'cancelled']),
       })
     )
-    .mutation(({ ctx, input }) =>
-      chatIntentOwner(ctx).resolve(input.sessionId, input.attemptId, input.resolution)
-    ),
+    .mutation(async ({ ctx, input }) => {
+      await chatIntentOwner(ctx).resolve(input.sessionId, input.attemptId, input.resolution);
+      await ctx.appContext.services.sessionDispatchService.tryDispatchNextMessage(input.sessionId);
+    }),
   getLaunchOptions: trustedLocalProcedure
     .input(
       z.object({

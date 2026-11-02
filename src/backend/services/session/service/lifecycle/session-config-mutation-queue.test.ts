@@ -11,6 +11,7 @@ import {
   defaultHandlers,
   defaultOptions,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 
 it.each(['resolve', 'reject'] as const)(
@@ -214,4 +215,51 @@ it('retains the durable provider identity when native Codex IDs are normalized',
     expect(permit.providerSessionId).toBe('sess_native');
     return Promise.resolve();
   });
+});
+
+it('provides explicit non-invocation proof when an admitted native prompt is locally fenced before RPC', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  const queue = new SessionConfigMutationQueue(manager, vi.fn());
+  await expect(
+    queue.runPrompt('session', (permit) =>
+      manager.sendPrompt(
+        'session',
+        [],
+        undefined,
+        undefined,
+        {
+          check: () => Promise.reject(new Error('fenced before RPC')),
+        },
+        permit
+      )
+    )
+  ).rejects.toBeInstanceOf(PromptNotInvokedError);
+  expect(handle.connection.prompt).not.toHaveBeenCalled();
+});
+
+it('never reports non-invocation proof after entering a failing provider RPC', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  const failure = new Error('provider result lost');
+  vi.mocked(handle.connection.prompt).mockRejectedValueOnce(failure);
+  const queue = new SessionConfigMutationQueue(manager, vi.fn());
+  await expect(
+    queue.runPrompt('session', (permit) =>
+      manager.sendPrompt('session', [], undefined, undefined, undefined, permit)
+    )
+  ).rejects.toBe(failure);
+  expect(handle.connection.prompt).toHaveBeenCalledOnce();
 });

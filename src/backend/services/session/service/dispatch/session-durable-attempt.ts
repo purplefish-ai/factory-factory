@@ -1,5 +1,6 @@
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
+import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import type { SessionCallerGuard } from '../bridges';
 import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
 import type { PermanentAttachmentError } from '../chat/chat-message-handlers/attachment-processing';
@@ -58,10 +59,7 @@ export async function prepareDurableAttempt(input: AttemptInput) {
         }
         return result;
       } catch (error) {
-        if (id) {
-          throw new UncertainChatDispatchError(id, { cause: error });
-        }
-        throw error;
+        return await rethrowAttemptFailure(input, id, error);
       }
     },
   };
@@ -80,13 +78,13 @@ async function checkBeforeInvocation(
     }
   } catch (error) {
     if (id) {
-      await owner?.store.settle(
+      await owner?.settleNotInvoked(
+        input.sessionId,
         id,
-        input.isCurrent() ? 'queued' : 'cancelled',
-        'fence prevented provider invocation'
+        input.isCurrent() ? 'queued' : 'cancelled'
       );
     }
-    throw error;
+    throw new PromptNotInvokedError(error);
   }
 }
 
@@ -122,4 +120,23 @@ export function sendConfiguredMessage(
   return guard
     ? service.sendSessionMessage(sessionId, content, guard)
     : service.sendSessionMessage(sessionId, content);
+}
+
+async function rethrowAttemptFailure(
+  input: AttemptInput,
+  id: string | null | undefined,
+  error: unknown
+): Promise<never> {
+  if (id && error instanceof PromptNotInvokedError) {
+    await input.owner?.settleNotInvoked(
+      input.sessionId,
+      id,
+      input.isCurrent() ? 'queued' : 'cancelled'
+    );
+    throw error;
+  }
+  if (id) {
+    throw new UncertainChatDispatchError(id, { cause: error });
+  }
+  throw error;
 }

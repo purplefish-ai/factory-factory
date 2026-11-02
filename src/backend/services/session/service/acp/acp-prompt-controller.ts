@@ -2,6 +2,7 @@ import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
+import { PromptNotInvokedError } from './acp-prompt-invocation';
 import { PromptTimeoutError } from './acp-runtime-errors';
 
 const logger = createLogger('acp-runtime-manager');
@@ -45,12 +46,14 @@ export class AcpPromptController {
     prompt: ContentBlock[],
     timeoutMs?: number,
     observation?: AcpPromptObservation,
-    assertCallerCurrent?: () => void
+    assertCallerCurrent?: () => void,
+    confirmPreInvocation = false
   ): Promise<{ stopReason: string }> {
     const pending = { cancelled: false };
     if (observation) {
       this.pendingObserved.set(handle, pending);
     }
+    let invocationStarted = false;
     let sendingRecorded = false;
     let terminalRecorded = false;
     try {
@@ -66,6 +69,7 @@ export class AcpPromptController {
       }
       assertCallerCurrent?.();
       handle.isPromptInFlight = true;
+      invocationStarted = true;
       const promptPromise = handle.connection.prompt({
         sessionId: handle.acpSessionId,
         prompt,
@@ -102,7 +106,12 @@ export class AcpPromptController {
         await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
       }
       handle.isPromptInFlight = false;
-      throw error;
+      throw classifyPreInvocationFailure(
+        error,
+        confirmPreInvocation,
+        invocationStarted,
+        observation
+      );
     } finally {
       this.releasePending(handle, pending);
     }
@@ -218,4 +227,13 @@ async function awaitPromptResponse(
 
 function promptOutcome(failed: boolean, reason: string): 'FAILED' | 'CANCELLED' | 'COMPLETED' {
   return failed ? 'FAILED' : reason === 'cancelled' ? 'CANCELLED' : 'COMPLETED';
+}
+
+function classifyPreInvocationFailure(
+  error: unknown,
+  requested: boolean,
+  invoked: boolean,
+  observation?: AcpPromptObservation
+): unknown {
+  return requested && !invoked && !observation ? new PromptNotInvokedError(error) : error;
 }

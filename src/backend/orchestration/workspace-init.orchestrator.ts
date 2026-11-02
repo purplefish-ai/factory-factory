@@ -330,8 +330,13 @@ async function prepareDefaultAgentSession(
     const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
     const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
 
-    // Build the initial prompt from linked issue data, or fallback to creation metadata.
-    const initialMessage = await resolveInitialAutoMessageContent(workspaceId, metadata);
+    // A provisioning retry resumes the immutable accepted input before consulting mutable issue data.
+    const recovered = await sessionDomainService.recoverInitialMessageDurably(
+      session.id,
+      `auto-init-${session.id}`
+    );
+    const initialMessage =
+      recovered ?? (await resolveInitialAutoMessageContent(workspaceId, metadata));
     const parent = workspace?.parentWorkspaceId
       ? await workspaceRelationshipsService.findParent(workspaceId)
       : null;
@@ -357,7 +362,7 @@ async function prepareDefaultAgentSession(
     }
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
-    if (messageToEnqueue) {
+    if (messageToEnqueue && !recovered) {
       await enqueueAutoMessage(
         session.id,
         workspaceId,

@@ -84,10 +84,12 @@ submitted content. Identical retries return the recorded state, even when the
 queue is now full; a conflicting payload is rejected explicitly. Workspace
 initial prompts and session-creation initial text use deterministic IDs and the
 same durable owner. Durable initial entry points require that owner and fail
-closed if composition has not installed it. Loading safely queued durable human
-input triggers dispatch after configuration publication; a browse-only load
-without queued human intent stays passive. Legacy in-memory input cannot be
-backfilled.
+closed if composition has not installed it. Trusted provisioning retries recover
+existing initial input before rebuilding mutable linked-issue content; submitted
+retry APIs still reject conflicting payloads. Failed initial acceptance rolls
+back a newly created session. Loading safely queued durable human input triggers
+dispatch after configuration publication; a browse-only load without queued
+human intent stays passive. Legacy in-memory input cannot be backfilled.
 
 Submitted payloads remain immutable. Accepted later model, reasoning, thinking
 and planning edits update separate desired settings/revisions for older queued
@@ -117,11 +119,14 @@ member together. Steering follows the same protocol; an explicit provider
 releases that claim for normal dispatch.
 
 The claim is already potentially sent: a crash between persistence and provider
-invocation cannot prove non-delivery. Interrupted or failed invocations remain
-uncertain, appear as recoverable failed input, and are never automatically
-replayed, together or member by member. Check provider history before submitting
-replacement input. Trusted-local `session.listUncertainDispatches` exposes the
-full membership identifiers and frozen provider/settings identity.
+invocation cannot prove non-delivery. Only explicit local proof produced before
+entering the provider RPC can return the entire batch to queued (or cancelled
+when stopped). That settlement also clears the live claim marker; missing proof
+is always uncertain. Interrupted or failed invocations remain uncertain, appear
+as recoverable failed input, and are never automatically replayed, together or
+member by member. Check provider history before submitting replacement input.
+Trusted-local `session.listUncertainDispatches` exposes the full membership
+identifiers and frozen provider/settings identity.
 `session.resolveUncertainDispatch` resolves an entire human-only batch as
 confirmed committed or cancelled after manual history review; neither choice
 requeues any member. Mixed external batches fail closed and require the existing
@@ -137,6 +142,9 @@ runtime replacement and backend shutdown preserve queued input. Stop cannot
 cancel the proof of an already uncertain attempt. Explicit session/workspace
 deletion cascades these records. Permission callbacks remain process-local and
 are never restored as durable requests.
+
+Resolving a human-only uncertain attempt also wakes the dispatcher, allowing
+unrelated external work held behind that proof to proceed under its own ledger.
 
 ## Session commands
 

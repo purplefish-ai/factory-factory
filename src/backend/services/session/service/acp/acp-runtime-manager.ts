@@ -16,6 +16,7 @@ import type { AcpProcessHandle } from './acp-process-handle';
 import type { PromptConfigurationPermit } from './acp-prompt-configuration';
 import type { AcpPromptObservation } from './acp-prompt-controller';
 import { AcpPromptController } from './acp-prompt-controller';
+import { PromptNotInvokedError } from './acp-prompt-invocation';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
@@ -207,73 +208,79 @@ export class AcpRuntimeManager {
     guard?: { check(): Promise<void>; assertCurrent?(): void },
     configurationPermit?: PromptConfigurationPermit
   ): Promise<{ stopReason: string }> {
-    const handle = this.requireInstalledHandle(sessionId);
-    configurationPermit?.assertCurrent();
-    while (
-      handle.configurationReady !== undefined ||
-      (!configurationPermit &&
-        (handle.pendingConfigUpdates !== undefined || handle.pendingPromptAdmission !== undefined))
-    ) {
-      await Promise.all([
-        handle.configurationReady,
-        configurationPermit ? undefined : handle.pendingConfigUpdates,
-        configurationPermit ? undefined : handle.pendingPromptAdmission,
-      ]);
+    try {
+      const handle = this.requireInstalledHandle(sessionId);
       configurationPermit?.assertCurrent();
-    }
-    if (
-      this.supervisor.getClient(sessionId) !== handle ||
-      this.supervisor.isStopInProgress(sessionId) ||
-      !handle.isRunning()
-    ) {
-      throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
-    }
-    const providerSessionId = handle.acpSessionId;
-    const assertCurrent = () => {
-      configurationPermit?.assertCurrent();
-      if (
-        this.supervisor.getClient(sessionId) !== handle ||
-        this.supervisor.isStopInProgress(sessionId) ||
-        !handle.isRunning() ||
-        handle.acpSessionId !== providerSessionId ||
+      while (
         handle.configurationReady !== undefined ||
         (!configurationPermit &&
           (handle.pendingConfigUpdates !== undefined ||
             handle.pendingPromptAdmission !== undefined))
       ) {
-        throw new Error('Observed prompt runtime or configuration changed');
+        await Promise.all([
+          handle.configurationReady,
+          configurationPermit ? undefined : handle.pendingConfigUpdates,
+          configurationPermit ? undefined : handle.pendingPromptAdmission,
+        ]);
+        configurationPermit?.assertCurrent();
       }
-    };
-    if (guard) {
-      await guard.check();
-    }
-    assertCurrent();
-    guard?.assertCurrent?.();
-    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
-    if (observed) {
-      handle.eventLifecycleGeneration = observed.lifecycleGeneration;
-    }
-    const observation = observed?.createObservation(
-      {
-        version: 1,
-        provider: handle.provider,
-        providerSessionId,
-        runtimeIncarnationId: this.supervisor.getRuntimeIncarnation(sessionId, handle),
-        lifecycleGeneration: observed.lifecycleGeneration,
-      },
-      assertCurrent
-    );
-    return await this.promptController.sendPrompt(
-      sessionId,
-      handle,
-      prompt,
-      timeoutMs,
-      observation,
-      () => {
-        assertCurrent();
-        guard?.assertCurrent?.();
+      if (
+        this.supervisor.getClient(sessionId) !== handle ||
+        this.supervisor.isStopInProgress(sessionId) ||
+        !handle.isRunning()
+      ) {
+        throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
       }
-    );
+      const providerSessionId = handle.acpSessionId;
+      const assertCurrent = () => {
+        configurationPermit?.assertCurrent();
+        if (
+          this.supervisor.getClient(sessionId) !== handle ||
+          this.supervisor.isStopInProgress(sessionId) ||
+          !handle.isRunning() ||
+          handle.acpSessionId !== providerSessionId ||
+          handle.configurationReady !== undefined ||
+          (!configurationPermit &&
+            (handle.pendingConfigUpdates !== undefined ||
+              handle.pendingPromptAdmission !== undefined))
+        ) {
+          throw new Error('Observed prompt runtime or configuration changed');
+        }
+      };
+      if (guard) {
+        await guard.check();
+      }
+      assertCurrent();
+      guard?.assertCurrent?.();
+      this.supervisor.forgetObservedEmptyProviderSession(sessionId);
+      if (observed) {
+        handle.eventLifecycleGeneration = observed.lifecycleGeneration;
+      }
+      const observation = observed?.createObservation(
+        {
+          version: 1,
+          provider: handle.provider,
+          providerSessionId,
+          runtimeIncarnationId: this.supervisor.getRuntimeIncarnation(sessionId, handle),
+          lifecycleGeneration: observed.lifecycleGeneration,
+        },
+        assertCurrent
+      );
+      return this.promptController.sendPrompt(
+        sessionId,
+        handle,
+        prompt,
+        timeoutMs,
+        observation,
+        () => {
+          assertCurrent();
+          guard?.assertCurrent?.();
+        },
+        configurationPermit !== undefined
+      );
+    } catch (error) {
+      throw configurationPermit ? new PromptNotInvokedError(error) : error;
+    }
   }
 
   /** Adds input to the active turn while its original prompt keeps owning completion. */

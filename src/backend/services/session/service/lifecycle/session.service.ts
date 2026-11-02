@@ -10,6 +10,7 @@ import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { PromptConfigurationPermit } from '../acp/acp-prompt-configuration';
+import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { withEventEvidenceDeadline } from './event-evidence-deadline';
 import type { EventOwnedWork } from './event-owned-work';
@@ -103,10 +104,14 @@ export class SessionService {
     configurationPermit?: PromptConfigurationPermit
   ): Promise<void> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
-    if (this.eventAuthority) {
-      await this.eventAuthority.assertOrdinary(sessionId);
+    try {
+      if (this.eventAuthority) {
+        await this.eventAuthority.assertOrdinary(sessionId);
+      }
+      this.assertPromptGeneration(sessionId, generation);
+    } catch (error) {
+      throw configurationPermit ? new PromptNotInvokedError(error) : error;
     }
-    this.assertPromptGeneration(sessionId, generation);
     const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
       if (!configurationPermit && this.admitPrompt) {
@@ -144,7 +149,7 @@ export class SessionService {
 
     const error = new Error(`No ACP client found for sendSessionMessage: ${sessionId}`);
     logger.warn('No ACP client found for sendSessionMessage', { sessionId });
-    return Promise.reject(error);
+    return Promise.reject(configurationPermit ? new PromptNotInvokedError(error) : error);
   }
 
   /**
@@ -202,13 +207,17 @@ export class SessionService {
       await this.runtimeManager.getClient(sessionId)?.pendingPromptAdmission;
     }
     return this.withSerializedAcpPrompt(sessionId, async () => {
-      if (this.eventAuthority) {
-        await this.eventAuthority.assertOrdinary(sessionId);
-      }
-      this.assertPromptGeneration(sessionId, generation);
-      if (guard) {
-        await guard.check();
-        guard.assertCurrent?.();
+      try {
+        if (this.eventAuthority) {
+          await this.eventAuthority.assertOrdinary(sessionId);
+        }
+        this.assertPromptGeneration(sessionId, generation);
+        if (guard) {
+          await guard.check();
+          guard.assertCurrent?.();
+        }
+      } catch (error) {
+        throw configurationPermit ? new PromptNotInvokedError(error) : error;
       }
       return this.executeAcpMessage(sessionId, prompt, undefined, guard, configurationPermit);
     });

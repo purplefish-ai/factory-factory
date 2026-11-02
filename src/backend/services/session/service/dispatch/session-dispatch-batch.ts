@@ -5,6 +5,7 @@ import type { NotificationDispatchClaim } from '@/backend/services/session/servi
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { ChatIntentRevisionChangedError } from '../../resources/chat-intent.accessor';
+import { PromptNotInvokedError } from '../acp/acp-prompt-invocation';
 import { UncertainChatDispatchError } from '../chat/chat-intent-errors';
 import type { SessionChatIntentService } from '../chat/session-chat-intent.service';
 import type {
@@ -163,7 +164,10 @@ async function handleFailedBatch(
   // Requeue from the end so a busy provider preserves FIFO order.
   const backwards = [...messages].reverse();
   error = input.chatIntent?.protectClaimedBatchFailure(input.sessionId, messages, error) ?? error;
-  if (error instanceof ChatIntentRevisionChangedError) {
+  if (
+    error instanceof ChatIntentRevisionChangedError ||
+    (error instanceof PromptNotInvokedError && input.isCurrent())
+  ) {
     await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
     for (const message of backwards) {
       sessionDomainService.requeueFront(input.sessionId, message);

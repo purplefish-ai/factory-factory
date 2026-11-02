@@ -41,6 +41,23 @@ describe('workspace initialization startup order', () => {
     ]);
   });
 
+  it('uses retained initial input when provisioning retries after issue/model changes', async () => {
+    vi.mocked(sessionDomainService.recoverInitialMessageDurably).mockResolvedValueOnce({
+      id: 'auto-init-session-1',
+      text: 'original frozen issue',
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: 'original-model',
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    await initializeWorkspaceWorktree(WORKSPACE_ID);
+    expect(sessionLifecycleService.startSession).toHaveBeenCalledOnce();
+    expect(sessionDomainService.enqueueInitialMessageDurably).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     'reserves initial launch before READY and releases on exit (failure: %s)',
     async (failReady) => {

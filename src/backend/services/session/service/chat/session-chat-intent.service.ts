@@ -127,6 +127,41 @@ export class SessionChatIntentService {
     });
   }
 
+  hasAccepted(sessionId: string, messageId: string): Promise<boolean> {
+    return this.run(sessionId, async () => Boolean(await this.store.find(sessionId, messageId)));
+  }
+
+  async settleNotInvoked(
+    sessionId: string,
+    attemptId: string,
+    status: 'queued' | 'cancelled'
+  ): Promise<void> {
+    await this.run(sessionId, async () => {
+      await this.store.settle(
+        attemptId,
+        status,
+        'confirmed local rejection before provider invocation'
+      );
+      const attempts = this.attempted.get(sessionId);
+      for (const [id, claimed] of attempts ?? []) {
+        if (claimed === attemptId) {
+          attempts?.delete(id);
+        }
+      }
+    });
+  }
+
+  recoverInitial(sessionId: string, messageId: string): Promise<QueuedMessage | null> {
+    return this.run(sessionId, async () => {
+      const prior = await this.store.find(sessionId, messageId);
+      if (!prior) {
+        return null;
+      }
+      await this.hydrateLocked(sessionId);
+      return prior.message;
+    });
+  }
+
   acceptInitial(
     sessionId: string,
     message: QueuedMessage

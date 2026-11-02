@@ -62,7 +62,7 @@ export function createQueueMessageHandler(
       SessionExecutionCommandServices['domain'],
       'enqueue' | 'emitDelta' | 'rejectMessage' | 'chatIntent'
     >;
-    chatIntent?: Pick<SessionChatIntentService, 'accept'>;
+    chatIntent?: Pick<SessionChatIntentService, 'accept' | 'hasAccepted'>;
     tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   }
 ): SessionCommandHandler<QueueMessageInput> {
@@ -70,6 +70,14 @@ export function createQueueMessageHandler(
     const text = message.text?.trim();
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
+      if (message.id && (await deps.chatIntent?.hasAccepted(sessionId, message.id))) {
+        return rejectAcceptanceError(
+          deps.domain,
+          sessionId,
+          message.id,
+          new ChatIntentConflictError()
+        );
+      }
       return rejectInvalidMessage(deps.domain, sessionId, message.id, validationError);
     }
 
