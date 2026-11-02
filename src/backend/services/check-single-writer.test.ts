@@ -108,6 +108,24 @@ describe('check-single-writer', () => {
 
   describe('owned side tables', () => {
     it.each([
+      `tx.workspacePRDelivery.update({where:{id:'receipt'},data:{state:'PENDING'}});`,
+      `tx.workspace.update({where:{id:'w'},data:{prDeliveries:{create:{id:'receipt'}}}});`,
+      `tx.workspacePREvent.update({where:{id:'e'},data:{batch:{connect:{id:'receipt'}}}});`,
+    ])('keeps frozen PR delivery writes in the event owner: %s', (mutation) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `function change(tx) { ${mutation} }`,
+        },
+      ]);
+      const result = runChecker(tempRoot);
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'workspacePRDelivery is written only by src/backend/services/workspace/resources/workspace-pr-event.accessor.ts'
+      );
+    });
+
+    it.each([
       `tx.workspacePRDedicatedSession.upsert({ where: { prId: 'p' }, create: { prId: 'p' }, update: {} });`,
       `tx.workspacePR.update({ where: { id: 'p' }, data: { dedicatedSession: { create: { sessionId: 's' } } } });`,
       `tx.agentSession.update({ where: { id: 's' }, data: { dedicatedPRBinding: { connect: { prId: 'p' } } } });`,

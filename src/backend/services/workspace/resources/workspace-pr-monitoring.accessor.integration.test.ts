@@ -18,6 +18,14 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 let db: IntegrationDatabase;
+async function readEvent(id: string) {
+  const row = await db.prisma.workspacePREvent.findUniqueOrThrow({ where: { id } });
+  return workspacePrEventAccessor.projectEvents(
+    [row],
+    await db.prisma.workspacePRDelivery.findMany()
+  )[0];
+}
+
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
@@ -148,9 +156,7 @@ describe('durable monitoring', () => {
       result: 'retry',
     });
     await workspacePrEventAccessor.recoverClaim(event.deliveryId, true);
-    expect((await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } }))?.state).toBe(
-      'DELIVERED'
-    );
+    expect((await readEvent(event.id))?.state).toBe('DELIVERED');
   });
   it('enables monitoring without creating PR events and keeps retries idempotent', async () => {
     const current = await workspacePrMonitoringAccessor.get('w');
@@ -254,7 +260,7 @@ describe('durable monitoring', () => {
       },
     });
     await workspacePrMonitoringAccessor.resume('foreign');
-    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+    expect(await readEvent(event.id)).toMatchObject({
       attempts: 0,
       state: 'PENDING',
       deliveryId: 'frozen',

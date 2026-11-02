@@ -58,6 +58,7 @@ export const ModelName = {
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
   WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
+  WorkspacePRDelivery: 'WorkspacePRDelivery',
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
@@ -231,6 +232,24 @@ export const WorkspacePRDedicatedSessionScalarFieldEnum = {
 export type WorkspacePRDedicatedSessionScalarFieldEnum = (typeof WorkspacePRDedicatedSessionScalarFieldEnum)[keyof typeof WorkspacePRDedicatedSessionScalarFieldEnum]
 
 
+export const WorkspacePRDeliveryScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  eventIds: 'eventIds',
+  state: 'state',
+  sessionId: 'sessionId',
+  provider: 'provider',
+  providerSessionId: 'providerSessionId',
+  bindingRevision: 'bindingRevision',
+  text: 'text',
+  attempts: 'attempts',
+  claimedAt: 'claimedAt',
+  deliveredAt: 'deliveredAt'
+} as const
+
+export type WorkspacePRDeliveryScalarFieldEnum = (typeof WorkspacePRDeliveryScalarFieldEnum)[keyof typeof WorkspacePRDeliveryScalarFieldEnum]
+
+
 export const WorkspacePREventScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -240,6 +259,7 @@ export const WorkspacePREventScalarFieldEnum = {
   payload: 'payload',
   state: 'state',
   attempts: 'attempts',
+  batchId: 'batchId',
   deliveryId: 'deliveryId',
   deliverySessionId: 'deliverySessionId',
   deliveryProvider: 'deliveryProvider',
