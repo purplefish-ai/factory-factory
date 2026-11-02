@@ -170,8 +170,15 @@ describe.each([false, true])('AdversarialReviewButton (menu=%s)', (renderAsMenuI
     expect(getAction()).toBeNull();
   });
 
-  it('retains workspace-only review routing for synthetic scalar snapshot identities', () => {
-    const legacy = {
+  it('retains workspace-only routing for a scalar-only legacy payload', () => {
+    render(workspace());
+    expect(getAction()).not.toBeNull();
+    flushSync(() => getAction()?.click());
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1' });
+  });
+
+  it('preserves a persisted migrated PR identity despite stale aggregate terminal flags', () => {
+    const migrated = {
       id: 'legacy-pr-workspace-1',
       url: 'https://github.com/example/repo/pull/42',
       number: 42,
@@ -184,9 +191,12 @@ describe.each([false, true])('AdversarialReviewButton (menu=%s)', (renderAsMenuI
       hasMergeConflict: false,
       syncedAt: null,
     };
-    render(workspace({ prs: [legacy], selectedPrId: legacy.id, selectedPr: legacy }));
+    render(workspace({ prs: [migrated], prState: 'MERGED', ratchetState: 'MERGED' }));
     expect(getAction()).not.toBeNull();
     flushSync(() => getAction()?.click());
-    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1' });
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: 'workspace-1',
+      prId: migrated.id,
+    });
   });
 });

@@ -85,6 +85,14 @@ it('resolves review association IDs only for persisted identities', () => {
   const pr = target.pr!;
   expect(getWorkspacePRReviewTarget({ id: 'w', prs: [pr] }).associationId).toBeNull();
   expect(
-    getWorkspacePRReviewTarget({ id: 'w', prs: [{ ...pr, id: 'persisted' }] }).associationId
+    getWorkspacePRReviewTarget({ id: 'w', prs: [{ ...pr, id: 'display-only' }] }).associationId
+  ).toBeNull();
+  const { identitySource: _source, ...persisted } = pr;
+  expect(
+    getWorkspacePRReviewTarget({ id: 'w', prs: [{ ...persisted, id: 'persisted' }] }).associationId
   ).toBe('persisted');
+  expect(
+    getWorkspacePRReviewTarget({ id: 'w', prs: [{ ...persisted, id: 'legacy-pr-w' }] })
+      .associationId
+  ).toBe('legacy-pr-w');
 });

@@ -261,7 +261,7 @@ export function ConnectedWorkspacePrMenu({
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const actions = useWorkspacePrActions(workspaceId, projectId);
+  const actions = useWorkspacePrActions(workspaceId, projectId, prs);
   const openAdd = () => {
     setUrl('');
     setError(null);

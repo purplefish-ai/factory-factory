@@ -171,9 +171,15 @@ Selection uses the existing ID-ascending rule: first nonterminal association
 (including an unsynced `NONE`), otherwise the first historical association, or
 explicit nulls for an empty collection. It is not a saved primary preference.
 `selectedPr` carries that association's own state, CI, review, conflicts and
-sync time. Links and review actions use these facts and review submits the
-association ID; workspace CI/status remains a collection summary. The PR menu
-continues to show and act on each individual association.
+sync time. Links, PR badges and review actions use these facts; the CI chip uses
+collection state. Review submits the persisted association ID. Scalar-only
+legacy payloads without a known association retain workspace-scoped review
+routing. Their display-only PRs carry `identitySource: 'legacy-snapshot'`;
+identity is not inferred from ID spelling, because migrated/restored persisted
+associations can also have `legacy-pr-…` IDs. Reusing a cached persisted
+association preserves its identity, and canonical collections replace adapter
+provenance. The PR menu continues to show and act on each individual
+association.
 
 Older summary/snapshot payloads may omit selection; client adapters derive it
 from the collection or adapt scalar-only legacy data. The snapshot store derives

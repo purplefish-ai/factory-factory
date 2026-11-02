@@ -3,6 +3,8 @@ import { CIStatus, PRState } from '@/shared/core';
 
 export const WorkspacePullRequestSchema = z.object({
   id: z.string(),
+  /** Only scalar compatibility adapters mark display-only identities. */
+  identitySource: z.literal('legacy-snapshot').optional(),
   url: z.string(),
   number: z.number().int().positive().nullable(),
   title: z.string().nullable(),
