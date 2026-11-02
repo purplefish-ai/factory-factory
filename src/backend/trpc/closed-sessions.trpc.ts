@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
@@ -57,7 +56,10 @@ export const closedSessionsRouter = router({
       );
 
       try {
-        const content = await readFile(transcriptPath, 'utf-8');
+        const content = await sessionDataService.readClosedSessionTranscript(
+          closedSession,
+          transcriptPath
+        );
         const transcript = closedSessionTranscriptSchema.parse(JSON.parse(content));
 
         return transcript;

@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { writeFileAtomic } from './atomic-file';
+import { DirectorySyncUnavailableError, writeFileAtomic } from './atomic-file';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -16,7 +16,7 @@ beforeEach(async () => {
 
 afterEach(() => vi.restoreAllMocks());
 
-it.each([false, true])(
+it.skipIf(process.platform === 'win32').each([false, true])(
   'syncs bytes before rename, directory ancestry afterward (parents precreated=%s)',
   async (precreated) => {
     const root = await fs.mkdtemp(join(tmpdir(), 'ff-durable-'));
@@ -55,6 +55,43 @@ it.each([false, true])(
     }
   }
 );
+
+it('signals unsupported Windows directory durability only after file sync and rename', async () => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'ff-windows-durability-'));
+  const target = join(root, 'archive.json');
+  const { open, rename } =
+    await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const events: string[] = [];
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  vi.mocked(fs.open).mockImplementation(async (...args) => {
+    if (String(args[0]) === root) {
+      events.push('directory-denied');
+      throw Object.assign(new Error('directory cannot flush'), { code: 'EPERM' });
+    }
+    const handle = await open(...args);
+    const sync = handle.sync.bind(handle);
+    vi.spyOn(handle, 'sync').mockImplementation(async () => {
+      events.push('file-sync');
+      await sync();
+    });
+    return handle;
+  });
+  vi.mocked(fs.rename).mockImplementation(async (...args) => {
+    events.push('rename');
+    await rename(...args);
+  });
+  try {
+    await expect(
+      writeFileAtomic(target, 'durable source proof', { durable: true })
+    ).rejects.toBeInstanceOf(DirectorySyncUnavailableError);
+    expect(events).toEqual(['file-sync', 'rename', 'directory-denied']);
+    expect(await fs.readFile(target, 'utf8')).toBe('durable source proof');
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 it.each(['file', 'directory'])(
   'rejects a %s sync failure instead of promising durability',
