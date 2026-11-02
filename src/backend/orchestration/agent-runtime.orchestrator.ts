@@ -1,5 +1,6 @@
 import {
   AgentSourcePollService,
+  AgentLedgerRetentionService,
   AgentEventEvaluationService,
   claimNextRun,
   maintainQueue,
@@ -10,10 +11,12 @@ import {
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { classifyGitHubCLIError, type githubCLIService } from '@/backend/services/github';
 import { jobRunner } from '@/backend/services/job-runner.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type { sessionProviderResolverService } from '@/backend/services/session';
 import type { userSettingsService } from '@/backend/services/settings';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
 
+const logger = createLogger('agent-runtime');
 const JOB = 'agent-source-poll';
 const EVALUATION_JOB = 'agent-event-evaluation';
 const LAUNCH_JOB = 'agent-launch-maintenance';
@@ -25,6 +28,7 @@ type LaunchClaim = Extract<AgentClaimResult, { status: 'CLAIMED' }>;
 type EvaluationWorker = {
   evaluatePendingEvents(signal: AbortSignal): Promise<void>;
   maintainQueue(): Promise<void>;
+  pruneExpired?: (signal: AbortSignal) => Promise<unknown>;
   claimNextRun(): Promise<AgentClaimResult>;
   consumeClaim?: (claim: LaunchClaim, signal: AbortSignal) => Promise<void>;
   canClaim?: () => boolean;
@@ -58,6 +62,7 @@ export function createAgentRuntime(
     },
     () => getServices().configService.getAgentRuntimeLimits().githubPagesPerCycle
   );
+  const retention = new AgentLedgerRetentionService();
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
   });
@@ -66,6 +71,7 @@ export function createAgentRuntime(
     {
       evaluatePendingEvents: (signal) => evaluator.evaluatePendingEvents(signal),
       maintainQueue,
+      pruneExpired: (signal) => retention.pruneExpired(signal),
       claimNextRun,
       consumeClaim: consumeClaim ?? launcher?.consumeClaim,
       canClaim: launcher?.canClaim,
@@ -106,6 +112,10 @@ export function createAgentRuntimeLifecycle(
       runImmediately: true,
       run: async (signal) => {
         await worker.maintainQueue();
+        if (signal.aborted) {
+          return;
+        }
+        await pruneLedger(worker, signal);
         if (signal.aborted) {
           return;
         }
@@ -172,4 +182,16 @@ export async function resolveAgentExecutionConfig(
     model,
     ...(reasoningEffort ? { reasoningEffort } : {}),
   });
+}
+
+async function pruneLedger(worker: EvaluationWorker, signal: AbortSignal) {
+  try {
+    await worker.pruneExpired?.(signal);
+  } catch {
+    if (!signal.aborted) {
+      logger.warn('Agent ledger retention failed; evaluation will continue.', {
+        reason: 'RETENTION_FAILED',
+      });
+    }
+  }
 }
