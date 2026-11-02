@@ -885,6 +885,10 @@ export class SessionConfigService {
     if (!accepted.isCurrent()) {
       return;
     }
+    await this.queuedSettings.persistBeforePublication(sessionId, {
+      provider: acpHandle.provider,
+      configOptions,
+    });
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
@@ -917,6 +921,7 @@ export class SessionConfigService {
       return;
     }
     const { provider, configOptions } = update;
+    await this.queuedSettings.persistBeforePublication(sessionId, update);
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,

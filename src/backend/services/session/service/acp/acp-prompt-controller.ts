@@ -2,7 +2,7 @@ import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
-import { PromptNotInvokedError } from './acp-prompt-invocation';
+import { PromptNotInvokedError, confirmedProviderBusy } from './acp-prompt-invocation';
 import { PromptTimeoutError } from './acp-runtime-errors';
 
 const logger = createLogger('acp-runtime-manager');
@@ -235,5 +235,8 @@ function classifyPreInvocationFailure(
   invoked: boolean,
   observation?: AcpPromptObservation
 ): unknown {
-  return requested && !invoked && !observation ? new PromptNotInvokedError(error) : error;
+  if (!requested || observation) {
+    return error;
+  }
+  return invoked ? (confirmedProviderBusy(error) ?? error) : new PromptNotInvokedError(error);
 }

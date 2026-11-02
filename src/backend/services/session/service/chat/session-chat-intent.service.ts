@@ -74,19 +74,21 @@ export class SessionChatIntentService {
       );
   }
 
-  hydrate(sessionId: string): Promise<void> {
-    return this.run(sessionId, () => this.hydrateLocked(sessionId));
+  hydrate(sessionId: string, options?: { publish?: boolean }): Promise<void> {
+    return this.run(sessionId, () => this.hydrateLocked(sessionId, options?.publish));
   }
-  private async hydrateLocked(sessionId: string): Promise<void> {
+  private async hydrateLocked(sessionId: string, publish = true): Promise<void> {
     const rows = await this.store.read(sessionId, true);
     for (const row of rows) {
       if (row.status === 'queued' && !this.isStaged(sessionId, row.message.id)) {
-        const result = this.domain.restoreAcceptedMessage(sessionId, row.message);
+        const result = this.domain.restoreAcceptedMessage(sessionId, row.message, {
+          emitSnapshot: publish,
+        });
         if ('error' in result) {
           throw new Error(result.error);
         }
       } else if (row.status === 'uncertain' || row.status === 'failed') {
-        this.publishRecorded(sessionId, row);
+        this.publishRecorded(sessionId, row, publish);
       }
     }
   }
@@ -121,6 +123,7 @@ export class SessionChatIntentService {
       }
       const result = this.domain.enqueue(sessionId, record.message);
       if ('error' in result) {
+        await this.store.cancel(sessionId, message.id);
         throw new Error(result.error);
       }
       return { ...record, position: result.position };
@@ -134,14 +137,11 @@ export class SessionChatIntentService {
   async settleNotInvoked(
     sessionId: string,
     attemptId: string,
-    status: 'queued' | 'cancelled'
+    status: 'queued' | 'cancelled',
+    evidence = 'confirmed local rejection before provider invocation'
   ): Promise<void> {
     await this.run(sessionId, async () => {
-      await this.store.settle(
-        attemptId,
-        status,
-        'confirmed local rejection before provider invocation'
-      );
+      await this.store.settle(attemptId, status, evidence);
       const attempts = this.attempted.get(sessionId);
       for (const [id, claimed] of attempts ?? []) {
         if (claimed === attemptId) {
@@ -164,9 +164,10 @@ export class SessionChatIntentService {
 
   acceptInitial(
     sessionId: string,
-    message: QueuedMessage
+    message: QueuedMessage,
+    isCurrent?: () => boolean
   ): Promise<IntentRecord & { position?: number }> {
-    return this.accept(sessionId, message);
+    return this.accept(sessionId, message, isCurrent);
   }
 
   cancelQueued(sessionId: string, messageId: string): Promise<boolean> {
@@ -188,13 +189,15 @@ export class SessionChatIntentService {
     });
   }
 
-  private publishRecorded(sessionId: string, row: IntentRecord): void {
+  private publishRecorded(sessionId: string, row: IntentRecord, publish = true): void {
     if (row.status === 'uncertain' && this.isStaged(sessionId, row.message.id)) {
-      this.domain.emitDelta(sessionId, {
-        type: 'message_state_changed',
-        id: row.message.id,
-        newState: MessageState.DISPATCHED,
-      });
+      if (publish) {
+        this.domain.emitDelta(sessionId, {
+          type: 'message_state_changed',
+          id: row.message.id,
+          newState: MessageState.DISPATCHED,
+        });
+      }
       return;
     }
     if (row.status === 'uncertain' || row.status === 'failed') {
@@ -203,7 +206,9 @@ export class SessionChatIntentService {
         row.message,
         row.status === 'uncertain'
           ? `Delivery outcome is uncertain (batch ${row.attemptId ?? 'unknown'}). Check provider history before submitting again. This batch will not be resent automatically.`
-          : 'Message was not sent. Submit a new message to retry.'
+          : 'Message was not sent. Submit a new message to retry.',
+        'failed',
+        publish
       );
     } else {
       this.domain.emitDelta(sessionId, {

@@ -631,7 +631,6 @@ export type ChatIntentCreateWithoutAttemptInput = {
 
 export type ChatIntentUncheckedCreateWithoutAttemptInput = {
   id?: number
-  sessionId: string
   messageId: string
   fingerprint: string
   submitted: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -715,7 +714,6 @@ export type ChatIntentUncheckedUpdateManyWithoutSessionInput = {
 
 export type ChatIntentCreateManyAttemptInput = {
   id?: number
-  sessionId: string
   messageId: string
   fingerprint: string
   submitted: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -738,7 +736,6 @@ export type ChatIntentUpdateWithoutAttemptInput = {
 
 export type ChatIntentUncheckedUpdateWithoutAttemptInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number
-  sessionId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   fingerprint?: Prisma.StringFieldUpdateOperationsInput | string
   submitted?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -750,7 +747,6 @@ export type ChatIntentUncheckedUpdateWithoutAttemptInput = {
 
 export type ChatIntentUncheckedUpdateManyWithoutAttemptInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number
-  sessionId?: Prisma.StringFieldUpdateOperationsInput | string
   messageId?: Prisma.StringFieldUpdateOperationsInput | string
   fingerprint?: Prisma.StringFieldUpdateOperationsInput | string
   submitted?: Prisma.JsonNullValueInput | runtime.InputJsonValue

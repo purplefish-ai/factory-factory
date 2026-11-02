@@ -72,6 +72,10 @@ it('rejects conflicting concurrent IDs without overwriting the accepted payload'
   ]);
   expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
   expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+  const winner = results.find((r) => r.status === 'fulfilled');
+  expect((await store.find('s', 'human'))?.message).toEqual(
+    winner?.status === 'fulfilled' ? winner.value.message : undefined
+  );
 });
 it('keeps later settings separate from the immutable submission across accessor restart', async () => {
   await store.accept('s', message(), false);
@@ -83,6 +87,7 @@ it('keeps later settings separate from the immutable submission across accessor 
   const retry = await store.accept('s', message(), true);
   expect(retry.message.settings.selectedModel).toBe('opus');
   expect(retry.message.settings.planModeEnabled).toBe(true);
+  expect((await db.prisma.chatIntent.findFirstOrThrow()).submitted).toEqual(message());
 });
 it('freezes a full mixed batch and atomically excludes all human members from replay before invocation', async () => {
   await store.accept('s', message('one'), false);
@@ -145,4 +150,21 @@ it('resolves a whole human attempt only for its session, without making any memb
   await store.resolve('s', id!, 'cancelled');
   expect((await store.read('s')).map((r) => r.status)).toEqual(['cancelled', 'cancelled']);
   expect(await store.hasUncertainAttempt('s')).toBe(false);
+});
+
+it('rejects cross-session attempt references in the database while preserving explicit session deletion', async () => {
+  await db.prisma.agentSession.create({
+    data: { id: 'other', workspaceId: 'w', workflow: 'implement', provider: 'CLAUDE' },
+  });
+  await store.accept('s', message('one'), false);
+  await store.accept('other', message('two'), false);
+  const otherAttempt = await store.claim('other', [message('two')], 'two', message().settings, 1);
+  await expect(
+    db.prisma.chatIntent.update({
+      where: { sessionId_messageId: { sessionId: 's', messageId: 'one' } },
+      data: { attemptId: otherAttempt },
+    })
+  ).rejects.toThrow();
+  await db.prisma.agentSession.delete({ where: { id: 'other' } });
+  expect(await store.find('s', 'one')).toBeDefined();
 });

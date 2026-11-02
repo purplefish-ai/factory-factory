@@ -263,3 +263,26 @@ it('never reports non-invocation proof after entering a failing provider RPC', a
   ).rejects.toBe(failure);
   expect(handle.connection.prompt).toHaveBeenCalledOnce();
 });
+
+it('treats the explicit ACP invalid-request busy response as declined input while preserving ambiguous errors', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  vi.mocked(handle.connection.prompt).mockRejectedValueOnce({
+    code: -32_600,
+    message: 'Invalid request',
+    data: { reason: 'A turn is already in progress for this session' },
+  });
+  const queue = new SessionConfigMutationQueue(manager, vi.fn());
+  await expect(
+    queue.runPrompt('session', (permit) =>
+      manager.sendPrompt('session', [], undefined, undefined, undefined, permit)
+    )
+  ).rejects.toBeInstanceOf(PromptNotInvokedError);
+  expect(handle.connection.prompt).toHaveBeenCalledOnce();
+});

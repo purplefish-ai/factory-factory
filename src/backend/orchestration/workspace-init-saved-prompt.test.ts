@@ -51,7 +51,8 @@ describe('saved initial prompts', () => {
     expect(githubCLIService.getIssue).not.toHaveBeenCalled();
     expect(enqueueInitialMessage).toHaveBeenCalledWith(
       'session-1',
-      expect.objectContaining({ text: 'Fix the unclosed </div> in Header.tsx' })
+      expect.objectContaining({ text: 'Fix the unclosed </div> in Header.tsx' }),
+      expect.any(Function)
     );
   });
 

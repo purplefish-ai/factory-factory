@@ -80,6 +80,7 @@ vi.mock('@/backend/services/session', () => ({
     beginInitialLaunch: vi.fn(() => vi.fn()),
     enqueue: vi.fn(),
     enqueueInitialMessageDurably: mocks.enqueueInitialMessageDurably,
+    cancelInitialMessageDurably: vi.fn(() => Promise.resolve()),
     recoverInitialMessageDurably: vi.fn(() => Promise.resolve(null)),
     emitDelta: mocks.emitDelta,
   },

@@ -10,6 +10,13 @@ type ConfigOperation = () => Promise<AcceptedQueuedConfig | undefined> | Promise
 
 /** Explicit edits supersede older queued intent, independently for each setting. */
 export class SessionQueuedSettings {
+  private readonly publications = new Map<
+    string,
+    (config: AcceptedQueuedConfig) => Promise<void>
+  >();
+  async persistBeforePublication(sessionId: string, config: AcceptedQueuedConfig): Promise<void> {
+    await this.publications.get(sessionId)?.(config);
+  }
   private readonly edits = new Map<
     string,
     {
@@ -77,14 +84,26 @@ export class SessionQueuedSettings {
     const edits = this.edits.get(sessionId) ?? { pendingCaptures: 0, values: new Map() };
     edits.pendingCaptures += 1;
     this.edits.set(sessionId, edits);
+    const isCurrent = () =>
+      this.edits.get(sessionId) === edits &&
+      (!handle || this.runtime.getClient(sessionId) === handle);
     return async () => {
       try {
         await this.enqueue(sessionId, async () => {
-          const accepted = await operation();
-          if (
-            this.edits.get(sessionId) !== edits ||
-            (handle && this.runtime.getClient(sessionId) !== handle)
-          ) {
+          let projected = false;
+          const publication = async (config: AcceptedQueuedConfig) => {
+            if (!isCurrent()) {
+              return;
+            }
+            const settings = readSettings(config);
+            if (Object.keys(settings).length) {
+              await this.persist?.(sessionId, requestedAt, settings);
+            }
+            projected = true;
+          };
+          this.publications.set(sessionId, publication);
+          const accepted = await this.runCapturedOperation(sessionId, operation, publication);
+          if (!isCurrent()) {
             return;
           }
           const config = accepted ?? handle;
@@ -92,7 +111,9 @@ export class SessionQueuedSettings {
             return;
           }
           const settings = readSettings(config);
-          await this.persist?.(sessionId, requestedAt, settings);
+          if (!projected && Object.keys(settings).length) {
+            await this.persist?.(sessionId, requestedAt, settings);
+          }
           for (const key of Object.keys(settings) as Array<keyof Settings>) {
             edits.values.set(key, { requestedAt, settings: { [key]: settings[key] } });
           }
@@ -108,6 +129,20 @@ export class SessionQueuedSettings {
         }
       }
     };
+  }
+
+  private async runCapturedOperation(
+    sessionId: string,
+    operation: ConfigOperation,
+    publication: (config: AcceptedQueuedConfig) => Promise<void>
+  ) {
+    try {
+      return await operation();
+    } finally {
+      if (this.publications.get(sessionId) === publication) {
+        this.publications.delete(sessionId);
+      }
+    }
   }
 
   release(sessionId: string): void {

@@ -58,6 +58,21 @@ describe('workspace initialization startup order', () => {
     expect(sessionDomainService.enqueueInitialMessageDurably).not.toHaveBeenCalled();
   });
 
+  it('does not publish READY when durable initial admission fails', async () => {
+    setupHappyPath({ creationMetadata: { initialPrompt: 'Must be retained' } });
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+    ]);
+    vi.mocked(sessionDomainService.enqueueInitialMessageDurably).mockRejectedValueOnce(
+      new Error('initial persistence unavailable')
+    );
+    await initializeWorkspaceWorktree(WORKSPACE_ID);
+    expect(workspaceStateMachine.markReady).not.toHaveBeenCalled();
+    expect(workspaceStateMachine.markReadyWithWarning).not.toHaveBeenCalled();
+    expect(workspaceStateMachine.markFailed).toHaveBeenCalled();
+    expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     'reserves initial launch before READY and releases on exit (failure: %s)',
     async (failReady) => {
@@ -212,7 +227,8 @@ describe('workspace initialization startup order', () => {
       await setupEntered.promise;
       expect(sessionDomainService.enqueueInitialMessageDurably).toHaveBeenCalledExactlyOnceWith(
         'session-1',
-        expect.objectContaining({ text: 'Fix the queued startup message' })
+        expect.objectContaining({ text: 'Fix the queued startup message' }),
+        expect.any(Function)
       );
       expect(sessionDomainService.emitDelta).toHaveBeenCalledWith(
         'session-1',

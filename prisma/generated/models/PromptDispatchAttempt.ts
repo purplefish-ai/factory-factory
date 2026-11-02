@@ -270,6 +270,7 @@ export type PromptDispatchAttemptOrderByWithRelationInput = {
 
 export type PromptDispatchAttemptWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  sessionId_id?: Prisma.PromptDispatchAttemptSessionIdIdCompoundUniqueInput
   AND?: Prisma.PromptDispatchAttemptWhereInput | Prisma.PromptDispatchAttemptWhereInput[]
   OR?: Prisma.PromptDispatchAttemptWhereInput[]
   NOT?: Prisma.PromptDispatchAttemptWhereInput | Prisma.PromptDispatchAttemptWhereInput[]
@@ -285,7 +286,7 @@ export type PromptDispatchAttemptWhereUniqueInput = Prisma.AtLeast<{
   settledAt?: Prisma.DateTimeNullableFilter<"PromptDispatchAttempt"> | Date | string | null
   session?: Prisma.XOR<Prisma.AgentSessionScalarRelationFilter, Prisma.AgentSessionWhereInput>
   intents?: Prisma.ChatIntentListRelationFilter
-}, "id">
+}, "id" | "sessionId_id">
 
 export type PromptDispatchAttemptOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -437,6 +438,11 @@ export type PromptDispatchAttemptOrderByRelationAggregateInput = {
 export type PromptDispatchAttemptNullableScalarRelationFilter = {
   is?: Prisma.PromptDispatchAttemptWhereInput | null
   isNot?: Prisma.PromptDispatchAttemptWhereInput | null
+}
+
+export type PromptDispatchAttemptSessionIdIdCompoundUniqueInput = {
+  sessionId: string
+  id: string
 }
 
 export type PromptDispatchAttemptCountOrderByAggregateInput = {

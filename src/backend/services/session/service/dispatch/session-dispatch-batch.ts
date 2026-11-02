@@ -1,6 +1,9 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { ChatIntentRevisionChangedError } from '@/backend/services/session/resources/chat-intent.accessor';
-import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
+import {
+  PromptNotInvokedError,
+  ProviderBusyDeclinedError,
+} from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
@@ -166,12 +169,14 @@ async function handleFailedBatch(
   error = input.chatIntent?.protectClaimedBatchFailure(input.sessionId, messages, error) ?? error;
   if (
     error instanceof ChatIntentRevisionChangedError ||
-    (error instanceof PromptNotInvokedError && input.isCurrent())
+    (error instanceof PromptNotInvokedError &&
+      !(error instanceof ProviderBusyDeclinedError) &&
+      input.isCurrent())
   ) {
     await releasePreparedBackgrounds(backwards, input.backgroundDelivery, error);
     if (!input.isCurrent()) {
       for (const message of backwards) {
-        await input.onError(message, error);
+        await handleMemberError(input, message, error);
       }
       return;
     }
@@ -189,7 +194,7 @@ async function handleFailedBatch(
     );
   }
   for (const message of backwards) {
-    await input.onError(message, error);
+    await handleMemberError(input, message, error);
   }
   return undefined;
 }
@@ -372,4 +377,19 @@ export async function prepareBackgroundForDispatch(
   }
 
   return true;
+}
+
+async function handleMemberError(
+  input: CollectedBatchInput,
+  message: QueuedMessage,
+  error: unknown
+): Promise<void> {
+  try {
+    await input.onError(message, error);
+  } catch (failure) {
+    logger.warn(
+      'Failed persisting one batch member failure; remaining members still need cleanup',
+      { messageId: message.id, error: failure }
+    );
+  }
 }

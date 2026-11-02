@@ -22,7 +22,7 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
-import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
+import type { MessageAttachment } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { AttachmentSchema } from '@/shared/websocket';
@@ -37,6 +37,11 @@ import {
   buildInitialPromptFromLinearIssue,
 } from './workspace-init-issue-prompts';
 import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
+import {
+  InitialChatAdmissionError,
+  requireInitialAdmission,
+  enqueueAutoMessage,
+} from './workspace-initial-chat-admission';
 
 const logger = createLogger('workspace-init-orchestrator');
 const initialAttachmentsSchema = AttachmentSchema.array();
@@ -153,55 +158,6 @@ async function markLinearIssueStartedIfApplicable(
  * Enqueue an auto-generated message through the session queue pipeline.
  * Used for rename instructions and initial prompts during workspace init.
  */
-async function enqueueAutoMessage(
-  sessionId: string,
-  workspaceId: string,
-  text: string,
-  model: string,
-  attachments?: MessageAttachment[]
-): Promise<void> {
-  const messageId = `auto-init-${sessionId}`;
-  const queued = {
-    id: messageId,
-    text,
-    ...(attachments && attachments.length > 0 ? { attachments } : {}),
-    timestamp: new Date().toISOString(),
-    settings: {
-      selectedModel: model,
-      reasoningEffort: null,
-      thinkingEnabled: false,
-      planModeEnabled: false,
-    },
-  };
-  const enqueueResult = await sessionDomainService.enqueueInitialMessageDurably(sessionId, queued);
-  if (!enqueueResult) {
-    return;
-  }
-  if ('error' in enqueueResult) {
-    logger.warn('Failed to enqueue auto message for session', {
-      workspaceId,
-      sessionId,
-      error: enqueueResult.error,
-    });
-  } else {
-    sessionDomainService.emitDelta(sessionId, {
-      type: 'message_state_changed',
-      id: messageId,
-      newState: MessageState.ACCEPTED,
-      queuePosition: enqueueResult.position,
-      userMessage: {
-        text: queued.text,
-        timestamp: queued.timestamp,
-        attachments: queued.attachments,
-        settings: {
-          ...queued.settings,
-          selectedModel: resolveSelectedModel(queued.settings.selectedModel),
-          reasoningEffort: queued.settings.reasoningEffort,
-        },
-      },
-    });
-  }
-}
 
 interface InitialAutoMessageContent {
   text: string;
@@ -331,9 +287,8 @@ async function prepareDefaultAgentSession(
     const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
 
     // A provisioning retry resumes the immutable accepted input before consulting mutable issue data.
-    const recovered = await sessionDomainService.recoverInitialMessageDurably(
-      session.id,
-      `auto-init-${session.id}`
+    const recovered = await requireInitialAdmission(() =>
+      sessionDomainService.recoverInitialMessageDurably(session.id, `auto-init-${session.id}`)
     );
     const initialMessage =
       recovered ?? (await resolveInitialAutoMessageContent(workspaceId, metadata));
@@ -365,10 +320,11 @@ async function prepareDefaultAgentSession(
     if (messageToEnqueue && !recovered) {
       await enqueueAutoMessage(
         session.id,
-        workspaceId,
         messageToEnqueue.text,
         session.model,
-        messageToEnqueue.attachments
+        messageToEnqueue.attachments,
+        signal,
+        guard
       );
     }
 
@@ -379,11 +335,7 @@ async function prepareDefaultAgentSession(
       hasInitialAttachments: (initialMessage?.attachments?.length ?? 0) > 0,
     };
   } catch (error) {
-    logger.warn('Failed to prepare default agent session for workspace', {
-      workspaceId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    return handlePreparationError(workspaceId, error);
   }
 }
 
@@ -781,6 +733,7 @@ async function runWorkspaceInitialization(
       preparationController.signal,
       guard
     );
+    void preparedSessionPromise.catch(() => undefined);
 
     const worktreeName = `workspace-${workspaceId}`;
     const baseBranch = options?.branchName ?? project.defaultBranch;
@@ -986,4 +939,15 @@ function unregisteredCandidate(
   registered: boolean
 ) {
   return project && worktreeInfo && !registered ? { project, worktreeInfo } : undefined;
+}
+
+function handlePreparationError(workspaceId: string, error: unknown): null {
+  if (error instanceof InitialChatAdmissionError) {
+    throw error;
+  }
+  logger.warn('Failed to prepare default agent session for workspace', {
+    workspaceId,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return null;
 }
