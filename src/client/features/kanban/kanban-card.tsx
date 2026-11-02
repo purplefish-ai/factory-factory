@@ -404,7 +404,7 @@ export const KanbanCard = memo(function KanbanCard({
         )}
       >
         <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start justify-between gap-2">
             {isEditing ? (
               <input
                 ref={inputRef}
@@ -431,7 +431,7 @@ export const KanbanCard = memo(function KanbanCard({
                 className="flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
               />
             ) : (
-              <CardTitle className="flex items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
+              <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
                 {workspace.creationSource === 'PERIODIC_TASK' && (
                   <RobotIcon
                     role="img"
@@ -439,7 +439,9 @@ export const KanbanCard = memo(function KanbanCard({
                     className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
                   />
                 )}
-                <span className="line-clamp-2">{workspace.name}</span>
+                <span className="min-w-0 line-clamp-2 [overflow-wrap:anywhere]">
+                  {workspace.name}
+                </span>
               </CardTitle>
             )}
             <CardTitleIcons
