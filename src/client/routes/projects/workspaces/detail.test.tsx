@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
-import { MainViewContent } from '@/client/features/workspace';
+import { MainViewContent } from '@/client/features/workspace/main-view-content';
 import {
   cleanupSubagentTabTestEnvironment,
   createLoadingSubagentTranscriptQuery,

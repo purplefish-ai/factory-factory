@@ -486,6 +486,7 @@ export const AgentRunScalarFieldEnum = {
   result: 'result',
   effectiveExecution: 'effectiveExecution',
   launchPreparation: 'launchPreparation',
+  contextExpiredAt: 'contextExpiredAt',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',
@@ -620,6 +621,7 @@ export type PeriodicTaskScalarFieldEnum = (typeof PeriodicTaskScalarFieldEnum)[k
 
 
 export const PeriodicTaskExecutionScalarFieldEnum = {
+  launchSnapshot: 'launchSnapshot',
   id: 'id',
   periodicTaskId: 'periodicTaskId',
   workspaceId: 'workspaceId',

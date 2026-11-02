@@ -64,9 +64,12 @@ The standalone backend claims one shutdown attempt before logging a fatal error.
 Further uncaught exceptions and unhandled rejections during cleanup do not write
 more fatal records or restart cleanup. Its terminal error is appended
 synchronously to `logs/server.log`, without a console echo, so an immediate
-failure exit retains the original cause when the filesystem is available.
-Ordinary console logging disables a stdout/stderr sink after a write failure;
-sink failures are never logged back through that sink.
+failure exit retains the original cause when the filesystem is available. If the
+file append fails, a synchronous fallback to file descriptor 2 attempts to
+preserve the same record. Short writes continue from the next byte; an error or
+zero progress stops the fallback without recursive logging. Ordinary console
+logging disables a stdout/stderr sink after a write failure; sink failures are
+never logged back through that sink.
 
 Fatal cleanup has a 30-second deadline, after which the standalone backend exits
 with status 1. This bounds failed-process cleanup without changing normal job
@@ -144,13 +147,16 @@ product boundary remain prerequisites.
 
 The evaluation job also owns bounded ledger retention before evaluation: one
 rotating page each of expired evaluations, event payloads and event identities.
-Its live shutdown signal is checked after awaited dependency reads, before
-mutations and at the final transaction boundary. Cursors publish only after
-commit, including progress past retained candidates; aborted batches roll back.
-A retention failure rolls back its current batch and logs a sanitized reason;
-evaluation and claims continue unless the live job signal is aborted. There is
-no additional retention job or timer. See [integrations](./integrations.md) for
-the 30/90-day boundaries and retained source-proof/history lifetimes.
+An explicitly configured terminal run context policy adds one bounded page under
+the same owner, with independent cursor/metrics; the default retains
+indefinitely. Its live shutdown signal is checked after awaited dependency
+reads, before mutations and at the final transaction boundary. Cursors publish
+only after commit, including progress past retained candidates; aborted batches
+roll back. A retention failure rolls back its current batch and logs a sanitized
+reason; evaluation and claims continue unless the live job signal is aborted.
+There is no additional retention job or timer. See
+[integrations](./integrations.md) for the 30/90-day boundaries and retained
+source-proof/history lifetimes.
 
 The existing `periodic-task-poll` remains the only periodic-task scheduler.
 Eligibility, overlap checks, atomic execution reservation and schedule
