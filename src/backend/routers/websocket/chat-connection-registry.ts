@@ -189,7 +189,9 @@ export class ChatConnectionRegistry {
     if (payload.type === 'session_replay_chunk' && payload.index === 0) {
       this.incomingReplays.set(dbSessionId, {
         id: payload.replayId,
-        loadRequestId: payload.encoding === 'events' ? payload.batch?.loadRequestId : undefined,
+        loadRequestId:
+          payload.loadRequestId ??
+          (payload.encoding === 'events' ? payload.batch?.loadRequestId : undefined),
       });
     }
     const incoming = this.incomingReplays.get(dbSessionId);

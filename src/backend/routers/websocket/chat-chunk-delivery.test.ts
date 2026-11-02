@@ -133,6 +133,35 @@ it('rejects a chunked replay over the configured budget with its correlated erro
   expect(test.viewer.close).not.toHaveBeenCalled();
 });
 
+it.each([false, true])(
+  'routes byte-fragmented metadata to its requester (over budget: %s)',
+  async (overBudget) => {
+    const test = setup(overBudget ? 1024 * 1024 : undefined);
+    const replay = { ...batch(), permissionMode: 'metadata'.repeat(20_000) };
+    const frames = [...frameSessionReplay(replay)];
+    expect(frames[0]).toMatchObject({ type: 'session_replay_chunk', chunk: expect.any(String) });
+    for (const frame of frames) {
+      test.bus.publishToSession('s1', frame);
+    }
+    test.bus.publishToSession('s1', delta);
+    for (let guard = 0; test.viewer.writes.length && guard < 100; guard++) {
+      await test.viewer.flush();
+    }
+    const assembler = new SessionReplayAssembler();
+    const received = test.viewer.frames
+      .map((frame) => assembler.accept(JSON.parse(frame)))
+      .filter((value) => value !== null);
+    if (overBudget) {
+      expect(received).toEqual([
+        expect.objectContaining({ type: 'error', code: 413, loadRequestId: 'load-1' }),
+      ]);
+    } else {
+      expect(received).toEqual([replay, delta]);
+    }
+    expect(test.viewer.close).not.toHaveBeenCalled();
+  }
+);
+
 it('settles an older concurrent request before a late oversized replay is filtered', () => {
   const test = setup(1024 * 1024);
   test.registry.expectReplay(test.viewer.socket(), 'load-2');

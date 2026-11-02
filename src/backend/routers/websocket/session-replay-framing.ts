@@ -76,6 +76,9 @@ export function* frameSessionReplay(batch: ReplayBatch): Generator<WebSocketMess
   const envelope: SessionReplayEnvelope = {
     type: 'session_replay_chunk',
     replayId: randomUUID(),
+    ...(batch.loadRequestId !== undefined && batch.loadRequestId.length <= 128
+      ? { loadRequestId: batch.loadRequestId }
+      : {}),
     index: MAX_REPLAY_BYTES,
     total: MAX_REPLAY_BYTES,
     byteLength: bytes.length,

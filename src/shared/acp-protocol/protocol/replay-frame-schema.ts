@@ -6,6 +6,8 @@ export const REPLAY_CHUNK_BYTES = 96 * 1024 - 1024;
 const BaseFrameSchema = z.object({
   type: z.literal('session_replay_chunk'),
   replayId: z.string().min(1).max(64),
+  /** Correlate even a byte-fragmented envelope before its contents are decoded. */
+  loadRequestId: z.string().max(128).optional(),
   index: z.number().int().nonnegative(),
   total: z
     .number()
