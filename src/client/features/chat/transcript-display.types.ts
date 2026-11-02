@@ -15,7 +15,8 @@ export interface TranscriptDisplayProps {
   work?: SessionWorkState;
   /** Present only while connected to this live session. */
   controlSessionId?: string;
-  onOpenAgents?: () => void;
+  onOpenSubagent?: (subagentId: string) => void;
+  onOpenSingleSubagent?: () => void;
   runningSubagentList?: ReactNode;
   runningSubagentIconIndices?: readonly number[];
   subagentTimelineError?: { message: string; onRetry: () => void } | null;

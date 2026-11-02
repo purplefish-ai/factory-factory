@@ -911,8 +911,9 @@ provider's archived history also clears its task snapshot.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Sessions panel through its session-scoped tracker. Clicking the running
-sub-agent count in the main chat expands an inline list of active sub-agents;
+Sessions panel through its session-scoped tracker. Clicking a single running
+sub-agent in the main chat opens its transcript tab directly, without expanding
+a list. With multiple running sub-agents, the count expands an inline list;
 selecting one opens its transcript tab directly. Completed sub-agents remain in
 Sessions. The inline list deduplicates overlapping provider pages and retains
 pagination and Retry controls when later pages are unavailable. The Sessions
@@ -945,18 +946,18 @@ children without a page reload.
 
 The chat timeline projects provider creation and completion timestamps into
 separate, muted sub-agent start and finish rows. Failure, cancellation, and
-interruption retain their own labels. In workspace-detail chat, these rows open
-the Sessions panel. Both workspace-detail and Quick Chat reconstruct the rows
-from provider metadata when history reloads; unknown timestamps are not
-invented. Native ACP replay without provider timestamps retains sub-agent
-summaries and transcripts for browsing but leaves lifecycle times unknown, so
-reopening a workspace does not append historical starts and finishes as new
-activity. Live native events still use their observation time. If a request
-fails or the provider repeats a pagination cursor, chat keeps known rows visible
-and offers Retry. Adjacent tool activity stays collapsed by default as muted
-summary rows; expanding a summary shows chronological calls with input and
-output available on demand. Failed calls remain visible in the collapsed
-summary.
+interruption retain their own labels. In workspace-detail chat, start and finish
+rows open the corresponding sub-agent transcript tab, including stopped agents.
+Both workspace-detail and Quick Chat reconstruct the rows from provider metadata
+when history reloads; unknown timestamps are not invented. Native ACP replay
+without provider timestamps retains sub-agent summaries and transcripts for
+browsing but leaves lifecycle times unknown, so reopening a workspace does not
+append historical starts and finishes as new activity. Live native events still
+use their observation time. If a request fails or the provider repeats a
+pagination cursor, chat keeps known rows visible and offers Retry. Adjacent tool
+activity stays collapsed by default as muted summary rows; expanding a summary
+shows chronological calls with input and output available on demand. Failed
+calls remain visible in the collapsed summary.
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering
