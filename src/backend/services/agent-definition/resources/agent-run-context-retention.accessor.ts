@@ -259,7 +259,7 @@ async function inspectPage(
   cursor: string | null,
   prospectiveDays: number | undefined,
   assertCurrent: () => void,
-  measureBytes: boolean
+  mode: 'INSPECT' | 'PRUNE'
 ) {
   assertCurrent();
   // Pruning calls this only after the ledger write lock. Inspection uses a read snapshot.
@@ -275,7 +275,7 @@ async function inspectPage(
   const report: RunContextInspection = {
     retentionDays: retentionMs === null ? null : retentionMs / 86_400_000,
     policySource: prospectiveDays === undefined ? 'CONFIGURED' : 'PREVIEW',
-    cursor,
+    cursor: mode === 'PRUNE' ? cursor : null,
     inspected: 0,
     eligible: 0,
     retained: {},
@@ -298,7 +298,7 @@ async function inspectPage(
     });
   let rows = await page(cursor);
   assertCurrent();
-  if (!rows.length && cursor) {
+  if (mode === 'PRUNE' && !rows.length && cursor) {
     rows = await page(null);
     assertCurrent();
   }
@@ -313,7 +313,7 @@ async function inspectPage(
       eligibleRows.push(run);
       report.eligible++;
     }
-    if (measureBytes) {
+    if (mode === 'INSPECT') {
       recordByteImpact(report, run, reason === null, expired);
     }
   }
@@ -335,7 +335,7 @@ export const agentRunContextRetentionAccessor = {
         input.after ?? null,
         input.retentionDays,
         assertCurrent,
-        true
+        'INSPECT'
       );
       assertCurrent();
       return report;
@@ -348,7 +348,7 @@ export const agentRunContextRetentionAccessor = {
         cursor,
         undefined,
         assertCurrent,
-        false
+        'PRUNE'
       );
       const batch: RetentionBatch = {
         kind: 'runContext',

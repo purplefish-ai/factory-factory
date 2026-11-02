@@ -474,6 +474,7 @@ it('previews prospective expiry without writes or enabling policy and matches ac
     retentionDays: 1,
     policySource: 'PREVIEW',
   });
+  expect(operations.length).toBeGreaterThan(0);
   expect(operations.every((operation) => operation.startsWith('find'))).toBe(true);
   expect(await db.prisma.agentRun.findMany()).toEqual(rowsBefore);
   expect(await db.prisma.agentInitialDelivery.findMany()).toEqual(deliveriesBefore);
@@ -592,6 +593,7 @@ it('bounds a mixed fixture preview, measures its impact and preserves the mainte
   const inspectQueries = measuredQueries;
   measuredQueries = undefined;
   expect(preview).toMatchObject({ inspected: 100, eligible: 51, retained: { ACTIVE_RUN: 49 } });
+  expect(inspectQueries.length).toBeGreaterThan(0);
   expect(inspectQueries.every((query) => query.operation.startsWith('find'))).toBe(true);
   expect(await db.prisma.agentRun.findMany({ orderBy: { id: 'asc' } })).toEqual(before);
   expect(
@@ -702,3 +704,36 @@ it.each(['launchPreparation', 'effectiveExecution', 'result', 'deliveryEvidence'
     });
   }
 );
+
+it('ends an inspection scan without wrapping or changing the maintenance cursor', async () => {
+  const before = await terminal();
+  const first = await retention.inspectRunContexts(
+    { retentionDays: 1 },
+    new AbortController().signal
+  );
+  expect(first).toMatchObject({ inspected: 1, eligible: 1, cursor: before.id });
+  expect(
+    await retention.inspectRunContexts(
+      { retentionDays: 1, after: first.cursor },
+      new AbortController().signal
+    )
+  ).toMatchObject({
+    inspected: 0,
+    eligible: 0,
+    cursor: null,
+  });
+  expect(
+    await retention.inspectRunContexts({ after: first.cursor }, new AbortController().signal)
+  ).toMatchObject({
+    inspected: 0,
+    eligible: 0,
+    retentionDays: null,
+    cursor: null,
+  });
+  expect(await read()).toEqual(before);
+  enable();
+  expect((await prune()).find((batch) => batch.kind === 'runContext')).toMatchObject({
+    inspected: 1,
+    changed: 1,
+  });
+});

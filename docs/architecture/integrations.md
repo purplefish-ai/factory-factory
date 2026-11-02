@@ -452,9 +452,11 @@ and retained-reason counts, an independent next cursor, and logical UTF-8 byte
 impact for snapshot JSON plus diagnostic text. A positive `eligibleDelta` means
 growth; a negative value means reduction. This excludes SQLite/file overhead and
 is not a physical disk-space guarantee. Inspection neither updates rows nor
-advances the maintenance cursor. Its snapshot is advisory: pruning independently
-rechecks eligibility under the ledger write lock. Byte serialization is confined
-to inspection rather than added to the destructive maintenance lock scope.
+advances the maintenance cursor. An exhausted inspection page is empty with a
+null cursor; only maintenance wraps to revisit retained candidates. Its snapshot
+is advisory: pruning independently rechecks eligibility under the ledger write
+lock. Byte serialization is confined to inspection rather than added to the
+destructive maintenance lock scope.
 
 A disposable mixed fixture measures lookup counts/timings and the observed
 write-lock scope without production data. Reproduce it with
