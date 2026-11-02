@@ -17,8 +17,9 @@ class WorkspaceNotificationService {
     return workspaceNotificationAccessor.create({ ...data, direction: 'PARENT_TO_CHILD' });
   }
 
-  findForDelivery(id: string) {
-    return workspaceNotificationAccessor.findById(id);
+  async findForDelivery(id: string) {
+    const notification = await workspaceNotificationAccessor.findById(id);
+    return notification?.recoveryHeld ? null : notification;
   }
 
   async listPendingForDelivery(workspaceId: string) {

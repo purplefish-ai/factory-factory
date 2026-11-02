@@ -1,6 +1,8 @@
 import { prisma } from '@/backend/db';
 import { type SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
-import type { SessionLifecycleEvent } from '@prisma-gen/client';
+import { retainedReferenceAllowed, type RecoveryImportedIds } from '@/shared/recovery-graph';
+import type { ExportData } from '@/shared/schemas/export-data.schema';
+import type { Prisma, SessionLifecycleEvent } from '@prisma-gen/client';
 
 export type SessionLifecycleEventRecord = SessionLifecycleEvent;
 
@@ -57,3 +59,28 @@ class PrismaSessionLifecycleEventAccessor implements SessionLifecycleEventStore 
 }
 
 export const sessionLifecycleEventAccessor = new PrismaSessionLifecycleEventAccessor();
+
+export async function restoreRecoveryLifecycleEvents(
+  tx: Prisma.TransactionClient,
+  data: ExportData['data'],
+  ids: RecoveryImportedIds
+) {
+  const sourceSessions = new Set(data.agentSessions.map((row) => row.id));
+  for (const row of data.durable?.sessionLifecycleEvent ?? []) {
+    if (
+      !(
+        ids.workspaces.has(row.workspaceId) &&
+        retainedReferenceAllowed(
+          sourceSessions,
+          ids.sessions,
+          row.sessionId,
+          !!(await tx.agentSession.findUnique({ where: { id: row.sessionId } }))
+        )
+      ) ||
+      (await tx.sessionLifecycleEvent.findUnique({ where: { id: row.id } }))
+    ) {
+      continue;
+    }
+    await tx.sessionLifecycleEvent.create({ data: row });
+  }
+}

@@ -656,6 +656,7 @@ export type PeriodicTaskExecutionScalarFieldEnum = (typeof PeriodicTaskExecution
 
 
 export const WorkspaceNotificationScalarFieldEnum = {
+  recoveryHeld: 'recoveryHeld',
   id: 'id',
   workspaceId: 'workspaceId',
   sourceWorkspaceId: 'sourceWorkspaceId',

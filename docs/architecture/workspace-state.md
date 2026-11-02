@@ -331,7 +331,15 @@ identity before descendants can attach. Existing workspace IDs are skipped with
 their imported descendants; no imported child/session borrows a local workspace
 by ID alone. Missing parents and cycles are skipped. Saved schedules, agent
 definitions, triggers, connections and PR monitoring restore disabled or paused.
-Unfinished scheduled executions become failed history for explicit review.
+Unfinished scheduled executions become failed history for explicit review. Run
+snapshots, initial-send evidence, source pages/baselines, launch origins,
+interruption history and decisions are retained. Unresolved imported runs
+require explicit review and unfinished sends remain ambiguous. Pending workspace
+notifications retain their real delivery timestamps and message intent with
+`recoveryHeld` set; normal pending-list, count and by-ID delivery admission
+exclude held rows. The additive migration defaults existing notifications to
+unheld and does not change ordinary delivery behavior.
+
 Process IDs and running script/terminal state are cleared. No import action
 launches an agent or sends a message. Supported legacy versions 4–7 remain
 readable.

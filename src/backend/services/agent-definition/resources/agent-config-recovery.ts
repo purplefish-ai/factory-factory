@@ -1,4 +1,9 @@
+import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import {
+  recoveryJsonNullLookup,
+  type RecoveryJsonNullLookup,
+} from '@/shared/schemas/recovery-json-storage.schema';
 import { Prisma } from '@prisma-gen/client';
 
 export async function restoreAgentConfigRecovery(
@@ -6,8 +11,10 @@ export async function restoreAgentConfigRecovery(
   data: DurableRecovery,
   projects: ReadonlySet<string>
 ) {
+  const nulls = recoveryJsonNullLookup(data.jsonStorage);
   const definitions = new Set<string>();
   const connections = new Set<string>();
+  const triggers = new Set<string>();
   for (const row of data.agentDefinition) {
     if (
       !projects.has(row.projectId) ||
@@ -43,15 +50,28 @@ export async function restoreAgentConfigRecovery(
     ) {
       continue;
     }
-    await tx.agentTrigger.create({
-      data: {
-        ...row,
-        config: row.config ?? Prisma.JsonNull,
-        isEnabled: false,
-        activationState: 'PAUSED',
-        activationBoundary: Prisma.DbNull,
-        pendingActivation: Prisma.DbNull,
-      },
-    });
+    await tx.agentTrigger.create({ data: inertTrigger(row, nulls) });
+    triggers.add(row.id);
   }
+  return { definitions, connections, triggers };
+}
+
+function inertTrigger(
+  row: DurableRecovery['agentTrigger'][number],
+  nulls: RecoveryJsonNullLookup
+): Prisma.AgentTriggerUncheckedCreateInput {
+  return {
+    ...row,
+    config: row.config ?? Prisma.JsonNull,
+    isEnabled: false,
+    activationState: 'PAUSED',
+    activationBoundary: nullablePrismaJson(
+      row.activationBoundary,
+      nulls('AgentTrigger', row.id, 'activationBoundary')
+    ),
+    pendingActivation: nullablePrismaJson(
+      row.pendingActivation,
+      nulls('AgentTrigger', row.id, 'pendingActivation')
+    ),
+  };
 }

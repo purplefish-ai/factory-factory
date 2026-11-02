@@ -62,3 +62,4 @@ export { triggerCapability } from './service/agent-management-projection';
 export const agentManagementService = new AgentManagementService();
 export { workspaceRetryAuthorityService } from './service/workspace-retry-authority.service';
 export { restoreAgentConfigRecovery } from './service/agent-config-recovery';
+export { restoreAgentHistoryRecovery } from './service/agent-history-recovery';

@@ -1,4 +1,5 @@
 import { ApplicationError } from '@/backend/lib/application-error';
+import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import {
   agentEventOrderInputSchema,
   agentSourceHealthSchema,
@@ -10,7 +11,9 @@ import {
   type AgentGithubCursor,
   type AgentSourceEntry,
 } from '@/shared/agent-source-state';
-import type { Prisma } from '@prisma-gen/client';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.schema';
+import { Prisma } from '@prisma-gen/client';
 import { agentEventAccessor } from './agent-event.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
@@ -380,3 +383,47 @@ export const agentSourceAccessor = {
   finalizeNextChunk,
   finalizeEventOrder,
 };
+
+/** Source control proof is retained, but imported cursors cannot start intake. */
+export async function restoreRecoverySources(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  connections: ReadonlySet<string>
+) {
+  const nulls = recoveryJsonNullLookup(data.jsonStorage);
+  const states = new Set<string>();
+  for (const row of data.agentSourceState) {
+    if (!connections.has(row.connectionId)) {
+      continue;
+    }
+    await tx.agentSourceState.create({
+      data: {
+        ...row,
+        isReady: false,
+        cursor: nullablePrismaJson(
+          row.cursor,
+          nulls('AgentSourceState', row.connectionId, 'cursor')
+        ),
+        health: nullablePrismaJson(
+          row.health,
+          nulls('AgentSourceState', row.connectionId, 'health')
+        ),
+      },
+    });
+    states.add(row.connectionId);
+  }
+  for (const row of data.agentSourcePage) {
+    if (!states.has(row.connectionId)) {
+      continue;
+    }
+    await tx.agentSourcePage.create({
+      data: { ...row, evidence: row.evidence ?? Prisma.JsonNull },
+    });
+  }
+  for (const row of data.agentSourceBaseline) {
+    if (!states.has(row.connectionId)) {
+      continue;
+    }
+    await tx.agentSourceBaseline.create({ data: row });
+  }
+}

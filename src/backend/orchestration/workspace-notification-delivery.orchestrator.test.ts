@@ -51,6 +51,7 @@ type DeliveryCase = {
 };
 
 const childNotification: WorkspaceNotification = {
+  recoveryHeld: false,
   id: 'notification-child',
   workspaceId: 'parent-1',
   sourceWorkspaceId: 'child-1',
@@ -63,6 +64,7 @@ const childNotification: WorkspaceNotification = {
 };
 
 const parentNotification: WorkspaceNotification = {
+  recoveryHeld: false,
   id: 'notification-parent',
   workspaceId: 'child-1',
   sourceWorkspaceId: 'parent-1',

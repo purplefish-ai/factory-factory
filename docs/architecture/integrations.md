@@ -435,9 +435,11 @@ have separate lifetimes, so ledger pruning does not erase all source text.
 Compact run results and PR links survive workspace and event deletion. Logical
 version-8 export/import includes disabled agent definitions, triggers and
 credential-free connection identities, plus disabled schedules and execution
-history. Run/effect/provenance coverage remains explicitly limited in the
-recovery manifest. The complete database backup requires the database file
-together with `encryption.key` and separately stored recovery files.
+history. Run/evaluation/send evidence, source continuity proof, proposals and
+retained origins are included according to the recovery manifest. Imported
+unfinished runs require explicit review; ambiguous sends never replay
+automatically. The complete database backup requires the database file together
+with `encryption.key` and separately stored recovery files.
 
 ### Project-owned saved management
 
@@ -580,9 +582,9 @@ through trusted local API procedures.
 
 Proposals belong to their authoring workspace and are removed with it; created
 definitions belong to the project and survive workspace deletion. Deleting a
-saved definition also removes its accepted proposal. Logical export/import does
-not yet include proposals or run/effect history; the recovery manifest states
-the exact per-model coverage.
+saved definition also removes its accepted proposal. Logical export/import
+includes proposals and run/effect history; the recovery manifest states the
+exact per-model coverage and inactive restore policy.
 
 The live authoring evaluation uses the installed Codex ACP runtime, the actual
 MCP server and authoring API, a disposable database, and fixed provider

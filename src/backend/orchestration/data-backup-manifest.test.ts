@@ -11,3 +11,9 @@ it('requires an explicit recovery classification and reason for every registered
   expect(manifest.kind).toBe('logical');
   expect(manifest.limitations.join(' ')).toContain('encryption.key');
 });
+
+it('isolates manifest policy from callers editing an exported snapshot', () => {
+  const edited = recoveryManifest();
+  Reflect.deleteProperty(edited.models, 'AgentRun');
+  expect(Object.keys(recoveryManifest().models).sort()).toEqual([...prismaModelNames].sort());
+});

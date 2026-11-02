@@ -10,3 +10,4 @@ export { EventInitialDispatchInterrupted } from './service/dispatch/event-initia
 export { withEventEvidenceDeadline } from './service/lifecycle/event-evidence-deadline';
 
 export { EventSessionFenceError } from './service/lifecycle/event-session-fence-error';
+export { restoreRetainedSessionRecovery } from './service/data/session-recovery';

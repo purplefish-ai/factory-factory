@@ -5,9 +5,9 @@ import type { ExportData } from '@/shared/schemas/export-data.schema';
 import {
   prAssociationBackupSchema,
   prDiscoveryBackupSchema,
-  prEventBackupSchema,
   prMonitoringBackupSchema,
 } from '@/shared/schemas/pr-monitoring-backup.schema';
+import { prRecoverySchema } from '@/shared/schemas/pr-recovery.schema';
 
 function iso(date: Date | null): string | null {
   return date?.toISOString() ?? null;
@@ -44,23 +44,29 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
           lastCheckedAt: iso(workspace.prMonitoring.lastCheckedAt),
         })
       : null,
-    prEvents: workspacePRMonitoringService
-      .exportEvents(workspace.prEvents, workspace.prDeliveries ?? [])
-      .map(({ batchId: _batchId, ...event }) =>
-        prEventBackupSchema.parse({
-          ...event,
-          claimedAt: iso(event.claimedAt),
-          deliveredAt: iso(event.deliveredAt),
-          createdAt: event.createdAt.toISOString(),
-        })
-      ),
+    prEvents: [],
+    prRecovery: prRecoverySchema.parse({
+      deliveries: workspace.prDeliveries.map((delivery) => ({
+        ...delivery,
+        claimedAt: iso(delivery.claimedAt),
+        deliveredAt: iso(delivery.deliveredAt),
+      })),
+      events: workspace.prEvents.map((event) => ({
+        ...event,
+        claimedAt: iso(event.claimedAt),
+        deliveredAt: iso(event.deliveredAt),
+        createdAt: event.createdAt.toISOString(),
+      })),
+    }),
   };
 }
 async function restoreDedicatedBindings(
   workspace: ExportData['data']['workspaces'][number],
-  tx: DataBackupTransactionClient
+  tx: DataBackupTransactionClient,
+  importedSessionIds: ReadonlySet<string>
 ) {
   for (const pr of workspace.prs) {
+    if (pr.dedicatedSession?.sessionId && !importedSessionIds.has(pr.dedicatedSession.sessionId)) continue;
     if (
       pr.dedicatedSession &&
       !(await sessionDataService.restorePRDedicatedSession(tx, {
@@ -77,7 +83,8 @@ async function restoreDedicatedBindings(
 export async function restorePRBackupState(
   workspaces: ExportData['data']['workspaces'],
   importedWorkspaceIds: string[],
-  tx: DataBackupTransactionClient
+  tx: DataBackupTransactionClient,
+  importedSessionIds: ReadonlySet<string>
 ) {
   for (const workspace of workspaces) {
     if (!importedWorkspaceIds.includes(workspace.id)) {
@@ -93,11 +100,18 @@ export async function restorePRBackupState(
       legacySessionIds: workspace.ratchetActiveSessionId ? [workspace.ratchetActiveSessionId] : [],
       lastCheckedAt: workspace.ratchetLastCheckedAt,
     };
-    await restoreDedicatedBindings(workspace, tx);
+    await restoreDedicatedBindings(workspace, tx, importedSessionIds);
     await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, {
       ...config,
       enabled: false,
     });
-    await workspacePRMonitoringService.restoreEventsBackup(tx, workspace.id, workspace.prEvents);
+    await workspacePRMonitoringService.restoreRecoveryBackup(
+      tx,
+      workspace.id,
+      workspace.prRecovery ?? {
+        deliveries: [],
+        events: workspace.prEvents.map((event) => ({ ...event, batchId: null })),
+      }
+    );
   }
 }

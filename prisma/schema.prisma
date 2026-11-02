@@ -971,6 +971,8 @@ model PeriodicTaskExecution {
 
 // Queued notifications from child workspaces, delivered when parent's next session starts
 model WorkspaceNotification {
+  // Logical recovery retains intent without claiming delivery or automatically sending it.
+  recoveryHeld Boolean @default(false) @map("recovery_held")
   id                  String    @id @default(cuid())
   workspaceId         String    @map("workspace_id")
   workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

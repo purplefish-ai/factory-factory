@@ -108,7 +108,7 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
     },
   });
   const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
-  expect(backup.meta.schemaVersion).toBe(7);
+  expect(backup.meta.schemaVersion).toBe(8);
   await db.prisma.workspace.delete({ where: { id: 'w' } });
   await dataBackupService.importData(backup);
   expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'w' } })).toHaveLength(2);
@@ -119,12 +119,17 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
     deliveryPauseReason: 'USER_STOPPED',
     bindingRevision: 7,
   });
+  expect(
+    await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'frozen-id' } })
+  ).toMatchObject({
+    state: 'BLOCKED',
+    provider: 'CLAUDE',
+    providerSessionId: 'existing-conversation',
+    text: '<!-- factory-factory-pr-event:frozen-id -->\nKeep PRs moving',
+  });
   expect(await readEvent('event')).toMatchObject({
     state: 'DISPATCHING',
-    deliveryId: 'frozen-id',
-    deliveryProvider: 'CLAUDE',
-    deliveryProviderSessionId: 'existing-conversation',
-    deliveryText: '<!-- factory-factory-pr-event:frozen-id -->\nKeep PRs moving',
+    batchId: 'frozen-id',
   });
   expect(await db.prisma.agentSession.findUnique({ where: { id: 'main' } })).toMatchObject({
     providerSessionId: 'existing-conversation',

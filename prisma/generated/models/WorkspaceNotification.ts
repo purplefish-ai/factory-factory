@@ -25,6 +25,7 @@ export type AggregateWorkspaceNotification = {
 }
 
 export type WorkspaceNotificationMinAggregateOutputType = {
+  recoveryHeld: boolean | null
   id: string | null
   workspaceId: string | null
   sourceWorkspaceId: string | null
@@ -37,6 +38,7 @@ export type WorkspaceNotificationMinAggregateOutputType = {
 }
 
 export type WorkspaceNotificationMaxAggregateOutputType = {
+  recoveryHeld: boolean | null
   id: string | null
   workspaceId: string | null
   sourceWorkspaceId: string | null
@@ -49,6 +51,7 @@ export type WorkspaceNotificationMaxAggregateOutputType = {
 }
 
 export type WorkspaceNotificationCountAggregateOutputType = {
+  recoveryHeld: number
   id: number
   workspaceId: number
   sourceWorkspaceId: number
@@ -63,6 +66,7 @@ export type WorkspaceNotificationCountAggregateOutputType = {
 
 
 export type WorkspaceNotificationMinAggregateInputType = {
+  recoveryHeld?: true
   id?: true
   workspaceId?: true
   sourceWorkspaceId?: true
@@ -75,6 +79,7 @@ export type WorkspaceNotificationMinAggregateInputType = {
 }
 
 export type WorkspaceNotificationMaxAggregateInputType = {
+  recoveryHeld?: true
   id?: true
   workspaceId?: true
   sourceWorkspaceId?: true
@@ -87,6 +92,7 @@ export type WorkspaceNotificationMaxAggregateInputType = {
 }
 
 export type WorkspaceNotificationCountAggregateInputType = {
+  recoveryHeld?: true
   id?: true
   workspaceId?: true
   sourceWorkspaceId?: true
@@ -172,6 +178,7 @@ export type WorkspaceNotificationGroupByArgs<ExtArgs extends runtime.Types.Exten
 }
 
 export type WorkspaceNotificationGroupByOutputType = {
+  recoveryHeld: boolean
   id: string
   workspaceId: string
   sourceWorkspaceId: string
@@ -205,6 +212,7 @@ export type WorkspaceNotificationWhereInput = {
   AND?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
   OR?: Prisma.WorkspaceNotificationWhereInput[]
   NOT?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
+  recoveryHeld?: Prisma.BoolFilter<"WorkspaceNotification"> | boolean
   id?: Prisma.StringFilter<"WorkspaceNotification"> | string
   workspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceWorkspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
@@ -218,6 +226,7 @@ export type WorkspaceNotificationWhereInput = {
 }
 
 export type WorkspaceNotificationOrderByWithRelationInput = {
+  recoveryHeld?: Prisma.SortOrder
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   sourceWorkspaceId?: Prisma.SortOrder
@@ -235,6 +244,7 @@ export type WorkspaceNotificationWhereUniqueInput = Prisma.AtLeast<{
   AND?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
   OR?: Prisma.WorkspaceNotificationWhereInput[]
   NOT?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
+  recoveryHeld?: Prisma.BoolFilter<"WorkspaceNotification"> | boolean
   workspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceWorkspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceWorkspaceName?: Prisma.StringFilter<"WorkspaceNotification"> | string
@@ -247,6 +257,7 @@ export type WorkspaceNotificationWhereUniqueInput = Prisma.AtLeast<{
 }, "id">
 
 export type WorkspaceNotificationOrderByWithAggregationInput = {
+  recoveryHeld?: Prisma.SortOrder
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   sourceWorkspaceId?: Prisma.SortOrder
@@ -265,6 +276,7 @@ export type WorkspaceNotificationScalarWhereWithAggregatesInput = {
   AND?: Prisma.WorkspaceNotificationScalarWhereWithAggregatesInput | Prisma.WorkspaceNotificationScalarWhereWithAggregatesInput[]
   OR?: Prisma.WorkspaceNotificationScalarWhereWithAggregatesInput[]
   NOT?: Prisma.WorkspaceNotificationScalarWhereWithAggregatesInput | Prisma.WorkspaceNotificationScalarWhereWithAggregatesInput[]
+  recoveryHeld?: Prisma.BoolWithAggregatesFilter<"WorkspaceNotification"> | boolean
   id?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
   workspaceId?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
   sourceWorkspaceId?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
@@ -277,6 +289,7 @@ export type WorkspaceNotificationScalarWhereWithAggregatesInput = {
 }
 
 export type WorkspaceNotificationCreateInput = {
+  recoveryHeld?: boolean
   id?: string
   sourceWorkspaceId: string
   sourceWorkspaceName: string
@@ -289,6 +302,7 @@ export type WorkspaceNotificationCreateInput = {
 }
 
 export type WorkspaceNotificationUncheckedCreateInput = {
+  recoveryHeld?: boolean
   id?: string
   workspaceId: string
   sourceWorkspaceId: string
@@ -301,6 +315,7 @@ export type WorkspaceNotificationUncheckedCreateInput = {
 }
 
 export type WorkspaceNotificationUpdateInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
@@ -313,6 +328,7 @@ export type WorkspaceNotificationUpdateInput = {
 }
 
 export type WorkspaceNotificationUncheckedUpdateInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -325,6 +341,7 @@ export type WorkspaceNotificationUncheckedUpdateInput = {
 }
 
 export type WorkspaceNotificationCreateManyInput = {
+  recoveryHeld?: boolean
   id?: string
   workspaceId: string
   sourceWorkspaceId: string
@@ -337,6 +354,7 @@ export type WorkspaceNotificationCreateManyInput = {
 }
 
 export type WorkspaceNotificationUpdateManyMutationInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
@@ -348,6 +366,7 @@ export type WorkspaceNotificationUpdateManyMutationInput = {
 }
 
 export type WorkspaceNotificationUncheckedUpdateManyInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -370,6 +389,7 @@ export type WorkspaceNotificationOrderByRelationAggregateInput = {
 }
 
 export type WorkspaceNotificationCountOrderByAggregateInput = {
+  recoveryHeld?: Prisma.SortOrder
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   sourceWorkspaceId?: Prisma.SortOrder
@@ -382,6 +402,7 @@ export type WorkspaceNotificationCountOrderByAggregateInput = {
 }
 
 export type WorkspaceNotificationMaxOrderByAggregateInput = {
+  recoveryHeld?: Prisma.SortOrder
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   sourceWorkspaceId?: Prisma.SortOrder
@@ -394,6 +415,7 @@ export type WorkspaceNotificationMaxOrderByAggregateInput = {
 }
 
 export type WorkspaceNotificationMinOrderByAggregateInput = {
+  recoveryHeld?: Prisma.SortOrder
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
   sourceWorkspaceId?: Prisma.SortOrder
@@ -452,6 +474,7 @@ export type EnumNotificationDirectionFieldUpdateOperationsInput = {
 }
 
 export type WorkspaceNotificationCreateWithoutWorkspaceInput = {
+  recoveryHeld?: boolean
   id?: string
   sourceWorkspaceId: string
   sourceWorkspaceName: string
@@ -463,6 +486,7 @@ export type WorkspaceNotificationCreateWithoutWorkspaceInput = {
 }
 
 export type WorkspaceNotificationUncheckedCreateWithoutWorkspaceInput = {
+  recoveryHeld?: boolean
   id?: string
   sourceWorkspaceId: string
   sourceWorkspaceName: string
@@ -502,6 +526,7 @@ export type WorkspaceNotificationScalarWhereInput = {
   AND?: Prisma.WorkspaceNotificationScalarWhereInput | Prisma.WorkspaceNotificationScalarWhereInput[]
   OR?: Prisma.WorkspaceNotificationScalarWhereInput[]
   NOT?: Prisma.WorkspaceNotificationScalarWhereInput | Prisma.WorkspaceNotificationScalarWhereInput[]
+  recoveryHeld?: Prisma.BoolFilter<"WorkspaceNotification"> | boolean
   id?: Prisma.StringFilter<"WorkspaceNotification"> | string
   workspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceWorkspaceId?: Prisma.StringFilter<"WorkspaceNotification"> | string
@@ -514,6 +539,7 @@ export type WorkspaceNotificationScalarWhereInput = {
 }
 
 export type WorkspaceNotificationCreateManyWorkspaceInput = {
+  recoveryHeld?: boolean
   id?: string
   sourceWorkspaceId: string
   sourceWorkspaceName: string
@@ -525,6 +551,7 @@ export type WorkspaceNotificationCreateManyWorkspaceInput = {
 }
 
 export type WorkspaceNotificationUpdateWithoutWorkspaceInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
@@ -536,6 +563,7 @@ export type WorkspaceNotificationUpdateWithoutWorkspaceInput = {
 }
 
 export type WorkspaceNotificationUncheckedUpdateWithoutWorkspaceInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
@@ -547,6 +575,7 @@ export type WorkspaceNotificationUncheckedUpdateWithoutWorkspaceInput = {
 }
 
 export type WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceInput = {
+  recoveryHeld?: Prisma.BoolFieldUpdateOperationsInput | boolean
   id?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
@@ -560,6 +589,7 @@ export type WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceInput = {
 
 
 export type WorkspaceNotificationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  recoveryHeld?: boolean
   id?: boolean
   workspaceId?: boolean
   sourceWorkspaceId?: boolean
@@ -573,6 +603,7 @@ export type WorkspaceNotificationSelect<ExtArgs extends runtime.Types.Extensions
 }, ExtArgs["result"]["workspaceNotification"]>
 
 export type WorkspaceNotificationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  recoveryHeld?: boolean
   id?: boolean
   workspaceId?: boolean
   sourceWorkspaceId?: boolean
@@ -586,6 +617,7 @@ export type WorkspaceNotificationSelectCreateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["workspaceNotification"]>
 
 export type WorkspaceNotificationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  recoveryHeld?: boolean
   id?: boolean
   workspaceId?: boolean
   sourceWorkspaceId?: boolean
@@ -599,6 +631,7 @@ export type WorkspaceNotificationSelectUpdateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["workspaceNotification"]>
 
 export type WorkspaceNotificationSelectScalar = {
+  recoveryHeld?: boolean
   id?: boolean
   workspaceId?: boolean
   sourceWorkspaceId?: boolean
@@ -610,7 +643,7 @@ export type WorkspaceNotificationSelectScalar = {
   createdAt?: boolean
 }
 
-export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "direction" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
+export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"recoveryHeld" | "id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "direction" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
 export type WorkspaceNotificationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -627,6 +660,7 @@ export type $WorkspaceNotificationPayload<ExtArgs extends runtime.Types.Extensio
     workspace: Prisma.$WorkspacePayload<ExtArgs>
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    recoveryHeld: boolean
     id: string
     workspaceId: string
     sourceWorkspaceId: string
@@ -719,8 +753,8 @@ export interface WorkspaceNotificationDelegate<ExtArgs extends runtime.Types.Ext
    * // Get first 10 WorkspaceNotifications
    * const workspaceNotifications = await prisma.workspaceNotification.findMany({ take: 10 })
    * 
-   * // Only select the `id`
-   * const workspaceNotificationWithIdOnly = await prisma.workspaceNotification.findMany({ select: { id: true } })
+   * // Only select the `recoveryHeld`
+   * const workspaceNotificationWithRecoveryHeldOnly = await prisma.workspaceNotification.findMany({ select: { recoveryHeld: true } })
    * 
    */
   findMany<T extends WorkspaceNotificationFindManyArgs>(args?: Prisma.SelectSubset<T, WorkspaceNotificationFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$WorkspaceNotificationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -764,9 +798,9 @@ export interface WorkspaceNotificationDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Create many WorkspaceNotifications and only return the `id`
-   * const workspaceNotificationWithIdOnly = await prisma.workspaceNotification.createManyAndReturn({
-   *   select: { id: true },
+   * // Create many WorkspaceNotifications and only return the `recoveryHeld`
+   * const workspaceNotificationWithRecoveryHeldOnly = await prisma.workspaceNotification.createManyAndReturn({
+   *   select: { recoveryHeld: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -855,9 +889,9 @@ export interface WorkspaceNotificationDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Update zero or more WorkspaceNotifications and only return the `id`
-   * const workspaceNotificationWithIdOnly = await prisma.workspaceNotification.updateManyAndReturn({
-   *   select: { id: true },
+   * // Update zero or more WorkspaceNotifications and only return the `recoveryHeld`
+   * const workspaceNotificationWithRecoveryHeldOnly = await prisma.workspaceNotification.updateManyAndReturn({
+   *   select: { recoveryHeld: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -1060,6 +1094,7 @@ export interface Prisma__WorkspaceNotificationClient<T, Null = never, ExtArgs ex
  * Fields of the WorkspaceNotification model
  */
 export interface WorkspaceNotificationFieldRefs {
+  readonly recoveryHeld: Prisma.FieldRef<"WorkspaceNotification", 'Boolean'>
   readonly id: Prisma.FieldRef<"WorkspaceNotification", 'String'>
   readonly workspaceId: Prisma.FieldRef<"WorkspaceNotification", 'String'>
   readonly sourceWorkspaceId: Prisma.FieldRef<"WorkspaceNotification", 'String'>

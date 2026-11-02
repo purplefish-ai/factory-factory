@@ -11,6 +11,7 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
+import { prRecoverySchema, type PRRecovery } from '@/shared/schemas/pr-recovery.schema';
 import type {
   AgentSession,
   Prisma,
@@ -367,6 +368,56 @@ function matchesClaimIdentity(
   );
 }
 
+async function createInertRecoveryDeliveries(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  snapshot: PRRecovery
+) {
+  for (const delivery of snapshot.deliveries) {
+    if (
+      delivery.workspaceId !== workspaceId ||
+      (await tx.workspacePRDelivery.findUnique({ where: { id: delivery.id } }))
+    ) {
+      throw new Error('Imported PR delivery identity or workspace conflicts');
+    }
+    await tx.workspacePRDelivery.create({
+      data: {
+        ...delivery,
+        state: ['DELIVERED', 'CANCELLED'].includes(delivery.state) ? delivery.state : 'BLOCKED',
+        claimedAt: delivery.claimedAt ? new Date(delivery.claimedAt) : null,
+        deliveredAt: delivery.deliveredAt ? new Date(delivery.deliveredAt) : null,
+      },
+    });
+  }
+}
+async function createInertRecoveryFacts(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  snapshot: PRRecovery
+) {
+  for (const event of snapshot.events) {
+    if (
+      event.workspaceId !== workspaceId ||
+      (event.prId && !(await tx.workspacePR.findFirst({ where: { id: event.prId, workspaceId } })))
+    ) {
+      throw new Error('Imported PR fact target is invalid');
+    }
+    validateImportedTarget(event, workspaceId);
+    await tx.workspacePREvent.create({
+      data: {
+        ...event,
+        state:
+          !(event.batchId || event.deliveryId) && ['PENDING', 'DISPATCHING'].includes(event.state)
+            ? 'CANCELLED'
+            : event.state,
+        claimedAt: event.claimedAt ? new Date(event.claimedAt) : null,
+        deliveredAt: event.deliveredAt ? new Date(event.deliveredAt) : null,
+        createdAt: new Date(event.createdAt),
+      },
+    });
+  }
+}
+
 class WorkspacePrEventAccessor {
   async restoreBackup(
     tx: Prisma.TransactionClient,
@@ -399,6 +450,32 @@ class WorkspacePrEventAccessor {
         throw new Error('Imported PR delivery identity already exists');
       }
       await normalizeLegacyDelivery(tx, id);
+    }
+  }
+  async restoreRecoveryBackup(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    input: PRRecovery
+  ) {
+    const snapshot = prRecoverySchema.parse(input);
+    await createInertRecoveryDeliveries(tx, workspaceId, snapshot);
+    await createInertRecoveryFacts(tx, workspaceId, snapshot);
+    const legacyIds = new Set(
+      snapshot.events.flatMap((event) =>
+        event.deliveryId &&
+        !snapshot.deliveries.some((delivery) => delivery.id === event.deliveryId)
+          ? [event.deliveryId]
+          : []
+      )
+    );
+    for (const id of legacyIds) {
+      if (await tx.workspacePRDelivery.findUnique({ where: { id } })) {
+        throw new Error('Imported PR delivery identity already exists');
+      }
+      const delivery = await normalizeLegacyDelivery(tx, id);
+      if (delivery && !['DELIVERED', 'CANCELLED'].includes(delivery.state)) {
+        await tx.workspacePRDelivery.update({ where: { id }, data: { state: 'BLOCKED' } });
+      }
     }
   }
   projectEvents = projectDeliveryEvents;

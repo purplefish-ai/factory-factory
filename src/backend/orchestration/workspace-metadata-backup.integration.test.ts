@@ -1,3 +1,4 @@
+import { PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   clearIntegrationDatabase,
@@ -468,6 +469,10 @@ it('roundtrips scheduled and event agent definitions with every activation disab
       isEnabled: true,
     },
   });
+  await db.prisma.workspace.update({
+    where: { id: 'workspace' },
+    data: { periodicTaskId: 'schedule' },
+  });
   await db.prisma.agentDefinition.create({
     data: {
       id: 'definition',
@@ -504,6 +509,26 @@ it('roundtrips scheduled and event agent definitions with every activation disab
       periodicTaskId: 'schedule',
       workspaceId: 'workspace',
       status: 'RUNNING',
+      errorMessage: 'Original admission observation',
+    },
+  });
+  const admittedSnapshot = {
+    version: 1,
+    projectId: 'project',
+    name: 'Original name',
+    prompt: 'Frozen admitted instructions',
+    cadence: 'MONTHLY',
+    scheduledTime: '09:00',
+    timezone: 'America/New_York',
+    scheduledDayOfMonth: 31,
+    dueAt: '2026-10-31T13:00:00.000Z',
+  };
+  await db.prisma.periodicTaskExecution.create({
+    data: {
+      id: 'frozen-execution',
+      periodicTaskId: 'schedule',
+      status: 'COMPLETED',
+      launchSnapshot: admittedSnapshot,
     },
   });
   const backup = exportDataSchema.parse(
@@ -517,7 +542,13 @@ it('roundtrips scheduled and event agent definitions with every activation disab
   await dataBackupService.importData(backup);
   expect(
     await db.prisma.periodicTaskExecution.findUnique({ where: { id: 'execution' } })
-  ).toMatchObject({ status: 'FAILED', workspaceId: 'workspace' });
+  ).toMatchObject({ status: 'FAILED', workspaceId: 'workspace', launchSnapshot: null });
+  expect(
+    await db.prisma.periodicTaskExecution.findUnique({ where: { id: 'frozen-execution' } })
+  ).toMatchObject({ status: 'COMPLETED', launchSnapshot: admittedSnapshot });
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'workspace' } })).toMatchObject({
+    periodicTaskId: 'schedule',
+  });
   expect(await db.prisma.periodicTask.findUnique({ where: { id: 'schedule' } })).toMatchObject({
     isEnabled: false,
     prompt: 'Review',
@@ -554,4 +585,141 @@ it('restores the supported hierarchy when children precede their parent in the w
   expect(await db.prisma.workspace.findUnique({ where: { id: 'child' } })).toMatchObject({
     parentWorkspaceId: 'workspace',
   });
+});
+
+it('preserves ordered PR batch membership and frozen effect evidence while restoring it inert', async () => {
+  await db.prisma.workspacePRDelivery.create({
+    data: {
+      id: 'receipt',
+      workspaceId: 'workspace',
+      eventIds: ['second', 'first'],
+      state: 'DISPATCHING',
+      sessionId: 'historical-session',
+      provider: 'CODEX',
+      providerSessionId: 'historical-conversation',
+      bindingRevision: 4,
+      text: 'Frozen exact batch text',
+      attempts: 3,
+      claimedAt: new Date('2026-11-01T00:00:00.000Z'),
+    },
+  });
+  for (const id of ['first', 'second']) {
+    await db.prisma.workspacePREvent.create({
+      data: {
+        id,
+        workspaceId: 'workspace',
+        batchId: 'receipt',
+        kind: 'MONITORING_ENABLED',
+        deduplicationKey: id,
+        payload: {
+          kind: 'MONITORING_ENABLED',
+          workspaceId: 'workspace',
+          bindingRevision: 4,
+          replyToPrComments: true,
+        },
+      },
+    });
+  }
+  const backup = exportDataSchema.parse(
+    JSON.parse(JSON.stringify(await dataBackupService.exportData('test')))
+  );
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(backup);
+  expect(
+    await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'receipt' } })
+  ).toMatchObject({
+    eventIds: ['second', 'first'],
+    state: 'BLOCKED',
+    text: 'Frozen exact batch text',
+    attempts: 3,
+    providerSessionId: 'historical-conversation',
+    claimedAt: new Date('2026-11-01T00:00:00.000Z'),
+  });
+  expect(await db.prisma.workspacePREvent.count({ where: { batchId: 'receipt' } })).toBe(2);
+  // An inert imported batch must itself remain exportable without flattening or reordering proof.
+  const again = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  expect(again).toBeDefined();
+});
+
+it('retains undelivered notification intent without marking it delivered or admitting it for a send', async () => {
+  const { workspaceNotificationService } = await vi.importActual<
+    typeof import('@/backend/services/workspace')
+  >('@/backend/services/workspace');
+  await db.prisma.workspaceNotification.create({
+    data: {
+      id: 'held-notice',
+      workspaceId: 'workspace',
+      sourceWorkspaceId: 'deleted-child',
+      sourceWorkspaceName: 'Child',
+      sourceProjectName: 'Project',
+      message: 'Human-requested follow-up',
+    },
+  });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  await clearIntegrationDatabase(db.prisma);
+  await dataBackupService.importData(backup);
+  expect(
+    await db.prisma.workspaceNotification.findUnique({ where: { id: 'held-notice' } })
+  ).toMatchObject({ deliveredAt: null, recoveryHeld: true, message: 'Human-requested follow-up' });
+  expect(await workspaceNotificationService.listPendingForDelivery('workspace')).toEqual([]);
+  expect(await workspaceNotificationService.findForDelivery('held-notice')).toBeNull();
+  expect(await workspaceNotificationService.countPending('workspace')).toBe(0);
+});
+
+it('exports only known public issue settings and excludes every stored credential field', async () => {
+  await db.prisma.project.update({
+    where: { id: 'project' },
+    data: {
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'SECRET_MARKER_LINEAR',
+          teamId: 'team',
+          teamName: 'Team',
+          viewerName: 'Viewer',
+          unknownCredential: 'SECRET_MARKER_NESTED',
+        },
+        credentialsEncrypted: 'SECRET_MARKER_ALIAS',
+      },
+    },
+  });
+  await db.prisma.userSettings.create({
+    data: { userId: 'default', deepgramApiKeyEncrypted: 'SECRET_MARKER_VOICE' },
+  });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  expect(JSON.stringify(backup)).not.toContain('SECRET_MARKER');
+  expect(backup.data.projects[0]?.issueTrackerConfig).toMatchObject({
+    linear: { teamId: 'team', teamName: 'Team', viewerName: 'Viewer' },
+  });
+});
+
+it('requires every promised durable section instead of silently treating a missing history as empty', async () => {
+  const backup = await dataBackupService.exportData('test');
+  if (!backup.data.durable) {
+    throw new Error('Missing fixture recovery data');
+  }
+  Reflect.deleteProperty(backup.data.durable, 'agentRun');
+  expect(exportDataSchema.safeParse(backup).success).toBe(false);
+});
+
+it('requires complete supported model coverage before opening an import transaction', async () => {
+  const backup = await dataBackupService.exportData('test');
+  if (!backup.meta.recovery) {
+    throw new Error('Missing fixture manifest');
+  }
+  Reflect.deleteProperty(backup.meta.recovery.models, 'AgentRun');
+  await expect(dataBackupService.importData(backup)).rejects.toThrow('model coverage');
+});
+
+it('skips a dedicated binding when its imported session collides with an unrelated local parent', async () => {
+  await db.prisma.workspacePR.create({ data: { id: 'dedicated-pr', workspaceId: 'workspace', url: 'https://github.com/org/repo/pull/1' } });
+  await db.prisma.agentSession.create({ data: { id: 'colliding-session', workspaceId: 'workspace', workspacePrId: 'dedicated-pr', workflow: PR_DEDICATED_WORKFLOW, provider: 'CLAUDE', model: 'sonnet' } });
+  await db.prisma.workspacePRDedicatedSession.create({ data: { prId: 'dedicated-pr', sessionId: 'colliding-session' } });
+  const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+  await clearIntegrationDatabase(db.prisma);
+  await db.prisma.project.create({ data: { id: 'local-project', name: 'Local', slug: 'local', repoPath: '/local', worktreeBasePath: '/local-trees' } });
+  await db.prisma.workspace.create({ data: { id: 'local-workspace', projectId: 'local-project', name: 'Local' } });
+  await db.prisma.agentSession.create({ data: { id: 'colliding-session', workspaceId: 'local-workspace', workflow: 'implement', provider: 'CLAUDE', model: 'sonnet' } });
+  await expect(dataBackupService.importData(backup)).resolves.toMatchObject({ agentSessions: { imported: 0, skipped: 1 } });
+  expect(await db.prisma.agentSession.findUnique({ where: { id: 'colliding-session' } })).toMatchObject({ workspaceId: 'local-workspace', workflow: 'implement' });
+  expect(await db.prisma.workspacePRDedicatedSession.findUnique({ where: { prId: 'dedicated-pr' } })).toBeNull();
 });

@@ -1,4 +1,7 @@
-import type { PrismaModelName } from '@/backend/services/registry';
+import { ApplicationError } from '@/backend/lib/application-error';
+import { prismaModelNames, type PrismaModelName } from '@/backend/services/registry';
+import type { ExportData } from '@/shared/schemas/export-data.schema';
+import { validateRecoveryJsonStorage } from './data-backup-json-storage';
 
 type Coverage = {
   category: 'config' | 'history' | 'evidence' | 'cache' | 'runtime' | 'secret';
@@ -42,7 +45,7 @@ export const recoveryModelCoverage = {
     category: 'evidence',
     handling: 'included',
     reason:
-      'Frozen delivery identity, envelope and full receipt membership via validated PR backup adapter; never automatically resent.',
+      'Exact ordered receipt membership and frozen proof in normalized snapshot; unresolved effects restore BLOCKED without flattening.',
   },
   WorkspacePREvent: {
     category: 'evidence',
@@ -102,33 +105,36 @@ export const recoveryModelCoverage = {
   AgentTrigger: {
     category: 'config',
     handling: 'included',
-    reason: 'Definitions restored paused with activation boundaries cleared.',
+    reason:
+      'Definitions restored paused; original boundary and pending-control evidence retained without activating it.',
   },
   DecisionLog: {
     category: 'history',
-    handling: 'excluded',
-    reason: 'Not yet supported by logical recovery; retain full database backup.',
+    handling: 'included',
+    reason: 'Historical decisions and reasoning retained independently of runtime processes.',
   },
   WorkspaceLaunchOrigin: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting durable provenance integration.',
+    handling: 'included',
+    reason:
+      'Retained workspace/run creation provenance; colliding target identities never borrowed.',
   },
   WorkspaceChildOrigin: {
     category: 'evidence',
-    handling: 'partial',
+    handling: 'included',
     reason:
-      'Live imported hierarchy reconstructed; deleted-child history requires provenance integration.',
+      'Live and deleted child creation identities retained; incomplete imported graphs cannot certify child coverage.',
   },
   AgentSessionLaunchOrigin: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting durable run provenance integration.',
+    handling: 'included',
+    reason:
+      'Retained immutable run/session launch intent with supported account identity remapping.',
   },
   SessionLifecycleEvent: {
     category: 'history',
-    handling: 'excluded',
-    reason: 'Awaiting durable history integration.',
+    handling: 'included',
+    reason: 'Interrupted/stopped turn history and original deduplication identities retained.',
   },
   ClosedSession: {
     category: 'history',
@@ -137,48 +143,53 @@ export const recoveryModelCoverage = {
   },
   WorkspaceNotification: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting inert notification import; never replay queued sends implicitly.',
+    handling: 'partial',
+    reason:
+      'Message intent and real delivery timestamps retained. Pending imports explicitly held; no automatic send or fabricated delivery.',
   },
   AgentRun: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting run-context/effect-proof foundation integration.',
+    handling: 'partial',
+    reason:
+      'Frozen snapshots, result and reservations retained; unresolved status explicitly imported for review with no automatic execution. Account references remapped.',
   },
   AgentProposal: {
     category: 'config',
-    handling: 'excluded',
-    reason: 'Awaiting proposal and accepted-definition provenance integration.',
+    handling: 'included',
+    reason:
+      'Draft specification and accepted-definition provenance retained for imported parent graphs.',
   },
   AgentSourceState: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting source checkpoint foundation integration.',
+    handling: 'included',
+    reason: 'Cursor and continuity metadata retained; imported intake remains unready.',
   },
   AgentSourcePage: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting source checkpoint foundation integration.',
+    handling: 'included',
+    reason: 'Exact source/control identity evidence and ordinal records retained.',
   },
   AgentSourceBaseline: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting source checkpoint foundation integration.',
+    handling: 'included',
+    reason: 'Existing issued baseline identities and finalized ordinal markers retained.',
   },
   AgentEvent: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting retained event ledger integration.',
+    handling: 'included',
+    reason: 'Retained normalized event identities and nullable expired payloads.',
   },
   AgentEvaluation: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting retained evaluation/provenance integration.',
+    handling: 'included',
+    reason:
+      'Frozen evaluation/configuration snapshots, classifier identity and run references retained; retry timers cleared.',
   },
   AgentInitialDelivery: {
     category: 'evidence',
-    handling: 'excluded',
-    reason: 'Awaiting inert effect-proof restore; missing proof never permits resend.',
+    handling: 'partial',
+    reason:
+      'Full send/message identities and provider evidence retained; unfinished effects become ambiguous and are never replayed automatically.',
   },
 } as const satisfies Record<PrismaModelName, Coverage>;
 
@@ -186,7 +197,7 @@ export function recoveryManifest() {
   return {
     version: 1 as const,
     kind: 'logical' as const,
-    models: recoveryModelCoverage,
+    models: structuredClone(recoveryModelCoverage),
     limitations: [
       'This is a limited logical export, not a full installation backup.',
       'Repository/worktree files, native account homes, credentials, encryption keys and provider-owned history are not included.',
@@ -194,4 +205,24 @@ export function recoveryManifest() {
       'Imported automation is inactive. Missing or ambiguous effect evidence never authorizes a resend.',
     ],
   };
+}
+
+export function validateRecoveryManifest(input: ExportData) {
+  if (input.meta.schemaVersion !== 8) {
+    if (input.data.durable) {
+      throw new ApplicationError('INVALID_INPUT', 'Durable recovery requires schema version 8');
+    }
+    return;
+  }
+  validateRecoveryJsonStorage(input.data);
+  const declared = new Set(Object.keys(input.meta.recovery?.models ?? {}));
+  if (
+    declared.size !== prismaModelNames.length ||
+    prismaModelNames.some((name) => !declared.has(name))
+  ) {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      'Logical recovery model coverage does not match the supported registry'
+    );
+  }
 }

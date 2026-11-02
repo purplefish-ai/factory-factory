@@ -1,5 +1,6 @@
 import { prisma } from '@/backend/db';
-import type { DecisionLog } from '@prisma-gen/client';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import type { DecisionLog, Prisma } from '@prisma-gen/client';
 
 class DecisionLogAccessor {
   findById(id: string): Promise<DecisionLog | null> {
@@ -43,3 +44,15 @@ class DecisionLogAccessor {
 }
 
 export const decisionLogAccessor = new DecisionLogAccessor();
+
+export async function restoreRecoveryDecisions(
+  tx: Prisma.TransactionClient,
+  rows: DurableRecovery['decisionLog']
+) {
+  for (const row of rows) {
+    if (await tx.decisionLog.findUnique({ where: { id: row.id } })) {
+      continue;
+    }
+    await tx.decisionLog.create({ data: row });
+  }
+}

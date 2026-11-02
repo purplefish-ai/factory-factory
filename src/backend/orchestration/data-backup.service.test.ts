@@ -31,6 +31,7 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  $queryRaw: vi.fn(async () => []),
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
@@ -422,8 +423,24 @@ describe('DataBackupService', () => {
       'agentDefinition',
       'agentConnection',
       'agentTrigger',
+      'agentRun',
+      'agentProposal',
+      'agentSourceState',
+      'agentSourcePage',
+      'agentSourceBaseline',
+      'agentEvent',
+      'agentEvaluation',
+      'agentInitialDelivery',
+      'workspaceNotification',
+      'workspaceLaunchOrigin',
+      'workspaceChildOrigin',
+      'agentSessionLaunchOrigin',
+      'sessionLifecycleEvent',
+      'decisionLog',
     ]) {
-      Object.assign(mockTx, { [model]: { findMany: vi.fn(async () => []) } });
+      Object.assign(mockTx, {
+        [model]: { ...Reflect.get(mockTx, model), findMany: vi.fn(async () => []) },
+      });
     }
     Object.assign(mockTx.project, { findMany: prisma.project.findMany });
     Object.assign(mockTx.workspace, { findMany: prisma.workspace.findMany });

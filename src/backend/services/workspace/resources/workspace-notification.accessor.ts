@@ -1,5 +1,6 @@
 import { prisma } from '@/backend/db';
-import type { WorkspaceNotification } from '@prisma-gen/client';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import type { Prisma, WorkspaceNotification } from '@prisma-gen/client';
 
 interface CreateNotificationInput {
   workspaceId: string;
@@ -28,7 +29,7 @@ class WorkspaceNotificationAccessor {
    */
   findPending(workspaceId: string): Promise<WorkspaceNotification[]> {
     return prisma.workspaceNotification.findMany({
-      where: { workspaceId, deliveredAt: null },
+      where: { workspaceId, deliveredAt: null, recoveryHeld: false },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -48,9 +49,33 @@ class WorkspaceNotificationAccessor {
 
   countPending(workspaceId: string): Promise<number> {
     return prisma.workspaceNotification.count({
-      where: { workspaceId, deliveredAt: null },
+      where: { workspaceId, deliveredAt: null, recoveryHeld: false },
     });
   }
 }
 
 export const workspaceNotificationAccessor = new WorkspaceNotificationAccessor();
+
+export async function restoreRecoveryNotifications(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  workspaces: ReadonlySet<string>
+) {
+  for (const row of data.workspaceNotification) {
+    if (
+      !workspaces.has(row.workspaceId) ||
+      (await tx.workspaceNotification.findUnique({ where: { id: row.id } }))
+    ) {
+      continue;
+    }
+    if (
+      !workspaces.has(row.sourceWorkspaceId) &&
+      (await tx.workspace.findUnique({ where: { id: row.sourceWorkspaceId } }))
+    ) {
+      continue;
+    }
+    await tx.workspaceNotification.create({
+      data: { ...row, recoveryHeld: row.recoveryHeld || row.deliveredAt === null },
+    });
+  }
+}

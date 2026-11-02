@@ -2,6 +2,8 @@ import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { retainedEventOriginSchema } from '@/shared/agent-history';
 import { eventWorkspaceIdentitySchema } from '@/shared/event-agent-launch';
+import { retainedReferenceAllowed, type RecoveryImportedIds } from '@/shared/recovery-graph';
+import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 
 type Origin = { runId: string; workspaceId: string; projectId: string };
@@ -66,4 +68,73 @@ function assertLiveIdentity(
       'Workspace origin does not match its creation identity.'
     );
   }
+}
+
+export async function restoreRecoveryWorkspaceOrigins(
+  tx: Prisma.TransactionClient,
+  data: ExportData['data'],
+  ids: RecoveryImportedIds,
+  incompleteParents: ReadonlySet<string>
+) {
+  const sourceWorkspaces = new Set(data.workspaces.map((row) => row.id));
+  const sourceProjects = new Set(data.projects.map((row) => row.id));
+  const sourceRuns = new Set(data.durable?.agentRun.map((row) => row.id));
+  for (const row of data.durable?.workspaceLaunchOrigin ?? []) {
+    const workspace = await tx.workspace.findUnique({ where: { id: row.workspaceId } });
+    if (
+      !(
+        retainedReferenceAllowed(sourceWorkspaces, ids.workspaces, row.workspaceId, !!workspace) &&
+        retainedReferenceAllowed(
+          sourceProjects,
+          ids.projects,
+          row.projectId,
+          !!(await tx.project.findUnique({ where: { id: row.projectId } }))
+        ) &&
+        retainedReferenceAllowed(
+          sourceRuns,
+          ids.runs,
+          row.runId,
+          !!(await tx.agentRun.findUnique({ where: { id: row.runId } }))
+        )
+      )
+    ) {
+      continue;
+    }
+    if (
+      await tx.workspaceLaunchOrigin.findFirst({
+        where: { OR: [{ runId: row.runId }, { workspaceId: row.workspaceId }] },
+      })
+    ) {
+      continue;
+    }
+    assertLiveRecoveryIdentity(row, workspace);
+    const expectedChildren = new Set(
+      data.durable?.workspaceChildOrigin
+        .filter((child) => child.parentWorkspaceId === row.workspaceId)
+        .map((child) => child.childWorkspaceId)
+    );
+    const actualChildren = await tx.workspaceChildOrigin.findMany({
+      where: { parentWorkspaceId: row.workspaceId },
+    });
+    const complete =
+      actualChildren.length === expectedChildren.size &&
+      actualChildren.every((child) => expectedChildren.has(child.childWorkspaceId));
+    await tx.workspaceLaunchOrigin.create({
+      data: {
+        ...row,
+        childHistoryVersion:
+          incompleteParents.has(row.workspaceId) || !complete ? null : row.childHistoryVersion,
+      },
+    });
+  }
+}
+
+function assertLiveRecoveryIdentity(origin: Origin, workspace: Workspace | null) {
+  if (!workspace) {
+    return;
+  }
+  if (workspace.projectId !== origin.projectId) {
+    throw new Error('Imported workspace origin belongs to another project');
+  }
+  assertLiveIdentity(origin, workspace);
 }

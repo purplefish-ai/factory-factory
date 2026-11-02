@@ -1,4 +1,5 @@
 import { ApplicationError } from '@/backend/lib/application-error';
+import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import {
   agentEventInputSchema,
   agentEventOrderInputSchema,
@@ -6,6 +7,8 @@ import {
   type AgentEventInput,
   type AgentEventOrderInput,
 } from '@/shared/agent-runtime';
+import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.schema';
 import { Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 
@@ -141,3 +144,28 @@ export const agentEventAccessor = {
   pruneEventInTransaction,
   finalizeEventOrderInTransaction,
 };
+
+export async function restoreRecoveryEvents(
+  tx: Prisma.TransactionClient,
+  data: DurableRecovery,
+  connections: ReadonlySet<string>
+) {
+  const nulls = recoveryJsonNullLookup(data.jsonStorage);
+  const events = new Set<string>();
+  for (const row of data.agentEvent) {
+    if (
+      !connections.has(row.connectionId) ||
+      (await tx.agentEvent.findUnique({ where: { id: row.id } }))
+    ) {
+      continue;
+    }
+    await tx.agentEvent.create({
+      data: {
+        ...row,
+        payload: nullablePrismaJson(row.payload, nulls('AgentEvent', row.id, 'payload')),
+      },
+    });
+    events.add(row.id);
+  }
+  return events;
+}

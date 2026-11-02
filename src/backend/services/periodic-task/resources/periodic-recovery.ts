@@ -1,5 +1,7 @@
+import { nullablePrismaJson } from '@/backend/lib/prisma-json';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
-import { Prisma } from '@prisma-gen/client';
+import { recoveryJsonNullLookup } from '@/shared/schemas/recovery-json-storage.schema';
+import { type Prisma } from '@prisma-gen/client';
 
 export async function restorePeriodicRecovery(
   tx: Prisma.TransactionClient,
@@ -7,6 +9,7 @@ export async function restorePeriodicRecovery(
   projects: ReadonlySet<string>,
   workspaces: ReadonlySet<string>
 ) {
+  const nulls = recoveryJsonNullLookup(data.jsonStorage);
   const tasks = new Set<string>();
   for (const row of data.periodicTask) {
     if (
@@ -29,13 +32,19 @@ export async function restorePeriodicRecovery(
     await tx.periodicTaskExecution.create({
       data: {
         ...row,
-        launchSnapshot: row.launchSnapshot ?? Prisma.DbNull,
+        launchSnapshot: nullablePrismaJson(
+          row.launchSnapshot,
+          nulls('PeriodicTaskExecution', row.id, 'launchSnapshot')
+        ),
         status: row.status === 'RUNNING' ? 'FAILED' : row.status,
         errorMessage:
           row.status === 'RUNNING'
-            ? 'Imported unfinished execution; inspect evidence before recovery'
+            ? [row.errorMessage, 'Imported unfinished execution; inspect evidence before recovery']
+                .filter((message) => message !== null)
+                .join('\n')
             : row.errorMessage,
       },
     });
   }
+  return tasks;
 }

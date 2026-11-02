@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { recoveryJsonStorageSchema } from './recovery-json-storage.schema';
 
 // Explicit scalar projections: relation objects and credentials never enter a backup.
-export const periodicTaskRecoverySchema = z.object({
+export const periodicTaskRecoverySchema = z.strictObject({
   id: z.string(),
   projectId: z.string(),
   name: z.string(),
@@ -17,7 +18,7 @@ export const periodicTaskRecoverySchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
-export const periodicTaskExecutionRecoverySchema = z.object({
+export const periodicTaskExecutionRecoverySchema = z.strictObject({
   launchSnapshot: z.json().nullable().optional().default(null),
   id: z.string(),
   periodicTaskId: z.string(),
@@ -30,7 +31,7 @@ export const periodicTaskExecutionRecoverySchema = z.object({
   completedAt: z.iso.datetime().nullable(),
 });
 
-export const agentDefinitionRecoverySchema = z.object({
+export const agentDefinitionRecoverySchema = z.strictObject({
   id: z.string(),
   projectId: z.string(),
   name: z.string(),
@@ -43,7 +44,7 @@ export const agentDefinitionRecoverySchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
-export const agentConnectionRecoverySchema = z.object({
+export const agentConnectionRecoverySchema = z.strictObject({
   id: z.string(),
   provider: z.enum(['SLACK', 'GITHUB']),
   externalId: z.string(),
@@ -53,7 +54,7 @@ export const agentConnectionRecoverySchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
-export const agentTriggerRecoverySchema = z.object({
+export const agentTriggerRecoverySchema = z.strictObject({
   id: z.string(),
   agentDefinitionId: z.string(),
   type: z.enum(['SCHEDULE', 'SLACK_MESSAGE', 'GITHUB_ISSUE']),
@@ -72,11 +73,226 @@ export const agentTriggerRecoverySchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
-export const durableRecoverySchema = z.object({
-  periodicTask: z.array(periodicTaskRecoverySchema).default([]),
-  periodicTaskExecution: z.array(periodicTaskExecutionRecoverySchema).default([]),
-  agentDefinition: z.array(agentDefinitionRecoverySchema).default([]),
-  agentConnection: z.array(agentConnectionRecoverySchema).default([]),
-  agentTrigger: z.array(agentTriggerRecoverySchema).default([]),
+export const agentRunRecoverySchema = z.strictObject({
+  id: z.string(),
+  agentDefinitionId: z.string(),
+  triggerId: z.string().nullable(),
+  idempotencyKey: z.string(),
+  status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'PR_CREATED', 'FAILED', 'CANCELLED']),
+  eventId: z.string().nullable(),
+  definitionRevision: z.number().int(),
+  triggerRevision: z.number().int(),
+  activationGeneration: z.number().int(),
+  launchPhase: z.enum([
+    'RESERVED',
+    'PROVISIONING',
+    'READY',
+    'DISPATCHING',
+    'ACTIVE',
+    'NEEDS_ATTENTION',
+    'FINISHED',
+  ]),
+  reservedWorkspaceId: z.string().nullable(),
+  reservedSessionId: z.string().nullable(),
+  initialMessageId: z.string().nullable(),
+  workerGeneration: z.number().int(),
+  attemptGeneration: z.number().int(),
+  attemptCount: z.number().int(),
+  nextAttemptAt: z.iso.datetime().nullable(),
+  leaseExpiresAt: z.iso.datetime().nullable(),
+  expiresAt: z.iso.datetime().nullable(),
+  reasonCode: z.string().nullable(),
+  result: z.json().nullable(),
+  effectiveExecution: z.json().nullable(),
+  launchPreparation: z.json().nullable(),
+  definitionSnapshot: z.json(),
+  triggerSnapshot: z.json().nullable(),
+  input: z.json(),
+  workspaceId: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  startedAt: z.iso.datetime().nullable(),
+  completedAt: z.iso.datetime().nullable(),
+});
+
+export const agentProposalRecoverySchema = z.strictObject({
+  id: z.string(),
+  workspaceId: z.string(),
+  revision: z.number().int(),
+  specification: z.json(),
+  sourceNames: z.json(),
+  agentDefinitionId: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const agentSourceStateRecoverySchema = z.strictObject({
+  lastSourceOrder: z.number().int(),
+  connectionId: z.string(),
+  isReady: z.boolean(),
+  cursor: z.json().nullable(),
+  health: z.json().nullable(),
+  lastObservedAt: z.iso.datetime().nullable(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const agentSourcePageRecoverySchema = z.strictObject({
+  id: z.string(),
+  connectionId: z.string(),
+  scanId: z.string(),
+  ordinal: z.number().int(),
+  phase: z.string(),
+  requestPage: z.number().int(),
+  nextPage: z.number().int().nullable(),
+  sourceOrder: z.number().int().nullable(),
+  evidence: z.json(),
+  createdAt: z.iso.datetime(),
+});
+
+export const agentSourceBaselineRecoverySchema = z.strictObject({
+  id: z.string(),
+  connectionId: z.string(),
+  headEventId: z.string().nullable(),
+  afterHeadEventId: z.string().nullable(),
+  sourceOrder: z.number().int().nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export const agentEventRecoverySchema = z.strictObject({
+  id: z.string(),
+  connectionId: z.string(),
+  providerEventId: z.string(),
+  sourceOrder: z.number().int().nullable(),
+  payload: z.json().nullable(),
+  occurredAt: z.iso.datetime(),
+  observedAt: z.iso.datetime(),
+  payloadExpiresAt: z.iso.datetime(),
+  identityExpiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+
+export const agentEvaluationRecoverySchema = z.strictObject({
+  id: z.string(),
+  eventId: z.string(),
+  connectionId: z.string(),
+  agentDefinitionId: z.string(),
+  triggerId: z.string(),
+  definitionRevision: z.number().int(),
+  triggerRevision: z.number().int(),
+  activationGeneration: z.number().int(),
+  status: z.enum(['MATCHED', 'SKIPPED', 'ERROR']),
+  reasonCode: z.string(),
+  explanation: z.string(),
+  attemptCount: z.number().int(),
+  nextAttemptAt: z.iso.datetime().nullable(),
+  configurationSnapshot: z.json(),
+  classifier: z.json().nullable(),
+  runId: z.string().nullable(),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const agentInitialDeliveryRecoverySchema = z.strictObject({
+  id: z.string(),
+  runId: z.string(),
+  state: z.enum(['PENDING', 'SENDING', 'ACCEPTED', 'FINISHED', 'AMBIGUOUS']),
+  attemptGeneration: z.number().int(),
+  sendAttemptId: z.string(),
+  messageId: z.string(),
+  providerTurnId: z.string().nullable(),
+  evidence: z.json().nullable(),
+  sendingAt: z.iso.datetime().nullable(),
+  acceptedAt: z.iso.datetime().nullable(),
+  finishedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const workspaceNotificationRecoverySchema = z.strictObject({
+  recoveryHeld: z.boolean().optional().default(false),
+  id: z.string(),
+  workspaceId: z.string(),
+  sourceWorkspaceId: z.string(),
+  sourceWorkspaceName: z.string(),
+  sourceProjectName: z.string(),
+  message: z.string(),
+  direction: z.enum(['CHILD_TO_PARENT', 'PARENT_TO_CHILD']),
+  deliveredAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export const workspaceLaunchOriginRecoverySchema = z.strictObject({
+  childHistoryVersion: z.number().int().nullable(),
+  runId: z.string(),
+  workspaceId: z.string(),
+  projectId: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const workspaceChildOriginRecoverySchema = z.strictObject({
+  parentWorkspaceId: z.string(),
+  childWorkspaceId: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const agentSessionLaunchOriginRecoverySchema = z.strictObject({
+  runId: z.string(),
+  sessionId: z.string(),
+  workspaceId: z.string(),
+  execution: z.json(),
+  createdAt: z.iso.datetime(),
+});
+
+export const sessionLifecycleEventRecoverySchema = z.strictObject({
+  id: z.string(),
+  workspaceId: z.string(),
+  sessionId: z.string(),
+  kind: z.enum(['TURN_INTERRUPTED', 'SESSION_STOPPED']),
+  reason: z.enum([
+    'PROMPT_TIMEOUT',
+    'PROVIDER_ERROR',
+    'USER_STOP',
+    'SESSION_CLOSED',
+    'WORKSPACE_ARCHIVED',
+    'UNEXPECTED_EXIT',
+    'SYSTEM_STOP',
+    'VOICE_INTERRUPT',
+  ]),
+  message: z.string(),
+  dedupeKey: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const decisionLogRecoverySchema = z.strictObject({
+  id: z.string(),
+  agentId: z.string(),
+  decision: z.string(),
+  reasoning: z.string(),
+  context: z.string().nullable(),
+  timestamp: z.iso.datetime(),
+});
+
+export const durableRecoverySchema = z.strictObject({
+  jsonStorage: recoveryJsonStorageSchema,
+  periodicTask: z.array(periodicTaskRecoverySchema),
+  periodicTaskExecution: z.array(periodicTaskExecutionRecoverySchema),
+  agentDefinition: z.array(agentDefinitionRecoverySchema),
+  agentConnection: z.array(agentConnectionRecoverySchema),
+  agentTrigger: z.array(agentTriggerRecoverySchema),
+  agentRun: z.array(agentRunRecoverySchema),
+  agentProposal: z.array(agentProposalRecoverySchema),
+  agentSourceState: z.array(agentSourceStateRecoverySchema),
+  agentSourcePage: z.array(agentSourcePageRecoverySchema),
+  agentSourceBaseline: z.array(agentSourceBaselineRecoverySchema),
+  agentEvent: z.array(agentEventRecoverySchema),
+  agentEvaluation: z.array(agentEvaluationRecoverySchema),
+  agentInitialDelivery: z.array(agentInitialDeliveryRecoverySchema),
+  workspaceNotification: z.array(workspaceNotificationRecoverySchema),
+  workspaceLaunchOrigin: z.array(workspaceLaunchOriginRecoverySchema),
+  workspaceChildOrigin: z.array(workspaceChildOriginRecoverySchema),
+  agentSessionLaunchOrigin: z.array(agentSessionLaunchOriginRecoverySchema),
+  sessionLifecycleEvent: z.array(sessionLifecycleEventRecoverySchema),
+  decisionLog: z.array(decisionLogRecoverySchema),
 });
 export type DurableRecovery = z.infer<typeof durableRecoverySchema>;

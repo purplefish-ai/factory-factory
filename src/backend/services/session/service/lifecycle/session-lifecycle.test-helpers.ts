@@ -480,6 +480,7 @@ export function createPendingWorkspaceNotification(
   }> = {}
 ) {
   return {
+    recoveryHeld: false,
     id: 'notif-parent',
     workspaceId: 'workspace-1',
     sourceWorkspaceId: 'parent-workspace',
