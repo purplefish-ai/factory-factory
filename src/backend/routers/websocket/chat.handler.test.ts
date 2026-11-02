@@ -29,6 +29,8 @@ let chatConnectionRegistry: ChatConnectionRegistry;
 
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
+  terminate = vi.fn();
   send = vi.fn();
   close = vi.fn();
 }
@@ -119,6 +121,44 @@ describe('createChatUpgradeHandler', () => {
     testApplications.clear();
     vi.restoreAllMocks();
   });
+
+  it.each(['invalid-json', 'set-model'])(
+    'retires a pressured requester for %s replies',
+    async (kind) => {
+      const { appContext } = createTestContext(tempRootDir);
+      const handler = createChatUpgradeHandler(appContext);
+      const ws = new MockWebSocket();
+      ws.bufferedAmount = 1024 * 1024;
+      const wss = {
+        handleUpgrade: (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (ws: WebSocket) => void
+        ) => callback(ws as unknown as WebSocket),
+      } as unknown as WebSocketServer;
+      handler(
+        {
+          headers: { origin: allowedOrigin },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as unknown as IncomingMessage,
+        { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+        Buffer.alloc(0),
+        new URL('http://localhost/chat?connectionId=requester&sessionId=s1'),
+        wss,
+        new WeakMap<WebSocket, boolean>()
+      );
+      ws.emit(
+        'message',
+        kind === 'invalid-json'
+          ? '{invalid-json'
+          : JSON.stringify({ type: 'set_model', model: 'model-1' })
+      );
+      await vi.waitFor(() => expect(ws.close).toHaveBeenCalledWith(1013, expect.any(String)));
+      expect(ws.send).not.toHaveBeenCalled();
+      ws.emit('close');
+    }
+  );
 
   it('rejects invalid workingDir with 400 response before upgrade', () => {
     const { appContext } = createTestContext(tempRootDir);
@@ -293,7 +333,8 @@ describe('createChatUpgradeHandler', () => {
       requester.emit('message', JSON.stringify({ type: 'set_model', model: 'model-1' }));
       await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
       expect(requester.send).toHaveBeenLastCalledWith(
-        JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES })
+        JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }),
+        expect.any(Function)
       );
       expect(second.send).not.toHaveBeenCalled();
 
@@ -330,8 +371,17 @@ describe('createChatUpgradeHandler', () => {
         type: 'session_delta',
         data: { type: 'config_options_update', configOptions },
       });
-      await vi.waitFor(() => expect(requester.send.mock.calls).toEqual([[correction], [error]]));
-      expect(second.send.mock.calls).toEqual([[correction]]);
+      await vi.waitFor(() =>
+        expect(requester.send.mock.calls).toEqual(
+          disconnect
+            ? [[correction, expect.any(Function)]]
+            : [
+                [correction, expect.any(Function)],
+                [error, expect.any(Function)],
+              ]
+        )
+      );
+      expect(second.send.mock.calls).toEqual([[correction, expect.any(Function)]]);
       expect(sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
         type: 'config_options_update',
         configOptions,
@@ -378,7 +428,8 @@ describe('createChatUpgradeHandler', () => {
       JSON.stringify({
         type: 'error',
         message: 'Disable PR updates to cancel background monitoring',
-      })
+      }),
+      expect.any(Function)
     );
     expect(second.send).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
@@ -772,7 +823,8 @@ describe('createChatUpgradeHandler', () => {
 
     expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Invalid message format' })
+      JSON.stringify({ type: 'error', message: 'Invalid message format' }),
+      expect.any(Function)
     );
     expect(sessionFileLogger.log).toHaveBeenCalledWith('session-1', 'OUT_TO_CLIENT', {
       type: 'error',

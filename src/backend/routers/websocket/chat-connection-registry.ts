@@ -14,7 +14,7 @@
 import type { WebSocket } from 'ws';
 import type { Application, ApplicationServices } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { safeSend } from '@/backend/lib/websocket-send';
+import { sendStateful } from '@/backend/lib/websocket-send';
 import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
@@ -59,7 +59,8 @@ export class ChatConnectionRegistry {
   /** Per-session socket index; topics are DB session ids. */
   private readonly broadcaster = new TopicBroadcaster<string>(
     { error: (...args) => this.logger.error(...args) },
-    'chat session message'
+    'chat session message',
+    sendStateful
   );
 
   private chatWsMsgCounter = 0;
@@ -123,7 +124,10 @@ export class ChatConnectionRegistry {
     this.chatWsMsgCounter++;
     const msgNum = this.chatWsMsgCounter;
 
-    const sent = this.broadcaster.broadcast(dbSessionId, payload);
+    const sent = this.broadcaster.broadcast(dbSessionId, payload, {
+      allowLargeFrame:
+        payload.type === 'session_replay_batch' || payload.type === 'session_snapshot',
+    });
     if (sent === 0) {
       if (this.debugChatWebSocket) {
         this.logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
@@ -152,7 +156,7 @@ export class ChatConnectionRegistry {
   broadcastToAll(payload: Record<string, unknown>): void {
     const message = JSON.stringify(payload);
     for (const entry of this.connections.values()) {
-      safeSend(entry.info.ws, message, this.logger, 'workspace notification');
+      sendStateful(entry.info.ws, message, this.logger, 'workspace notification');
     }
   }
 

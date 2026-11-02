@@ -6,12 +6,12 @@
  * registries. Fan-out cost is O(subscribers of the topic), not O(all
  * connections), because sockets are indexed by topic key.
  *
- * Sends go through `safeSend`, so a socket that is not OPEN or whose send
- * throws never drops the message for the remaining subscribers.
+ * Sends use an injected delivery policy (safeSend by default). Stateful
+ * channels retire slow viewers without interrupting healthy subscribers.
  */
 
 import type { WebSocket } from 'ws';
-import { safeSend } from './websocket-send';
+import { safeSend, type sendStateful, type StatefulSendOptions } from './websocket-send';
 
 interface BroadcastLogger {
   error(message: string, error: Error): void;
@@ -24,7 +24,8 @@ export class TopicBroadcaster<TKey = string> {
 
   constructor(
     private readonly logger: BroadcastLogger,
-    private readonly defaultDescription = 'WebSocket message'
+    private readonly defaultDescription = 'WebSocket message',
+    private readonly send: typeof sendStateful = safeSend
   ) {}
 
   /**
@@ -85,7 +86,7 @@ export class TopicBroadcaster<TKey = string> {
    * serialized once. Returns the number of sockets the message was
    * successfully handed to.
    */
-  broadcast(topic: TKey, payload: unknown): number {
+  broadcast(topic: TKey, payload: unknown, options?: StatefulSendOptions): number {
     const sockets = this.topics.get(topic);
     if (!sockets || sockets.size === 0) {
       return 0;
@@ -94,7 +95,7 @@ export class TopicBroadcaster<TKey = string> {
     const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
     let sent = 0;
     for (const ws of sockets) {
-      if (safeSend(ws, message, this.logger, this.defaultDescription)) {
+      if (this.send(ws, message, this.logger, this.defaultDescription, options)) {
         sent++;
       }
     }

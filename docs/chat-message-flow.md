@@ -151,6 +151,28 @@ cleanup remain owned by the transport. A closed or throwing requester does not
 skip application completion or another viewer's load updates. Concurrent loads
 retain their own request IDs and consume stored initial text once.
 
+Chat and snapshot delivery use a stateful send policy. A viewer that exceeds 1
+MiB of accumulated outgoing backlog is retired with close code 1013, then
+terminated after five seconds if its close handshake has not completed. No
+further state is sent on that connection, even if the buffer later drains.
+Synchronous and asynchronous write failures also retire that viewer. Other
+viewers and application work continue; reconnect runs the existing correlated
+load/replay or current full-snapshot path.
+
+A full snapshot, session snapshot, or replay batch can exceed the ordinary
+backlog budget on an empty connection. Its separate frame ceiling is three times
+Node's `buffer.constants.MAX_STRING_LENGTH` bytes, covering every UTF-8 string
+the existing JSON serializer can produce. This deliberately preserves the
+existing supported history/project sizes rather than creating a smaller limit
+that rejects the same baseline on every reconnect. The policy bounds
+accumulation, not the size or serialization cost of one existing authoritative
+state. A frame's write callback releases its allowance. While it is pending,
+completion metadata and subsequent deltas share an additional 1 MiB budget; a
+second large frame is not admitted to a nonempty queue. Close, successful flush,
+and retirement clean up the frame listener; close or deadline expiry cleans up
+the termination timer and listener. Snapshot deltas still wait for the full
+baseline to be admitted, and replay keeps its existing loadRequestId.
+
 Passive loading does not initialize an ACP runtime. A stored initial message may
 subsequently be enqueued and dispatched through the normal message path.
 

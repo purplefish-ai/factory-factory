@@ -10,7 +10,7 @@ import type { WebSocket } from 'ws';
 import type { AppContext, Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { safeSend } from '@/backend/lib/websocket-send';
+import { sendStateful } from '@/backend/lib/websocket-send';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -68,7 +68,7 @@ class SnapshotStoreSubscriptionState {
       const message = JSON.stringify({ ...payload, reviewCount });
       for (const ws of projectClients) {
         if (!awaitingBaseline.has(ws)) {
-          safeSend(ws, message, logger, description);
+          sendStateful(ws, message, logger, description);
         }
       }
     };
@@ -250,7 +250,9 @@ export function createSnapshotsUpgradeHandler(
           entries,
           reviewCount,
         };
-        const baselineSent = safeSend(ws, JSON.stringify(message), logger, 'full snapshot');
+        const baselineSent = sendStateful(ws, JSON.stringify(message), logger, 'full snapshot', {
+          allowLargeFrame: true,
+        });
         if (!baselineSent) {
           // The client has no baseline, so deltas must not start flowing.
           return;

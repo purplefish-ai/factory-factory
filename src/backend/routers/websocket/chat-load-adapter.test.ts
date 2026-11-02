@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
@@ -153,13 +154,16 @@ describe('executeSessionLoad', () => {
     firstConfig.resolve();
     await first;
   });
-  it.each(['closed', 'throws'] as const)(
+  it.each(['closed', 'throws', 'congested'] as const)(
     'continues application completion and other-viewer delivery when requester is %s after preparation',
     async (failure) => {
       const test = setup();
       const requesterFrames: string[] = [];
       const viewerFrames: string[] = [];
-      const requester = {
+      const requester = Object.assign(new EventEmitter(), {
+        bufferedAmount: failure === 'congested' ? 1024 * 1024 : 0,
+        close: () => requester.emit('close'),
+        terminate: () => undefined,
         readyState: WS_READY_STATE.OPEN as number,
         send(payload: string) {
           if (failure === 'throws') {
@@ -167,7 +171,7 @@ describe('executeSessionLoad', () => {
           }
           requesterFrames.push(payload);
         },
-      };
+      });
       const viewer = {
         readyState: WS_READY_STATE.OPEN,
         send: (payload: string) => viewerFrames.push(payload),
@@ -214,6 +218,70 @@ describe('executeSessionLoad', () => {
       registry.clear();
     }
   );
+  it('loads a large correlated replay and completes application work before a pressured viewer reconnects', async () => {
+    const test = setup();
+    const registry = new ChatConnectionRegistry();
+    const replayText = 'x'.repeat(2 * 1024 * 1024);
+    test.deps.loadService.captureReplay = () => ({
+      replayEvents: [
+        {
+          type: 'assistant_text_delta',
+          messageId: 'history',
+          order: 1,
+          offset: 0,
+          text: replayText,
+        },
+      ],
+      sessionRuntime: runtime,
+    });
+    test.deps.eventBus.on('session_outbound', ({ sessionId, payload }) =>
+      registry.broadcastToSession(sessionId, payload)
+    );
+    const connect = () => {
+      const frames: unknown[] = [];
+      const ws = Object.assign(new EventEmitter(), {
+        readyState: WS_READY_STATE.OPEN,
+        bufferedAmount: 0,
+        close: () => ws.emit('close'),
+        terminate: () => undefined,
+        send: (payload: string) => {
+          frames.push(JSON.parse(payload));
+          ws.bufferedAmount += Buffer.byteLength(payload);
+        },
+      });
+      registry.register('requester', {
+        ws: ws as unknown as WebSocket,
+        dbSessionId: 's1',
+        workingDir: null,
+      });
+      return { ws, frames };
+    };
+    const first = connect();
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
+    expect(first.frames).toHaveLength(3);
+    expect(first.frames[0]).toMatchObject({
+      type: 'session_replay_batch',
+      loadRequestId: 'first',
+      replayEvents: [{ type: 'assistant_text_delta', text: replayText }],
+    });
+    first.ws.bufferedAmount += 1024 * 1024;
+    registry.broadcastToSession('s1', {
+      type: 'session_delta',
+      data: { type: 'slash_commands', slashCommands: [] },
+    });
+    expect(first.frames).toHaveLength(3);
+    const second = connect();
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
+    expect(second.frames).toHaveLength(3);
+    expect(second.frames[0]).toMatchObject({
+      type: 'session_replay_batch',
+      loadRequestId: 'second',
+    });
+    expect(test.calls.at(-1)).toBe('activation');
+    second.ws.emit('close');
+    registry.clear();
+  });
+
   it('does not yield between replay capture and publication when a live update is queued', async () => {
     const test = setup();
     const capture = test.deps.loadService.captureReplay;

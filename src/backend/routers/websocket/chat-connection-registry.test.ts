@@ -32,8 +32,10 @@ class MockWebSocket extends EventEmitter {
     this._readyState = state;
   }
 
+  bufferedAmount = 0;
   send = vi.fn();
   close = vi.fn();
+  terminate = vi.fn();
 }
 
 function asWs(mock: MockWebSocket): WebSocket {
@@ -69,6 +71,41 @@ describe('ChatConnectionRegistry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registry = new ChatConnectionRegistry();
+  });
+
+  it('retires only the congested viewer and replays a large baseline on reconnect', () => {
+    const slow = new MockWebSocket();
+    const healthy = new MockWebSocket();
+    slow.bufferedAmount = 1024 * 1024;
+    for (const [id, viewer] of [
+      ['slow', slow],
+      ['healthy', healthy],
+    ] as const) {
+      registry.register(id, { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    }
+    const delta = asMessage({
+      type: 'session_delta',
+      data: { type: 'slash_commands', slashCommands: [] },
+    });
+    expect(registry.broadcastToSession('s1', delta)).toBe(1);
+    expect(slow.send).not.toHaveBeenCalled();
+    expect(slow.close).toHaveBeenCalledWith(1013, expect.any(String));
+    slow.emit('close');
+
+    const reconnect = new MockWebSocket();
+    registry.register('slow', { ws: asWs(reconnect), dbSessionId: 's1', workingDir: null });
+    const replay = asMessage({
+      type: 'session_replay_batch',
+      loadRequestId: 'reconnect-2',
+      replayEvents: [{ type: 'agent_message', data: 'x'.repeat(2 * 1024 * 1024) }],
+    });
+    registry.broadcastToSession('s1', replay);
+    registry.broadcastToSession('s1', delta);
+    expect(reconnect.send.mock.calls.map(([message]) => JSON.parse(message))).toEqual([
+      replay,
+      delta,
+    ]);
+    expect(reconnect.close).not.toHaveBeenCalled();
   });
 
   describe('connection registration', () => {
@@ -146,8 +183,8 @@ describe('ChatConnectionRegistry', () => {
       const message = asMessage({ type: 'test', data: 'hello' });
       registry.broadcastToSession('s1', message);
 
-      expect(ws1.send).toHaveBeenCalledWith(JSON.stringify(message));
-      expect(ws2.send).toHaveBeenCalledWith(JSON.stringify(message));
+      expect(ws1.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
+      expect(ws2.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
     });
 
     it('does not forward to connections viewing a different session', () => {
@@ -187,7 +224,7 @@ describe('ChatConnectionRegistry', () => {
       expect(() => registry.broadcastToSession('s1', message)).not.toThrow();
 
       expect(throwingWs.send).toHaveBeenCalled();
-      expect(healthyWs.send).toHaveBeenCalledWith(JSON.stringify(message));
+      expect(healthyWs.send).toHaveBeenCalledWith(JSON.stringify(message), expect.any(Function));
     });
   });
 
@@ -205,9 +242,9 @@ describe('ChatConnectionRegistry', () => {
       registry.broadcastToAll(payload);
 
       const message = JSON.stringify(payload);
-      expect(ws1.send).toHaveBeenCalledWith(message);
-      expect(ws2.send).toHaveBeenCalledWith(message);
-      expect(noSessionWs.send).toHaveBeenCalledWith(message);
+      expect(ws1.send).toHaveBeenCalledWith(message, expect.any(Function));
+      expect(ws2.send).toHaveBeenCalledWith(message, expect.any(Function));
+      expect(noSessionWs.send).toHaveBeenCalledWith(message, expect.any(Function));
     });
   });
 
@@ -261,7 +298,7 @@ describe('attachChatTransport', () => {
     const payload = asMessage({ type: 'session_delta', data: { type: 'noop' } });
     sessionEventBus.publishToSession('s1', payload);
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify(payload));
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify(payload), expect.any(Function));
   });
 
   it('delivers all-client broadcasts published on the bus', () => {
@@ -277,7 +314,8 @@ describe('attachChatTransport', () => {
     sessionEventBus.publishToAllClients({ type: 'workspace_notification_request' });
 
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'workspace_notification_request' })
+      JSON.stringify({ type: 'workspace_notification_request' }),
+      expect.any(Function)
     );
   });
 
