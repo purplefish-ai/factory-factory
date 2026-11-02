@@ -17,7 +17,7 @@ import {
   WorkspaceSummarySchema,
 } from '@/shared/workspace-summary';
 import { prDeliveryModeSchema } from './schemas/pr-event.schema';
-import { WorkspacePullRequestSchema } from './workspace-pr';
+import { WorkspacePRSelectionSchema, WorkspacePullRequestSchema } from './workspace-pr';
 import { WorkspacePRSummarySchema } from './workspace-pr-summary';
 
 const SnapshotFieldGroupSchema = z.enum([
@@ -54,6 +54,7 @@ export function projectWorkspaceSnapshotMetadata(source: Partial<WorkspaceSnapsh
 }
 
 const SnapshotEntrySchema = z.object({
+  ...WorkspacePRSelectionSchema.shape,
   ...WorkspaceSnapshotMetadataSchema.partial().shape,
   workspaceId: z.string(),
   projectId: z.string(),
