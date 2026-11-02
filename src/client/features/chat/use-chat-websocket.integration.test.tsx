@@ -239,6 +239,60 @@ async function mount(initialCapabilities = capabilities) {
   };
 }
 
+it('ignores stale frame-limit errors while the current load is pending', async () => {
+  vi.useFakeTimers();
+  try {
+    const test = await mount();
+    await act(() => vi.advanceTimersByTime(300));
+    await act(() =>
+      test.socket.receive({
+        type: 'error',
+        code: 413,
+        loadRequestId: 'older-load',
+        message: 'Old frame rejected',
+      })
+    );
+    expect(test.chat.sessionStatus.phase).toBe('loading');
+    expect(test.chat.messages).toHaveLength(0);
+    await act(() => vi.advanceTimersByTime(10_000));
+    expect(
+      test.socket.sent.filter((data) => JSON.parse(data).type === 'load_session')
+    ).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each([413, 409])(
+  'settles a terminal correlated load without retrying or enabling unhydrated controls (%s)',
+  async (code) => {
+    vi.useFakeTimers();
+    try {
+      const test = await mount();
+      const loadRequestId = test.socket.sent
+        .map((data) => outboundSchema.parse(JSON.parse(data)))
+        .findLast((message) => message.type === 'load_session')?.loadRequestId;
+      await act(() =>
+        test.socket.receive({
+          type: 'error',
+          code,
+          loadRequestId,
+          message: 'Replay exceeds frame limit; raise WEBSOCKET_MAX_FRAME_BYTES and reconnect.',
+        })
+      );
+      await act(() => vi.advanceTimersByTime(40_000));
+      expect(test.chat.sessionStatus.phase).not.toBe('loading');
+      expect(test.chat.controlsHydrated).toBe(false);
+      expect(
+        test.socket.sent.filter((data) => JSON.parse(data).type === 'load_session')
+      ).toHaveLength(1);
+      expect(BrowserSocket.sockets).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+);
+
 beforeEach(() => {
   sessionStorage.clear();
   BrowserSocket.sockets = [];
@@ -511,6 +565,14 @@ it('hydrates only a complete correlated replay and discards a partial replay acr
     }
   });
   expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
+  await act(() => {
+    for (const frame of oldFrames) {
+      next.receive(frame);
+    }
+  });
+  expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
   const text = 'reconnected 👋日本語\n"';
   const frames = chunkedReplay(requestId(next)!, text);
   await act(() => {

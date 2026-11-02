@@ -13,6 +13,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  writeSync,
   type WriteStream,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -236,6 +237,23 @@ function writeToConsole(stream: ConsoleStream, write: () => void): void {
   }
 }
 
+// Never route this fallback through the logger or retry a broken pipe.
+function writeFatalRecordToStderr(record: string): void {
+  try {
+    const bytes = Buffer.from(record);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const written = writeSync(2, bytes, offset, bytes.length - offset);
+      if (written <= 0) {
+        break;
+      }
+      offset += written;
+    }
+  } catch {
+    // Both terminal sinks are unavailable; shutdown must still proceed.
+  }
+}
+
 /**
  * Logger class for structured logging
  */
@@ -296,13 +314,14 @@ class Logger {
 
     if (fatal) {
       // The terminal record must survive an immediate process.exit, even when
-      // ordinary asynchronous file writes are still queued. Do not echo it.
+      // ordinary asynchronous file writes are still queued.
+      const record = `${safeStringify(entry)}\n`;
       try {
         const path = getLogFilePath();
         mkdirSync(dirname(path), { recursive: true });
-        appendFileSync(path, `${safeStringify(entry)}\n`);
+        appendFileSync(path, record);
       } catch {
-        // Best effort when the filesystem itself is unavailable.
+        writeFatalRecordToStderr(record);
       }
     } else if (this.config.prettyPrint) {
       this.prettyOutput(entry);
@@ -378,7 +397,9 @@ class Logger {
     }
   }
 
-  /** Write one terminal error directly to the file, bypassing console sinks. */
+  /**
+   * Write one terminal record synchronously, falling back to stderr if the file fails.
+   */
   fatal(message: string, errorOrContext?: Error | Record<string, unknown>): void {
     this.log(
       'error',

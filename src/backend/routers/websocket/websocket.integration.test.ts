@@ -220,6 +220,7 @@ function createLogger() {
 
 function createConfigService() {
   return {
+    getWebSocketConfig: () => ({ maxFrameBytes: 33_554_432 }),
     getCorsConfig: () => ({ allowedOrigins: [allowedOrigin] }),
   };
 }

@@ -8,6 +8,7 @@ import {
   h,
   providers,
   readyRetryPRFixture,
+  readPRDeliveryEvents,
   strictStop,
 } from '@/test-utils/event-generic-retry.test-support';
 
@@ -138,9 +139,7 @@ it.each([
       expect(
         h.session.sessionBackgroundDeliveryService.isDeliveryActive(replacement.delivery.deliveryId)
       ).toBe(true);
-      const events = await db.prisma.workspacePREvent.findMany({
-        where: { workspaceId: workspace.id },
-      });
+      const events = await readPRDeliveryEvents(workspace.id);
       expect(events).toHaveLength(2);
       expect(events).toEqual(
         expect.arrayContaining(
@@ -203,9 +202,7 @@ it.each([false, true])(
     expect(
       await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: workspace.id } })
     ).toMatchObject({ deliveryPauseReason: replaced ? null : 'DELIVERY_FAILED' });
-    const events = await db.prisma.workspacePREvent.findMany({
-      where: { workspaceId: workspace.id },
-    });
+    const events = await readPRDeliveryEvents(workspace.id);
     expect(events).toHaveLength(2);
     for (const event of events) {
       expect(event).toMatchObject({
@@ -318,9 +315,7 @@ it.each([false, true])(
       expect(await service.validate(replacement)).toBe(true);
       expect(service.isDeliveryActive(ready.delivery.deliveryId)).toBe(true);
       expect(h.session.sessionDomainService.getQueueSnapshot(other.id)).toEqual(queue);
-      const events = await db.prisma.workspacePREvent.findMany({
-        where: { workspaceId: workspace.id },
-      });
+      const events = await readPRDeliveryEvents(workspace.id);
       expect(events).toHaveLength(2);
       for (const event of events) {
         expect(event).toMatchObject({

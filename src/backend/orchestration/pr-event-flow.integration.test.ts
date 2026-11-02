@@ -22,6 +22,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import type { Prisma } from '@prisma-gen/client';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
@@ -45,6 +46,12 @@ function deferred<T>() {
 
 const state = getPRFlowTestState();
 let db: IntegrationDatabase;
+async function readEvents(where: Prisma.WorkspacePREventWhereInput) {
+  return workspacePRMonitoringService.projectEvents(
+    await db.prisma.workspacePREvent.findMany({ where }),
+    await db.prisma.workspacePRDelivery.findMany()
+  );
+}
 beforeEach(() => {
   // Delivery integration controls its freshness prerequisite at the delivery port.
   vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
@@ -237,9 +244,9 @@ it('delivers a dedicated PR batch through the same ledger and guards sibling rec
     data: { deliveryMode: 'MAIN', bindingRevision: 101 },
   });
   expect(await prBackgroundDeliveryPort.validate(result.delivery)).toBe(false);
-  const frozen = await db.prisma.workspacePREvent.findUniqueOrThrow({
-    where: { id: 'dedicated-event' },
-  });
+  const frozen = (await workspacePRMonitoringService.listPending('w')).find(
+    (event) => event.id === 'dedicated-event'
+  )!;
   expect(frozen.deliveryText).toBe(result.delivery.text);
   expect(frozen.deliverySessionId).toBe('dedicated');
 });
@@ -420,9 +427,9 @@ it('accepts a changed head without superseding an in-flight frozen failure', asy
     observation: { ...redObservation, headSha: 'next-head' },
   });
   expect(changed.eventIds).toHaveLength(1);
-  const frozen = await db.prisma.workspacePREvent.findUniqueOrThrow({
-    where: { id: accepted.eventIds[0]! },
-  });
+  const frozen = (await workspacePRMonitoringService.listPending(workspaceId)).find(
+    (event) => event.id === accepted.eventIds[0]
+  )!;
   expect(frozen).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: prepared.delivery.deliveryId,
@@ -779,9 +786,7 @@ it('recovers an absent frozen batch with a detached target and delivers attached
 
   vi.mocked(findPRDeliveryReceipt).mockResolvedValue('unavailable');
   await recoverPRDeliveries(sessionId);
-  expect(
-    await db.prisma.workspacePREvent.findMany({ where: { deliveryId: frozen.deliveryId } })
-  ).toEqual(
+  expect(await readEvents({ batchId: frozen.deliveryId })).toEqual(
     expect.arrayContaining(
       original.map((row) =>
         expect.objectContaining({
@@ -798,9 +803,7 @@ it('recovers an absent frozen batch with a detached target and delivers attached
   vi.mocked(findPRDeliveryReceipt).mockResolvedValue('absent');
   await recoverPRDeliveries(sessionId);
   await recoverPRDeliveries(sessionId);
-  expect(
-    await db.prisma.workspacePREvent.findMany({ where: { deliveryId: frozen.deliveryId } })
-  ).toEqual(
+  expect(await readEvents({ batchId: frozen.deliveryId })).toEqual(
     expect.arrayContaining(
       original.map((row) =>
         expect.objectContaining({
@@ -926,11 +929,13 @@ it('delivers a large MAIN ledger in bounded batches without acknowledging deferr
       }
     }
     expect(
-      await db.prisma.workspacePREvent.count({ where: { workspaceId, state: 'PENDING' } })
+      (await workspacePRMonitoringService.listPending(workspaceId)).filter(
+        (event) => event.state === 'PENDING'
+      ).length
     ).toBe(prs.length - delivered.size);
     await prBackgroundDeliveryPort.complete(delivery);
     expect(
-      await db.prisma.workspacePREvent.count({ where: { workspaceId, state: 'DELIVERED' } })
+      (await readEvents({ workspaceId })).filter((event) => event.state === 'DELIVERED').length
     ).toBe(delivered.size);
     batches++;
   }

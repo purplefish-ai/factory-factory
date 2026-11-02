@@ -40,8 +40,11 @@ export type ProviderHistoryHydrationDomain = Pick<
 
 /** Bind history fences, transcript writes, and retry state to the replay owner's domain. */
 export function createProviderHistoryHydrator(domain: ProviderHistoryHydrationDomain) {
-  return (sessionId: string, dbSession: ProviderHistorySession): Promise<void> =>
-    hydrateProviderHistory(domain, sessionId, dbSession);
+  return (
+    sessionId: string,
+    dbSession: ProviderHistorySession,
+    isCurrent?: () => boolean
+  ): Promise<void> => hydrateProviderHistory(domain, sessionId, dbSession, isCurrent);
 }
 
 export const hydrateProviderHistoryIfNeeded = createProviderHistoryHydrator(sessionDomainService);
@@ -89,13 +92,18 @@ function localMessages(transcript: ChatMessage[]): ChatMessage[] {
 async function hydrateProviderHistory(
   domain: ProviderHistoryHydrationDomain,
   sessionId: string,
-  dbSession: ProviderHistorySession
+  dbSession: ProviderHistorySession,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   const providerSessionId = getProviderHistorySessionId(dbSession);
-  const historyIsCurrent = providerSessionId
+  const providerIsCurrent = providerSessionId
     ? domain.createProviderHistoryFence(sessionId, providerSessionId)
     : () => true;
-  if (!historyIsCurrent) {
+  if (!providerIsCurrent) {
+    return;
+  }
+  const historyIsCurrent = () => providerIsCurrent() && isCurrent();
+  if (!historyIsCurrent()) {
     return;
   }
   const existingTranscript = domain.getTranscriptSnapshot(sessionId);

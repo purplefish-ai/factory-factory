@@ -17,6 +17,19 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 let db: IntegrationDatabase;
+async function readEvent(id: string | undefined) {
+  if (!id) {
+    throw new Error('Missing event ID');
+  }
+  const row = await db.prisma.workspacePREvent.findUnique({ where: { id } });
+  if (!row) {
+    return null;
+  }
+  return workspacePrEventAccessor.projectEvents(
+    [row],
+    await db.prisma.workspacePRDelivery.findMany()
+  )[0];
+}
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
@@ -188,7 +201,7 @@ it('authorizes dedicated claims only for their bound PR and keeps frozen identit
     deliveryMode: 'MAIN',
     expectedBindingRevision: 1,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toMatchObject({
+  expect(await readEvent(id)).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: 'frozen',
     deliverySessionId: 'dedicated',
@@ -217,6 +230,9 @@ it('pauses and resumes the workspace through its bound dedicated conversation', 
       deliveryId: 'frozen',
       deliverySessionId: 'dedicated',
       deliveryText: 'original',
+      deliveryProvider: 'CODEX',
+      deliveryProviderSessionId: 'dedicated-provider',
+      deliveryBindingRevision: 1,
     },
   });
   expect(await workspacePrMonitoringAccessor.pause('dedicated', 'USER_STOPPED')).toEqual({
@@ -235,7 +251,7 @@ it('pauses and resumes the workspace through its bound dedicated conversation', 
     deliveryPauseReason: null,
     bindingRevision: 3,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toMatchObject({
+  expect(await readEvent(id)).toMatchObject({
     attempts: 0,
     deliverySessionId: 'dedicated',
     deliveryId: 'frozen',
@@ -287,7 +303,7 @@ it('rejects dedicated claims for detached targets, disabled monitoring and forei
   });
   await db.prisma.workspacePR.update({ where: { id: 'p' }, data: { detachedAt: new Date() } });
   expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toMatchObject({
+  expect(await readEvent(id)).toMatchObject({
     state: 'PENDING',
     deliveryId: null,
     attempts: 0,
@@ -342,9 +358,11 @@ it('serializes dedicated PR claims across the workspace and releases the next ba
   const winner = batches[winnerIndex]!;
   const waiting = batches[1 - winnerIndex]!;
   expect(await claim(waiting)).toBeNull();
-  expect(
-    await db.prisma.workspacePREvent.findUnique({ where: { id: waiting.eventId } })
-  ).toMatchObject({ state: 'PENDING', deliveryId: null, attempts: 0 });
+  expect(await readEvent(waiting.eventId)).toMatchObject({
+    state: 'PENDING',
+    deliveryId: null,
+    attempts: 0,
+  });
   expect(
     await workspacePrEventAccessor.settleDelivery({
       deliveryId: winner.deliveryId,
@@ -426,7 +444,7 @@ it('explicit resume survives a deleted dedicated conversation and renews frozen 
     deliveryPauseReason: null,
     eventEpoch: 1,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: frozenId } })).toMatchObject({
+  expect(await readEvent(frozenId)).toMatchObject({
     state: 'PENDING',
     attempts: 0,
     deliveryId: 'frozen',
@@ -436,7 +454,7 @@ it('explicit resume survives a deleted dedicated conversation and renews frozen 
     deliveryText: 'unchanged',
     deliveryBindingRevision: 1,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: pendingId } })).toMatchObject({
+  expect(await readEvent(pendingId)).toMatchObject({
     state: 'PENDING',
   });
 });
@@ -511,7 +529,7 @@ it('preserves unclaimed recovery and review facts through mode-only switches whi
   const eventIds = await recoveryAndReviewFacts();
   await switchDedicated();
   expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: controlId } })).toMatchObject({
+  expect(await readEvent(controlId)).toMatchObject({
     state: 'CANCELLED',
   });
   await workspacePrMonitoringAccessor.setBinding({
@@ -615,16 +633,16 @@ it('preserves facts when a dedicated-to-main switch also binds a missing main pr
     })
   ).toEqual({ applied: true, bindingRevision: 2 });
   for (const id of eventIds) {
-    expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toMatchObject({
+    expect(await readEvent(id)).toMatchObject({
       state: 'PENDING',
       deliveryId: null,
     });
   }
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: oldControl } })).toMatchObject({
+  expect(await readEvent(oldControl)).toMatchObject({
     state: 'CANCELLED',
   });
   expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(0);
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: frozenId } })).toMatchObject({
+  expect(await readEvent(frozenId)).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: 'old-dedicated',
     deliverySessionId: 'dedicated',
@@ -682,7 +700,9 @@ it('atomically claims all main PR targets and preserves the whole frozen retry s
     deliveryProviderSessionId: 'main-provider',
   });
   expect(
-    await db.prisma.workspacePREvent.count({ where: { deliveryId: 'batch', state: 'DISPATCHING' } })
+    (await workspacePrEventAccessor.listPending('w')).filter(
+      (event) => event.deliveryId === 'batch' && event.state === 'DISPATCHING'
+    ).length
   ).toBe(2);
   await workspacePrEventAccessor.settleDelivery({
     deliveryId: 'batch',

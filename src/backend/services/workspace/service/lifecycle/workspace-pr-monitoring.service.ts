@@ -1,6 +1,8 @@
 import { workspacePrEventAccessor } from '@/backend/services/workspace/resources/workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from '@/backend/services/workspace/resources/workspace-pr-monitoring.accessor';
 export const workspacePRMonitoringService = {
+  projectEvents: workspacePrEventAccessor.projectEvents,
+  exportEvents: workspacePrEventAccessor.exportEvents,
   cancelRecoveredDelivery:
     workspacePrEventAccessor.cancelRecoveredDelivery.bind(workspacePrEventAccessor),
   addEnabledControl: workspacePrEventAccessor.addEnabledControl.bind(workspacePrEventAccessor),

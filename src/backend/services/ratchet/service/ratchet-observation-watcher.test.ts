@@ -140,9 +140,17 @@ it('observes every association and wakes the main queue once without creating fi
 const config = {
   workspaceId: 'w',
   enabled: true,
+  eventEpoch: 1,
   workspace: {
     prs: [
-      { id: 'p1', state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: false, reviewState: null },
+      {
+        id: 'p1',
+        state: 'OPEN',
+        observationEpoch: 1,
+        ciStatus: 'FAILURE',
+        hasMergeConflict: false,
+        reviewState: null,
+      },
     ],
   },
 };

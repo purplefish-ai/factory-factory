@@ -404,6 +404,7 @@ export const ModelName = {
   WorkspacePR: 'WorkspacePR',
   WorkspacePRMonitoring: 'WorkspacePRMonitoring',
   WorkspacePRDedicatedSession: 'WorkspacePRDedicatedSession',
+  WorkspacePRDelivery: 'WorkspacePRDelivery',
   WorkspacePREvent: 'WorkspacePREvent',
   WorkspacePRDiscovery: 'WorkspacePRDiscovery',
   WorkspaceRunScript: 'WorkspaceRunScript',
@@ -447,7 +448,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePRDelivery" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -966,6 +967,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspacePRDedicatedSessionCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDedicatedSessionCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspacePRDelivery: {
+      payload: Prisma.$WorkspacePRDeliveryPayload<ExtArgs>
+      fields: Prisma.WorkspacePRDeliveryFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspacePRDeliveryFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspacePRDeliveryFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspacePRDeliveryFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspacePRDeliveryFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspacePRDeliveryFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspacePRDeliveryCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspacePRDeliveryCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspacePRDeliveryCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspacePRDeliveryDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        update: {
+          args: Prisma.WorkspacePRDeliveryUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspacePRDeliveryDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspacePRDeliveryUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspacePRDeliveryUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspacePRDeliveryUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspacePRDeliveryPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspacePRDeliveryAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspacePRDelivery>
+        }
+        groupBy: {
+          args: Prisma.WorkspacePRDeliveryGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDeliveryGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspacePRDeliveryCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspacePRDeliveryCountAggregateOutputType> | number
         }
       }
     }
@@ -3209,6 +3284,24 @@ export const WorkspacePRDedicatedSessionScalarFieldEnum = {
 export type WorkspacePRDedicatedSessionScalarFieldEnum = (typeof WorkspacePRDedicatedSessionScalarFieldEnum)[keyof typeof WorkspacePRDedicatedSessionScalarFieldEnum]
 
 
+export const WorkspacePRDeliveryScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  eventIds: 'eventIds',
+  state: 'state',
+  sessionId: 'sessionId',
+  provider: 'provider',
+  providerSessionId: 'providerSessionId',
+  bindingRevision: 'bindingRevision',
+  text: 'text',
+  attempts: 'attempts',
+  claimedAt: 'claimedAt',
+  deliveredAt: 'deliveredAt'
+} as const
+
+export type WorkspacePRDeliveryScalarFieldEnum = (typeof WorkspacePRDeliveryScalarFieldEnum)[keyof typeof WorkspacePRDeliveryScalarFieldEnum]
+
+
 export const WorkspacePREventScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -3218,6 +3311,7 @@ export const WorkspacePREventScalarFieldEnum = {
   payload: 'payload',
   state: 'state',
   attempts: 'attempts',
+  batchId: 'batchId',
   deliveryId: 'deliveryId',
   deliverySessionId: 'deliverySessionId',
   deliveryProvider: 'deliveryProvider',
@@ -4120,6 +4214,7 @@ export type GlobalOmitConfig = {
   workspacePR?: Prisma.WorkspacePROmit
   workspacePRMonitoring?: Prisma.WorkspacePRMonitoringOmit
   workspacePRDedicatedSession?: Prisma.WorkspacePRDedicatedSessionOmit
+  workspacePRDelivery?: Prisma.WorkspacePRDeliveryOmit
   workspacePREvent?: Prisma.WorkspacePREventOmit
   workspacePRDiscovery?: Prisma.WorkspacePRDiscoveryOmit
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit

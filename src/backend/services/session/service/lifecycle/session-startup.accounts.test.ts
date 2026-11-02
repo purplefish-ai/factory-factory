@@ -53,7 +53,11 @@ describe('saved Codex account runtime ownership', () => {
       expect(h.accounts.getRuntimeContext).toHaveBeenCalledExactlyOnceWith('saved-account');
       expect(h.hydrateProviderHistory).toHaveBeenCalledWith(
         'session-1',
-        expect.objectContaining({ codexAccountId: 'saved-account', codexAccountContext: h.context })
+        expect.objectContaining({
+          codexAccountId: 'saved-account',
+          codexAccountContext: h.context,
+        }),
+        expect.any(Function)
       );
       expect(h.runtimeManager.getOrCreateClient).toHaveBeenCalledWith(
         'session-1',

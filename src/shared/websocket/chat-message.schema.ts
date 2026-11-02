@@ -84,7 +84,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Load session data
   z.object({
     type: z.literal('load_session'),
-    loadRequestId: z.string().min(1).optional(),
+    loadRequestId: z.string().min(1).max(128).optional(),
   }),
 
   // Respond to a permission request

@@ -542,6 +542,7 @@ const OWNED_SIDE_TABLES = {
   workspacePRMonitoring:
     'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
   workspacePREvent: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
+  workspacePRDelivery: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
   workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
   workspacePRDiscovery:
     'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',
@@ -566,12 +567,14 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
   'deleteMany',
 ]);
 
-/** The relation field each owned side table hangs off `Workspace` under. */
+/** Relation field names matched in any nested data payload, including dependent models. */
 const SIDE_TABLE_RELATIONS = {
   dedicatedSession: 'workspacePRDedicatedSession',
   dedicatedPRBinding: 'workspacePRDedicatedSession',
   prMonitoring: 'workspacePRMonitoring',
   prEvents: 'workspacePREvent',
+  prDeliveries: 'workspacePRDelivery',
+  batch: 'workspacePRDelivery',
   events: 'workspacePREvent',
   prs: 'workspacePR',
   prDiscovery: 'workspacePRDiscovery',
