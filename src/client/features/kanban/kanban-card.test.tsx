@@ -49,7 +49,13 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => createElement('div', null, children),
 }));
 
-vi.mock('@/client/features/workspace', () => ({
+vi.mock('@/client/features/workspace', async () => ({
+  WorkspaceParentLink: (
+    await vi.importActual<typeof import('@/client/features/workspace')>(
+      '@/client/features/workspace'
+    )
+  ).WorkspaceParentLink,
+  WorkspaceFamilyMenu: () => createElement('button', { type: 'button' }, 'Family'),
   ArchiveWorkspaceDialog: () => null,
   RatchetToggleButton: () => null,
   WorkspaceStatusBadge: ({ status }: { status: string }) => createElement('span', null, status),
@@ -119,6 +125,26 @@ afterEach(() => {
 });
 
 describe('KanbanCard', () => {
+  it('keeps parent navigation separate from the card link', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      creationSource: 'CHILD_WORKSPACE',
+      parentWorkspace: {
+        id: 'parent',
+        name: 'Authentication refactor',
+        projectId: 'api',
+        projectName: 'API',
+        projectSlug: 'api',
+      },
+    });
+    const parentLink = container.querySelector('a[href="/projects/api/workspaces/parent"]');
+    expect(parentLink?.textContent).toContain('Authentication refactor');
+    expect(container.querySelector('a a')).toBeNull();
+    expect(container.querySelector('a button')).toBeNull();
+    expect(container.querySelector('a[href="/projects/project/workspaces/ws-1"]')).not.toBeNull();
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
   it.each(['PERIODIC_TASK', 'MANUAL', 'CHILD_WORKSPACE'] as const)(
     'checks agent icon visibility for %s cards',
     (creationSource) => {

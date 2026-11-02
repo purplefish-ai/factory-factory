@@ -110,6 +110,8 @@ export const workspaceProjectionPolicy = {
   linearIssueIdentifier: { group: 'metadata', required: true, drift: 'metadata' },
   linearIssueUrl: { group: 'metadata', required: true, drift: 'metadata' },
   creationSource: { group: 'metadata', required: true, drift: 'metadata' },
+  parentWorkspace: { group: 'metadata', required: false, drift: 'metadata' },
+  childWorkspaceCount: { group: 'metadata', required: false, drift: 'metadata' },
 } as const satisfies Record<keyof SnapshotUpdateInput, FieldPolicy>;
 
 export type SnapshotInputField = keyof SnapshotUpdateInput;
