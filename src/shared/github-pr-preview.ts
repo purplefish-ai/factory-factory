@@ -25,7 +25,7 @@ export function parseGitHubPRLink(href: string) {
     if (url.protocol !== 'https:' || url.host !== 'github.com' || url.username || url.password) {
       return null;
     }
-    const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/.exec(url.pathname);
+    const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/i.exec(url.pathname);
     if (!match) {
       return null;
     }

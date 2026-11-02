@@ -1196,18 +1196,18 @@ or remote effects. Tracker updates continue normally throughout persistence.
 Observed PR links are unioned into bounded run results while work remains held.
 Successful quiescent work becomes PR_CREATED when links exist; failed or
 cancelled initial work preserves its outcome and links. Workspace deletion
-captures all still-persisted PR associations, including detached links, in the
+captures valid still-persisted PR associations, including detached links, in the
 same SQLite write transaction as the cascade. Attachments committed first are
 included; a concurrent attachment cannot commit against the deleted workspace.
 Capture failure rolls back deletion. This result-only update also supports
 terminal runs without a live lease and preserves their status, summary,
 completedAt, provider outcome and explicit recovery decision. The validated
-union retains at most 20 links across retries and deletion; it is not an
-unbounded history. The required capture port is wired by orchestration and
-deletion fails closed when unavailable. Capturing results or deleting a
-workspace never proves work resolution or releases held capacity. Ledger
-pruning, trusted-local operator transport/UI and child-work support remain
-activation prerequisites. Monitoring never auto-archives a workspace.
+union filters invalid links and retains at most 20 links across retries and
+deletion; it is not an unbounded history. The required capture port is wired by
+orchestration and deletion fails closed when unavailable. Capturing results or
+deleting a workspace never proves work resolution or releases held capacity.
+Ledger pruning, trusted-local operator transport/UI and child-work support
+remain activation prerequisites. Monitoring never auto-archives a workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A

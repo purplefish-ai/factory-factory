@@ -113,6 +113,29 @@ it.each(['RUNNING', 'COMPLETED'] as const)(
   }
 );
 
+it('retains an unhydrated uppercase PR path attached before deletion', async () => {
+  const workspaceId = h.claim.reservedWorkspaceId;
+  const { prId } = await h.workspace.workspacePrSnapshotService.attach(
+    workspaceId,
+    'https://github.com/Org/Repo/PULL/42'
+  );
+  expect(await h.workspace.workspacePrSnapshotService.find({ workspaceId, prId })).toMatchObject({
+    number: null,
+  });
+  const before = await row();
+  await h.workspace.workspaceDataService.delete(workspaceId);
+  expect(await row()).toEqual({
+    ...before,
+    workspaceId: null,
+    result: {
+      version: 1,
+      summary: '',
+      pullRequests: [{ url: 'https://github.com/Org/Repo/PULL/42', number: 42 }],
+    },
+  });
+  expect(await db.prisma.workspacePR.count()).toBe(0);
+});
+
 async function attachment(path: 'manual' | 'discovery' | 'agent') {
   const { prSnapshotService, PR_URL_ATTACHED } = await vi.importActual<
     typeof import('@/backend/services/github')
@@ -430,61 +453,112 @@ it('deduplicates retained legacy casing variants before applying the compact res
   });
 });
 
-it.each(['project', 'reserved', 'linked', 'origin', 'result', 'generation'] as const)(
-  'fails closed on inconsistent %s facts before deletion',
-  async (mismatch) => {
-    if (mismatch === 'project') {
-      const project = await db.prisma.project.create({
-        data: { name: 'Other', slug: 'other', repoPath: db.tempDir, worktreeBasePath: db.tempDir },
-      });
-      await db.prisma.workspace.update({
-        where: { id: h.claim.reservedWorkspaceId },
-        data: { projectId: project.id },
-      });
-    }
-    if (mismatch === 'reserved') {
-      await db.prisma.agentRun.update({
-        where: { id: h.claim.runId },
-        data: { reservedWorkspaceId: 'wrong' },
-      });
-    }
-    if (mismatch === 'linked') {
-      const other = await h.creation.create({
-        type: 'MANUAL',
-        projectId: h.workspaceSource.projectId,
-        name: 'Other',
-      });
-      await db.prisma.agentRun.update({
-        where: { id: h.claim.runId },
-        data: { workspaceId: other.id },
-      });
-    }
-    if (mismatch === 'origin') {
-      await db.prisma.workspaceLaunchOrigin.update({
-        where: { runId: h.claim.runId },
-        data: { runId: 'wrong' },
-      });
-    }
-    if (mismatch === 'result') {
-      await db.prisma.agentRun.update({
-        where: { id: h.claim.runId },
-        data: { result: { version: 1, summary: 'Malformed' } },
-      });
-    }
-    if (mismatch === 'generation') {
-      await db.prisma.agentInitialDelivery.update({
-        where: { runId: h.claim.runId },
-        data: { attemptGeneration: 2 },
-      });
-    }
-    const before = await row();
-    await expect(
-      h.workspace.workspaceDataService.delete(h.claim.reservedWorkspaceId)
-    ).rejects.toThrow();
-    expect(await row()).toEqual(before);
-    expect(await h.workspace.workspaceDataService.exists(h.claim.reservedWorkspaceId)).toBe(true);
+it.each([
+  'project',
+  'reserved',
+  'linked',
+  'origin',
+  'origin-project',
+  'origin-workspace',
+  'result',
+  'generation',
+] as const)('fails closed on inconsistent %s facts before deletion', async (mismatch) => {
+  await db.prisma.agentRun.update({
+    where: { id: h.claim.runId },
+    data: {
+      result: {
+        version: 1,
+        summary: 'Keep prior results',
+        pullRequests: [{ url: 'https://github.com/org/repo/pull/40', number: 40 }],
+      },
+    },
+  });
+  await h.workspace.workspacePrSnapshotService.attach(
+    h.claim.reservedWorkspaceId,
+    'https://github.com/org/repo/pull/42'
+  );
+  if (mismatch === 'project') {
+    const project = await db.prisma.project.create({
+      data: { name: 'Other', slug: 'other', repoPath: db.tempDir, worktreeBasePath: db.tempDir },
+    });
+    await db.prisma.workspace.update({
+      where: { id: h.claim.reservedWorkspaceId },
+      data: { projectId: project.id },
+    });
   }
-);
+  if (mismatch === 'reserved') {
+    await db.prisma.agentRun.update({
+      where: { id: h.claim.runId },
+      data: { reservedWorkspaceId: 'wrong' },
+    });
+  }
+  if (mismatch === 'linked') {
+    const other = await h.creation.create({
+      type: 'MANUAL',
+      projectId: h.workspaceSource.projectId,
+      name: 'Other',
+    });
+    await db.prisma.agentRun.update({
+      where: { id: h.claim.runId },
+      data: { workspaceId: other.id },
+    });
+  }
+  if (mismatch === 'origin') {
+    await db.prisma.workspaceLaunchOrigin.update({
+      where: { runId: h.claim.runId },
+      data: { runId: 'wrong' },
+    });
+  }
+  if (mismatch === 'origin-project') {
+    const project = await db.prisma.project.create({
+      data: {
+        name: 'Other origin project',
+        slug: 'other-origin',
+        repoPath: db.tempDir,
+        worktreeBasePath: db.tempDir,
+      },
+    });
+    await db.prisma.workspaceLaunchOrigin.update({
+      where: { runId: h.claim.runId },
+      data: { projectId: project.id },
+    });
+  }
+  if (mismatch === 'origin-workspace') {
+    await db.prisma.workspaceLaunchOrigin.update({
+      where: { runId: h.claim.runId },
+      data: { workspaceId: 'moved-origin' },
+    });
+  }
+  if (mismatch === 'result') {
+    await db.prisma.agentRun.update({
+      where: { id: h.claim.runId },
+      data: { result: { version: 1, summary: 'Malformed' } },
+    });
+  }
+  if (mismatch === 'generation') {
+    await db.prisma.agentInitialDelivery.update({
+      where: { runId: h.claim.runId },
+      data: { attemptGeneration: 2 },
+    });
+  }
+  const before = await row();
+  const workspaceBefore = await db.prisma.workspace.findUniqueOrThrow({
+    where: { id: h.claim.reservedWorkspaceId },
+  });
+  const prsBefore = await db.prisma.workspacePR.findMany({
+    where: { workspaceId: h.claim.reservedWorkspaceId },
+  });
+  await expect(
+    h.workspace.workspaceDataService.delete(h.claim.reservedWorkspaceId)
+  ).rejects.toThrow();
+  expect(await row()).toEqual(before);
+  expect(
+    await db.prisma.workspace.findUnique({ where: { id: h.claim.reservedWorkspaceId } })
+  ).toEqual(workspaceBefore);
+  expect(
+    await db.prisma.workspacePR.findMany({ where: { workspaceId: h.claim.reservedWorkspaceId } })
+  ).toEqual(prsBefore);
+});
 
 it('captures by the reserved identity before linkage and preserves retained child origins', async () => {
   await db.prisma.agentRun.update({
@@ -530,6 +604,52 @@ it('deletes an ordinary workspace with no run through the same required capture 
   await h.workspace.workspaceDataService.delete(ordinary.id);
   expect(await h.workspace.workspaceDataService.exists(ordinary.id)).toBe(false);
   expect(await row()).toEqual(before);
+});
+
+it('allows deletion after the corresponding run was deleted while retaining its origin', async () => {
+  await h.workspace.workspacePrSnapshotService.attach(
+    h.claim.reservedWorkspaceId,
+    'https://github.com/org/repo/pull/42'
+  );
+  await db.prisma.$transaction(async (tx) => {
+    await tx.agentEvaluation.updateMany({ where: { runId: h.claim.runId }, data: { runId: null } });
+    await tx.agentRun.delete({ where: { id: h.claim.runId } });
+  });
+  const origin = await db.prisma.workspaceLaunchOrigin.findUniqueOrThrow({
+    where: { runId: h.claim.runId },
+  });
+  await h.workspace.workspaceDataService.delete(h.claim.reservedWorkspaceId);
+  expect(await db.prisma.agentRun.count()).toBe(0);
+  expect(await db.prisma.workspace.count()).toBe(0);
+  expect(await db.prisma.workspacePR.count()).toBe(0);
+  expect(
+    await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
+  ).toEqual(origin);
+});
+
+it('captures valid retained identity with unknown historical child coverage without resolving work', async () => {
+  const origin = await db.prisma.workspaceLaunchOrigin.update({
+    where: { runId: h.claim.runId },
+    data: { childHistoryVersion: null },
+  });
+  await h.workspace.workspacePrSnapshotService.attach(
+    h.claim.reservedWorkspaceId,
+    'https://github.com/org/repo/pull/42'
+  );
+  const before = await row();
+  await h.workspace.workspaceDataService.delete(h.claim.reservedWorkspaceId);
+  expect(await row()).toEqual({
+    ...before,
+    workspaceId: null,
+    result: {
+      version: 1,
+      summary: '',
+      pullRequests: [{ url: 'https://github.com/org/repo/pull/42', number: 42 }],
+    },
+  });
+  expect(
+    await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
+  ).toEqual(origin);
 });
 
 it.each(['FAILED', 'CANCELLED', 'PR_CREATED'] as const)(
