@@ -511,6 +511,14 @@ it('hydrates only a complete correlated replay and discards a partial replay acr
     }
   });
   expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
+  await act(() => {
+    for (const frame of oldFrames) {
+      next.receive(frame);
+    }
+  });
+  expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
   const text = 'reconnected 👋日本語\n"';
   const frames = chunkedReplay(requestId(next)!, text);
   await act(() => {

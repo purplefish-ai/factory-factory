@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionLoadService } from '@/backend/services/session';
 import { SessionEventBus } from '@/backend/services/session';
+import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import { ChatConnectionRegistry } from './chat-connection-registry';
 import { executeSessionLoad } from './chat-load-adapter';
 
@@ -95,7 +96,7 @@ describe('executeSessionLoad', () => {
 
   it('bounds every replay frame even when one tool body exceeds the frame limit', async () => {
     const test = setup();
-    test.deps.loadService.captureReplay = () => ({
+    const replay: ReturnType<typeof test.deps.loadService.captureReplay> = {
       sessionRuntime: runtime,
       replayEvents: [
         {
@@ -113,16 +114,33 @@ describe('executeSessionLoad', () => {
           },
         },
       ],
-    });
+    };
+    test.deps.loadService.captureReplay = () => replay;
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'large' }, test.deps);
     const outbound = test.calls.filter(
       (call): call is { payload: unknown } =>
         typeof call === 'object' && call !== null && 'payload' in call
     );
-    expect(outbound.length).toBeGreaterThan(1);
+    const replayFrames = outbound.filter(
+      ({ payload }) =>
+        typeof payload === 'object' &&
+        payload !== null &&
+        'type' in payload &&
+        payload.type === 'session_replay_chunk'
+    );
+    expect(replayFrames.length).toBeGreaterThan(1);
     expect(
-      Math.max(...outbound.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
+      Math.max(...replayFrames.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
     ).toBeLessThanOrEqual(128 * 1024);
+    const assembler = new SessionReplayAssembler();
+    for (const { payload } of replayFrames.slice(0, -1)) {
+      expect(assembler.accept(payload)).toBeNull();
+    }
+    expect(assembler.accept(replayFrames.at(-1)?.payload)).toEqual({
+      type: 'session_replay_batch',
+      loadRequestId: 'large',
+      replayEvents: replay.replayEvents,
+    });
   });
 
   it('returns missing-session outcomes without replay, runtime, or activation', async () => {
