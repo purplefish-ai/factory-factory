@@ -90,6 +90,26 @@ describe('session-queue', () => {
     expect(result).toEqual({ position: 1 });
   });
 
+  it('keeps notifications behind human input while preserving external FIFO', () => {
+    const store = createStore();
+    enqueueMessage(store, message('workspace-notification-first'));
+    enqueueMessage(
+      store,
+      message('pr-event-second', {
+        type: 'pr_event',
+        request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 },
+      })
+    );
+    expect(enqueueMessage(store, message('human-first'))).toEqual({ position: 0 });
+    expect(enqueueMessage(store, message('human-second'))).toEqual({ position: 1 });
+    expect(store.queue.map((item) => item.id)).toEqual([
+      'human-first',
+      'human-second',
+      'workspace-notification-first',
+      'pr-event-second',
+    ]);
+  });
+
   it('returns queue full error at service limit', () => {
     const store = createStore();
     store.queue = Array.from({ length: SERVICE_LIMITS.sessionStoreMaxQueueSize }, (_, index) => ({

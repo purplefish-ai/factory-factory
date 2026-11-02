@@ -15,6 +15,20 @@ import type {
 
 const logger = createLogger('session-dispatch-batch');
 
+/** Skip held external work without changing the order of eligible delivery retries. */
+export async function getDispatchableHead(
+  sessionId: string,
+  isHeld: (message: QueuedMessage) => Promise<boolean>
+): Promise<QueuedMessage | undefined> {
+  const first = sessionDomainService.peekNextMessage(sessionId);
+  if (!(first && (await isHeld(first)))) {
+    return first;
+  }
+  sessionDomainService.prioritizeQueuedHumanMessages(sessionId);
+  const candidate = sessionDomainService.peekNextMessage(sessionId);
+  return candidate && !(await isHeld(candidate)) ? candidate : undefined;
+}
+
 /** Slash commands must remain standalone so providers interpret them as commands. */
 function isCommand(message: QueuedMessage): boolean {
   return !message.source && message.text.trimStart().startsWith('/');

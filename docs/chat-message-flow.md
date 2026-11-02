@@ -112,7 +112,11 @@ before reconciliation may retain the accepted native snapshot with prior queued
 desired settings, so the failed operation is not reported as fully durable. The
 dispatcher still combines consecutive messages into one prompt, preserves
 slash-command boundaries and human priority, and uses the last human's effective
-settings. Selected members are held out of hydration and cancellation until the
+settings. New human input precedes both PR events and workspace notifications.
+When a held external entry leads a retained queue, selection restores human
+priority without changing eligible delivery retry order. The unresolved mixed
+attempt and external FIFO remain intact; no frozen receipt or member record is
+released. Selected members are held out of hydration and cancellation until the
 batch exits; a rejected removal cannot cancel a durable member behind the
 dispatcher. The configuration owner serializes accepted edits, desired-revision
 refresh, provider configuration, atomic claim and the native turn. Claim

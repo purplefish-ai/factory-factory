@@ -1,6 +1,8 @@
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
+import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import { recordPRUpdateOutcome } from './session-pr-update';
 import type { SessionStore } from './session-store.types';
 import { removeTranscriptMessageById } from './session-transcript';
@@ -22,8 +24,8 @@ export function enqueueMessage(
   if (message.source && prior?.message?.prDeliveryState) {
     removeTranscriptMessageById(store, message.id);
   }
-  const firstBackground = store.queue.findIndex((item) => item.source?.type === 'pr_event');
-  if (!message.source && firstBackground >= 0) {
+  const firstBackground = store.queue.findIndex(isExternalQueuedMessage);
+  if (!isExternalQueuedMessage(message) && firstBackground >= 0) {
     store.queue.splice(firstBackground, 0, message);
     return { position: firstBackground };
   }
@@ -95,4 +97,25 @@ export function clearQueuedWork(store: SessionStore): boolean {
   store.queue = [];
   store.pendingInteractiveRequest = null;
   return hadQueuedWork;
+}
+
+/** Reserved external identities must not take priority over accepted human input. */
+export function isExternalQueuedMessage(message: QueuedMessage): boolean {
+  return (
+    Boolean(message.source) ||
+    message.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX) ||
+    message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)
+  );
+}
+
+/** Repair retained queue order without cloning messages or changing external ownership. */
+export function prioritizeQueuedHumanMessages(store: SessionStore): boolean {
+  const humans = store.queue.filter((message) => !isExternalQueuedMessage(message));
+  const external = store.queue.filter(isExternalQueuedMessage);
+  const ordered = [...humans, ...external];
+  if (ordered.every((message, index) => message === store.queue[index])) {
+    return false;
+  }
+  store.queue = ordered;
+  return true;
 }

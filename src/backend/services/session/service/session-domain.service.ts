@@ -25,6 +25,7 @@ import {
   dequeueNext,
   enqueueMessage,
   peekNext,
+  prioritizeQueuedHumanMessages,
   removeQueuedMessage,
   requeueFront,
   setPendingInteractiveRequest,
@@ -366,6 +367,13 @@ export class SessionDomainService extends EventEmitter {
     }
     this.publisher.forwardSnapshot(store, { reason: 'remove_queued_message' });
     return true;
+  }
+
+  prioritizeQueuedHumanMessages(sessionId: string): void {
+    const store = this.registry.getOrCreateActive(sessionId);
+    if (prioritizeQueuedHumanMessages(store)) {
+      this.publisher.forwardSnapshot(store);
+    }
   }
 
   peekNextMessage(sessionId: string): QueuedMessage | undefined {

@@ -14,6 +14,10 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import {
+  buildWorkspaceNotificationMessageText,
+  workspaceNotificationMessageId,
+} from '@/shared/workspace-notifications';
 import { SessionChatIntentService } from './session-chat-intent.service';
 
 let db: IntegrationDatabase;
@@ -75,6 +79,7 @@ function dispatcher(
     complete: vi.fn(),
   };
   const configured = vi.fn(async (_id: string, msg: QueuedMessage) => msg.settings);
+  const notificationClaim = vi.fn(() => ({ status: 'not_notification' as const }));
   const service = new SessionDispatchService({
     chatIntent: intents,
     runtimeManager: options.runtimeManager ?? {
@@ -102,7 +107,7 @@ function dispatcher(
       getOrCreateSessionClient: start,
     },
     notificationDelivery: {
-      claimForDispatch: () => ({ status: 'not_notification' }),
+      claimForDispatch: notificationClaim,
       isAlreadyDelivered: async () => false,
       acknowledgeSuccessfulDispatch: vi.fn(),
       recoverPending: vi.fn(),
@@ -114,7 +119,7 @@ function dispatcher(
   vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue({
     workspace: { status: 'READY' },
   } as never);
-  return { service, send, configured, background, start };
+  return { service, send, configured, background, start, notificationClaim };
 }
 it('fences steering when desired settings change after its captured revision', async () => {
   await intents.accept('s', message('one'));
@@ -218,3 +223,83 @@ it('refreshes persisted desired settings before freezing a valid steering attemp
   expect(attempt.effectiveSettings).toMatchObject({ selectedModel: 'persisted-newest' });
   expect(attempt.members).toEqual([expect.objectContaining({ messageId: 'one', revision: 1 })]);
 });
+
+it.each(['new input', 'already restored order'])(
+  'dispatches human input around held notifications (%s) without releasing mixed proof',
+  async (ordering) => {
+    const oldNotification = await db.prisma.workspaceNotification.create({
+      data: {
+        id: 'old-notification',
+        workspaceId: 'w',
+        sourceWorkspaceId: 'old-child',
+        sourceWorkspaceName: 'Child',
+        sourceProjectName: 'Project',
+        message: 'earlier notification',
+      },
+    });
+    const notification = await db.prisma.workspaceNotification.create({
+      data: {
+        id: 'later-notification',
+        workspaceId: 'w',
+        sourceWorkspaceId: 'old-child',
+        sourceWorkspaceName: 'Child',
+        sourceProjectName: 'Project',
+        message: 'held notification',
+      },
+    });
+    await intents.accept('s', message('old-human'));
+    domain.enqueue(
+      's',
+      message(
+        workspaceNotificationMessageId(oldNotification.id),
+        buildWorkspaceNotificationMessageText(oldNotification)
+      )
+    );
+    const originalBatch = domain.getQueueSnapshot('s');
+    const uncertainId = await intents.claim(
+      's',
+      originalBatch,
+      originalBatch.map((row) => row.text).join('\n\n'),
+      settings,
+      1
+    );
+    expect(uncertainId).toBeTypeOf('string');
+    domain.takeQueuedMessages('s', originalBatch);
+    const proof = await db.prisma.promptDispatchAttempt.findUniqueOrThrow({
+      where: { id: uncertainId! },
+    });
+    const notificationProof = await db.prisma.workspaceNotification.findMany({
+      orderBy: { id: 'asc' },
+    });
+    const held = message(
+      workspaceNotificationMessageId(notification.id),
+      buildWorkspaceNotificationMessageText(notification)
+    );
+    domain.enqueue('s', held);
+    await intents.accept('s', message('fresh-one'));
+    await intents.accept('s', message('fresh-two'));
+    if (ordering === 'already restored order') {
+      // Actual queue operations recreate a legacy/restored external-first order.
+      domain.removeQueuedMessage('s', held.id, { expectedMessage: held });
+      domain.requeueFront('s', held);
+    }
+    const h = dispatcher();
+    await h.service.tryDispatchNextMessage('s');
+    expect(h.send).toHaveBeenCalledExactlyOnceWith('s', 'fresh-one\n\nfresh-two');
+    expect(domain.getQueueSnapshot('s')).toEqual([held]);
+    expect(domain.peekNextMessage('s')).toBe(held);
+    expect(h.notificationClaim).not.toHaveBeenCalledWith('s', held.id);
+    expect(h.background.prepare).not.toHaveBeenCalled();
+    expect(
+      await db.prisma.promptDispatchAttempt.findUniqueOrThrow({ where: { id: uncertainId! } })
+    ).toEqual(proof);
+    expect(await db.prisma.workspaceNotification.findMany({ orderBy: { id: 'asc' } })).toEqual(
+      notificationProof
+    );
+    expect((await intents.store.find('s', 'old-human'))?.status).toBe('uncertain');
+    expect(await intents.store.hasUncertainAttempt('s')).toBe(true);
+    await h.service.tryDispatchNextMessage('s');
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(domain.getQueueSnapshot('s')).toEqual([held]);
+  }
+);
