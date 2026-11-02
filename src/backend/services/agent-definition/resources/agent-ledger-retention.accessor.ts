@@ -8,7 +8,7 @@ import {
   type RetentionReason,
 } from './agent-retention-dependencies';
 
-export type RetentionKind = 'evaluation' | 'payload' | 'identity';
+export type RetentionKind = 'evaluation' | 'payload' | 'identity' | 'runContext';
 export type RetentionBatch = {
   kind: RetentionKind;
   cursor: string | null;
@@ -23,7 +23,7 @@ type Candidate =
 
 async function candidates(
   tx: Prisma.TransactionClient,
-  kind: RetentionKind,
+  kind: Exclude<RetentionKind, 'runContext'>,
   after: string | null,
   now: Date,
   take: number
@@ -51,7 +51,7 @@ async function candidates(
 
 async function remainingDependency(
   tx: Prisma.TransactionClient,
-  kind: RetentionKind,
+  kind: Exclude<RetentionKind, 'runContext'>,
   eventId: string,
   limit: number,
   assertCurrent: () => void
@@ -84,7 +84,7 @@ async function remainingDependency(
 
 async function pruneCandidate(
   tx: Prisma.TransactionClient,
-  kind: RetentionKind,
+  kind: Exclude<RetentionKind, 'runContext'>,
   candidate: Candidate,
   limit: number,
   assertCurrent: () => void
@@ -113,7 +113,7 @@ async function pruneCandidate(
 }
 
 async function pruneBatch(
-  kind: RetentionKind,
+  kind: Exclude<RetentionKind, 'runContext'>,
   cursor: string | null,
   assertCurrent: () => void
 ): Promise<RetentionBatch> {

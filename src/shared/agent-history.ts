@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentManagementIdSchema } from './agent-management';
+import { expiredAgentRunContextSchema } from './agent-run-context';
 import {
   agentDeliveryStateSchema,
   agentEvaluationStatusSchema,
@@ -20,6 +21,9 @@ const reason = z
   .nullable();
 export const agentRunHistorySchema = z.strictObject({
   id,
+  context: z
+    .union([z.strictObject({ state: z.literal('RETAINED') }), expiredAgentRunContextSchema])
+    .default({ state: 'RETAINED' }),
   agentId: id,
   triggerId: id.nullable(),
   eventId: id.nullable(),
