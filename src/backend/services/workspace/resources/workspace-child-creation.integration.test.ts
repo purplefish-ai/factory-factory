@@ -34,7 +34,7 @@ async function createParentAndTarget() {
   return { project, parent };
 }
 
-it('projects cross-project parent links and counts only live children on every summary read', async () => {
+it('projects cross-project parents and counts the same non-archived children as the menu', async () => {
   const { project, parent } = await createParentAndTarget();
   const other = await db.prisma.project.create({
     data: {
@@ -58,6 +58,14 @@ it('projects cross-project parent links and counts only live children on every s
       status: 'ARCHIVED',
     },
   });
+  const archiving = await db.prisma.workspace.create({
+    data: {
+      projectId: project.id,
+      parentWorkspaceId: parent.id,
+      name: 'Archiving child',
+      status: 'ARCHIVING',
+    },
+  });
   const expectedParent = {
     id: parent.id,
     name: 'Parent',
@@ -71,17 +79,23 @@ it('projects cross-project parent links and counts only live children on every s
   expect(await workspaceAccessor.findByProjectIdWithSessions(other.id)).toEqual([
     expect.objectContaining({ parentWorkspace: expectedParent }),
   ]);
-  expect(await workspaceAccessor.findById(parent.id)).toMatchObject({ childWorkspaceCount: 1 });
+  const menuChildren = await workspaceAccessor.findChildrenWithStatus(parent.id);
+  expect(menuChildren.map((row) => row.id).sort()).toEqual([child.id, archiving.id].sort());
+  expect(await workspaceAccessor.findById(parent.id)).toMatchObject({ childWorkspaceCount: 2 });
   await db.prisma.workspace.update({
     where: { id: parent.id },
     data: { name: 'Renamed parent', status: 'ARCHIVED' },
   });
-  expect(await workspaceAccessor.findAllNonArchivedWithSessionsAndProject()).toEqual([
-    expect.objectContaining({
-      id: child.id,
-      parentWorkspace: { ...expectedParent, name: 'Renamed parent' },
-    }),
-  ]);
+  const summaries = await workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
+  expect(summaries).toHaveLength(2);
+  expect(summaries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: child.id,
+        parentWorkspace: { ...expectedParent, name: 'Renamed parent' },
+      }),
+    ])
+  );
 });
 
 it('rejects a child when archival commits after preflight but before insertion', async () => {

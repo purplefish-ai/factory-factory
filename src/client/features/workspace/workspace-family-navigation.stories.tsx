@@ -104,7 +104,7 @@ export const Parent: Story = {
     },
   },
 };
-export const Phone: Story = { args: { iconOnly: true } };
+export const IconOnly: Story = { args: { iconOnly: true } };
 export const Unavailable: Story = {
   decorators: [
     (Story) => (

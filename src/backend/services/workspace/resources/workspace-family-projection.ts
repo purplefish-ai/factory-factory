@@ -14,7 +14,7 @@ export const workspaceFamilyInclude = {
   _count: {
     select: {
       prEvents: { where: pendingPREventWhere },
-      childWorkspaces: { where: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } } },
+      childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
     },
   },
 } satisfies Prisma.WorkspaceInclude;

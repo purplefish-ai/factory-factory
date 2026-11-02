@@ -133,13 +133,28 @@ export const FamilyAcrossColumns: Story = {
   play: async ({ canvasElement }) => {
     const card = canvasElement.querySelector<HTMLElement>('[data-workspace-id="child"]')!;
     await userEvent.hover(card);
-    await expect(canvasElement.querySelectorAll('[data-family-highlighted="true"]')).toHaveLength(
-      3
-    );
+    await expect(
+      [...canvasElement.querySelectorAll('[data-family-highlighted="true"]')]
+        .map((node) => node.getAttribute('data-workspace-id'))
+        .sort()
+    ).toEqual(['child', 'parent', 'sibling']);
     await userEvent.unhover(card);
     await expect(canvasElement.querySelectorAll('[data-family-highlighted="true"]')).toHaveLength(
       0
     );
+    const parentLink = card.querySelector<HTMLAnchorElement>('a[aria-label^="Parent workspace:"]')!;
+    await userEvent.click(parentLink);
+    await userEvent.unhover(card);
+    await expect(canvasElement.querySelectorAll('[data-family-highlighted="true"]')).toHaveLength(
+      0
+    );
+    await userEvent.tab();
+    await expect(
+      [...canvasElement.querySelectorAll('[data-family-highlighted="true"]')]
+        .map((node) => node.getAttribute('data-workspace-id'))
+        .sort()
+    ).toEqual(['child', 'parent', 'sibling']);
+    (canvasElement.ownerDocument.activeElement as HTMLElement).blur();
     const parentCard = canvasElement.querySelector('[data-workspace-id="parent"]')!;
     const controls = parentCard.querySelector(
       'button[aria-label="Navigate workspace family"]'

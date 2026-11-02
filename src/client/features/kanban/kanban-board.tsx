@@ -49,10 +49,12 @@ interface WorkspacesByColumn {
   DONE: WorkspaceWithKanban[];
 }
 
+const EMPTY_WORKSPACES: WorkspaceWithKanban[] = [];
+
 export function KanbanBoard() {
   const { workspaces, projectId } = useKanban();
   return (
-    <KanbanFamilyProvider key={projectId} workspaces={workspaces ?? []}>
+    <KanbanFamilyProvider key={projectId} workspaces={workspaces ?? EMPTY_WORKSPACES}>
       <KanbanBoardContent />
     </KanbanFamilyProvider>
   );

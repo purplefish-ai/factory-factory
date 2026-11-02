@@ -91,7 +91,7 @@ describe('workspaceAccessor', () => {
           },
           _count: {
             select: {
-              childWorkspaces: { where: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } } },
+              childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
               prEvents: {
                 where: {
                   OR: [
@@ -140,7 +140,7 @@ describe('workspaceAccessor', () => {
           },
           _count: {
             select: {
-              childWorkspaces: { where: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } } },
+              childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
               prEvents: {
                 where: {
                   OR: [
@@ -206,7 +206,7 @@ describe('workspaceAccessor', () => {
         },
         _count: {
           select: {
-            childWorkspaces: { where: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } } },
+            childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
             prEvents: {
               where: {
                 OR: [

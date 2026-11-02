@@ -1,8 +1,9 @@
 # Workspace Family Navigation Implementation Plan
 
-> Execute inline using test-driven development. The approved design is the
-> parent links, breadcrumb, family menu and relationship icons discussed in
-> chat, with hover highlighting replacing the proposed Show family button.
+> Show parent links, a breadcrumb, a family menu and relationship icons. Use
+> hover highlighting so scanning a workspace immediately reveals its family
+> across Kanban columns without an extra button or a persistent filter. Keyboard
+> focus provides the same orientation while each card keeps its own status.
 
 **Goal:** Make workspace parentage apparent and navigation between related
 workspaces easy while preserving independent Kanban states.

@@ -717,11 +717,12 @@ Workspace cards show a named parent link and a family menu. The workspace header
 keeps a parent breadcrumb (an icon on phones) and the same menu for navigating
 between the parent and its children, including workspaces in other projects.
 Menus fetch family members when opened and display each member's own Kanban
-state; archived parents remain navigable. Hovering or focusing a Kanban card
-highlights its family across columns without moving cards or changing status.
-Child counts exclude archiving and archived children. Optional parent summaries
-and child counts travel through the existing HTTP/snapshot metadata projection;
-older summaries remain valid without these fields.
+state; archived parents remain navigable. Hovering or keyboard-focusing a Kanban
+card highlights its family across columns without moving cards or changing
+status. Child counts match the menu: archiving children remain counted until
+archived. Optional parent summaries and child counts travel through the existing
+HTTP/snapshot metadata projection; older summaries remain valid without these
+fields.
 
 ## Projection field contract
 
