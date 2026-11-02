@@ -131,11 +131,6 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
   };
 }
 
-/** Narrow legacy reads already order their rows by ID. */
-export function selectActiveWorkspacePR<T extends { state: PRState }>(prs: T[]): T | undefined {
-  return prs.find((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED') ?? prs[0];
-}
-
 const reattachmentFields = {
   detachedAt: null,
   state: 'NONE',
@@ -577,7 +572,7 @@ class WorkspacePRAccessor {
       where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
       orderBy: { id: 'asc' },
     });
-    const row = selectActiveWorkspacePR(rows);
+    const row = selectWorkspacePR(rows);
     return row ? { prId: row.id, prUrl: row.url, prNumber: row.number, prState: row.state } : null;
   }
 }
