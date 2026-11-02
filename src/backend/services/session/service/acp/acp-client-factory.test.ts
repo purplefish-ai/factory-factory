@@ -315,7 +315,7 @@ describe('AcpClientFactory', () => {
     'preserves new conversation output with a replay filter (fallback: %s)',
     async (fallback) => {
       setupSuccessfulSpawn(undefined, { loadSession: true });
-      const handlers = { ...defaultHandlers(), shouldSuppressReplayEvent: () => true };
+      const handlers = { ...defaultHandlers(), consumeReplayEvent: () => true };
       const emitText = async (text: string) => {
         const client = unsafeCoerce<AcpClientCallbacks>(mocks.connections[0]?.toClient({}));
         await client.sessionUpdate({

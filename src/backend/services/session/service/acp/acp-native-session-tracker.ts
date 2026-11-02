@@ -9,6 +9,7 @@ import {
   subagentTranscriptUpdateSchema,
   getSubagentThreadId,
 } from '@/shared/acp-protocol/subagents';
+import { isAcpHistoryReplayEnd } from './acp-history-replay';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import { normalizeSessionUpdateMessage } from './acp-stream-normalizer';
 import { AcpTargetedStopControls, type AcpStopDispatch } from './acp-targeted-stop-controls';
@@ -264,10 +265,7 @@ export class AcpNativeSessionTracker {
       return true;
     }
     if (sessionId === this.rootSessionId) {
-      if (
-        update.sessionUpdate === 'session_info_update' &&
-        airMetadata(update)?.loadReplayEnd === true
-      ) {
+      if (isAcpHistoryReplayEnd(update)) {
         this.completeHistoryReplay();
         return false;
       }

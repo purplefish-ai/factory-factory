@@ -9,6 +9,7 @@ import {
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection, type AcpConnection } from './acp-connection';
+import { isAcpHistoryReplayEnd } from './acp-history-replay';
 import { applyAcpStartupModel } from './acp-model-selection';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { stopOwnedRuntimeGroup } from './acp-owned-group';
@@ -160,7 +161,11 @@ export class AcpClientFactory {
       const stream = ndJsonStream(output, input);
       let replayingHistory = Boolean(options.resumeProviderSessionId);
       const onEvent = (sid: string, event: AcpRuntimeEvent) => {
-        if (replayingHistory && handlers.shouldSuppressReplayEvent?.(sid, event)) {
+        // Raw tracking can read ahead of SDK notifications; use their delivered marker.
+        if (event.type === 'acp_session_update' && isAcpHistoryReplayEnd(event.update)) {
+          replayingHistory = false;
+        }
+        if (replayingHistory && handlers.consumeReplayEvent?.(sid, event)) {
           return;
         }
         handlers.onAcpEvent?.(sid, event);

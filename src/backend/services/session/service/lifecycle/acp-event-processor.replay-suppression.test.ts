@@ -46,6 +46,47 @@ function setup(working = false) {
 }
 
 describe('AcpEventProcessor replay suppression', () => {
+  it('remembers replayed compaction identities without publishing historical boundaries', () => {
+    const { domain, handler, processor, sendUpdate, startPrompt } = setup();
+    const terminal: SessionUpdate = {
+      sessionUpdate: 'compaction_update',
+      compactionId: 'historical',
+      status: 'completed',
+    };
+    expect(
+      handler.consumeReplayEvent?.(SESSION_ID, {
+        type: 'acp_session_update',
+        update: terminal,
+      })
+    ).toBe(true);
+    expect(domain.getTranscriptSnapshot(SESSION_ID)).toEqual([]);
+    startPrompt();
+    sendUpdate(terminal);
+    processor.finishPromptTurn(SESSION_ID);
+    expect(domain.getTranscriptSnapshot(SESSION_ID)).toEqual([]);
+    sendUpdate({ ...terminal, compactionId: 'live' });
+    processor.finishPromptTurn(SESSION_ID);
+    expect(domain.getTranscriptSnapshot(SESSION_ID)).toMatchObject([
+      { message: { type: 'system', subtype: 'compact_boundary' } },
+    ]);
+    domain.clearAllSessions();
+  });
+
+  it.each(['created', 'updated', 'completed'] as const)(
+    'retains child %s notifications during startup replay',
+    (change) => {
+      const { domain, handler } = setup();
+      expect(
+        handler.consumeReplayEvent?.(SESSION_ID, {
+          type: 'acp_subagents_changed',
+          subagentId: 'child',
+          change,
+        })
+      ).toBe(false);
+      domain.clearAllSessions();
+    }
+  );
+
   it.each([
     { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Old prompt' } },
     { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Old reply' } },
@@ -57,9 +98,9 @@ describe('AcpEventProcessor replay suppression', () => {
     (update) => {
       const { domain, handler, processor } = setup();
       const event = { type: 'acp_session_update' as const, update };
-      expect(handler.shouldSuppressReplayEvent?.(SESSION_ID, event)).toBe(true);
+      expect(handler.consumeReplayEvent?.(SESSION_ID, event)).toBe(true);
       processor.setReplaySuppression(SESSION_ID, false);
-      expect(handler.shouldSuppressReplayEvent?.(SESSION_ID, event)).toBe(false);
+      expect(handler.consumeReplayEvent?.(SESSION_ID, event)).toBe(false);
       domain.clearAllSessions();
     }
   );
@@ -75,11 +116,11 @@ describe('AcpEventProcessor replay suppression', () => {
     'keeps $sessionUpdate in startup while replay is suppressed',
     (update) => {
       const { domain, handler } = setup();
+      expect(handler.consumeReplayEvent?.(SESSION_ID, { type: 'acp_session_update', update })).toBe(
+        false
+      );
       expect(
-        handler.shouldSuppressReplayEvent?.(SESSION_ID, { type: 'acp_session_update', update })
-      ).toBe(false);
-      expect(
-        handler.shouldSuppressReplayEvent?.(SESSION_ID, {
+        handler.consumeReplayEvent?.(SESSION_ID, {
           type: 'acp_task_status_changed',
           active: true,
         })

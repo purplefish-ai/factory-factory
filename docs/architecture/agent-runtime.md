@@ -682,6 +682,9 @@ persistence are pending. During provider history load, transcript events already
 covered by hydrated history are suppressed before entering this buffer. Raw
 logging and native work tracking still receive the replay, while configuration,
 commands, usage, plans, notices and subagent state continue through startup.
+Suppressed transcript updates still maintain translator bookkeeping, including
+compaction identities. The tracker's replay-end marker ends early filtering
+before the load response when supported; otherwise load completion ends it.
 Native child replay retains all transcript updates within its existing limits
 but emits only creation/completion invalidations until replay finishes, avoiding
 one buffered invalidation per child output chunk. Live invalidations continue

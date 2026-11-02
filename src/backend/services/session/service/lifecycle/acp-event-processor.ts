@@ -127,10 +127,7 @@ export class AcpEventProcessor {
 
   createRuntimeEventHandler(
     sessionId: string
-  ): Pick<
-    AcpRuntimeEventHandlers,
-    'permissionBridge' | 'onAcpEvent' | 'shouldSuppressReplayEvent'
-  > {
+  ): Pick<AcpRuntimeEventHandlers, 'permissionBridge' | 'onAcpEvent' | 'consumeReplayEvent'> {
     const permissionBridge = this.sessionPermissionService.createPermissionBridge(
       sessionId,
       this.sessionToWorkflow.get(sessionId)
@@ -138,8 +135,14 @@ export class AcpEventProcessor {
 
     return {
       permissionBridge,
-      shouldSuppressReplayEvent: (sid, event) =>
-        this.suppressAcpReplayForSession.has(sid) && isTranscriptReplayEvent(event),
+      consumeReplayEvent: (sid, event) => {
+        const suppress =
+          this.suppressAcpReplayForSession.has(sid) && isTranscriptReplayEvent(event);
+        if (suppress && event.type === 'acp_session_update') {
+          this.acpEventTranslator.translateSessionUpdate(event.update, sid);
+        }
+        return suppress;
+      },
       onAcpEvent: (
         sid: string,
         event: AcpRuntimeEvent,
