@@ -22,6 +22,7 @@ afterEach(() => {
 });
 function run(overrides: Partial<AgentRun>): AgentRun {
   return {
+    launchSnapshot: null,
     id: 'run',
     periodicTaskId: 'agent',
     workspaceId: null,

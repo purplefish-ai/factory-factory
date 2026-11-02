@@ -287,3 +287,27 @@ describe('Codex native profile configuration', () => {
     }
   );
 });
+
+describe('terminal agent run context retention policy', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it.each([undefined, '', '0', '-1', '1.5', '1day', '1e2', 'invalid', 'Infinity', '365001'])(
+    'retains indefinitely for missing/invalid opt-in %s',
+    (value) => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, 'AGENT_RUN_CONTEXT_RETENTION_DAYS');
+      } else {
+        process.env.AGENT_RUN_CONTEXT_RETENTION_DAYS = value;
+      }
+      configService.reload();
+      expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBeNull();
+    }
+  );
+  it('accepts explicit positive days through configService', () => {
+    process.env.AGENT_RUN_CONTEXT_RETENTION_DAYS = '45';
+    configService.reload();
+    expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBe(45 * 86_400_000);
+  });
+});

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
+import {
+  makeCompleteWorkspaceSnapshotEntry,
+  makeWorkspaceSnapshotEntry,
+} from '@/test-utils/workspace-snapshot';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
   type ProjectWorkspace,
@@ -533,4 +536,69 @@ describe('workspace snapshot cache projections', () => {
   it('keeps detail cache absent when no detail was fetched', () => {
     expect(mergeProjectSnapshotIntoWorkspaceDetail(makeEntry(), undefined)).toBeUndefined();
   });
+});
+
+it('derives selected facts for old collection snapshots and retains legacy scalar compatibility', () => {
+  const old = makeEntry();
+  const legacy = projectSnapshotToWorkspace(old);
+  expect(legacy).toMatchObject({
+    selectedPrId: 'legacy-pr-ws-1',
+    selectedPr: { number: 42, state: 'OPEN', ciStatus: 'SUCCESS' },
+  });
+  const a = { ...legacy.prs[0]!, id: 'a', state: 'APPROVED' as const, reviewState: 'APPROVED' };
+  const b = {
+    ...a,
+    id: 'b',
+    number: 43,
+    state: 'CHANGES_REQUESTED' as const,
+    reviewState: 'CHANGES_REQUESTED',
+    ciStatus: 'FAILURE' as const,
+  };
+  const entry = makeEntry({ prs: [b, a], prState: 'OPEN', prCiStatus: 'FAILURE' });
+  const listed = projectSnapshotToWorkspace(entry);
+  expect(listed).toMatchObject({ selectedPrId: 'a', selectedPr: a, prCiStatus: 'FAILURE' });
+  expect(mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(listed))).toMatchObject({
+    selectedPrId: 'a',
+    selectedPr: a,
+  });
+});
+
+it('keeps an authoritative empty snapshot collection empty despite stale aliases or selected facts', () => {
+  const existing = projectSnapshotToWorkspace(makeEntry());
+  const entry = makeCompleteWorkspaceSnapshotEntry({
+    prs: [],
+    prUrl: existing.prUrl,
+    prNumber: existing.prNumber,
+    prState: 'OPEN',
+    selectedPrId: existing.selectedPrId,
+    selectedPr: existing.selectedPr,
+  });
+  expect(projectSnapshotToWorkspace(entry, existing)).toMatchObject({
+    prs: [],
+    selectedPrId: null,
+    selectedPr: null,
+  });
+  expect(mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(existing))).toMatchObject({
+    prs: [],
+    selectedPrId: null,
+    selectedPr: null,
+  });
+});
+
+it('preserves identity provenance when scalar repairs reuse cached persisted legacy IDs', () => {
+  const synthetic = projectSnapshotToWorkspace(makeEntry());
+  expect(synthetic.prs[0]?.identitySource).toBe('legacy-snapshot');
+  const { identitySource: _source, ...persisted } = synthetic.prs[0]!;
+  const canonical = projectSnapshotToWorkspace(makeEntry({ prs: [persisted] }), synthetic);
+  expect(canonical.prs[0]?.id).toBe('legacy-pr-ws-1');
+  expect(canonical.prs[0]?.identitySource).toBeUndefined();
+  for (const projection of [
+    projectSnapshotToWorkspace(makeEntry(), canonical),
+    mergeProjectSnapshotIntoWorkspaceDetail(makeEntry(), seedDetail(canonical)),
+  ]) {
+    expect(projection?.selectedPrId).toBe(persisted.id);
+    expect(projection?.selectedPr?.identitySource).toBeUndefined();
+  }
+  const refreshedSynthetic = projectSnapshotToWorkspace(makeEntry(), synthetic);
+  expect(refreshedSynthetic.prs[0]?.identitySource).toBe('legacy-snapshot');
 });
