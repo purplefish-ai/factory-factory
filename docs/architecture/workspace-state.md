@@ -384,9 +384,12 @@ mismatched transcript envelopes, invalid paths, byte lengths and checksums.
 Import commits exact payloads as PENDING in the same database transaction as the
 relational graph, then publishes through the session archive protocol outside
 the transaction. Publication failure is reported; durable pending payloads allow
-restart reconciliation to finish safely. No COMPLETE row is created pointing at
-an unpublished file. Existing archive identities and skipped workspace graphs
-are left untouched.
+restart reconciliation to finish safely. A COMPLETE row may retain an exact
+database transcript when its platform cannot durably flush directory entries;
+logical export prefers that validated database source even if the file cache is
+missing or damaged. Imported rows still stage PENDING before owner publication.
+No completion is inferred from an absent file without retained durable bytes.
+Existing archive identities and skipped workspace graphs are left untouched.
 
 Process IDs and running script/terminal state are cleared. No import action
 launches an agent or sends a message. Supported legacy versions 4–7 remain

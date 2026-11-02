@@ -72,11 +72,13 @@ async function snapshotTranscript(
   worktreePath: string | null
 ): Promise<string> {
   const path = resolveClosedSessionTranscriptPath(row, worktreePath);
-  if (row.archiveState !== 'PENDING') {
+  // COMPLETE may retain the durable DB source when the platform cannot flush
+  // directory entries. Its file is only a cache until that source is released.
+  if (row.archiveState !== 'PENDING' && row.pendingTranscript === null) {
     return await readTranscript(path);
   }
   if (!(row.pendingTranscript && row.transcriptHash && row.archiveKey)) {
-    throw new Error('Invalid pending archive proof');
+    throw new Error('Invalid retained archive proof');
   }
   return row.pendingTranscript;
 }

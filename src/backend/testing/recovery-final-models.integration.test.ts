@@ -337,75 +337,80 @@ it('rejects a half-expired context instead of recreating executable-looking hist
   await expect(dataBackupService.exportData('test')).rejects.toThrow(/Expired context/);
 });
 
-it('roundtrips archive payloads through the full logical import and publishes only durable bytes', async () => {
-  const startedAt = new Date('2026-01-01T00:00:00.000Z');
-  const completedAt = new Date('2026-01-02T00:00:00.000Z');
-  const transcript = JSON.stringify({
-    version: 1,
-    sessionId: 'session',
-    workspaceId: 'workspace',
-    metadata: {
-      name: null,
-      workflow: 'default',
-      provider: 'CODEX',
-      model: 'default',
-      codexAccountId: 'frozen-source-account',
-      startedAt: startedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
-    },
-    messages: [
-      {
-        id: 'first',
-        source: 'user',
-        timestamp: startedAt.toISOString(),
-        order: 0,
-        text: 'visible first',
-        providerPrompt: [
-          { type: 'text', text: 'exact combined provider prompt' },
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'eA==' } },
-        ],
-      },
-      {
-        id: 'second',
-        source: 'user',
-        timestamp: startedAt.toISOString(),
-        order: 1,
-        text: 'visible second',
-        providerPrompt: null,
-      },
-    ],
-  });
-  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-  const transcriptHash = digest(transcript);
-  const transcriptPath = `closed-sessions/${digest('workspace')}/archive.${transcriptHash}.json`;
-  await db.prisma.closedSession.create({
-    data: {
-      id: 'archive',
+it.each(['PENDING', 'COMPLETE'])(
+  'roundtrips retained %s archive database bytes without a file cache through full logical recovery',
+  async (archiveState) => {
+    const startedAt = new Date('2026-01-01T00:00:00.000Z');
+    const completedAt = new Date('2026-01-02T00:00:00.000Z');
+    const transcript = JSON.stringify({
+      version: 1,
       sessionId: 'session',
       workspaceId: 'workspace',
-      workflow: 'default',
-      provider: 'CODEX',
-      model: 'default',
-      startedAt,
-      completedAt,
-      archiveKey: digest('original-identity'),
-      archiveState: 'PENDING',
-      pendingTranscript: transcript,
+      metadata: {
+        name: null,
+        workflow: 'default',
+        provider: 'CODEX',
+        model: 'default',
+        codexAccountId: 'frozen-source-account',
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+      },
+      messages: [
+        {
+          id: 'first',
+          source: 'user',
+          timestamp: startedAt.toISOString(),
+          order: 0,
+          text: 'visible first',
+          providerPrompt: [
+            { type: 'text', text: 'exact combined provider prompt' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'eA==' } },
+          ],
+        },
+        {
+          id: 'second',
+          source: 'user',
+          timestamp: startedAt.toISOString(),
+          order: 1,
+          text: 'visible second',
+          providerPrompt: null,
+        },
+      ],
+    });
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    const transcriptHash = digest(transcript);
+    const transcriptPath = `closed-sessions/${digest('workspace')}/archive.${transcriptHash}.json`;
+    await db.prisma.closedSession.create({
+      data: {
+        id: 'archive',
+        sessionId: 'session',
+        workspaceId: 'workspace',
+        workflow: 'default',
+        provider: 'CODEX',
+        model: 'default',
+        startedAt,
+        completedAt,
+        archiveKey: digest('original-identity'),
+        archiveState,
+        pendingTranscript: transcript,
+        transcriptHash,
+        transcriptPath,
+      },
+    });
+    const backup = await roundtrip();
+    expect(backup.data.archives?.entries[0]?.transcript).toBe(transcript);
+    expect(await db.prisma.closedSession.findUnique({ where: { id: 'archive' } })).toMatchObject({
+      archiveState: 'COMPLETE',
+      pendingTranscript: null,
       transcriptHash,
       transcriptPath,
-    },
-  });
-  const backup = await roundtrip();
-  expect(backup.data.archives?.entries[0]?.transcript).toBe(transcript);
-  expect(await db.prisma.closedSession.findUnique({ where: { id: 'archive' } })).toMatchObject({
-    archiveState: 'COMPLETE',
-    pendingTranscript: null,
-    transcriptHash,
-    transcriptPath,
-  });
-  expect(await readFile(join(db.tempDir, transcriptPath), 'utf8')).toBe(transcript);
-  expect((await dataBackupService.exportData('test')).data.archives).toEqual(backup.data.archives);
-});
+    });
+    expect(await readFile(join(db.tempDir, transcriptPath), 'utf8')).toBe(transcript);
+    expect((await dataBackupService.exportData('test')).data.archives).toEqual(
+      backup.data.archives
+    );
+  }
+);
 it('rejects contradictory COMPLETE source proof despite a forged completed validation cursor', async () => {
   await db.prisma.agentConnection.create({
     data: { id: 'connection', provider: 'GITHUB', externalId: 'github:proof', name: 'source' },

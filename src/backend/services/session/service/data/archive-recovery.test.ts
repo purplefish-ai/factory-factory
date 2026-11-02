@@ -82,6 +82,29 @@ describe('archive recovery export', () => {
     expect(result.entries[0]?.transcript).toContain('original-account');
     expect(result.entries[0]).not.toHaveProperty('transcriptPath');
   });
+  it.each(['missing', 'tampered'])(
+    'exports exact retained COMPLETE database bytes when the file cache is %s',
+    async (cache) => {
+      const source = row({ archiveState: 'COMPLETE' });
+      if (cache === 'tampered') {
+        const path = resolveClosedSessionTranscriptPath(source, null);
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, '{}');
+      }
+      const result = await exportSessionArchives([source], workspaces);
+      expect(result.entries[0]?.transcript).toBe(source.pendingTranscript);
+      expect(result.entries[0]?.sha256).toBe(source.transcriptHash);
+    }
+  );
+  it('rejects inconsistent COMPLETE database proof instead of silently substituting a file cache', async () => {
+    const source = row({ archiveState: 'COMPLETE' });
+    const path = resolveClosedSessionTranscriptPath(source, null);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, source.pendingTranscript!);
+    await expect(
+      exportSessionArchives([{ ...source, pendingTranscript: '{}' }], workspaces)
+    ).rejects.toThrow('Incomplete archive export');
+  });
   it('reads owned completed archives after their worktree is removed', async () => {
     const source = row({ archiveState: 'COMPLETE' });
     const path = resolveClosedSessionTranscriptPath(source, null);
@@ -101,7 +124,10 @@ describe('archive recovery export', () => {
       transcriptHash: null,
     });
     await writeFile(join(directory, 'legacy.json'), source.pendingTranscript!);
-    const result = await exportSessionArchives([source], new Map([['workspace', directory]]));
+    const result = await exportSessionArchives(
+      [{ ...source, pendingTranscript: null }],
+      new Map([['workspace', directory]])
+    );
     expect(result.entries[0]?.archiveKey).toBe(
       archiveDigest(
         JSON.stringify([
