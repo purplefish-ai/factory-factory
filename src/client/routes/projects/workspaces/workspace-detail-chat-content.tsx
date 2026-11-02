@@ -12,7 +12,6 @@ import {
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   SubagentList,
-  isActiveSubagent,
   type SubagentSelection,
   useSubagentTimelineMessages,
 } from '@/client/features/subagents';
@@ -177,8 +176,8 @@ function useSubagentNavigation(
     },
     [sessionId, parentSessionName, onOpenSubagent, timeline.subagents]
   );
-  const activeSubagents = timeline.subagents.filter(isActiveSubagent);
-  const singleSubagent = activeSubagents.length === 1 ? activeSubagents[0] : undefined;
+  const runningSubagents = timeline.subagents.filter((agent) => agent.status === 'running');
+  const singleSubagent = runningSubagents.length === 1 ? runningSubagents[0] : undefined;
   return {
     onOpenSubagent: onOpenSubagent ? handleOpenSubagent : undefined,
     onOpenSingleSubagent:

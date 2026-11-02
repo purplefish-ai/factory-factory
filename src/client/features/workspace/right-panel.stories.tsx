@@ -208,6 +208,8 @@ const meta = {
       [`workspace-right-panel-tab-${workspaceId}`, 'periodic-task'],
       [`workspace-panel-bottom-tab-${workspaceId}`, 'setup-logs'],
       [`workspace-panel-right-visible-${workspaceId}`, 'false'],
+      [`workspace-panel-tabs-${workspaceId}`, '[]'],
+      [`workspace-panel-active-tab-${workspaceId}`, 'chat'],
     ];
     const previous = entries.map(([key]) => [key, localStorage.getItem(key ?? '')]);
     for (const [key, value] of entries) {

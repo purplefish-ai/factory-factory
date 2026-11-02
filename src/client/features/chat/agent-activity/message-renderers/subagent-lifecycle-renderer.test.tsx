@@ -7,7 +7,7 @@ import {
   MessageItem,
   type MessageItemProps,
 } from '@/client/features/chat/agent-activity/agent-activity';
-import { TranscriptRenderingFixture } from '../../transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from '@/client/features/chat/transcript-rendering.test-utils';
 
 it.each([
   ['subagent_started', 'running', 'started working'],
