@@ -1,26 +1,8 @@
-import { z } from 'zod';
 import type { AgentSourceEntry } from '@/shared/agent-source-state';
 import type { AgentSourceCheckpoint, AgentSourcePage, Prisma } from '@prisma-gen/client';
 
 type Tx = Prisma.TransactionClient;
-async function boundaryOrder(tx: Tx, connectionId: string, head: string) {
-  const baseline = await tx.agentSourceBaseline.findFirst({
-    where: { connectionId, headEventId: head, sourceOrder: { not: null } },
-  });
-  if (baseline?.sourceOrder != null) {
-    return baseline.sourceOrder;
-  }
-  const markers = z.array(z.object({ sourceOrder: z.number().int().nonnegative() })).parse(
-    await tx.$queryRaw`
-      SELECT "sourceOrder" FROM "AgentSourcePage"
-      WHERE "connectionId" = ${connectionId} AND "phase" = 'FINALIZED' AND "sourceOrder" IS NOT NULL
-        AND json_extract("evidence", '$.ids[0]') = ${head} LIMIT 1
-    `
-  );
-  return markers[0]?.sourceOrder ?? null;
-}
-
-/** Legacy pages lack the cursor's previous boundary. Require an independent retained witness. */
+/** Recover the boundary identity; bounded promotion proves its canonical ordinal against every witness. */
 export async function captureBoundary(
   tx: Tx,
   checkpoint: AgentSourceCheckpoint,
@@ -46,10 +28,7 @@ export async function captureBoundary(
   const boundary =
     end >= 0 ? evidence.ids[end + 1] : checkpoint.entryCount > 0 ? evidence.ids[0] : undefined;
   if (boundary) {
-    const order = await boundaryOrder(tx, page.connectionId, boundary);
-    return order === null
-      ? {}
-      : { boundaryKnown: true, previousBoundaryEventId: boundary, initialSourceOrder: order };
+    return { boundaryKnown: true, previousBoundaryEventId: boundary };
   }
   if (page.nextPage === null && (end >= 0 || !evidence.ids.length)) {
     return { boundaryKnown: true, previousBoundaryEventId: null, initialSourceOrder: 0 };
