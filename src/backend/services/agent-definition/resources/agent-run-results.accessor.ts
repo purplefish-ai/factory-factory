@@ -42,6 +42,14 @@ export const agentRunResultsAccessor = {
     ) {
       launchConflict();
     }
+    // A lookup by workspace alone can miss an origin moved away from this run's reservation.
+    const origin = await tx.workspaceLaunchOrigin.findUnique({ where: { runId: run.id } });
+    if (
+      origin &&
+      (origin.workspaceId !== capture.workspaceId || origin.projectId !== capture.projectId)
+    ) {
+      launchConflict();
+    }
     if (run.status === 'RUNNING') {
       initialAttemptSchema.parse({
         runId: run.id,
