@@ -78,3 +78,13 @@ export const Failed: Story = { args: { state: 'failed' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const Empty: Story = { args: { state: 'empty' } };
 export const ProjectSwitch: Story = { args: { state: 'project-switch' } };
+
+export const NewWorkspaceImageDrop: Story = {
+  play: ({ canvasElement }) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['image'], 'reference.png', { type: 'image/png' }));
+    canvasElement
+      .querySelector('[data-sidebar="content"]')
+      ?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
+  },
+};

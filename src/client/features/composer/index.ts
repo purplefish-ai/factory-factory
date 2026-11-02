@@ -6,6 +6,7 @@
 // lifted out whole rather than exported piecemeal through chat's barrel.
 
 // Components
+export { ImageDropZone } from './image-drop-zone';
 export { AttachmentPreview } from './attachment-preview';
 export { AttachmentViewerDialog } from './attachment-viewer-dialog';
 export type {

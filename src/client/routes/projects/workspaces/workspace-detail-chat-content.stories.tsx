@@ -10,6 +10,7 @@ import {
 } from '@/lib/claude-fixtures';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createInitialSessionRuntimeState, type SessionWorkState } from '@/shared/session-runtime';
+import { WorkspaceChatImageDropZone } from './workspace-chat-image-drop-zone';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 
 const messages = Array.from({ length: 40 }, (_, index) =>
@@ -76,71 +77,85 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
         </Button>
       </div>
       <div className="min-h-0 flex-1" data-testid="mock-conversation">
-        <ChatContent
+        <WorkspaceChatImageDropZone
           workspaceId="scroll-button-story"
-          sessionId={null}
-          messages={messages}
-          sessionStatus={{ phase: work ? 'running' : 'ready' }}
-          sessionRuntime={
-            work
-              ? {
-                  ...createInitialSessionRuntimeState(),
-                  phase: 'running',
-                  processState: 'alive',
-                  activity: 'WORKING',
-                  work,
-                }
-              : createInitialSessionRuntimeState()
-          }
-          transcriptScroll={{
-            identity: 'main-story',
-            active: true,
-            ready: true,
-            initialIntent: 'following',
-            initialPosition: null,
-          }}
-          pendingRequest={pendingRequest}
-          approvePermission={noop}
-          answerQuestion={noop}
+          sessionId="story-session"
           connected
-          sendMessage={noop}
-          stopChat={noop}
-          inputRef={inputRef}
-          chatSettings={{
-            selectedModel: 'sonnet',
-            reasoningEffort: 'medium',
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          }}
+          sessionStatus={{ phase: 'ready' }}
           chatCapabilities={{
             ...EMPTY_CHAT_BAR_CAPABILITIES,
-            attachments: { enabled: true, kinds: ['text'] },
+            attachments: { enabled: true, kinds: ['image', 'text'] },
           }}
-          updateSettings={noop}
-          inputDraft={draft}
-          setInputDraft={setDraft}
           inputAttachments={attachments}
           setInputAttachments={setAttachments}
-          queuedMessages={[]}
-          removeQueuedMessage={noop}
-          steerQueuedMessage={noop}
-          resumeQueuedMessages={noop}
-          latestThinking={null}
-          pendingMessages={new Map()}
-          isCompacting={false}
-          slashCommands={[]}
-          slashCommandsLoaded
-          tokenStats={createTokenStats()}
-          rewindPreview={null}
-          startRewindPreview={noop}
-          confirmRewind={noop}
-          cancelRewind={noop}
-          getUuidForMessageId={() => undefined}
-          acpConfigOptions={null}
-          setConfigOption={noop}
-          initBanner={null}
-          isScriptFailed={false}
-        />
+          inputRef={inputRef}
+        >
+          <ChatContent
+            workspaceId="scroll-button-story"
+            sessionId={null}
+            messages={messages}
+            sessionStatus={{ phase: work ? 'running' : 'ready' }}
+            sessionRuntime={
+              work
+                ? {
+                    ...createInitialSessionRuntimeState(),
+                    phase: 'running',
+                    processState: 'alive',
+                    activity: 'WORKING',
+                    work,
+                  }
+                : createInitialSessionRuntimeState()
+            }
+            transcriptScroll={{
+              identity: 'main-story',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
+            pendingRequest={pendingRequest}
+            approvePermission={noop}
+            answerQuestion={noop}
+            connected
+            sendMessage={noop}
+            stopChat={noop}
+            inputRef={inputRef}
+            chatSettings={{
+              selectedModel: 'sonnet',
+              reasoningEffort: 'medium',
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            }}
+            chatCapabilities={{
+              ...EMPTY_CHAT_BAR_CAPABILITIES,
+              attachments: { enabled: true, kinds: ['image', 'text'] },
+            }}
+            updateSettings={noop}
+            inputDraft={draft}
+            setInputDraft={setDraft}
+            inputAttachments={attachments}
+            setInputAttachments={setAttachments}
+            queuedMessages={[]}
+            removeQueuedMessage={noop}
+            steerQueuedMessage={noop}
+            resumeQueuedMessages={noop}
+            latestThinking={null}
+            pendingMessages={new Map()}
+            isCompacting={false}
+            slashCommands={[]}
+            slashCommandsLoaded
+            tokenStats={createTokenStats()}
+            rewindPreview={null}
+            startRewindPreview={noop}
+            confirmRewind={noop}
+            cancelRewind={noop}
+            getUuidForMessageId={() => undefined}
+            acpConfigOptions={null}
+            setConfigOption={noop}
+            initBanner={null}
+            isScriptFailed={false}
+          />
+        </WorkspaceChatImageDropZone>
       </div>
     </div>
   );
@@ -177,5 +192,15 @@ export const PromptInFlight: Story = {
       runningSubagents: 0,
       activeGoals: 0,
     },
+  },
+};
+
+export const MessageImageDrop: Story = {
+  play: ({ canvasElement }) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['image'], 'reference.png', { type: 'image/png' }));
+    canvasElement
+      .querySelector('textarea')
+      ?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
   },
 };

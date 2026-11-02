@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   transport: {
     messages: [],
     connected: true,
+    chatCapabilities: { attachments: { enabled: true, kinds: ['image'] } },
     sessionStatus: { phase: 'ready' },
     processStatus: { state: 'alive' },
     sessionRuntime: {

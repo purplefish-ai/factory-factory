@@ -111,6 +111,17 @@ selections after discovery completes. Access warnings include an icon and text;
 closing settings preserves the launch draft. Escape inside settings closes the
 popover without cancelling workspace creation.
 
+Dragging image files over the Kanban board highlights a drop target. Dropping
+opens the new workspace form and appends the images to the project's creation
+draft. The navigation sidebar has its own creation drop target, including while
+viewing a workspace: dropping there opens the sidebar's new workspace form with
+the images attached. Dropping over the main chat transcript or composer
+highlights the message destination and appends images to that chat's composer.
+Existing instructions and attachments are retained. Image limits and per-file
+errors match the composer; workspace drops require a connected, loaded chat that
+supports image attachments. File reads finishing after a project or session
+switch are ignored.
+
 The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and
 periodic-agent schedules. Cancel clears the draft and restores user defaults for

@@ -3,3 +3,5 @@ export { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 export { getKanbanColumns, KanbanColumn } from './kanban-column';
 export { KanbanProvider, useKanban } from './kanban-context';
 export { IssueLaunchSheet } from './issue-launch-sheet';
+export { KanbanImageDropZone } from './kanban-image-drop-zone';
+export { WorkspaceCreationImageDropZone } from './workspace-creation-image-drop-zone';
