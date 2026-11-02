@@ -332,6 +332,17 @@ export async function restoreRecoveryCheckpointProof(
                 nulls('AgentSourceCheckpoint', id, 'validationCursor')
               )
             : Prisma.DbNull,
+        // Match the canonical verifier upgrade: replay retained pages from the
+        // beginning rather than trusting imported partial capture/verify counters.
+        ...(row.status === 'BUILDING'
+          ? {
+              nextOrdinal: 0,
+              entryCount: 0,
+              executableCount: 0,
+              verifiedCount: 0,
+              verification: Prisma.DbNull,
+            }
+          : {}),
       },
     });
   }

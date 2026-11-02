@@ -173,6 +173,17 @@ describe('archive recovery restore', () => {
     );
     expect(stageSessionArchiveRecovery).not.toHaveBeenCalled();
   });
+  it('requires deterministic legacy identity rather than allowing a marker to loosen modern clocks', async () => {
+    const recovery = await exportSessionArchives([row()], workspaces);
+    const entry = recovery.entries[0]!;
+    entry.identity = 'legacy-v1';
+    entry.completedAt = '2026-01-02T00:00:00.009Z';
+    await expect(restoreSessionArchives(tx, recovery, new Set(['workspace']))).rejects.toThrow(
+      'Invalid legacy archive identity'
+    );
+    expect(stageSessionArchiveRecovery).not.toHaveBeenCalled();
+  });
+
   it('propagates interrupted publication and permits a retry of the same durable ids', async () => {
     vi.mocked(closedSessionPersistenceService.recoverById)
       .mockRejectedValueOnce(new Error('disk full'))

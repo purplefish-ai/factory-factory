@@ -367,8 +367,10 @@ Source proof is checked across retained baselines, markers, all ordinal-bearing
 checkpoint heads and event identities. Null heads can only claim ordinal zero.
 Compacted COMPLETE proofs retain their historical answers without capture pages;
 unfinished checkpoint validation cursors are cleared so bounded domain
-validation restarts safely. Imported validation progress never certifies a
-checkpoint.
+validation restarts safely. BUILDING capture and verification counters restart
+at zero, with verification progress cleared. Permanent pages, heads, baselines
+and boundary/highwater facts stay intact for canonical bounded replay. Imported
+validation progress never certifies a checkpoint.
 
 Archive packages reject unsupported versions, duplicate identities, malformed or
 mismatched transcript envelopes, invalid paths, byte lengths and checksums.

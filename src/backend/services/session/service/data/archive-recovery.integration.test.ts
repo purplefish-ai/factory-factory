@@ -220,3 +220,105 @@ it('does not overwrite a different artifact when wire identifiers contain traver
   ).rejects.toThrow();
   expect(await db.prisma.closedSession.count()).toBe(0);
 });
+
+it.each([false, true])(
+  'roundtrips actual legacy writer timing with preserved=%s without changing row clocks or frozen bytes',
+  async (preserved) => {
+    // Pre-protocol persistence wrote JSON before a second new Date() for the DB row.
+    const fileCompletedAt = '2026-01-02T00:00:00.001Z';
+    const rowCompletedAt = new Date('2026-01-02T00:00:00.009Z');
+    const oldTranscript = JSON.stringify(
+      {
+        version: 1,
+        sessionId: 'legacy-session',
+        workspaceId: 'workspace',
+        metadata: {
+          name: null,
+          workflow: 'ratchet',
+          provider: 'CLAUDE',
+          model: 'sonnet',
+          startedAt,
+          completedAt: fileCompletedAt,
+        },
+        messages: [
+          {
+            id: 'old-user',
+            source: 'user',
+            text: 'Original legacy request',
+            timestamp: startedAt,
+            order: 0,
+          },
+          {
+            id: 'old-agent',
+            source: 'agent',
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: 'Original legacy answer' },
+            },
+            timestamp: fileCompletedAt,
+            order: 1,
+          },
+        ],
+      },
+      null,
+      2
+    );
+    const worktree = join(db.tempDir, 'legacy-worktree');
+    const relativePath = '.context/closed-sessions/legacy-session_2026-01-02T00-00-00-000Z.json';
+    const { mkdir, writeFile } =
+      await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    await mkdir(join(worktree, '.context/closed-sessions'), { recursive: true });
+    await writeFile(join(worktree, relativePath), oldTranscript);
+    await db.prisma.workspace.update({
+      where: { id: 'workspace' },
+      data: { worktreePath: worktree },
+    });
+    await db.prisma.closedSession.create({
+      data: {
+        id: 'legacy-archive',
+        workspaceId: 'workspace',
+        sessionId: 'legacy-session',
+        name: null,
+        workflow: 'ratchet',
+        provider: 'CLAUDE',
+        model: 'sonnet',
+        startedAt: new Date(startedAt),
+        completedAt: rowCompletedAt,
+        transcriptPath: relativePath,
+        archiveKey: null,
+        archiveState: 'COMPLETE',
+      },
+    });
+    if (preserved) {
+      await publisher.closedSessionPersistenceService.preserveWorkspaceArchives('workspace');
+    }
+    const snapshot = await db.prisma.closedSession.findMany();
+    const packaged = await recovery.exportSessionArchives(
+      snapshot,
+      new Map([['workspace', worktree]])
+    );
+    expect(packaged.entries[0]).toMatchObject({
+      identity: 'legacy-v1',
+      completedAt: rowCompletedAt.toISOString(),
+      transcript: oldTranscript,
+    });
+    await db.prisma.closedSession.deleteMany();
+    await rm(worktree, { recursive: true, force: true });
+    const ids = await db.prisma.$transaction((tx) =>
+      recovery.restoreSessionArchives(tx, packaged, new Set(['workspace']))
+    );
+    await recovery.publishRestoredSessionArchives(ids);
+    const restored = await db.prisma.closedSession.findUniqueOrThrow({
+      where: { id: 'legacy-archive' },
+    });
+    expect(restored.completedAt).toEqual(rowCompletedAt);
+    expect(await readFile(storage.resolveClosedSessionTranscriptPath(restored, null), 'utf8')).toBe(
+      oldTranscript
+    );
+    const reexported = await recovery.exportSessionArchives(
+      [restored],
+      new Map([['workspace', null]])
+    );
+    expect(reexported).toEqual(packaged);
+  }
+);

@@ -130,3 +130,13 @@ it('rejects event ordinals inconsistent with the retained head even when the eve
   });
   expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
 });
+
+it('rejects a checkpoint that uses its own captured head as its previous-boundary witness', () => {
+  const data = compactInterval();
+  const checkpoint = data.agentSourceCheckpoint[0]!;
+  checkpoint.previousBoundaryEventId = 'A';
+  checkpoint.initialSourceOrder = 6;
+  checkpoint.executableCount = 0;
+  data.agentSourceBaseline = [];
+  expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
+});

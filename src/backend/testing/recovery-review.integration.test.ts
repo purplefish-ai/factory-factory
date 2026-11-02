@@ -214,3 +214,143 @@ it('discards forged unfinished validation progress while retaining checkpoint he
   });
   expect(await db.prisma.agentSourceHead.count()).toBe(1);
 });
+
+it('replays unfinished verification instead of skipping contradictory retained pages using imported progress', async () => {
+  const runtime = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
+    '@/backend/services/agent-definition'
+  );
+  const { createLedgerFixture } = await vi.importActual<
+    typeof import('@/backend/services/agent-definition/resources/testing/agent-ledger.test-support')
+  >('@/backend/services/agent-definition/resources/testing/agent-ledger.test-support');
+  const fixture = await createLedgerFixture(db, runtime);
+  const connectionId = fixture.connectionId;
+  await db.prisma.agentSourceState.update({
+    where: { connectionId },
+    data: { cursor: { version: 1, provider: 'GITHUB', committedHeadEventId: 'A', scan: null } },
+  });
+  await db.prisma.agentSourceCheckpoint.create({
+    data: {
+      connectionId,
+      scanId: 'forged',
+      status: 'BUILDING',
+      nextOrdinal: 3,
+      entryCount: 2,
+      executableCount: 0,
+      verifiedCount: 2,
+      verification: {
+        version: 1,
+        nextPage: 2,
+        resumePage: 1,
+        resumeCount: 0,
+        seekingOverlap: false,
+      },
+      headEventId: 'A',
+      boundaryKnown: true,
+      initialSourceOrder: 0,
+      sourceOrder: 0,
+    },
+  });
+  await db.prisma.agentSourceHead.createMany({
+    data: ['A', 'B'].map((providerEventId, position) => ({
+      connectionId,
+      scanId: 'forged',
+      providerEventId,
+      position,
+      precedingEventCount: 0,
+    })),
+  });
+  await db.prisma.agentSourcePage.createMany({
+    data: [
+      {
+        id: 'capture',
+        connectionId,
+        scanId: 'forged',
+        ordinal: 0,
+        phase: 'CAPTURE',
+        requestPage: 1,
+        nextPage: null,
+        evidence: {
+          ids: ['A', 'B'],
+          entries: [
+            { providerEventId: 'A', eventId: null },
+            { providerEventId: 'B', eventId: null },
+          ],
+        },
+      },
+      {
+        id: 'verify1',
+        connectionId,
+        scanId: 'forged',
+        ordinal: 1,
+        phase: 'VERIFY',
+        requestPage: 1,
+        nextPage: 2,
+        evidence: { ids: ['A'], entries: [] },
+      },
+      {
+        id: 'verify2',
+        connectionId,
+        scanId: 'forged',
+        ordinal: 2,
+        phase: 'VERIFY',
+        requestPage: 2,
+        nextPage: null,
+        evidence: { ids: ['X', 'B'], entries: [] },
+      },
+      {
+        id: 'final',
+        connectionId,
+        scanId: 'forged',
+        ordinal: 3,
+        phase: 'FINALIZED',
+        requestPage: 1,
+        nextPage: null,
+        sourceOrder: 0,
+        evidence: { ids: ['A'], entries: [] },
+      },
+    ],
+  });
+  const backup = await dataBackupService.exportData('test');
+  await db.prisma.agentDefinition.deleteMany();
+  await db.prisma.agentConnection.deleteMany();
+  await db.prisma.workspace.deleteMany();
+  await db.prisma.project.deleteMany();
+  await dataBackupService.importData(backup);
+  expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({
+    status: 'BUILDING',
+    nextOrdinal: 0,
+    entryCount: 0,
+    executableCount: 0,
+    verifiedCount: 0,
+    verification: null,
+    validationCursor: null,
+    headEventId: 'A',
+    boundaryKnown: true,
+    previousBoundaryEventId: null,
+    initialSourceOrder: 0,
+    sourceOrder: 0,
+  });
+  expect(
+    await db.prisma
+      .$queryRaw`SELECT json_type(verification) AS verificationType, json_type(validationCursor) AS cursorType FROM AgentSourceCheckpoint WHERE scanId = 'forged'`
+  ).toEqual([{ verificationType: null, cursorType: null }]);
+  expect(await db.prisma.agentSourceHead.count()).toBe(2);
+  expect(await db.prisma.agentSourcePage.count()).toBe(4);
+  await db.prisma.agentDefinition.updateMany({ data: { isEnabled: true } });
+  await db.prisma.agentConnection.updateMany({ data: { isEnabled: true } });
+  await db.prisma.agentTrigger.updateMany({ data: { isEnabled: true, activationState: 'ACTIVE' } });
+  const source = new runtime.AgentSourcePollService(
+    {
+      getRepositoryIdentity: () => Promise.resolve({ id: 'repo-1', name: 'org/repo' }),
+      listIssueEvents: () => Promise.reject(new Error('No provider reads required')),
+      classifyError: () => 'unknown',
+    },
+    () => 0
+  );
+  for (let tick = 0; tick < 5; tick++) {
+    await source.pollCycle(new AbortController().signal);
+  }
+  expect(await db.prisma.agentSourceCheckpoint.findFirst()).toMatchObject({ status: 'INVALID' });
+  expect(await db.prisma.agentSourcePage.count()).toBe(4);
+  expect(await db.prisma.agentSourceHead.count()).toBe(2);
+});

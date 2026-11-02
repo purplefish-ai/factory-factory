@@ -211,7 +211,7 @@ it('retains checkpoint heads, verification cursor, authority revision and issued
   expect(
     await db.prisma
       .$queryRaw`SELECT json_type(verification) AS verificationType, json_type(validationCursor) AS cursorType FROM AgentSourceCheckpoint WHERE scanId = 'pending-scan'`
-  ).toEqual([{ verificationType: 'null', cursorType: null }]);
+  ).toEqual([{ verificationType: null, cursorType: null }]);
 
   expect(await db.prisma.agentSourceHead.findMany()).toEqual(heads);
   expect(await db.prisma.agentSourceBaseline.findMany()).toEqual(baselines);

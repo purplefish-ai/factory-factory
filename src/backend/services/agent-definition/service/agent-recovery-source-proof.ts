@@ -49,6 +49,7 @@ function checkpointHeads(checkpoint: Checkpoint, heads: Head[]) {
     if (
       head.position !== position ||
       identities.has(head.providerEventId) ||
+      head.providerEventId === checkpoint.previousBoundaryEventId ||
       head.precedingEventCount < prior ||
       head.precedingEventCount > prior + (position === 0 ? 0 : 1)
     ) {

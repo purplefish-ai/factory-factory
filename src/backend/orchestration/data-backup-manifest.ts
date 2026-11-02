@@ -208,7 +208,7 @@ export const recoveryModelCoverage = {
     category: 'evidence',
     handling: 'included',
     reason:
-      'Frozen evaluation/configuration snapshots, classifier identity and run references retained; unmatched admission is held for review and retry timers cleared.',
+      'Frozen evaluation/configuration snapshots, classifier identity and run references retained; matched decisions awaiting admission are held for review and retry timers cleared.',
   },
   AgentInitialDelivery: {
     category: 'evidence',

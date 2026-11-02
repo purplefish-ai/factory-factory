@@ -1,17 +1,5 @@
 import { z } from 'zod';
-import type { ChatMessage } from '@/shared/acp-protocol';
-
-// Validate the persisted envelope while retaining evolving provider message fields.
-const messageEnvelope = z
-  .object({
-    id: z.string(),
-    source: z.enum(['user', 'agent']),
-    timestamp: z.string(),
-    order: z.number(),
-    text: z.string().optional(),
-    message: z.object({ type: z.string() }).passthrough().optional(),
-  })
-  .passthrough();
+import { persistedChatMessageSchema } from './closed-session-message.schema';
 
 export const closedSessionTranscriptSchema = z.object({
   version: z.literal(1),
@@ -29,5 +17,5 @@ export const closedSessionTranscriptSchema = z.object({
       completedAt: z.string(),
     })
     .passthrough(),
-  messages: z.array(z.custom<ChatMessage>((value) => messageEnvelope.safeParse(value).success)),
+  messages: z.array(persistedChatMessageSchema),
 });

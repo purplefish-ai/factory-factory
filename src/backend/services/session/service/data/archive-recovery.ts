@@ -49,8 +49,18 @@ async function readTranscript(path: string): Promise<string> {
   }
 }
 
+function legacyArchiveKey(workspaceId: string, id: string, sha256: string): string {
+  return archiveDigest(JSON.stringify(['legacy', workspaceId, id, sha256]));
+}
+
 function validateChecksums(recovery: ArchiveRecovery): void {
   for (const entry of recovery.entries) {
+    if (
+      entry.identity === 'legacy-v1' &&
+      entry.archiveKey !== legacyArchiveKey(entry.workspaceId, entry.id, entry.sha256)
+    ) {
+      throw new Error(`Invalid legacy archive identity: ${entry.id}`);
+    }
     if (archiveDigest(entry.transcript) !== entry.sha256) {
       throw new Error(`Archive checksum mismatch: ${entry.id}`);
     }
@@ -90,8 +100,10 @@ async function exportEntry(
   ) {
     throw new Error('Archive checksum mismatch');
   }
+  const legacyKey = legacyArchiveKey(row.workspaceId, row.id, sha256);
   return {
     id: row.id,
+    identity: row.archiveKey === null || row.archiveKey === legacyKey ? 'legacy-v1' : 'content-v1',
     workspaceId: row.workspaceId,
     sessionId: row.sessionId,
     name: row.name,
@@ -100,8 +112,7 @@ async function exportEntry(
     model: row.model,
     startedAt: row.startedAt.toISOString(),
     completedAt: row.completedAt.toISOString(),
-    archiveKey:
-      row.archiveKey ?? archiveDigest(JSON.stringify(['legacy', row.workspaceId, row.id, sha256])),
+    archiveKey: row.archiveKey ?? legacyKey,
     sha256,
     byteLength,
     transcript,
