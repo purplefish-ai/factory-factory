@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, within, waitFor } from 'storybook/test';
 import { DataImportResultDialog } from './data-import-result-dialog';
 
 const meta = {
@@ -29,10 +29,34 @@ export const SkippedHistory: Story = {
   },
   play: async ({ canvasElement }) => {
     const screen = within(canvasElement.ownerDocument.body);
-    await expect(screen.getByRole('alertdialog')).toBeVisible();
+    await waitFor(async () => {
+      await expect(screen.getByRole('alertdialog')).toBeVisible();
+    });
     await expect(screen.getByText('Recovery import results')).toBeVisible();
     await expect(screen.getByText(/identity already exists/)).toBeVisible();
     await expect(screen.getByText(/conflicting unique identity or skipped parent/)).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Download full report' })).toBeVisible();
+  },
+};
+
+export const SingleSkippedRecord: Story = {
+  args: {
+    report: {
+      models: [{ model: 'ClosedSession', imported: 0, skipped: 1 }],
+      skipped: [
+        { model: 'ClosedSession', identity: 'saved-conversation', reason: 'EXISTING_IDENTITY' },
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const screen = within(canvasElement.ownerDocument.body);
+    await waitFor(async () => {
+      await expect(
+        screen.getByText(
+          '1 retained record was skipped. The full report contains every skipped identity.'
+        )
+      ).toBeVisible();
+    });
     await expect(screen.getByRole('button', { name: 'Download full report' })).toBeVisible();
   },
 };

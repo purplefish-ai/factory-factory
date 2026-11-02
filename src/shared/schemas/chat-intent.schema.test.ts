@@ -127,10 +127,16 @@ describe('durable chat owner decoding contract', () => {
     expect(durableRecoverySchema.parse(decoded)).toEqual(original);
   });
   it('keeps frozen membership bound to its session and complete human intent set', () => {
+    const committed = {
+      ...durable(),
+      chatIntent: [{ ...intent, status: 'committed' }],
+      promptDispatchAttempt: [{ ...attempt, status: 'committed' }],
+    };
+    expect(durableRecoverySchema.safeParse(committed).success).toBe(true);
     expect(
       durableRecoverySchema.safeParse({
-        ...durable(),
-        promptDispatchAttempt: [{ ...attempt, sessionId: 'foreign' }],
+        ...committed,
+        promptDispatchAttempt: [{ ...attempt, status: 'committed', sessionId: 'foreign' }],
       }).success
     ).toBe(false);
     expect(durableRecoverySchema.safeParse({ ...durable(), chatIntent: [] }).success).toBe(false);

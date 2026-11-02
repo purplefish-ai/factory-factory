@@ -68,8 +68,9 @@ export function DataImportResultDialog({
         {!!report?.skipped.length && (
           <div className="space-y-2 text-sm">
             <p>
-              {report.skipped.length} retained records were skipped. The full report contains every
-              skipped identity.
+              {report.skipped.length} retained{' '}
+              {report.skipped.length === 1 ? 'record was' : 'records were'} skipped. The full report
+              contains every skipped identity.
             </p>
             <ul className="max-h-48 overflow-y-auto break-words space-y-2">
               {report.skipped.slice(0, 100).map((row) => (

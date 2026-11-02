@@ -4,14 +4,16 @@ import {
   archiveRecoverySchema,
   MAX_ARCHIVE_ENTRY_BYTES,
   MAX_ARCHIVE_ENTRIES,
+  MAX_ARCHIVE_TOTAL_BYTES,
 } from './archive-recovery.schema';
 
-function entry() {
+function entry(padding = '') {
   const transcript = JSON.stringify({
     version: 1,
     sessionId: 'session',
     workspaceId: 'workspace',
     metadata: {
+      padding,
       name: 'saved',
       workflow: 'ratchet',
       provider: 'CODEX',
@@ -64,15 +66,76 @@ describe('archive recovery wire boundary', () => {
       expect(archiveRecoverySchema.safeParse({ version: 1, entries }).success).toBe(false);
     }
   });
-  it('bounds entry count and bytes and checks declared UTF8 length', () => {
+  it('checks declared UTF8 length independently of capacity', () => {
     const original = entry();
-    for (const entries of [
-      [{ ...original, byteLength: original.byteLength + 1 }],
-      [{ ...original, transcript: 'x'.repeat(MAX_ARCHIVE_ENTRY_BYTES + 1) }],
-      Array.from({ length: MAX_ARCHIVE_ENTRIES + 1 }, () => original),
-    ]) {
-      expect(archiveRecoverySchema.safeParse({ version: 1, entries }).success).toBe(false);
-    }
+    const result = archiveRecoverySchema.safeParse({
+      version: 1,
+      entries: [{ ...original, byteLength: original.byteLength + 1 }],
+    });
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['entries', 0, 'transcript'],
+        message: 'Invalid archive UTF-8 byte length or encoding',
+      }),
+    ]);
+  });
+
+  function sizedEntry(bytes: number) {
+    return entry('x'.repeat(bytes - entry().byteLength));
+  }
+
+  function uniqueEntries(original: ReturnType<typeof entry>, count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      ...original,
+      id: `archive-${index}`,
+      archiveKey: createHash('sha256').update(`archive-${index}`).digest('hex'),
+    }));
+  }
+
+  it('rejects a valid oversized transcript with matching length and checksum at the entry cap', () => {
+    const atLimit = sizedEntry(MAX_ARCHIVE_ENTRY_BYTES);
+    expect(archiveRecoverySchema.safeParse({ version: 1, entries: [atLimit] }).success).toBe(true);
+    const oversized = sizedEntry(MAX_ARCHIVE_ENTRY_BYTES + 1);
+    expect(Buffer.byteLength(oversized.transcript)).toBe(oversized.byteLength);
+    const result = archiveRecoverySchema.safeParse({ version: 1, entries: [oversized] });
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'too_big',
+        path: ['entries', 0, 'byteLength'],
+        maximum: MAX_ARCHIVE_ENTRY_BYTES,
+      })
+    );
+  });
+
+  it('bounds entry count with otherwise valid unique entries', () => {
+    const entries = uniqueEntries(entry(), MAX_ARCHIVE_ENTRIES + 1);
+    expect(
+      archiveRecoverySchema.safeParse({ version: 1, entries: entries.slice(0, -1) }).success
+    ).toBe(true);
+    const result = archiveRecoverySchema.safeParse({ version: 1, entries });
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        code: 'too_big',
+        path: ['entries'],
+        maximum: MAX_ARCHIVE_ENTRIES,
+      }),
+    ]);
+  });
+
+  it('bounds decoded aggregate bytes independently of entry count, duplicate and entry limits', () => {
+    const entries = uniqueEntries(
+      sizedEntry(MAX_ARCHIVE_ENTRY_BYTES),
+      MAX_ARCHIVE_TOTAL_BYTES / MAX_ARCHIVE_ENTRY_BYTES
+    );
+    expect(archiveRecoverySchema.safeParse({ version: 1, entries }).success).toBe(true);
+    const extra = { ...entry(), id: 'extra', archiveKey: 'f'.repeat(64) };
+    const result = archiveRecoverySchema.safeParse({ version: 1, entries: [...entries, extra] });
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['entries'],
+        message: 'Archive package exceeds total byte limit',
+      }),
+    ]);
   });
   it.each([
     'workspaceId',

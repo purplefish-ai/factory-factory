@@ -20,6 +20,34 @@ export type NotificationDispatchClaim =
   | { status: 'duplicate' }
   | { status: 'claimed'; notificationId: string; release(): void };
 
+export type NotificationDispatchState =
+  | 'pending'
+  | 'delivered'
+  | 'held'
+  | 'missing'
+  | 'unavailable';
+export type NotificationDispatchBlockReason =
+  | Exclude<NotificationDispatchState, 'pending' | 'missing'>
+  | 'duplicate';
+
+function notificationDispatchBlockReason(
+  state: NotificationDispatchState
+): NotificationDispatchBlockReason | undefined {
+  return state === 'pending' || state === 'missing' ? undefined : state;
+}
+
+export async function notificationClaimBlockReason(
+  notifications: Pick<SessionNotificationDeliveryService, 'getDispatchState'>,
+  claim: NotificationDispatchClaim
+): Promise<NotificationDispatchBlockReason | undefined> {
+  if (claim.status === 'duplicate') {
+    return 'duplicate';
+  }
+  return claim.status === 'claimed'
+    ? notificationDispatchBlockReason(await notifications.getDispatchState(claim.notificationId))
+    : undefined;
+}
+
 export type PendingWorkspaceNotification = Readonly<{
   id: string;
   workspaceId: string;
@@ -34,7 +62,9 @@ export type PendingWorkspaceNotification = Readonly<{
 
 export type NotificationPersistencePort = {
   listPendingForDelivery(workspaceId: string): Promise<PendingWorkspaceNotification[]>;
-  findForDelivery(notificationId: string): Promise<{ deliveredAt: Date | null } | null>;
+  findForDelivery(
+    notificationId: string
+  ): Promise<{ deliveredAt: Date | null; recoveryHeld: boolean } | null>;
   markDelivered(notificationIds: string[]): Promise<void>;
 };
 
@@ -223,16 +253,22 @@ export class SessionNotificationDeliveryService {
     };
   }
 
-  async isAlreadyDelivered(notificationId: string): Promise<boolean> {
+  async getDispatchState(notificationId: string): Promise<NotificationDispatchState> {
     try {
       const notification = await this.notificationPort.findForDelivery(notificationId);
-      return notification?.deliveredAt != null;
+      if (!notification) {
+        return 'missing';
+      }
+      if (notification.recoveryHeld) {
+        return 'held';
+      }
+      return notification.deliveredAt !== null ? 'delivered' : 'pending';
     } catch (error) {
       chatLogger.warn('[Chat WS] Failed to check workspace notification delivery state', {
         notificationId,
         error: this.formatError(error),
       });
-      return false;
+      return 'unavailable';
     }
   }
 
@@ -253,10 +289,15 @@ export class SessionNotificationDeliveryService {
     }
   }
 
-  removeDuplicateFromQueue(sessionId: string, messageId: string): boolean {
-    chatLogger.info('[Chat WS] Dropping already-delivered workspace notification', {
+  removeBlockedFromQueue(
+    sessionId: string,
+    messageId: string,
+    reason: NotificationDispatchBlockReason = 'delivered'
+  ): boolean {
+    chatLogger.info('[Chat WS] Dropping blocked workspace notification', {
       dbSessionId: sessionId,
       messageId,
+      reason,
     });
     return this.queuePort.removeQueuedMessage(sessionId, messageId);
   }

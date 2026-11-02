@@ -219,20 +219,36 @@ async function importProjects(
   return counter;
 }
 
-function importedPRs(workspace: ExportedWorkspace, jsonNulls: RecoveryJsonNullLookup) {
+async function importedPRs(
+  workspace: ExportedWorkspace,
+  jsonNulls: RecoveryJsonNullLookup,
+  tx: TransactionClient
+) {
+  const occupied = new Set<string>();
+  for (let start = 0; start < workspace.prs.length; start += 200) {
+    const rows = await tx.workspacePR.findMany({
+      where: { id: { in: workspace.prs.slice(start, start + 200).map((row) => row.id) } },
+      select: { id: true },
+    });
+    for (const row of rows) {
+      occupied.add(row.id);
+    }
+  }
   return workspace.prs.length
-    ? workspace.prs.map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
-        ...pr,
-        syncedAt: parseDate(pr.syncedAt),
-        detachedAt: parseDate(pr.detachedAt),
-        ciFailedAt: parseDate(pr.ciFailedAt),
-        ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),
-        reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
-        observation: nullablePrismaJson(
-          pr.observation,
-          jsonNulls('WorkspacePR', pr.id, 'observation')
-        ),
-      }))
+    ? workspace.prs
+        .filter((pr) => !occupied.has(pr.id))
+        .map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
+          ...pr,
+          syncedAt: parseDate(pr.syncedAt),
+          detachedAt: parseDate(pr.detachedAt),
+          ciFailedAt: parseDate(pr.ciFailedAt),
+          ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),
+          reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
+          observation: nullablePrismaJson(
+            pr.observation,
+            jsonNulls('WorkspacePR', pr.id, 'observation')
+          ),
+        }))
     : workspace.prUrl
       ? [
           {
@@ -352,7 +368,7 @@ async function importWorkspaces(
               }
             : {},
         },
-        prs: { create: importedPRs(workspace, jsonNulls) },
+        prs: { create: await importedPRs(workspace, jsonNulls, tx) },
         // `ratchetState` is not among them: it is derived from the PR row above,
         // so restoring it would create a second copy to disagree with. It is still
         // read on the way in — for the conflict flag — and recomputed on the way
@@ -804,7 +820,12 @@ class DataBackupService {
           new Set(importedWorkspaceIds),
           taskIds
         );
-        await restoreRecoveryNotifications(tx, input.data.durable, new Set(importedWorkspaceIds));
+        await restoreRecoveryNotifications(
+          tx,
+          input.data.durable,
+          new Set(importedWorkspaceIds),
+          new Set(input.data.workspaces.map((workspace) => workspace.id))
+        );
         const agentParents = await restoreAgentConfigRecovery(
           tx,
           input.data.durable,

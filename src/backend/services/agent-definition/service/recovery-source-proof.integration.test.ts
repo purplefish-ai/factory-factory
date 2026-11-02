@@ -265,7 +265,8 @@ it('retains an opaque truthy legacy cursor while runtime parsing refuses new aut
   durable.agentSourceHead = [];
   durable.agentSourcePage = [];
   durable.agentSourceState[0]!.cursor = { legacy: 'opaque' };
-  durable.agentSourceState[0]!.lastSourceOrder = 0;
+  // Preserve the real interval highwater; opaque bytes do not excuse a
+  // counter below retained proof, tested separately above.
   await clear();
   await dataBackupService.importData(backup);
   await enable();

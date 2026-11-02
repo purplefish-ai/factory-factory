@@ -252,7 +252,15 @@ export function validateRecoveryManifest(input: ExportData) {
   const declared = new Set(Object.keys(input.meta.recovery?.models ?? {}));
   if (
     declared.size !== prismaModelNames.length ||
-    prismaModelNames.some((name) => !declared.has(name))
+    prismaModelNames.some((name) => {
+      const entry = input.meta.recovery?.models[name];
+      const canonical = recoveryModelCoverage[name];
+      return (
+        !declared.has(name) ||
+        entry?.category !== canonical.category ||
+        entry.handling !== canonical.handling
+      );
+    })
   ) {
     throw new ApplicationError(
       'INVALID_INPUT',

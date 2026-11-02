@@ -58,9 +58,9 @@ const {
   mockNotificationDeliveryService: {
     recoverPending: vi.fn(),
     claimForDispatch: vi.fn(),
-    isAlreadyDelivered: vi.fn(),
+    getDispatchState: vi.fn(),
     acknowledgeSuccessfulDispatch: vi.fn(),
-    removeDuplicateFromQueue: vi.fn(),
+    removeBlockedFromQueue: vi.fn(),
     resetSession: vi.fn(),
     isNotificationMessage: vi.fn(),
   },
@@ -128,9 +128,9 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockNotificationDeliveryService.claimForDispatch.mockReturnValue({
       status: 'not_notification',
     });
-    mockNotificationDeliveryService.isAlreadyDelivered.mockResolvedValue(false);
+    mockNotificationDeliveryService.getDispatchState.mockResolvedValue('pending');
     mockNotificationDeliveryService.acknowledgeSuccessfulDispatch.mockResolvedValue(undefined);
-    mockNotificationDeliveryService.removeDuplicateFromQueue.mockReturnValue(true);
+    mockNotificationDeliveryService.removeBlockedFromQueue.mockReturnValue(true);
     mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(false);
     mockNotificationDeliveryService.recoverPending.mockResolvedValue({ dispatchableCount: 0 });
     mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);

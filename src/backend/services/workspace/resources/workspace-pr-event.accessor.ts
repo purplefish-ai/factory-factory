@@ -25,6 +25,7 @@ import {
   projectDeliveryEvents,
   exportDeliveryEvents,
 } from './workspace-pr-delivery.accessor';
+import { selectPRRecoveryWithoutCollisions } from './workspace-pr-recovery-collisions';
 
 // Frozen legacy metadata without a receipt cannot authorize another effect.
 const unboundLegacyEvidenceWhere = {
@@ -482,7 +483,11 @@ class WorkspacePrEventAccessor {
     workspaceId: string,
     input: PRRecovery
   ) {
-    const snapshot = prRecoverySchema.parse(input);
+    const snapshot = await selectPRRecoveryWithoutCollisions(
+      tx,
+      workspaceId,
+      prRecoverySchema.parse(input)
+    );
     await createInertRecoveryDeliveries(tx, workspaceId, snapshot);
     await createInertRecoveryFacts(tx, workspaceId, snapshot);
     const legacyIds = new Set(

@@ -137,11 +137,11 @@ function setup(provider: ChatProvider) {
     startup: { getSessionClient: () => handle, getOrCreateSessionClient: async () => handle },
     notificationDelivery: {
       claimForDispatch: () => ({ status: 'not_notification' }),
-      isAlreadyDelivered: async () => false,
+      getDispatchState: async () => 'pending',
       acknowledgeSuccessfulDispatch: async () => undefined,
       recoverPending: async () => ({ dispatchableCount: 0 }),
       resetSession: () => undefined,
-      removeDuplicateFromQueue: () => false,
+      removeBlockedFromQueue: () => false,
       isNotificationMessage: () => false,
     },
   });

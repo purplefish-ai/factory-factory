@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { closedSessionTranscriptSchema } from './closed-session-transcript.schema';
 
-// Limits apply to decoded transcript UTF-8 bytes, independently of JSON escaping.
+// Archive export/import has its own decoded UTF-8 budget, independent of JSON escaping.
+// The enclosing v8 recovery wire package has a separate, stricter 64 MiB budget.
 export const MAX_ARCHIVE_ENTRIES = 10_000;
 export const MAX_ARCHIVE_ENTRY_BYTES = 16 * 1024 * 1024;
 export const MAX_ARCHIVE_TOTAL_BYTES = 256 * 1024 * 1024;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const identity = z.string().min(1).max(1024);
-const transcriptSchema = closedSessionTranscriptSchema
+export const archiveTranscriptSchema = closedSessionTranscriptSchema
   .extend({
     metadata: closedSessionTranscriptSchema.shape.metadata.extend({
       startedAt: z.iso.datetime(),
@@ -56,7 +57,7 @@ const archiveRecoveryEntrySchema = z
       ctx.addIssue({ code: 'custom', path: ['transcript'], message: 'Invalid archive JSON' });
       return;
     }
-    const parsed = transcriptSchema.safeParse(json);
+    const parsed = archiveTranscriptSchema.safeParse(json);
     if (!parsed.success) {
       ctx.addIssue({
         code: 'custom',

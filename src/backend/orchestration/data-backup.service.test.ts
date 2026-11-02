@@ -35,6 +35,7 @@ const mockTx = vi.hoisted(() => ({
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
+  workspacePR: { findMany: vi.fn(async () => []) },
   project: {
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
     create: vi.fn(),
@@ -780,7 +781,7 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          // The v4 format's flat run-script fields land in the nested row too.
+          // Restore v4 script commands while resetting process state to IDLE/null.
           // `postRunCommand` is absent because the format never carried it, so it
           // restores as null and the next reconcile reads it back off disk.
           runScript: {

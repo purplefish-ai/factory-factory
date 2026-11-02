@@ -7,6 +7,7 @@ import { workspaceNotificationService } from './workspace-notification.service';
 vi.mock('@/backend/services/workspace/resources/workspace-notification.accessor', () => ({
   workspaceNotificationAccessor: {
     findPending: vi.fn(),
+    findById: vi.fn(),
   },
 }));
 
@@ -30,3 +31,16 @@ describe('workspaceNotificationService', () => {
     ]);
   });
 });
+
+it.each([null, new Date('2026-01-01')])(
+  'keeps an explicit held row available to the delivery admission port (deliveredAt=%s)',
+  async (deliveredAt) => {
+    const row = unsafeCoerce<WorkspaceNotification>({
+      id: 'held',
+      recoveryHeld: true,
+      deliveredAt,
+    });
+    vi.mocked(workspaceNotificationAccessor.findById).mockResolvedValue(row);
+    await expect(workspaceNotificationService.findForDelivery('held')).resolves.toBe(row);
+  }
+);

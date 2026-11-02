@@ -11,15 +11,19 @@ import { archiveRecoverySchema } from '@/shared/schemas/archive-recovery.schema'
 
 let db: IntegrationDatabase;
 let recovery: typeof import('./archive-recovery');
-let producer: typeof import('../lifecycle/closed-session-persistence.service');
-let storage: typeof import('../lifecycle/closed-session-storage');
+let producer: typeof import('@/backend/services/session/service/lifecycle/closed-session-persistence.service');
+let storage: typeof import('@/backend/services/session/service/lifecycle/closed-session-storage');
 let config: typeof import('@/backend/services/config.service').configService;
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   vi.stubEnv('BASE_DIR', db.tempDir);
   recovery = await vi.importActual('./archive-recovery');
-  producer = await vi.importActual('../lifecycle/closed-session-persistence.service');
-  storage = await vi.importActual('../lifecycle/closed-session-storage');
+  producer = await vi.importActual(
+    '@/backend/services/session/service/lifecycle/closed-session-persistence.service'
+  );
+  storage = await vi.importActual(
+    '@/backend/services/session/service/lifecycle/closed-session-storage'
+  );
   ({ configService: config } = await vi.importActual('@/backend/services/config.service'));
 });
 beforeEach(async () => {
@@ -134,11 +138,14 @@ it.each(['CLAUDE', 'CODEX'] as const)(
     entry.byteLength = Buffer.byteLength(entry.transcript);
     expect(archiveRecoverySchema.safeParse(packaged).success).toBe(true);
     await db.prisma.closedSession.deleteMany();
-    await expect(
-      db.prisma.$transaction((tx) =>
+    await db.prisma.$transaction(async (tx) => {
+      const create = vi.spyOn(tx.closedSession, 'create');
+      await expect(
         recovery.restoreSessionArchives(tx, packaged, new Set(['workspace']))
-      )
-    ).rejects.toThrow('Invalid content archive identity');
+      ).rejects.toThrow('Invalid content archive identity');
+      // The callback commits: rollback cannot hide a write attempted before rejection.
+      expect(create).not.toHaveBeenCalled();
+    });
     expect(await db.prisma.closedSession.count()).toBe(0);
   }
 );
@@ -162,7 +169,7 @@ it.each([false, true])(
     await recovery.publishRestoredSessionArchives(ids);
     vi.resetModules();
     const restarted: typeof producer = await vi.importActual(
-      '../lifecycle/closed-session-persistence.service'
+      '@/backend/services/session/service/lifecycle/closed-session-persistence.service'
     );
     await restarted.closedSessionPersistenceService.persistClosedSession(originalInput);
     const rows = await db.prisma.closedSession.findMany();

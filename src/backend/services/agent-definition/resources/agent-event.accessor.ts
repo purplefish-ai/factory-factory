@@ -145,6 +145,59 @@ export const agentEventAccessor = {
   finalizeEventOrderInTransaction,
 };
 
+type RecoveryEvent = DurableRecovery['agentEvent'][number];
+function eventIdentity(
+  row: Pick<RecoveryEvent, 'connectionId' | 'providerEventId' | 'sourceOrder'>
+) {
+  return {
+    provider: JSON.stringify([row.connectionId, row.providerEventId]),
+    order: row.sourceOrder === null ? null : JSON.stringify([row.connectionId, row.sourceOrder]),
+  };
+}
+async function eventRecoveryCollisions(tx: Prisma.TransactionClient, events: RecoveryEvent[]) {
+  const ids = new Set<string>();
+  const providers = new Set<string>();
+  const orders = new Set<string>();
+  const add = (
+    row: Pick<RecoveryEvent, 'id' | 'connectionId' | 'providerEventId' | 'sourceOrder'>
+  ) => {
+    ids.add(row.id);
+    const identity = eventIdentity(row);
+    providers.add(identity.provider);
+    if (identity.order !== null) {
+      orders.add(identity.order);
+    }
+  };
+  for (let start = 0; start < events.length; start += 100) {
+    const OR = events
+      .slice(start, start + 100)
+      .flatMap((row): Prisma.AgentEventWhereInput[] => [
+        { id: row.id },
+        { connectionId: row.connectionId, providerEventId: row.providerEventId },
+        ...(row.sourceOrder === null
+          ? []
+          : [{ connectionId: row.connectionId, sourceOrder: row.sourceOrder }]),
+      ]);
+    for (const row of await tx.agentEvent.findMany({
+      where: { OR },
+      select: { id: true, connectionId: true, providerEventId: true, sourceOrder: true },
+    })) {
+      add(row);
+    }
+  }
+  return {
+    add,
+    has(row: RecoveryEvent) {
+      const identity = eventIdentity(row);
+      return (
+        ids.has(row.id) ||
+        providers.has(identity.provider) ||
+        (identity.order !== null && orders.has(identity.order))
+      );
+    },
+  };
+}
+
 export async function restoreRecoveryEvents(
   tx: Prisma.TransactionClient,
   data: DurableRecovery,
@@ -152,11 +205,9 @@ export async function restoreRecoveryEvents(
 ) {
   const nulls = recoveryJsonNullLookup(data.jsonStorage);
   const events = new Set<string>();
+  const collisions = await eventRecoveryCollisions(tx, data.agentEvent);
   for (const row of data.agentEvent) {
-    if (
-      !connections.has(row.connectionId) ||
-      (await tx.agentEvent.findUnique({ where: { id: row.id } }))
-    ) {
+    if (!connections.has(row.connectionId) || collisions.has(row)) {
       continue;
     }
     await tx.agentEvent.create({
@@ -166,6 +217,7 @@ export async function restoreRecoveryEvents(
       },
     });
     events.add(row.id);
+    collisions.add(row);
   }
   return events;
 }

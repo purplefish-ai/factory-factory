@@ -128,10 +128,10 @@ function dispatcher(
     },
     notificationDelivery: {
       claimForDispatch: () => ({ status: 'not_notification' }),
-      isAlreadyDelivered: async () => false,
+      getDispatchState: async () => 'pending',
       acknowledgeSuccessfulDispatch: vi.fn(),
       recoverPending: vi.fn(),
-      removeDuplicateFromQueue: () => false,
+      removeBlockedFromQueue: () => false,
       resetSession: vi.fn(),
       isNotificationMessage: (id) => id.startsWith('workspace-notification-'),
     },

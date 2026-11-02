@@ -31,15 +31,33 @@ const state = vi.hoisted(() => {
     agentSession: { findMany: vi.fn(async () => []) },
     terminalSession: { findMany: vi.fn(async () => []) },
     userSettings: { findFirst: vi.fn(async () => null) },
-    codexAccount: { findMany: vi.fn(async () => []) },
+    codexAccount: {
+      findMany: vi.fn(async () => [
+        {
+          id: 'managed-account',
+          label: 'Managed account',
+          kind: 'MANAGED',
+          enabled: true,
+          identityKey: null,
+        },
+      ]),
+    },
   };
   return { tx, transaction: vi.fn(async (read) => read(tx)) };
 });
 vi.mock('@/backend/db', () => ({ prisma: { $transaction: state.transaction } }));
 import { dataBackupAccessor } from './data-backup.accessor';
-it('reads account identity and every relational row inside one consistent transaction', async () => {
+it('includes account identity metadata in the relational snapshot transaction', async () => {
   const snapshot = await dataBackupAccessor.getSnapshotForExport();
   expect(state.transaction).toHaveBeenCalledOnce();
   expect(state.tx.codexAccount.findMany).toHaveBeenCalledOnce();
-  expect(snapshot.codexAccounts).toEqual([]);
+  expect(snapshot.codexAccounts).toEqual([
+    {
+      id: 'managed-account',
+      label: 'Managed account',
+      kind: 'MANAGED',
+      enabled: true,
+      identityKey: null,
+    },
+  ]);
 });

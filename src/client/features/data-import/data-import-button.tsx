@@ -36,6 +36,7 @@ export function DataImportButton({
   children,
 }: DataImportButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const afterReportClose = useRef<(() => Promise<void>) | null>(null);
   const [report, setReport] = useState<RecoveryImportReport | null>(null);
   const [confirmState, setConfirmState] = useState<ImportConfirmState>({
     open: false,
@@ -64,16 +65,21 @@ export function DataImportButton({
       } else {
         toast.success('Import completed', { description, duration: 10_000 });
       }
-      if (recovery.models.some((row) => row.imported + row.skipped > 0)) {
-        setReport(recovery);
-      }
+      const hasReport = recovery.models.some((row) => row.imported + row.skipped > 0);
       setConfirmState({ open: false, data: null, summary: '' });
 
-      // Invalidate all queries to refresh data
-      await utils.invalidate();
-
-      // Call success callback if provided
-      onImportSuccess?.();
+      const complete = async () => {
+        await utils.invalidate();
+        onImportSuccess?.();
+      };
+      // Refreshing project queries can unmount first-project onboarding too.
+      // Keep both refresh and navigation behind the report's dismissal.
+      if (hasReport) {
+        afterReportClose.current = complete;
+        setReport(recovery);
+      } else {
+        await complete();
+      }
     },
     onError: (error) => {
       toast.error(`Import failed: ${error.message}`);
@@ -172,7 +178,17 @@ export function DataImportButton({
         className="hidden"
       />
 
-      <DataImportResultDialog report={report} onClose={() => setReport(null)} />
+      <DataImportResultDialog
+        report={report}
+        onClose={() => {
+          setReport(null);
+          const complete = afterReportClose.current;
+          afterReportClose.current = null;
+          if (complete) {
+            runInBackground(complete(), 'Could not finish import');
+          }
+        }}
+      />
       <ConfirmDialog
         open={confirmState.open}
         onOpenChange={(open) => {

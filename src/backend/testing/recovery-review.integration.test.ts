@@ -142,7 +142,12 @@ it('skips colliding lifecycle deduplication identities without aborting other ad
   await db.prisma.sessionLifecycleEvent.create({
     data: { ...row, id: 'local-event', workspaceId: 'old-local-workspace', message: 'keep local' },
   });
-  await expect(dataBackupService.importData(backup)).resolves.toBeDefined();
+  const result = await dataBackupService.importData(backup);
+  expect(result.recovery.skipped).toContainEqual({
+    model: 'SessionLifecycleEvent',
+    identity: 'source-event',
+    reason: 'CONFLICTING_IDENTITY_OR_PARENT',
+  });
   expect(await db.prisma.project.count()).toBe(2);
   expect(await db.prisma.sessionLifecycleEvent.findMany()).toEqual([
     expect.objectContaining({ id: 'local-event', message: 'keep local' }),

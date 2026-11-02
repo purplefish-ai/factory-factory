@@ -3,7 +3,11 @@ import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/a
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
-import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import type {
+  NotificationDispatchClaim,
+  NotificationDispatchState,
+  NotificationDispatchBlockReason,
+} from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 
@@ -40,9 +44,13 @@ export interface SessionDispatchNotificationDeliveryService {
     assertAllowed(): void;
   }): Promise<{ dispatchableCount: number }>;
   claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
-  isAlreadyDelivered(notificationId: string): Promise<boolean>;
+  getDispatchState(notificationId: string): Promise<NotificationDispatchState>;
   acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;
-  removeDuplicateFromQueue(sessionId: string, messageId: string): boolean;
+  removeBlockedFromQueue(
+    sessionId: string,
+    messageId: string,
+    reason?: NotificationDispatchBlockReason
+  ): boolean;
   resetSession(sessionId: string): void;
   isNotificationMessage(messageId: string): boolean;
 }

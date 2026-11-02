@@ -106,9 +106,10 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
     }
     assertCursorFence(checkpoint, state.authorityRevision);
   }
-  collectCheckpointClaims(authoritative, states, markers, headsByScan, claims);
+  collectCheckpointClaims(authoritative, states, markers, headsByScan);
   collectRetainedClaims(data, headsByScan, claims);
   collectCaptureClaims(data, markers, headsByScan, claims);
+  assertRetainedHighwater(states, claims);
   assertCommittedCursorClaims(data, claims);
   for (const checkpoint of authoritative) {
     if (checkpoint.previousBoundaryEventId === null) {
@@ -174,8 +175,7 @@ function collectCheckpointClaims(
   authoritative: Checkpoint[],
   states: Map<string, DurableRecovery['agentSourceState'][number]>,
   markers: ReturnType<typeof collectMarkers>,
-  headsByScan: Map<string, Head[]>,
-  claims: Claims
+  headsByScan: Map<string, Head[]>
 ) {
   for (const checkpoint of authoritative) {
     const heads = (headsByScan.get(key(checkpoint.connectionId, checkpoint.scanId)) ?? []).sort(
@@ -193,14 +193,6 @@ function collectCheckpointClaims(
       marker.head !== checkpoint.headEventId
     ) {
       invalid();
-    }
-    for (const head of heads) {
-      claim(
-        claims,
-        checkpoint.connectionId,
-        head.providerEventId,
-        checkpoint.sourceOrder - head.precedingEventCount
-      );
     }
   }
 }
@@ -271,28 +263,33 @@ function collectCaptureClaims(
   }
 }
 
-function assertCursorInitialization(
-  state: DurableRecovery['agentSourceState'][number],
+function assertRetainedHighwater(
+  states: Map<string, DurableRecovery['agentSourceState'][number]>,
   claims: Claims
 ) {
-  // prepareBaseline initializes falsy cursors only at zero highwater. It can then
-  // assign any requested head ordinal zero, contradicting retained positive proof.
-  if (state.cursor || state.lastSourceOrder !== 0) {
-    return;
-  }
-  for (const order of claims.get(state.connectionId)?.values() ?? []) {
-    if (order > 0) {
+  for (const state of states.values()) {
+    if (!Number.isSafeInteger(state.lastSourceOrder) || state.lastSourceOrder < 0) {
       invalid();
+    }
+  }
+  // Finalization writes ordinals and this highwater in one ledger transaction.
+  // Missing counters can initialize at zero, never below retained positive proof.
+  // FINALIZE's highwater includes its partially finalized, not-yet-committed head.
+  for (const [connectionId, orders] of claims) {
+    const highwater = states.get(connectionId)?.lastSourceOrder ?? 0;
+    for (const order of orders.values()) {
+      if (order > highwater) {
+        invalid();
+      }
     }
   }
 }
 
 function assertCommittedCursorClaims(data: DurableRecovery, claims: Claims) {
   for (const state of data.agentSourceState) {
-    assertCursorInitialization(state, claims);
     const cursor = agentGithubCursorSchema.safeParse(state.cursor);
-    // Truthy opaque legacy bytes cannot pass the runtime parser; unlike falsy
-    // values above they do not enter initialization or authorize new claims.
+    // Opaque legacy bytes cannot pass the runtime parser. The independent
+    // highwater check also protects reset-capable falsy and empty cursors.
     if (!cursor.success) {
       continue;
     }

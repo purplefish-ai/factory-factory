@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   archiveRecoveryInventoryDescriptor,
   durableRecoveryInventoryDescriptors,
+  prRecoveryInventoryDescriptors,
   readRecoveryInventory,
   reportRecoveryImport,
   validateRecoveryIdentityUniqueness,
@@ -21,6 +22,7 @@ import { Prisma } from '@prisma-gen/client';
 type Descriptor = {
   model: string;
   table: string;
+  identity: 'primary' | 'unique';
   keys: readonly { field: string; column: string }[];
 };
 const schema = readFileSync(join(process.cwd(), 'prisma/schema.prisma'), 'utf8');
@@ -35,18 +37,30 @@ function metadata(source = schema) {
         const line = body.split('\n').find((entry) => entry.trim().startsWith(`${field} `));
         return { field, column: line?.match(/@map\("([^"]+)"\)/)?.[1] ?? field };
       });
-      return [name, { table: body.match(/@@map\("([^"]+)"\)/)?.[1] ?? name, keys }];
+      const uniques = Array.from(body.matchAll(/@@unique\s*\(\s*\[([^\]]+)\]/g), (match) =>
+        match[1]!.split(',').map((item) => {
+          const field = item.trim();
+          const line = body.split('\n').find((entry) => entry.trim().startsWith(`${field} `));
+          return { field, column: line?.match(/@map\("([^"]+)"\)/)?.[1] ?? field };
+        })
+      );
+      return [name, { table: body.match(/@@map\("([^"]+)"\)/)?.[1] ?? name, keys, uniques }];
     })
   );
 }
 const allDescriptors = () => ({
   ...durableRecoveryInventoryDescriptors,
   closedSession: archiveRecoveryInventoryDescriptor,
+  ...prRecoveryInventoryDescriptors,
 });
 function verifyCoverage(descriptors: Record<string, Descriptor>, models = metadata()) {
   const expectedKeys = [
     ...Object.keys(durableRecoverySchema.shape).filter((key) => key !== 'jsonStorage'),
     'closedSession',
+    'workspacePR',
+    'workspacePRDedicatedSession',
+    'workspacePRDelivery',
+    'workspacePREvent',
   ];
   expect(Object.keys(descriptors).sort()).toEqual(expectedKeys.sort());
   expect(new Set(Object.values(descriptors).map((entry) => entry.model)).size).toBe(
@@ -57,11 +71,15 @@ function verifyCoverage(descriptors: Record<string, Descriptor>, models = metada
     const model = models.get(entry.model);
     expect(model).toBeDefined();
     expect(entry.table).toBe(model?.table);
-    expect(entry.keys).toEqual(model?.keys);
+    if (entry.identity === 'unique') {
+      expect(model?.uniques).toContainEqual(entry.keys);
+    } else {
+      expect(entry.keys).toEqual(model?.keys);
+    }
   }
 }
 
-it('exhaustively maps every durable array and archive to independent Prisma table/ordered primary-key metadata', () => {
+it('exhaustively maps every durable array and archive to independent Prisma table/ordered primary/unique-key metadata', () => {
   verifyCoverage(allDescriptors());
 });
 it('detects omitted mappings, wrong models/tables, nonprimary fields and SQL-column drift', () => {
@@ -135,7 +153,7 @@ const emptyDurable = () =>
     )
   );
 
-it('resolves every registered table and ordered primary key against a real migrated SQLite database', async () => {
+it('resolves every registered table and ordered primary/unique key against a real migrated SQLite database', async () => {
   const rowSchema = z.array(
     z.object({
       name: z.string(),
@@ -146,15 +164,47 @@ it('resolves every registered table and ordered primary key against a real migra
     const rows = rowSchema.parse(
       await db.prisma.$queryRaw(Prisma.sql`PRAGMA table_info(${Prisma.raw(`"${entry.table}"`)})`)
     );
-    expect(
-      rows
-        .filter((row) => row.pk > 0)
-        .sort((a, b) => a.pk - b.pk)
-        .map((row) => row.name)
-    ).toEqual(entry.keys.map((key) => key.column));
+    if (entry.identity === 'unique') {
+      const indexes = z
+        .array(
+          z.object({
+            name: z.string(),
+            unique: z.union([z.number(), z.bigint()]).transform(Number),
+          })
+        )
+        .parse(
+          await db.prisma.$queryRaw(
+            Prisma.sql`PRAGMA index_list(${Prisma.raw(`"${entry.table}"`)})`
+          )
+        );
+      const indexedColumns: string[][] = [];
+      for (const index of indexes.filter((row) => row.unique === 1)) {
+        const columns = z
+          .array(
+            z.object({
+              name: z.string(),
+              seqno: z.union([z.number(), z.bigint()]).transform(Number),
+            })
+          )
+          .parse(
+            await db.prisma.$queryRaw(
+              Prisma.sql`PRAGMA index_info(${Prisma.raw(`"${index.name}"`)})`
+            )
+          );
+        indexedColumns.push(columns.sort((a, b) => a.seqno - b.seqno).map((row) => row.name));
+      }
+      expect(indexedColumns).toContainEqual(entry.keys.map((key) => key.column));
+    } else {
+      expect(
+        rows
+          .filter((row) => row.pk > 0)
+          .sort((a, b) => a.pk - b.pk)
+          .map((row) => row.name)
+      ).toEqual(entry.keys.map((key) => key.column));
+    }
   }
 });
-it('preserves numeric, mapped-table and compound JSON identities, 200-row batching and collision reasons', async () => {
+it('preserves natural, mapped-table and compound JSON identities, 200-row batching and collision reasons', async () => {
   const project = await db.prisma.project.create({
     data: {
       id: 'project',
@@ -287,7 +337,7 @@ it('preserves numeric, mapped-table and compound JSON identities, 200-row batchi
   }));
   const query = vi.spyOn(db.prisma, '$queryRaw');
   const before = await readRecoveryInventory(db.prisma, data);
-  expect(before.get('ChatIntent')).toEqual(new Set(['[17]']));
+  expect(before.get('ChatIntent')).toEqual(new Set(['["session","human"]']));
   expect(before.get('WorkspaceNotification')).toEqual(new Set(['["notification"]']));
   expect(before.get('AgentSourceCheckpoint')).toEqual(
     new Set([JSON.stringify(['connection', 'scan"\\unicode😀'])])
@@ -313,11 +363,11 @@ it('preserves numeric, mapped-table and compound JSON identities, 200-row batchi
   });
   expect(report.skipped).toContainEqual({
     model: 'ChatIntent',
-    identity: '17',
+    identity: '["session","human"]',
     reason: 'EXISTING_IDENTITY',
   });
   durable.chatIntent.push(durable.chatIntent[0]!);
   expect(() => validateRecoveryIdentityUniqueness(data)).toThrow(
-    'Duplicate recovery identity ChatIntent: [17]'
+    'Duplicate recovery identity ChatIntent: ["session","human"]'
   );
 });

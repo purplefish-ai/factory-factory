@@ -53,8 +53,12 @@ it('retains exact frozen delivery membership separately from event facts', () =>
   };
   const result = exportPRBackupState(workspace);
   expect(result.prEvents).toEqual([]);
-  expect(result.prRecovery.events.map((event) => event.id)).toEqual(eventIds);
-  expect(result.prRecovery.events.every((event) => event.batchId === 'frozen-receipt')).toBe(true);
+  expect(result.prRecovery.events).toEqual(
+    workspace.prEvents.map((event) => ({
+      ...event,
+      createdAt: '2025-01-01T00:00:00.000Z',
+    }))
+  );
   expect(result.prRecovery.deliveries).toEqual([
     expect.objectContaining({
       id: 'frozen-receipt',

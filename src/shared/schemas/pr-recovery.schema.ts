@@ -11,7 +11,7 @@ export const prDeliveryRecoverySchema = z.strictObject({
   provider: z.string().nullable(),
   providerSessionId: z.string().nullable(),
   bindingRevision: z.number().int().nonnegative().nullable(),
-  text: z.string().nullable(),
+  text: prEventBackupSchema.shape.deliveryText,
   attempts: z.number().int().nonnegative(),
   claimedAt: instant,
   deliveredAt: instant,
@@ -59,7 +59,7 @@ export const prRecoverySchema = z
       if (!(batchId || prEventBackupSchema.safeParse(legacy).success)) {
         ctx.addIssue({
           code: 'custom',
-          message: 'Dispatching event requires complete frozen delivery metadata',
+          message: 'Invalid unbatched PR fact payload or frozen delivery metadata',
         });
       }
       if (

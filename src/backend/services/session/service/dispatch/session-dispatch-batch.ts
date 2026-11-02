@@ -5,7 +5,10 @@ import type { SessionCallerGuard } from '@/backend/services/session/service/brid
 import { UncertainChatDispatchError } from '@/backend/services/session/service/chat/chat-intent-errors';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
-import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import {
+  notificationClaimBlockReason,
+  type NotificationDispatchClaim,
+} from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import type {
@@ -190,7 +193,7 @@ async function handleFailedBatch(
   return undefined;
 }
 
-async function dropDuplicateNotification(
+async function dropBlockedNotification(
   notifications: SessionDispatchNotificationDeliveryService,
   sessionId: string,
   messageId: string,
@@ -205,17 +208,15 @@ async function dropDuplicateNotification(
   if (claim.status === 'claimed') {
     claims.push(claim);
   }
-  const duplicate =
-    claim.status === 'duplicate' ||
-    (claim.status === 'claimed' && (await notifications.isAlreadyDelivered(claim.notificationId)));
-  if (duplicate) {
+  const reason = await notificationClaimBlockReason(notifications, claim);
+  if (reason) {
     if (guard) {
       await guard.check();
       guard.assertCurrent?.();
     }
-    notifications.removeDuplicateFromQueue(sessionId, messageId);
+    notifications.removeBlockedFromQueue(sessionId, messageId, reason);
   }
-  return duplicate;
+  return reason !== undefined;
 }
 
 /** Receipt/notification acknowledgement must never roll back a successful provider turn. */
@@ -289,7 +290,7 @@ export async function collectDispatchBatch(input: {
         break;
       }
       if (
-        await dropDuplicateNotification(
+        await dropBlockedNotification(
           input.notifications,
           input.sessionId,
           message.id,

@@ -329,8 +329,8 @@ logical recovery format: repository/worktree contents, account homes,
 credentials, encryption keys and provider-owned history are excluded. Captured
 closed-session transcripts are included as exact UTF-8 bytes with immutable
 identities and SHA-256 digests. The read transaction captures archive
-references; filesystem reads happen afterward. Missing or changed bytes fail the
-export explicitly.
+references; filesystem reads happen afterward. Missing or changed file bytes
+fail the export unless a validated transcript is retained in the database.
 
 Full installation backups must retain `encryption.key` together with a
 consistent database snapshot, the application-owned `closed-sessions` directory,
@@ -348,31 +348,45 @@ non-FK origins and deleted child/session references may still outlive their
 source rows. A run with a retained launch reservation already owned by a local
 run is skipped with its dependent history. A source page or baseline ID
 collision skips the imported connection and its complete source graph; partial
-proof is never attached to local source state. Uncertain dispatch receipts
-require every human member to remain uncertain so explicit recovery can resolve
-them. Legacy packages retain their earlier skip behavior. The completion report
-lists imported/skipped durable and archive counts plus every skipped identity,
+proof is never attached to local source state. Every human member of an
+uncertain frozen prompt attempt must retain an uncertain intent in the same
+session, so explicit recovery can resolve the complete attempt. Legacy packages
+retain their earlier skip behavior.
+
+The completion report lists imported/skipped durable, archive, PR association,
+dedicated binding, frozen delivery and fact counts plus every skipped identity,
 distinguishing existing IDs from unique-identity or parent conflicts; the UI
-warns about skips and offers the full report for download. Saved schedules,
-agent definitions, triggers, connections and PR monitoring restore disabled or
-paused. Unfinished scheduled executions become failed history for explicit
-review. Run snapshots (including atomic expired-context markers), initial-send
-evidence, source pages/checkpoints/heads/baselines, launch origins, interruption
-history and decisions are retained. Unresolved imported runs require explicit
-review and unfinished sends remain ambiguous. Matched evaluations without an
-admitted run restore as skipped review-required history with their original
-reason and explanation retained, so reenabling does not admit the imported
-decision. Pending workspace notifications retain their real delivery timestamps
-and message intent with `recoveryHeld` set; normal pending-list, count and by-ID
-delivery admission exclude held rows. The additive migration defaults existing
-notifications to unheld and does not change ordinary delivery behavior.
+warns about skips and offers the full report for download. Project query refresh
+and navigation requested by the import action wait until this report is
+dismissed. A conflicting PR delivery or member skips the complete frozen batch;
+a partial batch never borrows a local receipt.
+
+Saved schedules, agent definitions, triggers, connections and PR monitoring
+restore disabled or paused. Unfinished scheduled executions become failed
+history for explicit review. Run snapshots (including atomic expired-context
+markers), initial-send evidence, source pages/checkpoints/heads/baselines,
+launch origins, interruption history and decisions are retained. Unresolved
+imported runs require explicit review and unfinished sends remain ambiguous.
+Matched evaluations without an admitted run restore as skipped review-required
+history with their original reason and explanation retained, so reenabling does
+not admit the imported decision. Pending workspace notifications retain their
+real delivery timestamps and message intent with `recoveryHeld` set.
+Pending-list and count exclude held rows, while by-ID delivery reports an
+explicit held state. Direct dispatch and human-batch collection block that
+state; it is never treated as delivery proof. An imported notification cannot
+borrow a source workspace skipped from the backup; a genuinely deleted source
+may remain as historical provenance. The additive migration defaults existing
+notifications to unheld. An unreadable delivery state cannot authorize a send.
 
 Frozen prompt attempts preserve ordered membership, submitted content, accepted
 settings revisions, provider/account identity and evidence. Queued human intents
-restore as failed history; uncertain attempts remain uncertain. Frozen run and
-launch account IDs remain source provenance while operational session account
-FKs map to restored profiles requiring authentication. Neither a restart nor
-reenabling automation authorizes replay of imported unresolved effects.
+restore as failed history; uncertain attempts remain uncertain.
+Installation-local numeric intent IDs are regenerated in original source order.
+Intent matching and reporting use the unique session/message identity; frozen
+attempt IDs, ordered members and submitted evidence stay unchanged. Frozen run
+and launch account IDs remain source provenance while operational session
+account FKs map to restored profiles requiring authentication. Neither a restart
+nor reenabling automation authorizes replay of imported unresolved effects.
 
 Source proof is checked across retained baselines, markers, all ordinal-bearing
 checkpoint heads and event identities. Null heads can only claim ordinal zero.

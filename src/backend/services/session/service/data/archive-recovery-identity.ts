@@ -1,19 +1,13 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
-import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
-import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
-
-const identitySnapshotSchema = closedSessionTranscriptSchema.extend({
-  metadata: closedSessionTranscriptSchema.shape.metadata.extend({
-    startedAt: z.iso.datetime(),
-    completedAt: z.iso.datetime(),
-    conversationEpoch: z.number().int().nonnegative().optional(),
-  }),
-});
+import {
+  archiveTranscriptSchema,
+  type ArchiveRecovery,
+} from '@/shared/schemas/archive-recovery.schema';
 
 /** Full schema validation narrows the raw INPUT, preserving absent stream input. */
-function isIdentitySnapshot(value: unknown): value is z.input<typeof identitySnapshotSchema> {
-  return identitySnapshotSchema.safeParse(value).success;
+function isIdentitySnapshot(value: unknown): value is z.input<typeof archiveTranscriptSchema> {
+  return archiveTranscriptSchema.safeParse(value).success;
 }
 
 export function validateModernArchiveIdentity(entry: ArchiveRecovery['entries'][number]): void {

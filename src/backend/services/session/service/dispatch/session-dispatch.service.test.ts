@@ -86,11 +86,11 @@ function harness(
     startup,
     notificationDelivery: notifications ?? {
       claimForDispatch: () => ({ status: 'not_notification' }),
-      isAlreadyDelivered: async () => false,
+      getDispatchState: async () => 'pending',
       acknowledgeSuccessfulDispatch: async () => undefined,
       recoverPending: async () => ({ dispatchableCount: 0 }),
       resetSession: () => undefined,
-      removeDuplicateFromQueue: () => false,
+      removeBlockedFromQueue: () => false,
       isNotificationMessage: () => false,
     },
   });
@@ -449,7 +449,10 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     const notifications = new SessionNotificationDeliveryService({
       notificationPort: {
         listPendingForDelivery: async () => [],
-        findForDelivery: async (id) => ({ deliveredAt: delivered.has(id) ? new Date() : null }),
+        findForDelivery: async (id) => ({
+          deliveredAt: delivered.has(id) ? new Date() : null,
+          recoveryHeld: false,
+        }),
         markDelivered: (ids) => {
           ids.forEach((id) => delivered.add(id));
           return Promise.resolve();

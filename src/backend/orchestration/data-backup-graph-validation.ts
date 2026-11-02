@@ -28,7 +28,7 @@ function optional<T>(rows: ReadonlyMap<string | number, T>, id: string | null, f
 }
 function same(actual: string, expected: string, field: string) {
   if (actual !== expected) {
-    invalid(`foreign required parent ${field}`);
+    invalid(`${field} ownership mismatch: ${actual} does not match ${expected}`);
   }
 }
 function owners(data: Data, durable: DurableRecovery) {
@@ -51,6 +51,11 @@ type Owners = ReturnType<typeof owners>;
 function validateWorkspaceGraph(data: Data, graph: Owners) {
   for (const workspace of data.workspaces) {
     required(graph.projects, workspace.projectId, 'Workspace.projectId');
+    const prs = index(workspace.prs, 'WorkspacePR');
+    for (const event of workspace.prRecovery?.events ?? []) {
+      same(event.workspaceId, workspace.id, 'WorkspacePREvent.workspaceId');
+      optional(prs, event.prId, 'WorkspacePREvent.prId');
+    }
     optional(graph.workspaces, workspace.parentWorkspaceId, 'Workspace.parentWorkspaceId');
     const task = optional(graph.tasks, workspace.periodicTaskId, 'Workspace.periodicTaskId');
     if (task) {
@@ -58,6 +63,7 @@ function validateWorkspaceGraph(data: Data, graph: Owners) {
     }
   }
   validateAncestry(graph);
+  validateWorkspaceDepth(data, graph);
   for (const session of data.agentSessions) {
     required(graph.workspaces, session.workspaceId, 'AgentSession.workspaceId');
     optional(graph.accounts, session.codexAccountId, 'AgentSession.codexAccountId');
@@ -67,6 +73,17 @@ function validateWorkspaceGraph(data: Data, graph: Owners) {
   }
   for (const archive of data.archives?.entries ?? []) {
     required(graph.workspaces, archive.workspaceId, 'ClosedSession.workspaceId');
+  }
+}
+function validateWorkspaceDepth(data: Data, graph: Owners) {
+  for (const workspace of data.workspaces) {
+    const parent =
+      workspace.parentWorkspaceId === null
+        ? undefined
+        : graph.workspaces.get(workspace.parentWorkspaceId);
+    if (parent && parent.parentWorkspaceId !== null) {
+      invalid('workspace depth exceeds one child level');
+    }
   }
 }
 function validateAncestry(graph: Owners) {

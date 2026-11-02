@@ -224,8 +224,74 @@ it.each(['CAPTURE', 'VERIFY', 'FINALIZE'] as const)(
         verifySeekingOverlap: false,
       },
     };
+    if (phase === 'FINALIZE') {
+      const timestamp = '2026-01-01T00:00:00.000Z';
+      data.agentEvent.push({
+        id: 'partial-finalize-event',
+        connectionId: 'source',
+        providerEventId: 'new-head',
+        sourceOrder: 1006,
+        payload: null,
+        occurredAt: timestamp,
+        observedAt: timestamp,
+        payloadExpiresAt: timestamp,
+        identityExpiresAt: timestamp,
+        createdAt: timestamp,
+      });
+    }
     expect(() => validateRecoverySourceProof(data)).not.toThrow();
     data.agentSourceState[0]!.lastSourceOrder++;
     expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
   }
 );
+
+it.each(['parsed-empty', 'missing-counter', 'opaque-low-counter'] as const)(
+  'rejects retained positive event authority above the source highwater: %s',
+  (variant) => {
+    const data = compactInterval();
+    data.agentSourceCheckpoint = [];
+    data.agentSourceHead = [];
+    data.agentSourcePage = [];
+    data.agentSourceBaseline = [];
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    data.agentEvent = [
+      {
+        id: 'retained-event',
+        connectionId: 'source',
+        providerEventId: 'A',
+        sourceOrder: 2,
+        payload: null,
+        occurredAt: timestamp,
+        observedAt: timestamp,
+        payloadExpiresAt: timestamp,
+        identityExpiresAt: timestamp,
+        createdAt: timestamp,
+      },
+    ];
+    data.agentSourceState[0]!.lastSourceOrder = 0;
+    data.agentSourceState[0]!.cursor =
+      variant === 'opaque-low-counter'
+        ? 'opaque-legacy-cursor'
+        : { version: 1, provider: 'GITHUB', committedHeadEventId: null, scan: null };
+    if (variant === 'missing-counter') {
+      data.agentSourceState = [];
+    }
+    expect(() => validateRecoverySourceProof(data)).toThrow(/source proof/i);
+  }
+);
+
+it('accepts an empty parsed cursor at zero highwater without positive retained claims', () => {
+  const data = compactInterval();
+  data.agentSourceCheckpoint = [];
+  data.agentSourceHead = [];
+  data.agentSourcePage = [];
+  data.agentSourceBaseline = [];
+  data.agentSourceState[0]!.lastSourceOrder = 0;
+  data.agentSourceState[0]!.cursor = {
+    version: 1,
+    provider: 'GITHUB',
+    committedHeadEventId: null,
+    scan: null,
+  };
+  expect(() => validateRecoverySourceProof(data)).not.toThrow();
+});

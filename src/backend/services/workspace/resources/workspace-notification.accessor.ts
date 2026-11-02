@@ -1,4 +1,5 @@
 import { prisma } from '@/backend/db';
+import { retainedReferenceAllowed } from '@/shared/recovery-graph';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
 import type { Prisma, WorkspaceNotification } from '@prisma-gen/client';
 
@@ -42,7 +43,7 @@ class WorkspaceNotificationAccessor {
       return;
     }
     await prisma.workspaceNotification.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, recoveryHeld: false },
       data: { deliveredAt: new Date() },
     });
   }
@@ -59,7 +60,8 @@ export const workspaceNotificationAccessor = new WorkspaceNotificationAccessor()
 export async function restoreRecoveryNotifications(
   tx: Prisma.TransactionClient,
   data: DurableRecovery,
-  workspaces: ReadonlySet<string>
+  workspaces: ReadonlySet<string>,
+  sourceWorkspaceIds: ReadonlySet<string>
 ) {
   for (const row of data.workspaceNotification) {
     if (
@@ -68,9 +70,11 @@ export async function restoreRecoveryNotifications(
     ) {
       continue;
     }
+    const sourceExists =
+      workspaces.has(row.sourceWorkspaceId) ||
+      !!(await tx.workspace.findUnique({ where: { id: row.sourceWorkspaceId } }));
     if (
-      !workspaces.has(row.sourceWorkspaceId) &&
-      (await tx.workspace.findUnique({ where: { id: row.sourceWorkspaceId } }))
+      !retainedReferenceAllowed(sourceWorkspaceIds, workspaces, row.sourceWorkspaceId, sourceExists)
     ) {
       continue;
     }

@@ -148,7 +148,11 @@ it('roundtrips actual accepted/overridden/frozen producer rows and remains reada
   await db.prisma.$transaction((tx) => restore(tx, snapshot, new Set(['session'])));
   const restoredIntents = await db.prisma.chatIntent.findMany();
   const restoredAttempts = await db.prisma.promptDispatchAttempt.findMany();
-  expect(JSON.parse(JSON.stringify(restoredIntents))).toEqual(snapshot.chatIntent);
+  expect(JSON.parse(JSON.stringify(restoredIntents))).toEqual(
+    snapshot.chatIntent.map((row) => ({ ...row, id: expect.any(Number) }))
+  );
+  // The installation-local sequence is regenerated; all natural identity and frozen fields stay exact.
+  expect(restoredIntents[0]?.id).not.toBe(snapshot.chatIntent[0]?.id);
   expect(JSON.parse(JSON.stringify(restoredAttempts))).toEqual(snapshot.promptDispatchAttempt);
   await expect(owner.read('session', true)).resolves.toMatchObject([
     {
@@ -189,7 +193,16 @@ it.each(['submitted', 'desired', 'effectiveSettings'])(
       db.prisma.$transaction((tx) =>
         restore(tx, durableRecoverySchema.parse(corrupted), new Set(['session']))
       )
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: [field === 'effectiveSettings' ? 'promptDispatchAttempt' : 'chatIntent', 0, field],
+          message: expect.stringContaining(
+            field === 'submitted' ? 'Invalid submitted intent' : 'Invalid intent settings'
+          ),
+        }),
+      ]),
+    });
     expect(await db.prisma.chatIntent.count()).toBe(0);
     expect(await db.prisma.promptDispatchAttempt.count()).toBe(0);
   }

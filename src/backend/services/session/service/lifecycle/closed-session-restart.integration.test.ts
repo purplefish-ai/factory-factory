@@ -379,11 +379,11 @@ it.each([
       startup: { getSessionClient: () => ({}), getOrCreateSessionClient: async () => ({}) },
       notificationDelivery: {
         claimForDispatch: () => ({ status: 'not_notification' }),
-        isAlreadyDelivered: async () => false,
+        getDispatchState: async () => 'pending',
         acknowledgeSuccessfulDispatch: async () => undefined,
         recoverPending: async () => ({ dispatchableCount: 0 }),
         resetSession: () => undefined,
-        removeDuplicateFromQueue: () => false,
+        removeBlockedFromQueue: () => false,
         isNotificationMessage: () => false,
       },
     });

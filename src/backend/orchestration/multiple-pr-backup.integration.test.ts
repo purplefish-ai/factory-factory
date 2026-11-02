@@ -374,7 +374,7 @@ it('backfills only the matching legacy fixer session PR target', async () => {
 });
 
 it.each(['missing', 'foreign', 'matching'] as const)(
-  'validates %s local PR association when skipping an existing workspace',
+  'preserves an existing workspace for %s local PR association without importing its sessions',
   async (association) => {
     const exported = await dataBackupService.exportData('test');
     await clearIntegrationDatabase(db.prisma);
@@ -391,10 +391,14 @@ it.each(['missing', 'foreign', 'matching'] as const)(
         data: { id: 'a', workspaceId, url: 'https://github.com/o/r/pull/42' },
       });
     }
+    const originalWorkspace = await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'w' } });
+    const originalPRs = await db.prisma.workspacePR.findMany();
     const result = await dataBackupService.importData(exportDataSchema.parse(exported));
     expect(result.workspaces).toEqual({ imported: 0, skipped: 1 });
     expect(result.agentSessions).toEqual({ imported: 0, skipped: 1 });
     expect(await db.prisma.agentSession.count()).toBe(0);
+    expect(await db.prisma.workspace.findUnique({ where: { id: 'w' } })).toEqual(originalWorkspace);
+    expect(await db.prisma.workspacePR.findMany()).toEqual(originalPRs);
   }
 );
 
@@ -656,7 +660,7 @@ it.each(['deliveryProvider', 'deliveryProviderSessionId'] as const)(
     expect(exportDataSchema.safeParse(invalid).success).toBe(false);
     await clearIntegrationDatabase(db.prisma);
     await expect(dataBackupService.importData(invalid)).rejects.toThrow(
-      'complete frozen delivery metadata'
+      'Invalid unbatched PR fact payload or frozen delivery metadata'
     );
     expect(await db.prisma.workspacePREvent.count()).toBe(0);
     expect(await db.prisma.workspace.count()).toBe(0);

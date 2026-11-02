@@ -270,7 +270,9 @@ it.each(['definition', 'connection'])(
     const fixture = await createLedgerFixture(db, runtime);
     await fixture.admit(await fixture.event());
     const sourceRun = await db.prisma.agentRun.findFirstOrThrow();
-    const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
+    const backup = exportDataSchema.parse(
+      JSON.parse(JSON.stringify(await dataBackupService.exportData('test')))
+    );
     await db.prisma.agentDefinition.deleteMany();
     await db.prisma.agentEvent.deleteMany();
     await db.prisma.agentConnection.deleteMany();
@@ -307,7 +309,17 @@ it.each(['definition', 'connection'])(
         },
       });
     }
-    await dataBackupService.importData(backup);
+    const result = await dataBackupService.importData(backup);
+    expect(result.recovery.skipped).toEqual(
+      expect.arrayContaining([
+        {
+          model: 'AgentTrigger',
+          identity: fixture.triggerId,
+          reason: 'CONFLICTING_IDENTITY_OR_PARENT',
+        },
+        { model: 'AgentRun', identity: sourceRun.id, reason: 'CONFLICTING_IDENTITY_OR_PARENT' },
+      ])
+    );
     expect(
       await db.prisma.agentTrigger.findUnique({ where: { id: fixture.triggerId } })
     ).toBeNull();

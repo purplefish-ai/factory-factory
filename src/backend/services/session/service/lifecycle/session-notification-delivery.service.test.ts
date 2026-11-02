@@ -707,20 +707,23 @@ describe('SessionNotificationDeliveryService', () => {
   it('reports delivered rows and pending rows through the durable notification port', async () => {
     const { service, notificationPort } = createHarness();
     notificationPort.findForDelivery
-      .mockResolvedValueOnce({ deliveredAt: new Date('2026-06-22T10:30:00.000Z') })
-      .mockResolvedValueOnce({ deliveredAt: null })
+      .mockResolvedValueOnce({
+        deliveredAt: new Date('2026-06-22T10:30:00.000Z'),
+        recoveryHeld: false,
+      })
+      .mockResolvedValueOnce({ deliveredAt: null, recoveryHeld: false })
       .mockResolvedValueOnce(null);
 
-    await expect(service.isAlreadyDelivered('notif-delivered')).resolves.toBe(true);
-    await expect(service.isAlreadyDelivered('notif-pending')).resolves.toBe(false);
-    await expect(service.isAlreadyDelivered('notif-missing')).resolves.toBe(false);
+    await expect(service.getDispatchState('notif-delivered')).resolves.toBe('delivered');
+    await expect(service.getDispatchState('notif-pending')).resolves.toBe('pending');
+    await expect(service.getDispatchState('notif-missing')).resolves.toBe('missing');
   });
 
-  it('fails open when durable notification delivery state cannot be read', async () => {
+  it('reports unavailable so dispatch stays blocked when durable delivery state cannot be read', async () => {
     const { service, notificationPort } = createHarness();
     notificationPort.findForDelivery.mockRejectedValue(new Error('database unavailable'));
 
-    await expect(service.isAlreadyDelivered('notif-1')).resolves.toBe(false);
+    await expect(service.getDispatchState('notif-1')).resolves.toBe('unavailable');
 
     expect(logger.warn).toHaveBeenCalledWith(
       '[Chat WS] Failed to check workspace notification delivery state',
@@ -732,7 +735,7 @@ describe('SessionNotificationDeliveryService', () => {
     const { service, queuePort } = createHarness();
     queuePort.removeQueuedMessage.mockReturnValue(false);
 
-    expect(service.removeDuplicateFromQueue('session-1', 'workspace-notification-notif-1')).toBe(
+    expect(service.removeBlockedFromQueue('session-1', 'workspace-notification-notif-1')).toBe(
       false
     );
     expect(queuePort.removeQueuedMessage).toHaveBeenCalledWith(
@@ -842,3 +845,13 @@ it('rechecks uncertainty after pending notification reads before inferring trans
   expect(h.notificationPort.markDelivered).not.toHaveBeenCalled();
   expect(h.queuePort.enqueue).not.toHaveBeenCalled();
 });
+
+it.each([null, new Date('2026-01-01')])(
+  'reports held separately from delivery proof even when deliveredAt=%s',
+  async (deliveredAt) => {
+    const h = createHarness();
+    h.notificationPort.findForDelivery.mockResolvedValue({ deliveredAt, recoveryHeld: true });
+    await expect(h.service.getDispatchState('held')).resolves.toBe('held');
+    expect(h.notificationPort.markDelivered).not.toHaveBeenCalled();
+  }
+);

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { prRecoverySchema } from './pr-recovery.schema';
+import { prRecoverySchema, prDeliveryRecoverySchema } from './pr-recovery.schema';
 
 function fixture() {
   return {
@@ -68,4 +68,13 @@ it('rejects facts pointing to absent batches or borrowing a second receipt ident
   }
   Object.assign(event, { deliveryId: 'another-receipt' });
   expect(prRecoverySchema.safeParse(conflicting).success).toBe(false);
+});
+
+it('bounds normalized frozen delivery text by UTF-8 bytes while preserving exact accepted text', () => {
+  const delivery = { ...fixture().deliveries[0]!, text: '🙂'.repeat(4096) };
+  expect(prDeliveryRecoverySchema.parse(delivery).text).toBe(delivery.text);
+  expect(
+    prDeliveryRecoverySchema.safeParse({ ...delivery, text: `${delivery.text}a` }).success
+  ).toBe(false);
+  expect(prDeliveryRecoverySchema.safeParse({ ...delivery, text: null }).success).toBe(true);
 });

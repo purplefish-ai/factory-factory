@@ -19,7 +19,7 @@ class WorkspaceNotificationService {
 
   async findForDelivery(id: string) {
     const notification = await workspaceNotificationAccessor.findById(id);
-    return notification?.recoveryHeld ? null : notification;
+    return notification;
   }
 
   async listPendingForDelivery(workspaceId: string) {

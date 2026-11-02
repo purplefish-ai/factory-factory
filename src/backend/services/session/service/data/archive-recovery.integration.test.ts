@@ -1,5 +1,5 @@
-import { readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { getClosedSessionArchiveKey } from '@/backend/services/session/service/lifecycle/closed-session-identity';
 import {
@@ -11,8 +11,8 @@ import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
 
 let db: IntegrationDatabase;
 let recovery: typeof import('./archive-recovery');
-let storage: typeof import('../lifecycle/closed-session-storage');
-let publisher: typeof import('../lifecycle/closed-session-persistence.service');
+let storage: typeof import('@/backend/services/session/service/lifecycle/closed-session-storage');
+let publisher: typeof import('@/backend/services/session/service/lifecycle/closed-session-persistence.service');
 let atomic: typeof import('@/backend/lib/atomic-file');
 let config: typeof import('@/backend/services/config.service').configService;
 const startedAt = '2026-01-01T00:00:00.000Z';
@@ -22,8 +22,12 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   vi.stubEnv('BASE_DIR', db.tempDir);
   recovery = await vi.importActual('./archive-recovery');
-  storage = await vi.importActual('../lifecycle/closed-session-storage');
-  publisher = await vi.importActual('../lifecycle/closed-session-persistence.service');
+  storage = await vi.importActual(
+    '@/backend/services/session/service/lifecycle/closed-session-storage'
+  );
+  publisher = await vi.importActual(
+    '@/backend/services/session/service/lifecycle/closed-session-persistence.service'
+  );
   atomic = await vi.importActual('@/backend/lib/atomic-file');
   ({ configService: config } = await vi.importActual('@/backend/services/config.service'));
 });
@@ -195,7 +199,7 @@ it('retains durable PENDING bytes after interrupted publication and recovers the
   ).toMatchObject({ archiveState: 'PENDING', pendingTranscript: input.entries[0]!.transcript });
   vi.resetModules();
   const restarted: typeof publisher = await vi.importActual(
-    '../lifecycle/closed-session-persistence.service'
+    '@/backend/services/session/service/lifecycle/closed-session-persistence.service'
   );
   await restarted.closedSessionPersistenceService.recoverById('archive');
   const row = await db.prisma.closedSession.findUniqueOrThrow({ where: { id: 'archive' } });
@@ -222,11 +226,23 @@ it('fails export when a complete artifact is deleted after the relational snapsh
 it('does not overwrite a different artifact when wire identifiers contain traversal', async () => {
   const input = packageFor();
   input.entries[0]!.id = '../outside';
-  await expect(
-    db.prisma.$transaction((tx) =>
+  const entry = input.entries[0]!;
+  const target = join(
+    db.tempDir,
+    storage.closedSessionArchivePath(entry.workspaceId, entry.id, entry.sha256)
+  );
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, 'existing unrelated artifact');
+  await db.prisma.$transaction(async (tx) => {
+    const create = vi.spyOn(tx.closedSession, 'create');
+    await expect(
       recovery.restoreSessionArchives(tx, input, new Set(['workspace']))
-    )
-  ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      issues: [expect.objectContaining({ code: 'invalid_format', path: ['entries', 0, 'id'] })],
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+  expect(await readFile(target, 'utf8')).toBe('existing unrelated artifact');
   expect(await db.prisma.closedSession.count()).toBe(0);
 });
 

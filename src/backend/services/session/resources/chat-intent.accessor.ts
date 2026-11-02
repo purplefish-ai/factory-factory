@@ -321,19 +321,20 @@ export async function restoreRecoveryChatIntents(
 ) {
   validateRecoveryChatIntentFingerprints(data);
   const attempts = await restoreRecoveryAttempts(tx, data, sessions);
-  for (const row of data.chatIntent) {
+  for (const row of [...data.chatIntent].sort((a, b) => a.id - b.id)) {
     if (
       !sessions.has(row.sessionId) ||
       (row.attemptId && !attempts.has(row.attemptId)) ||
       (await tx.chatIntent.findFirst({
-        where: { OR: [{ id: row.id }, { sessionId: row.sessionId, messageId: row.messageId }] },
+        where: { sessionId: row.sessionId, messageId: row.messageId },
       }))
     ) {
       continue;
     }
+    const { id: _sourceOrderingId, ...intent } = row;
     await tx.chatIntent.create({
       data: {
-        ...row,
+        ...intent,
         status: row.status === 'queued' ? 'failed' : row.status,
         submitted: row.submitted ?? Prisma.JsonNull,
         desired: row.desired ?? Prisma.JsonNull,
@@ -353,7 +354,8 @@ async function restoreRecoveryAttempts(
     if (
       await tx.chatIntent.findFirst({
         where: {
-          OR: [{ id: intent.id }, { sessionId: intent.sessionId, messageId: intent.messageId }],
+          sessionId: intent.sessionId,
+          messageId: intent.messageId,
         },
       })
     ) {

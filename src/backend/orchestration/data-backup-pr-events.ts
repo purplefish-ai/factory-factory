@@ -74,15 +74,13 @@ async function restoreDedicatedBindings(
     if (pr.dedicatedSession?.sessionId && !importedSessionIds.has(pr.dedicatedSession.sessionId)) {
       continue;
     }
-    if (
-      pr.dedicatedSession &&
-      !(await sessionDataService.restorePRDedicatedSession(tx, {
+    if (pr.dedicatedSession) {
+      // A false result means a destination identity/parent was skipped; inventory reports it.
+      await sessionDataService.restorePRDedicatedSession(tx, {
         workspaceId: workspace.id,
         prId: pr.id,
         sessionId: pr.dedicatedSession.sessionId,
-      }))
-    ) {
-      throw new Error('Imported dedicated session binding is invalid');
+      });
     }
   }
 }

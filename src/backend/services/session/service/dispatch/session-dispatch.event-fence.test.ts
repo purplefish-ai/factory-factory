@@ -57,9 +57,9 @@ it.each(['policy', 'unavailable'] as const)(
       notificationDelivery: {
         recoverPending: async () => ({ dispatchableCount: 0 }),
         claimForDispatch: () => ({ status: 'not_notification' }),
-        isAlreadyDelivered: async () => false,
+        getDispatchState: async () => 'pending',
         acknowledgeSuccessfulDispatch: async () => undefined,
-        removeDuplicateFromQueue: () => false,
+        removeBlockedFromQueue: () => false,
         resetSession: () => undefined,
         isNotificationMessage: () => false,
       },

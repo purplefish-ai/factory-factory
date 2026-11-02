@@ -139,7 +139,11 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
     status: 'uncertain',
     evidence: 'provider result unavailable',
   });
-  expect(await db.prisma.chatIntent.findUnique({ where: { id: 42 } })).toMatchObject({
+  expect(
+    await db.prisma.chatIntent.findUnique({
+      where: { sessionId_messageId: { sessionId: 'session', messageId: 'message' } },
+    })
+  ).toMatchObject({
     submitted,
     desired: { ...settings, selectedModel: 'later' },
     revision: 3,
@@ -147,7 +151,11 @@ it('retains complete ordered prompt attempts, original submitted settings and fr
     attemptId: 'attempt',
   });
   expect(await db.prisma.chatIntent.count({ where: { status: 'queued' } })).toBe(0);
-  expect(await db.prisma.chatIntent.findUnique({ where: { id: 43 } })).toMatchObject({
+  expect(
+    await db.prisma.chatIntent.findUnique({
+      where: { sessionId_messageId: { sessionId: 'session', messageId: 'waiting' } },
+    })
+  ).toMatchObject({
     status: 'failed',
   });
 });
@@ -224,6 +232,8 @@ it('retains checkpoint heads, verification cursor, authority revision and issued
   const baselines = await db.prisma.agentSourceBaseline.findMany();
   await roundtrip();
   expect(await db.prisma.agentSourceCheckpoint.findMany()).toEqual(checkpoint);
+  // BUILDING progress is intentionally reset to SQL NULL for canonical replay;
+  // retained JSON-null context/effect proof is tested separately.
   expect(
     await db.prisma
       .$queryRaw`SELECT json_type(verification) AS verificationType, json_type(validationCursor) AS cursorType FROM AgentSourceCheckpoint WHERE scanId = 'pending-scan'`

@@ -57,9 +57,9 @@ const {
   mockNotificationDeliveryService: {
     recoverPending: vi.fn(),
     claimForDispatch: vi.fn(),
-    isAlreadyDelivered: vi.fn(),
+    getDispatchState: vi.fn(),
     acknowledgeSuccessfulDispatch: vi.fn(),
-    removeDuplicateFromQueue: vi.fn(),
+    removeBlockedFromQueue: vi.fn(),
     resetSession: vi.fn(),
     isNotificationMessage: vi.fn(),
   },
@@ -130,9 +130,9 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockNotificationDeliveryService.claimForDispatch.mockReturnValue({
       status: 'not_notification',
     });
-    mockNotificationDeliveryService.isAlreadyDelivered.mockResolvedValue(false);
+    mockNotificationDeliveryService.getDispatchState.mockResolvedValue('pending');
     mockNotificationDeliveryService.acknowledgeSuccessfulDispatch.mockResolvedValue(undefined);
-    mockNotificationDeliveryService.removeDuplicateFromQueue.mockReturnValue(true);
+    mockNotificationDeliveryService.removeBlockedFromQueue.mockReturnValue(true);
     mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(false);
     mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);
     mockSessionDomainService.removeQueuedMessage.mockReturnValue(true);
@@ -434,9 +434,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     await sessionDispatchService.tryDispatchNextMessage('s1');
 
     // The duplicate is removed with a queue-state update, not silently dequeued.
-    expect(mockNotificationDeliveryService.removeDuplicateFromQueue).toHaveBeenCalledWith(
+    expect(mockNotificationDeliveryService.removeBlockedFromQueue).toHaveBeenCalledWith(
       's1',
-      'workspace-notification-notif-parent'
+      'workspace-notification-notif-parent',
+      'duplicate'
     );
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');

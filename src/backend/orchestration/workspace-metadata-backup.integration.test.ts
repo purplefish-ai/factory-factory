@@ -662,7 +662,10 @@ it('retains undelivered notification intent without marking it delivered or admi
     await db.prisma.workspaceNotification.findUnique({ where: { id: 'held-notice' } })
   ).toMatchObject({ deliveredAt: null, recoveryHeld: true, message: 'Human-requested follow-up' });
   expect(await workspaceNotificationService.listPendingForDelivery('workspace')).toEqual([]);
-  expect(await workspaceNotificationService.findForDelivery('held-notice')).toBeNull();
+  expect(await workspaceNotificationService.findForDelivery('held-notice')).toMatchObject({
+    recoveryHeld: true,
+    deliveredAt: null,
+  });
   expect(await workspaceNotificationService.countPending('workspace')).toBe(0);
 });
 

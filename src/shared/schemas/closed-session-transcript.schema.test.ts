@@ -21,6 +21,20 @@ function transcript(message: unknown) {
 }
 
 describe('closed-session transcript nested boundary', () => {
+  // Archive persistence shipped at 520a5a8a8 after the ACP cutover. These are
+  // the six top-level message variants from that producer's protocol, not raw SDK frames.
+  it.each([
+    { type: 'system', subtype: 'init', tools: [{ name: 'Read' }] },
+    { type: 'assistant', message: { role: 'assistant', content: 'historical answer' } },
+    { type: 'user', message: { role: 'user', content: 'historical prompt' } },
+    { type: 'stream_event', event: { type: 'message_stop' } },
+    { type: 'result', result: { historical: true }, usage: { output_tokens: 1 } },
+    { type: 'error', error: 'historical failure' },
+  ])('retains the original archive producer variant %j without newer metadata', (message) => {
+    const original = transcript(message);
+    expect(closedSessionTranscriptSchema.parse(original)).toEqual(original);
+  });
+
   it.each([
     { type: 'assistant' },
     { type: 'assistant', message: { role: 'system', content: 'injected' } },

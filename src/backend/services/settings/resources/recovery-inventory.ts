@@ -30,13 +30,13 @@ function descriptor<
     { field: ScalarField<NoInfer<Model>>; column: string },
     ...{ field: ScalarField<NoInfer<Model>>; column: string }[],
   ],
->(model: Model, table: Table, keys: Keys) {
-  return { model, table, keys };
+>(model: Model, table: Table, keys: Keys, identity: 'primary' | 'unique' = 'primary') {
+  return { model, table, keys, identity };
 }
 
-// Wire groups never supply SQL identifiers. Every model/table/ordered primary
+// Wire groups never supply SQL identifiers. Every model/table/ordered unique
 // key is explicit, scalar-checked by Prisma, and exhaustively keyed by the wire.
-// Independent schema + migrated SQLite coverage verifies @map/@@map and PKs.
+// Independent schema + migrated SQLite coverage verifies @map/@@map and primary/unique keys.
 export const durableRecoveryInventoryDescriptors = {
   agentSourceCheckpoint: descriptor('AgentSourceCheckpoint', 'AgentSourceCheckpoint', [
     { field: 'connectionId', column: 'connectionId' },
@@ -47,7 +47,16 @@ export const durableRecoveryInventoryDescriptors = {
     { field: 'scanId', column: 'scanId' },
     { field: 'providerEventId', column: 'providerEventId' },
   ]),
-  chatIntent: descriptor('ChatIntent', 'ChatIntent', [{ field: 'id', column: 'id' }]),
+  // Numeric IDs are installation-local ordering. Frozen members use this unique identity.
+  chatIntent: descriptor(
+    'ChatIntent',
+    'ChatIntent',
+    [
+      { field: 'sessionId', column: 'sessionId' },
+      { field: 'messageId', column: 'messageId' },
+    ],
+    'unique'
+  ),
   promptDispatchAttempt: descriptor('PromptDispatchAttempt', 'PromptDispatchAttempt', [
     { field: 'id', column: 'id' },
   ]),
@@ -102,9 +111,25 @@ export const archiveRecoveryInventoryDescriptor = descriptor('ClosedSession', 'C
   { field: 'id', column: 'id' },
 ]);
 
+export const prRecoveryInventoryDescriptors = {
+  workspacePR: descriptor('WorkspacePR', 'WorkspacePR', [{ field: 'id', column: 'id' }]),
+  workspacePRDedicatedSession: descriptor(
+    'WorkspacePRDedicatedSession',
+    'WorkspacePRDedicatedSession',
+    [{ field: 'prId', column: 'prId' }]
+  ),
+  workspacePRDelivery: descriptor('WorkspacePRDelivery', 'WorkspacePRDelivery', [
+    { field: 'id', column: 'id' },
+  ]),
+  workspacePREvent: descriptor('WorkspacePREvent', 'WorkspacePREvent', [
+    { field: 'id', column: 'id' },
+  ]),
+};
+
 type InventoryDescriptor =
   | (typeof durableRecoveryInventoryDescriptors)[DurableKey]
-  | typeof archiveRecoveryInventoryDescriptor;
+  | typeof archiveRecoveryInventoryDescriptor
+  | (typeof prRecoveryInventoryDescriptors)[keyof typeof prRecoveryInventoryDescriptors];
 type Group = InventoryDescriptor & { values: (string | number)[][] };
 type StaticIdentifier =
   | InventoryDescriptor['table']
@@ -135,6 +160,29 @@ function groups(data: ExportData['data']): Group[] {
       values: data.archives.entries.map((row) => [row.id]),
     });
   }
+  const prs = data.workspaces.flatMap((workspace) => workspace.prs);
+  result.push({
+    ...prRecoveryInventoryDescriptors.workspacePR,
+    values: prs.map((row) => [row.id]),
+  });
+  result.push({
+    ...prRecoveryInventoryDescriptors.workspacePRDedicatedSession,
+    values: prs
+      .filter((row) => row.dedicatedSession !== null && row.dedicatedSession !== undefined)
+      .map((row) => [row.id]),
+  });
+  result.push({
+    ...prRecoveryInventoryDescriptors.workspacePRDelivery,
+    values: data.workspaces.flatMap((workspace) =>
+      (workspace.prRecovery?.deliveries ?? []).map((row) => [row.id])
+    ),
+  });
+  result.push({
+    ...prRecoveryInventoryDescriptors.workspacePREvent,
+    values: data.workspaces.flatMap((workspace) =>
+      (workspace.prRecovery?.events ?? workspace.prEvents).map((row) => [row.id])
+    ),
+  });
   return result;
 }
 const quoted = (name: StaticIdentifier) => Prisma.raw(`"${name}"`);

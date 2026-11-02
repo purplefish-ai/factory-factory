@@ -4,7 +4,7 @@ import { retainedEventOriginSchema } from '@/shared/agent-history';
 import { eventWorkspaceIdentitySchema } from '@/shared/event-agent-launch';
 import { retainedReferenceAllowed, type RecoveryImportedIds } from '@/shared/recovery-graph';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
-import type { Prisma, Workspace } from '@prisma-gen/client';
+import type { AgentRun, Prisma, Workspace } from '@prisma-gen/client';
 
 type Origin = { runId: string; workspaceId: string; projectId: string };
 /** Retained scalars deliberately outlive the workspace, run and project. */
@@ -81,6 +81,7 @@ export async function restoreRecoveryWorkspaceOrigins(
   const sourceRuns = new Set(data.durable?.agentRun.map((row) => row.id));
   for (const row of data.durable?.workspaceLaunchOrigin ?? []) {
     const workspace = await tx.workspace.findUnique({ where: { id: row.workspaceId } });
+    const run = await tx.agentRun.findUnique({ where: { id: row.runId } });
     if (
       !(
         retainedReferenceAllowed(sourceWorkspaces, ids.workspaces, row.workspaceId, !!workspace) &&
@@ -90,23 +91,15 @@ export async function restoreRecoveryWorkspaceOrigins(
           row.projectId,
           !!(await tx.project.findUnique({ where: { id: row.projectId } }))
         ) &&
-        retainedReferenceAllowed(
-          sourceRuns,
-          ids.runs,
-          row.runId,
-          !!(await tx.agentRun.findUnique({ where: { id: row.runId } }))
-        )
+        retainedReferenceAllowed(sourceRuns, ids.runs, row.runId, !!run)
       )
     ) {
       continue;
     }
-    if (
-      await tx.workspaceLaunchOrigin.findFirst({
-        where: { OR: [{ runId: row.runId }, { workspaceId: row.workspaceId }] },
-      })
-    ) {
+    if (await workspaceLaunchOriginAccessor.find(tx, row)) {
       continue;
     }
+    assertRecoveryRunReservation(row, run);
     assertLiveRecoveryIdentity(row, workspace);
     const expectedChildren = new Set(
       data.durable?.workspaceChildOrigin
@@ -126,6 +119,19 @@ export async function restoreRecoveryWorkspaceOrigins(
           incompleteParents.has(row.workspaceId) || !complete ? null : row.childHistoryVersion,
       },
     });
+  }
+}
+
+function assertRecoveryRunReservation(row: Origin, run: AgentRun | null) {
+  if (
+    run &&
+    (run.reservedWorkspaceId !== row.workspaceId ||
+      (run.workspaceId !== null && run.workspaceId !== row.workspaceId))
+  ) {
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      'Imported origin contradicts run workspace reservation'
+    );
   }
 }
 

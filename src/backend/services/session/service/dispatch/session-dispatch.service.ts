@@ -7,6 +7,7 @@ import { PermanentAttachmentError } from '@/backend/services/session/service/cha
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
+import { notificationClaimBlockReason } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { PromptConfigurationBoundary } from '@/backend/services/session/service/lifecycle/session-prompt-configuration';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -234,23 +235,16 @@ export class SessionDispatchService {
       return 'done';
     }
 
-    const claim = this.lifecycle.notificationDelivery.claimForDispatch(dbSessionId, peeked.id);
-    if (claim.status === 'duplicate') {
-      return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
-        ? 'continue'
-        : 'done';
-    }
-
+    const notifications = this.lifecycle.notificationDelivery;
+    const claim = notifications.claimForDispatch(dbSessionId, peeked.id);
     try {
-      if (
-        claim.status === 'claimed' &&
-        (await this.lifecycle.notificationDelivery.isAlreadyDelivered(claim.notificationId))
-      ) {
+      const reason = await notificationClaimBlockReason(notifications, claim);
+      if (reason) {
         if (guard) {
           await guard.check();
           guard.assertCurrent?.();
         }
-        return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
+        return notifications.removeBlockedFromQueue(dbSessionId, peeked.id, reason)
           ? 'continue'
           : 'done';
       }
