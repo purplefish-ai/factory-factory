@@ -103,6 +103,7 @@ function StoryContent({
           {
             id: 'today',
             periodicTaskId: agent.id,
+            launchSnapshot: null,
             workspaceId: 'run-today',
             status: 'RUNNING',
             startedAt: new Date('2026-10-29T13:00:00Z'),
@@ -114,6 +115,7 @@ function StoryContent({
           {
             id: 'yesterday',
             periodicTaskId: agent.id,
+            launchSnapshot: null,
             workspaceId: 'run-yesterday',
             status: 'PR_CREATED',
             startedAt: new Date('2026-10-28T13:00:00Z'),
@@ -125,6 +127,7 @@ function StoryContent({
           {
             id: 'nothing-to-do',
             periodicTaskId: agent.id,
+            launchSnapshot: null,
             workspaceId: 'run-nothing-to-do',
             status: 'COMPLETED',
             startedAt: new Date('2026-10-27T18:00:00Z'),
@@ -136,6 +139,7 @@ function StoryContent({
           {
             id: 'failed',
             periodicTaskId: agent.id,
+            launchSnapshot: null,
             workspaceId: null,
             status: 'FAILED',
             startedAt: new Date('2026-10-27T13:00:00Z'),

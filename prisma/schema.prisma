@@ -921,6 +921,9 @@ model PeriodicTask {
 }
 
 model PeriodicTaskExecution {
+  // Frozen canonical launch and calendar configuration; null only for legacy rows.
+  launchSnapshot Json?
+
   id              String                       @id @default(cuid())
   periodicTaskId  String
   periodicTask    PeriodicTask                 @relation(fields: [periodicTaskId], references: [id], onDelete: Cascade)
