@@ -3,8 +3,10 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import {
   agentGithubCursorSchema,
   agentSourcePageEvidenceSchema,
+  type AgentSourceScan,
 } from '@/shared/agent-source-state';
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
+import { validRecoveryVerification } from './agent-recovery-source-proof-verification';
 
 type Checkpoint = DurableRecovery['agentSourceCheckpoint'][number];
 type Head = DurableRecovery['agentSourceHead'][number];
@@ -78,6 +80,17 @@ function assertCursorFence(checkpoint: Checkpoint, revision: number) {
   }
 }
 
+function groupPages(pages: DurableRecovery['agentSourcePage']) {
+  const pagesByScan = new Map<string, DurableRecovery['agentSourcePage']>();
+  for (const page of pages) {
+    const id = key(page.connectionId, page.scanId);
+    const retained = pagesByScan.get(id) ?? [];
+    retained.push(page);
+    pagesByScan.set(id, retained);
+  }
+  return pagesByScan;
+}
+
 /** Recompute internal ordinal consistency from retained facts, never from an
  * imported validation cursor or a claimed COMPLETE label. Full capture pages
  * may be compacted; permanent heads, baselines and final markers suffice.
@@ -99,6 +112,7 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
   const authoritative = data.agentSourceCheckpoint.filter((row) =>
     ['INDEXED', 'COMPLETE'].includes(row.status)
   );
+  const pagesByScan = groupPages(data.agentSourcePage);
   for (const checkpoint of data.agentSourceCheckpoint) {
     const state = states.get(checkpoint.connectionId);
     if (!state) {
@@ -106,11 +120,11 @@ export function validateRecoverySourceProof(data: DurableRecovery): void {
     }
     assertCursorFence(checkpoint, state.authorityRevision);
   }
-  collectCheckpointClaims(authoritative, states, markers, headsByScan);
+  collectCheckpointClaims(authoritative, states, markers, headsByScan, pagesByScan);
   collectRetainedClaims(data, headsByScan, claims);
   collectCaptureClaims(data, markers, headsByScan, claims);
   assertRetainedHighwater(states, claims);
-  assertCommittedCursorClaims(data, claims);
+  assertCommittedCursorClaims(data, claims, pagesByScan);
   for (const checkpoint of authoritative) {
     if (checkpoint.previousBoundaryEventId === null) {
       if (checkpoint.initialSourceOrder !== 0) {
@@ -175,7 +189,8 @@ function collectCheckpointClaims(
   authoritative: Checkpoint[],
   states: Map<string, DurableRecovery['agentSourceState'][number]>,
   markers: ReturnType<typeof collectMarkers>,
-  headsByScan: Map<string, Head[]>
+  headsByScan: Map<string, Head[]>,
+  pagesByScan: Map<string, DurableRecovery['agentSourcePage']>
 ) {
   for (const checkpoint of authoritative) {
     const heads = (headsByScan.get(key(checkpoint.connectionId, checkpoint.scanId)) ?? []).sort(
@@ -190,7 +205,12 @@ function collectCheckpointClaims(
       checkpoint.sourceOrder > state.lastSourceOrder ||
       !marker ||
       marker.order !== checkpoint.sourceOrder ||
-      marker.head !== checkpoint.headEventId
+      marker.head !== checkpoint.headEventId ||
+      !validRecoveryVerification(
+        checkpoint,
+        pagesByScan.get(key(checkpoint.connectionId, checkpoint.scanId)) ?? [],
+        heads
+      )
     ) {
       invalid();
     }
@@ -285,7 +305,12 @@ function assertRetainedHighwater(
   }
 }
 
-function assertCommittedCursorClaims(data: DurableRecovery, claims: Claims) {
+function assertCommittedCursorClaims(
+  data: DurableRecovery,
+  claims: Claims,
+  pagesByScan: Map<string, DurableRecovery['agentSourcePage']>
+) {
+  const events = new Map(data.agentEvent.map((event) => [event.id, event]));
   for (const state of data.agentSourceState) {
     const cursor = agentGithubCursorSchema.safeParse(state.cursor);
     // Opaque legacy bytes cannot pass the runtime parser. The independent
@@ -308,6 +333,52 @@ function assertCommittedCursorClaims(data: DurableRecovery, claims: Claims) {
       committedHeadEventId === null ? 0 : claims.get(state.connectionId)?.get(committedHeadEventId);
     // Do not add the imported cursor as an independent checkpoint boundary witness.
     if (retainedOrder === undefined || retainedOrder !== committedOrder) {
+      invalid();
+    }
+    assertFinalizedPrefix(events, pagesByScan, state.connectionId, scan, committedOrder);
+  }
+}
+
+function assertFinalizedPrefix(
+  events: Map<string, DurableRecovery['agentEvent'][number]>,
+  pagesByScan: Map<string, DurableRecovery['agentSourcePage']>,
+  connectionId: string,
+  scan: AgentSourceScan | null,
+  committedOrder: number
+) {
+  if (scan?.phase !== 'FINALIZE') {
+    return;
+  }
+  // Active scans are excluded from compaction. Runtime finalization skips this
+  // exact reversed executable prefix, so every skipped row needs stored proof.
+  const pages = (pagesByScan.get(key(connectionId, scan.id)) ?? [])
+    .filter((page) => page.phase === 'CAPTURE')
+    .sort((a, b) => a.ordinal - b.ordinal);
+  if (!pages.length || pages.some((page, position) => page.ordinal !== position)) {
+    invalid();
+  }
+  const entries = pages.flatMap(
+    (page) => agentSourcePageEvidenceSchema.parse(page.evidence).entries
+  );
+  if (entries[0]?.providerEventId !== scan.fixedHeadEventId) {
+    invalid();
+  }
+  const executable = entries
+    .slice()
+    .reverse()
+    .filter((entry) => entry.eventId !== null);
+  if (scan.finalizedCount > executable.length) {
+    invalid();
+  }
+  for (const [index, entry] of executable.entries()) {
+    const event = entry.eventId === null ? undefined : events.get(entry.eventId);
+    const expected = index < scan.finalizedCount ? committedOrder + index + 1 : null;
+    if (
+      !event ||
+      event.connectionId !== connectionId ||
+      event.providerEventId !== entry.providerEventId ||
+      event.sourceOrder !== expected
+    ) {
       invalid();
     }
   }
