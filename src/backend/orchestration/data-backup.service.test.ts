@@ -234,6 +234,7 @@ const mockUserSettings: UserSettings = {
   preferredIde: 'cursor',
   customIdeCommand: null,
   playSoundOnComplete: true,
+  childWorkspacesEnabled: false,
   notificationSoundPath: '/path/to/sound.mp3',
   workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
   cachedSlashCommands: { commands: [] },
@@ -382,6 +383,7 @@ function createImportData(
         preferredIde: 'cursor',
         customIdeCommand: null,
         playSoundOnComplete: true,
+        childWorkspacesEnabled: false,
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
         ratchetReplyToPrComments: true,
@@ -482,6 +484,7 @@ describe('DataBackupService', () => {
       ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
+          childWorkspacesEnabled: false,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
@@ -529,6 +532,7 @@ describe('DataBackupService', () => {
       });
 
       expect(exportedData.data.userSettings?.ratchetReviewTriggerMode).toBe('CHANGES_REQUESTED');
+      expect(exportedData.data.userSettings?.childWorkspacesEnabled).toBe(true);
     });
 
     it('exports null user settings when absent', async () => {
@@ -760,6 +764,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -799,6 +804,7 @@ describe('DataBackupService', () => {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          childWorkspacesEnabled: false,
           notificationSoundPath: null,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,

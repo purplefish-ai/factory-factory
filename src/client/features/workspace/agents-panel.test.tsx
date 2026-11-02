@@ -7,10 +7,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentsPanel } from './agents-panel';
 
 const mocks = vi.hoisted(() => ({
+  childWorkspacesEnabled: true,
   childProps: vi.fn(),
+  settingsQuery: vi.fn(),
   providerProps: vi.fn(),
   queryBacked: false,
   querySubagents: vi.fn<(sessionId: string) => Promise<string>>(),
+}));
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    userSettings: {
+      get: {
+        useQuery: (input?: undefined, options?: { enabled: boolean }) => {
+          mocks.settingsQuery(input, options);
+          return { data: { childWorkspacesEnabled: mocks.childWorkspacesEnabled } };
+        },
+      },
+    },
+  },
 }));
 
 vi.mock('@/client/features/subagents', () => ({
@@ -69,6 +84,7 @@ describe('AgentsPanel', () => {
       value: true,
     });
     mocks.queryBacked = false;
+    mocks.childWorkspacesEnabled = true;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -109,6 +125,22 @@ describe('AgentsPanel', () => {
     expect(container.querySelector('[data-testid="child-workspaces"]')).not.toBeNull();
   });
 
+  it('hides children when the setting is disabled while retaining provider subagents', () => {
+    mocks.childWorkspacesEnabled = false;
+    render({
+      workspaceId: 'parent',
+      sessionId: 'session',
+      sessionName: 'Session',
+      sessionReady: true,
+      isParentWorkspace: true,
+      onOpenSubagent: vi.fn(),
+    });
+    expect(mocks.childProps).not.toHaveBeenCalled();
+    expect(mocks.providerProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sessionId: 'session', enabled: true })
+    );
+  });
+
   it('keeps child workspaces workspace-scoped when the selected session changes', () => {
     const props = {
       workspaceId: 'workspace-1',
@@ -144,6 +176,7 @@ describe('AgentsPanel', () => {
 
     expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="child-workspaces"]')).toBeNull();
+    expect(mocks.settingsQuery).toHaveBeenLastCalledWith(undefined, { enabled: false });
   });
 
   it('authoritatively refreshes A after switching A to B to A without refetching unchanged A', async () => {

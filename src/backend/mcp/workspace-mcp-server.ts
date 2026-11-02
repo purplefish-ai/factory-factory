@@ -322,6 +322,14 @@ async function handleListProjectsTool(req: JsonRpcRequest, apiBase: string): Pro
   });
 }
 
+async function childWorkspacesEnabled(apiBase: string): Promise<boolean> {
+  const { result, error } = await callTrpcQuery(apiBase, 'userSettings.get');
+  if (error) {
+    throw new Error(error);
+  }
+  return z.object({ childWorkspacesEnabled: z.boolean() }).parse(result).childWorkspacesEnabled;
+}
+
 async function dispatchToolCall(
   req: JsonRpcRequest,
   workspaceId: string,
@@ -340,6 +348,24 @@ async function dispatchToolCall(
       mutate: callTrpcMutation,
     });
     send({ jsonrpc: '2.0', id: req.id, result });
+    return;
+  }
+  const workspaceToolNames = [
+    'spawn_child_workspace',
+    'list_projects',
+    'send_message_to_parent',
+    'send_message_to_child',
+    'archive_child_workspace',
+  ];
+  if (workspaceToolNames.includes(params.name) && !(await childWorkspacesEnabled(apiBase))) {
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: {
+        content: [{ type: 'text', text: 'Child workspaces are disabled in Settings' }],
+        isError: true,
+      },
+    });
     return;
   }
   if (params.name === 'spawn_child_workspace' && !hasParent) {
@@ -398,7 +424,8 @@ async function handleRequest(
     const workspaceTools = hasParent
       ? [SEND_MSG_TOOL]
       : [LIST_PROJECTS_TOOL, SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
-    const tools = [...workspaceTools, ...AGENT_AUTHORING_TOOLS];
+    const childToolsEnabled = await childWorkspacesEnabled(apiBase).catch(() => false);
+    const tools = [...(childToolsEnabled ? workspaceTools : []), ...AGENT_AUTHORING_TOOLS];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
   }

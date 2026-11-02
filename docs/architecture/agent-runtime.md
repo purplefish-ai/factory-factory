@@ -70,6 +70,14 @@ while their provider dispatch is unsettled, including across session stop/reset.
 Only settled transcript evidence can acknowledge delivery; a failed send leaves
 its durable notification pending for a later startup to recover.
 
+Child workspaces are enabled by default. Settings → General → Child Workspaces
+can disable their controls, MCP tools, and creation through the UI or MCP.
+Existing children and notifications are preserved. MCP checks the current
+setting when listing or calling child workspace tools; disabled tools are
+rejected even in running sessions. Start a new conversation after re-enabling if
+its provider has cached the disabled tool catalog. Agent-authoring tools remain
+available.
+
 Child workspace creation offers active projects only and rejects archived target
 projects at the orchestration boundary, including requests from MCP clients or
 stale browser selections. Child inserts also connect only to active projects

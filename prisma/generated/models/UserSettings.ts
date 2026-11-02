@@ -47,6 +47,7 @@ export type UserSettingsMinAggregateOutputType = {
   customIdeCommand: string | null
   playSoundOnComplete: boolean | null
   notificationSoundPath: string | null
+  childWorkspacesEnabled: boolean | null
   ratchetEnabled: boolean | null
   ratchetReplyToPrComments: boolean | null
   ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode | null
@@ -83,6 +84,7 @@ export type UserSettingsMaxAggregateOutputType = {
   customIdeCommand: string | null
   playSoundOnComplete: boolean | null
   notificationSoundPath: string | null
+  childWorkspacesEnabled: boolean | null
   ratchetEnabled: boolean | null
   ratchetReplyToPrComments: boolean | null
   ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode | null
@@ -119,6 +121,7 @@ export type UserSettingsCountAggregateOutputType = {
   customIdeCommand: number
   playSoundOnComplete: number
   notificationSoundPath: number
+  childWorkspacesEnabled: number
   workspaceOrder: number
   cachedSlashCommands: number
   ratchetEnabled: number
@@ -173,6 +176,7 @@ export type UserSettingsMinAggregateInputType = {
   customIdeCommand?: true
   playSoundOnComplete?: true
   notificationSoundPath?: true
+  childWorkspacesEnabled?: true
   ratchetEnabled?: true
   ratchetReplyToPrComments?: true
   ratchetReviewTriggerMode?: true
@@ -209,6 +213,7 @@ export type UserSettingsMaxAggregateInputType = {
   customIdeCommand?: true
   playSoundOnComplete?: true
   notificationSoundPath?: true
+  childWorkspacesEnabled?: true
   ratchetEnabled?: true
   ratchetReplyToPrComments?: true
   ratchetReviewTriggerMode?: true
@@ -245,6 +250,7 @@ export type UserSettingsCountAggregateInputType = {
   customIdeCommand?: true
   playSoundOnComplete?: true
   notificationSoundPath?: true
+  childWorkspacesEnabled?: true
   workspaceOrder?: true
   cachedSlashCommands?: true
   ratchetEnabled?: true
@@ -370,6 +376,7 @@ export type UserSettingsGroupByOutputType = {
   customIdeCommand: string | null
   playSoundOnComplete: boolean
   notificationSoundPath: string | null
+  childWorkspacesEnabled: boolean
   workspaceOrder: runtime.JsonValue | null
   cachedSlashCommands: runtime.JsonValue | null
   ratchetEnabled: boolean
@@ -431,6 +438,7 @@ export type UserSettingsWhereInput = {
   customIdeCommand?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   playSoundOnComplete?: Prisma.BoolFilter<"UserSettings"> | boolean
   notificationSoundPath?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  childWorkspacesEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   workspaceOrder?: Prisma.JsonNullableFilter<"UserSettings">
   cachedSlashCommands?: Prisma.JsonNullableFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
@@ -469,6 +477,7 @@ export type UserSettingsOrderByWithRelationInput = {
   customIdeCommand?: Prisma.SortOrderInput | Prisma.SortOrder
   playSoundOnComplete?: Prisma.SortOrder
   notificationSoundPath?: Prisma.SortOrderInput | Prisma.SortOrder
+  childWorkspacesEnabled?: Prisma.SortOrder
   workspaceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   cachedSlashCommands?: Prisma.SortOrderInput | Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
@@ -510,6 +519,7 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   customIdeCommand?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   playSoundOnComplete?: Prisma.BoolFilter<"UserSettings"> | boolean
   notificationSoundPath?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  childWorkspacesEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   workspaceOrder?: Prisma.JsonNullableFilter<"UserSettings">
   cachedSlashCommands?: Prisma.JsonNullableFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
@@ -548,6 +558,7 @@ export type UserSettingsOrderByWithAggregationInput = {
   customIdeCommand?: Prisma.SortOrderInput | Prisma.SortOrder
   playSoundOnComplete?: Prisma.SortOrder
   notificationSoundPath?: Prisma.SortOrderInput | Prisma.SortOrder
+  childWorkspacesEnabled?: Prisma.SortOrder
   workspaceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   cachedSlashCommands?: Prisma.SortOrderInput | Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
@@ -594,6 +605,7 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   customIdeCommand?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   playSoundOnComplete?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
   notificationSoundPath?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
+  childWorkspacesEnabled?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
   workspaceOrder?: Prisma.JsonNullableWithAggregatesFilter<"UserSettings">
   cachedSlashCommands?: Prisma.JsonNullableWithAggregatesFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
@@ -632,6 +644,7 @@ export type UserSettingsCreateInput = {
   customIdeCommand?: string | null
   playSoundOnComplete?: boolean
   notificationSoundPath?: string | null
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
@@ -670,6 +683,7 @@ export type UserSettingsUncheckedCreateInput = {
   customIdeCommand?: string | null
   playSoundOnComplete?: boolean
   notificationSoundPath?: string | null
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
@@ -708,6 +722,7 @@ export type UserSettingsUpdateInput = {
   customIdeCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   playSoundOnComplete?: Prisma.BoolFieldUpdateOperationsInput | boolean
   notificationSoundPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  childWorkspacesEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -746,6 +761,7 @@ export type UserSettingsUncheckedUpdateInput = {
   customIdeCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   playSoundOnComplete?: Prisma.BoolFieldUpdateOperationsInput | boolean
   notificationSoundPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  childWorkspacesEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -784,6 +800,7 @@ export type UserSettingsCreateManyInput = {
   customIdeCommand?: string | null
   playSoundOnComplete?: boolean
   notificationSoundPath?: string | null
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
@@ -822,6 +839,7 @@ export type UserSettingsUpdateManyMutationInput = {
   customIdeCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   playSoundOnComplete?: Prisma.BoolFieldUpdateOperationsInput | boolean
   notificationSoundPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  childWorkspacesEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -860,6 +878,7 @@ export type UserSettingsUncheckedUpdateManyInput = {
   customIdeCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   playSoundOnComplete?: Prisma.BoolFieldUpdateOperationsInput | boolean
   notificationSoundPath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  childWorkspacesEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspaceOrder?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -898,6 +917,7 @@ export type UserSettingsCountOrderByAggregateInput = {
   customIdeCommand?: Prisma.SortOrder
   playSoundOnComplete?: Prisma.SortOrder
   notificationSoundPath?: Prisma.SortOrder
+  childWorkspacesEnabled?: Prisma.SortOrder
   workspaceOrder?: Prisma.SortOrder
   cachedSlashCommands?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
@@ -943,6 +963,7 @@ export type UserSettingsMaxOrderByAggregateInput = {
   customIdeCommand?: Prisma.SortOrder
   playSoundOnComplete?: Prisma.SortOrder
   notificationSoundPath?: Prisma.SortOrder
+  childWorkspacesEnabled?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
   ratchetReviewTriggerMode?: Prisma.SortOrder
@@ -979,6 +1000,7 @@ export type UserSettingsMinOrderByAggregateInput = {
   customIdeCommand?: Prisma.SortOrder
   playSoundOnComplete?: Prisma.SortOrder
   notificationSoundPath?: Prisma.SortOrder
+  childWorkspacesEnabled?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
   ratchetReviewTriggerMode?: Prisma.SortOrder
@@ -1040,6 +1062,7 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   customIdeCommand?: boolean
   playSoundOnComplete?: boolean
   notificationSoundPath?: boolean
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: boolean
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
@@ -1078,6 +1101,7 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   customIdeCommand?: boolean
   playSoundOnComplete?: boolean
   notificationSoundPath?: boolean
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: boolean
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
@@ -1116,6 +1140,7 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   customIdeCommand?: boolean
   playSoundOnComplete?: boolean
   notificationSoundPath?: boolean
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: boolean
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
@@ -1154,6 +1179,7 @@ export type UserSettingsSelectScalar = {
   customIdeCommand?: boolean
   playSoundOnComplete?: boolean
   notificationSoundPath?: boolean
+  childWorkspacesEnabled?: boolean
   workspaceOrder?: boolean
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
@@ -1185,7 +1211,7 @@ export type UserSettingsSelectScalar = {
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "appearanceColorScheme" | "appearanceBackgroundColor" | "appearanceForegroundColor" | "appearanceFontScale" | "appearanceFontSans" | "appearanceFontMono" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "childWorkspacesEnabled" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "appearanceColorScheme" | "appearanceBackgroundColor" | "appearanceForegroundColor" | "appearanceFontScale" | "appearanceFontSans" | "appearanceFontMono" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -1197,6 +1223,7 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     customIdeCommand: string | null
     playSoundOnComplete: boolean
     notificationSoundPath: string | null
+    childWorkspacesEnabled: boolean
     workspaceOrder: runtime.JsonValue | null
     cachedSlashCommands: runtime.JsonValue | null
     ratchetEnabled: boolean
@@ -1655,6 +1682,7 @@ export interface UserSettingsFieldRefs {
   readonly customIdeCommand: Prisma.FieldRef<"UserSettings", 'String'>
   readonly playSoundOnComplete: Prisma.FieldRef<"UserSettings", 'Boolean'>
   readonly notificationSoundPath: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly childWorkspacesEnabled: Prisma.FieldRef<"UserSettings", 'Boolean'>
   readonly workspaceOrder: Prisma.FieldRef<"UserSettings", 'Json'>
   readonly cachedSlashCommands: Prisma.FieldRef<"UserSettings", 'Json'>
   readonly ratchetEnabled: Prisma.FieldRef<"UserSettings", 'Boolean'>
