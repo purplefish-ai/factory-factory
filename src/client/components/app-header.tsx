@@ -6,6 +6,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAppHeaderContext } from './app-header-context';
+import './app-header.css';
 
 function SidebarToggleButton() {
   const { toggleSidebar } = useSidebar();
@@ -33,7 +34,7 @@ export function AppHeader() {
   const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
 
   return (
-    <header className="@container/header flex shrink-0 items-center gap-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)] md:gap-x-2">
+    <header className="app-header @container/header flex shrink-0 items-center gap-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)] md:gap-x-2">
       <SidebarToggleButton />
       <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
         <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />

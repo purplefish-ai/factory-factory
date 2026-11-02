@@ -77,6 +77,8 @@ export const snapshotFieldPolicy = {
   linearIssueIdentifier: { group: 'metadata', required: true, drift: 'metadata' },
   linearIssueUrl: { group: 'metadata', required: true, drift: 'metadata' },
   creationSource: { group: 'metadata', required: true, drift: 'metadata' },
+  parentWorkspace: { group: 'metadata', required: false, drift: 'metadata' },
+  childWorkspaceCount: { group: 'metadata', required: false, drift: 'metadata' },
 } as const satisfies Record<keyof SnapshotUpdateInput, FieldPolicy>;
 
 export const snapshotClockDefaults = {
@@ -142,6 +144,8 @@ export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
     linearIssueIdentifier: null,
     linearIssueUrl: null,
     creationSource: 'MANUAL',
+    parentWorkspace: null,
+    childWorkspaceCount: 0,
   };
 }
 
@@ -234,6 +238,14 @@ export function changedSnapshotInput(): Required<SnapshotUpdateInput> {
     linearIssueIdentifier: 'ENG-1',
     linearIssueUrl: 'https://linear.app/team/issue/ENG-1',
     creationSource: 'GITHUB_ISSUE',
+    parentWorkspace: {
+      id: 'parent',
+      name: 'Parent',
+      projectId: 'parent-project',
+      projectName: 'Parent project',
+      projectSlug: 'parent-project',
+    },
+    childWorkspaceCount: 2,
   };
 }
 

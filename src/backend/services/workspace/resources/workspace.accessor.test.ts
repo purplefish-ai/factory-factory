@@ -81,8 +81,17 @@ describe('workspaceAccessor', () => {
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
+          parentWorkspace: {
+            select: {
+              id: true,
+              name: true,
+              projectId: true,
+              project: { select: { name: true, slug: true } },
+            },
+          },
           _count: {
             select: {
+              childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
               prEvents: {
                 where: {
                   OR: [
@@ -121,8 +130,17 @@ describe('workspaceAccessor', () => {
           prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
+          parentWorkspace: {
+            select: {
+              id: true,
+              name: true,
+              projectId: true,
+              project: { select: { name: true, slug: true } },
+            },
+          },
           _count: {
             select: {
+              childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
               prEvents: {
                 where: {
                   OR: [
@@ -178,8 +196,17 @@ describe('workspaceAccessor', () => {
         prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
         prDiscovery: true,
         runScript: true,
+        parentWorkspace: {
+          select: {
+            id: true,
+            name: true,
+            projectId: true,
+            project: { select: { name: true, slug: true } },
+          },
+        },
         _count: {
           select: {
+            childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
             prEvents: {
               where: {
                 OR: [
