@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -10,7 +11,7 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
-import type { RuntimeStopEvidence } from '@/shared/event-agent-delivery';
+import type { RuntimeStopEvidence, ExpectedEventRuntime } from '@/shared/event-agent-delivery';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { withEventEvidenceDeadline } from './event-evidence-deadline';
@@ -71,7 +72,7 @@ export type SessionTerminationCoordinatorDependencies = {
     | 'beginShutdown'
     | 'stopAllClients'
   > &
-    Partial<Pick<AcpRuntimeManager, 'stopAndQuiesceObserved'>>;
+    Partial<Pick<AcpRuntimeManager, 'stopAndQuiesceObserved' | 'getRuntimeStopSource'>>;
   sessionDomainService: Pick<SessionDomainService, 'clearQueuedWork' | 'setRuntimeSnapshot'>;
   sessionPermissionService: Pick<SessionPermissionService, 'cancelPendingRequests'>;
   acpEventProcessor: Pick<
@@ -316,11 +317,15 @@ export class SessionTerminationCoordinator {
 
   private async isEventOwnedForStop(
     sessionId: string,
-    authority: EventSessionAuthority
+    authority: EventSessionAuthority,
+    allowPhysicalFallback: boolean
   ): Promise<boolean> {
     try {
       return await withEventEvidenceDeadline(authority.isOwned(sessionId));
     } catch (error) {
+      if (!allowPhysicalFallback) {
+        throw error;
+      }
       authority.invalidate(sessionId);
       // The supervisor retains live group ownership independently of the database.
       // Failure still rejects the stop: physical cleanup cannot manufacture durable proof.
@@ -352,8 +357,12 @@ export class SessionTerminationCoordinator {
   /** Targeted initial-task interruption; never clears human queues or closes global authority. */
   async interruptEventInitial(
     sessionId: string,
-    cause: 'SHUTDOWN' | 'TIMEOUT'
+    cause: RuntimeStopEvidence['cause'],
+    expected?: ExpectedEventRuntime,
+    assertInitialCurrent?: () => void
   ): Promise<RuntimeStopEvidence> {
+    assertInitialCurrent?.();
+    this.assertExpectedRuntime(sessionId, expected);
     const reservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
     if (!reservation) {
       throw new Error('Event stop confirmation is pending');
@@ -361,7 +370,14 @@ export class SessionTerminationCoordinator {
     const cancellation = new AbortController();
     try {
       const evidence = await withEventEvidenceDeadline(
-        this.performEventStop(sessionId, cause, cancellation.signal),
+        this.performEventStop(
+          sessionId,
+          cause,
+          cancellation.signal,
+          expected,
+          false,
+          assertInitialCurrent
+        ),
         () => cancellation.abort(),
         10_000
       );
@@ -377,16 +393,39 @@ export class SessionTerminationCoordinator {
   private async performEventStop(
     sessionId: string,
     cause: RuntimeStopEvidence['cause'],
-    signal: AbortSignal
+    signal: AbortSignal,
+    expected?: ExpectedEventRuntime,
+    allowPhysicalFallback = true,
+    assertInitialCurrent?: () => void
   ): Promise<RuntimeStopEvidence | null> {
+    assertInitialCurrent?.();
     const authority = this.dependencies.eventAuthority;
-    if (!(authority && (await this.isEventOwnedForStop(sessionId, authority)))) {
+    if (
+      !(authority && (await this.isEventOwnedForStop(sessionId, authority, allowPhysicalFallback)))
+    ) {
       return null;
     }
     signal.throwIfAborted();
-    authority.invalidate(sessionId);
-    const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch(() => null);
+    assertInitialCurrent?.();
+    const fence = await withEventEvidenceDeadline(authority.read(sessionId)).catch((error) => {
+      if (!allowPhysicalFallback) {
+        throw error;
+      }
+      return null;
+    });
     signal.throwIfAborted();
+    assertInitialCurrent?.();
+    this.assertExpectedRuntime(sessionId, expected);
+    if (
+      expected &&
+      !(
+        isDeepStrictEqual(fence?.attempt, expected.attempt) &&
+        isDeepStrictEqual(fence?.evidence?.source, expected.source)
+      )
+    ) {
+      throw new Error('Event stop attempt changed');
+    }
+    authority.invalidate(sessionId);
     const unknown: RuntimeStopEvidence = {
       version: 1,
       cause,
@@ -399,7 +438,7 @@ export class SessionTerminationCoordinator {
           this.dependencies.runtimeManager.stopAndQuiesceObserved(
             sessionId,
             cause,
-            fence?.state === 'FINISHED' ? undefined : fence?.evidence?.source
+            expected?.source ?? (fence?.state === 'FINISHED' ? undefined : fence?.evidence?.source)
           )
         ).catch(() => {
           logger.warn('Event physical stop failed; termination remains unconfirmed', { sessionId });
@@ -407,8 +446,38 @@ export class SessionTerminationCoordinator {
         })
       : unknown;
     signal.throwIfAborted();
-    await authority.recordStop(sessionId, { ...evidence, cause }, signal);
+    assertInitialCurrent?.();
+    expected?.assertCurrent();
+    if (assertInitialCurrent) {
+      await authority.recordStop(
+        sessionId,
+        { ...evidence, cause },
+        signal,
+        expected,
+        assertInitialCurrent
+      );
+    } else if (expected) {
+      await authority.recordStop(sessionId, { ...evidence, cause }, signal, expected);
+    } else {
+      await authority.recordStop(sessionId, { ...evidence, cause }, signal);
+    }
     return evidence;
+  }
+
+  private assertExpectedRuntime(sessionId: string, expected?: ExpectedEventRuntime): void {
+    if (!expected) {
+      return;
+    }
+    expected.assertCurrent();
+    if (
+      expected.attempt.sessionId !== sessionId ||
+      !isDeepStrictEqual(
+        this.dependencies.runtimeManager.getRuntimeStopSource?.(sessionId),
+        expected.source
+      )
+    ) {
+      throw new Error('Event stop source changed or is unavailable');
+    }
   }
 
   private async workspaceStopOptions(

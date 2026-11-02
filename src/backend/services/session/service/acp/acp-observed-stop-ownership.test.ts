@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AcpObservedStop } from './acp-observed-stop';
+import * as groups from './acp-owned-group';
 import { createDeferred, createTestProcessHandle } from './acp-runtime-manager.test-helpers';
 import { AcpRuntimeQuiescence } from './acp-runtime-quiescence';
 const source = {
@@ -36,6 +37,13 @@ function setup(owned = true, removed?: () => void) {
     endStop,
     replace: () => {
       current = createTestProcessHandle();
+    },
+    registerOrdinary: () => {
+      current = createTestProcessHandle();
+      stop.register('s', current, false);
+    },
+    removeCurrent: () => {
+      current = undefined;
     },
   };
 }
@@ -188,3 +196,33 @@ it.skipIf(process.platform === 'win32')(
     expect(h.endStop).toHaveBeenCalledOnce();
   }
 );
+
+it('never reuses retained event stop after an ordinary runtime is registered and removed', async () => {
+  const h = setup();
+  const physical = vi
+    .spyOn(groups, 'stopOwnedRuntimeGroup')
+    .mockResolvedValue('LOCAL_RUNTIME_GROUP_STOPPED');
+  expect((await h.stop.stopAndQuiesceObserved('s', 'USER_STOP', source)).status).toBe(
+    'LOCAL_RUNTIME_GROUP_STOPPED'
+  );
+  expect(h.stop.getSource('s')).toEqual(source);
+  h.registerOrdinary();
+  expect(h.stop.getSource('s')).toBeNull();
+  h.removeCurrent();
+  expect(h.stop.getSource('s')).toBeNull();
+  expect((await h.stop.stopAndQuiesceObserved('s', 'TIMEOUT', source)).status).toBe('UNKNOWN');
+  expect(physical).toHaveBeenCalledOnce();
+});
+
+it('does not republish an old stop after ordinary replacement during physical cleanup', async () => {
+  const h = setup();
+  const physical = createDeferred<'LOCAL_RUNTIME_GROUP_STOPPED'>();
+  const called = vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockReturnValue(physical.promise);
+  const pending = h.stop.stopAndQuiesceObserved('s', 'USER_STOP', source);
+  await vi.waitFor(() => expect(called).toHaveBeenCalledOnce());
+  h.registerOrdinary();
+  h.removeCurrent();
+  physical.resolve('LOCAL_RUNTIME_GROUP_STOPPED');
+  expect((await pending).status).toBe('UNKNOWN');
+  expect(h.stop.getSource('s')).toBeNull();
+});

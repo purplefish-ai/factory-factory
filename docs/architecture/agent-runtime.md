@@ -1074,7 +1074,8 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents remain
-unactivatable until monitoring, operator recovery and UI gates exist.
+unactivatable until operator recovery, lossless predelete result capture,
+retention, native capability validation and UI gates exist.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or
@@ -1090,18 +1091,28 @@ capacity are retained while cleanup is uncertain; persisted PIDs are never
 signalled. Git cleanup requires positive filesystem and canonical registration
 absence even when the legacy removal promise resolves.
 
-The targeted `interruptEventInitial` capability uses SHUTDOWN/TIMEOUT evidence
-without ordinary user-stop finalization or clearing queued human input. Initial
-dispatch cancellation shares the existing evidence deadlines and fences late
-observations; it does not close global authority. Already-started observation
-writes remain tracked for final session teardown. Setup cancellation joins
-actual Git operations and script cleanup directly, so uncancellable Git may
-outlive the setup deadline while retaining ownership. Durable reads and
-output/PID persistence use the existing bounded evidence drain; expiration
-closes the launch guard permanently. A late read cannot start physical work or a
-new write, and any already-started physical operation still drains directly. A
-settled UNKNOWN setup cleanup has no reusable process-control handle in the
-launcher; missing local state is never used as termination proof.
+The targeted `interruptEventInitial` capability records the requested lifecycle
+cause without ordinary user-stop finalization or clearing queued human input.
+Monitoring supplies the exact expected attempt and runtime source; replacement
+or unavailable source blocks the action, including after awaited owner reads.
+Targeted ownership-read failure or timeout fails closed; ordinary explicit stop
+and global shutdown keep their separate physical-cleanup fallback. Cleanup of a
+finished initial failure waits for ordinary follow-ups and known agent work to
+finish. Initial dispatch cancellation shares the existing evidence deadlines and
+fences late observations; it does not close global authority. Failure and abort
+cleanup carry the launch ownership guard through handoff, stop ownership/fence
+reads, evidence publication and final disposition. Cleanup ownership is separate
+from the aborted input signal, so a current owner still performs its shutdown
+stop. Revoked cleanup cannot invalidate a replacement; already-started physical
+cleanup remains joined before its launch releases physical-stage tracking.
+Already-started observation writes remain tracked for final session teardown.
+Setup cancellation joins actual Git operations and script cleanup directly, so
+uncancellable Git may outlive the setup deadline while retaining ownership.
+Durable reads and output/PID persistence use the existing bounded evidence
+drain; expiration closes the launch guard permanently. A late read cannot start
+physical work or a new write, and any already-started physical operation still
+drains directly. A settled UNKNOWN setup cleanup has no reusable process-control
+handle in the launcher; missing local state is never used as termination proof.
 
 The send boundary persists SENDING after session serialization and provider
 configuration readiness. It then rechecks the captured runtime, lifecycle and
@@ -1120,8 +1131,83 @@ an authorized retry rotates the current delivery identity. Terminal outcome
 alone does not settle the run or release capacity; tracked agent work is a
 separate reconciliation concern. Later human results cannot overwrite it.
 
+The dormant runtime exposes transport-neutral inspection and explicit RESOLVE,
+ABANDON and RETRY actions. Every action checks project, run, worker generation,
+attempt generation and current message/send identities. The consumer permanently
+fences the matching initial operation, including admission awaiting a durable
+read, before targeted cleanup. This does not abort into a second untargeted stop
+or revoke a replacement. Active human follow-ups block recovery cleanup.
+
+Resolution requires correlated strict local stop plus a current stopped-work
+window and complete child-history coverage. RESOLVE retains the RUNNING slot for
+a later decision; ABANDON closes it with an explicit decision separate from the
+provider outcome. RETRY retains capacity continuously and preserves the run,
+workspace, session, frozen account/input, original initialMessageId,
+setupStartedAt and inherited attemptCount, including an exhausted budget. It
+rotates only the current send identities and attemptGeneration, reuses the READY
+worktree without rerunning setup, and replaces the consumer's old operation.
+Deleted or unavailable resources block retry. Inspection includes directory
+existence and read/traversal access in `retryResourcesAvailable` and reports a
+retry-specific `retryBlocked` resource reason, separate from common proof
+blocks. An unavailable retry directory does not block RESOLVE or ABANDON. Retry
+checks resources before targeted stop and again at final transaction validation;
+losing the directory during the write rolls back with `RESOURCES_UNAVAILABLE`.
+Known child work, unknown child history and settled UNKNOWN setup cleanup have
+no supported recovery action.
+
+Saved resolution JSON does not restore lost live coverage. Both a later action
+and the rotated attempt's startup require the old stopped-work window to remain
+valid. A restart between rotation and startup can therefore leave the new
+attempt unsent and blocked. Ordinary startup/send remains allowed after a
+finished initial turn, but invalidates prior proof; a pending retry uses the
+existing durable initial-delivery fence. Only an independently resolved previous
+attempt permits a new tracking window after history replay. Recovery uses the
+same final synchronous proof check and asynchronous engine-commit limitation as
+settlement.
+
+Normal settlement requires the current initial runtime's live tracking window,
+established before its send, and zero in-flight prompts, interactive requests,
+active goals, native children and non-shell agent tasks. Shell/dev-server-only
+work does not retain capacity. FF child-workspace creation is retained by its
+workspace owner, including through archive and deletion, and holds parent
+capacity independently of native tracking. The current ordinary child lifecycle
+cannot supply positive child-work cleanup proof: archive, deletion, IDLE and a
+successful legacy stop return cannot resolve that hold. Recovery and UI must not
+advertise those operations as resolution; supported positive child cleanup still
+requires implementation before activation. Missing tracking, replay, source
+replacement and restart without live coverage remain unknown; history inspection
+never starts a provider. A newly created event-workspace origin marks complete
+child-history capture in its creation transaction. Historical origins remain
+unknown; importing a matching workspace revokes that coverage even when the
+workspace already exists. Backfilling surviving children retains holds but does
+not certify an empty history. A terminal failure/cancellation, unexpected exit,
+timeout or workspace removal also needs correlated strict runtime-stop evidence.
+The original four-hour turn deadline uses the durable send timestamp. SHUTDOWN
+uncertainty remains reserved for recovery and does not fall through to timeout.
+
+The owner transaction persists the work proof and terminal result together,
+checking worker, send attempt and current source. Settlement linearizes at its
+final synchronous live-token validation after all awaited reads and mutations.
+Observed work/source/lifecycle changes before that check roll back the write.
+The database engine's asynchronous commit remains a gap: this is a contract for
+supported FF-tracked work, not universal containment of future native activity
+or remote effects. Tracker updates continue normally throughout persistence.
+
+Observed PR links are unioned into bounded run results while work remains held.
+Successful quiescent work becomes PR_CREATED when links exist; failed or
+cancelled initial work preserves its outcome and links. These sampled links
+survive workspace deletion. Lossless capture of attachments created and deleted
+between observations, ledger pruning, trusted-local operator transport/UI and
+child-work support remain activation prerequisites. Monitoring never
+auto-archives a workspace.
+
 Event runtimes use an owned POSIX process group. Strict stop confirms
-LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. Adapter
+LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A
+permission-uncertain probe after a successful owned signal may wait within the
+existing stop deadline, but does not permit escalation or count as absence.
+Initial probe errors, signal errors and lost ownership remain unconfirmed.
+Stopped-work proof also requires the retained stop source to match the original
+source; every new runtime registration invalidates that retained proof. Adapter
 exit, a signal acknowledgment, cancellation acknowledgment, a missing handle or
 an IDLE snapshot is insufficient. Unsupported executable overrides, Windows
 without conclusive tree evidence, and uncertain cleanup report UNKNOWN. Live

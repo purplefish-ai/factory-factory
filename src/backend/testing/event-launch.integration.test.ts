@@ -15,6 +15,7 @@ import {
   createEventAdmissionFixture,
   createEventDeliveryFixture,
   boundary,
+  deferred,
   releaseEventBoundaries,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
 import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
@@ -44,6 +45,9 @@ beforeEach(async () => {
   const factory = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-client-factory')
   >('@/backend/services/session/service/acp/acp-client-factory');
+  const { AcpNativeSessionTracker } = await vi.importActual<
+    typeof import('@/backend/services/session/service/acp/acp-native-session-tracker')
+  >('@/backend/services/session/service/acp/acp-native-session-tracker');
   vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(
     async ({ options }) => {
       const run = await db.prisma.agentRun.findUniqueOrThrow({
@@ -53,11 +57,16 @@ beforeEach(async () => {
       expect(
         await db.prisma.workspace.findUnique({ where: { id: run.workspaceId! } })
       ).toMatchObject({ status: 'READY' });
-      const provider = fakeEventProvider(h.session.AcpProcessHandle, options, async () => {
-        expect(
-          await db.prisma.agentInitialDelivery.findUnique({ where: { runId: run.id } })
-        ).toMatchObject({ state: 'SENDING' });
-      });
+      const provider = fakeEventProvider(
+        h.session.AcpProcessHandle,
+        options,
+        async () => {
+          expect(
+            await db.prisma.agentInitialDelivery.findUnique({ where: { runId: run.id } })
+          ).toMatchObject({ state: 'SENDING' });
+        },
+        new AcpNativeSessionTracker()
+      );
       providers.set(options.sessionId, provider);
       return provider.handle;
     }
@@ -102,27 +111,50 @@ afterEach(async () => {
   }
 });
 
-it('creates, links and initializes before the real singleton send and retains initial outcome', async () => {
-  expect(await db.prisma.workspace.count()).toBe(0);
-  const launch = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
-  >('@/backend/orchestration/event-run-launch.orchestrator');
-  const task = launch.launchEventRun(h.claim, new AbortController().signal);
-  tasks.push(task);
-  void task.catch(() => undefined);
-  await vi.waitFor(() => expect(providers.size).toBe(1));
-  const provider = providers.get(h.attempt.sessionId)!;
-  await provider.called;
-  provider.response.resolve({ stopReason: 'end_turn' });
-  await task;
-  expect(await h.read()).toMatchObject({ state: 'FINISHED', execution: h.execution });
-  expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
-    status: 'RUNNING',
-    launchPhase: 'ACTIVE',
-  });
-  expect(await db.prisma.workspace.count()).toBe(1);
-  expect(await db.prisma.agentSession.count()).toBe(1);
-});
+it.each([false, true])(
+  'creates, links, sends and settles with positive owned-work coverage (shell=%s)',
+  async (shell) => {
+    expect(await db.prisma.workspace.count()).toBe(0);
+    const launch = await vi.importActual<
+      typeof import('@/backend/orchestration/event-run-launch.orchestrator')
+    >('@/backend/orchestration/event-run-launch.orchestrator');
+    const task = launch.launchEventRun(h.claim, new AbortController().signal);
+    tasks.push(task);
+    void task.catch(() => undefined);
+    await vi.waitFor(() => expect(providers.size).toBe(1));
+    const provider = providers.get(h.attempt.sessionId)!;
+    await provider.called;
+    if (shell) {
+      provider.update({
+        sessionUpdate: 'async_task_spawned',
+        asyncTaskId: 'preview',
+        taskType: 'shell',
+      });
+    }
+    provider.response.resolve({ stopReason: 'end_turn' });
+    await task;
+    expect(await h.read()).toMatchObject({ state: 'FINISHED', execution: h.execution });
+    expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
+      status: 'RUNNING',
+      launchPhase: 'ACTIVE',
+    });
+    expect(await db.prisma.workspace.count()).toBe(1);
+    expect(await db.prisma.agentSession.count()).toBe(1);
+    const outcome = (await h.read()).evidence?.outcome;
+    const { observeEventRun } = await vi.importActual<
+      typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
+    >('@/backend/orchestration/event-run-monitor.orchestrator');
+    expect(await observeEventRun(h.claim)).toBe('SETTLED');
+    expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
+      status: 'COMPLETED',
+      launchPhase: 'FINISHED',
+      leaseExpiresAt: null,
+    });
+    expect((await h.read()).evidence?.outcome).toEqual(outcome);
+    await h.session.eventSessionAuthority.assertOrdinary(h.attempt.sessionId);
+    expect(provider.child.kill).not.toHaveBeenCalled();
+  }
+);
 
 it('hands four independent committed claims off without waiting for turns and defers the fifth', async () => {
   const { createEventRunConsumer } = await vi.importActual<
@@ -145,6 +177,9 @@ it('hands four independent committed claims off without waiting for turns and de
   }
   await consumer.drain();
   expect(await db.prisma.agentInitialDelivery.count({ where: { state: 'FINISHED' } })).toBe(4);
+  await consumer.maintain(new AbortController().signal);
+  expect(await db.prisma.agentRun.count({ where: { status: 'COMPLETED' } })).toBe(4);
+  expect(await h.owner.claimNextRun()).toMatchObject({ status: 'CLAIMED' });
 });
 
 it('retains an already-aborted committed claim as safely resumable without creating resources', async () => {
@@ -396,7 +431,15 @@ it('fences invocation when lease renewal fails during the committed SENDING obse
   gate.release();
   await consumer.drain();
   expect(providers.get(h.claim.reservedSessionId)!.connection.prompt).not.toHaveBeenCalled();
-  expect(await h.read()).toMatchObject({ state: 'AMBIGUOUS' });
+  // The expired owner cannot relabel its committed uncertainty or stop a runtime.
+  const fence = await h.read();
+  expect(fence.state).toBe('SENDING');
+  expect(fence.evidence?.stop).toBeUndefined();
+  expect(fence.evidence?.outcome).toBeUndefined();
+  expect(providers.get(h.claim.reservedSessionId)!.child.kill).not.toHaveBeenCalled();
+  expect(
+    await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } })
+  ).toMatchObject({ status: 'RUNNING' });
 });
 
 it('preserves composed PID and output at the UNKNOWN cleanup boundary without reconstructing evidence', async () => {
@@ -656,6 +699,65 @@ it.each(['stall', 'reject'] as const)(
     }
   }
 );
+
+it('bounds runtime shutdown after maintenance has entered a failed disposition and fences its late write', async () => {
+  const other = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+  const gate = boundary();
+  const dispositionDone = deferred<void>();
+  vi.spyOn(h.owner.eventRunLaunch, 'read').mockRejectedValue(new Error('Owner read failed'));
+  const dispose = h.owner.eventRunLaunch.dispose;
+  vi.spyOn(h.owner.eventRunLaunch, 'dispose').mockImplementation(async (...args) => {
+    if (args[0].runId === h.claim.runId) {
+      await gate.wait();
+      try {
+        return await dispose(...args);
+      } finally {
+        dispositionDone.resolve();
+      }
+    }
+    return dispose(...args);
+  });
+  const { createEventRunConsumer } = await vi.importActual<
+    typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/event-run-consumer.orchestrator');
+  const { createAgentRuntimeLifecycle } = await vi.importActual<
+    typeof import('@/backend/orchestration/agent-runtime.orchestrator')
+  >('@/backend/orchestration/agent-runtime.orchestrator');
+  const consumer = createEventRunConsumer();
+  await consumer.consumeClaim(h.claim, new AbortController().signal);
+  await consumer.consumeClaim(other.claim, new AbortController().signal);
+  await consumer.drain();
+  vi.useFakeTimers();
+  const runtime = createAgentRuntimeLifecycle(
+    { pollCycle: async () => undefined },
+    undefined,
+    consumer
+  );
+  runtime.start();
+  await gate.entered;
+  let done = false;
+  const stopping = runtime.stop().then(() => {
+    done = true;
+  });
+  try {
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(done).toBe(true);
+    expect(await db.prisma.agentRun.findUnique({ where: { id: other.claim.runId } })).toMatchObject(
+      { launchPhase: 'NEEDS_ATTENTION' }
+    );
+    gate.release();
+    await dispositionDone.promise;
+    await consumer.drain();
+    expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
+      launchPhase: 'PROVISIONING',
+      status: 'RUNNING',
+    });
+  } finally {
+    gate.release();
+    vi.useRealTimers();
+    await stopping;
+  }
+});
 
 it('bounds shutdown behind a stalled durable handoff read and fences all later writes', async () => {
   const gate = boundary();

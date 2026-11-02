@@ -75,3 +75,5 @@ export {
   EventWorkspaceFenceError,
   type EventWorkspaceClaim,
 } from './lifecycle/event-workspace-init.service';
+
+export { workspaceChildHistoryService } from './lifecycle/workspace-child-history.service';

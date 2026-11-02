@@ -61,7 +61,7 @@ export function createAgentRuntime(
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
   });
-  return createAgentRuntimeLifecycle(
+  const lifecycle = createAgentRuntimeLifecycle(
     poller,
     {
       evaluatePendingEvents: (signal) => evaluator.evaluatePendingEvents(signal),
@@ -72,6 +72,12 @@ export function createAgentRuntime(
     },
     launcher
   );
+  return {
+    ...lifecycle,
+    recovery: launcher
+      ? { inspectRun: launcher.inspectRun, resolveAmbiguousRun: launcher.resolveAmbiguousRun }
+      : undefined,
+  };
 }
 
 export function createAgentRuntimeLifecycle(

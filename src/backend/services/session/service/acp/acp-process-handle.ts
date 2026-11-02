@@ -31,6 +31,7 @@ export class AcpProcessHandle {
   agentCapabilities: Record<string, unknown>;
   readonly supportsSteering: boolean;
   private promptLease?: AcpConfigurationLease;
+  promptRevision = 0;
   private readonly promptCompletion = new AcpPromptReadiness();
   private pendingConfigUpdate?: Promise<void>;
   configOptions: SessionConfigOption[];
@@ -73,6 +74,9 @@ export class AcpProcessHandle {
   }
 
   set isPromptInFlight(value: boolean) {
+    if (value !== this.isPromptInFlight) {
+      this.promptRevision++;
+    }
     if (value) {
       this.promptLease ??= this.promptCompletion.begin();
     } else {

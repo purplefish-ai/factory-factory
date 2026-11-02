@@ -12,6 +12,7 @@ export {
   type RuntimeStopEvidence,
 } from './acp-protocol/runtime-observation';
 import { eventAgentExecutionSchema, eventLaunchIdentifierSchema as id } from './event-agent-launch';
+import { eventWorkProofSchema } from './event-agent-work';
 
 export const initialAttemptSchema = z.strictObject({
   runId: id,
@@ -22,6 +23,11 @@ export const initialAttemptSchema = z.strictObject({
   attemptGeneration: z.number().int().positive(),
 });
 export type InitialAttempt = z.infer<typeof initialAttemptSchema>;
+export type ExpectedEventRuntime = {
+  attempt: InitialAttempt;
+  source: ProviderSource;
+  assertCurrent(): void;
+};
 export const initialOutcomeSchema = z
   .strictObject({
     source: providerSourceSchema,
@@ -34,12 +40,24 @@ export const initialOutcomeSchema = z
     'Inconsistent terminal outcome'
   );
 export type InitialOutcome = z.infer<typeof initialOutcomeSchema>;
+/** Last explicit decision, separate from the provider's immutable response. */
+export const eventRunResolutionSchema = z.strictObject({
+  action: z.enum(['RESOLVE', 'ABANDON', 'RETRY']),
+  attempt: initialAttemptSchema,
+  outcome: initialOutcomeSchema.optional(),
+  stop: runtimeStopEvidenceSchema,
+  work: eventWorkProofSchema,
+  resolvedAt: z.iso.datetime(),
+});
+export type EventRunResolution = z.infer<typeof eventRunResolutionSchema>;
 export const initialDeliveryEvidenceSchema = z.strictObject({
   version: z.literal(1),
   attempt: initialAttemptSchema,
   source: providerSourceSchema.optional(),
   outcome: initialOutcomeSchema.optional(),
   stop: runtimeStopEvidenceSchema.optional(),
+  work: eventWorkProofSchema.optional(),
+  resolution: eventRunResolutionSchema.optional(),
 });
 export type InitialDeliveryEvidence = z.infer<typeof initialDeliveryEvidenceSchema>;
 export const initialDeliveryFenceSchema = z.strictObject({

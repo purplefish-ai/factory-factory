@@ -16,7 +16,10 @@ import {
   dataBackupAccessor,
   type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
-import { workspacePrSnapshotService } from '@/backend/services/workspace';
+import {
+  workspacePrSnapshotService,
+  workspaceChildHistoryService,
+} from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
@@ -238,6 +241,7 @@ async function importWorkspaces(
   );
 
   for (const workspace of orderedWorkspaces) {
+    await workspaceChildHistoryService.invalidateImportedWorkspace(tx, workspace.id);
     const existing = await tx.workspace.findUnique({ where: { id: workspace.id } });
     if (existing) {
       counter.skipped++;
@@ -332,6 +336,7 @@ async function importWorkspaces(
         updatedAt: new Date(workspace.updatedAt),
       },
     });
+    await workspaceChildHistoryService.recordImportedChild(tx, workspace);
     importedWorkspaceIds.push(workspace.id);
     counter.imported++;
   }

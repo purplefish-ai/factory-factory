@@ -21,12 +21,17 @@ export class EventInitialDispatcher {
       start(sessionId: string, permit: EventInitialPermit): Promise<unknown>;
       send(sessionId: string, text: string, permit: EventInitialPermit): Promise<void>;
       commit(sessionId: string, message: QueuedMessage): void;
-      interrupt?(sessionId: string, cause: 'SHUTDOWN' | 'TIMEOUT'): Promise<RuntimeStopEvidence>;
+      interrupt?(
+        sessionId: string,
+        cause: 'SHUTDOWN' | 'TIMEOUT',
+        assertInitialCurrent: () => void
+      ): Promise<RuntimeStopEvidence>;
     }
   ) {}
   async dispatch(input: {
     attempt: InitialAttempt;
     text: string;
+    /** Owner lifetime only: abort cleanup still needs authority after signal abortion. */
     assertCurrent(): void;
     signal?: AbortSignal;
   }): Promise<void> {
@@ -81,7 +86,7 @@ export class EventInitialDispatcher {
         throw error;
       }
       const evidence = await this.ports
-        .interrupt?.(input.attempt.sessionId, 'SHUTDOWN')
+        .interrupt?.(input.attempt.sessionId, 'SHUTDOWN', input.assertCurrent)
         .catch(() => null);
       await withEventEvidenceDeadline(
         operation.catch(() => undefined),

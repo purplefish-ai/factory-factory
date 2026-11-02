@@ -962,6 +962,8 @@ model WorkspaceNotification {
 
 /// Retained creation evidence; intentionally no cascading entity relations.
 model WorkspaceLaunchOrigin {
+  // Only new event-workspace creation establishes complete child history.
+  childHistoryVersion Int?
   runId String @id
   workspaceId String @unique
   projectId String
@@ -975,4 +977,14 @@ model AgentSessionLaunchOrigin {
   workspaceId String
   execution Json // eventAgentExecutionSchema
   createdAt DateTime @default(now())
+}
+
+
+/// Workspace-owned child creation facts survive archive, deletion and import.
+model WorkspaceChildOrigin {
+  parentWorkspaceId String
+  childWorkspaceId String
+  createdAt DateTime @default(now())
+
+  @@id([parentWorkspaceId, childWorkspaceId])
 }

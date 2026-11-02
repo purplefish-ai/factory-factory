@@ -31,6 +31,8 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  workspaceLaunchOrigin: { updateMany: vi.fn() },
+  workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
   project: {
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),

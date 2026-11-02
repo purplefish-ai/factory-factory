@@ -82,7 +82,8 @@ export const ModelName = {
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
-  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin'
+  AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
+  WorkspaceChildOrigin: 'WorkspaceChildOrigin'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -647,6 +648,7 @@ export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotification
 
 
 export const WorkspaceLaunchOriginScalarFieldEnum = {
+  childHistoryVersion: 'childHistoryVersion',
   runId: 'runId',
   workspaceId: 'workspaceId',
   projectId: 'projectId',
@@ -665,6 +667,15 @@ export const AgentSessionLaunchOriginScalarFieldEnum = {
 } as const
 
 export type AgentSessionLaunchOriginScalarFieldEnum = (typeof AgentSessionLaunchOriginScalarFieldEnum)[keyof typeof AgentSessionLaunchOriginScalarFieldEnum]
+
+
+export const WorkspaceChildOriginScalarFieldEnum = {
+  parentWorkspaceId: 'parentWorkspaceId',
+  childWorkspaceId: 'childWorkspaceId',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceChildOriginScalarFieldEnum = (typeof WorkspaceChildOriginScalarFieldEnum)[keyof typeof WorkspaceChildOriginScalarFieldEnum]
 
 
 export const SortOrder = {

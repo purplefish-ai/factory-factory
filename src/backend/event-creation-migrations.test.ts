@@ -58,3 +58,40 @@ it('applies event creation migrations in the same order on fresh installs and up
     rmSync(temp, { recursive: true, force: true });
   }
 });
+
+it('backfills retained child holds without certifying historical child history', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'ff-child-history-migration-'));
+  const migrationsPath = join(process.cwd(), 'prisma/migrations');
+  const baseline = join(temp, 'baseline');
+  mkdirSync(baseline);
+  for (const entry of readdirSync(migrationsPath, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name <= '20261101190000_event_launch_preparation') {
+      cpSync(join(migrationsPath, entry.name), join(baseline, entry.name), { recursive: true });
+    }
+  }
+  const databasePath = join(temp, 'upgrade.db');
+  let db: Database.Database | undefined;
+  try {
+    runMigrations({ databasePath, migrationsPath: baseline, log: () => undefined });
+    db = new Database(databasePath);
+    db.exec(`
+      INSERT INTO Project (id, name, slug, repoPath, worktreeBasePath, updatedAt) VALUES ('project', 'Project', 'project', '/repo', '/worktrees', CURRENT_TIMESTAMP);
+      INSERT INTO Workspace (id, projectId, name, updatedAt) VALUES ('parent', 'project', 'Parent', CURRENT_TIMESTAMP);
+      INSERT INTO Workspace (id, projectId, name, status, parent_workspace_id, updatedAt) VALUES ('child', 'project', 'Child', 'ARCHIVED', 'parent', CURRENT_TIMESTAMP);
+      INSERT INTO WorkspaceLaunchOrigin (runId, workspaceId, projectId) VALUES ('run', 'parent', 'project');
+    `);
+    db.close();
+    runMigrations({ databasePath, migrationsPath, log: () => undefined });
+    db = new Database(databasePath);
+    expect(db.prepare('SELECT childHistoryVersion FROM WorkspaceLaunchOrigin').all()).toEqual([
+      { childHistoryVersion: null },
+    ]);
+    db.prepare('DELETE FROM Workspace WHERE id = ?').run('child');
+    expect(
+      db.prepare('SELECT parentWorkspaceId, childWorkspaceId FROM WorkspaceChildOrigin').all()
+    ).toEqual([{ parentWorkspaceId: 'parent', childWorkspaceId: 'child' }]);
+  } finally {
+    db?.close();
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
