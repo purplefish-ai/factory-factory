@@ -6,6 +6,7 @@ const mockSessionDataService = vi.hoisted(() => ({
   findClosedSessionByIdWithWorkspace: vi.fn(),
   deleteClosedSession: vi.fn(),
   resolveClosedSessionTranscriptPath: vi.fn(),
+  readClosedSessionTranscript: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -21,6 +22,9 @@ function createCaller() {
 }
 
 beforeEach(() => {
+  mockSessionDataService.readClosedSessionTranscript.mockImplementation((_archive, path) =>
+    mockReadFile(path, 'utf-8')
+  );
   mockSessionDataService.resolveClosedSessionTranscriptPath.mockReturnValue(
     '/tmp/worktree/transcripts/closed-1.json'
   );

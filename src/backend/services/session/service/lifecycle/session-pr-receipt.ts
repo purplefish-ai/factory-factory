@@ -97,17 +97,26 @@ async function findArchivedReceipt(
         unavailable = true;
         continue;
       }
-      const metadata = await readClosedSessionTranscriptHeader(
-        resolveClosedSessionTranscriptPath(archive, archive.workspace.worktreePath),
-        z.object({
-          sessionId: z.literal(sessionId),
-          metadata: z.object({
-            provider: z.enum(['CLAUDE', 'CODEX']),
-            providerSessionId: z.string().min(1),
-            codexAccountId: z.string().nullish(),
-          }),
-        })
+      const transcriptPath = resolveClosedSessionTranscriptPath(
+        archive,
+        archive.workspace.worktreePath
       );
+      const schema = z.object({
+        sessionId: z.literal(sessionId),
+        metadata: z.object({
+          provider: z.enum(['CLAUDE', 'CODEX']),
+          providerSessionId: z.string().min(1),
+          codexAccountId: z.string().nullish(),
+        }),
+      });
+      const metadata =
+        typeof archive.pendingTranscript === 'string'
+          ? schema.parse(
+              JSON.parse(
+                await closedSessionPersistenceService.readTranscript(archive, transcriptPath)
+              )
+            )
+          : await readClosedSessionTranscriptHeader(transcriptPath, schema);
       if (metadata.metadata.provider !== archive.provider) {
         unavailable = true;
         continue;

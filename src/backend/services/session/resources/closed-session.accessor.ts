@@ -195,6 +195,26 @@ class PrismaClosedSessionAccessor {
     );
   }
 
+  completeWithRetainedTranscript(id: string, transcriptHash: string) {
+    return prisma.$transaction((tx) =>
+      tx.closedSession.update({
+        where: { id, transcriptHash, pendingTranscript: { not: null } },
+        data: { archiveState: 'COMPLETE' },
+      })
+    );
+  }
+
+  findRetainedTranscriptById(id: string) {
+    return prisma.closedSession.findFirst({
+      where: {
+        id,
+        archiveState: 'COMPLETE',
+        archiveKey: { not: null },
+        pendingTranscript: { not: null },
+      },
+    });
+  }
+
   findArtifactOwner(id: string, transcriptHash: string, transcriptPath: string) {
     return prisma.closedSession.findUnique({
       where: { id, transcriptHash, transcriptPath },
