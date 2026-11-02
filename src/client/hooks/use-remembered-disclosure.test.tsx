@@ -65,3 +65,37 @@ it('keeps unscoped instances independent without remembering them on remount', (
     flushSync(() => root.unmount());
   }
 });
+
+it('preserves mounted choices during cache eviction until their last subscriber unmounts', () => {
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const render = (index: number, secondSubscriber = false) =>
+    flushSync(() =>
+      root.render(
+        <>
+          <Disclosure scope="pinned-choice" section="agents" />
+          {secondSubscriber && <Disclosure scope="pinned-choice" section="agents" />}
+          <Disclosure scope={`eviction-${index}`} section="agents" />
+        </>
+      )
+    );
+  try {
+    render(0, true);
+    flushSync(() => host.querySelector('button')?.click());
+    render(0);
+    for (let index = 0; index <= 500; index += 1) {
+      render(index);
+      flushSync(() => host.querySelectorAll('button')[1]?.click());
+    }
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+    flushSync(() => root.render(null));
+    for (let index = 501; index <= 1001; index += 1) {
+      flushSync(() => root.render(<Disclosure scope={`eviction-${index}`} section="agents" />));
+      flushSync(() => host.querySelector('button')?.click());
+    }
+    flushSync(() => root.render(<Disclosure scope="pinned-choice" section="agents" />));
+    expect(host.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
