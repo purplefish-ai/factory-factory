@@ -431,7 +431,15 @@ it('fences invocation when lease renewal fails during the committed SENDING obse
   gate.release();
   await consumer.drain();
   expect(providers.get(h.claim.reservedSessionId)!.connection.prompt).not.toHaveBeenCalled();
-  expect(await h.read()).toMatchObject({ state: 'AMBIGUOUS' });
+  // The expired owner cannot relabel its committed uncertainty or stop a runtime.
+  const fence = await h.read();
+  expect(fence.state).toBe('SENDING');
+  expect(fence.evidence?.stop).toBeUndefined();
+  expect(fence.evidence?.outcome).toBeUndefined();
+  expect(providers.get(h.claim.reservedSessionId)!.child.kill).not.toHaveBeenCalled();
+  expect(
+    await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } })
+  ).toMatchObject({ status: 'RUNNING' });
 });
 
 it('preserves composed PID and output at the UNKNOWN cleanup boundary without reconstructing evidence', async () => {

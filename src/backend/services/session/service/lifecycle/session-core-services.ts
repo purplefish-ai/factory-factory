@@ -236,7 +236,8 @@ sessionLifecycleServiceInstance = new SessionLifecycleService({
 export { sessionLifecycleServiceInstance as sessionLifecycleService };
 
 const initialDispatcher = new EventInitialDispatcher({
-  interrupt: (id, cause) => sessionTerminationCoordinator.interruptEventInitial(id, cause),
+  interrupt: (id, cause, assertInitialCurrent) =>
+    sessionTerminationCoordinator.interruptEventInitial(id, cause, undefined, assertInitialCurrent),
   authority: eventSessionAuthority,
   start: (id, permit) => {
     if (permit.previousResolution) {

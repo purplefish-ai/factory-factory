@@ -233,10 +233,13 @@ export class EventSessionAuthority {
     sessionId: string,
     evidence: RuntimeStopEvidence,
     signal?: AbortSignal,
-    expected?: ExpectedEventRuntime
+    expected?: ExpectedEventRuntime,
+    assertInitialCurrent?: () => void
   ): Promise<void> {
     return this.observe(async (assertCurrent) => {
+      assertInitialCurrent?.();
       const fence = await this.read(sessionId, assertCurrent);
+      assertInitialCurrent?.();
       if (!(fence && this.owner)) {
         blocked();
       }
@@ -253,6 +256,7 @@ export class EventSessionAuthority {
       assertCurrent();
       await this.owner.stop(fence.attempt, evidence);
       assertCurrent();
+      assertInitialCurrent?.();
       if (fence.state === 'SENDING' || fence.state === 'ACCEPTED') {
         await this.owner.ambiguous(fence.attempt);
       }

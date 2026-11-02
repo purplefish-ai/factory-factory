@@ -1099,15 +1099,20 @@ Targeted ownership-read failure or timeout fails closed; ordinary explicit stop
 and global shutdown keep their separate physical-cleanup fallback. Cleanup of a
 finished initial failure waits for ordinary follow-ups and known agent work to
 finish. Initial dispatch cancellation shares the existing evidence deadlines and
-fences late observations; it does not close global authority. Already-started
-observation writes remain tracked for final session teardown. Setup cancellation
-joins actual Git operations and script cleanup directly, so uncancellable Git
-may outlive the setup deadline while retaining ownership. Durable reads and
-output/PID persistence use the existing bounded evidence drain; expiration
-closes the launch guard permanently. A late read cannot start physical work or a
-new write, and any already-started physical operation still drains directly. A
-settled UNKNOWN setup cleanup has no reusable process-control handle in the
-launcher; missing local state is never used as termination proof.
+fences late observations; it does not close global authority. Failure and abort
+cleanup carry the launch ownership guard through handoff, stop ownership/fence
+reads, evidence publication and final disposition. Cleanup ownership is separate
+from the aborted input signal, so a current owner still performs its shutdown
+stop. Revoked cleanup cannot invalidate a replacement; already-started physical
+cleanup remains joined before its launch releases physical-stage tracking.
+Already-started observation writes remain tracked for final session teardown.
+Setup cancellation joins actual Git operations and script cleanup directly, so
+uncancellable Git may outlive the setup deadline while retaining ownership.
+Durable reads and output/PID persistence use the existing bounded evidence
+drain; expiration closes the launch guard permanently. A late read cannot start
+physical work or a new write, and any already-started physical operation still
+drains directly. A settled UNKNOWN setup cleanup has no reusable process-control
+handle in the launcher; missing local state is never used as termination proof.
 
 The send boundary persists SENDING after session serialization and provider
 configuration readiness. It then rechecks the captured runtime, lifecycle and

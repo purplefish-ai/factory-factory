@@ -503,6 +503,178 @@ it('fences in-flight maintenance without aborting into a second untargeted stop'
   expect((await row()).status).toBe('COMPLETED');
 });
 
+it('fences failure cleanup after its captured handoff read while recovery starts a replacement', async () => {
+  const launcher = await vi.importActual<
+    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
+  >('@/backend/orchestration/event-run-launch.orchestrator');
+  const launchRun = launcher.launchEventRun;
+  let oldLaunch: ReturnType<typeof launchRun> | undefined;
+  vi.spyOn(launcher, 'launchEventRun').mockImplementationOnce((...args) => {
+    oldLaunch = launchRun(...args);
+    return oldLaunch;
+  });
+  await launch();
+  const read = h.owner.eventRunLaunch.read.bind(h.owner.eventRunLaunch);
+  const gate = boundary();
+  vi.spyOn(h.owner.eventRunLaunch, 'read').mockImplementationOnce(async (...args) => {
+    const snapshot = await read(...args);
+    await gate.wait();
+    return snapshot;
+  });
+  providers[0]!.response.reject(new Error('Provider connection lost'));
+  await gate.entered;
+  await strictStop();
+  const dispose = vi.spyOn(h.owner.eventRunLaunch, 'dispose');
+  expect(
+    await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
+  ).toMatchObject({ status: 'RETRIED' });
+  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await providers[1]!.called;
+  const invalidate = vi.spyOn(h.session.eventSessionAuthority, 'invalidate');
+  gate.release();
+  await oldLaunch?.catch(() => undefined);
+  expect(providers[1]!.child.kill).not.toHaveBeenCalled();
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(dispose).not.toHaveBeenCalled();
+  providers[1]!.response.resolve({ stopReason: 'end_turn' });
+  await consumer.drain();
+  expect((await h.read()).evidence?.outcome?.result).toBe('COMPLETED');
+});
+
+it.each(['ownership', 'fence'] as const)(
+  'fences failure cleanup cancelled during its stop %s lookup',
+  async (stage) => {
+    vi.spyOn(h.session.sessionDomainService, 'commitSentUserMessage').mockImplementationOnce(() => {
+      throw new Error('Transcript unavailable');
+    });
+    const gate = boundary();
+    let paused = false;
+    if (stage === 'ownership') {
+      const isOwned = h.session.eventSessionAuthority.isOwned.bind(h.session.eventSessionAuthority);
+      vi.spyOn(h.session.eventSessionAuthority, 'isOwned').mockImplementation(async (...args) => {
+        const result = await isOwned(...args);
+        // Startup performs the first lookup; cleanup is the first one after failure.
+        if (providers.length && !paused) {
+          paused = true;
+          await gate.wait();
+        }
+        return result;
+      });
+    } else {
+      const read = h.session.eventSessionAuthority.read.bind(h.session.eventSessionAuthority);
+      vi.spyOn(h.session.eventSessionAuthority, 'read').mockImplementation(async (...args) => {
+        const result = await read(...args);
+        if (providers.length && !paused) {
+          paused = true;
+          await gate.wait();
+        }
+        return result;
+      });
+    }
+    await consumer.consumeClaim(h.claim, new AbortController().signal);
+    await gate.entered;
+    const input = await context();
+    const dispose = vi.spyOn(h.owner.eventRunLaunch, 'dispose');
+    expect(await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' })).toMatchObject({
+      status: 'BLOCKED',
+    });
+    const replacementEntered = deferred<void>();
+    const replacementGate = boundary();
+    const replacement = h.session.eventSessionAuthority.runInitial(
+      input.attempt,
+      async (permit) => {
+        replacementEntered.resolve();
+        await replacementGate.wait();
+        h.session.eventSessionAuthority.assertCurrent(permit);
+      }
+    );
+    await replacementEntered.promise;
+    gate.release();
+    await consumer.drain();
+    replacementGate.release();
+    await expect(replacement).resolves.toBeUndefined();
+    expect(providers[0]!.child.kill).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(providers[0]!.connection.prompt).not.toHaveBeenCalled();
+  }
+);
+
+it('fences dispatcher abort cleanup already awaiting ownership when recovery revokes the launch', async () => {
+  const controller = new AbortController();
+  await consumer.consumeClaim(h.claim, controller.signal);
+  await vi.waitFor(() => expect(providers).toHaveLength(1));
+  await providers[0]!.called;
+  const lookup = boundary();
+  const isOwned = h.session.eventSessionAuthority.isOwned.bind(h.session.eventSessionAuthority);
+  vi.spyOn(h.session.eventSessionAuthority, 'isOwned').mockImplementationOnce(async (...args) => {
+    const result = await isOwned(...args);
+    await lookup.wait();
+    return result;
+  });
+  controller.abort();
+  await lookup.entered;
+  expect(
+    await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
+  ).toMatchObject({ status: 'BLOCKED' });
+  const invalidate = vi.spyOn(h.session.eventSessionAuthority, 'invalidate');
+  lookup.release();
+  providers[0]!.response.resolve({ stopReason: 'end_turn' });
+  await consumer.drain();
+  expect(providers[0]!.child.kill).not.toHaveBeenCalled();
+  expect(invalidate).not.toHaveBeenCalled();
+  expect((await row()).status).toBe('RUNNING');
+});
+
+it.each([false, true])(
+  'joins already-started physical abort cleanup with revoked ownership %s',
+  async (revoked) => {
+    const controller = new AbortController();
+    await consumer.consumeClaim(h.claim, controller.signal);
+    await vi.waitFor(() => expect(providers).toHaveLength(1));
+    await providers[0]!.called;
+    const groups = await vi.importActual<
+      typeof import('@/backend/services/session/service/acp/acp-owned-group')
+    >('@/backend/services/session/service/acp/acp-owned-group');
+    const physical = boundary();
+    vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockImplementation(async ({ child }) => {
+      await physical.wait();
+      child.kill();
+      return 'LOCAL_RUNTIME_GROUP_STOPPED';
+    });
+    const record = vi.spyOn(h.session.eventSessionAuthority, 'recordStop');
+    controller.abort();
+    await physical.entered;
+    const signalsAtGate = providers[0]!.child.kill.mock.calls.length;
+    if (revoked) {
+      expect(
+        await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
+      ).toMatchObject({ status: 'BLOCKED' });
+    }
+    let joined = false;
+    const stopping = consumer.stop().then(() => {
+      joined = true;
+    });
+    await Promise.resolve();
+    expect(joined).toBe(false);
+    expect(providers[0]!.child.kill).toHaveBeenCalledTimes(signalsAtGate);
+    physical.release();
+    providers[0]!.response.resolve({ stopReason: 'end_turn' });
+    await stopping;
+    expect(providers[0]!.child.kill).toHaveBeenCalledTimes(signalsAtGate + 1);
+    if (revoked) {
+      expect(record).not.toHaveBeenCalled();
+    } else {
+      expect(record).toHaveBeenCalledWith(
+        h.attempt.sessionId,
+        expect.objectContaining({ cause: 'SHUTDOWN', status: 'LOCAL_RUNTIME_GROUP_STOPPED' }),
+        expect.any(AbortSignal),
+        undefined,
+        expect.any(Function)
+      );
+    }
+  }
+);
+
 it.each(['RETRY', 'ABANDON'] as const)(
   'rolls back %s when tracked work changes during its final awaited mutation',
   async (action) => {
