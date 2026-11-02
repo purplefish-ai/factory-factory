@@ -16,7 +16,9 @@ CREATE TABLE "WorkspacePRDelivery" (
  CONSTRAINT "WorkspacePRDelivery_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE INDEX "WorkspacePRDelivery_workspaceId_state_idx" ON "WorkspacePRDelivery"("workspaceId", "state");
-ALTER TABLE "WorkspacePREvent" ADD COLUMN "batchId" TEXT REFERENCES "WorkspacePRDelivery"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- NO ACTION checks after workspace cascades; a malformed cross-workspace
+-- group must never cascade deletion into another workspace's evidence.
+ALTER TABLE "WorkspacePREvent" ADD COLUMN "batchId" TEXT REFERENCES "WorkspacePRDelivery"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 CREATE INDEX "WorkspacePREvent_batchId_idx" ON "WorkspacePREvent"("batchId");
 CREATE TEMP TABLE valid_pr_delivery AS
 SELECT e.deliveryId AS id FROM WorkspacePREvent e WHERE e.deliveryId IS NOT NULL AND

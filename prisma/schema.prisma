@@ -427,7 +427,7 @@ model WorkspacePREvent {
   attempts Int @default(0)
   // Legacy backup/evidence columns. New frozen effects use batchId only.
   batchId String?
-  batch WorkspacePRDelivery? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch WorkspacePRDelivery? @relation(fields: [batchId], references: [id], onDelete: NoAction)
   deliveryId String?
   deliverySessionId String?
   deliveryProvider String?

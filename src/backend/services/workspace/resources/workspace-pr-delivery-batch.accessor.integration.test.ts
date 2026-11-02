@@ -408,3 +408,46 @@ it('rolls back a restore that collides with an existing delivery identity', asyn
     await db.prisma.workspacePRDelivery.findUnique({ where: { id: 'collision' } })
   ).toMatchObject({ state: 'DISPATCHING', text: 'original', attempts: 1 });
 });
+
+it('preserves explicit workspace deletion cascade for normalized batches', async () => {
+  const eventIds = await mainBatchFacts();
+  await workspacePrEventAccessor.claimDelivery(
+    { workspaceId: 'w', prId: null, bindingRevision: 0 },
+    { deliveryId: 'deletion', sessionId: 'main', eventIds, text: 'frozen' }
+  );
+  await db.prisma.workspace.delete({ where: { id: 'w' } });
+  expect(await db.prisma.workspacePREvent.count()).toBe(0);
+  expect(await db.prisma.workspacePRDelivery.count()).toBe(0);
+  expect(await db.prisma.workspace.findUnique({ where: { id: 'other' } })).not.toBeNull();
+});
+
+it('cannot cascade another workspace event through a quarantined cross-workspace legacy receipt', async () => {
+  const original = await fact();
+  await db.prisma.workspacePREvent.update({
+    where: { id: original },
+    data: { deliveryId: 'shared-legacy-receipt' },
+  });
+  await db.prisma.workspacePREvent.create({
+    data: {
+      id: 'other-evidence',
+      workspaceId: 'other',
+      kind: 'MONITORING_ENABLED',
+      deduplicationKey: 'other',
+      deliveryId: 'shared-legacy-receipt',
+      payload: {
+        kind: 'MONITORING_ENABLED',
+        workspaceId: 'other',
+        bindingRevision: 0,
+        replyToPrComments: true,
+      },
+    },
+  });
+  expect(await workspacePrEventAccessor.recoverClaim('shared-legacy-receipt', true)).toEqual({
+    count: 0,
+    status: 'identity_mismatch',
+  });
+  await expect(db.prisma.workspace.delete({ where: { id: 'w' } })).rejects.toThrow();
+  expect(
+    await db.prisma.workspacePREvent.findUnique({ where: { id: 'other-evidence' } })
+  ).toMatchObject({ workspaceId: 'other', deliveryId: 'shared-legacy-receipt' });
+});

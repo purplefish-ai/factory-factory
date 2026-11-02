@@ -221,7 +221,9 @@ repeated metadata, lifecycle state and timestamps for agreement. Valid groups
 move to one delivery and clear redundant legacy columns. Inconsistent or
 incomplete groups become `BLOCKED`; their original event evidence remains
 verbatim. Resume cannot reset that evidence or unblock the batch. Explicit
-workspace deletion still cascades both deliveries and events.
+workspace deletion still cascades both deliveries and events. A quarantined
+legacy receipt spanning multiple workspaces blocks deletion of its batch owner
+rather than cascading into another workspace's evidence.
 
 Logical backups retain the existing flattened event format. Export validates
 complete normalized membership; old imports reconstruct batches with the same
