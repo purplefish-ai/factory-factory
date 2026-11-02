@@ -8,6 +8,11 @@ import {
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
 } from '@/shared/acp-protocol';
+import {
+  buildCombinedTextContent,
+  buildContentArray,
+  categorizeAttachments,
+} from '../chat/chat-message-handlers/attachment-processing';
 import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
 
@@ -151,6 +156,17 @@ function buildPRUpdateHistoryMessages(
   if (suffix || (!before && hasAttachments && boundary >= 0)) {
     appendHuman(suffix, !before);
   }
+  messages.forEach((message, index) => {
+    const attachments = categorizeAttachments(historyMsg.attachments ?? []);
+    const prompt =
+      historyMsg.providerPrompt === undefined
+        ? buildContentArray(
+            buildCombinedTextContent(historyMsg.content, attachments.textAttachments),
+            attachments.imageAttachments
+          )
+        : historyMsg.providerPrompt;
+    message.providerPrompt = index === 0 ? prompt : null;
+  });
   return messages;
 }
 
@@ -176,6 +192,9 @@ function appendHistoryToTranscript(
       source: 'user',
       text: historyMsg.content,
       attachments: historyMsg.attachments,
+      ...(historyMsg.providerPrompt !== undefined
+        ? { providerPrompt: historyMsg.providerPrompt }
+        : {}),
       timestamp: historyMsg.timestamp,
       order,
     });
@@ -444,7 +463,8 @@ export function appendClaudeEvent(
 export function commitSentUserMessageWithOrder(
   store: SessionStore,
   message: QueuedMessage,
-  order: number
+  order: number,
+  providerPrompt?: ChatMessage['providerPrompt']
 ): void {
   const transcriptMessage: ChatMessage = {
     id: message.id,
@@ -453,6 +473,7 @@ export function commitSentUserMessageWithOrder(
     attachments: message.attachments,
     timestamp: message.timestamp,
     order,
+    ...(providerPrompt !== undefined ? { providerPrompt } : {}),
   };
   if (message.source?.type === 'pr_event') {
     transcriptMessage.source = 'agent';

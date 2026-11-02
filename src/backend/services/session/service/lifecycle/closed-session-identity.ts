@@ -142,9 +142,12 @@ function orderedValue(value: unknown): unknown {
 function conversationContent(messages: ChatMessage[]) {
   const tokens: CanonicalContent = { provider: [], local: [] };
   for (const message of messages) {
-    if (message.source === 'user') {
+    if (message.providerPrompt != null) {
+      appendPayload(tokens.provider, 'user', message.providerPrompt);
+    }
+    if (message.source === 'user' && message.providerPrompt === undefined) {
       appendUser(tokens.provider, message);
-    } else if (message.message) {
+    } else if (message.source === 'agent' && message.message) {
       appendAgent(tokens, message.message);
     }
   }

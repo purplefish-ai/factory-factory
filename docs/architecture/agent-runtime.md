@@ -100,6 +100,15 @@ chunk splitting does not. Durable local events retain their IDs/content
 independently of their reconstructed timeline placement. Restart retries reuse
 the first reservation's exact bytes, including its original display fields and
 completion timestamp; canonicalization never rewrites that retained transcript.
+The dispatcher records the exact sent prompt on the first committed batch row
+(`providerPrompt`), with `null` on the other covered rows. Archive identity uses
+that prompt once, so queued humans retain their separate UI entries while
+matching the combined native-history prompt after restart. Unmarked adjacent
+human prompts retain separate boundaries; identity never guesses their batching.
+Native Claude text/image arrays and Codex input blocks retain the same
+provenance before their UI projection splits/joins text and restores images,
+including mixed PR/human prompts. Codex event projections also retain the
+matching native response prompt when it supplies the image/block evidence.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
 its digest before any file write. Atomic file writing and hash verification

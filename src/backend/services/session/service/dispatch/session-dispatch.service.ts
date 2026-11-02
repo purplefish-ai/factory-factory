@@ -688,7 +688,7 @@ export class SessionDispatchService {
     sessionDomainService.markRunning(dbSessionId);
 
     const content = combineBatchContents(messages, contents);
-    const dispatched = messages.map((message) => {
+    const dispatched = messages.map((message, index) => {
       if (!message.source) {
         message.settings = { ...msg.settings };
       }
@@ -709,7 +709,7 @@ export class SessionDispatchService {
         newState: MessageState.DISPATCHED,
         userMessage,
       });
-      return { message, order, userMessage };
+      return { message, order, userMessage, providerPrompt: index === 0 ? content : null };
     });
 
     if (isCompactCommand && compactionClient) {
@@ -724,9 +724,10 @@ export class SessionDispatchService {
       );
       // Persist immediately after dispatch so refresh/replay keeps this user message
       // visible while the provider is still working on the turn.
-      for (const { message, order } of dispatched) {
+      for (const { message, order, providerPrompt } of dispatched) {
         sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order, {
           emitSnapshot: false,
+          providerPrompt,
         });
       }
       sessionDomainService.emitSessionSnapshot(dbSessionId);

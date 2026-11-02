@@ -10,6 +10,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { AgentContentItem } from '@/shared/acp-protocol';
 
 let db: IntegrationDatabase;
 let service: typeof import('./closed-session-persistence.service').closedSessionPersistenceService;
@@ -19,6 +20,8 @@ let hydrator: typeof import('./session-provider-history-hydrator').createProvide
 let atomic: typeof import('@/backend/lib/atomic-file');
 let config: typeof import('@/backend/services/config.service').configService;
 let paths: typeof import('./closed-session-storage');
+let dispatchModule: typeof import('../dispatch/session-dispatch.service');
+let liveDomain: typeof import('../session-domain.service').sessionDomainService;
 const sessionId = 'restart-session';
 let worktree: string;
 let providerFile: string;
@@ -46,6 +49,12 @@ beforeAll(async () => {
   paths = await vi.importActual<typeof import('./closed-session-storage')>(
     './closed-session-storage'
   );
+  dispatchModule = await vi.importActual<typeof import('../dispatch/session-dispatch.service')>(
+    '../dispatch/session-dispatch.service'
+  );
+  ({ sessionDomainService: liveDomain } = await vi.importActual<
+    typeof import('../session-domain.service')
+  >('../session-domain.service'));
 });
 
 beforeEach(async () => {
@@ -81,6 +90,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  liveDomain.clearAllSessions();
   await service.stopArchiveMaintenance();
   vi.restoreAllMocks();
   await clearIntegrationDatabase(db.prisma);
@@ -91,8 +101,7 @@ afterAll(async () => {
   await destroyIntegrationDatabase(db);
 });
 
-function runtime(failDeletion: boolean, context?: CodexRuntimeContext) {
-  const domain = new Domain();
+function runtime(failDeletion: boolean, context?: CodexRuntimeContext, domain = new Domain()) {
   const hydrate = hydrator(domain);
   const finalizer = new Finalizer({
     repository: {
@@ -132,6 +141,201 @@ function historyEntry(uuid?: string) {
     message: { role: 'assistant', content: [{ type: 'text', text: 'Saved provider answer' }] },
   });
 }
+
+it.each(
+  ['pending', 'complete'].flatMap((phase) =>
+    [false, true].flatMap((image) =>
+      ['CLAUDE', 'CODEX'].map((provider) => ({ phase, image, provider }))
+    )
+  )
+)(
+  'reuses the first $phase archive after real human batching and restart (image=$image, provider=$provider)',
+  async ({ phase, image, provider }) => {
+    let context: CodexRuntimeContext | undefined;
+    if (provider === 'CODEX') {
+      await db.prisma.agentSession.update({
+        where: { id: sessionId },
+        data: { provider: 'CODEX', codexAccountId: 'codex-native-default' },
+      });
+      const home = join(db.tempDir, 'provider', 'codex');
+      const sessionsDir = join(home, 'sessions');
+      providerFile = join(sessionsDir, '2026', '11', '02', 'rollout-history.jsonl');
+      await mkdir(dirname(providerFile), { recursive: true });
+      context = {
+        accountId: 'codex-native-default',
+        homeDir: home,
+        sessionsDir,
+        env: { CODEX_HOME: home },
+      };
+    }
+    const settings = {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    };
+    const attachment = {
+      id: 'image',
+      name: 'image.png',
+      type: 'image/png',
+      contentType: 'image' as const,
+      size: 67,
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    };
+    for (const text of ['first', 'second']) {
+      liveDomain.enqueue(sessionId, {
+        id: text,
+        text,
+        timestamp: '2026-01-01',
+        settings: { ...settings },
+        ...(image && text === 'second' ? { attachments: [attachment] } : {}),
+      });
+    }
+    const sendSessionMessage = vi.fn(async (_id: string, content: string | AgentContentItem[]) => {
+      if (context) {
+        const blocks =
+          typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+        const input = blocks.flatMap<{ type: string; text?: string; image_url?: string }>((block) =>
+          block.type === 'text'
+            ? [{ type: 'input_text', text: block.text }]
+            : block.type === 'image'
+              ? [
+                  {
+                    type: 'input_image',
+                    image_url: `data:${block.source.media_type};base64,${block.source.data}`,
+                  },
+                ]
+              : []
+        );
+        await writeFile(
+          providerFile,
+          [
+            { type: 'session_meta', payload: { id: 'history', cwd: worktree } },
+            { type: 'response_item', payload: { type: 'message', role: 'user', content: input } },
+            {
+              type: 'event_msg',
+              payload: {
+                type: 'user_message',
+                message: blocks
+                  .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+                  .join('\n'),
+              },
+            },
+            {
+              type: 'event_msg',
+              payload: { type: 'agent_message', message: 'Saved provider answer' },
+            },
+          ]
+            .map((entry) => JSON.stringify(entry))
+            .join('\n')
+        );
+        return;
+      }
+      await writeFile(
+        providerFile,
+        `${JSON.stringify({ type: 'user', uuid: 'native-batch', message: { role: 'user', content } })}\n${historyEntry('native-answer')}\n`
+      );
+    });
+    const dispatcher = new dispatchModule.SessionDispatchService({
+      runtimeManager: { isSessionPromptInFlight: () => false, isSessionRunning: () => true },
+      configService: {
+        resolveQueuedMessageSettings: (_id, message) => message.settings,
+        configureQueuedMessage: async (_id, message) => message.settings,
+      },
+      promptService: {
+        sendSessionMessage,
+        steerSessionMessage: async () => ({ outcome: 'injected' }),
+      },
+      backgroundDelivery: {
+        prepare: vi.fn(),
+        validate: async () => true,
+        fail: async () => undefined,
+        complete: async () => undefined,
+      },
+    });
+    dispatcher.configure({
+      initPolicy: { getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }) },
+    });
+    dispatcher.configureLifecycle({
+      gate: {
+        getGeneration: () => 0,
+        isGenerationCurrent: () => true,
+        isSessionStopping: () => false,
+      },
+      startup: { getSessionClient: () => ({}), getOrCreateSessionClient: async () => ({}) },
+      notificationDelivery: {
+        claimForDispatch: () => ({ status: 'not_notification' }),
+        isAlreadyDelivered: async () => false,
+        acknowledgeSuccessfulDispatch: async () => undefined,
+        recoverPending: async () => ({ dispatchableCount: 0 }),
+        resetSession: () => undefined,
+        removeDuplicateFromQueue: () => false,
+        isNotificationMessage: () => false,
+      },
+    });
+    await dispatcher.tryDispatchNextMessage(sessionId);
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
+      sessionId,
+      image
+        ? [
+            { type: 'text', text: 'first' },
+            { type: 'text', text: '\n\nsecond' },
+            {
+              type: 'image',
+              source: { type: 'base64', data: attachment.data, media_type: 'image/png' },
+            },
+          ]
+        : 'first\n\nsecond'
+    );
+    expect(liveDomain.getTranscriptSnapshot(sessionId).map(({ text }) => text)).toEqual([
+      'first',
+      'second',
+    ]);
+    liveDomain.appendClaudeEvent(sessionId, {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Saved provider answer' }] },
+    });
+    const interrupted = runtime(true, context, liveDomain);
+    const write =
+      phase === 'pending'
+        ? vi
+            .spyOn(atomic, 'writeFileAtomic')
+            .mockRejectedValueOnce(new Error('interrupted before publication'))
+        : undefined;
+    await close(interrupted.finalizer);
+    write?.mockRestore();
+    const original = await db.prisma.closedSession.findFirstOrThrow();
+    expect(original.archiveState).toBe(phase === 'pending' ? 'PENDING' : 'COMPLETE');
+    const bytes =
+      original.pendingTranscript ??
+      (await readFile(paths.resolveClosedSessionTranscriptPath(original, null), 'utf8'));
+    liveDomain.clearAllSessions();
+    const restarted = runtime(false, context);
+    const session = await db.prisma.agentSession.findUniqueOrThrow({ where: { id: sessionId } });
+    await restarted.hydrate(sessionId, {
+      ...session,
+      codexAccountContext: context,
+      workspace: { worktreePath: worktree },
+    });
+    expect(
+      restarted.domain
+        .getTranscriptSnapshot(sessionId)
+        .filter(({ source }) => source === 'user')
+        .map(({ text }) => text)
+    ).toEqual(
+      image ? (context ? ['first\n\n\nsecond'] : ['first', '\n\nsecond']) : ['first\n\nsecond']
+    );
+    await service.recoverPending('workspace');
+    await close(restarted.finalizer);
+    expect(await db.prisma.agentSession.count()).toBe(0);
+    const archives = await db.prisma.closedSession.findMany();
+    expect(archives).toHaveLength(1);
+    expect(archives[0]?.id).toBe(original.id);
+    expect(
+      await readFile(paths.resolveClosedSessionTranscriptPath(archives[0]!, null), 'utf8')
+    ).toBe(bytes);
+  }
+);
 
 it.each([
   { live: true, phase: 'pending' },

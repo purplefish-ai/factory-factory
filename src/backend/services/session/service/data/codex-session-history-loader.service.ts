@@ -9,6 +9,7 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
+import { codexHistoryPrompt, restoreCodexEventPrompt } from './codex-history-prompt';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
@@ -518,6 +519,7 @@ function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryM
       content: text,
       timestamp,
       ...(attachments.length > 0 ? { attachments } : {}),
+      ...(role === 'user' ? { providerPrompt: codexHistoryPrompt(content, kinds) } : {}),
     },
   ];
 }
@@ -527,18 +529,15 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
   // Legacy event copies of the prompt may omit images that the response item kept.
-  const responseUserAttachments = turn.messages.find(
-    (item) => item.source === 'response' && item.message.type === 'user' && item.message.attachments
-  )?.message.attachments;
+  const responseUser = turn.messages.find(
+    (item) =>
+      item.source === 'response' &&
+      item.message.type === 'user' &&
+      (item.message.attachments || item.message.providerPrompt !== undefined)
+  )?.message;
   for (const { source, message } of turn.messages) {
     if (source === 'event' || !eventTypes.has(message.type)) {
-      const needsAttachments =
-        source === 'event' && message.type === 'user' && !message.attachments;
-      history.push(
-        needsAttachments && responseUserAttachments
-          ? { ...message, attachments: responseUserAttachments }
-          : message
-      );
+      history.push(restoreCodexEventPrompt(message, responseUser, source === 'event'));
     }
   }
   turn.messages = [];

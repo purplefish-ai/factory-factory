@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { ChatMessage } from '@/shared/acp-protocol';
+import type { AgentContentItem, ChatMessage } from '@/shared/acp-protocol';
 import { getClosedSessionArchiveKey } from './closed-session-identity';
 
 const scope = {
@@ -23,6 +23,38 @@ const message = (text: string): ChatMessage => ({
   },
 });
 const key = (messages: ChatMessage[]) => getClosedSessionArchiveKey({ ...scope, messages });
+
+it('uses explicit dispatch provenance without collapsing independent adjacent user prompts', () => {
+  const user = (text: string): ChatMessage => ({
+    id: text,
+    source: 'user',
+    text,
+    timestamp: '2026-01-01',
+    order: 0,
+  });
+  const first = user('first');
+  const second = user('second');
+  const native = user('first\n\nsecond');
+  const batch = [
+    { ...first, providerPrompt: 'first\n\nsecond' },
+    { ...second, providerPrompt: null },
+  ];
+  expect(key(batch)).toBe(key([native]));
+  expect(key([first, second])).not.toBe(key(batch));
+  expect(key([second, first])).not.toBe(key([first, second]));
+  expect(key([first, message('answer'), second])).not.toBe(key(batch));
+  expect(key(batch)).not.toBe(key([...batch, user('later')]));
+  expect(key([{ ...first, providerPrompt: 'second\n\nfirst' }, batch[1]!])).not.toBe(key(batch));
+  const image: AgentContentItem = {
+    type: 'image',
+    source: { type: 'base64', media_type: 'image/png', data: 'AQ==' },
+  };
+  const a: AgentContentItem = { type: 'text', text: 'first' };
+  const b: AgentContentItem = { type: 'text', text: '\n\nsecond' };
+  expect(key([{ ...first, providerPrompt: [a, image, b] }])).not.toBe(
+    key([{ ...first, providerPrompt: [a, b, image] }])
+  );
+});
 
 it('ignores presentation IDs, clocks, orders, icon indexes and runtime envelopes', () => {
   const live = message('answer');

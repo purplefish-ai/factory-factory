@@ -23,6 +23,8 @@ interface HistoryMessageBase {
 export interface UserHistoryMessage extends HistoryMessageBase {
   type: 'user';
   content: string;
+  /** Original native prompt before projection splits text blocks/restores images. */
+  providerPrompt?: string | AgentContentItem[] | null;
 }
 
 export interface AssistantHistoryMessage extends HistoryMessageBase {
