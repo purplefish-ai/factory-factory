@@ -6,7 +6,7 @@ import {
   hasStartingSessionSummary,
 } from '@/shared/session-runtime';
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSelection, type WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
@@ -62,6 +62,7 @@ function projectSnapshotPRs(
     : legacyId;
   const legacyPR: WorkspacePullRequest = {
     id: cachedPR?.id ?? fallbackId,
+    identitySource: cachedPR ? cachedPR.identitySource : 'legacy-snapshot',
     url: entry.prUrl,
     number: entry.prNumber,
     title: cachedPR?.title ?? null,
@@ -163,6 +164,7 @@ function projectSnapshotToLiveFields(
         : createdAt,
     branchName: entry.branchName,
     prs,
+    ...deriveWorkspacePRSelection(prs),
     prSummary: entry.prSummary ?? deriveWorkspacePRSummary(prs, entry.ratchetEnabled),
     prUrl: entry.prUrl,
     prNumber: entry.prNumber,

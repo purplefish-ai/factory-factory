@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
-import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/core';
+import { PeriodicTaskCadence, type PeriodicTaskExecutionStatus } from '@/shared/core';
 import type { PeriodicTask, PeriodicTaskExecution } from '@prisma-gen/client';
 
 // ─── Cadence helpers ────────────────────────────────────────────────────────
@@ -11,13 +11,20 @@ const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
 type TimeZoneDateParts = { year: number; month: number; day: number };
 type TimeZoneDateTimeParts = TimeZoneDateParts & { hour: number; minute: number };
 type ScheduledTimeParts = { hours: number; minutes: number };
-type PeriodicTaskDispatchSchedule = {
-  cadence: PeriodicTaskCadence;
-  scheduledTime: string | null;
-  timezone: string | null;
-  scheduledDayOfMonth: number | null;
-  /** The task's `nextRunAt` when it was found due: the slot being dispatched. */
-  dueAt: Date;
+// Nullable on legacy executions; new admissions always persist version 1.
+const launchSnapshotSchema = z.object({
+  version: z.literal(1),
+  projectId: z.string(),
+  name: z.string(),
+  prompt: z.string(),
+  cadence: z.enum(PeriodicTaskCadence),
+  scheduledTime: z.string().nullable(),
+  timezone: z.string().nullable(),
+  scheduledDayOfMonth: z.number().int().nullable(),
+  dueAt: z.iso.datetime(),
+});
+type ReservedExecution = Omit<PeriodicTaskExecution, 'launchSnapshot'> & {
+  launchSnapshot: z.infer<typeof launchSnapshotSchema>;
 };
 
 function getTimeZoneDateParts(date: Date, timezone: string): TimeZoneDateParts {
@@ -380,45 +387,25 @@ function computeFirstRunInSeries(
   }
 }
 
-async function buildDispatchedTaskData(
-  id: string,
-  { cadence, scheduledTime, timezone, scheduledDayOfMonth, dueAt }: PeriodicTaskDispatchSchedule
-): Promise<{
-  lastRunAt: Date;
-  scheduledDayOfMonth: number | null;
-  nextRunAt: Date;
-}> {
-  let resolvedScheduledDayOfMonth = scheduledDayOfMonth;
-  if (cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
-    const task = await prisma.periodicTask.findUnique({
-      where: { id },
-      select: { createdAt: true, scheduledDayOfMonth: true, timezone: true },
-    });
-    resolvedScheduledDayOfMonth = resolveScheduledDayOfMonth(
-      cadence,
-      task?.scheduledDayOfMonth,
-      task?.timezone ?? timezone,
-      task?.createdAt ?? new Date()
-    );
-  }
-  // Captured after the awaited lookup so the next run is always after it.
-  const dispatchedAt = new Date();
-
-  // Advance from the slot that was due, not from the (possibly late) dispatch
-  // time, so a pickup just past local midnight or the month boundary keeps the
-  // following slot. If the task missed more than a full period (e.g. while the
-  // machine slept), this single run covers every missed slot and the schedule
-  // resumes at the first slot still ahead, which may be later today.
+function buildDispatchedTaskData(task: PeriodicTask, dispatchedAt: Date) {
+  const scheduledDayOfMonth = resolveScheduledDayOfMonth(
+    task.cadence,
+    task.scheduledDayOfMonth,
+    task.timezone,
+    task.createdAt
+  );
+  // Advance the canonical due slot, keeping DST, monthly anchors and catch-up
+  // semantics. The row and admission time belong to the reservation transaction.
   return {
     lastRunAt: dispatchedAt,
-    scheduledDayOfMonth: resolvedScheduledDayOfMonth,
+    scheduledDayOfMonth,
     nextRunAt: computeNextRunAfter(
-      cadence,
-      dueAt,
+      task.cadence,
+      task.nextRunAt,
       dispatchedAt,
-      scheduledTime,
-      timezone,
-      resolvedScheduledDayOfMonth
+      task.scheduledTime,
+      task.timezone,
+      scheduledDayOfMonth
     ),
   };
 }
@@ -641,21 +628,20 @@ export const periodicTaskAccessor = {
 
   // ─── Execution CRUD ─────────────────────────────────────────────────────
 
-  async reserveExecutionAndMarkDispatched(
-    input: {
-      periodicTaskId: string;
-      workspaceId: string | null;
-      status: PeriodicTaskExecutionStatus;
-    },
-    schedule: PeriodicTaskDispatchSchedule
-  ): Promise<PeriodicTaskExecution | null> {
-    const data = await buildDispatchedTaskData(input.periodicTaskId, schedule);
+  reserveExecutionAndMarkDispatched(periodicTaskId: string): Promise<ReservedExecution | null> {
     return prisma.$transaction(async (transaction) => {
+      const task = await transaction.periodicTask.findUnique({ where: { id: periodicTaskId } });
+      // Read the time after the canonical row, including legacy monthly anchors.
+      const dispatchedAt = new Date();
+      if (!task?.isEnabled || task.nextRunAt > dispatchedAt) {
+        return null;
+      }
+      const data = buildDispatchedTaskData(task, dispatchedAt);
       const reservation = await transaction.periodicTask.updateMany({
         where: {
-          id: input.periodicTaskId,
+          id: periodicTaskId,
           isEnabled: true,
-          nextRunAt: { lte: data.lastRunAt },
+          nextRunAt: { equals: task.nextRunAt, lte: dispatchedAt },
           project: { isArchived: false },
           executions: { none: { status: 'RUNNING' } },
         },
@@ -665,13 +651,27 @@ export const periodicTaskAccessor = {
         return null;
       }
 
-      return transaction.periodicTaskExecution.create({
+      const launchSnapshot = launchSnapshotSchema.parse({
+        version: 1,
+        projectId: task.projectId,
+        name: `${task.name} — ${dispatchedAt.toLocaleDateString()}`,
+        prompt: task.prompt,
+        cadence: task.cadence,
+        scheduledTime: task.scheduledTime,
+        timezone: task.timezone,
+        scheduledDayOfMonth: data.scheduledDayOfMonth,
+        dueAt: task.nextRunAt.toISOString(),
+      });
+      const execution = await transaction.periodicTaskExecution.create({
         data: {
-          periodicTaskId: input.periodicTaskId,
-          workspaceId: input.workspaceId,
-          status: input.status,
+          periodicTaskId,
+          workspaceId: null,
+          status: 'RUNNING',
+          startedAt: dispatchedAt,
+          launchSnapshot,
         },
       });
+      return { ...execution, launchSnapshot: launchSnapshotSchema.parse(execution.launchSnapshot) };
     });
   },
 

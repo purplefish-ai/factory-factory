@@ -8,9 +8,16 @@
  * instead of the console. Only errors are also written to stderr for visibility.
  */
 
-import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
+import {
+  appendFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  writeSync,
+  type WriteStream,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { expandEnvVars } from '@/backend/lib/env';
 import { LoggerEnvSchema } from './env-schemas';
 
@@ -202,6 +209,51 @@ function getDefaultConfig(): LoggerConfig {
   };
 }
 
+// Keep sink state on the stream so module reloads share one error listener and
+// cannot revive a failed sink. Never report a sink failure through the logger.
+const consoleSinkStateKey = Symbol.for('factory-factory.logger.console-sink-state');
+interface ConsoleSinkState {
+  failed: boolean;
+}
+type ConsoleStream = NodeJS.WriteStream & { [consoleSinkStateKey]?: ConsoleSinkState };
+
+function writeToConsole(stream: ConsoleStream, write: () => void): void {
+  let state = stream[consoleSinkStateKey];
+  if (!state) {
+    const registeredState = { failed: false };
+    stream[consoleSinkStateKey] = registeredState;
+    stream.on('error', () => {
+      registeredState.failed = true;
+    });
+    state = registeredState;
+  }
+  if (state.failed) {
+    return;
+  }
+  try {
+    write();
+  } catch {
+    state.failed = true;
+  }
+}
+
+// Never route this fallback through the logger or retry a broken pipe.
+function writeFatalRecordToStderr(record: string): void {
+  try {
+    const bytes = Buffer.from(record);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const written = writeSync(2, bytes, offset, bytes.length - offset);
+      if (written <= 0) {
+        break;
+      }
+      offset += written;
+    }
+  } catch {
+    // Both terminal sinks are unavailable; shutdown must still proceed.
+  }
+}
+
 /**
  * Logger class for structured logging
  */
@@ -238,7 +290,8 @@ class Logger {
     level: LogLevel,
     message: string,
     context?: Record<string, unknown>,
-    error?: Error
+    error?: Error,
+    fatal = false
   ): void {
     if (!this.shouldLog(level)) {
       return;
@@ -259,7 +312,18 @@ class Logger {
       entry.error = error;
     }
 
-    if (this.config.prettyPrint) {
+    if (fatal) {
+      // The terminal record must survive an immediate process.exit, even when
+      // ordinary asynchronous file writes are still queued.
+      const record = `${safeStringify(entry)}\n`;
+      try {
+        const path = getLogFilePath();
+        mkdirSync(dirname(path), { recursive: true });
+        appendFileSync(path, record);
+      } catch {
+        writeFatalRecordToStderr(record);
+      }
+    } else if (this.config.prettyPrint) {
       this.prettyOutput(entry);
     } else {
       this.jsonOutput(entry);
@@ -285,7 +349,7 @@ class Logger {
 
     // In production, only surface errors in the terminal
     if (entry.level === 'error') {
-      console.error(safeStringify(entry));
+      writeToConsole(process.stderr, () => console.error(safeStringify(entry)));
     }
   }
 
@@ -320,15 +384,30 @@ class Logger {
     }
 
     if (entry.level === 'error') {
-      console.error(output);
-      if (entry.error?.stack) {
-        console.error(entry.error.stack);
-      }
+      writeToConsole(process.stderr, () => {
+        console.error(output);
+        if (entry.error?.stack) {
+          console.error(entry.error.stack);
+        }
+      });
     } else if (entry.level === 'warn') {
-      console.warn(output);
+      writeToConsole(process.stderr, () => console.warn(output));
     } else {
-      console.log(output);
+      writeToConsole(process.stdout, () => console.log(output));
     }
+  }
+
+  /**
+   * Write one terminal record synchronously, falling back to stderr if the file fails.
+   */
+  fatal(message: string, errorOrContext?: Error | Record<string, unknown>): void {
+    this.log(
+      'error',
+      message,
+      errorOrContext instanceof Error ? undefined : errorOrContext,
+      errorOrContext instanceof Error ? errorOrContext : undefined,
+      true
+    );
   }
 
   /**

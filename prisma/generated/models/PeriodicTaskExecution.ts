@@ -59,6 +59,7 @@ export type PeriodicTaskExecutionMaxAggregateOutputType = {
 }
 
 export type PeriodicTaskExecutionCountAggregateOutputType = {
+  launchSnapshot: number
   id: number
   periodicTaskId: number
   workspaceId: number
@@ -105,6 +106,7 @@ export type PeriodicTaskExecutionMaxAggregateInputType = {
 }
 
 export type PeriodicTaskExecutionCountAggregateInputType = {
+  launchSnapshot?: true
   id?: true
   periodicTaskId?: true
   workspaceId?: true
@@ -204,6 +206,7 @@ export type PeriodicTaskExecutionGroupByArgs<ExtArgs extends runtime.Types.Exten
 }
 
 export type PeriodicTaskExecutionGroupByOutputType = {
+  launchSnapshot: runtime.JsonValue | null
   id: string
   periodicTaskId: string
   workspaceId: string | null
@@ -239,6 +242,7 @@ export type PeriodicTaskExecutionWhereInput = {
   AND?: Prisma.PeriodicTaskExecutionWhereInput | Prisma.PeriodicTaskExecutionWhereInput[]
   OR?: Prisma.PeriodicTaskExecutionWhereInput[]
   NOT?: Prisma.PeriodicTaskExecutionWhereInput | Prisma.PeriodicTaskExecutionWhereInput[]
+  launchSnapshot?: Prisma.JsonNullableFilter<"PeriodicTaskExecution">
   id?: Prisma.StringFilter<"PeriodicTaskExecution"> | string
   periodicTaskId?: Prisma.StringFilter<"PeriodicTaskExecution"> | string
   workspaceId?: Prisma.StringNullableFilter<"PeriodicTaskExecution"> | string | null
@@ -253,6 +257,7 @@ export type PeriodicTaskExecutionWhereInput = {
 }
 
 export type PeriodicTaskExecutionOrderByWithRelationInput = {
+  launchSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   id?: Prisma.SortOrder
   periodicTaskId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -272,6 +277,7 @@ export type PeriodicTaskExecutionWhereUniqueInput = Prisma.AtLeast<{
   AND?: Prisma.PeriodicTaskExecutionWhereInput | Prisma.PeriodicTaskExecutionWhereInput[]
   OR?: Prisma.PeriodicTaskExecutionWhereInput[]
   NOT?: Prisma.PeriodicTaskExecutionWhereInput | Prisma.PeriodicTaskExecutionWhereInput[]
+  launchSnapshot?: Prisma.JsonNullableFilter<"PeriodicTaskExecution">
   periodicTaskId?: Prisma.StringFilter<"PeriodicTaskExecution"> | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFilter<"PeriodicTaskExecution"> | $Enums.PeriodicTaskExecutionStatus
   prUrl?: Prisma.StringNullableFilter<"PeriodicTaskExecution"> | string | null
@@ -284,6 +290,7 @@ export type PeriodicTaskExecutionWhereUniqueInput = Prisma.AtLeast<{
 }, "id" | "workspaceId">
 
 export type PeriodicTaskExecutionOrderByWithAggregationInput = {
+  launchSnapshot?: Prisma.SortOrderInput | Prisma.SortOrder
   id?: Prisma.SortOrder
   periodicTaskId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -304,6 +311,7 @@ export type PeriodicTaskExecutionScalarWhereWithAggregatesInput = {
   AND?: Prisma.PeriodicTaskExecutionScalarWhereWithAggregatesInput | Prisma.PeriodicTaskExecutionScalarWhereWithAggregatesInput[]
   OR?: Prisma.PeriodicTaskExecutionScalarWhereWithAggregatesInput[]
   NOT?: Prisma.PeriodicTaskExecutionScalarWhereWithAggregatesInput | Prisma.PeriodicTaskExecutionScalarWhereWithAggregatesInput[]
+  launchSnapshot?: Prisma.JsonNullableWithAggregatesFilter<"PeriodicTaskExecution">
   id?: Prisma.StringWithAggregatesFilter<"PeriodicTaskExecution"> | string
   periodicTaskId?: Prisma.StringWithAggregatesFilter<"PeriodicTaskExecution"> | string
   workspaceId?: Prisma.StringNullableWithAggregatesFilter<"PeriodicTaskExecution"> | string | null
@@ -316,6 +324,7 @@ export type PeriodicTaskExecutionScalarWhereWithAggregatesInput = {
 }
 
 export type PeriodicTaskExecutionCreateInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   status: $Enums.PeriodicTaskExecutionStatus
   prUrl?: string | null
@@ -328,6 +337,7 @@ export type PeriodicTaskExecutionCreateInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedCreateInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   periodicTaskId: string
   workspaceId?: string | null
@@ -340,6 +350,7 @@ export type PeriodicTaskExecutionUncheckedCreateInput = {
 }
 
 export type PeriodicTaskExecutionUpdateInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -352,6 +363,7 @@ export type PeriodicTaskExecutionUpdateInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedUpdateInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   periodicTaskId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -364,6 +376,7 @@ export type PeriodicTaskExecutionUncheckedUpdateInput = {
 }
 
 export type PeriodicTaskExecutionCreateManyInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   periodicTaskId: string
   workspaceId?: string | null
@@ -376,6 +389,7 @@ export type PeriodicTaskExecutionCreateManyInput = {
 }
 
 export type PeriodicTaskExecutionUpdateManyMutationInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -386,6 +400,7 @@ export type PeriodicTaskExecutionUpdateManyMutationInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedUpdateManyInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   periodicTaskId?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -413,6 +428,7 @@ export type PeriodicTaskExecutionOrderByRelationAggregateInput = {
 }
 
 export type PeriodicTaskExecutionCountOrderByAggregateInput = {
+  launchSnapshot?: Prisma.SortOrder
   id?: Prisma.SortOrder
   periodicTaskId?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
@@ -535,6 +551,7 @@ export type EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput = {
 }
 
 export type PeriodicTaskExecutionCreateWithoutWorkspaceInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   status: $Enums.PeriodicTaskExecutionStatus
   prUrl?: string | null
@@ -546,6 +563,7 @@ export type PeriodicTaskExecutionCreateWithoutWorkspaceInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedCreateWithoutWorkspaceInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   periodicTaskId: string
   status: $Enums.PeriodicTaskExecutionStatus
@@ -573,6 +591,7 @@ export type PeriodicTaskExecutionUpdateToOneWithWhereWithoutWorkspaceInput = {
 }
 
 export type PeriodicTaskExecutionUpdateWithoutWorkspaceInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -584,6 +603,7 @@ export type PeriodicTaskExecutionUpdateWithoutWorkspaceInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedUpdateWithoutWorkspaceInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   periodicTaskId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
@@ -595,6 +615,7 @@ export type PeriodicTaskExecutionUncheckedUpdateWithoutWorkspaceInput = {
 }
 
 export type PeriodicTaskExecutionCreateWithoutPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   status: $Enums.PeriodicTaskExecutionStatus
   prUrl?: string | null
@@ -606,6 +627,7 @@ export type PeriodicTaskExecutionCreateWithoutPeriodicTaskInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedCreateWithoutPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   workspaceId?: string | null
   status: $Enums.PeriodicTaskExecutionStatus
@@ -645,6 +667,7 @@ export type PeriodicTaskExecutionScalarWhereInput = {
   AND?: Prisma.PeriodicTaskExecutionScalarWhereInput | Prisma.PeriodicTaskExecutionScalarWhereInput[]
   OR?: Prisma.PeriodicTaskExecutionScalarWhereInput[]
   NOT?: Prisma.PeriodicTaskExecutionScalarWhereInput | Prisma.PeriodicTaskExecutionScalarWhereInput[]
+  launchSnapshot?: Prisma.JsonNullableFilter<"PeriodicTaskExecution">
   id?: Prisma.StringFilter<"PeriodicTaskExecution"> | string
   periodicTaskId?: Prisma.StringFilter<"PeriodicTaskExecution"> | string
   workspaceId?: Prisma.StringNullableFilter<"PeriodicTaskExecution"> | string | null
@@ -657,6 +680,7 @@ export type PeriodicTaskExecutionScalarWhereInput = {
 }
 
 export type PeriodicTaskExecutionCreateManyPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: string
   workspaceId?: string | null
   status: $Enums.PeriodicTaskExecutionStatus
@@ -668,6 +692,7 @@ export type PeriodicTaskExecutionCreateManyPeriodicTaskInput = {
 }
 
 export type PeriodicTaskExecutionUpdateWithoutPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -679,6 +704,7 @@ export type PeriodicTaskExecutionUpdateWithoutPeriodicTaskInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedUpdateWithoutPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
@@ -690,6 +716,7 @@ export type PeriodicTaskExecutionUncheckedUpdateWithoutPeriodicTaskInput = {
 }
 
 export type PeriodicTaskExecutionUncheckedUpdateManyWithoutPeriodicTaskInput = {
+  launchSnapshot?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPeriodicTaskExecutionStatusFieldUpdateOperationsInput | $Enums.PeriodicTaskExecutionStatus
@@ -703,6 +730,7 @@ export type PeriodicTaskExecutionUncheckedUpdateManyWithoutPeriodicTaskInput = {
 
 
 export type PeriodicTaskExecutionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  launchSnapshot?: boolean
   id?: boolean
   periodicTaskId?: boolean
   workspaceId?: boolean
@@ -717,6 +745,7 @@ export type PeriodicTaskExecutionSelect<ExtArgs extends runtime.Types.Extensions
 }, ExtArgs["result"]["periodicTaskExecution"]>
 
 export type PeriodicTaskExecutionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  launchSnapshot?: boolean
   id?: boolean
   periodicTaskId?: boolean
   workspaceId?: boolean
@@ -731,6 +760,7 @@ export type PeriodicTaskExecutionSelectCreateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["periodicTaskExecution"]>
 
 export type PeriodicTaskExecutionSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  launchSnapshot?: boolean
   id?: boolean
   periodicTaskId?: boolean
   workspaceId?: boolean
@@ -745,6 +775,7 @@ export type PeriodicTaskExecutionSelectUpdateManyAndReturn<ExtArgs extends runti
 }, ExtArgs["result"]["periodicTaskExecution"]>
 
 export type PeriodicTaskExecutionSelectScalar = {
+  launchSnapshot?: boolean
   id?: boolean
   periodicTaskId?: boolean
   workspaceId?: boolean
@@ -756,7 +787,7 @@ export type PeriodicTaskExecutionSelectScalar = {
   completedAt?: boolean
 }
 
-export type PeriodicTaskExecutionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "periodicTaskId" | "workspaceId" | "status" | "prUrl" | "prNumber" | "errorMessage" | "startedAt" | "completedAt", ExtArgs["result"]["periodicTaskExecution"]>
+export type PeriodicTaskExecutionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"launchSnapshot" | "id" | "periodicTaskId" | "workspaceId" | "status" | "prUrl" | "prNumber" | "errorMessage" | "startedAt" | "completedAt", ExtArgs["result"]["periodicTaskExecution"]>
 export type PeriodicTaskExecutionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   periodicTask?: boolean | Prisma.PeriodicTaskDefaultArgs<ExtArgs>
   workspace?: boolean | Prisma.PeriodicTaskExecution$workspaceArgs<ExtArgs>
@@ -777,6 +808,7 @@ export type $PeriodicTaskExecutionPayload<ExtArgs extends runtime.Types.Extensio
     workspace: Prisma.$WorkspacePayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    launchSnapshot: runtime.JsonValue | null
     id: string
     periodicTaskId: string
     workspaceId: string | null
@@ -869,8 +901,8 @@ export interface PeriodicTaskExecutionDelegate<ExtArgs extends runtime.Types.Ext
    * // Get first 10 PeriodicTaskExecutions
    * const periodicTaskExecutions = await prisma.periodicTaskExecution.findMany({ take: 10 })
    * 
-   * // Only select the `id`
-   * const periodicTaskExecutionWithIdOnly = await prisma.periodicTaskExecution.findMany({ select: { id: true } })
+   * // Only select the `launchSnapshot`
+   * const periodicTaskExecutionWithLaunchSnapshotOnly = await prisma.periodicTaskExecution.findMany({ select: { launchSnapshot: true } })
    * 
    */
   findMany<T extends PeriodicTaskExecutionFindManyArgs>(args?: Prisma.SelectSubset<T, PeriodicTaskExecutionFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskExecutionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -914,9 +946,9 @@ export interface PeriodicTaskExecutionDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Create many PeriodicTaskExecutions and only return the `id`
-   * const periodicTaskExecutionWithIdOnly = await prisma.periodicTaskExecution.createManyAndReturn({
-   *   select: { id: true },
+   * // Create many PeriodicTaskExecutions and only return the `launchSnapshot`
+   * const periodicTaskExecutionWithLaunchSnapshotOnly = await prisma.periodicTaskExecution.createManyAndReturn({
+   *   select: { launchSnapshot: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -1005,9 +1037,9 @@ export interface PeriodicTaskExecutionDelegate<ExtArgs extends runtime.Types.Ext
    *   ]
    * })
    * 
-   * // Update zero or more PeriodicTaskExecutions and only return the `id`
-   * const periodicTaskExecutionWithIdOnly = await prisma.periodicTaskExecution.updateManyAndReturn({
-   *   select: { id: true },
+   * // Update zero or more PeriodicTaskExecutions and only return the `launchSnapshot`
+   * const periodicTaskExecutionWithLaunchSnapshotOnly = await prisma.periodicTaskExecution.updateManyAndReturn({
+   *   select: { launchSnapshot: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -1211,6 +1243,7 @@ export interface Prisma__PeriodicTaskExecutionClient<T, Null = never, ExtArgs ex
  * Fields of the PeriodicTaskExecution model
  */
 export interface PeriodicTaskExecutionFieldRefs {
+  readonly launchSnapshot: Prisma.FieldRef<"PeriodicTaskExecution", 'Json'>
   readonly id: Prisma.FieldRef<"PeriodicTaskExecution", 'String'>
   readonly periodicTaskId: Prisma.FieldRef<"PeriodicTaskExecution", 'String'>
   readonly workspaceId: Prisma.FieldRef<"PeriodicTaskExecution", 'String'>

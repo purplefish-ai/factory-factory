@@ -6,6 +6,8 @@ import {
 } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import {
   WorkspaceSnapshotEntrySchema,
   SnapshotServerMessageSchema,
@@ -287,4 +289,61 @@ it('publishes ordinary snapshots without retired loop fields or freshness groups
   expect(entry).not.toHaveProperty('autoIteration');
   expect(entry).not.toHaveProperty('autoIterationStatus');
   expect(entry?.fieldTimestamps).not.toHaveProperty('autoIteration');
+});
+
+it('publishes selected facts consistently in full and changed payloads from the authoritative collection', () => {
+  const snapshots = store();
+  const a: WorkspacePullRequest = {
+    id: 'a',
+    url: 'https://github.com/o/r/pull/1',
+    number: 1,
+    title: null,
+    headRefName: null,
+    baseRefName: null,
+    state: 'APPROVED',
+    reviewState: 'APPROVED',
+    ciStatus: 'SUCCESS',
+    hasMergeConflict: false,
+    syncedAt: null,
+  };
+  const b: WorkspacePullRequest = {
+    ...a,
+    id: 'b',
+    url: 'https://github.com/o/r/pull/2',
+    number: 2,
+    state: 'CHANGES_REQUESTED',
+    reviewState: 'CHANGES_REQUESTED',
+    ciStatus: 'FAILURE',
+    hasMergeConflict: true,
+  };
+  const prs = [b, a];
+  snapshots.upsert(
+    'ws',
+    { ...seed(), prs, prSummary: deriveWorkspacePRSummary(prs, true) },
+    'seed',
+    100
+  );
+  const full = SnapshotServerMessageSchema.parse({
+    type: 'snapshot_full',
+    projectId: 'project-1',
+    entries: [snapshots.getByWorkspaceId('ws')],
+  });
+  expect(full).toMatchObject({
+    entries: [{ selectedPrId: 'a', selectedPr: a, prSummary: { ciStatus: 'FAILURE' } }],
+  });
+  const events: unknown[] = [];
+  snapshots.on(SNAPSHOT_CHANGED, ({ entry }) =>
+    events.push(
+      SnapshotServerMessageSchema.parse({ type: 'snapshot_changed', workspaceId: 'ws', entry })
+    )
+  );
+  snapshots.upsert(
+    'ws',
+    { prs: [b], prSummary: deriveWorkspacePRSummary([b], true) },
+    'detach',
+    200
+  );
+  expect(events).toMatchObject([{ entry: { selectedPrId: 'b', selectedPr: b } }]);
+  snapshots.upsert('ws', { prs: [], prSummary: deriveWorkspacePRSummary([], true) }, 'detach', 300);
+  expect(events[1]).toMatchObject({ entry: { selectedPrId: null, selectedPr: null } });
 });

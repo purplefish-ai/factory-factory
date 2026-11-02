@@ -64,10 +64,7 @@ async function settlementFor(
   const unavailable =
     !workspace || workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
   const terminal = terminalResult(evidence, unavailable);
-  const stopped =
-    proof.mode === 'STOPPED' &&
-    evidence.stop?.status === 'LOCAL_RUNTIME_GROUP_STOPPED' &&
-    isDeepStrictEqual(evidence.stop.source, proof.source);
+  const stopped = hasStoppedRunWork(evidence, proof);
   if (!terminal || ((terminal !== 'COMPLETED' || unavailable) && !stopped)) {
     return null;
   }
@@ -80,7 +77,7 @@ async function settlementFor(
 /** The write lock serializes child creation and its retained origin before settlement. */
 export async function childHistoryIsClear(
   tx: Prisma.TransactionClient,
-  run: Run
+  run: Pick<Run, 'id' | 'reservedWorkspaceId' | 'agentDefinition'>
 ): Promise<boolean> {
   const workspaceId = run.reservedWorkspaceId;
   if (!workspaceId) {
@@ -94,17 +91,31 @@ export async function childHistoryIsClear(
   ) {
     return false;
   }
+  return !(await hasChildWork(tx, workspaceId));
+}
+
+/** Shared child-work hold for settlement and terminal context retention. */
+export async function hasChildWork(tx: Prisma.TransactionClient, workspaceId: string) {
   const child = await tx.workspace.findFirst({
     where: { parentWorkspaceId: workspaceId },
     select: { id: true },
   });
   if (child) {
-    return false;
+    return true;
   }
-  return !(await tx.workspaceChildOrigin.findFirst({
+  return !!(await tx.workspaceChildOrigin.findFirst({
     where: { parentWorkspaceId: workspaceId },
     select: { childWorkspaceId: true },
   }));
+}
+/** Positive stopped-source/work proof shared by recovery, settlement and retention. */
+export function hasStoppedRunWork(evidence: InitialDeliveryEvidence, proof: EventWorkProof) {
+  return (
+    proof.mode === 'STOPPED' &&
+    evidence.stop?.status === 'LOCAL_RUNTIME_GROUP_STOPPED' &&
+    isDeepStrictEqual(evidence.source, proof.source) &&
+    isDeepStrictEqual(evidence.stop.source, proof.source)
+  );
 }
 export function assertAttempt(run: Run, expected: InitialAttempt) {
   const current = initialAttemptSchema.parse({

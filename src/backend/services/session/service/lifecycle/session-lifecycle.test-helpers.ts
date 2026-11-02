@@ -240,7 +240,8 @@ export function mockCreatedAcpClient(
     completeConfiguration: vi.fn((assertCurrent?: () => void) => assertCurrent?.()),
     failConfiguration: vi.fn(),
   });
-  vi.mocked(runtimeManager.getOrCreateClient).mockImplementation((_id, options) => {
+  vi.mocked(runtimeManager.getOrCreateClient).mockImplementation(async (_id, options) => {
+    await options.beforeSessionCreation?.();
     Object.assign(acpHandle, {
       provider: acpHandle.provider ?? options.provider,
       providerSessionId:
@@ -595,7 +596,8 @@ export function createLifecycleHarness(
     ),
     getOrCreateClient: vi.fn<AcpRuntimeManager['getOrCreateClient']>(
       overrides.getOrCreateClient ??
-        ((_id, options, handlers) => {
+        (async (_id, options, handlers) => {
+          await options.beforeSessionCreation?.();
           handlers.onRuntimeCreated?.(handle);
           if (options.purpose !== 'browse') {
             runtimeManager.getClient.mockReturnValue(handle);

@@ -20,6 +20,8 @@ export function createOptimisticWorkspaceSummary(params: {
     worktreePath: null,
     initErrorMessage: null,
     prs: [],
+    selectedPrId: null,
+    selectedPr: null,
     prSummary: deriveWorkspacePRSummary([], params.ratchetEnabled),
     prUrl: null,
     prNumber: null,
