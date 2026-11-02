@@ -188,3 +188,54 @@ it('uses the existing evaluation maintenance lifetime for pruning and drains its
   await vi.advanceTimersByTimeAsync(60_000);
   expect(calls).toHaveLength(3);
 });
+
+it.each([false, true])(
+  'retention failure preserves evaluation/claim progress and shutdown (aborted: %s)',
+  async (aborted) => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    let entered!: () => void;
+    const began = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let fail!: () => void;
+    let retainedSignal: AbortSignal | undefined;
+    const runtime = createAgentRuntime(
+      { pollCycle: async () => undefined },
+      {
+        maintainQueue: async () => undefined,
+        pruneExpired: (signal) => {
+          retainedSignal = signal;
+          calls.push('retention');
+          entered();
+          return new Promise<never>((_resolve, reject) => {
+            fail = () => reject(new Error('secret provider/database diagnostic'));
+          });
+        },
+        evaluatePendingEvents: () => {
+          calls.push('evaluation');
+          return Promise.resolve();
+        },
+        claimNextRun: () => {
+          calls.push('claim');
+          return Promise.resolve({ status: 'DEFERRED', reason: 'EMPTY' });
+        },
+        consumeClaim: async () => undefined,
+      }
+    );
+    runtime.start();
+    // Use the real job lifetime for shutdown, rather than a caller-owned flag.
+    await began;
+    if (aborted) {
+      const stopping = runtime.stop();
+      fail();
+      await stopping;
+    } else {
+      fail();
+      await vi.advanceTimersByTimeAsync(0);
+      await runtime.stop();
+    }
+    expect(retainedSignal?.aborted).toBe(true);
+    expect(calls).toEqual(aborted ? ['retention'] : ['retention', 'evaluation', 'claim']);
+  }
+);
