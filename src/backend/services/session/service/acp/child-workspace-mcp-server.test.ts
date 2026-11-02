@@ -234,86 +234,135 @@ describe('child workspace MCP tRPC errors', () => {
   });
 });
 
-it('advertises only existing agent authoring tools and rejects management/activation/recovery calls', async () => {
-  let calls = 0;
-  const server = createServer((_req, res) => {
-    calls += 1;
-    res.end('{}');
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  try {
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Missing fixture port');
+it.each([null, 'parent-workspace'])(
+  'advertises the exact workspace/authoring catalog and rejects recovery controls (parent=%s)',
+  async (parentWorkspaceId) => {
+    let calls = 0;
+    const server = createServer((_req, res) => {
+      calls += 1;
+      res.end('{}');
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Missing fixture port');
+      }
+      const config = getChildWorkspaceMcpServerConfig({
+        nodeExecPath: process.execPath,
+        workspaceId: 'author',
+        parentWorkspaceId,
+        apiBaseUrl: `http://127.0.0.1:${address.port}`,
+      });
+      const child = spawn(config.command, config.args, {
+        cwd: tmpdir(),
+        env: { ...process.env, ...config.env },
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk: string) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk: string) => {
+        stderr += chunk;
+      });
+      const forbidden = [
+        'agent.updateSaved',
+        'update_saved_agent',
+        'agent.setEnabled',
+        'activate_agent',
+        'resolve_agent_run',
+        'agent.recover',
+        'agent.recoveryTarget',
+        'recoveryTarget',
+        'recovery_target',
+        'agent.inspectRun',
+        'inspectRun',
+        'inspect_agent_run',
+        'agent.resolveAmbiguousRun',
+        'resolveAmbiguousRun',
+        'agent.activate',
+        'agent.pause',
+        'setEnabled',
+      ];
+      const messages = [
+        JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'tools/list' }),
+        ...forbidden.flatMap((name, index) =>
+          ['RESOLVE', 'ABANDON', 'RETRY'].map((action, actionIndex) =>
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: index * 3 + actionIndex + 1,
+              method: 'tools/call',
+              params: {
+                name,
+                arguments: {
+                  projectId: 'project',
+                  agentId: 'agent',
+                  runId: 'run',
+                  claim: {
+                    status: 'CLAIMED',
+                    runId: 'run',
+                    workerGeneration: 1,
+                    attemptGeneration: 1,
+                    reservedWorkspaceId: 'workspace',
+                    reservedSessionId: 'session',
+                    initialMessageId: 'original',
+                  },
+                  attempt: {
+                    runId: 'run',
+                    sessionId: 'session',
+                    messageId: 'current',
+                    sendAttemptId: 'send',
+                    workerGeneration: 1,
+                    attemptGeneration: 1,
+                  },
+                  action,
+                },
+              },
+            })
+          )
+        ),
+      ].join('\n');
+      child.stdin.end(`${messages}\n`);
+      expect((await once(child, 'close'))[0]).toBe(0);
+      expect(stderr).toBe('');
+      const responses = stdout
+        .trim()
+        .split('\n')
+        .map((line) =>
+          z
+            .object({
+              id: z.number(),
+              result: z.object({ tools: z.array(z.object({ name: z.string() })) }).optional(),
+              error: z.object({ code: z.number(), message: z.string() }).optional(),
+            })
+            .parse(JSON.parse(line))
+        );
+      const names = responses.find((row) => row.id === 0)!.result!.tools.map((tool) => tool.name);
+      expect(names).toEqual([
+        ...(parentWorkspaceId
+          ? ['send_message_to_parent']
+          : [
+              'list_projects',
+              'spawn_child_workspace',
+              'send_message_to_child',
+              'archive_child_workspace',
+            ]),
+        'list_agent_sources',
+        'propose_agent',
+        'get_agent_proposal',
+      ]);
+      expect(responses.filter((row) => row.id !== 0)).toHaveLength(forbidden.length * 3);
+      expect(
+        responses.filter((row) => row.id !== 0).every((row) => row.error?.code === -32_601)
+      ).toBe(true);
+      expect(calls).toBe(0);
+    } finally {
+      server.close();
+      await once(server, 'close');
     }
-    const config = getChildWorkspaceMcpServerConfig({
-      nodeExecPath: process.execPath,
-      workspaceId: 'author',
-      parentWorkspaceId: null,
-      apiBaseUrl: `http://127.0.0.1:${address.port}`,
-    });
-    const child = spawn(config.command, config.args, {
-      cwd: tmpdir(),
-      env: { ...process.env, ...config.env },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
-    const forbidden = [
-      'agent.updateSaved',
-      'update_saved_agent',
-      'agent.setEnabled',
-      'activate_agent',
-      'resolve_agent_run',
-      'agent.recover',
-    ];
-    const messages = [
-      JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'tools/list' }),
-      ...forbidden.map((name, index) =>
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: index + 1,
-          method: 'tools/call',
-          params: { name, arguments: {} },
-        })
-      ),
-    ].join('\n');
-    child.stdin.end(`${messages}\n`);
-    expect((await once(child, 'close'))[0]).toBe(0);
-    expect(stderr).toBe('');
-    const responses = stdout
-      .trim()
-      .split('\n')
-      .map((line) =>
-        z
-          .object({
-            id: z.number(),
-            result: z.object({ tools: z.array(z.object({ name: z.string() })) }).optional(),
-            error: z.object({ code: z.number(), message: z.string() }).optional(),
-          })
-          .parse(JSON.parse(line))
-      );
-    const names = responses.find((row) => row.id === 0)!.result!.tools.map((tool) => tool.name);
-    expect(names.filter((name) => name.includes('agent'))).toEqual([
-      'list_agent_sources',
-      'propose_agent',
-      'get_agent_proposal',
-    ]);
-    expect(responses.filter((row) => row.id !== 0)).toHaveLength(forbidden.length);
-    expect(
-      responses.filter((row) => row.id !== 0).every((row) => row.error?.code === -32_601)
-    ).toBe(true);
-    expect(calls).toBe(0);
-  } finally {
-    server.close();
-    await once(server, 'close');
   }
-});
+);

@@ -47,7 +47,7 @@ export function boundary() {
 }
 
 /** Real source capture, evaluation and admission only; no workspace/session creation or linkage. */
-export async function createEventAdmissionFixture(
+export async function createEventAdmissionSeed(
   db: IntegrationDatabase,
   provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
 ) {
@@ -60,10 +60,6 @@ export async function createEventAdmissionFixture(
   const session = await vi.importActual<typeof import('@/backend/services/session')>(
     '@/backend/services/session'
   );
-  const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
-  workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
   const execution: EventAgentExecution =
     provider === 'CLAUDE'
       ? {
@@ -192,6 +188,19 @@ export async function createEventAdmissionFixture(
     activationGeneration: 1,
   });
   return { owner, workspace, session, execution, project, input };
+}
+
+/** Compatibility composition for delivery tests; production bootstrap tests use the pure seed. */
+export async function createEventAdmissionFixture(
+  db: IntegrationDatabase,
+  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
+) {
+  const seed = await createEventAdmissionSeed(db, provider);
+  const { captureWorkspaceRunResults } = await vi.importActual<
+    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-deletion.orchestrator');
+  seed.workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
+  return seed;
 }
 
 export async function createEventDeliveryFixture(

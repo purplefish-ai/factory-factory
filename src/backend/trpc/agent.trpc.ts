@@ -25,6 +25,14 @@ import {
   agentDraftValidationInputSchema,
   agentDraftValidationSchema,
 } from '@/shared/agent-validation';
+import {
+  agentRecoveryTargetInputSchema,
+  agentRecoveryTargetSchema,
+  agentRecoveryContextSchema,
+  agentRecoveryInputSchema,
+  agentRecoveryInspectionSchema,
+  agentRecoveryResultSchema,
+} from '@/shared/event-agent-recovery';
 import { router, trustedLocalProcedure } from './trpc';
 
 const referenceInput = z.strictObject({
@@ -32,6 +40,22 @@ const referenceInput = z.strictObject({
   proposalId: z.string().min(1),
 });
 export const agentRouter = router({
+  recoveryTarget: trustedLocalProcedure
+    .input(agentRecoveryTargetInputSchema)
+    .output(agentRecoveryTargetSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.agentManagementService.recoveryTarget(input)
+    ),
+  inspectRun: trustedLocalProcedure
+    .input(agentRecoveryContextSchema)
+    .output(agentRecoveryInspectionSchema)
+    .query(({ ctx, input }) => ctx.appContext.services.agentManagement.inspectRun(input)),
+  resolveAmbiguousRun: trustedLocalProcedure
+    .input(agentRecoveryInputSchema)
+    .output(agentRecoveryResultSchema)
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.agentManagement.resolveAmbiguousRun(input)
+    ),
   list: trustedLocalProcedure
     .input(agentListInputSchema)
     .output(agentListPageSchema)

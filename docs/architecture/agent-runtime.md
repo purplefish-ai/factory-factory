@@ -1217,8 +1217,9 @@ union filters invalid links and retains at most 20 links across retries and
 deletion; it is not an unbounded history. The required capture port is wired by
 orchestration and deletion fails closed when unavailable. Capturing results or
 deleting a workspace never proves work resolution or releases held capacity.
-Ledger pruning, trusted-local operator transport/UI and child-work support
-remain activation prerequisites. Monitoring never auto-archives a workspace.
+Ledger pruning and trusted-local operator transport are implemented. Operator UI
+and the child-work product decision remain activation prerequisites. Monitoring
+never auto-archives a workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A
@@ -1323,3 +1324,45 @@ wake performs receipt recovery: delivered receipts settle, absent receipts can
 reclaim under the current binding, and unavailable receipts pause explicitly.
 The nested completion wake may still see the active map; this is not an
 immediate-delivery or polling-time guarantee.
+
+### Exact-context operator recovery transport
+
+The trusted-local `agent.recoveryTarget` query accepts project, agent and run
+IDs. Its owner reads membership and the current run/delivery tuple together,
+returning an exact claim/current-send context or a bounded unavailable reason.
+It performs no provider discovery, stop, adoption or mutation. History and
+workspace origins intentionally omit current send identity and cannot authorize
+recovery.
+
+`agent.inspectRun` accepts that full context plus agent ID;
+`agent.resolveAmbiguousRun` adds RESOLVE, ABANDON or RETRY. Both verify the
+project/agent/run membership before reaching the application's existing recovery
+consumer. They preserve the submitted claim and attempt, including the original
+initial message and the current message/send attempt. A later action revalidates
+independently; stale inspection or target data is never refreshed to make an
+action succeed. Inspection returns only safe status and bounded availability,
+without prompts, provider source/work evidence or transcripts.
+
+`retryBlocked: RESOURCES_UNAVAILABLE` is separate from common proof, preparation
+and child-work blocks. Missing directory, frozen account or session resources
+prevent RETRY; otherwise supported RESOLVE/ABANDON still depend on authoritative
+stopped-source and current tracked-work proof. PENDING delivery means UNSENT,
+while incomplete setup retains its preparation hold. Manual retry keeps the
+logical run, reserved workspace/session/account, original message, setup start,
+inherited automatic attempt budget and initial outcome; it rotates only the
+current send identity and send generation.
+
+The boundary uses existing socket locality, configured CIDRs, browser Origin and
+explicit proxy trust rules. Origin-less loopback and other same-user local
+processes satisfy locality; this is not authenticated human-versus-agent
+isolation. Parent and child workspace MCP advertise only their workspace tools
+and the existing sources/propose/getProposal authoring allowlist. They expose no
+recovery target, inspection, action or activation tools. No activation or
+operational recovery UI is supplied by these endpoints.
+
+A fresh application-construction integration test exercises real production
+bridge registration and public workspace deletion without preinstalling capture.
+Unseen attached and retained detached PR links survive the cascade as compact
+run results; capture or cascade failures roll back the transaction. This
+provider-free witness proves construction/deletion wiring, not provider work
+resolution or capacity release.

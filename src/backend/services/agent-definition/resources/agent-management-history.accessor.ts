@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
+import type { agentRecoveryTargetInputSchema } from '@/shared/event-agent-recovery';
 import { ownedAgent, pageAfter, type ManagementCursor } from './agent-management.accessor';
 
 const runSelect = {
@@ -28,6 +29,43 @@ const runSelect = {
   },
 } as const;
 export const agentManagementHistoryAccessor = {
+  /** Read only: membership and current delivery identity share one transaction. */
+  recoveryTarget(input: z.infer<typeof agentRecoveryTargetInputSchema>) {
+    return prisma
+      .$transaction((tx) =>
+        tx.agentRun.findFirst({
+          where: {
+            id: input.runId,
+            agentDefinitionId: input.agentId,
+            agentDefinition: { projectId: input.projectId },
+          },
+          select: {
+            id: true,
+            status: true,
+            launchPhase: true,
+            workerGeneration: true,
+            attemptGeneration: true,
+            reservedWorkspaceId: true,
+            reservedSessionId: true,
+            initialMessageId: true,
+            launchPreparation: true,
+            initialDelivery: {
+              select: {
+                runId: true,
+                state: true,
+                attemptGeneration: true,
+                messageId: true,
+                sendAttemptId: true,
+                evidence: true,
+              },
+            },
+          },
+        })
+      )
+      .catch(() => {
+        throw new ApplicationError('PRECONDITION_FAILED', 'Event recovery target is unavailable.');
+      });
+  },
   runs(input: { projectId: string; agentId: string; limit: number }, cursor?: ManagementCursor) {
     return prisma.$transaction(async (tx) => {
       await ownedAgent(tx, input.projectId, input.agentId);
