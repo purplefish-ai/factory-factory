@@ -450,6 +450,11 @@ maintenance replays them without deleting their heads or interrupting active
 source scans. INDEXED, COMPLETE, and rejected checkpoints retain their existing
 status.
 
+During legacy capture replay, an observation without any indexed identity can be
+a boundary-only continuation only when the next retained page starts
+verification. Observations still searching for shifted overlap do not establish
+a boundary.
+
 Each operational target in a poll cycle also advances at most one legacy proof
 page or one authority-validation chunk in a serialized maintenance transaction.
 Until its entire interval is verified, historical baseline preparation falls

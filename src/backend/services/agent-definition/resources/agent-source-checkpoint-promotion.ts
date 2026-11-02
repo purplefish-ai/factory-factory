@@ -13,6 +13,11 @@ const progressSchema = z.object({
   headCount: z.number().int().nonnegative(),
 });
 type Progress = z.infer<typeof progressSchema>;
+type PhaseOutcome =
+  | { kind: 'DEFERRED' }
+  | { kind: 'INVALID' }
+  | { kind: 'ADVANCED'; remaining: number }
+  | { kind: 'COMPLETE' };
 const markersSchema = z.array(
   z.object({
     scanId: z.string(),
@@ -168,25 +173,27 @@ export async function checkpointPromotionStatus(tx: Tx, connectionId: string, sc
           headCount: 0,
         };
   let remaining = 100;
-  if (progress.phase === 'MARKERS') {
-    const budget = await advanceMarkers(tx, checkpoint, progress, remaining);
-    if (budget === 'INVALID') {
-      return { status: 'INVALID' };
+  for (const phase of ['MARKERS', 'HEADS', 'BASELINES'] as const) {
+    if (remaining === 0 || progress.phase !== phase) {
+      continue;
     }
-    if (budget === null) {
-      return;
+    const outcome =
+      phase === 'MARKERS'
+        ? await advanceMarkers(tx, checkpoint, progress, remaining)
+        : phase === 'HEADS'
+          ? await advanceHeads(tx, checkpoint, progress, remaining)
+          : await advanceBaselines(tx, checkpoint, progress, remaining);
+    switch (outcome.kind) {
+      case 'DEFERRED':
+        return;
+      case 'INVALID':
+        return { status: 'INVALID' };
+      case 'COMPLETE':
+        return { status: 'COMPLETE', validationCursor: progress };
+      case 'ADVANCED':
+        remaining = outcome.remaining;
+        break;
     }
-    remaining = budget;
-  }
-  if (remaining > 0 && progress.phase === 'HEADS') {
-    const budget = await advanceHeads(tx, checkpoint, progress, remaining);
-    if (budget === null) {
-      return { status: 'INVALID' };
-    }
-    remaining = budget;
-  }
-  if (remaining > 0 && progress.phase === 'BASELINES') {
-    return await advanceBaselines(tx, checkpoint, progress, remaining);
   }
   return { validationCursor: progress };
 }
@@ -196,11 +203,11 @@ async function advanceMarkers(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   const rows = await markers(tx, checkpoint.connectionId, progress, remaining);
   // Unindexed legacy intervals might contain contradictory heads. Keep their proof.
   if (rows.some((row) => row.status !== 'INDEXED' && row.status !== 'COMPLETE')) {
-    return null;
+    return { kind: 'DEFERRED' };
   }
   if (
     rows.some(
@@ -214,7 +221,7 @@ async function advanceMarkers(
           row.sourceOrder !== checkpoint.initialSourceOrder)
     )
   ) {
-    return 'INVALID';
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some(
     (row) => row.headEventId === checkpoint.previousBoundaryEventId
@@ -230,7 +237,7 @@ async function advanceMarkers(
     progress.scanId = '';
     progress.position = -1;
   }
-  return remaining;
+  return { kind: 'ADVANCED', remaining };
 }
 
 async function advanceHeads(
@@ -238,13 +245,13 @@ async function advanceHeads(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   if (checkpoint.sourceOrder === null) {
-    return null;
+    return { kind: 'INVALID' };
   }
   const take = Math.floor(remaining / 3);
   if (take === 0) {
-    return 0;
+    return { kind: 'ADVANCED', remaining: 0 };
   }
   const rows = await heads(
     tx,
@@ -264,10 +271,10 @@ async function advanceHeads(
           (row.baselineMaximum !== null && row.baselineMaximum !== row.canonicalOrder))
     )
   ) {
-    return null;
+    return { kind: 'INVALID' };
   }
   if (rows.some((row) => row.conflict === 'CONFLICT' || row.boundary === 'CONFLICT')) {
-    return null;
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some((row) => row.boundary === 'MATCH');
   progress.headCount += rows.filter((row) => row.scanId === checkpoint.scanId).length;
@@ -280,7 +287,7 @@ async function advanceHeads(
   if (rows.length < take) {
     progress.phase = 'BASELINES';
   }
-  return remaining;
+  return { kind: 'ADVANCED', remaining };
 }
 
 async function advanceBaselines(
@@ -288,9 +295,9 @@ async function advanceBaselines(
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
-) {
+): Promise<PhaseOutcome> {
   if (checkpoint.sourceOrder === null) {
-    return { status: 'INVALID' };
+    return { kind: 'INVALID' };
   }
   const rows = await baselines(
     tx,
@@ -303,7 +310,7 @@ async function advanceBaselines(
     remaining
   );
   if (rows.some((row) => row.conflict === 'CONFLICT' || row.boundary === 'CONFLICT')) {
-    return { status: 'INVALID' };
+    return { kind: 'INVALID' };
   }
   progress.boundaryWitnessed ||= rows.some((row) => row.boundary === 'MATCH');
   const last = rows.at(-1);
@@ -312,12 +319,11 @@ async function advanceBaselines(
   }
   if (rows.length < remaining) {
     return {
-      status:
+      kind:
         progress.headCount === checkpoint.entryCount && progress.boundaryWitnessed
           ? 'COMPLETE'
           : 'INVALID',
-      validationCursor: progress,
     };
   }
-  return { validationCursor: progress };
+  return { kind: 'ADVANCED', remaining: 0 };
 }

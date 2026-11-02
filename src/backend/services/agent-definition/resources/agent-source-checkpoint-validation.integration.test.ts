@@ -247,3 +247,36 @@ it('bounds actual joined authority rows and records the fixture writer-lock scop
     `checkpoint validation fixture ${JSON.stringify({ heads: 1250, baselines: 251, inspected, lockMs })}\n`
   );
 });
+
+it('defers promotion for an unindexed marker and advances after its authority becomes available', async () => {
+  await legacy([['head-0', 'head-1']]);
+  await db.prisma.agentSourcePage.create({
+    data: {
+      connectionId: fixture.connectionId,
+      scanId: 'z-unindexed',
+      ordinal: 2,
+      phase: 'FINALIZED',
+      requestPage: 1,
+      sourceOrder: 0,
+      evidence: { ids: ['older-head'], entries: [] },
+    },
+  });
+  const pages = await db.prisma.agentSourcePage.findMany();
+  await maintain(3);
+  expect(await checkpoint()).toMatchObject({ status: 'INDEXED', validationCursor: null });
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
+  await db.prisma.agentSourceCheckpoint.create({
+    data: {
+      connectionId: fixture.connectionId,
+      scanId: 'z-unindexed',
+      status: 'COMPLETE',
+      headEventId: 'older-head',
+      sourceOrder: 0,
+      entryCount: 1,
+      heads: { create: { providerEventId: 'older-head', position: 0, precedingEventCount: 0 } },
+    },
+  });
+  await maintain(1);
+  expect(await checkpoint()).toMatchObject({ status: 'COMPLETE' });
+  expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
+});
