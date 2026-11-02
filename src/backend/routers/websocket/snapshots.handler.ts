@@ -10,7 +10,7 @@ import type { WebSocket } from 'ws';
 import type { AppContext, Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { safeSend } from '@/backend/lib/websocket-send';
+import { sendStateful } from '@/backend/lib/websocket-send';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -68,7 +68,7 @@ class SnapshotStoreSubscriptionState {
       const message = JSON.stringify({ ...payload, reviewCount });
       for (const ws of projectClients) {
         if (!awaitingBaseline.has(ws)) {
-          safeSend(ws, message, logger, description);
+          sendStateful(ws, message, logger, description);
         }
       }
     };
@@ -250,7 +250,27 @@ export function createSnapshotsUpgradeHandler(
           entries,
           reviewCount,
         };
-        const baselineSent = safeSend(ws, JSON.stringify(message), logger, 'full snapshot');
+        const serialized = JSON.stringify(message);
+        const maxFrameBytes = configService.getWebSocketConfig().maxFrameBytes;
+        if (Buffer.byteLength(serialized) > maxFrameBytes) {
+          sendStateful(
+            ws,
+            JSON.stringify({
+              type: 'snapshot_error',
+              ...(projectId.length <= 128 ? { projectId } : {}),
+              code: 'FRAME_TOO_LARGE',
+              message:
+                'Project snapshot exceeds WEBSOCKET_MAX_FRAME_BYTES; increase the configured limit and reconnect. HTTP data remains available.',
+            }),
+            logger,
+            'snapshot limit error'
+          );
+          return;
+        }
+        const baselineSent = sendStateful(ws, serialized, logger, 'full snapshot', {
+          allowLargeFrame: true,
+          maxFrameBytes,
+        });
         if (!baselineSent) {
           // The client has no baseline, so deltas must not start flowing.
           return;

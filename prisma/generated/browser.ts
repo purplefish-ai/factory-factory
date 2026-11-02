@@ -53,6 +53,12 @@ export type WorkspacePRMonitoring = Prisma.WorkspacePRMonitoringModel
  */
 export type WorkspacePRDedicatedSession = Prisma.WorkspacePRDedicatedSessionModel
 /**
+ * Model WorkspacePRDelivery
+ * Frozen external effect and complete ordered membership. Legacy event columns
+ * remain only for import compatibility and quarantined inconsistent evidence.
+ */
+export type WorkspacePRDelivery = Prisma.WorkspacePRDeliveryModel
+/**
  * Model WorkspacePREvent
  * 
  */

@@ -37,7 +37,10 @@ describe('fatal logging', () => {
     });
   });
 
-  it('still sends ordinary errors to a healthy console sink without accumulating listeners', () => {
+  it('still sends ordinary errors to a healthy console sink without accumulating listeners', async () => {
+    const baseDir = await mkdtemp(join(tmpdir(), 'ff-healthy-stderr-'));
+    temporaryDirectories.push(baseDir);
+    vi.stubEnv('BASE_DIR', baseDir);
     const stderr = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const listenersBefore = process.stderr.listenerCount('error');
     for (let index = 0; index < 50; index++) {

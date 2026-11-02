@@ -12,7 +12,12 @@ import {
 function iso(date: Date | null): string | null {
   return date?.toISOString() ?? null;
 }
-export function exportPRBackupState(workspace: WorkspaceForExport) {
+export function exportPRBackupState(
+  workspace: Pick<
+    WorkspaceForExport,
+    'prs' | 'prDiscovery' | 'prMonitoring' | 'prEvents' | 'prDeliveries'
+  >
+) {
   return {
     prs: workspace.prs.map(({ workspaceId: _workspaceId, ...pr }) =>
       prAssociationBackupSchema.parse({
@@ -44,14 +49,16 @@ export function exportPRBackupState(workspace: WorkspaceForExport) {
           lastCheckedAt: iso(workspace.prMonitoring.lastCheckedAt),
         })
       : null,
-    prEvents: workspace.prEvents.map((event) =>
-      prEventBackupSchema.parse({
-        ...event,
-        claimedAt: iso(event.claimedAt),
-        deliveredAt: iso(event.deliveredAt),
-        createdAt: event.createdAt.toISOString(),
-      })
-    ),
+    prEvents: workspacePRMonitoringService
+      .exportEvents(workspace.prEvents, workspace.prDeliveries ?? [])
+      .map(({ batchId: _batchId, ...event }) =>
+        prEventBackupSchema.parse({
+          ...event,
+          claimedAt: iso(event.claimedAt),
+          deliveredAt: iso(event.deliveredAt),
+          createdAt: event.createdAt.toISOString(),
+        })
+      ),
   };
 }
 async function restoreDedicatedBindings(

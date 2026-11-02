@@ -15,6 +15,27 @@ describe('configService environment accessors', () => {
     configService.reload();
   });
 
+  it.each([undefined, '', 'abc', '123garbage', '0', '-1', '1048575', '268435457', '2097152.5'])(
+    'defaults invalid or absent websocket frame budget %s',
+    (value) => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, 'WEBSOCKET_MAX_FRAME_BYTES');
+      } else {
+        process.env.WEBSOCKET_MAX_FRAME_BYTES = value;
+      }
+      configService.reload();
+      expect(configService.getWebSocketConfig()).toEqual({ maxFrameBytes: 33_554_432 });
+    }
+  );
+  it.each(['1048576', '67108864', '268435456'])(
+    'reads bounded websocket frame budget %s',
+    (value) => {
+      process.env.WEBSOCKET_MAX_FRAME_BYTES = value;
+      configService.reload();
+      expect(configService.getWebSocketConfig()).toEqual({ maxFrameBytes: Number(value) });
+    }
+  );
+
   it('reads backend host from validated config', () => {
     process.env.BACKEND_HOST = '127.0.0.1';
     configService.reload();

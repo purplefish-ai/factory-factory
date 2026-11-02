@@ -77,6 +77,16 @@ describe('ChatMessageSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it.each([
+    [128, true],
+    [129, false],
+  ] as const)('bounds load correlation IDs at %s characters', (length, accepted) => {
+    expect(
+      ChatMessageSchema.safeParse({ type: 'load_session', loadRequestId: 'é'.repeat(length) })
+        .success
+    ).toBe(accepted);
+  });
+
   it('accepts load_session with optional loadRequestId', () => {
     const result = ChatMessageSchema.safeParse({
       type: 'load_session',

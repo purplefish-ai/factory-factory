@@ -23,6 +23,20 @@ it.each([false, true])(
     const child = setupSuccessfulSpawn({ loadSession: true });
     exitChildAfterSigterm(child);
     const history = createDeferred<void>();
+    const hydrationStarted = vi.fn();
+    const hydrationFinished = vi.fn();
+    const hydration = (async () => {
+      hydrationStarted();
+      await history.promise;
+      hydrationFinished();
+    })();
+    expect(hydrationStarted).toHaveBeenCalledOnce();
+    expect(hydrationFinished).not.toHaveBeenCalled();
+    mockInitialize.mockImplementation(() => {
+      expect(hydrationStarted).toHaveBeenCalledOnce();
+      expect(hydrationFinished).not.toHaveBeenCalled();
+      return Promise.resolve({ protocolVersion: 1, agentCapabilities: { loadSession: true } });
+    });
     const barrierEntered = createDeferred<void>();
     const creation = manager.getOrCreateClient(
       'session-1',
@@ -31,7 +45,7 @@ it.each([false, true])(
         ...(resume ? { resumeProviderSessionId: 'existing' } : {}),
         beforeSessionCreation: () => {
           barrierEntered.resolve();
-          return history.promise;
+          return hydration;
         },
       },
       defaultHandlers(),
@@ -45,11 +59,14 @@ it.each([false, true])(
         ])
       ).toBe('hydration barrier');
       expect(mockInitialize).toHaveBeenCalledOnce();
+      expect(hydrationFinished).not.toHaveBeenCalled();
       expect(mockLoadSession).not.toHaveBeenCalled();
       expect(mockNewSession).not.toHaveBeenCalled();
     } finally {
       history.resolve();
       await creation;
+      expect(hydrationFinished).toHaveBeenCalledOnce();
+      expect(resume ? mockLoadSession : mockNewSession).toHaveBeenCalledOnce();
       await manager.stopClient('session-1');
     }
   }

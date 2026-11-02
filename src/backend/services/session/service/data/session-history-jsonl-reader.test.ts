@@ -155,3 +155,22 @@ it('yields within a dense byte block once its cooperative budget expires', async
     now.mockRestore();
   }
 });
+
+it.each([true, false])(
+  'silently stops an obsolete read (initially current: %s)',
+  async (initiallyCurrent) => {
+    const onError = vi.fn();
+    const onLine = vi.fn(() => {
+      current = false;
+    });
+    let current = initiallyCurrent;
+    await readNonEmptyJsonlLines({
+      filePath: writeFile('{"a":1}\n{"b":2}\n'),
+      isCurrent: () => current,
+      onLine,
+      onError,
+    });
+    expect(onLine).toHaveBeenCalledTimes(initiallyCurrent ? 1 : 0);
+    expect(onError).not.toHaveBeenCalled();
+  }
+);

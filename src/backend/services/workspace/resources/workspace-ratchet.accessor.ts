@@ -29,7 +29,10 @@ export function flattenWorkspaceRatchet(
 }
 export const WORKSPACE_RATCHET_DEFAULTS = flattenWorkspaceRatchet(null);
 export const pendingPREventWhere = {
-  state: { in: ['PENDING', 'DISPATCHING'] },
+  OR: [
+    { batchId: null, state: { in: ['PENDING', 'DISPATCHING'] } },
+    { batch: { state: { in: ['PENDING', 'DISPATCHING', 'BLOCKED'] } } },
+  ],
   prId: { not: null },
   pr: { detachedAt: null },
 } satisfies Prisma.WorkspacePREventWhereInput;

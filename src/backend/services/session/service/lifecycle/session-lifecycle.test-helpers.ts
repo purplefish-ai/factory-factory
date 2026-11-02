@@ -109,6 +109,7 @@ export type LifecycleHarness = {
     | 'enqueue'
     | 'removeQueuedMessage'
     | 'getTranscriptSnapshot'
+    | 'createProviderHistoryFence'
     | 'getHistoryHydrationSource'
     | 'setRuntimeSnapshot'
     | 'isHistoryHydrated'
@@ -641,6 +642,7 @@ export function createLifecycleHarness(
     enqueue: vi.fn<SessionDomainService['enqueue']>(overrides.enqueue ?? (() => ({ position: 0 }))),
     removeQueuedMessage: vi.fn(() => true),
     getTranscriptSnapshot: vi.fn(() => overrides.transcript ?? []),
+    createProviderHistoryFence: vi.fn(() => () => true),
     getHistoryHydrationSource: vi.fn(() => overrides.historyHydrationSource ?? 'none'),
     setRuntimeSnapshot: vi.fn(),
     isHistoryHydrated: vi.fn(() => false),
@@ -663,6 +665,7 @@ export function createLifecycleHarness(
     | 'enqueue'
     | 'removeQueuedMessage'
     | 'getTranscriptSnapshot'
+    | 'createProviderHistoryFence'
     | 'getHistoryHydrationSource'
     | 'setRuntimeSnapshot'
     | 'isHistoryHydrated'

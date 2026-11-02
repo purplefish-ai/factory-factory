@@ -50,13 +50,21 @@ export async function readNonEmptyJsonlLines(params: {
       linesBeforeBlock += newlines + countNewlines(block, scanned, block.length);
     }
   } catch (error) {
-    params.onError(error);
+    reportHistoryReadError(error, params.onError);
+  }
+}
+
+class HistoryReadCancelledError extends Error {}
+
+function reportHistoryReadError(error: unknown, onError: (error: unknown) => void): void {
+  if (!(error instanceof HistoryReadCancelledError)) {
+    onError(error);
   }
 }
 
 function assertHistoryReadCurrent(isCurrent?: () => boolean): void {
   if (isCurrent?.() === false) {
-    throw new Error('Provider history identity changed during read');
+    throw new HistoryReadCancelledError('Provider history identity changed during read');
   }
 }
 

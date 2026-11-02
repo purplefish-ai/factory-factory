@@ -20,6 +20,15 @@ describe('SessionDomainService', () => {
     sessionDomainService.clearAllSessions();
   });
 
+  it('retains the repaired identity fence for null snapshots through ordinary store eviction', () => {
+    sessionDomainService.resetProviderHistory('s1', 'replacement');
+    sessionDomainService.clearSession('s1');
+    expect(sessionDomainService.createProviderHistoryFence('s1', null)).toBeNull();
+    expect(sessionDomainService.createProviderHistoryFence('s1', 'replacement')?.()).toBe(true);
+    sessionDomainService.clearSession('s1', { permanentlyDeleted: true });
+    expect(sessionDomainService.createProviderHistoryFence('s1', null)?.()).toBe(true);
+  });
+
   it('upserts a lifecycle message once by its stable ID', () => {
     const lifecycleMessage = {
       id: 'session-lifecycle:event-1',

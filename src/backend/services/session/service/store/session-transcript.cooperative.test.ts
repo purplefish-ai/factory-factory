@@ -54,3 +54,24 @@ it('discards unfinished projection when its provider identity is replaced', asyn
   ).resolves.toBeNull();
   await yieldToEventLoop();
 });
+
+it('yields after a single structured tool result when its projection budget expires', async () => {
+  let clock = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => (clock += 20));
+  const structured: HistoryMessage[] = [
+    {
+      type: 'tool_result',
+      toolId: 'large-call',
+      content: [{ type: 'text', text: 'large body'.repeat(10_000) }],
+      timestamp: '2026-10-18T12:00:02Z',
+    },
+  ];
+  const heartbeat = vi.fn();
+  setImmediate(heartbeat);
+  const projected = await transcript.buildTranscriptFromHistoryCooperatively(
+    structured,
+    () => true
+  );
+  expect(heartbeat).toHaveBeenCalledOnce();
+  expect(projected).toEqual(transcript.buildTranscriptFromHistory(structured));
+});
