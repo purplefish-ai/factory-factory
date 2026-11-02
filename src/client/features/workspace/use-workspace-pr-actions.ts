@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
+import { getWorkspacePRAssociationId } from '@/client/lib/workspace-selected-pr';
 export function useWorkspacePrActions(workspaceId: string, projectId?: string) {
   const utils = trpc.useUtils();
   const refresh = async () => {
@@ -46,6 +47,9 @@ export function useWorkspacePrActions(workspaceId: string, projectId?: string) {
         return false;
       }
     },
-    review: (prId: string) => review.mutate({ workspaceId, prId }),
+    review: (prId: string) => {
+      const associationId = getWorkspacePRAssociationId(workspaceId, prId);
+      review.mutate({ workspaceId, ...(associationId !== null ? { prId: associationId } : {}) });
+    },
   };
 }
