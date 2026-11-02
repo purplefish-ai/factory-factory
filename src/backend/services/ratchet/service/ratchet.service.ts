@@ -10,6 +10,7 @@ import {
 } from '@/backend/services/workspace';
 import { type CIStatus, deriveRatchetState, RatchetState } from '@/shared/core';
 import type { PRTarget, PRDeliveryMode } from '@/shared/pr-monitoring';
+import { shouldPollPR } from '@/shared/pr-polling';
 
 const logger = createLogger('ratchet');
 const POLL_JOB = 'pr-event-poll';
@@ -276,6 +277,9 @@ export class RatchetService extends EventEmitter {
   ) {
     for (const pr of config.workspace.prs) {
       signal.throwIfAborted();
+      if (!shouldPollPR(pr, config.eventEpoch)) {
+        continue;
+      }
       try {
         await bridge.observe({ workspaceId: config.workspaceId, prId: pr.id }, signal);
       } catch (error) {

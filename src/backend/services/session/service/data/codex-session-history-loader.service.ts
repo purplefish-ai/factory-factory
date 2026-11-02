@@ -862,11 +862,9 @@ class CodexSessionHistoryLoaderService {
     workingDir: string;
     codexAccountId?: string | null;
     codexAccountContext?: CodexRuntimeContext;
-    /**
-     * Parse only rollout lines containing this text, found by a byte search.
-     * Turn grouping then sees only those lines.
-     */
+    /** Byte-filter rollout lines; turn grouping sees only matching lines. */
     onlyLinesContaining?: string;
+    isCurrent?: () => boolean;
   }): Promise<CodexSessionHistoryLoadResult> {
     const providerSessionId = params.providerSessionId;
     if (!providerSessionId) {
@@ -896,7 +894,8 @@ class CodexSessionHistoryLoaderService {
 
     const { history, hadReadError } = await this.readHistoryFromFile(
       filePath,
-      params.onlyLinesContaining
+      params.onlyLinesContaining,
+      params.isCurrent
     );
     if (hadReadError) {
       return { status: 'error', reason: 'read_failed', filePath };
@@ -907,7 +906,8 @@ class CodexSessionHistoryLoaderService {
 
   private async readHistoryFromFile(
     filePath: string,
-    containing?: string
+    containing?: string,
+    isCurrent?: () => boolean
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     let hadReadError = false;
     const history: HistoryMessage[] = [];
@@ -917,6 +917,7 @@ class CodexSessionHistoryLoaderService {
     await readNonEmptyJsonlLines({
       filePath,
       containing,
+      isCurrent,
       onLine: (trimmed, lineNumber) =>
         this.appendHistoryFromLine(
           history,

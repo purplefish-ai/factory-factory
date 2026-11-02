@@ -65,38 +65,9 @@ async function checkSingleExecution(
   await method.call(service, execution);
 }
 
-async function dispatchTask(
-  service: PeriodicTaskService,
-  params: {
-    taskId?: string;
-    projectId?: string;
-    name?: string;
-    prompt?: string;
-  } = {}
-): Promise<void> {
-  const method = Reflect.get(service, 'dispatchTask') as (
-    taskId: string,
-    projectId: string,
-    name: string,
-    prompt: string,
-    cadence: 'DAILY',
-    scheduledTime: string | null,
-    timezone: string | null,
-    scheduledDayOfMonth: number | null,
-    dueAt: Date
-  ) => Promise<void>;
-  await method.call(
-    service,
-    params.taskId ?? 'task-1',
-    params.projectId ?? 'project-1',
-    params.name ?? 'Daily cleanup',
-    params.prompt ?? 'Clean up stale data',
-    'DAILY',
-    '09:00',
-    'UTC',
-    null,
-    now
-  );
+async function dispatchTask(service: PeriodicTaskService): Promise<void> {
+  const method = Reflect.get(service, 'dispatchTask') as (taskId: string) => Promise<void>;
+  await method.call(service, 'task-1');
 }
 
 function createServiceWithTimerDispatch(
@@ -152,6 +123,11 @@ describe('PeriodicTaskService', () => {
       status: 'RUNNING',
     });
     mockReserveExecutionAndMarkDispatched.mockResolvedValue({
+      launchSnapshot: {
+        projectId: 'project-1',
+        name: 'Daily cleanup — 5/20/2026',
+        prompt: 'Clean up stale data',
+      },
       id: 'exec-1',
       periodicTaskId: 'task-1',
       workspaceId: null,
@@ -278,20 +254,7 @@ describe('PeriodicTaskService', () => {
 
     await dispatchTask(service);
 
-    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalledWith(
-      {
-        periodicTaskId: 'task-1',
-        workspaceId: null,
-        status: 'RUNNING',
-      },
-      {
-        cadence: 'DAILY',
-        scheduledTime: '09:00',
-        timezone: 'UTC',
-        scheduledDayOfMonth: null,
-        dueAt: now,
-      }
-    );
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalledWith('task-1');
     expect(dispatchTimerEvent).toHaveBeenCalledExactlyOnceWith({
       kind: 'timer_due',
       executionId: 'exec-1',

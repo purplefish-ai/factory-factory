@@ -17,6 +17,7 @@ export function createSubagentTimelineEvents(subagents: SubagentSummary[]): Chat
       const id = `subagent-${agent.id}-${phase}`;
       events.set(id, {
         id,
+        subagentId: agent.id,
         order: 0,
         subagentIconIndex: iconIndices.get(agent.id),
         source: 'agent',

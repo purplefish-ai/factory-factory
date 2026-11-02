@@ -83,6 +83,28 @@ export const OneSubagent: Story = {
     work: { promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 },
     runningSubagentList: runningList([0]),
     runningSubagentIconIndices: [0],
+    onOpenSingleSubagent: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const button = canvas.getByRole('button', { name: '1 sub-agent running' });
+    await expect(button).not.toHaveAttribute('aria-expanded');
+    await userEvent.click(button);
+    await expect(args.onOpenSingleSubagent).toHaveBeenCalledOnce();
+    await expect(canvas.queryByRole('button', { name: /Review code/ })).not.toBeInTheDocument();
+  },
+};
+
+export const OneSubagentLoading: Story = {
+  args: {
+    work: { promptInFlight: false, backgroundTasks: [], runningSubagents: 1, activeGoals: 0 },
+    runningSubagentIconIndices: [],
+    runningSubagentList: undefined,
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', { name: '1 sub-agent running' })
+    ).toBeDisabled();
   },
 };
 

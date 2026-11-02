@@ -247,6 +247,17 @@ export class AcpClientFactory {
         agentCapabilities: initResult.agentCapabilities,
       });
 
+      if (options.beforeSessionCreation) {
+        await Promise.race([
+          // Local history previously completed before ACP startup. Keep its
+          // wait cancellable without imposing a provider RPC deadline on IO.
+          options.beforeSessionCreation(),
+          startupError,
+          shutdownSignal.promise,
+          stopSignal.promise,
+        ]);
+      }
+
       const agentCapabilities = initResult.agentCapabilities ?? {};
       nativeSessionTracker.setCapabilities(agentCapabilities);
       const sessionInfo = await Promise.race([
