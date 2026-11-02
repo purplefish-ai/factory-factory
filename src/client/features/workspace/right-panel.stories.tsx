@@ -47,6 +47,7 @@ function RightPanelStory({
           ({ op }) =>
             observable((observer) => {
               const responses: Record<string, () => unknown> = {
+                'userSettings.get': () => ({ childWorkspacesEnabled: true }),
                 'session.listQuickActions': () => [],
                 'session.listSubagents': () => ({
                   supported: true,

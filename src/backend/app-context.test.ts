@@ -179,6 +179,9 @@ describe('createApplication', () => {
         return property === 'findById' ? findProject : Reflect.get(target, property, receiver);
       },
     });
+    services.userSettingsQueryService = unsafeCoerce({
+      get: vi.fn(async () => ({ childWorkspacesEnabled: true })),
+    });
     services.launchWorkspace = launch;
     const input = {
       projectId: 'project-1',

@@ -7,10 +7,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentsPanel } from './agents-panel';
 
 const mocks = vi.hoisted(() => ({
+  childWorkspacesEnabled: true,
   childProps: vi.fn(),
   providerProps: vi.fn(),
   queryBacked: false,
   querySubagents: vi.fn<(sessionId: string) => Promise<string>>(),
+}));
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    userSettings: {
+      get: {
+        useQuery: () => ({ data: { childWorkspacesEnabled: mocks.childWorkspacesEnabled } }),
+      },
+    },
+  },
 }));
 
 vi.mock('@/client/features/subagents', () => ({
@@ -69,6 +80,7 @@ describe('AgentsPanel', () => {
       value: true,
     });
     mocks.queryBacked = false;
+    mocks.childWorkspacesEnabled = true;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -107,6 +119,20 @@ describe('AgentsPanel', () => {
     });
     expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="child-workspaces"]')).not.toBeNull();
+  });
+
+  it('hides children when the setting is disabled while retaining provider subagents', () => {
+    mocks.childWorkspacesEnabled = false;
+    render({
+      workspaceId: 'parent',
+      sessionId: 'session',
+      sessionName: 'Session',
+      sessionReady: true,
+      isParentWorkspace: true,
+      onOpenSubagent: vi.fn(),
+    });
+    expect(mocks.childProps).not.toHaveBeenCalled();
+    expect(mocks.providerProps).toHaveBeenCalled();
   });
 
   it('keeps child workspaces workspace-scoped when the selected session changes', () => {

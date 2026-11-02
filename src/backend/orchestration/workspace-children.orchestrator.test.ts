@@ -51,6 +51,7 @@ import {
 } from './workspace-children.orchestrator';
 
 const childPorts = {
+  getSettings: vi.fn(async () => ({ childWorkspacesEnabled: true })),
   findProject: (projectId: string) => projectManagementService.findById(projectId),
   launchWorkspace: vi.fn((source: Parameters<typeof launchWorkspace>[0]) =>
     launchWorkspace(source, {
@@ -98,12 +99,28 @@ function createProject(
 describe('createChildWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    childPorts.getSettings.mockResolvedValue({ childWorkspacesEnabled: true });
     vi.mocked(sessionProviderResolverService.resolveProviderForWorkspaceCreation).mockResolvedValue(
       'CODEX'
     );
     vi.mocked(sessionDataService.createAgentSession).mockResolvedValue(
       unsafeCoerce({ id: 'child-session' })
     );
+  });
+
+  it('rejects child creation when disabled before launching any work', async () => {
+    childPorts.getSettings.mockResolvedValue({ childWorkspacesEnabled: false });
+    await expect(
+      createChildWorkspace(
+        {
+          parentWorkspaceId: 'parent-1',
+          projectId: 'active-project',
+          name: 'Child',
+        },
+        childPorts
+      )
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(childPorts.launchWorkspace).not.toHaveBeenCalled();
   });
 
   it('rejects an archived target project before creating a workspace', async () => {

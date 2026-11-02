@@ -1,4 +1,5 @@
 import { ProviderSubagentsSection, type SubagentSelection } from '@/client/features/subagents';
+import { trpc } from '@/client/lib/trpc';
 import { ChildWorkspacesPanel } from './child-workspaces-panel';
 
 export interface AgentsPanelProps {
@@ -22,6 +23,7 @@ export function AgentsPanel({
   isParentWorkspace,
   onOpenSubagent,
 }: AgentsPanelProps) {
+  const { data: settings } = trpc.userSettings.get.useQuery();
   return (
     <div className="h-full overflow-y-auto">
       <ProviderSubagentsSection
@@ -33,7 +35,9 @@ export function AgentsPanel({
         controlRuntimeId={controlRuntimeId}
         onSelect={onOpenSubagent}
       />
-      {isParentWorkspace && <ChildWorkspacesPanel workspaceId={workspaceId} embedded />}
+      {isParentWorkspace && settings?.childWorkspacesEnabled && (
+        <ChildWorkspacesPanel workspaceId={workspaceId} embedded />
+      )}
     </div>
   );
 }

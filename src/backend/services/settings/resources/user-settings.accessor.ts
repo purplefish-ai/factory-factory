@@ -14,6 +14,7 @@ interface UpdateUserSettingsInput {
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
+  childWorkspacesEnabled?: boolean;
   notificationSoundPath?: string | null;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
@@ -127,12 +128,17 @@ function buildGeneralPreferenceDefaults(
   data: UpdateUserSettingsInput
 ): Pick<
   Prisma.UserSettingsCreateInput,
-  'preferredIde' | 'customIdeCommand' | 'playSoundOnComplete' | 'cachedSlashCommands'
+  | 'preferredIde'
+  | 'customIdeCommand'
+  | 'playSoundOnComplete'
+  | 'cachedSlashCommands'
+  | 'childWorkspacesEnabled'
 > {
   return {
     preferredIde: data.preferredIde ?? 'cursor',
     customIdeCommand: data.customIdeCommand ?? null,
     playSoundOnComplete: data.playSoundOnComplete ?? true,
+    childWorkspacesEnabled: data.childWorkspacesEnabled ?? true,
     cachedSlashCommands: data.cachedSlashCommands ?? undefined,
   };
 }
@@ -296,6 +302,7 @@ class UserSettingsAccessor {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          childWorkspacesEnabled: true,
           defaultSessionProvider: 'CLAUDE',
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
