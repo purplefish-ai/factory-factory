@@ -9,10 +9,20 @@ import {
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import {
+  createTestProcessHandle,
+  defaultOptions,
+  defaultContext,
+} from '../acp/acp-runtime-manager.test-helpers';
+import { AcpRuntimeSupervisor } from '../acp/acp-runtime-supervisor';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { createProviderHistoryHydrator } from './session-provider-history-hydrator';
+import {
+  createSessionHistoryBarrier,
+  prepareSessionHistoryForResume,
+} from './session-startup-history';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 
 const { loadHistory } = vi.hoisted(() => ({ loadHistory: vi.fn() }));
@@ -116,7 +126,8 @@ function setup(provider: 'CLAUDE' | 'CODEX' = 'CODEX') {
     },
     { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done' } },
   ];
-  h.runtimeManager.getOrCreateClient.mockImplementation((id, _options, handlers) => {
+  h.runtimeManager.getOrCreateClient.mockImplementation(async (id, options, handlers) => {
+    await options.beforeSessionCreation?.();
     for (const update of replay) {
       handlers.onAcpEvent?.(id, { type: 'acp_session_update', update });
     }
@@ -231,7 +242,44 @@ it.each(['CLAUDE', 'CODEX'] as const)(
   }
 );
 
-it('does not spawn a runtime when stopped during history hydration', async () => {
+it('starts adapter initialization while cold history is pending, then gates provider replay', async () => {
+  const reading = createDeferred<unknown>();
+  loadHistory.mockReturnValue(reading.promise);
+  const { h, coordinator, domain } = setup();
+  const initializing = createDeferred<void>();
+  const original = h.runtimeManager.getOrCreateClient.getMockImplementation()!;
+  h.runtimeManager.getOrCreateClient.mockImplementation((...args) => {
+    initializing.resolve();
+    return original(...args);
+  });
+  const startup = coordinator.getOrCreateSessionClient('session-1');
+  await initializing.promise;
+  expect(loadHistory).toHaveBeenCalledOnce();
+  expect(
+    domain
+      .getTranscriptSnapshot('session-1')
+      .every((message) => message.message?.type === 'session_lifecycle')
+  ).toBe(true);
+  reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
+  await startup;
+  expect(domain.getTranscriptSnapshot('session-1')[0]?.text).toBe('Initial prompt');
+});
+
+it('owns a late hydration rejection after adapter initialization has failed', async () => {
+  const reading = createDeferred<unknown>();
+  loadHistory.mockReturnValue(reading.promise);
+  const { h, coordinator } = setup();
+  h.runtimeManager.getOrCreateClient.mockRejectedValue(new Error('initialize failed'));
+  await expect(coordinator.getOrCreateSessionClient('session-1')).rejects.toThrow(
+    'initialize failed'
+  );
+  reading.reject(new Error('late history read failure'));
+  // Flush the detached preparation: Vitest also reports any unhandled rejection.
+  await reading.promise.catch(() => undefined);
+  await Promise.resolve();
+});
+
+it('does not resume a provider when stopped during concurrent history hydration', async () => {
   const reading = createDeferred<unknown>();
   loadHistory.mockReturnValue(reading.promise);
   const { h, coordinator } = setup();
@@ -242,7 +290,7 @@ it('does not spawn a runtime when stopped during history hydration', async () =>
   const reservation = h.lifecycleGate.reserveStop('session-1');
   reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
   expect(await startup).toBeInstanceOf(SessionStartupCancelledError);
-  expect(h.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  expect(h.runtimeManager.getClient('session-1')).toBeUndefined();
   reservation?.release();
 });
 
@@ -252,7 +300,8 @@ it('shares history preparation across concurrent startups and keeps fallback rep
   const { h, domain, processor, coordinator } = setup();
   const creating = createDeferred<typeof h.handle>();
   let replayHandlers: AcpRuntimeEventHandlers | undefined;
-  h.runtimeManager.getOrCreateClient.mockImplementation((_id, _options, handlers) => {
+  h.runtimeManager.getOrCreateClient.mockImplementation(async (_id, options, handlers) => {
+    await options.beforeSessionCreation?.();
     replayHandlers ??= handlers;
     return creating.promise.then((handle) => {
       h.runtimeManager.getClient.mockReturnValue(handle);
@@ -292,7 +341,8 @@ it('leaves an already pending runtime in control of its incomplete fallback repl
   const { h, domain, processor, coordinator } = setup();
   domain.injectCommittedUserMessage('session-1', 'Initial prompt');
   h.runtimeManager.getPendingClient.mockReturnValue(Promise.resolve(h.handle));
-  h.runtimeManager.getOrCreateClient.mockImplementation((id, _options, handlers) => {
+  h.runtimeManager.getOrCreateClient.mockImplementation(async (id, options, handlers) => {
+    await options.beforeSessionCreation?.();
     handlers.onAcpEvent?.(id, {
       type: 'acp_session_update',
       update: {
@@ -331,3 +381,100 @@ vi.mock('@/backend/services/codex-accounts', () => ({
     getUsage: vi.fn(),
   },
 }));
+
+it('joins shared history before a pending adapter can fail and release a queued retry', async () => {
+  const reading = createDeferred<unknown>();
+  loadHistory.mockReturnValue(reading.promise);
+  const { h, domain, hydrateProviderHistory } = setup();
+  const context = await h.contextService.load('session-1');
+  expect(context).not.toBeNull();
+  if (!context) {
+    throw new Error('Missing test context');
+  }
+  const dependencies = {
+    hydrateProviderHistory,
+    sessionDomainService: domain,
+    runtimeManager: h.runtimeManager,
+  };
+  const first = prepareSessionHistoryForResume('session-1', context, dependencies);
+  h.runtimeManager.getPendingClient.mockReturnValue(Promise.resolve(h.handle));
+  const retry = prepareSessionHistoryForResume('session-1', context, dependencies);
+  try {
+    expect(retry).toBe(first);
+    expect(loadHistory).toHaveBeenCalledOnce();
+  } finally {
+    reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
+    await Promise.all([first, retry]);
+  }
+});
+
+it('keeps a serialized retry behind shared hydration when the first adapter initialization fails', async () => {
+  const reading = createDeferred<unknown>();
+  loadHistory.mockReturnValue(reading.promise);
+  const { h, domain, processor, hydrateProviderHistory } = setup();
+  const context = await h.contextService.load('session-1');
+  if (!context) {
+    throw new Error('Missing test context');
+  }
+  const firstInitializing = createDeferred<void>();
+  const failFirst = createDeferred<void>();
+  const retryInitializing = createDeferred<void>();
+  const replayed = vi.fn();
+  let attempt = 0;
+  const supervisor = new AcpRuntimeSupervisor({
+    cancelPrompt: async () => true,
+    clientFactory: {
+      createClient: async ({ options }) => {
+        if (++attempt === 1) {
+          firstInitializing.resolve();
+          await failFirst.promise;
+          throw new Error('first adapter initialization failed');
+        }
+        retryInitializing.resolve();
+        await options.beforeSessionCreation?.();
+        replayed();
+        return createTestProcessHandle({
+          providerSessionId: 'existing-thread',
+          sessionCreationOutcome: { kind: 'resumed' },
+        });
+      },
+    },
+  });
+  const dependencies = {
+    hydrateProviderHistory,
+    sessionDomainService: domain,
+    runtimeManager: supervisor,
+    acpEventProcessor: processor,
+  };
+  const barrier = () =>
+    createSessionHistoryBarrier('session-1', context, dependencies, async () => undefined);
+  const first = supervisor
+    .getOrCreateClient(
+      'session-1',
+      { ...defaultOptions(), beforeSessionCreation: barrier() },
+      {},
+      defaultContext()
+    )
+    .catch((error: unknown) => error);
+  await firstInitializing.promise;
+  expect(supervisor.getPendingClient('session-1')).toBeDefined();
+  const retry = supervisor.getOrCreateClient(
+    'session-1',
+    { ...defaultOptions(), beforeSessionCreation: barrier() },
+    {},
+    defaultContext()
+  );
+  failFirst.resolve();
+  await retryInitializing.promise;
+  // Drain only promise continuations, with no wall-clock delay or provider work.
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(replayed).not.toHaveBeenCalled();
+  reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
+  expect(await first).toBeInstanceOf(Error);
+  await retry;
+  expect(replayed).toHaveBeenCalledOnce();
+  expect(domain.getTranscriptSnapshot('session-1')[0]?.timestamp).toBe(history[0]?.timestamp);
+});

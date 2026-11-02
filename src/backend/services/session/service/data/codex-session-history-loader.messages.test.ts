@@ -63,6 +63,39 @@ describe('Codex response-item history messages', () => {
     return result.status === 'loaded' ? result.history : [];
   }
 
+  it('restores complete large tool bodies and turn boundaries', async () => {
+    const output = `large-tool-result ${'👋'.repeat(300_000)}`;
+    const history = await load([
+      event('task_started', undefined, 'one'),
+      response('user', 'first', { kinds: ['user.text'], turnId: 'one' }),
+      {
+        type: 'response_item',
+        payload: { type: 'function_call', name: 'shell', call_id: 'call', arguments: '{}' },
+      },
+      {
+        type: 'response_item',
+        timestamp: '2026-10-18T12:00:00Z',
+        payload: { type: 'function_call_output', call_id: 'call', output },
+      },
+      { type: 'turn_context', payload: { turn_id: 'two', ignored: 'x'.repeat(1_100_000) } },
+      response('user', 'second', { kinds: ['user.text'], turnId: 'two' }),
+      response('assistant', 'done', { phase: 'final_answer', turnId: 'two' }),
+    ]);
+    expect(history.map(({ type }) => type)).toEqual([
+      'user',
+      'tool_use',
+      'tool_result',
+      'user',
+      'assistant',
+    ]);
+    expect(history[2]).toMatchObject({
+      content: output,
+      toolId: 'call',
+      timestamp: '2026-10-18T12:00:00Z',
+    });
+    expect(history[3]).toMatchObject({ content: 'second' });
+  });
+
   it('restores native response-only turns and hides injected instructions', async () => {
     const history = await load([
       event('task_started', undefined, 'turn-1'),

@@ -455,3 +455,74 @@ it('withdraws hydrated controls while recovery replaces a closing socket before 
   await harness.hydrate(next, [modelOption, reasoningOption]);
   expect(harness.container.querySelector('[aria-label^="Stop process"]')).not.toBeNull();
 });
+
+function chunkedReplay(loadRequestId: string, text: string) {
+  const bytes = Buffer.from(
+    JSON.stringify({
+      type: 'session_replay_batch',
+      loadRequestId,
+      replayEvents: [
+        {
+          type: 'session_runtime_snapshot',
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            updatedAt: '2026-10-18T12:00:00Z',
+          },
+        },
+        {
+          type: 'message_state_changed',
+          id: 'framed-user',
+          newState: 'ACCEPTED',
+          userMessage: { text, timestamp: '2026-10-18T12:00:00Z', order: 7 },
+        },
+        { type: 'message_state_changed', id: 'framed-user', newState: 'COMMITTED' },
+      ],
+    })
+  );
+  const total = Math.ceil(bytes.length / 31);
+  return Array.from({ length: total }, (_, index) => ({
+    type: 'session_replay_chunk',
+    replayId: 'test-replay',
+    index,
+    total,
+    byteLength: bytes.length,
+    chunk: bytes.subarray(index * 31, (index + 1) * 31).toString('base64'),
+  }));
+}
+
+it('hydrates only a complete correlated replay and discards a partial replay across reconnect', async () => {
+  const harness = await mount(capabilities);
+  const requestId = (socket: BrowserSocket) =>
+    socket.sent
+      .map((message) => outboundSchema.parse(JSON.parse(message)))
+      .findLast((message) => message.type === 'load_session')?.loadRequestId;
+  const oldId = requestId(harness.socket)!;
+  const oldFrames = chunkedReplay(oldId, 'stale 👋');
+  await act(() => harness.socket.receive(oldFrames[0]));
+  expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
+  await act(() => harness.socket.close());
+  const next = await harness.reconnect();
+  await act(() => {
+    for (const frame of oldFrames.slice(1)) {
+      next.receive(frame);
+    }
+  });
+  expect(harness.chat.controlsHydrated).toBe(false);
+  const text = 'reconnected 👋日本語\n"';
+  const frames = chunkedReplay(requestId(next)!, text);
+  await act(() => {
+    for (const frame of frames.slice(0, -1)) {
+      next.receive(frame);
+    }
+  });
+  expect(harness.chat.controlsHydrated).toBe(false);
+  expect(harness.chat.messages).toHaveLength(0);
+  await act(() => next.receive(frames.at(-1)));
+  expect(harness.chat.controlsHydrated).toBe(true);
+  expect(harness.chat.messages).toMatchObject([
+    { id: 'framed-user', text, timestamp: '2026-10-18T12:00:00Z', order: 7 },
+  ]);
+});
