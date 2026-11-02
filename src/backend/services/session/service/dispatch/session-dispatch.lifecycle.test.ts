@@ -818,7 +818,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       's1',
       queuedMessage,
       0,
-      { emitSnapshot: false }
+      { emitSnapshot: false, providerPrompt: 'hello' }
     );
     expect(mockSessionDomainService.emitSessionSnapshot).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledBefore(

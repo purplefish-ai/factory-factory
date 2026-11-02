@@ -12,6 +12,8 @@ import {
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/lifecycle/closed-session-persistence.service';
+import { resolveClosedSessionTranscriptPath } from '@/backend/services/session/service/lifecycle/closed-session-storage';
 import { createSessionLaunchMetadata } from '@/backend/services/session/service/lifecycle/session-launch-settings';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
@@ -283,19 +285,40 @@ class SessionDataImplementation {
 
   // Closed sessions
 
-  findClosedSessionsByWorkspaceId(
+  async findClosedSessionsByWorkspaceId(
     workspaceId: string,
     limit: number
   ): Promise<ClosedSessionRecord[]> {
+    await closedSessionPersistenceService.recoverPending(workspaceId);
     return closedSessionAccessor.findByWorkspaceId(workspaceId, limit);
   }
 
-  findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
+  async findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
+    await closedSessionPersistenceService.recoverById(id);
     return closedSessionAccessor.findByIdWithWorkspace(id);
   }
 
+  resolveClosedSessionTranscriptPath(
+    archive: Parameters<typeof resolveClosedSessionTranscriptPath>[0],
+    worktreePath: string | null
+  ): string {
+    return resolveClosedSessionTranscriptPath(archive, worktreePath);
+  }
+
+  cleanupClosedSessionArtifacts(workspaceId: string): Promise<void> {
+    return closedSessionPersistenceService.cleanupDeletedWorkspace(workspaceId);
+  }
+
+  maintainClosedSessionArchives(signal?: AbortSignal): Promise<void> {
+    return closedSessionPersistenceService.maintainArchives(signal);
+  }
+
+  stopClosedSessionArchiveMaintenance(): Promise<void> {
+    return closedSessionPersistenceService.stopArchiveMaintenance();
+  }
+
   deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
-    return closedSessionAccessor.delete(id);
+    return closedSessionPersistenceService.deleteArchive(id);
   }
 }
 

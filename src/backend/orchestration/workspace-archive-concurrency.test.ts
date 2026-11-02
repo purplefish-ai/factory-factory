@@ -1,5 +1,9 @@
+vi.mock('@/backend/services/session', () => ({
+  closedSessionPersistenceService: { preserveWorkspaceArchives: vi.fn(async () => undefined) },
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { closedSessionPersistenceService } from '@/backend/services/session';
 import {
   workspaceMaintenanceService,
   workspaceStateMachine,
@@ -86,6 +90,17 @@ describe('concurrent workspace archives', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('preserves the worktree and restores workspace state when legacy archive proof is missing', async () => {
+    vi.mocked(closedSessionPersistenceService.preserveWorkspaceArchives).mockRejectedValueOnce(
+      Object.assign(new Error('missing retained transcript'), { code: 'ENOENT' })
+    );
+    await expect(archiveWorkspace(row, {}, services)).rejects.toThrow(
+      'missing retained transcript'
+    );
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(row.status).toBe('READY');
   });
 
   it('joins pending cleanup for both fresh and stale duplicate requests', async () => {

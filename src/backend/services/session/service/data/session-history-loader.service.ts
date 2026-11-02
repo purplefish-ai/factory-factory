@@ -281,6 +281,9 @@ const HistoryImageSchema = z.object({
   type: z.literal('image'),
   source: HistoryImageSourceSchema.extend({ type: z.literal('base64') }),
 });
+const HistoryPromptSchema = z.array(
+  z.union([z.object({ type: z.literal('text'), text: z.string() }), HistoryImageSchema])
+);
 
 function restoreUserImages(
   messages: HistoryMessage[],
@@ -334,6 +337,16 @@ function parseContentAsHistory(
 
   if (role === 'user') {
     restoreUserImages(messages, content, timestamp, uuid);
+    // Keep native prompt boundaries and image order before the UI projection
+    // splits text blocks and moves images onto its first human row.
+    const prompt = HistoryPromptSchema.safeParse(content);
+    if (prompt.success) {
+      messages.forEach((message, index) => {
+        if (message.type === 'user') {
+          message.providerPrompt = index === 0 ? prompt.data : null;
+        }
+      });
+    }
   }
   return messages;
 }

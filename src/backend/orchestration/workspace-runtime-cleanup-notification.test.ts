@@ -1,3 +1,6 @@
+vi.mock('@/backend/services/session', () => ({
+  closedSessionPersistenceService: { preserveWorkspaceArchives: vi.fn(async () => undefined) },
+}));
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   workspaceActivityService,

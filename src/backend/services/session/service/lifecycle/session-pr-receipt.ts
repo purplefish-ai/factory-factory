@@ -1,10 +1,11 @@
-import { join } from 'node:path';
 import { z } from 'zod';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
+import { resolveClosedSessionTranscriptPath } from '@/backend/services/session/service/lifecycle/closed-session-storage';
 import { prEventMarker } from '@/shared/pr-monitoring';
+import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { readClosedSessionTranscriptHeader } from './closed-session-transcript-header';
 
 export async function findPRDeliveryReceipt(
@@ -87,8 +88,9 @@ async function findArchivedReceipt(
   deliveryId: string,
   unavailableWhenEmpty = true
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
+  const recovered = await closedSessionPersistenceService.recoverPendingForSession(sessionId);
   const archives = await closedSessionAccessor.findBySessionIdWithWorkspace(sessionId);
-  let unavailable = unavailableWhenEmpty && archives.length === 0;
+  let unavailable = !recovered || (unavailableWhenEmpty && archives.length === 0);
   for (const archive of archives) {
     try {
       if (!archive.workspace.worktreePath) {
@@ -96,7 +98,7 @@ async function findArchivedReceipt(
         continue;
       }
       const metadata = await readClosedSessionTranscriptHeader(
-        join(archive.workspace.worktreePath, archive.transcriptPath),
+        resolveClosedSessionTranscriptPath(archive, archive.workspace.worktreePath),
         z.object({
           sessionId: z.literal(sessionId),
           metadata: z.object({

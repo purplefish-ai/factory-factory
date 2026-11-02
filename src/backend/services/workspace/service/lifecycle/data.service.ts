@@ -11,9 +11,14 @@ import { AcceptedBranchPublisher, type AcceptedWorkspaceBranch } from './accepte
 
 class WorkspaceDataService {
   private deletionCapture: WorkspaceDeletionCapture | null = null;
+  private afterDeletion: ((workspaceId: string) => Promise<void>) | undefined;
 
-  configureDeletionCapture(capture: WorkspaceDeletionCapture) {
+  configureDeletionCapture(
+    capture: WorkspaceDeletionCapture,
+    afterDeletion?: (workspaceId: string) => Promise<void>
+  ) {
     this.deletionCapture = capture;
+    this.afterDeletion = afterDeletion;
   }
   reserveMetadata(workspaceId: string, requestId: string) {
     return workspaceMetadataAccessor.reserve(workspaceId, requestId);
@@ -128,7 +133,10 @@ class WorkspaceDataService {
         'Workspace deletion result capture is unavailable'
       );
     }
-    return workspaceAccessor.delete(id, this.deletionCapture);
+    return workspaceAccessor.delete(id, this.deletionCapture).then(async (deleted) => {
+      await this.afterDeletion?.(id);
+      return deleted;
+    });
   }
 }
 

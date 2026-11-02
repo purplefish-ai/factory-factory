@@ -1,3 +1,7 @@
+import { closedSessionPersistenceService } from '@/backend/services/session';
+vi.mock('@/backend/services/session', () => ({
+  closedSessionPersistenceService: { preserveWorkspaceArchives: vi.fn(async () => undefined) },
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -122,6 +126,15 @@ describe('archiveWorkspace', () => {
     );
     vi.mocked(services.runScriptService.evictWorkspaceBuffers).mockReturnValue(undefined);
     vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
+  });
+
+  it('retains the worktree when archive relocation fails', async () => {
+    vi.mocked(closedSessionPersistenceService.preserveWorkspaceArchives).mockRejectedValueOnce(
+      new Error('disk full')
+    );
+    await expect(archiveWorkspace(makeWorkspace())).rejects.toThrow('disk full');
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
   });
 
   describe('state transition validation', () => {

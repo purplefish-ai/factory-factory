@@ -401,7 +401,7 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { emitSnapshot?: boolean; providerPrompt?: ChatMessage['providerPrompt'] }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     this.commitSentUserMessageWithOrder(store, message, order, options);
@@ -411,9 +411,9 @@ export class SessionDomainService extends EventEmitter {
     store: SessionStore,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { emitSnapshot?: boolean; providerPrompt?: ChatMessage['providerPrompt'] }
   ): void {
-    commitSentUserMessageWithOrder(store, message, order);
+    commitSentUserMessageWithOrder(store, message, order, options?.providerPrompt);
     this.emit('user_message_committed', { sessionId: store.sessionId });
 
     if (options?.emitSnapshot !== false) {

@@ -8,10 +8,14 @@ import { prEventMarker } from '@/shared/pr-monitoring';
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   archives: vi.fn(),
+  pending: vi.fn(),
   codexHistoryContext: vi.fn(),
 }));
 vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
-  closedSessionAccessor: { findBySessionIdWithWorkspace: mocks.archives },
+  closedSessionAccessor: {
+    findBySessionIdWithWorkspace: mocks.archives,
+    findPendingForSession: mocks.pending,
+  },
 }));
 vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: { findAgentSessionById: mocks.session },
@@ -34,6 +38,7 @@ beforeEach(() => {
   process.env.CLAUDE_CONFIG_DIR = join(tempDir, 'claude');
   configService.reload();
   mocks.archives.mockResolvedValue([]);
+  mocks.pending.mockResolvedValue([]);
   mocks.codexHistoryContext.mockResolvedValue({ sessionsDir: join(tempDir, 'codex-sessions') });
 });
 
