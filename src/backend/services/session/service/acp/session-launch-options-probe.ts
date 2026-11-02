@@ -91,12 +91,31 @@ export function launchOptionsFromConfig(
     },
   };
 }
-/** Disposable native configuration discovery. No prompt is submitted. */
-export async function fetchSessionLaunchOptionsFromAcp(input: {
+type ProbeInput = {
   provider: 'CLAUDE' | 'CODEX';
   model?: string;
   env?: NodeJS.ProcessEnv;
-}): Promise<NativeSessionLaunchOptions> {
+};
+/** Bounded discovery result, with a separately retained native child/pipe lifetime. */
+export function fetchSessionLaunchOptionsFromAcp(input: ProbeInput) {
+  let lifetime = Promise.resolve();
+  const result = probeLaunchOptions(input, (drained) => {
+    lifetime = drained;
+  });
+  return {
+    result,
+    drained: result.then(
+      () => lifetime,
+      () => lifetime
+    ),
+  };
+}
+
+/** Disposable native configuration discovery. No prompt is submitted. */
+async function probeLaunchOptions(
+  input: ProbeInput,
+  retainLifetime: (drained: Promise<void>) => void
+): Promise<NativeSessionLaunchOptions> {
   const command = resolveProviderAcpSpawnCommand(input.provider);
   const cwd = tmpdir();
   const child = spawn(command.command, command.args, {
@@ -111,10 +130,18 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
         : {}),
     },
   });
+  // Observe before ACP setup or cleanup: exit and signal requests do not close pipes.
+  const childClosed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  retainLifetime(childClosed);
   let spawnListener: ((error: Error) => void) | undefined;
   const failed = new Promise<never>((_resolve, reject) => {
     spawnListener = (error) => reject(createAcpSpawnError(command.commandLabel, error));
-    child.once('error', spawnListener);
+    child.on('error', spawnListener);
+  });
+  void childClosed.then(() => {
+    if (spawnListener) {
+      child.removeListener('error', spawnListener);
+    }
   });
   // A spawn failure may precede the first raced operation.
   void failed.catch(() => undefined);
@@ -146,6 +173,8 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
         Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
       )
     );
+    // SDK.closed is logical closure; actual child close remains mandatory.
+    retainLifetime(Promise.all([childClosed, connection.closed]).then(() => undefined));
 
     await run(
       connection.initialize({
@@ -205,13 +234,7 @@ export async function fetchSessionLaunchOptionsFromAcp(input: {
       try {
         await terminateCatalogProcess(child);
       } finally {
-        try {
-          connection?.close();
-        } finally {
-          if (spawnListener) {
-            child.removeListener('error', spawnListener);
-          }
-        }
+        connection?.close();
       }
     }
   }

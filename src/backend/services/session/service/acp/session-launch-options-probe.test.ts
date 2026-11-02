@@ -2,11 +2,27 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpClientCallbacks } from './acp-connection';
-import { createMockChildProcess, exitChildAfterSigterm } from './acp-runtime-manager.test-helpers';
 import {
-  fetchSessionLaunchOptionsFromAcp,
+  createMockChildProcess as createChild,
+  exitChildAfterSigterm,
+} from './acp-runtime-manager.test-helpers';
+import {
+  fetchSessionLaunchOptionsFromAcp as startProbe,
   launchOptionsFromConfig,
 } from './session-launch-options-probe';
+function fetchSessionLaunchOptionsFromAcp(input: Parameters<typeof startProbe>[0]) {
+  return startProbe(input).result;
+}
+function createMockChildProcess() {
+  const child = createChild();
+  child.once('exit', () => {
+    for (const stream of [child.stdin, child.stdout, child.stderr]) {
+      stream.destroy();
+    }
+    queueMicrotask(() => child.emit('close', child.exitCode, child.signalCode));
+  });
+  return child;
+}
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
   initialize: vi.fn(),
@@ -31,6 +47,7 @@ vi.mock('./acp-connection', () => ({
       setSessionConfigOption: mocks.set,
       extMethod: mocks.ext,
       close: mocks.close,
+      closed: Promise.resolve(),
       prompt: mocks.prompt,
     };
   },
