@@ -7,6 +7,14 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentManagementAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-management.accessor',
+  },
+  agentManagementHistoryAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-management-history.accessor',
+  },
   agentLedgerRetentionAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-ledger-retention.accessor',
