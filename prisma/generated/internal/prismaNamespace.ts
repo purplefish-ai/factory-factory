@@ -3478,6 +3478,7 @@ export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typ
 
 
 export const AgentSourceStateScalarFieldEnum = {
+  authorityRevision: 'authorityRevision',
   lastSourceOrder: 'lastSourceOrder',
   connectionId: 'connectionId',
   isReady: 'isReady',
@@ -3518,7 +3519,8 @@ export const AgentSourceCheckpointScalarFieldEnum = {
   boundaryKnown: 'boundaryKnown',
   previousBoundaryEventId: 'previousBoundaryEventId',
   initialSourceOrder: 'initialSourceOrder',
-  sourceOrder: 'sourceOrder'
+  sourceOrder: 'sourceOrder',
+  validationCursor: 'validationCursor'
 } as const
 
 export type AgentSourceCheckpointScalarFieldEnum = (typeof AgentSourceCheckpointScalarFieldEnum)[keyof typeof AgentSourceCheckpointScalarFieldEnum]

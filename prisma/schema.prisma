@@ -780,6 +780,7 @@ model AgentRun {
 }
 
 model AgentSourceState {
+  authorityRevision Int @default(0) // SQLite triggers fence checkpoint validation between transactions
   lastSourceOrder Int @default(0) // Retained beyond event tombstones; canonical API-order high water
   connectionId   String          @id
   connection     AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
@@ -826,6 +827,7 @@ model AgentSourceCheckpoint {
   previousBoundaryEventId String?
   initialSourceOrder Int?
   sourceOrder Int?
+  validationCursor Json? // Bounded authority traversal and revision; never authorizes reads
   heads AgentSourceHead[]
 
   @@id([connectionId, scanId])
@@ -858,6 +860,7 @@ model AgentSourceBaseline {
 
   @@index([connectionId, sourceOrder])
   @@index([connectionId, headEventId])
+  @@index([connectionId, id])
 }
 
 model AgentEvent {

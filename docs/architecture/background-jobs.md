@@ -80,9 +80,10 @@ cycle. It reads at most ten issue-event pages per repository per cycle, shared
 between capture and verification. Its GitHub port uses the existing CLI budget
 and cancellation signal. Shutdown stops and drains this intake before stopping
 provider sessions or disconnecting the database. Each operational target also
-advances one bounded source-checkpoint backfill or compaction transaction; this
-uses retained database proof and makes no provider requests. This job does not
-evaluate events, activate saved triggers, or launch workspaces.
+advances one bounded source-checkpoint backfill, authority-validation, or
+compaction transaction; this uses retained database proof and makes no provider
+requests. This job does not evaluate events, activate saved triggers, or launch
+workspaces.
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,

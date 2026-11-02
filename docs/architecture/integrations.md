@@ -403,21 +403,31 @@ Legacy backfill reconstructs that boundary only from independent retained
 baseline/interval evidence; ambiguous proof remains intact. Partial or invalid
 checkpoints never serve historical lookups. Fully indexed intervals wait until
 all legacy finalized intervals have been indexed before conflict checks can
-publish them. Conflicting ordinals fail closed and retain their original proof.
+publish them. Promotion keyset-traverses at most 100 retained authority rows per
+transaction across finalized markers, heads, and baselines. Each row uses unique
+point joins, so repeated head identities or baseline pins cannot turn one row
+into an unbounded conflict probe. A persisted cursor counts the candidate's
+heads and records the connection authority revision. SQLite triggers advance
+that revision when consulted proof or ordinal claims change; validation restarts
+from the beginning at a new revision. The final chunk and publication share the
+ledger writer lock. Small intervals can publish during finalization; larger
+intervals remain INDEXED with their full pages until maintenance finishes.
+Continuous authority writes can defer completion, but cannot authorize partial
+validation. Conflicting ordinals fail closed and retain their original proof.
 Any rejected interval fences historical preparation and page compaction for that
 connection, since later pages may contain unexamined conflicting heads.
 Already-issued baseline IDs remain readable through `getBaseline`.
 
 Each operational target in a poll cycle also advances at most one legacy proof
-page in a serialized maintenance transaction. Until its entire interval is
-verified, historical baseline preparation falls back to retained
-CAPTURE/FINALIZED proof. After completion, maintenance can remove at most 100
-redundant CAPTURE/VERIFY pages per transaction. Proof pages for active scans,
-missing or malformed proof, and incomplete checkpoints remain retained.
-Checkpoint metadata can advance through backfill or become invalid without
-deleting those proof pages. FINALIZED markers, head checkpoints and issued
-baseline rows remain indefinitely, preserving both exact historical head lookups
-and `getBaseline(connectionId, id)` answers after event pruning and page
+page or one authority-validation chunk in a serialized maintenance transaction.
+Until its entire interval is verified, historical baseline preparation falls
+back to retained CAPTURE/FINALIZED proof. After completion, maintenance can
+remove at most 100 redundant CAPTURE/VERIFY pages per transaction. Proof pages
+for active scans, missing or malformed proof, and incomplete checkpoints remain
+retained. Checkpoint metadata can advance through backfill or become invalid
+without deleting those proof pages. FINALIZED markers, head checkpoints and
+issued baseline rows remain indefinitely, preserving both exact historical head
+lookups and `getBaseline(connectionId, id)` answers after event pruning and page
 compaction. No age or current-reference rule deletes that retained evidence: a
 provider baseline read may still be in flight before its pending row exists.
 Source pages contain compact provider/control identities, not full source text.

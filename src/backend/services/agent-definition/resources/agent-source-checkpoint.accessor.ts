@@ -12,11 +12,11 @@ type Tx = Prisma.TransactionClient;
 type DeletePages = (tx: Tx, ids: string[]) => Promise<{ count: number }>;
 
 async function promoteCheckpoint(tx: Tx, connectionId: string, scanId: string) {
-  const status = await checkpointPromotionStatus(tx, connectionId, scanId);
-  if (status) {
+  const data = await checkpointPromotionStatus(tx, connectionId, scanId);
+  if (data) {
     await tx.agentSourceCheckpoint.update({
       where: { connectionId_scanId: { connectionId, scanId } },
-      data: { status },
+      data,
     });
   }
 }
@@ -84,6 +84,50 @@ async function capture(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSou
   return true;
 }
 
+function invalidSkippedIdentity(position: number | undefined, verifiedCount: number) {
+  return (
+    (position !== undefined && position > verifiedCount) ||
+    (verifiedCount > 0 && position === undefined)
+  );
+}
+
+function verificationMatches(
+  checkpoint: AgentSourceCheckpoint,
+  page: AgentSourcePage,
+  ids: string[],
+  expected: string[],
+  positions: Map<string, number>
+) {
+  let matched = 0;
+  let started = false;
+  for (const id of ids) {
+    if (!expected[matched]) {
+      break;
+    }
+    if (!started && id !== expected[matched]) {
+      const position = positions.get(id);
+      if (invalidSkippedIdentity(position, checkpoint.verifiedCount)) {
+        return null;
+      }
+      continue;
+    }
+    started = true;
+    if (id !== expected[matched]) {
+      return null;
+    }
+    matched++;
+    if (
+      checkpoint.boundaryKnown &&
+      checkpoint.previousBoundaryEventId === null &&
+      checkpoint.verifiedCount + matched === checkpoint.entryCount &&
+      (id !== ids.at(-1) || page.nextPage !== null)
+    ) {
+      return null;
+    }
+  }
+  return matched;
+}
+
 async function verify(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSourcePage) {
   const evidence = agentSourcePageEvidenceSchema.parse(page.evidence);
   if (evidence.entries.length) {
@@ -106,28 +150,22 @@ async function verify(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSour
   ) {
     expected.push(checkpoint.previousBoundaryEventId);
   }
-  let matched = 0;
-  let started = false;
-  for (const id of evidence.ids) {
-    if (!expected[matched]) {
-      break;
-    }
-    if (!started && id !== expected[matched]) {
-      continue;
-    }
-    started = true;
-    if (id !== expected[matched]) {
-      return false;
-    }
-    matched++;
-    if (
-      checkpoint.boundaryKnown &&
-      checkpoint.previousBoundaryEventId === null &&
-      checkpoint.verifiedCount + matched === checkpoint.entryCount &&
-      (id !== evidence.ids.at(-1) || page.nextPage !== null)
-    ) {
-      return false;
-    }
+  // One bounded identity lookup distinguishes prior overlap from a gap or future head.
+  const observed = await tx.agentSourceHead.findMany({
+    where: {
+      connectionId: page.connectionId,
+      scanId: page.scanId,
+      providerEventId: { in: evidence.ids },
+    },
+    select: { providerEventId: true, position: true },
+  });
+  const positions = new Map(observed.map((head) => [head.providerEventId, head.position]));
+  if (checkpoint.previousBoundaryEventId) {
+    positions.set(checkpoint.previousBoundaryEventId, checkpoint.entryCount);
+  }
+  const matched = verificationMatches(checkpoint, page, evidence.ids, expected, positions);
+  if (matched === null) {
+    return false;
   }
   await tx.agentSourceCheckpoint.update({
     where: {
@@ -151,12 +189,6 @@ async function complete(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSo
     page.sourceOrder - checkpoint.executableCount !== checkpoint.initialSourceOrder ||
     !Number.isSafeInteger(page.sourceOrder)
   ) {
-    return false;
-  }
-  const count = await tx.agentSourceHead.count({
-    where: { connectionId: page.connectionId, scanId: page.scanId },
-  });
-  if (count !== checkpoint.entryCount) {
     return false;
   }
   await tx.agentSourceCheckpoint.update({
@@ -326,8 +358,8 @@ async function compactPages(
     const marker = await tx.agentSourcePage.findFirst({
       where: { connectionId, scanId, phase: 'FINALIZED' },
     });
-    const count = await tx.agentSourceHead.count({ where: { connectionId, scanId } });
-    if (marker?.sourceOrder !== checkpoint.sourceOrder || count !== checkpoint.entryCount) {
+    // Publication already counted immutable heads in bounded validation chunks.
+    if (marker?.sourceOrder !== checkpoint.sourceOrder) {
       continue;
     }
     ids.push(...pages.filter((page) => page.scanId === scanId).map((page) => page.id));

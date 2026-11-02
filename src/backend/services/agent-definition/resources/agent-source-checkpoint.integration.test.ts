@@ -211,7 +211,8 @@ it('bounds backfill to100 heads per call and uses indexed lookups after page com
     });
     expect(await db.prisma.agentSourceHead.count()).toBe(count);
   }
-  for (let i = 0; i < 5; i++) {
+  // Verification/finalization plus three bounded authority chunks and compaction.
+  for (let i = 0; i < 7; i++) {
     await source.maintainCheckpoints(fixture.connectionId);
   }
   expect(await db.prisma.agentSourcePage.count()).toBe(1);
@@ -445,6 +446,7 @@ it('backfills a previous boundary at the start of a new capture page without fen
     previousBoundaryEventId: 'anchor',
     initialSourceOrder: 0,
   });
+  await source.maintainCheckpoints(fixture.connectionId);
   expect(await db.prisma.agentSourcePage.count()).toBe(1);
   expect(
     (await source.prepareBaseline(fixture.connectionId, 'head-99')).boundary?.sourceOrder
