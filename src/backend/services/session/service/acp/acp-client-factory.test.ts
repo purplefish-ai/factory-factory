@@ -4,10 +4,15 @@ import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AcpEventProcessor } from '@/backend/services/session/service/lifecycle/acp-event-processor';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { AcpClientFactory } from './acp-client-factory';
+import type { AcpClientCallbacks } from './acp-connection';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpStartupSignal } from './acp-runtime-contracts';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
+import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
 import type { AcpClientOptions, PermissionPreset } from './types';
 
 const mocks = vi.hoisted(() => ({
@@ -53,6 +58,13 @@ vi.mock('./acp-connection', () => ({
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mocks.logger,
   getCurrentProcessEnv: () => ({ FROM_DEFAULT_PROVIDER: 'yes' }),
+}));
+
+vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
+  acpTraceLogger: { log: vi.fn() },
+}));
+vi.mock('@/backend/services/session/service/logging/session-file-logger.service', () => ({
+  sessionFileLogger: { log: vi.fn() },
 }));
 
 type MockChildProcess = EventEmitter & {
@@ -121,10 +133,7 @@ function createSignal(): RejectableSignal {
   return { promise, dispose: vi.fn(), reject: rejectSignal };
 }
 
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve(value: T): void;
-} {
+function createDeferred<T>() {
   let resolvePromise!: (value: T) => void;
   const promise = new Promise<T>((resolve) => {
     resolvePromise = resolve;
@@ -209,6 +218,137 @@ describe('AcpClientFactory', () => {
       readable: { pipeThrough: () => ({}) },
     });
   });
+
+  it.each(['active', 'browse'] as const)(
+    'resumes large hydrated history for %s without overflowing startup or duplicating messages',
+    async (purpose) => {
+      const child = createMockChildProcess({ exitAfterSigterm: true });
+      setupSuccessfulSpawn(child, { loadSession: true });
+      const supervisor = new AcpRuntimeSupervisor({
+        clientFactory: new AcpClientFactory(),
+        cancelPrompt: async () => false,
+      });
+      const domain = new SessionDomainService();
+      domain.injectCommittedUserMessage('session-1', 'Saved history');
+      let promptInFlight = false;
+      const processor = new AcpEventProcessor({
+        sessionDomainService: domain,
+        runtimeManager: unsafeCoerce({
+          getClient: () => supervisor.getClient('session-1'),
+          isSessionPromptInFlight: () => promptInFlight,
+        }),
+        sessionPermissionService: unsafeCoerce({ createPermissionBridge: () => undefined }),
+        sessionConfigService: unsafeCoerce({}),
+        onToolCallTimeout: () => undefined,
+      });
+      processor.setReplaySuppression('session-1', true);
+      const handlers = processor.createRuntimeEventHandler('session-1');
+      const onAcpEvent = vi.fn(handlers.onAcpEvent);
+      mocks.loadSession.mockImplementation(async () => {
+        const client = unsafeCoerce<AcpClientCallbacks>(mocks.connections[0]?.toClient({}));
+        for (let index = 0; index < 20_000; index++) {
+          await client.sessionUpdate({
+            sessionId: 'existing-thread',
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'Already loaded' },
+            },
+          });
+        }
+        await client.sessionUpdate({
+          sessionId: 'existing-thread',
+          update: { sessionUpdate: 'usage_update', used: 123, size: 1000 },
+        });
+        await client.sessionUpdate({
+          sessionId: 'existing-thread',
+          update: { sessionUpdate: 'plan', entries: [] },
+        });
+        return { configOptions: CONFIG_OPTIONS };
+      });
+
+      try {
+        const handle = await supervisor.getOrCreateClient(
+          'session-1',
+          defaultOptions({
+            provider: 'CODEX',
+            resumeProviderSessionId: 'existing-thread',
+            purpose,
+          }),
+          { ...handlers, onAcpEvent },
+          { workspaceId: 'workspace-1', workingDir: tmpdir() }
+        );
+        expect(handle.providerSessionId).toBe('existing-thread');
+        expect(handle.sessionCreationOutcome).toEqual({ kind: 'resumed' });
+        expect(onAcpEvent.mock.calls.map(([, event]) => event)).toEqual([
+          {
+            type: 'acp_session_update',
+            update: { sessionUpdate: 'usage_update', used: 123, size: 1000 },
+          },
+          { type: 'acp_session_update', update: { sessionUpdate: 'plan', entries: [] } },
+        ]);
+        expect(
+          domain
+            .getTranscriptSnapshot('session-1')
+            .map((entry) => entry.text ?? entry.message?.type)
+        ).toEqual(['Saved history', 'result']);
+        promptInFlight = true;
+        const client = unsafeCoerce<AcpClientCallbacks>(mocks.connections[0]?.toClient({}));
+        await client.sessionUpdate({
+          sessionId: 'existing-thread',
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Live response' },
+          },
+        });
+        processor.finishPromptTurn('session-1');
+        expect(domain.getTranscriptSnapshot('session-1').at(-1)?.message?.message?.content).toEqual(
+          [{ type: 'text', text: 'Live response' }]
+        );
+      } finally {
+        await supervisor.stopAllClients();
+        domain.clearAllSessions();
+      }
+    }
+  );
+
+  it.each([true, false])(
+    'preserves new conversation output with a replay filter (fallback: %s)',
+    async (fallback) => {
+      setupSuccessfulSpawn(undefined, { loadSession: true });
+      const handlers = { ...defaultHandlers(), consumeReplayEvent: () => true };
+      const emitText = async (text: string) => {
+        const client = unsafeCoerce<AcpClientCallbacks>(mocks.connections[0]?.toClient({}));
+        await client.sessionUpdate({
+          sessionId: 'provider-thread',
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text },
+          },
+        });
+      };
+      mocks.loadSession.mockImplementation(async () => {
+        await emitText('Failed history');
+        throw new Error('Missing conversation');
+      });
+      mocks.newSession.mockImplementation(async () => {
+        await emitText('New conversation');
+        return { sessionId: 'new-thread', configOptions: CONFIG_OPTIONS };
+      });
+      await new AcpClientFactory().createClient(
+        createParams({
+          handlers,
+          options: defaultOptions({ resumeProviderSessionId: fallback ? 'old-thread' : undefined }),
+        })
+      );
+      expect(handlers.onAcpEvent).toHaveBeenCalledExactlyOnceWith('session-1', {
+        type: 'acp_session_update',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'New conversation' },
+        },
+      });
+    }
+  );
 
   it.each(['', '   '])(
     'rejects unusable working directory %j before spawning',

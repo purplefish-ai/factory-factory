@@ -340,6 +340,8 @@ describe('ACP session negotiation integration', () => {
   );
 
   it('retains live work after Claude explicitly ends history replay before the load response', async () => {
+    const text: string[] = [];
+    const childTools: string[] = [];
     const fixture: SessionFixture = {
       ...CLAUDE_SESSION_FIXTURE,
       replayUpdates: [
@@ -359,8 +361,43 @@ describe('ACP session negotiation integration', () => {
         },
         {
           update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Historical reply' },
+          },
+        },
+        {
+          update: {
             sessionUpdate: 'session_info_update',
             _meta: { jetbrains: { air: { loadReplayEnd: true, goal: { status: 'active' } } } },
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'subagent_spawned',
+            subagentSessionId: 'live-child',
+            name: 'Live child',
+          },
+        },
+        {
+          sessionId: 'live-child',
+          update: {
+            sessionUpdate: 'tool_call',
+            toolCallId: 'live-tool',
+            title: 'Live tool',
+            status: 'completed',
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'subagent_state_update',
+            subagentSessionId: 'live-child',
+            state: 'completed',
+          },
+        },
+        {
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'Live reply after replay marker' },
           },
         },
         {
@@ -383,11 +420,30 @@ describe('ACP session negotiation integration', () => {
         adapterBinaryPath: binaryPath,
         resumeProviderSessionId: fixture.sessionId,
       },
-      {},
+      {
+        consumeReplayEvent: (_sid, event) =>
+          event.type === 'acp_subagent_tool_update' ||
+          (event.type === 'acp_session_update' &&
+            event.update.sessionUpdate === 'agent_message_chunk'),
+        onAcpEvent: (_sid, event) => {
+          if (event.type === 'acp_subagent_tool_update') {
+            childTools.push(event.subagentId);
+          }
+          if (
+            event.type === 'acp_session_update' &&
+            event.update.sessionUpdate === 'agent_message_chunk' &&
+            event.update.content.type === 'text'
+          ) {
+            text.push(event.update.content.text);
+          }
+        },
+      },
       defaultContext()
     );
 
     expect(manager.isSessionWorking('resumed')).toBe(true);
+    expect(text).toEqual(['Live reply after replay marker']);
+    expect(childTools).toEqual(['live-child']);
     expect(handle.nativeSessionTracker?.getBackgroundWork()).toEqual({
       backgroundTasks: [
         { id: '["claude-session-001","live-task"]', name: 'New live work', kind: 'task' },
@@ -397,6 +453,7 @@ describe('ACP session negotiation integration', () => {
     });
     expect(handle.nativeSessionTracker?.list({ limit: 10 }).subagents).toMatchObject([
       { id: 'finished-child', status: 'completed' },
+      { id: 'live-child', status: 'completed' },
     ]);
   });
 

@@ -64,8 +64,11 @@ describe('Codex resumed subagent transcripts', () => {
       expect(changed).toHaveBeenLastCalledWith({
         sessionId: 'root',
         subagentId: childId,
-        change: 'updated',
+        change: replay ? 'completed' : 'updated',
       });
+      if (replay) {
+        expect(changed.mock.calls.some(([event]) => event.change === 'updated')).toBe(false);
+      }
       finish(tracker, resumedId);
       if (replay) {
         tracker.completeHistoryReplay();

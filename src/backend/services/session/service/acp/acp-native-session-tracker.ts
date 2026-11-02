@@ -9,6 +9,7 @@ import {
   subagentTranscriptUpdateSchema,
   getSubagentThreadId,
 } from '@/shared/acp-protocol/subagents';
+import { isAcpHistoryReplayEnd } from './acp-history-replay';
 import { AcpSubagentBrowseError } from './acp-runtime-errors';
 import { normalizeSessionUpdateMessage } from './acp-stream-normalizer';
 import { AcpTargetedStopControls, type AcpStopDispatch } from './acp-targeted-stop-controls';
@@ -264,10 +265,7 @@ export class AcpNativeSessionTracker {
       return true;
     }
     if (sessionId === this.rootSessionId) {
-      if (
-        update.sessionUpdate === 'session_info_update' &&
-        airMetadata(update)?.loadReplayEnd === true
-      ) {
+      if (isAcpHistoryReplayEnd(update)) {
         this.completeHistoryReplay();
         return false;
       }
@@ -685,6 +683,11 @@ export class AcpNativeSessionTracker {
   }
 
   private changed(subagentId: string, change: SubagentsChangedParams['change']): void {
+    // Startup publishes the created/completed invalidations after history is loaded.
+    // Per-chunk invalidations add no state and can overflow its bounded event buffer.
+    if (this.replayingHistory && change === 'updated') {
+      return;
+    }
     if (this.rootSessionId) {
       this.callbacks.onSubagentsChanged?.({ sessionId: this.rootSessionId, subagentId, change });
     }

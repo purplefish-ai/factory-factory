@@ -37,6 +37,36 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it('retains large child replay without per-chunk invalidations and resumes live notifications', () => {
+    const onSubagentsChanged = vi.fn();
+    const tracker = new AcpNativeSessionTracker({ onSubagentsChanged });
+    tracker.setRootSessionId('root');
+    tracker.beginHistoryReplay();
+    spawn(tracker);
+    for (let index = 0; index < 20_000; index++) {
+      text(tracker, 'child', 'agent', 'x');
+    }
+    tracker.completeHistoryReplay();
+
+    const updates = tracker.read({ subagentId: 'child', limit: 10 }).updates;
+    expect(updates).toHaveLength(20_000);
+    expect(updates.at(-1)).toMatchObject({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'x' },
+    });
+    expect(onSubagentsChanged).toHaveBeenCalledTimes(2);
+    expect(onSubagentsChanged.mock.calls.map(([event]) => event)).toEqual([
+      { sessionId: 'root', subagentId: 'child', change: 'created' },
+      { sessionId: 'root', subagentId: 'child', change: 'completed' },
+    ]);
+    text(tracker, 'child', 'agent', 'live');
+    expect(onSubagentsChanged).toHaveBeenLastCalledWith({
+      sessionId: 'root',
+      subagentId: 'child',
+      change: 'updated',
+    });
+  });
+
   it('forwards child tool updates, but not root or text updates, to tool observers', () => {
     const onSubagentToolUpdate = vi.fn();
     const tracker = new AcpNativeSessionTracker({ onSubagentToolUpdate });

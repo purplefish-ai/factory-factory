@@ -9,7 +9,6 @@ import {
   type AcpRuntimeEvent,
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
-  type AcpSessionUpdateEvent,
 } from '@/backend/services/session/service/acp';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
@@ -17,6 +16,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { isReplayExemptSessionUpdate, isTranscriptReplayEvent } from './acp-replay-policy';
 import { AcpThoughtBuffer } from './acp-thought-buffer';
 import { getAcpWorkState } from './session-work-state';
 import type { SessionConfigService } from './session.config.service';
@@ -34,22 +34,6 @@ type PendingAcpToolCall = {
   acpKind?: string;
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
-
-/**
- * ACP updates that report current provider state rather than transcript history,
- * so their deltas pass replay suppression during idle history loading. The
- * translator emits only validated warning notices for `session_info_update`.
- * A `usage_update` becomes a non-rendering occupancy `result`; hydrated history
- * has no result rows, and the provider sends the snapshot at attach.
- * Plan snapshots restore the current checklist, including explicit empty lists.
- */
-function isReplayExemptSessionUpdate(update: AcpSessionUpdateEvent['update']): boolean {
-  return (
-    update.sessionUpdate === 'session_info_update' ||
-    update.sessionUpdate === 'usage_update' ||
-    update.sessionUpdate === 'plan'
-  );
-}
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
 const DEFAULT_TEXT_FLUSH_INTERVAL_MS = 25;
@@ -143,7 +127,7 @@ export class AcpEventProcessor {
 
   createRuntimeEventHandler(
     sessionId: string
-  ): Pick<AcpRuntimeEventHandlers, 'permissionBridge' | 'onAcpEvent'> {
+  ): Pick<AcpRuntimeEventHandlers, 'permissionBridge' | 'onAcpEvent' | 'consumeReplayEvent'> {
     const permissionBridge = this.sessionPermissionService.createPermissionBridge(
       sessionId,
       this.sessionToWorkflow.get(sessionId)
@@ -151,6 +135,14 @@ export class AcpEventProcessor {
 
     return {
       permissionBridge,
+      consumeReplayEvent: (sid, event) => {
+        const suppress =
+          this.suppressAcpReplayForSession.has(sid) && isTranscriptReplayEvent(event);
+        if (suppress && event.type === 'acp_session_update') {
+          this.acpEventTranslator.translateSessionUpdate(event.update, sid);
+        }
+        return suppress;
+      },
       onAcpEvent: (
         sid: string,
         event: AcpRuntimeEvent,
