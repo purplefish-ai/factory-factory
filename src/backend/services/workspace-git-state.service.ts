@@ -76,6 +76,8 @@ interface CacheEntry {
 
 interface SnapshotCalculation {
   generation: number;
+  failed: boolean;
+  drained: Promise<void>;
   promise: Promise<WorkspaceGitStateSnapshot>;
   refresh?: { watcher: WatcherRecord; promise: Promise<WorkspaceGitStateSnapshot> };
 }
@@ -246,25 +248,16 @@ export class WorkspaceGitStateService {
     const normalizedInput = { ...input, worktreePath: path.resolve(input.worktreePath) };
     const watcher = this.ensureWatcher(normalizedInput.worktreePath);
     const key = this.cacheKey(normalizedInput);
-    const cached = this.cache.get(key);
+    const cached = this.getCachedSnapshot(normalizedInput);
     if (cached) {
-      const ttl = isDegraded(cached.snapshot)
-        ? DEGRADED_TTL_MS
-        : watcher.mode === 'healthy'
-          ? Number.POSITIVE_INFINITY
-          : FALLBACK_TTL_MS;
-      if (this.now() - cached.snapshot.computedAt < ttl) {
-        return Promise.resolve(cached.snapshot);
-      }
+      return Promise.resolve(cached);
     }
-    if (cached) {
-      this.cache.delete(key);
-    }
+    this.cache.delete(key);
 
     const existing = this.inFlight.get(key);
     const generation = this.generations.get(key) ?? 0;
     if (existing !== undefined) {
-      if (existing.generation === generation) {
+      if (existing.generation === generation && !existing.failed) {
         return existing.promise;
       }
       // Keep physical work registered until it settles. All readers following
@@ -272,37 +265,46 @@ export class WorkspaceGitStateService {
       if (existing.refresh?.watcher !== watcher) {
         existing.refresh = {
           watcher,
-          promise: existing.promise.then(
-            (snapshot) =>
-              this.watchers.get(normalizedInput.worktreePath) === watcher
-                ? this.getSnapshot(normalizedInput)
-                : snapshot,
-            (error: unknown) => {
-              if (this.watchers.get(normalizedInput.worktreePath) === watcher) {
-                return this.getSnapshot(normalizedInput);
-              }
-              throw error;
-            }
+          promise: existing.drained.then(() =>
+            this.watchers.get(normalizedInput.worktreePath) === watcher
+              ? this.getSnapshot(normalizedInput)
+              : existing.promise
           ),
         };
       }
       return existing.refresh.promise;
     }
 
-    const calculation = watcher.setup
-      .then(() => this.calculate(normalizedInput))
+    const run = watcher.setup.then(() => this.calculate(normalizedInput));
+    const outcome = run
+      .then((started) => started.promise)
       .then((snapshot) => {
         if ((this.generations.get(key) ?? 0) === generation) {
           this.cache.set(key, { snapshot });
         }
         return snapshot;
-      })
-      .finally(() => {
-        this.inFlight.delete(key);
-        this.generations.delete(key);
       });
-    this.inFlight.set(key, { generation, promise: calculation });
-    return calculation;
+    const calculation: SnapshotCalculation = {
+      generation,
+      failed: false,
+      promise: outcome.then(
+        (snapshot) => calculation.drained.then(() => snapshot),
+        (error: unknown) => {
+          calculation.failed = true;
+          throw error;
+        }
+      ),
+      drained: Promise.resolve(),
+    };
+    calculation.drained = Promise.allSettled([
+      outcome,
+      run.then((started) => started.drained),
+    ]).then(() => {
+      this.inFlight.delete(key);
+      this.generations.delete(key);
+    });
+    this.inFlight.set(key, calculation);
+    return calculation.promise;
   }
 
   /**
@@ -600,29 +602,40 @@ export class WorkspaceGitStateService {
     this.activateFallback(record);
   }
 
-  private async calculate(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
+  private calculate(input: WorkspaceGitStateInput): {
+    promise: Promise<WorkspaceGitStateSnapshot>;
+    drained: Promise<void>;
+  } {
     const limitGit = pLimit(SNAPSHOT_GIT_CONCURRENCY);
-    const runGit: RunGit = (args, cwd) => limitGit(() => this.runGit(args, cwd));
+    const commands: Promise<ExecResult>[] = [];
+    const runGit: RunGit = (args, cwd) => {
+      const command = limitGit(() => this.runGit(args, cwd));
+      commands.push(command);
+      return command;
+    };
     const sections = [
       runGit(['--no-optional-locks', 'status', '--porcelain'], input.worktreePath),
       this.calculateBase(input, runGit),
       this.calculateUpstream(input.worktreePath, runGit),
     ] as const;
-    // A rejected command must not release ownership while sibling Git work
-    // continues. Drain every section before publishing or rejecting this run.
-    await Promise.allSettled(sections);
-    const [statusResult, base, upstream] = await Promise.all(sections);
-    const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
-    const status: WorkspaceGitStateSnapshot['status'] = {
-      files: statusFiles,
-      hasUncommitted: statusFiles.length > 0,
-    };
-    if (statusResult.code !== 0) {
-      status.error = commandError(statusResult);
-    }
-
-    base.stats.hasUncommitted = status.hasUncommitted;
-    return { ...input, computedAt: this.now(), status, base, upstream };
+    const promise = Promise.all(sections).then(([statusResult, base, upstream]) => {
+      const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
+      const status: WorkspaceGitStateSnapshot['status'] = {
+        files: statusFiles,
+        hasUncommitted: statusFiles.length > 0,
+      };
+      if (statusResult.code !== 0) {
+        status.error = commandError(statusResult);
+      }
+      base.stats.hasUncommitted = status.hasUncommitted;
+      return { ...input, computedAt: this.now(), status, base, upstream };
+    });
+    // Report errors immediately, but keep ownership until every section and
+    // its started commands settle. A failed base diff can outlive its section.
+    const drained = Promise.allSettled(sections)
+      .then(() => Promise.allSettled(commands))
+      .then(() => undefined);
+    return { promise, drained };
   }
 
   private async calculateBase(
@@ -635,7 +648,6 @@ export class WorkspaceGitStateService {
       runGit(diffArgs, input.worktreePath),
       mergeBase ? runGit(['diff', '--name-status', mergeBase], input.worktreePath) : null,
     ] as const;
-    await Promise.allSettled(diffs);
     const [numstatResult, nameStatusResult] = await Promise.all(diffs);
     const base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats } = {
       mergeBase,

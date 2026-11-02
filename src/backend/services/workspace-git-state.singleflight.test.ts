@@ -106,9 +106,13 @@ describe('workspace Git invalidation singleflight', () => {
     expect(await third).toBe(service.getCachedSnapshot(input));
     service.stop();
   });
-  it.each(['status', 'numstat'])(
-    'keeps ownership until sibling commands drain after a rejected %s command',
-    async (failure) => {
+  it.each([
+    ['status', true],
+    ['numstat', true],
+    ['status', false],
+  ] as const)(
+    'rejects %s immediately while retaining ownership (invalidate: %s)',
+    async (failure, invalidate) => {
       const { service, runGit, releases } = createHarness();
       const execute = runGit.getMockImplementation();
       let releaseSibling: ((value: ExecResult) => void) | undefined;
@@ -144,13 +148,15 @@ describe('workspace Git invalidation singleflight', () => {
         return error;
       });
       await setImmediate();
-      service.invalidate(input.worktreePath);
+      if (invalidate) {
+        service.invalidate(input.worktreePath);
+      }
       const second = service.getSnapshot(input);
       await setImmediate();
-      expect(settled).toBe(false);
+      expect(settled).toBe(true);
       expect(releases).toHaveLength(0);
-      releaseSibling?.({ ...cleanStatus, stdout: failure === 'status' ? 'base\n' : '' });
       expect(await first).toEqual(new Error('spawn failed'));
+      releaseSibling?.({ ...cleanStatus, stdout: failure === 'status' ? 'base\n' : '' });
       await setImmediate();
       expect(releases).toHaveLength(1);
       releases[0]?.(cleanStatus);
