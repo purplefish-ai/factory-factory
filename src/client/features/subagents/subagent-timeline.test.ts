@@ -85,6 +85,55 @@ describe('mergeSubagentTimeline', () => {
     ]);
   });
 
+  // Known bug: session_replay_batch agent_message events carry no timestamp, and
+  // the backend never sets AgentMessage.timestamp, so the chat reducer stamps every
+  // replayed agent message with the reload time (createClaudeMessage). The merge
+  // then treats all agent rows as "after" every lifecycle event, so after a reload
+  // or session switch all sub-agent rows bunch up before the first agent reply.
+  // Fixing it needs the replay builder to send the transcript timestamp
+  // (src/backend/services/session/service/store/session-replay-builder.ts) and the
+  // reducer to keep it, which is outside this feature.
+  it.fails('places lifecycle entries in their own turn after a session reload', () => {
+    const reloadedAt = '2026-10-31T09:00:00.000Z';
+    const user = (id: string, timestamp: string): ChatMessage => ({
+      id,
+      source: 'user',
+      text: id,
+      timestamp,
+      order: 0,
+    });
+    // Shape produced by chatReducer for replayed history: user rows keep their
+    // server timestamp, agent rows get the replay time and no provider timestamp.
+    const replayed: ChatMessage[] = [
+      user('first ask', '2026-10-30T12:00:00Z'),
+      text('first reply', reloadedAt),
+      user('second ask', '2026-10-30T12:10:00Z'),
+      text('second reply', reloadedAt),
+    ];
+    const secondTurnAgent: SubagentSummary = {
+      ...agent,
+      id: 'second',
+      name: 'Second turn helper',
+      createdAt: '2026-10-30T12:10:01Z',
+      completedAt: '2026-10-30T12:10:05Z',
+      updatedAt: '2026-10-30T12:10:05Z',
+    };
+    expect(
+      mergeSubagentTimeline(replayed, [agent, secondTurnAgent]).map(
+        (message) => message.text ?? message.id
+      )
+    ).toEqual([
+      'first ask',
+      'Audit capture fix started working',
+      'Audit capture fix finished',
+      'first reply',
+      'second ask',
+      'Second turn helper started working',
+      'Second turn helper finished',
+      'second reply',
+    ]);
+  });
+
   it.each(['failed', 'cancelled', 'interrupted'] as const)(
     'preserves %s outcomes and uses a known terminal update time',
     (status) => {

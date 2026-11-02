@@ -10,6 +10,7 @@ import { MessageState } from '@/shared/acp-protocol';
 import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import { sessionResumeFences } from './session-resume-fence';
 import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from './store/session-local-transcript';
@@ -451,6 +452,15 @@ export class SessionDomainService extends EventEmitter {
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
+    // An exit that does not preserve the queue discards it; return typed human
+    // input for retry instead of silently dropping it. Background and notification messages own
+    // their own recovery.
+    const discardedHumanMessages = options?.preserveQueuedInput
+      ? []
+      : store.queue.filter(
+          (message) =>
+            !(message.source || message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX))
+        );
     handleProcessExit({
       store,
       code,
@@ -463,6 +473,14 @@ export class SessionDomainService extends EventEmitter {
         this.publisher.forwardSnapshot(targetStore, options);
       },
     });
+
+    const notSentReason =
+      code === 0
+        ? 'Message was not sent because the agent process exited.'
+        : 'Message was not sent because the agent process exited unexpectedly.';
+    for (const message of discardedHumanMessages) {
+      this.failMessage(sessionId, message, notSentReason);
+    }
 
     if (pendingRequest) {
       this.emit('pending_request_changed', {

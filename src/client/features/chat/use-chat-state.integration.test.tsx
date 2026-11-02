@@ -374,6 +374,28 @@ describe('useChatState rejected message recovery', () => {
 
     harness.cleanup();
   });
+
+  it('drops attachment updates from a paste that finishes after switching sessions', async () => {
+    const harness = renderChatState('session-A');
+    await flushEffects();
+    try {
+      // A slow paste/drop/upload holds the setter from the session it started in.
+      const setterFromSessionA = harness.chatRef.current?.setInputAttachments;
+
+      actFlushSync(() => harness.rerenderSession('session-B'));
+      await flushEffects();
+
+      actFlushSync(() => setterFromSessionA?.((previous) => [...previous, createAttachment()]));
+      await flushEffects();
+
+      expect(harness.chatRef.current?.inputAttachments).toEqual([]);
+      expect(sessionStorage.getItem('chat-attachments-session-B') ?? '').not.toContain(
+        'secret.txt'
+      );
+    } finally {
+      harness.cleanup();
+    }
+  });
 });
 
 describe('useChatState plan mode persistence', () => {

@@ -440,7 +440,11 @@ export function InlineWorkspaceForm({
   };
 
   return (
-    <Card className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out">
+    <Card
+      // The setup card owns progress; retain the composer for failure recovery.
+      hidden={isStandardLaunchPending(isCreating, mode)}
+      className="shrink-0 border-dashed border-primary/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150 motion-safe:ease-out"
+    >
       <CardContent className="p-2 space-y-2" onKeyDown={handleKeyDown}>
         <DraftPersistenceWarning
           message={recovery.persistenceError}
@@ -589,6 +593,10 @@ export function InlineWorkspaceForm({
       </CardContent>
     </Card>
   );
+}
+
+function isStandardLaunchPending(isCreating: boolean, mode: 'STANDARD' | 'PERIODIC_TASK') {
+  return isCreating && mode === 'STANDARD';
 }
 
 function getLaunchDisabledReason(restoring: boolean, workspaceOptions: boolean, reason?: string) {

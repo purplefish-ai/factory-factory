@@ -177,19 +177,27 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     setInputAttachmentsState(restored);
   }, [dbSessionId]);
 
-  // Update attachments and keep sessionStorage in sync.
-  const setInputAttachments = useCallback((update: React.SetStateAction<MessageAttachment[]>) => {
-    const attachments = typeof update === 'function' ? update(inputAttachmentsRef.current) : update;
-    inputAttachmentsRef.current = attachments;
-    setInputAttachmentsState(attachments);
-    if (attachments.length === 0) {
-      setInputDraftGeneration((generation) => generation + 1);
-    }
-    const persistenceResult = persistInputAttachments(dbSessionIdRef.current, attachments);
-    if (!persistenceResult.ok) {
-      showAttachmentPersistenceError(persistenceResult.operation);
-    }
-  }, []);
+  // Update attachments and keep sessionStorage in sync. Bound to the session it was
+  // rendered for, so a slow paste/drop/upload cannot land in a later session.
+  const setInputAttachments = useCallback(
+    (update: React.SetStateAction<MessageAttachment[]>) => {
+      if (sessionContextRef.current !== sessionContext) {
+        return;
+      }
+      const attachments =
+        typeof update === 'function' ? update(inputAttachmentsRef.current) : update;
+      inputAttachmentsRef.current = attachments;
+      setInputAttachmentsState(attachments);
+      if (attachments.length === 0) {
+        setInputDraftGeneration((generation) => generation + 1);
+      }
+      const persistenceResult = persistInputAttachments(dbSessionIdRef.current, attachments);
+      if (!persistenceResult.ok) {
+        showAttachmentPersistenceError(persistenceResult.operation);
+      }
+    },
+    [sessionContext]
+  );
 
   // Clear attachments from both state and persistence.
   const clearInputAttachments = useCallback(() => {

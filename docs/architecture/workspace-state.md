@@ -138,6 +138,10 @@ Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
 duplicate submissions. Success clears only the submitted revision; a late
 response cannot clear or close a newer draft or a composer in another project.
+Standard workspace launches collapse the composer immediately while the
+optimistic setup card shows progress in Working. If the standard workspace
+creation request fails, its optimistic card is removed and the composer returns
+with its retained draft and error.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
@@ -262,6 +266,13 @@ discarded until those descendants close their pipes, so writing after
 provisioning does not interrupt them. Persistent background commands should
 redirect output if it needs to remain available after startup.
 
+Terminals and setup, run, postRun and cleanup scripts run the user's commands,
+so they omit the variables Factory Factory's launchers set for its own backend
+(`NODE_ENV`, `DATABASE_PATH`, `BACKEND_PORT`, and the rest listed in
+`src/backend/lib/user-process-env.ts`). Otherwise `NODE_ENV=production` from
+`ff serve` or the desktop app would make `npm install` skip devDependencies and
+run dev servers in production mode. Agent sessions are not covered.
+
 The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
 `postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
 written only by `workspace-run-script.accessor.ts`; reads flatten it back under
@@ -287,6 +298,12 @@ stops, exits, and restarts until they unsubscribe or the workspace is archived
 or deleted. The postRun command is spawned only if its run script is still
 active after tunnel startup, neither exited nor being stopped, because stop and
 exit cleanup would not see a postRun spawned later.
+
+Each dev-logs and post-run-logs connection first receives the retained output
+buffer, when non-empty, as one `{ type: 'output', data, replay: true }` frame.
+The buffer repeats output a reconnecting client already shows, so on a reconnect
+`useLogStream` replaces its output with the replay rather than appending it;
+with no replay frame (e.g. after a backend restart) it keeps the earlier output.
 
 ## Provider defaults
 

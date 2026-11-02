@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { type ComponentProps } from 'react';
+import { type ComponentProps, useState } from 'react';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   createAssistantMessage,
@@ -298,6 +298,62 @@ export const QueuedMessageSteering: Story = {
       backgroundTasks: [],
       runningSubagents: 0,
       activeGoals: 0,
+    },
+  },
+};
+
+function QueueHandoffPreview(args: ComponentProps<typeof ChatTranscript>) {
+  const [queued, setQueued] = useState(true);
+  return (
+    <div className="h-full flex flex-col">
+      <button
+        type="button"
+        className="self-start text-sm underline mb-2"
+        onClick={() => setQueued(!queued)}
+      >
+        {queued ? 'Dequeue message' : 'Queue message again'}
+      </button>
+      <div className="flex-1 min-h-0">
+        <StartupPreview
+          {...args}
+          queuedMessageIds={queued ? new Set([startupMessage.id]) : new Set()}
+          onSteerQueuedMessage={() => setQueued(false)}
+        />
+      </div>
+    </div>
+  );
+}
+
+export const QueuedMessageHandoff: Story = {
+  ...QueuedMessageSteering,
+  render: (args) => <QueueHandoffPreview {...args} />,
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story:
+          'Dequeue or steer to preview the controls collapsing while the message stays mounted. Respects reduced motion.',
+      },
+    },
+  },
+};
+
+const queuedCommand = createUserMessage('/compact');
+export const QueuedCommandWithoutActions: Story = {
+  render: (args) => <StartupPreview {...args} />,
+  args: {
+    messages: [queuedCommand],
+    queuedMessageIds: new Set([queuedCommand.id]),
+    onSteerQueuedMessage: () => undefined,
+    loadingSession: false,
+    running: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A queued command without a cancel callback reserves no space for ineligible steering controls.',
+      },
     },
   },
 };

@@ -94,6 +94,45 @@ export const TwoSubagents: Story = {
   },
 };
 
+export const RememberedExpansion: Story = {
+  render: (args) => {
+    const [sessionId, setSessionId] = useState('remembered-story-a');
+    const [visible, setVisible] = useState(true);
+    return (
+      <div>
+        <div className="flex gap-3">
+          <button type="button" onClick={() => setSessionId('remembered-story-a')}>
+            Session A
+          </button>
+          <button type="button" onClick={() => setSessionId('remembered-story-b')}>
+            Session B
+          </button>
+          <button type="button" onClick={() => setVisible(!visible)}>
+            Toggle transcript
+          </button>
+        </div>
+        {visible && <SessionActivityIndicator {...args} sessionId={sessionId} />}
+      </div>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = () => canvas.getByRole('button', { name: '3 sub-agents running' });
+    if (trigger().getAttribute('aria-expanded') === 'true') {
+      await userEvent.click(trigger());
+    }
+    await userEvent.click(trigger());
+    await expect(canvas.getByRole('button', { name: /Review code/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Toggle transcript' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Toggle transcript' }));
+    await expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(canvas.getByRole('button', { name: 'Session B' }));
+    await expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(canvas.getByRole('button', { name: 'Session A' }));
+    await expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+  },
+};
+
 export const Dark: Story = {
   globals: { theme: 'dark' },
 };

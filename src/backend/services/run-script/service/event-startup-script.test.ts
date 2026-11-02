@@ -302,3 +302,57 @@ it('keeps the deadline active while output persistence drains after foreground c
     await task;
   }
 });
+// Pipes split output at arbitrary byte offsets; a script killed mid-character
+// leaves an incomplete sequence that must surface as U+FFFD, not vanish.
+it('decodes UTF-8 split across chunks and flushes partial output on stream end', async () => {
+  const h = setup();
+  const task = executeEventStartupScript({
+    cwd: '/test',
+    args: ['-c', 'task'],
+    timeoutMs: 10_000,
+    ...h.ports,
+  });
+  await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+  const line = Buffer.from('✓ installed\n');
+  const truncated = Buffer.from('warn é');
+  h.child.stdout.emit('data', line.subarray(0, 1));
+  h.child.stdout.emit('data', line.subarray(1));
+  h.child.stdout.emit('end');
+  h.child.stderr.emit('data', truncated.subarray(0, -1));
+  h.child.stderr.emit('end');
+  h.child.emit('close', 1, null);
+
+  await expect(task).resolves.toEqual({ success: false, errorMessage: 'warn �' });
+  const streamed = h.ports.appendOutput.mock.calls.map((call) => String(call.at(0))).join('');
+  expect(streamed).toBe('✓ installed\nwarn �');
+});
+// A desktop/`ff serve` backend runs with NODE_ENV=production; a setup script
+// like `npm install` inheriting it silently omits devDependencies.
+it("runs event setup scripts without Factory Factory's own runtime env", async () => {
+  const h = setup();
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('DATABASE_PATH', '/Users/me/factory-factory/data.db');
+  vi.stubEnv('BACKEND_PORT', '3001');
+  vi.stubEnv('MY_PROJECT_TOKEN', 'keep-me');
+  try {
+    const task = executeEventStartupScript({
+      cwd: '/test',
+      args: ['-c', 'npm install'],
+      timeoutMs: 10_000,
+      ...h.ports,
+    });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    h.child.emit('close', 0, null);
+    await expect(task).resolves.toEqual({ success: true });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+
+  const env = spawn.mock.calls.at(-1)?.[2]?.env as NodeJS.ProcessEnv;
+  expect(env.WORKSPACE_PATH).toBe('/test');
+  expect(env.MY_PROJECT_TOKEN).toBe('keep-me');
+  expect(env.PATH).toBe(process.env.PATH);
+  expect(env).not.toHaveProperty('NODE_ENV');
+  expect(env).not.toHaveProperty('DATABASE_PATH');
+  expect(env).not.toHaveProperty('BACKEND_PORT');
+});

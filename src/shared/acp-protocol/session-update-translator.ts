@@ -1,6 +1,6 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
-import type { SessionDeltaEvent } from './protocol';
+import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
 import type { SubagentTranscriptUpdate } from './subagents';
 
 export type AcpTranslationLogger = {
@@ -42,6 +42,11 @@ const MAX_TERMINALS_PER_TOOL = 16;
 const MAX_TRACKED_TOOL_CALLS = 1024;
 const toolInputSchema = z.record(z.string(), z.unknown());
 const terminalOutputSchema = z.object({ data: z.string(), terminal_id: z.string().min(1) });
+const acpImageBlockSchema = z.object({
+  type: z.literal('image'),
+  data: z.string().min(1),
+  mimeType: z.string().min(1),
+});
 const terminalReferenceSchema = z.object({
   type: z.literal('terminal'),
   terminalId: z.string().min(1),
@@ -416,7 +421,13 @@ export class AcpEventTranslator {
     content: unknown,
     rawOutput: unknown,
     terminalOutput: string
-  ): string {
+  ): ToolResultContentValue {
+    // Image results (Read of an image file, MCP screenshots) keep the same
+    // text/image item shape as provider history replay instead of base64 JSON text.
+    const items = this.extractToolResultItems(content);
+    if (items) {
+      return items;
+    }
     const contentText = this.extractContentText(content);
     if (contentText.length > 0) {
       return contentText;
@@ -497,6 +508,32 @@ export class AcpEventTranslator {
     }
 
     return update.content.text;
+  }
+
+  private extractToolResultItems(content: unknown): Exclude<ToolResultContentValue, string> | null {
+    if (!Array.isArray(content)) {
+      return null;
+    }
+    const items: Exclude<ToolResultContentValue, string> = [];
+    let hasImage = false;
+    for (const entry of content) {
+      const block = this.getObject(entry);
+      const inner = block?.type === 'content' ? block.content : entry;
+      const image = acpImageBlockSchema.safeParse(inner);
+      if (image.success) {
+        hasImage = true;
+        items.push({
+          type: 'image',
+          source: { type: 'base64', data: image.data.data, media_type: image.data.mimeType },
+        });
+        continue;
+      }
+      const text = this.getObject(inner);
+      if (text?.type === 'text' && typeof text.text === 'string' && text.text.length > 0) {
+        items.push({ type: 'text', text: text.text });
+      }
+    }
+    return hasImage ? items : null;
   }
 
   private extractContentText(content: unknown): string {

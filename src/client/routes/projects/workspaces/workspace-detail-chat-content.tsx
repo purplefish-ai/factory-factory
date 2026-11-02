@@ -256,6 +256,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
+        sessionId={props.sessionId}
         thinkingInFooter
         header={createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
           retryAvailability: props.retryAvailability,

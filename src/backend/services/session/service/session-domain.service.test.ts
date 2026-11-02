@@ -402,6 +402,76 @@ describe('SessionDomainService', () => {
     }
   );
 
+  it('keeps a human message queued behind a crashed turn recoverable instead of silently dropping it', () => {
+    // The user queued a follow-up while the agent was working; then the agent
+    // process crashed. The queue is discarded, but the typed text must come back
+    // to the user as a failed message they can retry.
+    sessionDomainService.enqueue('s1', {
+      id: 'follow-up',
+      text: 'also update the README',
+      timestamp: '2026-02-14T00:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    publishToSessionMock.mockClear();
+
+    sessionDomainService.markProcessExit('s1', 1);
+
+    expect(sessionDomainService.getQueueSnapshot('s1')).toEqual([]);
+    expect(publishToSessionMock).toHaveBeenCalledWith('s1', {
+      type: 'session_delta',
+      data: expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'follow-up',
+        newState: 'FAILED',
+        userMessage: expect.objectContaining({ text: 'also update the README' }),
+      }),
+    });
+    // A reload within the rejection window still restores the text.
+    const { replayEvents } = sessionDomainService.prepareLoad(
+      's1',
+      sessionDomainService.getRuntimeSnapshot('s1')
+    );
+    expect(replayEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'follow-up',
+        newState: 'FAILED',
+      })
+    );
+  });
+
+  it('fails queued human messages without calling a clean exit unexpected', () => {
+    sessionDomainService.enqueue('s1', {
+      id: 'follow-up',
+      text: 'also update the README',
+      timestamp: '2026-02-14T00:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    publishToSessionMock.mockClear();
+
+    sessionDomainService.markProcessExit('s1', 0);
+
+    expect(publishToSessionMock).toHaveBeenCalledWith('s1', {
+      type: 'session_delta',
+      data: expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'follow-up',
+        newState: 'FAILED',
+        errorMessage: 'Message was not sent because the agent process exited.',
+      }),
+    });
+  });
+
   it('returns transcript snapshot sorted by order', () => {
     sessionDomainService.commitSentUserMessageAtOrder(
       's1',

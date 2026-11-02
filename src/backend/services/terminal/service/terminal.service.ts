@@ -15,6 +15,8 @@ import { createRequire } from 'node:module';
 import type { IPty } from 'node-pty';
 import pidusage from 'pidusage';
 import { toError } from '@/backend/lib/error-utils';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('terminal');
@@ -321,8 +323,9 @@ export class TerminalService {
       // Generate unique terminal ID
       const terminalId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+      const userEnv = buildUserProcessEnv(configService.getChildProcessEnv());
       // Determine shell to use
-      const shellPath = shell || process.env.SHELL || '/bin/bash';
+      const shellPath = shell || userEnv.SHELL || '/bin/bash';
       const shellArgs: string[] = [];
 
       logger.info('Creating terminal', {
@@ -341,7 +344,7 @@ export class TerminalService {
         rows,
         cwd: workingDir,
         env: {
-          ...process.env,
+          ...userEnv,
           TERM: 'xterm-256color',
           COLORTERM: 'truecolor',
         },

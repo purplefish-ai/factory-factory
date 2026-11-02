@@ -497,6 +497,11 @@ later explicit retry may repeat prior effects. The host requests
 prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
 input is removed from the queue even if stopping advances the generation while
 the request settles, preventing a delivered steer from being replayed on resume.
+Queue-to-transcript handoffs publish the consumed input together with its
+committed transcript entries; steering and batched sends never publish a partial
+snapshot between removal and commit. The chat keeps each message row mounted and
+briefly collapses its queued controls when dispatched, respecting reduced-motion
+preferences.
 
 Codex uses native `turn/steer` without cancelling the current turn. Claude's
 native steering may pre-empt generation or background a foreground tool; neither

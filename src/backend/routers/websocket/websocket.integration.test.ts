@@ -496,7 +496,7 @@ describe('websocket integration', () => {
     openSockets.add(ws);
 
     await vi.waitFor(() => {
-      expect(messages).toContainEqual({ type: 'output', data: 'buffered logs\n' });
+      expect(messages).toContainEqual({ type: 'output', data: 'buffered logs\n', replay: true });
     });
 
     runScriptService.emit(workspaceId, 'live logs\n');

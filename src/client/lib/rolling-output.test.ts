@@ -95,6 +95,17 @@ describe('RollingOutputBuffer', () => {
     expect(buffer.toString()).toBe('');
   });
 
+  it('clears retained output and truncation state', () => {
+    const buffer = new RollingOutputBuffer(options);
+
+    buffer.append('abcdefghijklmnop');
+    buffer.clear();
+    expect(buffer.toString()).toBe('');
+
+    buffer.append('abc');
+    expect(buffer.toString()).toBe('abc');
+  });
+
   it('releases strings from consumed chunk slots', () => {
     const buffer = new RollingOutputBuffer(options);
 

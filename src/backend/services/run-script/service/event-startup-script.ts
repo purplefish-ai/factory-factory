@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { stopOwnedProcessGroup } from '@/backend/lib/owned-process-group';
+import { buildUserProcessEnv } from '@/backend/lib/user-process-env';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
+import { decodeOutputStream } from './run-script-process-utils';
 
 export class EventSetupError extends Error {
   readonly failure: ReturnType<typeof classifyEventPreparationFailure>;
@@ -34,7 +36,7 @@ export async function executeEventStartupScript(
   input.signal.throwIfAborted();
   const child = spawn('bash', input.args, {
     cwd: input.cwd,
-    env: { ...configService.getChildProcessEnv(), WORKSPACE_PATH: input.cwd },
+    env: { ...buildUserProcessEnv(configService.getChildProcessEnv()), WORKSPACE_PATH: input.cwd },
     detached: process.platform !== 'win32',
   });
   input.physicalStage?.(true);
@@ -131,11 +133,11 @@ export async function executeEventStartupScript(
         ? 'TIMED_OUT'
         : 'ABORTED'
     );
-  const output = (data: Buffer, stream: Readable, errorOutput: boolean) => {
+  const output = (decoded: string, stream: Readable, errorOutput: boolean) => {
     if (finishing || stopping !== undefined) {
       return;
     }
-    const text = data.toString().slice(-SERVICE_LIMITS.startupScriptOutputTailBytes);
+    const text = decoded.slice(-SERVICE_LIMITS.startupScriptOutputTailBytes);
     if (errorOutput) {
       stderr = `${stderr}${text}`.slice(-SERVICE_LIMITS.startupScriptOutputTailBytes);
     }
@@ -150,8 +152,8 @@ export async function executeEventStartupScript(
       }
     });
   };
-  child.stdout.on('data', (data: Buffer) => output(data, child.stdout, false));
-  child.stderr.on('data', (data: Buffer) => output(data, child.stderr, true));
+  decodeOutputStream(child.stdout, (text) => output(text, child.stdout, false));
+  decodeOutputStream(child.stderr, (text) => output(text, child.stderr, true));
   child.once('error', (error) => {
     void finish(null, error);
   });

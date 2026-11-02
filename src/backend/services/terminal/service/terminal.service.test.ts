@@ -159,6 +159,32 @@ describe('TerminalService', () => {
       await service.createTerminal({ ...defaultOpts, shell: '/bin/zsh' });
       expect(mockPtySpawn).toHaveBeenCalledWith('/bin/zsh', [], expect.any(Object));
     });
+
+    // `ff serve` and the desktop app launch the backend with NODE_ENV=production
+    // and their own DATABASE_PATH/BACKEND_PORT. A user's terminal must not
+    // inherit them: `npm install` would skip devDependencies and the project's
+    // dev server would bind Factory Factory's port or open its database.
+    it("does not leak Factory Factory's own runtime env into the user's shell", async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('DATABASE_PATH', '/Users/me/factory-factory/data.db');
+      vi.stubEnv('BACKEND_PORT', '3001');
+      vi.stubEnv('FRONTEND_STATIC_PATH', '/Applications/FF.app/dist/client');
+      vi.stubEnv('MY_PROJECT_TOKEN', 'keep-me');
+      try {
+        await service.createTerminal(defaultOpts);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+
+      const env = mockPtySpawn.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv;
+      expect(env.MY_PROJECT_TOKEN).toBe('keep-me');
+      expect(env.PATH).toBe(process.env.PATH);
+      expect(env.TERM).toBe('xterm-256color');
+      expect(env).not.toHaveProperty('NODE_ENV');
+      expect(env).not.toHaveProperty('DATABASE_PATH');
+      expect(env).not.toHaveProperty('BACKEND_PORT');
+      expect(env).not.toHaveProperty('FRONTEND_STATIC_PATH');
+    });
   });
 
   // =========================================================================

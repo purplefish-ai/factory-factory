@@ -52,7 +52,7 @@ export function reducePRObservation(input: {
   const terminal = current.prState === 'MERGED' || current.prState === 'CLOSED';
   supersededEventIds.push(
     ...pendingEvents
-      .filter((event) => eventIsSuperseded(event, current, terminal))
+      .filter((event) => eventIsSuperseded(event, current, terminal, deliveredEvents))
       .map((event) => event.id)
   );
   if (terminal) {
@@ -78,10 +78,34 @@ export function reducePRObservation(input: {
   return { events, supersededEventIds, nextTransitionSequence };
 }
 
+function sameReview(
+  a: { identity: string; contentHash: string },
+  b: { identity: string; contentHash: string }
+) {
+  return a.identity === b.identity && a.contentHash === b.contentHash;
+}
+
+function deliveredReviews(deliveredEvents: readonly PREventSummary[]) {
+  return deliveredEvents.flatMap((e) =>
+    e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []
+  );
+}
+
+/**
+ * A delivery received after this event was queued, i.e. one in flight when it
+ * was re-emitted. Ties are safe: the reducer only queues a review that is not
+ * already delivered, so a same-instant delivery of it is that in-flight one.
+ */
+function receivedSince(event: PREventSummary, deliveredEvents: readonly PREventSummary[]) {
+  const queuedAt = event.createdAt;
+  return queuedAt ? deliveredEvents.filter((d) => d.deliveredAt && d.deliveredAt >= queuedAt) : [];
+}
+
 function eventIsSuperseded(
   event: PREventSummary,
   current: PRObservation,
-  terminal: boolean
+  terminal: boolean,
+  deliveredEvents: readonly PREventSummary[]
 ): boolean {
   const payload = event.payload;
   if (payload.observation.headSha !== current.headSha) {
@@ -100,15 +124,21 @@ function eventIsSuperseded(
   if (event.kind === 'CONFLICT_DETECTED') {
     return !current.hasMergeConflict;
   }
+  if (payload.kind !== 'REVIEW_FEEDBACK') {
+    return false;
+  }
+  // Feedback re-emitted while an earlier delivery was in flight is dropped once
+  // that delivery is received; until then it guards against a cancelled claim.
+  // Deliveries received before this event was queued (e.g. a re-opened thread)
+  // do not suppress it.
+  const delivered = deliveredReviews(receivedSince(event, deliveredEvents));
   return (
-    payload.kind === 'REVIEW_FEEDBACK' &&
+    (payload.reviews.length > 0 &&
+      payload.reviews.every((r) => delivered.some((d) => sameReview(d, r)))) ||
     payload.reviews.some(
       (r) =>
         current.resolvedReviewIds?.includes(r.identity) ||
-        (current.reviewsComplete &&
-          !current.actionableReviews.some(
-            (c) => c.identity === r.identity && c.contentHash === r.contentHash
-          ))
+        (current.reviewsComplete && !current.actionableReviews.some((c) => sameReview(c, r)))
     )
   );
 }
@@ -159,12 +189,14 @@ function addReviewTransitions(
   sequence: number
 ) {
   const { previous, current, target } = input;
+  // A new head supersedes undelivered feedback, so it is re-emitted; delivered
+  // feedback is unchanged and is not repeated. Feedback frozen in flight is
+  // re-emitted too, because a cancelled claim would otherwise lose it.
+  const delivered = deliveredReviews(input.deliveredEvents);
   for (const review of current.actionableReviews) {
     if (
-      !previous?.actionableReviews.some(
-        (r) => r.identity === review.identity && r.contentHash === review.contentHash
-      ) ||
-      previous.headSha !== current.headSha
+      !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
+      (previous.headSha !== current.headSha && !delivered.some((r) => sameReview(r, review)))
     ) {
       sequence++;
       add(
