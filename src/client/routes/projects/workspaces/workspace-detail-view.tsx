@@ -2,12 +2,10 @@ import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 
 import { Loading } from '@/client/components/loading';
 import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
 import type { SubagentSelection } from '@/client/features/subagents';
-import {
-  ArchiveWorkspaceDialog,
-  RightPanel,
-  WorkspaceContentView,
-} from '@/client/features/workspace';
+import { ArchiveWorkspaceDialog } from '@/client/features/workspace';
+import { RightPanel } from '@/client/features/workspace/right-panel';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
+import { WorkspaceContentView } from '@/client/features/workspace/workspace-content-view';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
