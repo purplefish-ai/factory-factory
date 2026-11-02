@@ -1,6 +1,10 @@
-import { Navigate, useParams } from 'react-router';
+import { Navigate, useLocation, useParams } from 'react-router';
 import { useAppNavigationDataContext } from '@/client/hooks/use-app-navigation-data';
-import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
+import {
+  getAgentRouteKind,
+  getProjectAgentPath,
+  getProjectSectionPath,
+} from '@/client/lib/project-navigation';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -83,5 +87,14 @@ function LegacyAgentsIndex() {
 /** Resolve old global links before mounting any project management UI. */
 export default function LegacyAgentsRoute() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const kind = getAgentRouteKind(location.search);
+  if (!kind || kind === 'event') {
+    return (
+      <p role="alert" className="p-6">
+        Event agent links require an explicit project owner and a valid kind.
+      </p>
+    );
+  }
   return id ? <LegacyAgentDetail key={id} id={id} /> : <LegacyAgentsIndex />;
 }

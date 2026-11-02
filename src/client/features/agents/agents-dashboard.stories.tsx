@@ -4,6 +4,11 @@ import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistory } from './agent-run-history';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
+import {
+  EventDashboardStory,
+  eventStoryAgent,
+  type EventStoryState,
+} from './event-dashboard-story';
 import type { Agent } from './types';
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
@@ -44,7 +49,7 @@ const agents = [
   },
 ];
 
-type StoryMode = 'populated' | 'empty' | 'error' | 'loading' | 'create' | 'edit';
+type StoryMode = 'populated' | 'empty' | 'error' | 'loading' | 'create' | 'edit' | EventStoryState;
 function StoryContent({
   mode,
   setMode,
@@ -146,30 +151,38 @@ function StoryContent({
   );
 }
 
-function DashboardSession({
-  state = 'populated',
-}: {
-  state?: 'populated' | 'empty' | 'error' | 'loading' | 'create' | 'edit';
-}) {
+function DashboardSession({ state = 'populated' }: { state?: StoryMode }) {
   const [mode, setMode] = useState(state);
   const [enabled, setEnabled] = useState(true);
+  const eventState = mode.startsWith('event') ? (mode as EventStoryState) : null;
   return (
     <div className="h-dvh bg-background text-foreground">
       <AgentsDashboardShell
         projectSlug={project.slug}
-        agents={mode === 'empty' ? [] : mode === 'loading' || mode === 'error' ? undefined : agents}
-        selectedAgentId={mode === 'create' ? undefined : agent.id}
+        agents={
+          mode === 'empty'
+            ? []
+            : mode === 'loading' || mode === 'error'
+              ? undefined
+              : [...agents, { ...eventStoryAgent(eventState ?? 'event'), kind: 'event' as const }]
+        }
+        selectedKind={eventState ? 'event' : 'scheduled'}
+        selectedAgentId={mode === 'create' ? undefined : eventState ? 'event-agent' : agent.id}
         isLoading={mode === 'loading'}
         error={mode === 'error' ? 'Could not load agents: Connection unavailable.' : undefined}
         onRetry={() => setMode('populated')}
         onCreate={() => setMode('create')}
       >
-        <StoryContent
-          mode={mode}
-          setMode={setMode}
-          enabled={enabled}
-          onToggle={() => setEnabled(!enabled)}
-        />
+        {eventState ? (
+          <EventDashboardStory key={eventState} state={eventState} />
+        ) : (
+          <StoryContent
+            mode={mode}
+            setMode={setMode}
+            enabled={enabled}
+            onToggle={() => setEnabled(!enabled)}
+          />
+        )}
       </AgentsDashboardShell>
     </div>
   );
@@ -205,3 +218,19 @@ export const Edit: Story = { args: { state: 'edit' } };
 export const ConstrainedCreate: Story = { args: { state: 'create', contentWidth: 458 } };
 export const ConstrainedEdit: Story = { args: { state: 'edit', contentWidth: 640 } };
 export const ConstrainedDetail: Story = { args: { state: 'populated', contentWidth: 416 } };
+
+export const MixedList: Story = { args: { state: 'populated' } };
+export const SavedEvent: Story = { args: { state: 'event' } };
+export const SavedEventEdit: Story = { args: { state: 'event-edit' } };
+export const UnknownMembership: Story = { args: { state: 'event-unknown' } };
+export const CompleteReplacement: Story = {
+  args: { state: 'event-replacement', contentWidth: 416 },
+};
+export const NullStoredConfiguration: Story = { args: { state: 'event-null' } };
+export const SourceError: Story = { args: { state: 'event-health-error' } };
+export const SourceCatchingUp: Story = { args: { state: 'event-health-catching-up' } };
+export const UnsupportedNativePreview: Story = { args: { state: 'event-preview-unsupported' } };
+export const UnavailableNativePreview: Story = { args: { state: 'event-preview-unavailable' } };
+export const SavedConflict: Story = { args: { state: 'event-conflict' } };
+export const ConstrainedEventEdit: Story = { args: { state: 'event-edit', contentWidth: 458 } };
+export const ConstrainedEventDetail: Story = { args: { state: 'event', contentWidth: 640 } };

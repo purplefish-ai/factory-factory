@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
+import { getAgentRouteKind, type AgentKind } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistoryQuery } from './agent-run-history';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
+import { EventAgentSelection } from './event-agent-selection';
 import type { AgentProject } from './types';
 import { useAgentsController } from './use-agents-controller';
 
@@ -59,7 +61,7 @@ function AgentRequestError({
   );
 }
 function AgentSelectionContent({ controller }: { controller: Controller }) {
-  const { id, task, project, mode } = controller;
+  const { id, project, mode } = controller;
   if (controller.wrongOwner) {
     return (
       <p role="alert" className="text-sm text-destructive">
@@ -81,6 +83,21 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
       </>
     );
   }
+  if (!id && mode === 'detail') {
+    if (controller.list.error || controller.events.error) {
+      return <p className="text-sm">Select an available agent or retry the failed list.</p>;
+    }
+    if (controller.list.isLoading || controller.events.isLoading) {
+      return <Loading>Loading agents…</Loading>;
+    }
+  }
+  if (controller.kind === 'event') {
+    return <EventAgentSelection controller={controller} />;
+  }
+  return <ScheduledAgentSelection controller={controller} />;
+}
+function ScheduledAgentSelection({ controller }: { controller: Controller }) {
+  const { id, task, project, mode } = controller;
   // Keep mounted editors and their drafts during background query failures.
   if (mode === 'edit' && task.data) {
     return (
@@ -88,7 +105,7 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
         <h2 className="text-xl font-semibold">Edit Agent</h2>
         <AgentRequestError task={task} refresh />
         <AgentForm
-          key={`edit-${task.data.id}`}
+          key={`edit-${project.id}:scheduled:${task.data.id}`}
           initialValues={task.data}
           onSave={controller.save}
           onCancel={() => controller.setMode('detail')}
@@ -128,19 +145,61 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
     </div>
   );
 }
-function AgentsPageSession({ project: routeProject }: { project: AgentProject }) {
-  const controller = useAgentsController(routeProject);
+function AgentsPageSession({
+  project: routeProject,
+  kind,
+}: {
+  project: AgentProject;
+  kind: AgentKind;
+}) {
+  const controller = useAgentsController(routeProject, kind);
   const { id, task, list, project, mode, pending, actionError } = controller;
   return (
     <>
       <AgentsDashboardShell
         projectSlug={project.slug}
-        agents={list.data}
+        agents={
+          list.data || controller.events.data
+            ? [
+                ...(list.data ?? []),
+                ...(controller.events.data?.pages.flatMap((page) =>
+                  page.items.map((item) => ({ ...item, kind: 'event' as const }))
+                ) ?? []),
+              ]
+            : undefined
+        }
+        selectedKind={kind}
+        continuation={
+          controller.events.hasNextPage ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={controller.events.isFetchingNextPage}
+              onClick={() => void controller.events.fetchNextPage()}
+            >
+              Load more event agents
+            </Button>
+          ) : undefined
+        }
         selectedAgentId={mode === 'create' ? undefined : id}
-        isLoading={list.isLoading || (!!id && task.isLoading)}
-        error={list.error ? `Could not load agents: ${list.error.message}` : undefined}
+        isLoading={
+          list.isLoading ||
+          controller.events.isLoading ||
+          (!!id && (kind === 'event' ? controller.event.isLoading : task.isLoading))
+        }
+        error={
+          [
+            list.error ? `Could not load scheduled agents: ${list.error.message}` : '',
+            controller.events.error
+              ? `Could not load event agents: ${controller.events.error.message}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         onRetry={() => {
           void list.refetch();
+          void controller.events.refetch();
         }}
         onCreate={controller.startCreate}
         createDisabled={controller.createDisabled}
@@ -169,5 +228,19 @@ function AgentsPageSession({ project: routeProject }: { project: AgentProject })
 /** Navigation creates a fresh editing session; polling keeps the existing draft. */
 export function AgentsPage({ project }: { project: AgentProject }) {
   const location = useLocation();
-  return <AgentsPageSession key={`${project.id}:${location.key}`} project={project} />;
+  const kind = getAgentRouteKind(location.search);
+  if (!kind) {
+    return (
+      <p role="alert" className="p-6 text-sm">
+        Invalid agent kind. Use a single scheduled or event selection.
+      </p>
+    );
+  }
+  return (
+    <AgentsPageSession
+      key={`${project.id}:${kind}:${location.key}`}
+      project={project}
+      kind={kind}
+    />
+  );
 }

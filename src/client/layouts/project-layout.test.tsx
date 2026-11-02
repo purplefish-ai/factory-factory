@@ -76,6 +76,8 @@ function requestResult(path: string, input: unknown): Promise<unknown> {
   switch (path) {
     case 'project.getBySlug':
       return projectRead(z.object({ slug: z.string() }).parse(input).slug);
+    case 'agent.list':
+      return Promise.resolve({ items: [], nextCursor: null });
     case 'periodicTask.get':
       return Promise.resolve(agent);
     case 'periodicTask.list': {

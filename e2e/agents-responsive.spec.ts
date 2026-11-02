@@ -106,3 +106,58 @@ for (const width of [768, 810, 1024, 1280]) {
     await assertEditorBounds(page);
   });
 }
+
+for (const width of [768, 810, 1024, 1280]) {
+  test(`saved event drafts and replacement retain bounds on resize at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.addInitScript(() => localStorage.setItem('sidebar_width', '352'));
+    await page.goto('/__mobile-baseline?surface=agents');
+    if (width === 1280) {
+      const handle = await page
+        .getByRole('button', { name: 'Resize sidebar', exact: true })
+        .boundingBox();
+      if (!handle) {
+        throw new Error('Missing sidebar resize handle');
+      }
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2 + 288, handle.y + handle.height / 2);
+      await page.mouse.up();
+    }
+    const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
+    await rail.locator('a[href$="event-agent?kind=event"]').click();
+    await expect(
+      page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
+    ).toBeVisible();
+    await expect(page.locator('main')).not.toContainText('Run history');
+    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Retain event edit');
+    await page.getByText('Event settings', { exact: true }).click();
+    await assertEditorBounds(page);
+    await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+    await expect(page.getByLabel('Draft preview')).toContainText('UNAVAILABLE');
+    await page.setViewportSize({ width: 1700, height: 1000 });
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(
+      'Retain event edit'
+    );
+    await assertEditorBounds(page);
+    await page.screenshot({ path: test.info().outputPath(`event-edit-${width}.png`) });
+    await rail.locator('a[href$="replacement-agent?kind=event"]').click();
+    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
+    const replacement = page.getByRole('textbox', {
+      name: 'Full saved specification JSON',
+      exact: true,
+    });
+    await expect(replacement).toHaveValue('');
+    await replacement.fill('{"name":"Keep entire replacement draft"}');
+    await page.setViewportSize({ width: 1700, height: 1000 });
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(replacement).toHaveValue('{"name":"Keep entire replacement draft"}');
+    await assertEditorBounds(page);
+    await page.screenshot({ path: test.info().outputPath(`event-replacement-${width}.png`) });
+  });
+}

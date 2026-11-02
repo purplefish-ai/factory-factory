@@ -14,9 +14,11 @@ import {
   AppNavigationDataProvider,
   type AppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
+import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { mobileEventFixtures, MobileEventAgentContent } from './mobile-event-agents-fixture';
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
 const projectDefaults = {
@@ -99,11 +101,14 @@ function MobileAgentsSession() {
   const nextAgentId = useRef(1);
   const [agents, setAgents] = useState([review, dependencies]);
   const [selectedId, setSelectedId] = useState(review.id);
+  const [selectedKind, setSelectedKind] = useState<'scheduled' | 'event'>('scheduled');
+  const [events, setEvents] = useState(() => mobileEventFixtures(project.id));
+  const selectedEvent = events.find((event) => event.id === selectedId);
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const navData = {
     ...navigation,
     agentsSummary: {
-      totalCount: agents.length,
+      totalCount: agents.length + events.length,
       failedCount: agents.filter(
         (agent) =>
           agent.executions
@@ -137,10 +142,20 @@ function MobileAgentsSession() {
         const agent = agents.find(
           (candidate) => href === `/projects/${project.slug}/agents/${candidate.id}`
         );
+        const savedEvent = events.find(
+          (candidate) => href === getProjectAgentPath(project.slug, candidate.id, 'event')
+        );
+        if (savedEvent) {
+          event.preventDefault();
+          setSelectedId(savedEvent.id);
+          setSelectedKind('event');
+          setFormMode(null);
+        }
         if (agent) {
           // Only selection is local to this fixture. Workspace links use the real router.
           event.preventDefault();
           setSelectedId(agent.id);
+          setSelectedKind('scheduled');
           setFormMode(null);
         }
       }}
@@ -156,11 +171,31 @@ function MobileAgentsSession() {
                 <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                   <AgentsDashboardShell
                     projectSlug={project.slug}
-                    agents={agents}
-                    selectedAgentId={formMode === 'create' ? undefined : selected.id}
-                    onCreate={() => setFormMode('create')}
+                    agents={[
+                      ...agents,
+                      ...events.map((event) => ({ ...event, kind: 'event' as const })),
+                    ]}
+                    selectedKind={selectedKind}
+                    selectedAgentId={formMode === 'create' ? undefined : selectedId}
+                    onCreate={() => {
+                      setSelectedKind('scheduled');
+                      setFormMode('create');
+                    }}
                   >
-                    {formMode ? (
+                    {selectedKind === 'event' && selectedEvent ? (
+                      <MobileEventAgentContent
+                        agent={selectedEvent}
+                        editing={formMode === 'edit'}
+                        onEdit={() => setFormMode('edit')}
+                        onCancel={() => setFormMode(null)}
+                        onSaved={(updated) => {
+                          setEvents((current) =>
+                            current.map((event) => (event.id === updated.id ? updated : event))
+                          );
+                          setFormMode(null);
+                        }}
+                      />
+                    ) : formMode ? (
                       <>
                         <h2 className="text-xl font-semibold">
                           {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}

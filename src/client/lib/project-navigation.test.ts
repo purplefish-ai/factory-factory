@@ -29,3 +29,9 @@ it.each([
     expect(hasExplicitLegacyProjectOwner(pathname, search)).toBe(explicit);
   }
 );
+it('keeps scheduled URLs stable and encodes saved event selections', () => {
+  expect(getProjectAgentPath('a/b', 'c/d', 'event')).toBe(
+    '/projects/a%2Fb/agents/c%2Fd?kind=event'
+  );
+  expect(getProjectAgentPath('a/b', 'c/d', 'scheduled')).toBe('/projects/a%2Fb/agents/c%2Fd');
+});

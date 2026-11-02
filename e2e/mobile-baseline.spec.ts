@@ -153,8 +153,8 @@ for (const viewport of mobileViewports) {
     ).toEqual(['Agents', 'Reviews2', 'Settings']);
     await expect(
       footer.getByRole('link', { name: 'Agents', exact: true })
-    ).toHaveAccessibleDescription('2 agents');
-    await expect(footer.locator('[data-agent-count]')).toHaveText('2');
+    ).toHaveAccessibleDescription('4 agents');
+    await expect(footer.locator('[data-agent-count]')).toHaveText('4');
     await expect(page).toHaveScreenshot(`agents-sidebar-${viewport.name}.png`);
     await sidebar.getByRole('button', { name: 'Close sidebar', exact: true }).click();
     await expect(sidebar).toBeHidden();
@@ -239,5 +239,76 @@ for (const width of [320, 375, 390, 412, 1280]) {
     await page.getByRole('tab', { name: 'General Settings' }).focus();
     await expect(page.getByRole('tab', { name: 'General Settings' })).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  });
+}
+
+for (const viewport of mobileViewports) {
+  test(`saved event selection, keyboard editing and replacement - ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto('/__mobile-baseline?surface=agents');
+    const eventLink = page.locator('a[href$="event-agent?kind=event"]');
+    await eventLink.focus();
+    await page.keyboard.press('Enter');
+    await expect(eventLink).toHaveAttribute('aria-current', 'page');
+    await expect(
+      page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
+    await instructions.fill('Phone draft stays during resize');
+    await instructions.focus();
+    await page.keyboard.press('Tab');
+    await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+    await expect(page.getByLabel('Draft preview')).toContainText('Native discovery is unavailable');
+    await page.setViewportSize({ width: 1024, height: 1000 });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await expect(instructions).toHaveValue('Phone draft stays during resize');
+    await page.locator('input[id$="-connection"]').fill('fixture-slack');
+    await page.getByRole('button', { name: 'Refresh project sources', exact: true }).click();
+    await page.getByRole('button', { name: 'More Slack channels', exact: true }).click();
+    await page.getByRole('button', { name: 'More Slack channels', exact: true }).click();
+    const sources = page.getByLabel('Project sources', { exact: true });
+    await expect(sources).toContainText('Fixture channel one');
+    await expect(sources).toContainText('Fixture channel two');
+    await expect(sources).toContainText('Fixture channel three');
+    await page.getByText('Event settings', { exact: true }).click();
+    const main = page.locator('main');
+    const editor = await main.boundingBox();
+    if (!editor) {
+      throw new Error('Missing saved editor');
+    }
+    for (const control of await main.locator('input, textarea').all()) {
+      const box = await control.boundingBox();
+      if (!box) {
+        throw new Error('Missing saved control');
+      }
+      expect(box.x).toBeGreaterThanOrEqual(editor.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(editor.x + editor.width + 1);
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+    ).toBeLessThanOrEqual(1);
+    await page.locator('a[href$="replacement-agent?kind=event"]').click();
+    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
+    const replacement = page.getByRole('textbox', {
+      name: 'Full saved specification JSON',
+      exact: true,
+    });
+    await expect(replacement).toHaveValue('');
+    await replacement.fill('{"instructions":"Explicit whole replacement"}');
+    await page.setViewportSize({ width: 1024, height: 1000 });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await expect(replacement).toHaveValue('{"instructions":"Explicit whole replacement"}');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(main.getByRole('alert')).toContainText('whole intended specification');
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: test.info().outputPath(`event-replacement-${viewport.name}.png`),
+    });
   });
 }

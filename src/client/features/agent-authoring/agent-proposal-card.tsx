@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
+import { invalidateSavedAgentQueries } from '@/client/lib/agent-query-cache';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -284,6 +285,20 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
     <AgentProposalEditor
       proposal={query.data}
       onCreate={async (value) => {
+        let projectId: string;
+        try {
+          const owner =
+            utils.workspace.get.getData({ id: reference.workspaceId }) ??
+            (await utils.workspace.get.fetch({ id: reference.workspaceId }));
+          if (!owner?.projectId) {
+            throw new Error('Missing authoring workspace project.');
+          }
+          projectId = owner.projectId;
+        } catch {
+          throw new Error(
+            'Could not load the authoring workspace project. Reload this proposal before saving.'
+          );
+        }
         let result: AgentProposal;
         try {
           result = await (query.data?.agentDefinitionId ? update : mutation).mutateAsync(value);
@@ -292,6 +307,9 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
           throw error;
         }
         utils.agent.getProposal.setData(input, result);
+        if (result.agentDefinitionId) {
+          await invalidateSavedAgentQueries(utils, projectId, result.agentDefinitionId);
+        }
         return result;
       }}
     />
