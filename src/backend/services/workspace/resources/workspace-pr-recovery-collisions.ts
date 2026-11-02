@@ -68,12 +68,23 @@ function units(snapshot: PRRecovery) {
 async function existingDeliveryIds(tx: Prisma.TransactionClient, deliveryIds: string[]) {
   const occupiedDeliveries = new Set<string>();
   for (let start = 0; start < deliveryIds.length; start += 200) {
-    const rows = await tx.workspacePRDelivery.findMany({
-      where: { id: { in: deliveryIds.slice(start, start + 200) } },
-      select: { id: true },
-    });
+    const ids = deliveryIds.slice(start, start + 200);
+    const [rows, legacy] = await Promise.all([
+      tx.workspacePRDelivery.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+      // Legacy receipt identity remains owned before normalization. The legacy
+      // normalizer joins by deliveryId across all rows, including foreign proof.
+      tx.workspacePREvent.findMany({
+        where: { deliveryId: { in: ids } },
+        select: { deliveryId: true },
+      }),
+    ]);
     for (const row of rows) {
       occupiedDeliveries.add(row.id);
+    }
+    for (const row of legacy) {
+      if (row.deliveryId !== null) {
+        occupiedDeliveries.add(row.deliveryId);
+      }
     }
   }
   return occupiedDeliveries;
