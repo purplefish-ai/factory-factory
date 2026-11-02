@@ -6,6 +6,7 @@ import {
   categorizeAttachments,
 } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import type { AgentContentItem, AgentMessage, ChatMessage } from '@/shared/acp-protocol';
+import type { persistedChatMessageSchema } from '@/shared/schemas/closed-session-message.schema';
 
 export function getClosedSessionConversationEpoch(metadata: unknown): number {
   const parsed = z
@@ -13,6 +14,15 @@ export function getClosedSessionConversationEpoch(metadata: unknown): number {
     .safeParse(metadata);
   return parsed.success ? (parsed.data.providerIdentityRollovers?.length ?? 0) : 0;
 }
+
+// Raw validated snapshots may precede streamed tool input. Keep their exact
+// input shape rather than the renderer decoder's defaulted output projection.
+type RawArchiveMessage = z.input<typeof persistedChatMessageSchema>;
+type ArchiveMessage = ChatMessage | RawArchiveMessage;
+type ArchiveAgentMessage = AgentMessage | NonNullable<RawArchiveMessage['message']>;
+type ArchiveContentItem =
+  | AgentContentItem
+  | Exclude<NonNullable<ArchiveAgentMessage['message']>['content'], string>[number];
 
 interface ArchiveIdentityInput {
   sessionId: string;
@@ -22,10 +32,10 @@ interface ArchiveIdentityInput {
   codexAccountId?: string | null;
   conversationEpoch?: number;
   startedAt: Date;
-  messages: ChatMessage[];
+  messages: ArchiveMessage[];
 }
 
-type ContentToken = { role: 'user' | 'assistant'; content: AgentContentItem };
+type ContentToken = { role: 'user' | 'assistant'; content: ArchiveContentItem };
 interface CanonicalContent {
   provider: ContentToken[];
   local: unknown[];
@@ -34,7 +44,7 @@ interface CanonicalContent {
 function appendContent(
   tokens: ContentToken[],
   role: 'user' | 'assistant',
-  content: AgentContentItem
+  content: ArchiveContentItem
 ): void {
   const previous = tokens.at(-1);
   // Live accumulation and JSONL chunk splitting must identify the same content.
@@ -61,7 +71,7 @@ function appendContent(
 function appendPayload(
   tokens: ContentToken[],
   role: 'user' | 'assistant',
-  content: AgentContentItem[] | string
+  content: ArchiveContentItem[] | string
 ): void {
   const blocks = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
   for (const block of blocks) {
@@ -69,7 +79,7 @@ function appendPayload(
   }
 }
 
-function appendUser(tokens: ContentToken[], message: ChatMessage): void {
+function appendUser(tokens: ContentToken[], message: ArchiveMessage): void {
   const attachments = categorizeAttachments(message.attachments ?? []);
   // Reuse dispatch's pure content builders: native history retains text-file
   // prompt framing and image bytes, not upload IDs or generated image names.
@@ -83,7 +93,7 @@ function appendUser(tokens: ContentToken[], message: ChatMessage): void {
   appendPayload(tokens, 'user', content);
 }
 
-function appendAgent(tokens: CanonicalContent, agent: AgentMessage): void {
+function appendAgent(tokens: CanonicalContent, agent: ArchiveAgentMessage): void {
   if (agent.message) {
     appendPayload(tokens.provider, agent.message.role, agent.message.content);
     return;
@@ -139,7 +149,7 @@ function orderedValue(value: unknown): unknown {
   return value;
 }
 
-function conversationContent(messages: ChatMessage[]) {
+function conversationContent(messages: ArchiveMessage[]) {
   const tokens: CanonicalContent = { provider: [], local: [] };
   for (const message of messages) {
     if (message.providerPrompt != null) {

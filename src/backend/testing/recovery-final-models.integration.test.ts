@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
+import { closedSessionTranscriptSchema } from '@/shared/schemas/closed-session-transcript.schema';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import { dataBackupService } from '../orchestration/data-backup.service';
+import { getClosedSessionArchiveKey } from '../services/session/service/lifecycle/closed-session-identity';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -390,7 +392,14 @@ it.each(['PENDING', 'COMPLETE'])(
         model: 'default',
         startedAt,
         completedAt,
-        archiveKey: digest('original-identity'),
+        archiveKey: getClosedSessionArchiveKey({
+          workspaceId: 'workspace',
+          sessionId: 'session',
+          provider: 'CODEX',
+          codexAccountId: 'frozen-source-account',
+          startedAt,
+          messages: closedSessionTranscriptSchema.parse(JSON.parse(transcript)).messages,
+        }),
         archiveState,
         pendingTranscript: transcript,
         transcriptHash,

@@ -14,6 +14,7 @@ import {
   closedSessionArchivePath,
   resolveClosedSessionTranscriptPath,
 } from '../lifecycle/closed-session-storage';
+import { validateModernArchiveIdentity } from './archive-recovery-identity';
 
 /** Bounded exact UTF-8 reads; a concurrent truncate/growth fails this export. */
 async function readTranscript(path: string): Promise<string> {
@@ -63,6 +64,9 @@ function validateChecksums(recovery: ArchiveRecovery): void {
     }
     if (archiveDigest(entry.transcript) !== entry.sha256) {
       throw new Error(`Archive checksum mismatch: ${entry.id}`);
+    }
+    if (entry.identity !== 'legacy-v1') {
+      validateModernArchiveIdentity(entry);
     }
   }
 }

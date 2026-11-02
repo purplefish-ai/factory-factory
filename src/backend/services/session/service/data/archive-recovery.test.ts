@@ -6,6 +6,7 @@ import { configService } from '@/backend/services/config.service';
 import { archiveRecoverySchema } from '@/shared/schemas/archive-recovery.schema';
 import type { ClosedSession, Prisma } from '@prisma-gen/client';
 import { stageSessionArchiveRecovery } from '../../resources/archive-recovery';
+import { getClosedSessionArchiveKey } from '../lifecycle/closed-session-identity';
 import { closedSessionPersistenceService } from '../lifecycle/closed-session-persistence.service';
 import {
   archiveDigest,
@@ -58,7 +59,15 @@ function row(overrides: Partial<ClosedSession> = {}): ClosedSession {
     model: 'model',
     startedAt,
     completedAt,
-    archiveKey: 'a'.repeat(64),
+    archiveKey: getClosedSessionArchiveKey({
+      workspaceId: 'workspace',
+      sessionId: 'session',
+      provider: 'CODEX',
+      providerSessionId: 'original-native',
+      codexAccountId: 'original-account',
+      startedAt,
+      messages: [],
+    }),
     archiveState: 'PENDING',
     transcriptPath: closedSessionArchivePath('workspace', 'archive', transcriptHash),
     transcriptHash,

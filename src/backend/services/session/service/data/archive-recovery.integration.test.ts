@@ -7,6 +7,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { ArchiveRecovery } from '@/shared/schemas/archive-recovery.schema';
+import { getClosedSessionArchiveKey } from '../lifecycle/closed-session-identity';
 
 let db: IntegrationDatabase;
 let recovery: typeof import('./archive-recovery');
@@ -54,7 +55,7 @@ afterAll(async () => {
 
 function packageFor(
   id = 'archive',
-  archiveKey = 'a'.repeat(64),
+  conversationIdentity = 'a'.repeat(64),
   workspaceId = 'workspace'
 ): ArchiveRecovery {
   const transcript = JSON.stringify(
@@ -67,7 +68,7 @@ function packageFor(
         workflow: 'ratchet',
         provider: 'CODEX',
         codexAccountId: 'unmapped-original-account',
-        providerSessionId: 'original-native-id',
+        providerSessionId: conversationIdentity,
         model: 'model',
         startedAt,
         completedAt,
@@ -82,7 +83,15 @@ function packageFor(
     entries: [
       {
         id,
-        archiveKey,
+        archiveKey: getClosedSessionArchiveKey({
+          workspaceId,
+          sessionId: 'session',
+          provider: 'CODEX',
+          providerSessionId: conversationIdentity,
+          codexAccountId: 'unmapped-original-account',
+          startedAt: new Date(startedAt),
+          messages: [],
+        }),
         workspaceId,
         sessionId: 'session',
         name: null,
@@ -126,12 +135,12 @@ it('excludes skipped workspace parents and local id/key collisions without borro
     recovery.restoreSessionArchives(tx, existing, new Set(['workspace']))
   );
   const collisionId = packageFor('archive', 'b'.repeat(64), 'other-workspace');
-  const collisionKey = packageFor('other-archive', 'a'.repeat(64), 'other-workspace');
+  const collisionKey = packageFor('other-archive', 'a'.repeat(64), 'workspace');
   const skippedParent = packageFor('third-archive', 'c'.repeat(64), 'other-workspace');
   for (const input of [collisionId, collisionKey]) {
     expect(
       await db.prisma.$transaction((tx) =>
-        recovery.restoreSessionArchives(tx, input, new Set(['other-workspace']))
+        recovery.restoreSessionArchives(tx, input, new Set(['workspace', 'other-workspace']))
       )
     ).toEqual([]);
   }
