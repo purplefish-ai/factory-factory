@@ -191,6 +191,7 @@ const mockWorkspace: WorkspaceForExport = {
     lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
   },
   prEvents: [],
+  prDeliveries: [],
   prDiscovery: null,
   hasHadSessions: true,
   periodicTaskId: null,

@@ -106,6 +106,8 @@ export const AGENT_MESSAGE_TYPES = Object.keys(AGENT_MESSAGE_TYPE_MAP) as AgentM
  * UI chat message representation.
  */
 export interface ChatMessage {
+  /** Provider identity for direct navigation from projected sub-agent lifecycle rows. */
+  subagentId?: string;
   /** Presentation-only index for projected provider sub-agent lifecycle rows. */
   subagentIconIndex?: number;
   id: string;

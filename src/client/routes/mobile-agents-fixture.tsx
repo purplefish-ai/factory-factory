@@ -60,6 +60,7 @@ function previousRuns(periodicTaskId: string): AgentRun[] {
     {
       id: 'previous-run',
       periodicTaskId,
+      launchSnapshot: null,
       workspaceId: 'archived-run',
       status: 'PR_CREATED',
       startedAt: new Date('2026-01-12T14:00:00.000Z'),

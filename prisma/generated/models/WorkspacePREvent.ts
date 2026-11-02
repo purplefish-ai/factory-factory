@@ -44,6 +44,7 @@ export type WorkspacePREventMinAggregateOutputType = {
   deduplicationKey: string | null
   state: string | null
   attempts: number | null
+  batchId: string | null
   deliveryId: string | null
   deliverySessionId: string | null
   deliveryProvider: string | null
@@ -63,6 +64,7 @@ export type WorkspacePREventMaxAggregateOutputType = {
   deduplicationKey: string | null
   state: string | null
   attempts: number | null
+  batchId: string | null
   deliveryId: string | null
   deliverySessionId: string | null
   deliveryProvider: string | null
@@ -83,6 +85,7 @@ export type WorkspacePREventCountAggregateOutputType = {
   payload: number
   state: number
   attempts: number
+  batchId: number
   deliveryId: number
   deliverySessionId: number
   deliveryProvider: number
@@ -114,6 +117,7 @@ export type WorkspacePREventMinAggregateInputType = {
   deduplicationKey?: true
   state?: true
   attempts?: true
+  batchId?: true
   deliveryId?: true
   deliverySessionId?: true
   deliveryProvider?: true
@@ -133,6 +137,7 @@ export type WorkspacePREventMaxAggregateInputType = {
   deduplicationKey?: true
   state?: true
   attempts?: true
+  batchId?: true
   deliveryId?: true
   deliverySessionId?: true
   deliveryProvider?: true
@@ -153,6 +158,7 @@ export type WorkspacePREventCountAggregateInputType = {
   payload?: true
   state?: true
   attempts?: true
+  batchId?: true
   deliveryId?: true
   deliverySessionId?: true
   deliveryProvider?: true
@@ -260,6 +266,7 @@ export type WorkspacePREventGroupByOutputType = {
   payload: runtime.JsonValue
   state: string
   attempts: number
+  batchId: string | null
   deliveryId: string | null
   deliverySessionId: string | null
   deliveryProvider: string | null
@@ -303,6 +310,7 @@ export type WorkspacePREventWhereInput = {
   payload?: Prisma.JsonFilter<"WorkspacePREvent">
   state?: Prisma.StringFilter<"WorkspacePREvent"> | string
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
+  batchId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
@@ -314,6 +322,7 @@ export type WorkspacePREventWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"WorkspacePREvent"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   pr?: Prisma.XOR<Prisma.WorkspacePRNullableScalarRelationFilter, Prisma.WorkspacePRWhereInput> | null
+  batch?: Prisma.XOR<Prisma.WorkspacePRDeliveryNullableScalarRelationFilter, Prisma.WorkspacePRDeliveryWhereInput> | null
 }
 
 export type WorkspacePREventOrderByWithRelationInput = {
@@ -325,6 +334,7 @@ export type WorkspacePREventOrderByWithRelationInput = {
   payload?: Prisma.SortOrder
   state?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
+  batchId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryProvider?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -336,6 +346,7 @@ export type WorkspacePREventOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
   pr?: Prisma.WorkspacePROrderByWithRelationInput
+  batch?: Prisma.WorkspacePRDeliveryOrderByWithRelationInput
 }
 
 export type WorkspacePREventWhereUniqueInput = Prisma.AtLeast<{
@@ -352,6 +363,7 @@ export type WorkspacePREventWhereUniqueInput = Prisma.AtLeast<{
   payload?: Prisma.JsonFilter<"WorkspacePREvent">
   state?: Prisma.StringFilter<"WorkspacePREvent"> | string
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
+  batchId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
@@ -363,6 +375,7 @@ export type WorkspacePREventWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"WorkspacePREvent"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
   pr?: Prisma.XOR<Prisma.WorkspacePRNullableScalarRelationFilter, Prisma.WorkspacePRWhereInput> | null
+  batch?: Prisma.XOR<Prisma.WorkspacePRDeliveryNullableScalarRelationFilter, Prisma.WorkspacePRDeliveryWhereInput> | null
 }, "id" | "prId_deduplicationKey" | "workspaceId_deduplicationKey">
 
 export type WorkspacePREventOrderByWithAggregationInput = {
@@ -374,6 +387,7 @@ export type WorkspacePREventOrderByWithAggregationInput = {
   payload?: Prisma.SortOrder
   state?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
+  batchId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryProvider?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -402,6 +416,7 @@ export type WorkspacePREventScalarWhereWithAggregatesInput = {
   payload?: Prisma.JsonWithAggregatesFilter<"WorkspacePREvent">
   state?: Prisma.StringWithAggregatesFilter<"WorkspacePREvent"> | string
   attempts?: Prisma.IntWithAggregatesFilter<"WorkspacePREvent"> | number
+  batchId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   deliveryId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
   deliveryProvider?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePREvent"> | string | null
@@ -431,6 +446,7 @@ export type WorkspacePREventCreateInput = {
   createdAt?: Date | string
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrEventsInput
   pr?: Prisma.WorkspacePRCreateNestedOneWithoutEventsInput
+  batch?: Prisma.WorkspacePRDeliveryCreateNestedOneWithoutEventsInput
 }
 
 export type WorkspacePREventUncheckedCreateInput = {
@@ -442,6 +458,7 @@ export type WorkspacePREventUncheckedCreateInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -471,6 +488,7 @@ export type WorkspacePREventUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrEventsNestedInput
   pr?: Prisma.WorkspacePRUpdateOneWithoutEventsNestedInput
+  batch?: Prisma.WorkspacePRDeliveryUpdateOneWithoutEventsNestedInput
 }
 
 export type WorkspacePREventUncheckedUpdateInput = {
@@ -482,6 +500,7 @@ export type WorkspacePREventUncheckedUpdateInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: Prisma.StringFieldUpdateOperationsInput | string
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -502,6 +521,7 @@ export type WorkspacePREventCreateManyInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -540,6 +560,7 @@ export type WorkspacePREventUncheckedUpdateManyInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: Prisma.StringFieldUpdateOperationsInput | string
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -580,6 +601,7 @@ export type WorkspacePREventCountOrderByAggregateInput = {
   payload?: Prisma.SortOrder
   state?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
+  batchId?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
   deliveryProvider?: Prisma.SortOrder
@@ -604,6 +626,7 @@ export type WorkspacePREventMaxOrderByAggregateInput = {
   deduplicationKey?: Prisma.SortOrder
   state?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
+  batchId?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
   deliveryProvider?: Prisma.SortOrder
@@ -623,6 +646,7 @@ export type WorkspacePREventMinOrderByAggregateInput = {
   deduplicationKey?: Prisma.SortOrder
   state?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
+  batchId?: Prisma.SortOrder
   deliveryId?: Prisma.SortOrder
   deliverySessionId?: Prisma.SortOrder
   deliveryProvider?: Prisma.SortOrder
@@ -723,6 +747,48 @@ export type WorkspacePREventUncheckedUpdateManyWithoutPrNestedInput = {
   deleteMany?: Prisma.WorkspacePREventScalarWhereInput | Prisma.WorkspacePREventScalarWhereInput[]
 }
 
+export type WorkspacePREventCreateNestedManyWithoutBatchInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput> | Prisma.WorkspacePREventCreateWithoutBatchInput[] | Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput[]
+  connectOrCreate?: Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput | Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput[]
+  createMany?: Prisma.WorkspacePREventCreateManyBatchInputEnvelope
+  connect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+}
+
+export type WorkspacePREventUncheckedCreateNestedManyWithoutBatchInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput> | Prisma.WorkspacePREventCreateWithoutBatchInput[] | Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput[]
+  connectOrCreate?: Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput | Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput[]
+  createMany?: Prisma.WorkspacePREventCreateManyBatchInputEnvelope
+  connect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+}
+
+export type WorkspacePREventUpdateManyWithoutBatchNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput> | Prisma.WorkspacePREventCreateWithoutBatchInput[] | Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput[]
+  connectOrCreate?: Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput | Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput[]
+  upsert?: Prisma.WorkspacePREventUpsertWithWhereUniqueWithoutBatchInput | Prisma.WorkspacePREventUpsertWithWhereUniqueWithoutBatchInput[]
+  createMany?: Prisma.WorkspacePREventCreateManyBatchInputEnvelope
+  set?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  disconnect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  delete?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  connect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  update?: Prisma.WorkspacePREventUpdateWithWhereUniqueWithoutBatchInput | Prisma.WorkspacePREventUpdateWithWhereUniqueWithoutBatchInput[]
+  updateMany?: Prisma.WorkspacePREventUpdateManyWithWhereWithoutBatchInput | Prisma.WorkspacePREventUpdateManyWithWhereWithoutBatchInput[]
+  deleteMany?: Prisma.WorkspacePREventScalarWhereInput | Prisma.WorkspacePREventScalarWhereInput[]
+}
+
+export type WorkspacePREventUncheckedUpdateManyWithoutBatchNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput> | Prisma.WorkspacePREventCreateWithoutBatchInput[] | Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput[]
+  connectOrCreate?: Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput | Prisma.WorkspacePREventCreateOrConnectWithoutBatchInput[]
+  upsert?: Prisma.WorkspacePREventUpsertWithWhereUniqueWithoutBatchInput | Prisma.WorkspacePREventUpsertWithWhereUniqueWithoutBatchInput[]
+  createMany?: Prisma.WorkspacePREventCreateManyBatchInputEnvelope
+  set?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  disconnect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  delete?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  connect?: Prisma.WorkspacePREventWhereUniqueInput | Prisma.WorkspacePREventWhereUniqueInput[]
+  update?: Prisma.WorkspacePREventUpdateWithWhereUniqueWithoutBatchInput | Prisma.WorkspacePREventUpdateWithWhereUniqueWithoutBatchInput[]
+  updateMany?: Prisma.WorkspacePREventUpdateManyWithWhereWithoutBatchInput | Prisma.WorkspacePREventUpdateManyWithWhereWithoutBatchInput[]
+  deleteMany?: Prisma.WorkspacePREventScalarWhereInput | Prisma.WorkspacePREventScalarWhereInput[]
+}
+
 export type WorkspacePREventCreateWithoutWorkspaceInput = {
   id?: string
   kind: string
@@ -740,6 +806,7 @@ export type WorkspacePREventCreateWithoutWorkspaceInput = {
   deliveredAt?: Date | string | null
   createdAt?: Date | string
   pr?: Prisma.WorkspacePRCreateNestedOneWithoutEventsInput
+  batch?: Prisma.WorkspacePRDeliveryCreateNestedOneWithoutEventsInput
 }
 
 export type WorkspacePREventUncheckedCreateWithoutWorkspaceInput = {
@@ -750,6 +817,7 @@ export type WorkspacePREventUncheckedCreateWithoutWorkspaceInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -798,6 +866,7 @@ export type WorkspacePREventScalarWhereInput = {
   payload?: Prisma.JsonFilter<"WorkspacePREvent">
   state?: Prisma.StringFilter<"WorkspacePREvent"> | string
   attempts?: Prisma.IntFilter<"WorkspacePREvent"> | number
+  batchId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliverySessionId?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
   deliveryProvider?: Prisma.StringNullableFilter<"WorkspacePREvent"> | string | null
@@ -826,6 +895,7 @@ export type WorkspacePREventCreateWithoutPrInput = {
   deliveredAt?: Date | string | null
   createdAt?: Date | string
   workspace: Prisma.WorkspaceCreateNestedOneWithoutPrEventsInput
+  batch?: Prisma.WorkspacePRDeliveryCreateNestedOneWithoutEventsInput
 }
 
 export type WorkspacePREventUncheckedCreateWithoutPrInput = {
@@ -836,6 +906,7 @@ export type WorkspacePREventUncheckedCreateWithoutPrInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -872,6 +943,71 @@ export type WorkspacePREventUpdateManyWithWhereWithoutPrInput = {
   data: Prisma.XOR<Prisma.WorkspacePREventUpdateManyMutationInput, Prisma.WorkspacePREventUncheckedUpdateManyWithoutPrInput>
 }
 
+export type WorkspacePREventCreateWithoutBatchInput = {
+  id?: string
+  kind: string
+  deduplicationKey: string
+  payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: string
+  attempts?: number
+  deliveryId?: string | null
+  deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
+  deliveryBindingRevision?: number | null
+  deliveryText?: string | null
+  claimedAt?: Date | string | null
+  deliveredAt?: Date | string | null
+  createdAt?: Date | string
+  workspace: Prisma.WorkspaceCreateNestedOneWithoutPrEventsInput
+  pr?: Prisma.WorkspacePRCreateNestedOneWithoutEventsInput
+}
+
+export type WorkspacePREventUncheckedCreateWithoutBatchInput = {
+  id?: string
+  workspaceId: string
+  prId?: string | null
+  kind: string
+  deduplicationKey: string
+  payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: string
+  attempts?: number
+  deliveryId?: string | null
+  deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
+  deliveryBindingRevision?: number | null
+  deliveryText?: string | null
+  claimedAt?: Date | string | null
+  deliveredAt?: Date | string | null
+  createdAt?: Date | string
+}
+
+export type WorkspacePREventCreateOrConnectWithoutBatchInput = {
+  where: Prisma.WorkspacePREventWhereUniqueInput
+  create: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput>
+}
+
+export type WorkspacePREventCreateManyBatchInputEnvelope = {
+  data: Prisma.WorkspacePREventCreateManyBatchInput | Prisma.WorkspacePREventCreateManyBatchInput[]
+}
+
+export type WorkspacePREventUpsertWithWhereUniqueWithoutBatchInput = {
+  where: Prisma.WorkspacePREventWhereUniqueInput
+  update: Prisma.XOR<Prisma.WorkspacePREventUpdateWithoutBatchInput, Prisma.WorkspacePREventUncheckedUpdateWithoutBatchInput>
+  create: Prisma.XOR<Prisma.WorkspacePREventCreateWithoutBatchInput, Prisma.WorkspacePREventUncheckedCreateWithoutBatchInput>
+}
+
+export type WorkspacePREventUpdateWithWhereUniqueWithoutBatchInput = {
+  where: Prisma.WorkspacePREventWhereUniqueInput
+  data: Prisma.XOR<Prisma.WorkspacePREventUpdateWithoutBatchInput, Prisma.WorkspacePREventUncheckedUpdateWithoutBatchInput>
+}
+
+export type WorkspacePREventUpdateManyWithWhereWithoutBatchInput = {
+  where: Prisma.WorkspacePREventScalarWhereInput
+  data: Prisma.XOR<Prisma.WorkspacePREventUpdateManyMutationInput, Prisma.WorkspacePREventUncheckedUpdateManyWithoutBatchInput>
+}
+
 export type WorkspacePREventCreateManyWorkspaceInput = {
   id?: string
   prId?: string | null
@@ -880,6 +1016,7 @@ export type WorkspacePREventCreateManyWorkspaceInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -908,6 +1045,7 @@ export type WorkspacePREventUpdateWithoutWorkspaceInput = {
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   pr?: Prisma.WorkspacePRUpdateOneWithoutEventsNestedInput
+  batch?: Prisma.WorkspacePRDeliveryUpdateOneWithoutEventsNestedInput
 }
 
 export type WorkspacePREventUncheckedUpdateWithoutWorkspaceInput = {
@@ -918,6 +1056,7 @@ export type WorkspacePREventUncheckedUpdateWithoutWorkspaceInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: Prisma.StringFieldUpdateOperationsInput | string
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -937,6 +1076,7 @@ export type WorkspacePREventUncheckedUpdateManyWithoutWorkspaceInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: Prisma.StringFieldUpdateOperationsInput | string
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -956,6 +1096,7 @@ export type WorkspacePREventCreateManyPrInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   state?: string
   attempts?: number
+  batchId?: string | null
   deliveryId?: string | null
   deliverySessionId?: string | null
   deliveryProvider?: string | null
@@ -984,11 +1125,93 @@ export type WorkspacePREventUpdateWithoutPrInput = {
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrEventsNestedInput
+  batch?: Prisma.WorkspacePRDeliveryUpdateOneWithoutEventsNestedInput
 }
 
 export type WorkspacePREventUncheckedUpdateWithoutPrInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  deduplicationKey?: Prisma.StringFieldUpdateOperationsInput | string
+  payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: Prisma.StringFieldUpdateOperationsInput | string
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type WorkspacePREventUncheckedUpdateManyWithoutPrInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  deduplicationKey?: Prisma.StringFieldUpdateOperationsInput | string
+  payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: Prisma.StringFieldUpdateOperationsInput | string
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  batchId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type WorkspacePREventCreateManyBatchInput = {
+  id?: string
+  workspaceId: string
+  prId?: string | null
+  kind: string
+  deduplicationKey: string
+  payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: string
+  attempts?: number
+  deliveryId?: string | null
+  deliverySessionId?: string | null
+  deliveryProvider?: string | null
+  deliveryProviderSessionId?: string | null
+  deliveryBindingRevision?: number | null
+  deliveryText?: string | null
+  claimedAt?: Date | string | null
+  deliveredAt?: Date | string | null
+  createdAt?: Date | string
+}
+
+export type WorkspacePREventUpdateWithoutBatchInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  deduplicationKey?: Prisma.StringFieldUpdateOperationsInput | string
+  payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  state?: Prisma.StringFieldUpdateOperationsInput | string
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  deliveryId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliverySessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProvider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryProviderSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  deliveryBindingRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  deliveryText?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  claimedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutPrEventsNestedInput
+  pr?: Prisma.WorkspacePRUpdateOneWithoutEventsNestedInput
+}
+
+export type WorkspacePREventUncheckedUpdateWithoutBatchInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  prId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   kind?: Prisma.StringFieldUpdateOperationsInput | string
   deduplicationKey?: Prisma.StringFieldUpdateOperationsInput | string
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1005,9 +1228,10 @@ export type WorkspacePREventUncheckedUpdateWithoutPrInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
-export type WorkspacePREventUncheckedUpdateManyWithoutPrInput = {
+export type WorkspacePREventUncheckedUpdateManyWithoutBatchInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
+  prId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   kind?: Prisma.StringFieldUpdateOperationsInput | string
   deduplicationKey?: Prisma.StringFieldUpdateOperationsInput | string
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
@@ -1035,6 +1259,7 @@ export type WorkspacePREventSelect<ExtArgs extends runtime.Types.Extensions.Inte
   payload?: boolean
   state?: boolean
   attempts?: boolean
+  batchId?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
   deliveryProvider?: boolean
@@ -1046,6 +1271,7 @@ export type WorkspacePREventSelect<ExtArgs extends runtime.Types.Extensions.Inte
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePREvent"]>
 
 export type WorkspacePREventSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -1057,6 +1283,7 @@ export type WorkspacePREventSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
   payload?: boolean
   state?: boolean
   attempts?: boolean
+  batchId?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
   deliveryProvider?: boolean
@@ -1068,6 +1295,7 @@ export type WorkspacePREventSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePREvent"]>
 
 export type WorkspacePREventSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -1079,6 +1307,7 @@ export type WorkspacePREventSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
   payload?: boolean
   state?: boolean
   attempts?: boolean
+  batchId?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
   deliveryProvider?: boolean
@@ -1090,6 +1319,7 @@ export type WorkspacePREventSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }, ExtArgs["result"]["workspacePREvent"]>
 
 export type WorkspacePREventSelectScalar = {
@@ -1101,6 +1331,7 @@ export type WorkspacePREventSelectScalar = {
   payload?: boolean
   state?: boolean
   attempts?: boolean
+  batchId?: boolean
   deliveryId?: boolean
   deliverySessionId?: boolean
   deliveryProvider?: boolean
@@ -1112,18 +1343,21 @@ export type WorkspacePREventSelectScalar = {
   createdAt?: boolean
 }
 
-export type WorkspacePREventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "prId" | "kind" | "deduplicationKey" | "payload" | "state" | "attempts" | "deliveryId" | "deliverySessionId" | "deliveryProvider" | "deliveryProviderSessionId" | "deliveryBindingRevision" | "deliveryText" | "claimedAt" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspacePREvent"]>
+export type WorkspacePREventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "prId" | "kind" | "deduplicationKey" | "payload" | "state" | "attempts" | "batchId" | "deliveryId" | "deliverySessionId" | "deliveryProvider" | "deliveryProviderSessionId" | "deliveryBindingRevision" | "deliveryText" | "claimedAt" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspacePREvent"]>
 export type WorkspacePREventInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }
 export type WorkspacePREventIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }
 export type WorkspacePREventIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   pr?: boolean | Prisma.WorkspacePREvent$prArgs<ExtArgs>
+  batch?: boolean | Prisma.WorkspacePREvent$batchArgs<ExtArgs>
 }
 
 export type $WorkspacePREventPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1131,6 +1365,7 @@ export type $WorkspacePREventPayload<ExtArgs extends runtime.Types.Extensions.In
   objects: {
     workspace: Prisma.$WorkspacePayload<ExtArgs>
     pr: Prisma.$WorkspacePRPayload<ExtArgs> | null
+    batch: Prisma.$WorkspacePRDeliveryPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1141,6 +1376,7 @@ export type $WorkspacePREventPayload<ExtArgs extends runtime.Types.Extensions.In
     payload: runtime.JsonValue
     state: string
     attempts: number
+    batchId: string | null
     deliveryId: string | null
     deliverySessionId: string | null
     deliveryProvider: string | null
@@ -1546,6 +1782,7 @@ export interface Prisma__WorkspacePREventClient<T, Null = never, ExtArgs extends
   readonly [Symbol.toStringTag]: "PrismaPromise"
   workspace<T extends Prisma.WorkspaceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspaceDefaultArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   pr<T extends Prisma.WorkspacePREvent$prArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePREvent$prArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  batch<T extends Prisma.WorkspacePREvent$batchArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.WorkspacePREvent$batchArgs<ExtArgs>>): Prisma.Prisma__WorkspacePRDeliveryClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePRDeliveryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1583,6 +1820,7 @@ export interface WorkspacePREventFieldRefs {
   readonly payload: Prisma.FieldRef<"WorkspacePREvent", 'Json'>
   readonly state: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly attempts: Prisma.FieldRef<"WorkspacePREvent", 'Int'>
+  readonly batchId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly deliveryId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly deliverySessionId: Prisma.FieldRef<"WorkspacePREvent", 'String'>
   readonly deliveryProvider: Prisma.FieldRef<"WorkspacePREvent", 'String'>
@@ -2007,6 +2245,25 @@ export type WorkspacePREvent$prArgs<ExtArgs extends runtime.Types.Extensions.Int
    */
   include?: Prisma.WorkspacePRInclude<ExtArgs> | null
   where?: Prisma.WorkspacePRWhereInput
+}
+
+/**
+ * WorkspacePREvent.batch
+ */
+export type WorkspacePREvent$batchArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspacePRDelivery
+   */
+  select?: Prisma.WorkspacePRDeliverySelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspacePRDelivery
+   */
+  omit?: Prisma.WorkspacePRDeliveryOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspacePRDeliveryInclude<ExtArgs> | null
+  where?: Prisma.WorkspacePRDeliveryWhereInput
 }
 
 /**

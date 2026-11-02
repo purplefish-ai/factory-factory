@@ -29,6 +29,7 @@ Enforced by dependency-cruiser and ownership checks:
   budget.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
   `WorkspacePRMonitoring` owns the recipient binding, `WorkspacePREvent` the
-  durable event ledger, and `WorkspacePRDiscovery` the discovery schedule. Other
-  side tables flatten their rows onto workspace reads. Read
+  durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and
+  membership, and `WorkspacePRDiscovery` the discovery schedule. Other side
+  tables flatten their rows onto workspace reads. Read
   [workspace state](../../../docs/architecture/workspace-state.md).

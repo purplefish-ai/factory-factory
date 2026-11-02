@@ -904,7 +904,7 @@ it.each([
       }
       expect(
         await db.prisma.workspacePREvent.count({
-          where: { workspaceId: workspace.id, state: 'DISPATCHING' },
+          where: { workspaceId: workspace.id, batch: { state: 'DISPATCHING' } },
         })
       ).toBe(2);
       if (revoked) {
@@ -933,12 +933,12 @@ it.each([
     expect(providers[1]!.connection.prompt).toHaveBeenCalledTimes(revoked ? 0 : 1);
     expect(
       await db.prisma.workspacePREvent.count({
-        where: { workspaceId: workspace.id, state: 'DISPATCHING' },
+        where: { workspaceId: workspace.id, batch: { state: 'DISPATCHING' } },
       })
     ).toBe(0);
     expect(
       await db.prisma.workspacePREvent.count({
-        where: { workspaceId: workspace.id, state: revoked ? 'PENDING' : 'DELIVERED' },
+        where: { workspaceId: workspace.id, batch: { state: revoked ? 'PENDING' : 'DELIVERED' } },
       })
     ).toBe(2);
   }

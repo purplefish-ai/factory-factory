@@ -22,6 +22,7 @@ export async function readDurableRecovery(tx: Prisma.TransactionClient) {
     }),
     periodicTaskExecution: await tx.periodicTaskExecution.findMany({
       select: {
+        launchSnapshot: true,
         id: true,
         periodicTaskId: true,
         workspaceId: true,

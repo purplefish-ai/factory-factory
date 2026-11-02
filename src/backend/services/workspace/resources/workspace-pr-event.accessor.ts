@@ -11,7 +11,128 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
-import type { AgentSession, Prisma, WorkspacePREvent } from '@prisma-gen/client';
+import type {
+  AgentSession,
+  Prisma,
+  WorkspacePRDelivery,
+  WorkspacePREvent,
+} from '@prisma-gen/client';
+import {
+  readDeliveryEvents,
+  projectDeliveryEvent,
+  projectDeliveryEvents,
+  exportDeliveryEvents,
+} from './workspace-pr-delivery.accessor';
+
+const membershipSchema = z.array(z.string().min(1)).min(1);
+const legacyFields = [
+  'workspaceId',
+  'state',
+  'attempts',
+  'deliverySessionId',
+  'deliveryProvider',
+  'deliveryProviderSessionId',
+  'deliveryBindingRevision',
+  'deliveryText',
+  'claimedAt',
+  'deliveredAt',
+] as const;
+
+const clearedDeliveryFields = {
+  state: 'PENDING',
+  attempts: 0,
+  deliveryId: null,
+  deliverySessionId: null,
+  deliveryProvider: null,
+  deliveryProviderSessionId: null,
+  deliveryBindingRevision: null,
+  deliveryText: null,
+  claimedAt: null,
+  deliveredAt: null,
+};
+
+/** Also used for old-format restores. Invalid evidence stays verbatim on events. */
+async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string) {
+  const existing = await tx.workspacePRDelivery.findUnique({ where: { id } });
+  if (existing) {
+    return existing;
+  }
+  const rows = await tx.workspacePREvent.findMany({
+    where: { deliveryId: id },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+  const first = rows[0];
+  if (!first) {
+    return null;
+  }
+  const valid = Boolean(
+    first.deliverySessionId &&
+    ['CLAUDE', 'CODEX'].includes(first.deliveryProvider ?? '') &&
+    first.deliveryProviderSessionId &&
+    first.deliveryText &&
+    Buffer.byteLength(first.deliveryText) <= 16_384 &&
+    first.deliveryBindingRevision !== null &&
+    first.deliveryBindingRevision >= 0 &&
+    first.attempts >= 0 &&
+    ['PENDING', 'DISPATCHING', 'DELIVERED', 'CANCELLED'].includes(first.state) &&
+    rows.every((row) =>
+      legacyFields.every((field) => {
+        const a = row[field],
+          b = first[field];
+        return a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b;
+      })
+    )
+  );
+  const delivery = await tx.workspacePRDelivery.create({
+    data: {
+      id,
+      workspaceId: first.workspaceId,
+      eventIds: rows.map((row) => row.id),
+      state: valid ? first.state : 'BLOCKED',
+      ...(valid
+        ? {
+            sessionId: first.deliverySessionId,
+            provider: first.deliveryProvider,
+            providerSessionId: first.deliveryProviderSessionId,
+            bindingRevision: first.deliveryBindingRevision,
+            text: first.deliveryText,
+            attempts: first.attempts,
+            claimedAt: first.claimedAt,
+            deliveredAt: first.deliveredAt,
+          }
+        : {}),
+    },
+  });
+  await tx.workspacePREvent.updateMany({
+    where: { deliveryId: id },
+    data: { batchId: id, ...(valid ? clearedDeliveryFields : {}) },
+  });
+  return delivery;
+}
+
+async function validDeliveryMembers(tx: Prisma.TransactionClient, delivery: WorkspacePRDelivery) {
+  if (delivery.state === 'BLOCKED') {
+    return null;
+  }
+  const parsed = membershipSchema.safeParse(delivery.eventIds);
+  const rows = await tx.workspacePREvent.findMany({
+    where: { OR: [{ batchId: delivery.id }, { deliveryId: delivery.id }] },
+  });
+  const ids = parsed.success ? new Set(parsed.data) : new Set<string>();
+  if (
+    !parsed.success ||
+    ids.size !== parsed.data.length ||
+    rows.length !== ids.size ||
+    rows.some(
+      (row) =>
+        !ids.has(row.id) || row.workspaceId !== delivery.workspaceId || row.batchId !== delivery.id
+    )
+  ) {
+    await tx.workspacePRDelivery.update({ where: { id: delivery.id }, data: { state: 'BLOCKED' } });
+    return null;
+  }
+  return rows.map((row) => projectDeliveryEvent(row, delivery));
+}
 
 function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, workspaceId: string) {
   if (
@@ -142,6 +263,39 @@ async function requeueAttachedFactsAfterDetachment(
   return cancelled.count;
 }
 
+async function recoverAbsentIdentity(
+  tx: Prisma.TransactionClient,
+  deliveryId: string,
+  identity: RecoveryIdentity,
+  rows: WorkspacePREvent[]
+): Promise<ClaimRecoveryResult | null> {
+  const session = await tx.agentSession.findFirst({
+    where: {
+      id: identity.sessionId,
+      provider: identity.provider,
+      providerSessionId: identity.providerSessionId,
+    },
+  });
+  if (
+    !session ||
+    rows.some(
+      (row) =>
+        row.workspaceId !== session.workspaceId ||
+        row.deliverySessionId !== session.id ||
+        row.deliveryProvider !== session.provider ||
+        !hasRolloverLineage(session, row.deliveryProviderSessionId)
+    )
+  ) {
+    return { count: 0, status: 'identity_mismatch' };
+  }
+  const requeued = await requeueAttachedFactsAfterDetachment(tx, session, rows);
+  if (requeued === null) {
+    return null;
+  }
+  await tx.workspacePRDelivery.update({ where: { id: deliveryId }, data: { state: 'CANCELLED' } });
+  return { count: requeued, status: 'recovered' };
+}
+
 type DeliveryClaimInput = Omit<ClaimedPRDelivery, 'bindingRevision' | 'attempt'>;
 function claimPRScope(request: PRDeliveryRequest, deliveryMode: 'MAIN' | 'DEDICATED') {
   return deliveryMode === 'MAIN' && request.prId === null ? {} : { prId: request.prId };
@@ -152,27 +306,22 @@ async function matchesFrozenClaim(
   input: DeliveryClaimInput,
   rows: WorkspacePREvent[]
 ) {
-  if (rows.length !== input.eventIds.length) {
+  if (rows.length !== input.eventIds.length || new Set(input.eventIds).size !== rows.length) {
     return false;
   }
-  if (
-    rows.some(
-      (row) =>
-        row.deliveryId &&
-        (row.deliveryId !== input.deliveryId ||
-          row.deliverySessionId !== input.sessionId ||
-          row.deliveryText !== input.text)
-    )
-  ) {
-    return false;
+  const delivery = await normalizeLegacyDelivery(tx, input.deliveryId);
+  if (!delivery) {
+    return rows.every((row) => !row.deliveryId);
   }
-  if (!rows.some((row) => row.deliveryId)) {
-    return true;
-  }
-  // Frozen retries contain every original event and no newly observed facts.
-  return (
-    rows.every((row) => row.deliveryId === input.deliveryId) &&
-    (await tx.workspacePREvent.count({ where: { deliveryId: input.deliveryId } })) === rows.length
+  const members = await validDeliveryMembers(tx, delivery);
+  return Boolean(
+    members &&
+    delivery.state === 'PENDING' &&
+    delivery.sessionId === input.sessionId &&
+    delivery.text === input.text &&
+    members.length === rows.length &&
+    members.every((member) => input.eventIds.includes(member.id)) &&
+    rows.every((row) => row.deliveryId === input.deliveryId)
   );
 }
 async function claimTargetsAttached(
@@ -243,7 +392,17 @@ class WorkspacePrEventAccessor {
         },
       });
     }
+    for (const id of new Set(
+      rawEvents.flatMap((event) => (event.deliveryId ? [event.deliveryId] : []))
+    )) {
+      if (await tx.workspacePRDelivery.findUnique({ where: { id } })) {
+        throw new Error('Imported PR delivery identity already exists');
+      }
+      await normalizeLegacyDelivery(tx, id);
+    }
   }
+  projectEvents = projectDeliveryEvents;
+  exportEvents = exportDeliveryEvents;
   async insert(
     tx: Prisma.TransactionClient,
     workspaceId: string,
@@ -300,24 +459,26 @@ class WorkspacePrEventAccessor {
       ]);
     });
   }
-  listPending(workspaceId: string, prId?: string | null) {
-    return prisma.workspacePREvent.findMany({
-      where: {
+  async listPending(workspaceId: string, prId?: string | null) {
+    return (
+      await readDeliveryEvents(prisma, {
         workspaceId,
         ...(prId !== undefined ? { prId } : {}),
-        state: { in: ['PENDING', 'DISPATCHING'] },
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+        OR: [
+          { batchId: null, state: { in: ['PENDING', 'DISPATCHING'] } },
+          { batch: { state: { in: ['PENDING', 'DISPATCHING', 'BLOCKED'] } } },
+        ],
+      })
+    ).filter((event) => ['PENDING', 'DISPATCHING'].includes(event.state));
   }
-  listForPR(tx: Prisma.TransactionClient, prId: string) {
-    return tx.workspacePREvent.findMany({
-      where: { prId, state: { in: ['PENDING', 'DISPATCHING', 'DELIVERED'] } },
-    });
+  async listForPR(tx: Prisma.TransactionClient, prId: string) {
+    return (await readDeliveryEvents(tx, { prId })).filter((event) =>
+      ['PENDING', 'DISPATCHING', 'DELIVERED'].includes(event.state)
+    );
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
     return tx.workspacePREvent.updateMany({
-      where: { id: { in: ids }, state: 'PENDING', deliveryId: null },
+      where: { id: { in: ids }, state: 'PENDING', deliveryId: null, batchId: null },
       data: { state: 'SUPERSEDED' },
     });
   }
@@ -341,24 +502,32 @@ class WorkspacePrEventAccessor {
         return null;
       }
       // A durable claim holds the workspace until prompt completion or receipt recovery.
-      const competing = await tx.workspacePREvent.findFirst({
-        where: {
-          workspaceId: request.workspaceId,
-          state: 'DISPATCHING',
-          OR: [{ deliveryId: null }, { deliveryId: { not: input.deliveryId } }],
-        },
+      const held = await tx.workspacePRDelivery.findFirst({
+        where: { workspaceId: request.workspaceId, state: { in: ['DISPATCHING', 'BLOCKED'] } },
       });
+      const competing =
+        held ||
+        (await tx.workspacePREvent.findFirst({
+          where: {
+            workspaceId: request.workspaceId,
+            OR: [
+              { batchId: null, state: 'DISPATCHING' },
+              { batch: { state: { in: ['DISPATCHING', 'BLOCKED'] } } },
+            ],
+          },
+        }));
       if (competing) {
         return null;
       }
-      const rows = await tx.workspacePREvent.findMany({
-        where: {
+      // Normalize imported legacy batches before reading their compatibility projection.
+      await normalizeLegacyDelivery(tx, input.deliveryId);
+      const rows = (
+        await readDeliveryEvents(tx, {
           id: { in: input.eventIds },
           workspaceId: request.workspaceId,
           ...claimPRScope(request, deliveryMode),
-          state: 'PENDING',
-        },
-      });
+        })
+      ).filter((event) => event.state === 'PENDING');
       if (!(await matchesFrozenClaim(tx, input, rows))) {
         return null;
       }
@@ -379,143 +548,176 @@ class WorkspacePrEventAccessor {
         deliveryProviderSessionId: session.providerSessionId,
       };
       const attempt = Math.max(...rows.map((e) => e.attempts)) + 1;
-      const updated = await tx.workspacePREvent.updateMany({
-        where: { id: { in: input.eventIds }, state: 'PENDING' },
-        data: {
+      await tx.workspacePRDelivery.upsert({
+        where: { id: input.deliveryId },
+        create: {
+          id: input.deliveryId,
+          workspaceId: request.workspaceId,
+          eventIds: input.eventIds,
           state: 'DISPATCHING',
-          ...identity,
+          sessionId: input.sessionId,
+          provider: session.provider,
+          providerSessionId: session.providerSessionId,
+          bindingRevision: request.bindingRevision,
+          text: input.text,
           attempts: attempt,
-          deliveryId: input.deliveryId,
-          deliverySessionId: input.sessionId,
-          deliveryBindingRevision: request.bindingRevision,
-          deliveryText: input.text,
+          claimedAt: new Date(),
+        },
+        update: {
+          state: 'DISPATCHING',
+          attempts: attempt,
+          bindingRevision: request.bindingRevision,
           claimedAt: new Date(),
         },
       });
-      if (updated.count !== rows.length) {
-        throw new Error('Lost event claim');
-      }
+      await tx.workspacePREvent.updateMany({
+        where: { id: { in: input.eventIds } },
+        data: { batchId: input.deliveryId },
+      });
       return { ...input, ...identity, bindingRevision: request.bindingRevision, attempt };
     });
   }
-  async settleDelivery(input: {
+  settleDelivery(input: {
     deliveryId: string;
     sessionId: string;
     bindingRevision: number;
     attempt?: number;
     result: 'delivered' | 'retry' | 'failed';
   }) {
-    const result = await prisma.workspacePREvent.updateMany({
-      where: {
-        deliveryId: input.deliveryId,
-        deliverySessionId: input.sessionId,
-        deliveryBindingRevision: input.bindingRevision,
-        state: 'DISPATCHING',
-        ...(input.attempt !== undefined && { attempts: input.attempt }),
-      },
-      data:
-        input.result === 'delivered'
-          ? { state: 'DELIVERED', deliveredAt: new Date() }
-          : { state: 'PENDING' },
+    return prisma.$transaction(async (tx) => {
+      const delivery = await normalizeLegacyDelivery(tx, input.deliveryId);
+      if (!(delivery && (await validDeliveryMembers(tx, delivery)))) {
+        return false;
+      }
+      const result = await tx.workspacePRDelivery.updateMany({
+        where: {
+          id: input.deliveryId,
+          sessionId: input.sessionId,
+          bindingRevision: input.bindingRevision,
+          state: 'DISPATCHING',
+          ...(input.attempt !== undefined && { attempts: input.attempt }),
+        },
+        data:
+          input.result === 'delivered'
+            ? { state: 'DELIVERED', deliveredAt: new Date() }
+            : { state: 'PENDING' },
+      });
+      return result.count > 0;
     });
-    return result.count > 0;
   }
   deferBusy(deliveryId: string) {
-    return prisma.workspacePREvent.updateMany({
-      where: { deliveryId, state: 'DISPATCHING', attempts: { gt: 0 } },
-      data: { state: 'PENDING', attempts: { decrement: 1 } },
+    return prisma.$transaction(async (tx) => {
+      const delivery = await normalizeLegacyDelivery(tx, deliveryId);
+      if (!(delivery && (await validDeliveryMembers(tx, delivery)))) {
+        return { count: 0 };
+      }
+      return tx.workspacePRDelivery.updateMany({
+        where: { id: deliveryId, state: 'DISPATCHING', attempts: { gt: 0 } },
+        data: { state: 'PENDING', attempts: { decrement: 1 } },
+      });
     });
   }
-  renewRetryAllowance(tx: Prisma.TransactionClient, workspaceId: string) {
-    return tx.workspacePREvent.updateMany({
+  async renewRetryAllowance(tx: Prisma.TransactionClient, workspaceId: string) {
+    const legacy = await tx.workspacePREvent.findMany({
+      where: { workspaceId, deliveryId: { not: null } },
+      select: { deliveryId: true },
+    });
+    for (const id of new Set(legacy.flatMap((row) => (row.deliveryId ? [row.deliveryId] : [])))) {
+      await normalizeLegacyDelivery(tx, id);
+    }
+    const deliveries = await tx.workspacePRDelivery.findMany({
       where: { workspaceId, state: { in: ['PENDING', 'DISPATCHING'] }, attempts: { gte: 3 } },
+    });
+    for (const delivery of deliveries) {
+      if (await validDeliveryMembers(tx, delivery)) {
+        await tx.workspacePRDelivery.update({ where: { id: delivery.id }, data: { attempts: 0 } });
+      }
+    }
+    return tx.workspacePREvent.updateMany({
+      where: {
+        workspaceId,
+        deliveryId: null,
+        batchId: null,
+        state: { in: ['PENDING', 'DISPATCHING'] },
+        attempts: { gte: 3 },
+      },
       data: { attempts: 0 },
     });
   }
-  async recoverClaim(
+  recoverClaim(
     deliveryId: string,
     delivered: boolean,
     identity?: RecoveryIdentity
   ): Promise<ClaimRecoveryResult> {
-    if (!delivered && identity) {
-      // Only receipt recovery may migrate a frozen claim to a recorded successor.
-      return prisma.$transaction(async (tx) => {
-        const rows = await tx.workspacePREvent.findMany({
-          where: { deliveryId, state: { in: ['PENDING', 'DISPATCHING'] } },
-        });
-        if (!rows.length) {
-          return { count: 0, status: 'settled' };
+    return prisma.$transaction(async (tx) => {
+      const delivery = await normalizeLegacyDelivery(tx, deliveryId);
+      if (!delivery) {
+        return { count: 0, status: 'settled' };
+      }
+      const rows = await validDeliveryMembers(tx, delivery);
+      if (!rows) {
+        return { count: 0, status: 'identity_mismatch' };
+      }
+      if (!['PENDING', 'DISPATCHING'].includes(delivery.state)) {
+        return { count: 0, status: 'settled' };
+      }
+      if (!delivered && identity) {
+        const recovered = await recoverAbsentIdentity(tx, deliveryId, identity, rows);
+        if (recovered) {
+          return recovered;
         }
-        const session = await tx.agentSession.findFirst({
-          where: {
-            id: identity.sessionId,
-            provider: identity.provider,
-            providerSessionId: identity.providerSessionId,
-          },
-        });
-        if (
-          !session ||
-          rows.some(
-            (row) =>
-              row.workspaceId !== session.workspaceId ||
-              row.deliverySessionId !== session.id ||
-              row.deliveryProvider !== session.provider ||
-              !hasRolloverLineage(session, row.deliveryProviderSessionId)
-          )
-        ) {
-          return { count: 0, status: 'identity_mismatch' };
-        }
-        const requeued = await requeueAttachedFactsAfterDetachment(tx, session, rows);
-        if (requeued !== null) {
-          return { count: requeued, status: 'recovered' };
-        }
-        const updated = await tx.workspacePREvent.updateMany({
-          where: {
-            id: { in: rows.map((row) => row.id) },
-            state: { in: ['PENDING', 'DISPATCHING'] },
-          },
-          data: { state: 'PENDING', deliveryProviderSessionId: identity.providerSessionId },
-        });
-        return { ...updated, status: updated.count ? 'recovered' : 'settled' };
+      }
+      await tx.workspacePRDelivery.update({
+        where: { id: deliveryId },
+        data: delivered
+          ? { state: 'DELIVERED', deliveredAt: new Date() }
+          : {
+              state: 'PENDING',
+              ...(identity && { providerSessionId: identity.providerSessionId }),
+            },
       });
-    }
-    const updated = await prisma.workspacePREvent.updateMany({
-      where: { deliveryId, state: delivered ? { in: ['PENDING', 'DISPATCHING'] } : 'DISPATCHING' },
-      data: delivered ? { state: 'DELIVERED', deliveredAt: new Date() } : { state: 'PENDING' },
+      return { count: rows.length, status: 'recovered' };
     });
-    return { ...updated, status: updated.count ? 'recovered' : 'settled' };
   }
   cancelRecoveredDelivery(deliveryId: string, sessionId: string) {
-    return prisma.workspacePREvent.updateMany({
-      where: {
-        deliveryId,
-        deliverySessionId: sessionId,
-        state: { in: ['PENDING', 'DISPATCHING'] },
-      },
-      data: { state: 'CANCELLED' },
+    return prisma.$transaction(async (tx) => {
+      const delivery = await normalizeLegacyDelivery(tx, deliveryId);
+      if (!(delivery && (await validDeliveryMembers(tx, delivery)))) {
+        return { count: 0 };
+      }
+      return tx.workspacePRDelivery.updateMany({
+        where: { id: deliveryId, sessionId, state: { in: ['PENDING', 'DISPATCHING'] } },
+        data: { state: 'CANCELLED' },
+      });
     });
   }
   cancelForPR(tx: Prisma.TransactionClient, prId: string) {
     return tx.workspacePREvent.updateMany({
-      where: { prId, state: 'PENDING', deliveryId: null },
+      where: { prId, state: 'PENDING', deliveryId: null, batchId: null },
       data: { state: 'CANCELLED' },
     });
   }
   cancelUnclaimedControls(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePREvent.updateMany({
-      where: { workspaceId, kind: 'MONITORING_ENABLED', state: 'PENDING', deliveryId: null },
+      where: {
+        workspaceId,
+        kind: 'MONITORING_ENABLED',
+        state: 'PENDING',
+        deliveryId: null,
+        batchId: null,
+      },
       data: { state: 'CANCELLED' },
     });
   }
   cancelInTransaction(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePREvent.updateMany({
-      where: { workspaceId, state: 'PENDING', deliveryId: null },
+      where: { workspaceId, state: 'PENDING', deliveryId: null, batchId: null },
       data: { state: 'CANCELLED' },
     });
   }
   cancelWorkspace(workspaceId: string) {
     return prisma.workspacePREvent.updateMany({
-      where: { workspaceId, state: 'PENDING', deliveryId: null },
+      where: { workspaceId, state: 'PENDING', deliveryId: null, batchId: null },
       data: { state: 'CANCELLED' },
     });
   }

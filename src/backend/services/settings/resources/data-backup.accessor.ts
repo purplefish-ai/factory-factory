@@ -24,6 +24,7 @@ export type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
     conversationMetadata: true;
     prMonitoring: true;
     prEvents: true;
+    prDeliveries: true;
     prDiscovery: true;
     prs: { include: { dedicatedSession: true } };
     runScript: true;
@@ -52,6 +53,7 @@ class DataBackupAccessor {
               conversationMetadata: true,
               prMonitoring: true,
               prEvents: true,
+              prDeliveries: true,
               prDiscovery: true,
               prs: { include: { dedicatedSession: true } },
               runScript: true,

@@ -1,5 +1,5 @@
 import type { DurableRecovery } from '@/shared/schemas/durable-recovery.schema';
-import type { Prisma } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 
 export async function restorePeriodicRecovery(
   tx: Prisma.TransactionClient,
@@ -29,6 +29,7 @@ export async function restorePeriodicRecovery(
     await tx.periodicTaskExecution.create({
       data: {
         ...row,
+        launchSnapshot: row.launchSnapshot ?? Prisma.DbNull,
         status: row.status === 'RUNNING' ? 'FAILED' : row.status,
         errorMessage:
           row.status === 'RUNNING'

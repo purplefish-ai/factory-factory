@@ -18,7 +18,7 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskAccessor } from '@/backend/services/periodic-task/resources/periodic-task.accessor';
-import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
+import { WorkspaceStatus } from '@/shared/core';
 import type { PeriodicTaskTimerEvent } from './periodic-task-timer-event';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -192,24 +192,13 @@ export class PeriodicTaskService {
           continue;
         }
 
-        // Once the following reservation attempt begins, shutdown drains it through
-        // launch and linkage, including the async monthly-anchor lookup before its
-        // transaction. This guard rejects work before that admission boundary.
+        // Once reservation begins, shutdown drains the canonical row read,
+        // reservation, launch and linkage. Reject new work before that boundary.
         if (this.isShuttingDown) {
           break;
         }
 
-        await this.dispatchTask(
-          task.id,
-          task.projectId,
-          task.name,
-          task.prompt,
-          task.cadence as PeriodicTaskCadence,
-          task.scheduledTime,
-          task.timezone,
-          task.scheduledDayOfMonth,
-          task.nextRunAt
-        );
+        await this.dispatchTask(task.id);
       } catch (error) {
         this.logger.error('Failed to dispatch periodic task', {
           taskId: task.id,
@@ -219,38 +208,13 @@ export class PeriodicTaskService {
     }
   }
 
-  private async dispatchTask(
-    taskId: string,
-    projectId: string,
-    name: string,
-    prompt: string,
-    cadence: PeriodicTaskCadence,
-    scheduledTime: string | null,
-    timezone: string | null,
-    scheduledDayOfMonth: number | null,
-    dueAt: Date
-  ): Promise<void> {
+  private async dispatchTask(taskId: string): Promise<void> {
     if (!this.timerDispatchBridge) {
       this.logger.warn('Periodic task service not configured — skipping dispatch');
       return;
     }
 
-    this.logger.info('Dispatching periodic task', { taskId, name });
-
-    const execution = await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
-      {
-        periodicTaskId: taskId,
-        workspaceId: null,
-        status: 'RUNNING',
-      },
-      {
-        cadence,
-        scheduledTime,
-        timezone,
-        scheduledDayOfMonth,
-        dueAt,
-      }
-    );
+    const execution = await periodicTaskAccessor.reserveExecutionAndMarkDispatched(taskId);
     if (!execution) {
       this.logger.debug(
         'Skipping periodic task — dispatch reservation no longer eligible or already claimed',
@@ -261,13 +225,16 @@ export class PeriodicTaskService {
       return;
     }
 
+    const { projectId, name, prompt } = execution.launchSnapshot;
+    this.logger.info('Dispatching periodic task', { taskId, name });
+
     let result: { workspaceId: string };
     try {
       result = await this.timerDispatchBridge.dispatchTimerEvent({
         kind: 'timer_due',
         executionId: execution.id,
         projectId,
-        name: `${name} — ${new Date().toLocaleDateString()}`,
+        name,
         prompt,
         periodicTaskId: taskId,
       });

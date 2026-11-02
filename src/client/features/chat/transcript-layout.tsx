@@ -136,15 +136,10 @@ export function TranscriptTail({
           showThinking={!props.hideThinkingIndicator}
           latestThinking={props.latestThinking}
           runningSubagentList={props.runningSubagentList}
+          onOpenSingleSubagent={props.onOpenSingleSubagent}
         />
       )}
-      {queuedPRUpdate && (
-        <GroupedMessageItemRenderer
-          item={queuedPRUpdate}
-          isQueued
-          onOpenAgents={props.onOpenAgents}
-        />
-      )}
+      {queuedPRUpdate && <GroupedMessageItemRenderer item={queuedPRUpdate} isQueued />}
     </>
   );
 }

@@ -28,7 +28,7 @@ it('rerenders a memoized tool row when persisted expansion changes without remou
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  const onOpenAgents = vi.fn();
+  const onOpenSubagent = vi.fn();
   const item = {
     type: 'tool_sequence' as const,
     id: 'expansion-tool',
@@ -48,14 +48,14 @@ it('rerenders a memoized tool row when persisted expansion changes without remou
           running={false}
           startingSession={false}
           loadingSession={false}
-          onOpenAgents={onOpenAgents}
+          onOpenSubagent={onOpenSubagent}
         />
       )
     );
     const node = host.querySelector<HTMLButtonElement>('[data-message="expansion-tool"]');
     const before = render.mock.lastCall?.[0].toolExpansionToken;
     expect(before).toBe('false:false:false');
-    expect(render.mock.lastCall?.[0].onOpenAgents).toBe(onOpenAgents);
+    expect(render.mock.lastCall?.[0].onOpenSubagent).toBe(onOpenSubagent);
     flushSync(() => node?.click());
     expect(render.mock.lastCall?.[0].toolExpansionToken).toBe('true:false:false');
     expect(host.querySelector('[data-message="expansion-tool"]')).toBe(node);

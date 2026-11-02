@@ -12,6 +12,7 @@ import type {
   TokenStats,
 } from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type {
@@ -165,6 +166,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // This works because:
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
+  const replayAssembler = useRef(new SessionReplayAssembler());
   const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const exhaustedLoadRequestIdRef = useRef<string | null>(null);
@@ -181,6 +183,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // treat the reset runtime as authoritative for A. Same-session reconnects
   // keep the marker so hydrated state isn't spuriously reported as loading.
   useEffect(() => {
+    replayAssembler.current.reset();
     if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
       hydratedSessionIdRef.current = null;
       controlHydratedSessionIdRef.current = null;
@@ -237,7 +240,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
-    (data: unknown) => {
+    (raw: unknown) => {
+      const data = replayAssembler.current.accept(raw);
+      if (data === null) {
+        return;
+      }
       const batch = parseHydrationBatch(data);
       if (batch) {
         const decision = evaluateHydrationBatch(
@@ -271,6 +278,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
+    replayAssembler.current.reset();
     controlHydratedSessionIdRef.current = null;
     const hasHydratedSession = dbSessionId !== null && hydratedSessionIdRef.current === dbSessionId;
     clearConnectLoadingTimeout();
@@ -291,6 +299,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
+    replayAssembler.current.reset();
     controlHydratedSessionIdRef.current = null;
     chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;
@@ -304,6 +313,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Ensure pending load timers cannot fire after unmount.
   useEffect(() => {
     return () => {
+      replayAssembler.current.reset();
       currentLoadRequestIdRef.current = null;
       exhaustedLoadRequestIdRef.current = null;
       currentLoadGenerationRef.current += 1;

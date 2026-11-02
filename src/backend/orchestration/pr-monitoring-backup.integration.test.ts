@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { workspacePRMonitoringService } from '@/backend/services/workspace';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -18,6 +19,16 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 let db: IntegrationDatabase;
+async function readEvent(id: string) {
+  const row = await db.prisma.workspacePREvent.findUnique({ where: { id } });
+  if (!row) {
+    return null;
+  }
+  return workspacePRMonitoringService.projectEvents(
+    [row],
+    await db.prisma.workspacePRDelivery.findMany()
+  )[0];
+}
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
@@ -108,7 +119,7 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
     deliveryPauseReason: 'USER_STOPPED',
     bindingRevision: 7,
   });
-  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+  expect(await readEvent('event')).toMatchObject({
     state: 'DISPATCHING',
     deliveryId: 'frozen-id',
     deliveryProvider: 'CLAUDE',

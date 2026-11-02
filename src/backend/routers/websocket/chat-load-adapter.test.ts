@@ -93,6 +93,38 @@ describe('executeSessionLoad', () => {
     ]);
   });
 
+  it('bounds every replay frame even when one tool body exceeds the frame limit', async () => {
+    const test = setup();
+    test.deps.loadService.captureReplay = () => ({
+      sessionRuntime: runtime,
+      replayEvents: [
+        {
+          type: 'agent_message',
+          messageId: 'large-tool',
+          order: 7,
+          data: {
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                { type: 'tool_result', tool_use_id: 'call', content: '👋"\\'.repeat(100_000) },
+              ],
+            },
+          },
+        },
+      ],
+    });
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'large' }, test.deps);
+    const outbound = test.calls.filter(
+      (call): call is { payload: unknown } =>
+        typeof call === 'object' && call !== null && 'payload' in call
+    );
+    expect(outbound.length).toBeGreaterThan(1);
+    expect(
+      Math.max(...outbound.map(({ payload }) => Buffer.byteLength(JSON.stringify(payload))))
+    ).toBeLessThanOrEqual(128 * 1024);
+  });
+
   it('returns missing-session outcomes without replay, runtime, or activation', async () => {
     const test = setup();
     test.deps.loadService.prepareLoad = async () => ({

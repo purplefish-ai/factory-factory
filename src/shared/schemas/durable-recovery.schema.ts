@@ -18,6 +18,7 @@ export const periodicTaskRecoverySchema = z.object({
 });
 
 export const periodicTaskExecutionRecoverySchema = z.object({
+  launchSnapshot: z.json().nullable().optional().default(null),
   id: z.string(),
   periodicTaskId: z.string(),
   workspaceId: z.string().nullable(),

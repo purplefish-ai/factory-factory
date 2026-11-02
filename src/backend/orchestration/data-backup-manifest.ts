@@ -38,6 +38,12 @@ export const recoveryModelCoverage = {
     handling: 'included',
     reason: 'Validated dedicated session bindings.',
   },
+  WorkspacePRDelivery: {
+    category: 'evidence',
+    handling: 'included',
+    reason:
+      'Frozen delivery identity, envelope and full receipt membership via validated PR backup adapter; never automatically resent.',
+  },
   WorkspacePREvent: {
     category: 'evidence',
     handling: 'included',
