@@ -43,17 +43,32 @@ it.each([
     const { SessionConfigService } = await vi.importActual<
       typeof import('@/backend/services/session/service/lifecycle/session.config.service')
     >('@/backend/services/session/service/lifecycle/session.config.service');
-    const configure = SessionConfigService.prototype.configureQueuedMessage;
+    const configure = SessionConfigService.prototype.withPromptConfiguration;
     const held = boundary();
     let targetId: string | undefined;
     let baselineConfig = 0;
-    vi.spyOn(SessionConfigService.prototype, 'configureQueuedMessage').mockImplementation(
-      async function (this: InstanceType<typeof SessionConfigService>, id, ...args) {
-        targetId = id;
-        baselineConfig = providers[2]!.connection.setSessionConfigOption.mock.calls.length;
-        expect(args[0].timestamp).toBe(notice.createdAt.toISOString());
-        await held.wait();
-        return configure.call(this, id, ...args);
+    vi.spyOn(SessionConfigService.prototype, 'withPromptConfiguration').mockImplementation(
+      function <T>(
+        this: InstanceType<typeof SessionConfigService>,
+        id: string,
+        operation: import('@/backend/services/session/service/lifecycle/session-prompt-configuration').PromptConfigurationOperation<T>,
+        guard?: import('@/backend/services/session/service/bridges').SessionCallerGuard
+      ) {
+        return configure.bind(this)(
+          id,
+          (scope) =>
+            operation({
+              ...scope,
+              configure: async (message, supportsThinking) => {
+                targetId = id;
+                baselineConfig = providers[2]!.connection.setSessionConfigOption.mock.calls.length;
+                expect(message.timestamp).toBe(notice.createdAt.toISOString());
+                await held.wait();
+                return scope.configure(message, supportsThinking);
+              },
+            }),
+          guard
+        );
       }
     );
     if (entry === 'getOrCreate') {

@@ -75,3 +75,13 @@ it('republishes an undelivered task after its queue is destructively cleared', (
   expect(domain.enqueueInitialMessage('session-1', retry)).toEqual({ position: 0 });
   expect(domain.getQueueSnapshot('session-1')).toEqual([retry]);
 });
+it('refuses durable initial admission when no persistence capability is installed', async () => {
+  await expect(domain.enqueueInitialMessageDurably('session', message)).rejects.toThrow(
+    'Durable chat admission is not configured'
+  );
+  await expect(domain.storeInitialMessageDurably('session', 'hello')).rejects.toThrow(
+    'Durable chat admission is not configured'
+  );
+  expect(domain.getQueueSnapshot('session')).toEqual([]);
+  expect(domain.consumeInitialMessage('session')).toBeNull();
+});

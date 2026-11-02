@@ -20,12 +20,45 @@ import type {
 } from '@prisma-gen/client';
 import {
   readDeliveryEvents,
+  getFrozenDeliveryMembers,
   projectDeliveryEvent,
   projectDeliveryEvents,
   exportDeliveryEvents,
 } from './workspace-pr-delivery.accessor';
 
-const membershipSchema = z.array(z.string().min(1)).min(1);
+// Frozen legacy metadata without a receipt cannot authorize another effect.
+const unboundLegacyEvidenceWhere = {
+  batchId: null,
+  OR: [
+    { deliveryId: '' },
+    {
+      deliveryId: null,
+      OR: [
+        { deliverySessionId: { not: null } },
+        { deliveryProvider: { not: null } },
+        { deliveryProviderSessionId: { not: null } },
+        { deliveryBindingRevision: { not: null } },
+        { deliveryText: { not: null } },
+        { claimedAt: { not: null } },
+        { deliveredAt: { not: null } },
+      ],
+    },
+  ],
+} satisfies Prisma.WorkspacePREventWhereInput;
+
+// Positive NULL checks avoid three-valued NOT semantics on optional receipt IDs.
+const unclaimedDeliveryWhere = {
+  batchId: null,
+  deliveryId: null,
+  deliverySessionId: null,
+  deliveryProvider: null,
+  deliveryProviderSessionId: null,
+  deliveryBindingRevision: null,
+  deliveryText: null,
+  claimedAt: null,
+  deliveredAt: null,
+} satisfies Prisma.WorkspacePREventWhereInput;
+
 const legacyFields = [
   'workspaceId',
   'state',
@@ -67,6 +100,7 @@ async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string)
     return null;
   }
   const valid = Boolean(
+    id.length > 0 &&
     first.deliverySessionId &&
     ['CLAUDE', 'CODEX'].includes(first.deliveryProvider ?? '') &&
     first.deliveryProviderSessionId &&
@@ -115,24 +149,15 @@ async function validDeliveryMembers(tx: Prisma.TransactionClient, delivery: Work
   if (delivery.state === 'BLOCKED') {
     return null;
   }
-  const parsed = membershipSchema.safeParse(delivery.eventIds);
   const rows = await tx.workspacePREvent.findMany({
     where: { OR: [{ batchId: delivery.id }, { deliveryId: delivery.id }] },
   });
-  const ids = parsed.success ? new Set(parsed.data) : new Set<string>();
-  if (
-    !parsed.success ||
-    ids.size !== parsed.data.length ||
-    rows.length !== ids.size ||
-    rows.some(
-      (row) =>
-        !ids.has(row.id) || row.workspaceId !== delivery.workspaceId || row.batchId !== delivery.id
-    )
-  ) {
+  const members = getFrozenDeliveryMembers(delivery, rows);
+  if (!members) {
     await tx.workspacePRDelivery.update({ where: { id: delivery.id }, data: { state: 'BLOCKED' } });
     return null;
   }
-  return rows.map((row) => projectDeliveryEvent(row, delivery));
+  return members.map((row) => projectDeliveryEvent(row, delivery));
 }
 
 function validateImportedTarget(event: z.infer<typeof prEventBackupSchema>, workspaceId: string) {
@@ -555,7 +580,11 @@ class WorkspacePrEventAccessor {
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
     return tx.workspacePREvent.updateMany({
-      where: { id: { in: ids }, state: 'PENDING', deliveryId: null, batchId: null },
+      where: {
+        id: { in: ids },
+        state: 'PENDING',
+        ...unclaimedDeliveryWhere,
+      },
       data: { state: 'SUPERSEDED' },
     });
   }
@@ -575,7 +604,7 @@ class WorkspacePrEventAccessor {
           workspace: { status: 'READY' },
         },
       });
-      if (!(config && input.eventIds.length)) {
+      if (!(config && input.eventIds.length && input.deliveryId)) {
         return null;
       }
       // A durable claim holds the workspace until prompt completion or receipt recovery.
@@ -589,6 +618,7 @@ class WorkspacePrEventAccessor {
             workspaceId: request.workspaceId,
             OR: [
               { batchId: null, state: 'DISPATCHING' },
+              unboundLegacyEvidenceWhere,
               { batch: { state: { in: ['DISPATCHING', 'BLOCKED'] } } },
             ],
           },
@@ -713,10 +743,9 @@ class WorkspacePrEventAccessor {
     return tx.workspacePREvent.updateMany({
       where: {
         workspaceId,
-        deliveryId: null,
-        batchId: null,
-        state: { in: ['PENDING', 'DISPATCHING'] },
+        state: 'PENDING',
         attempts: { gte: 3 },
+        ...unclaimedDeliveryWhere,
       },
       data: { attempts: 0 },
     });
@@ -770,7 +799,11 @@ class WorkspacePrEventAccessor {
   }
   cancelForPR(tx: Prisma.TransactionClient, prId: string) {
     return tx.workspacePREvent.updateMany({
-      where: { prId, state: 'PENDING', deliveryId: null, batchId: null },
+      where: {
+        prId,
+        state: 'PENDING',
+        ...unclaimedDeliveryWhere,
+      },
       data: { state: 'CANCELLED' },
     });
   }
@@ -779,22 +812,29 @@ class WorkspacePrEventAccessor {
       where: {
         workspaceId,
         kind: 'MONITORING_ENABLED',
+        ...unclaimedDeliveryWhere,
         state: 'PENDING',
-        deliveryId: null,
-        batchId: null,
       },
       data: { state: 'CANCELLED' },
     });
   }
   cancelInTransaction(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePREvent.updateMany({
-      where: { workspaceId, state: 'PENDING', deliveryId: null, batchId: null },
+      where: {
+        workspaceId,
+        state: 'PENDING',
+        ...unclaimedDeliveryWhere,
+      },
       data: { state: 'CANCELLED' },
     });
   }
   cancelWorkspace(workspaceId: string) {
     return prisma.workspacePREvent.updateMany({
-      where: { workspaceId, state: 'PENDING', deliveryId: null, batchId: null },
+      where: {
+        workspaceId,
+        state: 'PENDING',
+        ...unclaimedDeliveryWhere,
+      },
       data: { state: 'CANCELLED' },
     });
   }

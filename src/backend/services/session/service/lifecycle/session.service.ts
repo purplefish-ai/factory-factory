@@ -3,6 +3,8 @@ import pLimit, { type LimitFunction } from 'p-limit';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { createLogger } from '@/backend/services/logger.service';
 import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
+import { PromptNotInvokedError } from '@/backend/services/session/service/acp/acp-prompt-invocation';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -24,6 +26,11 @@ const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 export type SessionServiceDependencies = {
+  admitPrompt?: <T>(
+    sessionId: string,
+    send: (permit: PromptConfigurationPermit) => Promise<T>,
+    guard?: SessionCallerGuard
+  ) => Promise<T>;
   eventAuthority?: EventSessionAuthority;
   ownedWork?: EventOwnedWork;
   runtimeManager: AcpRuntimeManager;
@@ -38,6 +45,7 @@ export type SessionServiceDependencies = {
 };
 
 export class SessionService {
+  private readonly admitPrompt?: SessionServiceDependencies['admitPrompt'];
   private readonly eventAuthority?: EventSessionAuthority;
   private readonly ownedWork?: EventOwnedWork;
   private readonly runtimeManager: AcpRuntimeManager;
@@ -54,6 +62,7 @@ export class SessionService {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
 
   constructor(options: SessionServiceDependencies) {
+    this.admitPrompt = options.admitPrompt;
     this.eventAuthority = options.eventAuthority;
     this.ownedWork = options.ownedWork;
     this.runtimeManager = options.runtimeManager;
@@ -91,20 +100,35 @@ export class SessionService {
   async sendSessionMessage(
     sessionId: string,
     content: string | AgentContentItem[],
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    configurationPermit?: PromptConfigurationPermit
   ): Promise<void> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
-    if (this.eventAuthority) {
-      await this.eventAuthority.assertOrdinary(sessionId);
+    try {
+      if (this.eventAuthority) {
+        await this.eventAuthority.assertOrdinary(sessionId);
+      }
+      this.assertPromptGeneration(sessionId, generation);
+    } catch (error) {
+      throw configurationPermit ? new PromptNotInvokedError(error) : error;
     }
-    this.assertPromptGeneration(sessionId, generation);
     const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
+      if (!configurationPermit && this.admitPrompt) {
+        return this.admitPrompt(
+          sessionId,
+          (permit) => {
+            this.assertPromptGeneration(sessionId, generation);
+            return this.sendSessionMessage(sessionId, content, guard, permit);
+          },
+          guard
+        );
+      }
       const prompt: ContentBlock[] =
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt, generation, guard)
+      return this.sendAcpMessage(sessionId, prompt, generation, guard, configurationPermit)
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
@@ -125,7 +149,7 @@ export class SessionService {
 
     const error = new Error(`No ACP client found for sendSessionMessage: ${sessionId}`);
     logger.warn('No ACP client found for sendSessionMessage', { sessionId });
-    return Promise.reject(error);
+    return Promise.reject(configurationPermit ? new PromptNotInvokedError(error) : error);
   }
 
   /**
@@ -171,22 +195,34 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  private sendAcpMessage(
+  private async sendAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
     generation: number,
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    configurationPermit?: PromptConfigurationPermit
   ): Promise<string> {
+    // An ordinary send must not occupy the limiter needed by the admitted batch.
+    const admission = configurationPermit
+      ? undefined
+      : this.runtimeManager.getClient(sessionId)?.pendingPromptAdmission;
+    if (admission !== undefined) {
+      await admission;
+    }
     return this.withSerializedAcpPrompt(sessionId, async () => {
-      if (this.eventAuthority) {
-        await this.eventAuthority.assertOrdinary(sessionId);
+      try {
+        if (this.eventAuthority) {
+          await this.eventAuthority.assertOrdinary(sessionId);
+        }
+        this.assertPromptGeneration(sessionId, generation);
+        if (guard) {
+          await guard.check();
+          guard.assertCurrent?.();
+        }
+      } catch (error) {
+        throw configurationPermit ? new PromptNotInvokedError(error) : error;
       }
-      this.assertPromptGeneration(sessionId, generation);
-      if (guard) {
-        await guard.check();
-        guard.assertCurrent?.();
-      }
-      return this.executeAcpMessage(sessionId, prompt, undefined, guard);
+      return this.executeAcpMessage(sessionId, prompt, undefined, guard, configurationPermit);
     });
   }
 
@@ -264,7 +300,8 @@ export class SessionService {
     sessionId: string,
     prompt: ContentBlock[],
     permit?: EventInitialPermit,
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    configurationPermit?: PromptConfigurationPermit
   ): Promise<string> {
     const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
@@ -290,7 +327,13 @@ export class SessionService {
 
     try {
       const observed = this.initialObservation(sessionId, stopGeneration, permit);
-      const result = await this.sendRuntimePrompt(sessionId, prompt, observed, guard);
+      const result = await this.sendRuntimePrompt(
+        sessionId,
+        prompt,
+        observed,
+        guard,
+        configurationPermit
+      );
       promptCompleted = true;
       this.completeSuccessfulPromptTurn({
         sessionId,
@@ -299,7 +342,8 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
-      if (error instanceof WorkspaceInitFenceError) {
+      const localError = error instanceof PromptNotInvokedError ? error.cause : error;
+      if (localError instanceof WorkspaceInitFenceError) {
         this.abandonRejectedPrompt(sessionId, attemptKey, stopGeneration, promptHandle);
         throw error;
       }
@@ -367,15 +411,17 @@ export class SessionService {
     sessionId: string,
     prompt: ContentBlock[],
     observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt,
-    guard?: SessionCallerGuard
+    guard?: SessionCallerGuard,
+    configurationPermit?: PromptConfigurationPermit
   ) {
-    if (guard) {
+    if (guard || configurationPermit) {
       return this.runtimeManager.sendPrompt(
         sessionId,
         prompt,
         DEFAULT_USER_PROMPT_TIMEOUT_MS,
         observed,
-        guard
+        guard,
+        configurationPermit
       );
     }
     return observed

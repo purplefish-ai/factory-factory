@@ -32,6 +32,7 @@ const testStores = new Set<WorkspaceSnapshotStore>();
 
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
   send = vi.fn();
   close = vi.fn();
   terminate = vi.fn();
@@ -71,7 +72,11 @@ const workspaceSnapshotStore = {
 // ============================================================================
 
 function createAppContextMock(
-  overrides: { workspaceQueryService?: unknown; workspaceSnapshotStore?: unknown } = {}
+  overrides: {
+    workspaceQueryService?: unknown;
+    workspaceSnapshotStore?: unknown;
+    frameLimit?: () => number;
+  } = {}
 ): AppContext {
   const application = {
     services: {
@@ -83,6 +88,7 @@ function createAppContextMock(
       })),
       configService: {
         getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        getWebSocketConfig: () => ({ maxFrameBytes: overrides.frameLimit?.() ?? 33_554_432 }),
       },
       workspaceQueryService: overrides.workspaceQueryService ?? {
         getCachedReviewCount: mockGetCachedReviewCount,
@@ -141,7 +147,7 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
   });
 }
 
-function createPendingBaseline() {
+function createPendingBaseline(frameLimit?: () => number) {
   let finishSeed: () => void = () => undefined;
   mockWaitForSeed.mockReturnValueOnce(
     new Promise<void>((resolve) => {
@@ -161,7 +167,7 @@ function createPendingBaseline() {
   });
   testStores.add(store);
   const handler = createSnapshotsUpgradeHandler(
-    createAppContextMock({ workspaceSnapshotStore: store })
+    createAppContextMock({ workspaceSnapshotStore: store, frameLimit })
   );
   const ws = new MockWebSocket();
   callHandler(handler, ws, 'proj-1');
@@ -179,6 +185,102 @@ function sentMessages(ws: MockWebSocket) {
 // ============================================================================
 
 describe('createSnapshotsUpgradeHandler', () => {
+  it.each([256, 2 * 1024 * 1024])(
+    'preserves long project-ID sync or returns a bounded error (%s)',
+    async (length) => {
+      const ws = new MockWebSocket();
+      const handler = createSnapshotsUpgradeHandler(
+        createAppContextMock({ frameLimit: () => 1024 * 1024 })
+      );
+      const projectId = 'p'.repeat(length);
+      const result = callHandler(handler, ws, projectId);
+      expect(result.wss.handleUpgrade).toHaveBeenCalledTimes(1);
+      await waitForInitialSnapshot(ws);
+      if (length === 256) {
+        expect(sentMessages(ws)[0]).toMatchObject({ type: 'snapshot_full', projectId });
+      } else {
+        expect(sentMessages(ws)[0]).toMatchObject({
+          type: 'snapshot_error',
+          code: 'FRAME_TOO_LARGE',
+        });
+        expect(sentMessages(ws)[0]).not.toHaveProperty('projectId');
+        expect(Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(1024);
+      }
+      expect(ws.close).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([-1, 0, 1])(
+    'bounds snapshot_full at the UTF8 frame ceiling (extra byte %s)',
+    async (extra) => {
+      let limit = 33_554_432;
+      const { store, ws, finishSeed } = createPendingBaseline(() => limit);
+      store.upsert(
+        'ws-1',
+        { projectId: 'proj-1', name: 'é'.repeat(1024 * 1024), status: 'READY' },
+        'test',
+        100
+      );
+      limit =
+        Buffer.byteLength(
+          JSON.stringify({
+            type: 'snapshot_full',
+            projectId: 'proj-1',
+            entries: store.getByProjectId('proj-1'),
+            reviewCount: 5,
+          })
+        ) - extra;
+      finishSeed();
+      await waitForInitialSnapshot(ws);
+      expect(sentMessages(ws)[0]).toMatchObject(
+        extra > 0
+          ? { type: 'snapshot_error', projectId: 'proj-1', code: 'FRAME_TOO_LARGE' }
+          : { type: 'snapshot_full' }
+      );
+      expect(ws.close).not.toHaveBeenCalled();
+      if (extra > 0) {
+        store.upsert('ws-1', { name: 'Small subsequent update' }, 'test', 200);
+        expect(ws.send).toHaveBeenCalledTimes(1);
+        expect(Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(512);
+      }
+    }
+  );
+
+  it('accepts a large full snapshot, retires on accumulated deltas and reconnects from current state', async () => {
+    const { store, handler, ws, finishSeed } = createPendingBaseline();
+    const largeName = 'x'.repeat(2 * 1024 * 1024);
+    store.upsert('ws-1', { projectId: 'proj-1', name: largeName, status: 'READY' }, 'test', 100);
+    finishSeed();
+    await waitForInitialSnapshot(ws);
+    expect(sentMessages(ws)[0]).toMatchObject({
+      type: 'snapshot_full',
+      entries: [expect.objectContaining({ name: largeName })],
+    });
+    expect(ws.close).not.toHaveBeenCalled();
+    ws.bufferedAmount = Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '');
+    store.upsert('ws-1', { name: 'Current' }, 'test', 200);
+    expect(ws.send).toHaveBeenCalledTimes(2);
+    ws.bufferedAmount += 1024 * 1024;
+    store.upsert('ws-1', { name: 'Latest' }, 'test', 300);
+    expect(ws.close).toHaveBeenCalledWith(1013, expect.any(String));
+    expect(ws.send).toHaveBeenCalledTimes(2);
+    ws.emit('close');
+
+    const reconnect = new MockWebSocket();
+    callHandler(handler, reconnect, 'proj-1');
+    expect(sentMessages(reconnect)).toEqual([
+      expect.objectContaining({
+        type: 'snapshot_full',
+        entries: [expect.objectContaining({ name: 'Latest' })],
+      }),
+    ]);
+    store.upsert('ws-1', { name: 'Live' }, 'test', 400);
+    expect(sentMessages(reconnect)[1]).toMatchObject({
+      type: 'snapshot_changed',
+      entry: expect.objectContaining({ name: 'Live' }),
+    });
+  });
+
   it('delivers a canonical accepted rename synchronously to each existing project viewer', async () => {
     const { store, handler, ws, finishSeed } = createPendingBaseline();
     store.upsert(
@@ -264,7 +366,8 @@ describe('createSnapshotsUpgradeHandler', () => {
           projectId: 'proj-1',
           entries: [visibleEntry],
           reviewCount: 5,
-        })
+        }),
+        expect.any(Function)
       );
     });
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
@@ -299,7 +402,8 @@ describe('createSnapshotsUpgradeHandler', () => {
               status: 'READY',
             },
           ],
-        })
+        }),
+        expect.any(Function)
       );
     });
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
@@ -377,7 +481,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         workspaceId: 'ws-1',
         entry: event.entry,
         reviewCount: 5,
-      })
+      }),
+      expect.any(Function)
     );
     expect(wsB.send).not.toHaveBeenCalled();
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
@@ -456,7 +561,8 @@ describe('createSnapshotsUpgradeHandler', () => {
           status: 'READY',
         },
         reviewCount: 22,
-      })
+      }),
+      expect.any(Function)
     );
     expect(wsA.send).not.toHaveBeenCalled();
     expect(queryA.getCachedReviewCount).not.toHaveBeenCalled();
@@ -491,7 +597,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         type: 'snapshot_changed',
         workspaceId: 'ws-1',
         entry: event.entry,
-      })
+      }),
+      expect.any(Function)
     );
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
@@ -524,7 +631,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
         reviewCount: 5,
-      })
+      }),
+      expect.any(Function)
     );
   });
 
@@ -550,7 +658,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
         reviewCount: 5,
-      })
+      }),
+      expect.any(Function)
     );
   });
 
@@ -758,7 +867,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         workspaceId: 'ws-1',
         entry: event.entry,
         reviewCount: 5,
-      })
+      }),
+      expect.any(Function)
     );
   });
 
@@ -793,7 +903,8 @@ describe('createSnapshotsUpgradeHandler', () => {
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
         reviewCount: 5,
-      })
+      }),
+      expect.any(Function)
     );
   });
 

@@ -75,6 +75,8 @@ export const ModelName = {
   AgentRun: 'AgentRun',
   AgentSourceState: 'AgentSourceState',
   AgentSourcePage: 'AgentSourcePage',
+  AgentSourceCheckpoint: 'AgentSourceCheckpoint',
+  AgentSourceHead: 'AgentSourceHead',
   AgentSourceBaseline: 'AgentSourceBaseline',
   AgentEvent: 'AgentEvent',
   AgentEvaluation: 'AgentEvaluation',
@@ -84,7 +86,9 @@ export const ModelName = {
   WorkspaceNotification: 'WorkspaceNotification',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
   AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
-  WorkspaceChildOrigin: 'WorkspaceChildOrigin'
+  WorkspaceChildOrigin: 'WorkspaceChildOrigin',
+  ChatIntent: 'ChatIntent',
+  PromptDispatchAttempt: 'PromptDispatchAttempt'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -506,6 +510,7 @@ export const AgentRunScalarFieldEnum = {
   result: 'result',
   effectiveExecution: 'effectiveExecution',
   launchPreparation: 'launchPreparation',
+  contextExpiredAt: 'contextExpiredAt',
   definitionSnapshot: 'definitionSnapshot',
   triggerSnapshot: 'triggerSnapshot',
   input: 'input',
@@ -520,6 +525,7 @@ export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typ
 
 
 export const AgentSourceStateScalarFieldEnum = {
+  authorityRevision: 'authorityRevision',
   lastSourceOrder: 'lastSourceOrder',
   connectionId: 'connectionId',
   isReady: 'isReady',
@@ -546,6 +552,37 @@ export const AgentSourcePageScalarFieldEnum = {
 } as const
 
 export type AgentSourcePageScalarFieldEnum = (typeof AgentSourcePageScalarFieldEnum)[keyof typeof AgentSourcePageScalarFieldEnum]
+
+
+export const AgentSourceCheckpointScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  status: 'status',
+  nextOrdinal: 'nextOrdinal',
+  entryCount: 'entryCount',
+  executableCount: 'executableCount',
+  verifiedCount: 'verifiedCount',
+  verification: 'verification',
+  headEventId: 'headEventId',
+  boundaryKnown: 'boundaryKnown',
+  previousBoundaryEventId: 'previousBoundaryEventId',
+  initialSourceOrder: 'initialSourceOrder',
+  sourceOrder: 'sourceOrder',
+  validationCursor: 'validationCursor'
+} as const
+
+export type AgentSourceCheckpointScalarFieldEnum = (typeof AgentSourceCheckpointScalarFieldEnum)[keyof typeof AgentSourceCheckpointScalarFieldEnum]
+
+
+export const AgentSourceHeadScalarFieldEnum = {
+  connectionId: 'connectionId',
+  scanId: 'scanId',
+  providerEventId: 'providerEventId',
+  position: 'position',
+  precedingEventCount: 'precedingEventCount'
+} as const
+
+export type AgentSourceHeadScalarFieldEnum = (typeof AgentSourceHeadScalarFieldEnum)[keyof typeof AgentSourceHeadScalarFieldEnum]
 
 
 export const AgentSourceBaselineScalarFieldEnum = {
@@ -700,6 +737,39 @@ export const WorkspaceChildOriginScalarFieldEnum = {
 } as const
 
 export type WorkspaceChildOriginScalarFieldEnum = (typeof WorkspaceChildOriginScalarFieldEnum)[keyof typeof WorkspaceChildOriginScalarFieldEnum]
+
+
+export const ChatIntentScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  messageId: 'messageId',
+  fingerprint: 'fingerprint',
+  submitted: 'submitted',
+  desired: 'desired',
+  revision: 'revision',
+  status: 'status',
+  attemptId: 'attemptId',
+  createdAt: 'createdAt'
+} as const
+
+export type ChatIntentScalarFieldEnum = (typeof ChatIntentScalarFieldEnum)[keyof typeof ChatIntentScalarFieldEnum]
+
+
+export const PromptDispatchAttemptScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  members: 'members',
+  content: 'content',
+  effectiveSettings: 'effectiveSettings',
+  providerIdentity: 'providerIdentity',
+  sendGeneration: 'sendGeneration',
+  status: 'status',
+  evidence: 'evidence',
+  createdAt: 'createdAt',
+  settledAt: 'settledAt'
+} as const
+
+export type PromptDispatchAttemptScalarFieldEnum = (typeof PromptDispatchAttemptScalarFieldEnum)[keyof typeof PromptDispatchAttemptScalarFieldEnum]
 
 
 export const SortOrder = {

@@ -28,14 +28,19 @@ import type {
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
-import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSelection } from '@/shared/workspace-pr';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
+import {
+  snapshotFieldGroups as FIELD_GROUP_MAPPINGS,
+  snapshotRequiredFields,
+  type SnapshotUpdateInput,
+  type SnapshotField,
+} from '@/shared/workspace-projection-fields';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
   WorkspaceSnapshotEntrySchema,
   type SnapshotFieldGroup,
   type WorkspaceSnapshotEntry,
-  type WorkspaceSnapshotMetadata,
 } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 import { BranchFreshness } from './branch-freshness';
@@ -53,54 +58,7 @@ export type WorkspaceSessionSummary = SessionSummary;
  * reconciliation fields. Does NOT include derived fields (recomputed) or
  * version/computedAt/source (managed by the store).
  */
-export interface SnapshotUpdateInput extends Partial<WorkspaceSnapshotMetadata> {
-  projectId?: string; // Required on first upsert, optional on updates
-
-  // Workspace fields (group: 'workspace')
-  name?: string;
-  /** Input-only canonical DB provenance; never part of a snapshot payload. */
-  nameUpdatedAt?: number;
-  status?: WorkspaceStatus;
-  createdAt?: string;
-  branchName?: string | null;
-  /** Input-only canonical DB branch provenance. */
-  branchUpdatedAt?: number;
-  hasHadSessions?: boolean;
-
-  // PR fields (group: 'pr')
-  prs?: WorkspacePullRequest[];
-  prSummary?: WorkspacePRSummary;
-  prUrl?: string | null;
-  prNumber?: number | null;
-  prState?: PRState;
-  prCiStatus?: CIStatus;
-  prUpdatedAt?: string | null;
-  hasMergeConflict?: boolean;
-
-  // Session fields (group: 'session')
-  isWorking?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
-  sessionSummaries?: WorkspaceSessionSummary[];
-
-  // Ratchet fields (group: 'ratchet')
-  ratchetEnabled?: boolean;
-  ratchetState?: RatchetState;
-  prMonitoring?: WorkspaceSnapshotEntry['prMonitoring'];
-
-  // Run-script fields (group: 'runScript')
-  runScriptStatus?: RunScriptStatus;
-
-  // Git fields (group: 'git')
-  gitStats?: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-
-  // Reconciliation fields (group: 'reconciliation')
-  lastActivityAt?: string | null;
-}
+export type { SnapshotUpdateInput } from '@/shared/workspace-projection-fields';
 
 /**
  * Interface for injected derivation functions (ARCH-02 compliance).
@@ -161,54 +119,12 @@ export interface SnapshotUpsertResult {
 // Field-to-group mapping
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_FIELDS = ['projectId', 'status', 'createdAt', 'hasHadSessions'] as const;
-const PR_FIELDS = [
-  'prs',
-  'prSummary',
-  'prUrl',
-  'prNumber',
-  'prState',
-  'prCiStatus',
-  'prUpdatedAt',
-  'hasMergeConflict',
-] as const;
-const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
-const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState', 'prMonitoring'] as const;
-const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
-const RECONCILIATION_FIELDS = ['lastActivityAt'] as const;
-const GIT_FIELDS = ['gitStats'] as const;
-const METADATA_FIELDS = [
-  'conversationSummary',
-  'defaultSessionProvider',
-  'worktreePath',
-  'initErrorMessage',
-  'githubIssueNumber',
-  'githubIssueUrl',
-  'linearIssueId',
-  'linearIssueIdentifier',
-  'linearIssueUrl',
-  'creationSource',
-] as const;
-
-type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
-
 type RemovalTombstone = { removedAt: number; expiresAt: number; timer: NodeJS.Timeout };
 
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
   fields: readonly SnapshotField[];
 };
-
-const FIELD_GROUP_MAPPINGS: FieldGroupMapping[] = [
-  { group: 'workspace', fields: WORKSPACE_FIELDS },
-  { group: 'pr', fields: PR_FIELDS },
-  { group: 'session', fields: SESSION_FIELDS },
-  { group: 'ratchet', fields: RATCHET_FIELDS },
-  { group: 'runScript', fields: RUN_SCRIPT_FIELDS },
-  { group: 'reconciliation', fields: RECONCILIATION_FIELDS },
-  { group: 'git', fields: GIT_FIELDS },
-  { group: 'metadata', fields: METADATA_FIELDS },
-];
 
 // ---------------------------------------------------------------------------
 // Logger
@@ -536,19 +452,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private updateSummaryCompleteness(entry: WorkspaceSnapshotEntry): boolean {
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     const complete =
-      hydrated.has('name') &&
-      hydrated.has('branchName') &&
-      FIELD_GROUP_MAPPINGS.every(
-        ({ group, fields }) =>
-          group === 'git' ||
-          // Older complete summaries can omit optional launch/generated metadata.
-          fields.every(
-            (field) =>
-              field === 'defaultSessionProvider' ||
-              field === 'conversationSummary' ||
-              hydrated.has(field)
-          )
-      ) &&
+      snapshotRequiredFields.every((field) => hydrated.has(field)) &&
       WorkspaceSnapshotEntrySchema.safeParse({ ...entry, summaryVersion: 1 }).success;
     const versionChanged = entry.summaryVersion !== (complete ? 1 : undefined);
     entry.summaryVersion = complete ? 1 : undefined;
@@ -581,6 +485,17 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     );
 
     let changed = false;
+    // Derived from accepted collection facts: no independent clock, hydration or drift policy.
+    if (entry.prs) {
+      const selection = deriveWorkspacePRSelection(entry.prs);
+      if (
+        entry.selectedPrId !== selection.selectedPrId ||
+        !isDeepStrictEqual(entry.selectedPr, selection.selectedPr)
+      ) {
+        Object.assign(entry, selection);
+        changed = true;
+      }
+    }
     if (entry.isWorking !== derivedState.isWorking) {
       entry.isWorking = derivedState.isWorking;
       changed = true;

@@ -27,14 +27,17 @@ export type AggregateAgentSourceState = {
 }
 
 export type AgentSourceStateAvgAggregateOutputType = {
+  authorityRevision: number | null
   lastSourceOrder: number | null
 }
 
 export type AgentSourceStateSumAggregateOutputType = {
+  authorityRevision: number | null
   lastSourceOrder: number | null
 }
 
 export type AgentSourceStateMinAggregateOutputType = {
+  authorityRevision: number | null
   lastSourceOrder: number | null
   connectionId: string | null
   isReady: boolean | null
@@ -43,6 +46,7 @@ export type AgentSourceStateMinAggregateOutputType = {
 }
 
 export type AgentSourceStateMaxAggregateOutputType = {
+  authorityRevision: number | null
   lastSourceOrder: number | null
   connectionId: string | null
   isReady: boolean | null
@@ -51,6 +55,7 @@ export type AgentSourceStateMaxAggregateOutputType = {
 }
 
 export type AgentSourceStateCountAggregateOutputType = {
+  authorityRevision: number
   lastSourceOrder: number
   connectionId: number
   isReady: number
@@ -63,14 +68,17 @@ export type AgentSourceStateCountAggregateOutputType = {
 
 
 export type AgentSourceStateAvgAggregateInputType = {
+  authorityRevision?: true
   lastSourceOrder?: true
 }
 
 export type AgentSourceStateSumAggregateInputType = {
+  authorityRevision?: true
   lastSourceOrder?: true
 }
 
 export type AgentSourceStateMinAggregateInputType = {
+  authorityRevision?: true
   lastSourceOrder?: true
   connectionId?: true
   isReady?: true
@@ -79,6 +87,7 @@ export type AgentSourceStateMinAggregateInputType = {
 }
 
 export type AgentSourceStateMaxAggregateInputType = {
+  authorityRevision?: true
   lastSourceOrder?: true
   connectionId?: true
   isReady?: true
@@ -87,6 +96,7 @@ export type AgentSourceStateMaxAggregateInputType = {
 }
 
 export type AgentSourceStateCountAggregateInputType = {
+  authorityRevision?: true
   lastSourceOrder?: true
   connectionId?: true
   isReady?: true
@@ -184,6 +194,7 @@ export type AgentSourceStateGroupByArgs<ExtArgs extends runtime.Types.Extensions
 }
 
 export type AgentSourceStateGroupByOutputType = {
+  authorityRevision: number
   lastSourceOrder: number
   connectionId: string
   isReady: boolean
@@ -217,6 +228,7 @@ export type AgentSourceStateWhereInput = {
   AND?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
   OR?: Prisma.AgentSourceStateWhereInput[]
   NOT?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
+  authorityRevision?: Prisma.IntFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
   connectionId?: Prisma.StringFilter<"AgentSourceState"> | string
   isReady?: Prisma.BoolFilter<"AgentSourceState"> | boolean
@@ -227,9 +239,11 @@ export type AgentSourceStateWhereInput = {
   connection?: Prisma.XOR<Prisma.AgentConnectionScalarRelationFilter, Prisma.AgentConnectionWhereInput>
   pages?: Prisma.AgentSourcePageListRelationFilter
   baselines?: Prisma.AgentSourceBaselineListRelationFilter
+  checkpoints?: Prisma.AgentSourceCheckpointListRelationFilter
 }
 
 export type AgentSourceStateOrderByWithRelationInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
@@ -240,6 +254,7 @@ export type AgentSourceStateOrderByWithRelationInput = {
   connection?: Prisma.AgentConnectionOrderByWithRelationInput
   pages?: Prisma.AgentSourcePageOrderByRelationAggregateInput
   baselines?: Prisma.AgentSourceBaselineOrderByRelationAggregateInput
+  checkpoints?: Prisma.AgentSourceCheckpointOrderByRelationAggregateInput
 }
 
 export type AgentSourceStateWhereUniqueInput = Prisma.AtLeast<{
@@ -247,6 +262,7 @@ export type AgentSourceStateWhereUniqueInput = Prisma.AtLeast<{
   AND?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
   OR?: Prisma.AgentSourceStateWhereInput[]
   NOT?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
+  authorityRevision?: Prisma.IntFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
   isReady?: Prisma.BoolFilter<"AgentSourceState"> | boolean
   cursor?: Prisma.JsonNullableFilter<"AgentSourceState">
@@ -256,9 +272,11 @@ export type AgentSourceStateWhereUniqueInput = Prisma.AtLeast<{
   connection?: Prisma.XOR<Prisma.AgentConnectionScalarRelationFilter, Prisma.AgentConnectionWhereInput>
   pages?: Prisma.AgentSourcePageListRelationFilter
   baselines?: Prisma.AgentSourceBaselineListRelationFilter
+  checkpoints?: Prisma.AgentSourceCheckpointListRelationFilter
 }, "connectionId">
 
 export type AgentSourceStateOrderByWithAggregationInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
@@ -277,6 +295,7 @@ export type AgentSourceStateScalarWhereWithAggregatesInput = {
   AND?: Prisma.AgentSourceStateScalarWhereWithAggregatesInput | Prisma.AgentSourceStateScalarWhereWithAggregatesInput[]
   OR?: Prisma.AgentSourceStateScalarWhereWithAggregatesInput[]
   NOT?: Prisma.AgentSourceStateScalarWhereWithAggregatesInput | Prisma.AgentSourceStateScalarWhereWithAggregatesInput[]
+  authorityRevision?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
   connectionId?: Prisma.StringWithAggregatesFilter<"AgentSourceState"> | string
   isReady?: Prisma.BoolWithAggregatesFilter<"AgentSourceState"> | boolean
@@ -287,6 +306,7 @@ export type AgentSourceStateScalarWhereWithAggregatesInput = {
 }
 
 export type AgentSourceStateCreateInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -296,9 +316,11 @@ export type AgentSourceStateCreateInput = {
   connection: Prisma.AgentConnectionCreateNestedOneWithoutSourceStateInput
   pages?: Prisma.AgentSourcePageCreateNestedManyWithoutSourceInput
   baselines?: Prisma.AgentSourceBaselineCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateUncheckedCreateInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   connectionId: string
   isReady?: boolean
@@ -308,9 +330,11 @@ export type AgentSourceStateUncheckedCreateInput = {
   updatedAt?: Date | string
   pages?: Prisma.AgentSourcePageUncheckedCreateNestedManyWithoutSourceInput
   baselines?: Prisma.AgentSourceBaselineUncheckedCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateUpdateInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -320,9 +344,11 @@ export type AgentSourceStateUpdateInput = {
   connection?: Prisma.AgentConnectionUpdateOneRequiredWithoutSourceStateNestedInput
   pages?: Prisma.AgentSourcePageUpdateManyWithoutSourceNestedInput
   baselines?: Prisma.AgentSourceBaselineUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateUncheckedUpdateInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -332,9 +358,11 @@ export type AgentSourceStateUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   pages?: Prisma.AgentSourcePageUncheckedUpdateManyWithoutSourceNestedInput
   baselines?: Prisma.AgentSourceBaselineUncheckedUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateCreateManyInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   connectionId: string
   isReady?: boolean
@@ -345,6 +373,7 @@ export type AgentSourceStateCreateManyInput = {
 }
 
 export type AgentSourceStateUpdateManyMutationInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -354,6 +383,7 @@ export type AgentSourceStateUpdateManyMutationInput = {
 }
 
 export type AgentSourceStateUncheckedUpdateManyInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -369,6 +399,7 @@ export type AgentSourceStateNullableScalarRelationFilter = {
 }
 
 export type AgentSourceStateCountOrderByAggregateInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
@@ -379,10 +410,12 @@ export type AgentSourceStateCountOrderByAggregateInput = {
 }
 
 export type AgentSourceStateAvgOrderByAggregateInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
 }
 
 export type AgentSourceStateMaxOrderByAggregateInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
@@ -391,6 +424,7 @@ export type AgentSourceStateMaxOrderByAggregateInput = {
 }
 
 export type AgentSourceStateMinOrderByAggregateInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
@@ -399,6 +433,7 @@ export type AgentSourceStateMinOrderByAggregateInput = {
 }
 
 export type AgentSourceStateSumOrderByAggregateInput = {
+  authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
 }
 
@@ -453,6 +488,20 @@ export type AgentSourceStateUpdateOneRequiredWithoutPagesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSourceStateUpdateToOneWithWhereWithoutPagesInput, Prisma.AgentSourceStateUpdateWithoutPagesInput>, Prisma.AgentSourceStateUncheckedUpdateWithoutPagesInput>
 }
 
+export type AgentSourceStateCreateNestedOneWithoutCheckpointsInput = {
+  create?: Prisma.XOR<Prisma.AgentSourceStateCreateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedCreateWithoutCheckpointsInput>
+  connectOrCreate?: Prisma.AgentSourceStateCreateOrConnectWithoutCheckpointsInput
+  connect?: Prisma.AgentSourceStateWhereUniqueInput
+}
+
+export type AgentSourceStateUpdateOneRequiredWithoutCheckpointsNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentSourceStateCreateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedCreateWithoutCheckpointsInput>
+  connectOrCreate?: Prisma.AgentSourceStateCreateOrConnectWithoutCheckpointsInput
+  upsert?: Prisma.AgentSourceStateUpsertWithoutCheckpointsInput
+  connect?: Prisma.AgentSourceStateWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AgentSourceStateUpdateToOneWithWhereWithoutCheckpointsInput, Prisma.AgentSourceStateUpdateWithoutCheckpointsInput>, Prisma.AgentSourceStateUncheckedUpdateWithoutCheckpointsInput>
+}
+
 export type AgentSourceStateCreateNestedOneWithoutBaselinesInput = {
   create?: Prisma.XOR<Prisma.AgentSourceStateCreateWithoutBaselinesInput, Prisma.AgentSourceStateUncheckedCreateWithoutBaselinesInput>
   connectOrCreate?: Prisma.AgentSourceStateCreateOrConnectWithoutBaselinesInput
@@ -468,6 +517,7 @@ export type AgentSourceStateUpdateOneRequiredWithoutBaselinesNestedInput = {
 }
 
 export type AgentSourceStateCreateWithoutConnectionInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -476,9 +526,11 @@ export type AgentSourceStateCreateWithoutConnectionInput = {
   updatedAt?: Date | string
   pages?: Prisma.AgentSourcePageCreateNestedManyWithoutSourceInput
   baselines?: Prisma.AgentSourceBaselineCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateUncheckedCreateWithoutConnectionInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -487,6 +539,7 @@ export type AgentSourceStateUncheckedCreateWithoutConnectionInput = {
   updatedAt?: Date | string
   pages?: Prisma.AgentSourcePageUncheckedCreateNestedManyWithoutSourceInput
   baselines?: Prisma.AgentSourceBaselineUncheckedCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateCreateOrConnectWithoutConnectionInput = {
@@ -506,6 +559,7 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutConnectionInput = {
 }
 
 export type AgentSourceStateUpdateWithoutConnectionInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -514,9 +568,11 @@ export type AgentSourceStateUpdateWithoutConnectionInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   pages?: Prisma.AgentSourcePageUpdateManyWithoutSourceNestedInput
   baselines?: Prisma.AgentSourceBaselineUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateUncheckedUpdateWithoutConnectionInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -525,9 +581,11 @@ export type AgentSourceStateUncheckedUpdateWithoutConnectionInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   pages?: Prisma.AgentSourcePageUncheckedUpdateManyWithoutSourceNestedInput
   baselines?: Prisma.AgentSourceBaselineUncheckedUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateCreateWithoutPagesInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -536,9 +594,11 @@ export type AgentSourceStateCreateWithoutPagesInput = {
   updatedAt?: Date | string
   connection: Prisma.AgentConnectionCreateNestedOneWithoutSourceStateInput
   baselines?: Prisma.AgentSourceBaselineCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateUncheckedCreateWithoutPagesInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   connectionId: string
   isReady?: boolean
@@ -547,6 +607,7 @@ export type AgentSourceStateUncheckedCreateWithoutPagesInput = {
   lastObservedAt?: Date | string | null
   updatedAt?: Date | string
   baselines?: Prisma.AgentSourceBaselineUncheckedCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateCreateOrConnectWithoutPagesInput = {
@@ -566,6 +627,7 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutPagesInput = {
 }
 
 export type AgentSourceStateUpdateWithoutPagesInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -574,9 +636,11 @@ export type AgentSourceStateUpdateWithoutPagesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   connection?: Prisma.AgentConnectionUpdateOneRequiredWithoutSourceStateNestedInput
   baselines?: Prisma.AgentSourceBaselineUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateUncheckedUpdateWithoutPagesInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -585,9 +649,11 @@ export type AgentSourceStateUncheckedUpdateWithoutPagesInput = {
   lastObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   baselines?: Prisma.AgentSourceBaselineUncheckedUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedUpdateManyWithoutSourceNestedInput
 }
 
-export type AgentSourceStateCreateWithoutBaselinesInput = {
+export type AgentSourceStateCreateWithoutCheckpointsInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -596,9 +662,11 @@ export type AgentSourceStateCreateWithoutBaselinesInput = {
   updatedAt?: Date | string
   connection: Prisma.AgentConnectionCreateNestedOneWithoutSourceStateInput
   pages?: Prisma.AgentSourcePageCreateNestedManyWithoutSourceInput
+  baselines?: Prisma.AgentSourceBaselineCreateNestedManyWithoutSourceInput
 }
 
-export type AgentSourceStateUncheckedCreateWithoutBaselinesInput = {
+export type AgentSourceStateUncheckedCreateWithoutCheckpointsInput = {
+  authorityRevision?: number
   lastSourceOrder?: number
   connectionId: string
   isReady?: boolean
@@ -607,6 +675,75 @@ export type AgentSourceStateUncheckedCreateWithoutBaselinesInput = {
   lastObservedAt?: Date | string | null
   updatedAt?: Date | string
   pages?: Prisma.AgentSourcePageUncheckedCreateNestedManyWithoutSourceInput
+  baselines?: Prisma.AgentSourceBaselineUncheckedCreateNestedManyWithoutSourceInput
+}
+
+export type AgentSourceStateCreateOrConnectWithoutCheckpointsInput = {
+  where: Prisma.AgentSourceStateWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentSourceStateCreateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedCreateWithoutCheckpointsInput>
+}
+
+export type AgentSourceStateUpsertWithoutCheckpointsInput = {
+  update: Prisma.XOR<Prisma.AgentSourceStateUpdateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedUpdateWithoutCheckpointsInput>
+  create: Prisma.XOR<Prisma.AgentSourceStateCreateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedCreateWithoutCheckpointsInput>
+  where?: Prisma.AgentSourceStateWhereInput
+}
+
+export type AgentSourceStateUpdateToOneWithWhereWithoutCheckpointsInput = {
+  where?: Prisma.AgentSourceStateWhereInput
+  data: Prisma.XOR<Prisma.AgentSourceStateUpdateWithoutCheckpointsInput, Prisma.AgentSourceStateUncheckedUpdateWithoutCheckpointsInput>
+}
+
+export type AgentSourceStateUpdateWithoutCheckpointsInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  lastObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  connection?: Prisma.AgentConnectionUpdateOneRequiredWithoutSourceStateNestedInput
+  pages?: Prisma.AgentSourcePageUpdateManyWithoutSourceNestedInput
+  baselines?: Prisma.AgentSourceBaselineUpdateManyWithoutSourceNestedInput
+}
+
+export type AgentSourceStateUncheckedUpdateWithoutCheckpointsInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  connectionId?: Prisma.StringFieldUpdateOperationsInput | string
+  isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  lastObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  pages?: Prisma.AgentSourcePageUncheckedUpdateManyWithoutSourceNestedInput
+  baselines?: Prisma.AgentSourceBaselineUncheckedUpdateManyWithoutSourceNestedInput
+}
+
+export type AgentSourceStateCreateWithoutBaselinesInput = {
+  authorityRevision?: number
+  lastSourceOrder?: number
+  isReady?: boolean
+  cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  lastObservedAt?: Date | string | null
+  updatedAt?: Date | string
+  connection: Prisma.AgentConnectionCreateNestedOneWithoutSourceStateInput
+  pages?: Prisma.AgentSourcePageCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointCreateNestedManyWithoutSourceInput
+}
+
+export type AgentSourceStateUncheckedCreateWithoutBaselinesInput = {
+  authorityRevision?: number
+  lastSourceOrder?: number
+  connectionId: string
+  isReady?: boolean
+  cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  lastObservedAt?: Date | string | null
+  updatedAt?: Date | string
+  pages?: Prisma.AgentSourcePageUncheckedCreateNestedManyWithoutSourceInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedCreateNestedManyWithoutSourceInput
 }
 
 export type AgentSourceStateCreateOrConnectWithoutBaselinesInput = {
@@ -626,6 +763,7 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutBaselinesInput = {
 }
 
 export type AgentSourceStateUpdateWithoutBaselinesInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -634,9 +772,11 @@ export type AgentSourceStateUpdateWithoutBaselinesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   connection?: Prisma.AgentConnectionUpdateOneRequiredWithoutSourceStateNestedInput
   pages?: Prisma.AgentSourcePageUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUpdateManyWithoutSourceNestedInput
 }
 
 export type AgentSourceStateUncheckedUpdateWithoutBaselinesInput = {
+  authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -645,6 +785,7 @@ export type AgentSourceStateUncheckedUpdateWithoutBaselinesInput = {
   lastObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   pages?: Prisma.AgentSourcePageUncheckedUpdateManyWithoutSourceNestedInput
+  checkpoints?: Prisma.AgentSourceCheckpointUncheckedUpdateManyWithoutSourceNestedInput
 }
 
 
@@ -655,11 +796,13 @@ export type AgentSourceStateUncheckedUpdateWithoutBaselinesInput = {
 export type AgentSourceStateCountOutputType = {
   pages: number
   baselines: number
+  checkpoints: number
 }
 
 export type AgentSourceStateCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   pages?: boolean | AgentSourceStateCountOutputTypeCountPagesArgs
   baselines?: boolean | AgentSourceStateCountOutputTypeCountBaselinesArgs
+  checkpoints?: boolean | AgentSourceStateCountOutputTypeCountCheckpointsArgs
 }
 
 /**
@@ -686,8 +829,16 @@ export type AgentSourceStateCountOutputTypeCountBaselinesArgs<ExtArgs extends ru
   where?: Prisma.AgentSourceBaselineWhereInput
 }
 
+/**
+ * AgentSourceStateCountOutputType without action
+ */
+export type AgentSourceStateCountOutputTypeCountCheckpointsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AgentSourceCheckpointWhereInput
+}
+
 
 export type AgentSourceStateSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  authorityRevision?: boolean
   lastSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
@@ -698,10 +849,12 @@ export type AgentSourceStateSelect<ExtArgs extends runtime.Types.Extensions.Inte
   connection?: boolean | Prisma.AgentConnectionDefaultArgs<ExtArgs>
   pages?: boolean | Prisma.AgentSourceState$pagesArgs<ExtArgs>
   baselines?: boolean | Prisma.AgentSourceState$baselinesArgs<ExtArgs>
+  checkpoints?: boolean | Prisma.AgentSourceState$checkpointsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentSourceStateCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceState"]>
 
 export type AgentSourceStateSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  authorityRevision?: boolean
   lastSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
@@ -713,6 +866,7 @@ export type AgentSourceStateSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
 }, ExtArgs["result"]["agentSourceState"]>
 
 export type AgentSourceStateSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  authorityRevision?: boolean
   lastSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
@@ -724,6 +878,7 @@ export type AgentSourceStateSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
 }, ExtArgs["result"]["agentSourceState"]>
 
 export type AgentSourceStateSelectScalar = {
+  authorityRevision?: boolean
   lastSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
@@ -733,11 +888,12 @@ export type AgentSourceStateSelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentSourceStateOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"lastSourceOrder" | "connectionId" | "isReady" | "cursor" | "health" | "lastObservedAt" | "updatedAt", ExtArgs["result"]["agentSourceState"]>
+export type AgentSourceStateOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"authorityRevision" | "lastSourceOrder" | "connectionId" | "isReady" | "cursor" | "health" | "lastObservedAt" | "updatedAt", ExtArgs["result"]["agentSourceState"]>
 export type AgentSourceStateInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   connection?: boolean | Prisma.AgentConnectionDefaultArgs<ExtArgs>
   pages?: boolean | Prisma.AgentSourceState$pagesArgs<ExtArgs>
   baselines?: boolean | Prisma.AgentSourceState$baselinesArgs<ExtArgs>
+  checkpoints?: boolean | Prisma.AgentSourceState$checkpointsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentSourceStateCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AgentSourceStateIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -753,8 +909,10 @@ export type $AgentSourceStatePayload<ExtArgs extends runtime.Types.Extensions.In
     connection: Prisma.$AgentConnectionPayload<ExtArgs>
     pages: Prisma.$AgentSourcePagePayload<ExtArgs>[]
     baselines: Prisma.$AgentSourceBaselinePayload<ExtArgs>[]
+    checkpoints: Prisma.$AgentSourceCheckpointPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    authorityRevision: number
     lastSourceOrder: number
     connectionId: string
     isReady: boolean
@@ -845,8 +1003,8 @@ export interface AgentSourceStateDelegate<ExtArgs extends runtime.Types.Extensio
    * // Get first 10 AgentSourceStates
    * const agentSourceStates = await prisma.agentSourceState.findMany({ take: 10 })
    * 
-   * // Only select the `lastSourceOrder`
-   * const agentSourceStateWithLastSourceOrderOnly = await prisma.agentSourceState.findMany({ select: { lastSourceOrder: true } })
+   * // Only select the `authorityRevision`
+   * const agentSourceStateWithAuthorityRevisionOnly = await prisma.agentSourceState.findMany({ select: { authorityRevision: true } })
    * 
    */
   findMany<T extends AgentSourceStateFindManyArgs>(args?: Prisma.SelectSubset<T, AgentSourceStateFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentSourceStatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -890,9 +1048,9 @@ export interface AgentSourceStateDelegate<ExtArgs extends runtime.Types.Extensio
    *   ]
    * })
    * 
-   * // Create many AgentSourceStates and only return the `lastSourceOrder`
-   * const agentSourceStateWithLastSourceOrderOnly = await prisma.agentSourceState.createManyAndReturn({
-   *   select: { lastSourceOrder: true },
+   * // Create many AgentSourceStates and only return the `authorityRevision`
+   * const agentSourceStateWithAuthorityRevisionOnly = await prisma.agentSourceState.createManyAndReturn({
+   *   select: { authorityRevision: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -981,9 +1139,9 @@ export interface AgentSourceStateDelegate<ExtArgs extends runtime.Types.Extensio
    *   ]
    * })
    * 
-   * // Update zero or more AgentSourceStates and only return the `lastSourceOrder`
-   * const agentSourceStateWithLastSourceOrderOnly = await prisma.agentSourceState.updateManyAndReturn({
-   *   select: { lastSourceOrder: true },
+   * // Update zero or more AgentSourceStates and only return the `authorityRevision`
+   * const agentSourceStateWithAuthorityRevisionOnly = await prisma.agentSourceState.updateManyAndReturn({
+   *   select: { authorityRevision: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -1159,6 +1317,7 @@ export interface Prisma__AgentSourceStateClient<T, Null = never, ExtArgs extends
   connection<T extends Prisma.AgentConnectionDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentConnectionDefaultArgs<ExtArgs>>): Prisma.Prisma__AgentConnectionClient<runtime.Types.Result.GetResult<Prisma.$AgentConnectionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   pages<T extends Prisma.AgentSourceState$pagesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSourceState$pagesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentSourcePagePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   baselines<T extends Prisma.AgentSourceState$baselinesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSourceState$baselinesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentSourceBaselinePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  checkpoints<T extends Prisma.AgentSourceState$checkpointsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentSourceState$checkpointsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentSourceCheckpointPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1188,6 +1347,7 @@ export interface Prisma__AgentSourceStateClient<T, Null = never, ExtArgs extends
  * Fields of the AgentSourceState model
  */
 export interface AgentSourceStateFieldRefs {
+  readonly authorityRevision: Prisma.FieldRef<"AgentSourceState", 'Int'>
   readonly lastSourceOrder: Prisma.FieldRef<"AgentSourceState", 'Int'>
   readonly connectionId: Prisma.FieldRef<"AgentSourceState", 'String'>
   readonly isReady: Prisma.FieldRef<"AgentSourceState", 'Boolean'>
@@ -1639,6 +1799,30 @@ export type AgentSourceState$baselinesArgs<ExtArgs extends runtime.Types.Extensi
   take?: number
   skip?: number
   distinct?: Prisma.AgentSourceBaselineScalarFieldEnum | Prisma.AgentSourceBaselineScalarFieldEnum[]
+}
+
+/**
+ * AgentSourceState.checkpoints
+ */
+export type AgentSourceState$checkpointsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AgentSourceCheckpoint
+   */
+  select?: Prisma.AgentSourceCheckpointSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AgentSourceCheckpoint
+   */
+  omit?: Prisma.AgentSourceCheckpointOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentSourceCheckpointInclude<ExtArgs> | null
+  where?: Prisma.AgentSourceCheckpointWhereInput
+  orderBy?: Prisma.AgentSourceCheckpointOrderByWithRelationInput | Prisma.AgentSourceCheckpointOrderByWithRelationInput[]
+  cursor?: Prisma.AgentSourceCheckpointWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AgentSourceCheckpointScalarFieldEnum | Prisma.AgentSourceCheckpointScalarFieldEnum[]
 }
 
 /**

@@ -38,3 +38,18 @@ export function assertConfiguredAcpHandle(
     throw new Error('Session runtime changed before configuration update');
   }
 }
+
+export function captureRuntimeIdentityGuard(
+  runtime: Pick<AcpRuntimeManager, 'getClient' | 'isStopInProgress'>,
+  sessionId: string,
+  handle?: AcpProcessHandle
+): () => void {
+  return () => {
+    if (
+      handle &&
+      (runtime.getClient(sessionId) !== handle || runtime.isStopInProgress(sessionId))
+    ) {
+      throw new Error('Session runtime changed before configuration update');
+    }
+  };
+}

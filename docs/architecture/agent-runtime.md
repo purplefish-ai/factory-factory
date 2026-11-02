@@ -85,6 +85,20 @@ backend restart; an unprompted session without a file then remains protected
 until provider history can be confirmed. Empty ACP fallbacks remain eligible for
 a JSONL read.
 
+Accepted queued human messages and attachment bytes are durable before their
+acceptance event. Submitted payload identity is separate from later desired
+settings. One persisted attempt covers an entire provider prompt batch; a crash
+or missing provider result leaves the whole attempt uncertain and never triggers
+automatic replay. Initial human prompts and steering share that owner. See
+[durable chat acceptance](../chat-message-flow.md#durable-human-acceptance-and-batched-dispatch)
+for recovery, cancellation and external delivery ownership. The session
+configuration owner also owns prompt admission: earlier accepted edits finish
+before a durable batch refreshes and claims desired revisions; later edits wait
+until its native turn completes. Frozen attempts retain the provider identity,
+native configuration options and each human revision. Ordinary prompts use the
+same admission queue. A retired handle rejects deferred configuration work,
+while unresolved claimed batches retain all delivery owners.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

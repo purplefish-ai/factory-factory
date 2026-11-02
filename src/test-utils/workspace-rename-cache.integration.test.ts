@@ -101,6 +101,7 @@ it('streams the accepted canonical rename into the existing query cache before l
       createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
       configService: {
         getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
+        getWebSocketConfig: () => ({ maxFrameBytes: 32 * 1024 * 1024 }),
       },
       workspaceSnapshotStore: snapshotStore,
       workspaceQueryService: {

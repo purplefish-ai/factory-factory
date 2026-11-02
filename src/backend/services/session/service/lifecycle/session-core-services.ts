@@ -7,6 +7,7 @@ import {
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
+import { sessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent';
 import {
   EventInitialDispatcher,
   EventInitialDispatchInterrupted,
@@ -89,6 +90,7 @@ export const providerUsageService = new ProviderUsageService({
 });
 
 export const sessionConfigService = new SessionConfigService({
+  chatIntent: sessionChatIntentService,
   eventAuthority: eventSessionAuthority,
   codexModelCatalogService,
   repository: sessionRepository,
@@ -130,7 +132,12 @@ export const eventOwnedWork = new EventOwnedWork(
   sessionDomainService
 );
 
+sessionChatIntentService.configureAdmissionGuard(
+  (id) => !sessionLifecycleGate.isSessionStopping(id)
+);
+
 export const sessionNotificationDeliveryService = new SessionNotificationDeliveryService({
+  isRecoveryHeld: (id) => sessionChatIntentService.store.hasUncertainAttempt(id),
   notificationPort: workspaceNotificationService,
   queuePort: sessionDomainService,
   transcriptPort: sessionDomainService,
@@ -149,6 +156,17 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
 });
 
 const sessionPromptCoordinator = new SessionService({
+  admitPrompt: (id, send, guard) =>
+    sessionConfigService.withPromptConfiguration(
+      id,
+      ({ permit }) => {
+        if (!permit) {
+          throw new Error('Prompt configuration admission is unavailable');
+        }
+        return send(permit);
+      },
+      guard
+    ),
   ownedWork: eventOwnedWork,
   eventAuthority: eventSessionAuthority,
   runtimeManager: acpRuntimeManager,
@@ -169,6 +187,7 @@ const sessionProviderIdentityService = new SessionProviderIdentityService({
 });
 
 const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
+  chatIntent: sessionChatIntentService,
   eventAuthority: eventSessionAuthority,
   providerIdentityService: sessionProviderIdentityService,
   repository: sessionRepository,
@@ -199,8 +218,9 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
   lifecycleGate: sessionLifecycleGate,
   workflowFinalizer: sessionWorkflowFinalizer,
   getRuntimeSnapshot: (sessionId) => sessionLifecycleServiceInstance.getRuntimeSnapshot(sessionId),
-  onBeforeStopSession: (sessionId) => {
+  onBeforeStopSession: async (sessionId) => {
     sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId);
+    await sessionChatIntentService.cancel(sessionId);
   },
 });
 

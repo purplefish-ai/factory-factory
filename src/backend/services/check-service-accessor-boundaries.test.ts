@@ -97,6 +97,27 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.stdout).toContain('cross-owner raw persistence accessor');
   });
 
+  it('tracks delivery reader functions through service aliases into a capsule barrel', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor.ts',
+        content: 'export function readDeliveryEvents() {}',
+      },
+      {
+        path: 'src/backend/services/workspace/service/read.ts',
+        content:
+          "import {readDeliveryEvents} from '../resources/workspace-pr-delivery.accessor'; export {readDeliveryEvents as aliasedReader};",
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export {aliasedReader} from './service/read';",
+      },
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('readDeliveryEvents');
+  });
+
   it('allows owner-internal deep accessor imports', () => {
     const result = runChecker([
       {

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { actFlushSync } from '@/test-utils/react-act';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { WorkspaceItemContent } from './workspace-item-content';
 
 vi.mock('@/client/features/workspace', () => ({ WorkspacePrMenu: () => null }));
@@ -98,12 +99,16 @@ describe('WorkspaceItemContent', () => {
     const onOpenPr = vi.fn();
     const onParentPointerUp = vi.fn();
     const { container, root } = renderContent(
-      {
+      unsafeCoerce<ServerWorkspace>({
         ...baseWorkspace,
+        // Exercise the scalar-only compatibility adapter, without a current selection.
+        prs: undefined,
+        selectedPr: undefined,
+        selectedPrId: undefined,
         prUrl: 'https://github.com/example/repo/pull/42',
         prNumber: 42,
         prState: 'OPEN',
-      },
+      }),
       { onOpenPr, onParentPointerUp }
     );
     const button = container.querySelector('button');

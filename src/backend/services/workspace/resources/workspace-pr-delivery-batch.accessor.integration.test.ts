@@ -446,8 +446,61 @@ it('cannot cascade another workspace event through a quarantined cross-workspace
     count: 0,
     status: 'identity_mismatch',
   });
-  await expect(db.prisma.workspace.delete({ where: { id: 'w' } })).rejects.toThrow();
+  await expect(db.prisma.workspace.delete({ where: { id: 'w' } })).rejects.toThrow(/foreign key/i);
   expect(
     await db.prisma.workspacePREvent.findUnique({ where: { id: 'other-evidence' } })
   ).toMatchObject({ workspaceId: 'other', deliveryId: 'shared-legacy-receipt' });
+});
+
+it.each([null, ''])(
+  'holds legacy frozen evidence with receipt %s instead of resetting or requeueing it',
+  async (receipt) => {
+    const id = await fact();
+    await db.prisma.workspacePREvent.update({
+      where: { id },
+      data: {
+        attempts: 3,
+        deliveryId: receipt,
+        deliveryText: 'frozen without receipt',
+        deliverySessionId: 'main',
+        deliveryProvider: 'CLAUDE',
+        deliveryProviderSessionId: 'main-provider',
+        deliveryBindingRevision: 0,
+      },
+    });
+    const before = await db.prisma.workspacePREvent.findUnique({ where: { id } });
+    expect(
+      await workspacePrEventAccessor.claimDelivery(
+        { workspaceId: 'w', prId: null, bindingRevision: 0 },
+        { deliveryId: 'replacement-receipt', sessionId: 'main', eventIds: [id], text: 'new text' }
+      )
+    ).toBeNull();
+    await db.prisma.$transaction(async (tx) => {
+      await workspacePrEventAccessor.renewRetryAllowance(tx, 'w');
+      await workspacePrEventAccessor.supersede(tx, [id]);
+      await workspacePrEventAccessor.cancelInTransaction(tx, 'w');
+    });
+    expect(await db.prisma.workspacePREvent.findUnique({ where: { id } })).toEqual(before);
+  }
+);
+
+it('rejects an export member linked only through a legacy receipt field', async () => {
+  const eventIds = await mainBatchFacts();
+  const deliveryId = 'lost-explicit-membership';
+  await workspacePrEventAccessor.claimDelivery(
+    { workspaceId: 'w', prId: null, bindingRevision: 0 },
+    { deliveryId, sessionId: 'main', eventIds, text: 'frozen' }
+  );
+  await db.prisma.workspacePREvent.update({
+    where: { id: eventIds[0] },
+    data: { batchId: null, deliveryId },
+  });
+  const events = await db.prisma.workspacePREvent.findMany({ where: { workspaceId: 'w' } });
+  const deliveries = await db.prisma.workspacePRDelivery.findMany({ where: { id: deliveryId } });
+  expect(() => workspacePrEventAccessor.exportEvents(events, deliveries)).toThrow(
+    'Cannot export incomplete PR delivery membership'
+  );
+  expect(
+    await db.prisma.workspacePRDelivery.findUnique({ where: { id: deliveryId } })
+  ).toMatchObject({ state: 'DISPATCHING', eventIds });
 });

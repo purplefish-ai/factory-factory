@@ -19,7 +19,7 @@ const mockSessionDataService = vi.hoisted(() => ({
 }));
 
 const mockSessionDomainService = vi.hoisted(() => ({
-  storeInitialMessage: vi.fn(),
+  storeInitialMessageDurably: vi.fn(),
 }));
 
 const mockSessionProviderResolverService = vi.hoisted(() => ({
@@ -36,7 +36,12 @@ type SubagentRuntimeManager = Pick<
   'isSessionWorking' | 'getSubagentBrowseCapability' | 'listSubagents' | 'readSubagentTranscript'
 >;
 
-function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) {
+function createCaller(options?: {
+  acpRuntimeManager?: SubagentRuntimeManager;
+  chatIntent?: {
+    resolve: (id: string, attempt: string, status: 'committed' | 'cancelled') => Promise<void>;
+  };
+}) {
   const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
     getSubagentBrowseCapability: vi.fn(),
@@ -49,9 +54,11 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
     persistClosedSession: vi.fn(async () => undefined),
     ensureSubagentBrowseSession: vi.fn(async () => false),
   };
+  const sessionDispatchService = { tryDispatchNextMessage: vi.fn(() => Promise.resolve()) };
   const sessionDomainService = {
+    chatIntent: options?.chatIntent,
     clearSession: vi.fn(),
-    storeInitialMessage: mockSessionDomainService.storeInitialMessage,
+    storeInitialMessageDurably: mockSessionDomainService.storeInitialMessageDurably,
   };
   const cliHealthService = {
     checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
@@ -72,6 +79,7 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
           acpRuntimeManager: options?.acpRuntimeManager ?? acpRuntimeManager,
           sessionLifecycleService,
           sessionDomainService,
+          sessionDispatchService,
           sessionDataService: mockSessionDataService,
           terminalSessionService: {
             findWorkspaceSessions: mockSessionDataService.findTerminalSessionsByWorkspaceId,
@@ -90,6 +98,7 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
     acpRuntimeManager,
     sessionLifecycleService,
     sessionDomainService,
+    sessionDispatchService,
     cliHealthService,
   };
 }
@@ -338,6 +347,40 @@ describe('sessionRouter', () => {
     ]);
   });
 
+  it('wakes queued work after resolving a human-only uncertain attempt', async () => {
+    const resolve = vi.fn(() => Promise.resolve());
+    const { caller, sessionDispatchService } = createCaller({ chatIntent: { resolve } });
+    await caller.resolveUncertainDispatch({
+      sessionId: 's',
+      attemptId: 'attempt',
+      resolution: 'cancelled',
+    });
+    expect(resolve).toHaveBeenCalledWith('s', 'attempt', 'cancelled');
+    expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith('s');
+    expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionDispatchService.tryDispatchNextMessage.mock.invocationCallOrder[0]!
+    );
+  });
+
+  it.each(['createSession', 'createAndStartSession'] as const)(
+    'rolls back %s when durable initial acceptance fails',
+    async (method) => {
+      const { caller, sessionDomainService } = createCaller();
+      mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValueOnce({
+        outcome: 'created',
+        session: { id: 'initial-failed', workspaceId: 'w1' },
+      });
+      mockSessionDomainService.storeInitialMessageDurably.mockRejectedValueOnce(
+        new Error('durable acceptance failed')
+      );
+      await expect(
+        caller[method]({ workspaceId: 'w1', workflow: 'user', initialMessage: 'hello' })
+      ).rejects.toThrow('durable acceptance failed');
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('initial-failed');
+      expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('initial-failed');
+    }
+  );
+
   it('enforces workspace session limits and creates a session with provider resolution', async () => {
     const { caller, cliHealthService } = createCaller();
 
@@ -380,7 +423,10 @@ describe('sessionRouter', () => {
       explicitProvider: undefined,
     });
     expect(cliHealthService.checkHealth).toHaveBeenCalledWith();
-    expect(mockSessionDomainService.storeInitialMessage).toHaveBeenCalledWith('s3', 'Start here');
+    expect(mockSessionDomainService.storeInitialMessageDurably).toHaveBeenCalledWith(
+      's3',
+      'Start here'
+    );
   });
 
   it('blocks creating a session when the selected provider is unavailable', async () => {
@@ -432,7 +478,7 @@ describe('sessionRouter', () => {
       })
     ).resolves.toEqual({ id: 's-started', workspaceId: 'w1', status: 'RUNNING' });
 
-    expect(mockSessionDomainService.storeInitialMessage).toHaveBeenCalledWith(
+    expect(mockSessionDomainService.storeInitialMessageDurably).toHaveBeenCalledWith(
       's-started',
       'Stored before start'
     );

@@ -17,7 +17,7 @@ import {
   WORKSPACE_ID,
 } from './workspace-init.test-harness';
 
-const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
+const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessageDurably);
 
 async function initializeWithSavedPrompt(initialPrompt: string) {
   const workspace = makeWorkspaceWithProject({
@@ -34,7 +34,7 @@ async function initializeWithSavedPrompt(initialPrompt: string) {
   vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
     unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
   ]);
-  enqueueInitialMessage.mockReturnValue({ position: 0 });
+  enqueueInitialMessage.mockResolvedValue({ position: 0 });
 
   await initializeWorkspaceWorktree(WORKSPACE_ID);
 }

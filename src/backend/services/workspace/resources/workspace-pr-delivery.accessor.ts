@@ -1,7 +1,35 @@
 import { z } from 'zod';
 import type { Prisma, WorkspacePRDelivery, WorkspacePREvent } from '@prisma-gen/client';
 
-const membershipSchema = z.array(z.string().min(1)).min(1);
+const prDeliveryMembershipSchema = z.array(z.string().min(1)).min(1);
+/** Validate the complete explicit membership before export or any lifecycle transition. */
+export function getFrozenDeliveryMembers(
+  delivery: Pick<WorkspacePRDelivery, 'id' | 'workspaceId' | 'eventIds'>,
+  events: WorkspacePREvent[]
+): WorkspacePREvent[] | null {
+  const parsed = prDeliveryMembershipSchema.safeParse(delivery.eventIds);
+  if (!parsed.success) {
+    return null;
+  }
+  const ids = new Set(parsed.data);
+  const members = events.filter(
+    (event) => event.batchId === delivery.id || event.deliveryId === delivery.id
+  );
+  if (
+    ids.size !== parsed.data.length ||
+    members.length !== ids.size ||
+    members.some(
+      (event) =>
+        !ids.has(event.id) ||
+        event.workspaceId !== delivery.workspaceId ||
+        event.batchId !== delivery.id
+    )
+  ) {
+    return null;
+  }
+  return members;
+}
+
 export function projectDeliveryEvent(
   event: WorkspacePREvent,
   delivery?: WorkspacePRDelivery
@@ -34,7 +62,7 @@ export function projectDeliveryEvents(
   const byId = new Map(deliveries.map((delivery) => [delivery.id, delivery]));
   return events.map((event) => {
     const id = event.batchId ?? event.deliveryId;
-    return projectDeliveryEvent(event, id ? byId.get(id) : undefined);
+    return projectDeliveryEvent(event, id === null ? undefined : byId.get(id));
   });
 }
 
@@ -50,7 +78,7 @@ export async function readDeliveryEvents(
     ...new Set(
       events.flatMap((event) => {
         const id = event.batchId ?? event.deliveryId;
-        return id ? [id] : [];
+        return id === null ? [] : [id];
       })
     ),
   ];
@@ -66,15 +94,8 @@ export function exportDeliveryEvents(
   deliveries: WorkspacePRDelivery[]
 ) {
   for (const delivery of deliveries) {
-    const ids = membershipSchema.parse(delivery.eventIds);
-    const members = events.filter(
-      (event) => event.batchId === delivery.id || event.deliveryId === delivery.id
-    );
-    if (
-      ids.length !== new Set(ids).size ||
-      members.length !== ids.length ||
-      members.some((event) => !ids.includes(event.id) || event.workspaceId !== delivery.workspaceId)
-    ) {
+    const members = getFrozenDeliveryMembers(delivery, events);
+    if (!members) {
       throw new Error('Cannot export incomplete PR delivery membership');
     }
     if (delivery.state === 'BLOCKED' && members.some((event) => event.deliveryId !== delivery.id)) {

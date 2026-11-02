@@ -21,7 +21,7 @@ CREATE INDEX "WorkspacePRDelivery_workspaceId_state_idx" ON "WorkspacePRDelivery
 ALTER TABLE "WorkspacePREvent" ADD COLUMN "batchId" TEXT REFERENCES "WorkspacePRDelivery"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 CREATE INDEX "WorkspacePREvent_batchId_idx" ON "WorkspacePREvent"("batchId");
 CREATE TEMP TABLE valid_pr_delivery AS
-SELECT e.deliveryId AS id FROM WorkspacePREvent e WHERE e.deliveryId IS NOT NULL AND
+SELECT e.deliveryId AS id FROM WorkspacePREvent e WHERE e.deliveryId IS NOT NULL AND length(e.deliveryId)>0 AND
 NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.workspaceId IS NOT e.workspaceId)
  AND NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.state IS NOT e.state)
  AND NOT EXISTS (SELECT 1 FROM WorkspacePREvent other WHERE other.deliveryId = e.deliveryId AND other.deliverySessionId IS NOT e.deliverySessionId)
@@ -54,7 +54,10 @@ SELECT e.deliveryId, e.workspaceId,
  CASE WHEN valid.id IS NOT NULL THEN e.claimedAt END,
  CASE WHEN valid.id IS NOT NULL THEN e.deliveredAt END
 FROM WorkspacePREvent e LEFT JOIN valid_pr_delivery valid ON valid.id=e.deliveryId
-WHERE e.deliveryId IS NOT NULL GROUP BY e.deliveryId;
+WHERE e.deliveryId IS NOT NULL AND e.id = (
+ SELECT first_event.id FROM WorkspacePREvent first_event
+ WHERE first_event.deliveryId=e.deliveryId ORDER BY first_event.createdAt,first_event.id LIMIT 1
+);
 UPDATE WorkspacePREvent SET batchId=deliveryId WHERE deliveryId IS NOT NULL;
 -- Null the redundant compatible columns only after a proven valid backfill.
 UPDATE WorkspacePREvent SET state='PENDING',attempts=0,deliveryId=NULL,deliverySessionId=NULL,deliveryProvider=NULL,deliveryProviderSessionId=NULL,deliveryBindingRevision=NULL,deliveryText=NULL,claimedAt=NULL,deliveredAt=NULL

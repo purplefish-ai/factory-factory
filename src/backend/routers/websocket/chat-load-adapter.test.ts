@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionLoadService } from '@/backend/services/session';
 import { SessionEventBus } from '@/backend/services/session';
+import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import { ChatConnectionRegistry } from './chat-connection-registry';
 import { executeSessionLoad } from './chat-load-adapter';
+import * as replayFraming from './session-replay-framing';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -125,6 +128,24 @@ describe('executeSessionLoad', () => {
     ).toBeLessThanOrEqual(128 * 1024);
   });
 
+  it('settles a hard framing limit with a correlated terminal error while completing application work', async () => {
+    const test = setup();
+    const framing = vi.spyOn(replayFraming, 'frameSessionReplay').mockImplementation(() => {
+      throw new replayFraming.SessionReplayLimitError(
+        'Session replay exceeds the 128 MiB transport limit'
+      );
+    });
+    try {
+      await executeSessionLoad({ sessionId: 's1', loadRequestId: 'too-large' }, test.deps);
+      expect(test.calls[0]).toMatchObject({
+        payload: { type: 'error', code: 413, loadRequestId: 'too-large' },
+      });
+      expect(test.calls.at(-1)).toBe('activation');
+    } finally {
+      framing.mockRestore();
+    }
+  });
+
   it('returns missing-session outcomes without replay, runtime, or activation', async () => {
     const test = setup();
     test.deps.loadService.prepareLoad = async () => ({
@@ -185,13 +206,16 @@ describe('executeSessionLoad', () => {
     firstConfig.resolve();
     await first;
   });
-  it.each(['closed', 'throws'] as const)(
+  it.each(['closed', 'throws', 'congested'] as const)(
     'continues application completion and other-viewer delivery when requester is %s after preparation',
     async (failure) => {
       const test = setup();
       const requesterFrames: string[] = [];
       const viewerFrames: string[] = [];
-      const requester = {
+      const requester = Object.assign(new EventEmitter(), {
+        bufferedAmount: failure === 'congested' ? 1024 * 1024 : 0,
+        close: () => requester.emit('close'),
+        terminate: () => undefined,
         readyState: WS_READY_STATE.OPEN as number,
         send(payload: string) {
           if (failure === 'throws') {
@@ -199,7 +223,7 @@ describe('executeSessionLoad', () => {
           }
           requesterFrames.push(payload);
         },
-      };
+      });
       const viewer = {
         readyState: WS_READY_STATE.OPEN,
         send: (payload: string) => viewerFrames.push(payload),
@@ -246,6 +270,84 @@ describe('executeSessionLoad', () => {
       registry.clear();
     }
   );
+  it('loads a large correlated replay and completes application work before a pressured viewer reconnects', async () => {
+    const test = setup();
+    const registry = new ChatConnectionRegistry();
+    const replayText = 'x'.repeat(2 * 1024 * 1024);
+    test.deps.loadService.captureReplay = () => ({
+      replayEvents: [
+        {
+          type: 'assistant_text_delta',
+          messageId: 'history',
+          order: 1,
+          offset: 0,
+          text: replayText,
+        },
+      ],
+      sessionRuntime: runtime,
+    });
+    test.deps.eventBus.on('session_outbound', ({ sessionId, payload }) =>
+      registry.broadcastToSession(sessionId, payload)
+    );
+    const connect = () => {
+      const frames: unknown[] = [];
+      const assembler = new SessionReplayAssembler();
+      const ws = Object.assign(new EventEmitter(), {
+        readyState: WS_READY_STATE.OPEN,
+        bufferedAmount: 0,
+        close: () => ws.emit('close'),
+        terminate: () => undefined,
+        send: (payload: string, callback: (error?: Error) => void) => {
+          const value = assembler.accept(JSON.parse(payload));
+          if (value !== null) {
+            frames.push(value);
+          }
+          const bytes = Buffer.byteLength(payload);
+          ws.bufferedAmount += bytes;
+          queueMicrotask(() => {
+            ws.bufferedAmount -= bytes;
+            callback();
+          });
+        },
+      });
+      registry.register('requester', {
+        ws: ws as unknown as WebSocket,
+        dbSessionId: 's1',
+        workingDir: null,
+      });
+      return { ws, frames };
+    };
+    const first = connect();
+    registry.expectReplay(first.ws as unknown as WebSocket, 'first');
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
+    await vi.waitFor(() => expect(first.frames).toHaveLength(3));
+    expect(first.frames[0]).toMatchObject({
+      type: 'session_replay_batch',
+      loadRequestId: 'first',
+      replayEvents: [{ type: 'assistant_text_delta', text: replayText }],
+    });
+    registry.expectReplay(first.ws as unknown as WebSocket, 'first');
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
+    await vi.waitFor(() => expect(first.frames).toHaveLength(6));
+    first.ws.bufferedAmount += 1024 * 1024;
+    registry.broadcastToSession('s1', {
+      type: 'session_delta',
+      data: { type: 'slash_commands', slashCommands: [] },
+    });
+    expect(first.frames).toHaveLength(6);
+    const second = connect();
+    registry.expectReplay(second.ws as unknown as WebSocket, 'second');
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
+    await vi.waitFor(() => expect(second.frames).toHaveLength(3));
+    expect(second.frames[0]).toMatchObject({
+      type: 'session_replay_batch',
+      loadRequestId: 'second',
+    });
+    expect(test.calls.at(-1)).toBe('activation');
+    second.ws.emit('close');
+    registry.clear();
+  });
+
   it('does not yield between replay capture and publication when a live update is queued', async () => {
     const test = setup();
     const capture = test.deps.loadService.captureReplay;

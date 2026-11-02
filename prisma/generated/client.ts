@@ -204,6 +204,16 @@ export type AgentSourceState = Prisma.AgentSourceStateModel
  */
 export type AgentSourcePage = Prisma.AgentSourcePageModel
 /**
+ * Model AgentSourceCheckpoint
+ * Retained interval proof. Only COMPLETE rows authorize historical reads and page compaction.
+ */
+export type AgentSourceCheckpoint = Prisma.AgentSourceCheckpointModel
+/**
+ * Model AgentSourceHead
+ * Every captured provider identity, including unsupported/control heads, in API order.
+ */
+export type AgentSourceHead = Prisma.AgentSourceHeadModel
+/**
  * Model AgentSourceBaseline
  * Prepared provider head; an ordinal is assigned only after all older captured events.
  */
@@ -253,3 +263,13 @@ export type AgentSessionLaunchOrigin = Prisma.AgentSessionLaunchOriginModel
  * Workspace-owned child creation facts survive archive, deletion and import.
  */
 export type WorkspaceChildOrigin = Prisma.WorkspaceChildOriginModel
+/**
+ * Model ChatIntent
+ * 
+ */
+export type ChatIntent = Prisma.ChatIntentModel
+/**
+ * Model PromptDispatchAttempt
+ * 
+ */
+export type PromptDispatchAttempt = Prisma.PromptDispatchAttemptModel

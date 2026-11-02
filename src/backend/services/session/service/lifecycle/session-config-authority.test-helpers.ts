@@ -11,7 +11,10 @@ import {
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionConfigService } from './session.config.service';
+import {
+  SessionConfigService,
+  type SessionConfigServiceDependencies,
+} from './session.config.service';
 import { SessionRepository } from './session.repository';
 
 export function configOptions(
@@ -77,7 +80,10 @@ export async function settleConfig() {
 }
 
 type Update = Partial<AgentSessionRecord>;
-export function setupAuthority(runtimeManager?: AcpRuntimeManager) {
+export function setupAuthority(
+  runtimeManager?: AcpRuntimeManager,
+  chatIntent?: SessionConfigServiceDependencies['chatIntent']
+) {
   let row = unsafeCoerce<AgentSessionRecord>({
     id: 'session',
     provider: 'CODEX',
@@ -193,6 +199,7 @@ export function setupAuthority(runtimeManager?: AcpRuntimeManager) {
     ),
   };
   const service = new SessionConfigService({
+    chatIntent,
     repository,
     runtimeManager: runtimeManager ?? unsafeCoerce(runtime),
     codexModelCatalogService: {

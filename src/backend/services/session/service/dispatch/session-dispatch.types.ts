@@ -1,5 +1,7 @@
+import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
@@ -53,12 +55,14 @@ export interface SessionDispatchLifecycleDependencies {
 
 /** Method-level capabilities supplied by the session composition root. */
 export interface SessionDispatchDependencies {
+  chatIntent?: SessionChatIntentService;
   eventAuthority?: { assertOrdinary(sessionId: string): Promise<void> };
   runtimeManager: Pick<AcpRuntimeManager, 'isSessionPromptInFlight' | 'isSessionRunning'>;
   configService: Pick<
     SessionConfigService,
     'configureQueuedMessage' | 'resolveQueuedMessageSettings'
-  >;
+  > &
+    Partial<Pick<SessionConfigService, 'withPromptConfiguration'>>;
   promptService: {
     steerSessionMessage(
       sessionId: string,
@@ -67,7 +71,8 @@ export interface SessionDispatchDependencies {
     sendSessionMessage(
       sessionId: string,
       content: string | AgentContentItem[],
-      guard?: SessionCallerGuard
+      guard?: SessionCallerGuard,
+      configurationPermit?: PromptConfigurationPermit
     ): Promise<void>;
   };
   backgroundDelivery: Pick<

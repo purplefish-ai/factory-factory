@@ -7,6 +7,10 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const SOURCE_ROOT = 'src/backend';
 
 const ACCESSOR_POLICIES = {
+  agentSourceCheckpointAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor',
+  },
   workspaceRetryAuthorityAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/workspace-retry-authority.accessor',
@@ -18,6 +22,10 @@ const ACCESSOR_POLICIES = {
   agentManagementHistoryAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-management-history.accessor',
+  },
+  agentRunContextRetentionAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-run-context-retention.accessor',
   },
   agentLedgerRetentionAccessor: {
     owner: 'agent-definition',
@@ -147,7 +155,7 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor',
   },
-  workspacePrDeliveryReadAccessor: {
+  readDeliveryEvents: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor',
   },
@@ -178,6 +186,10 @@ const ACCESSOR_POLICIES = {
   closedSessionAccessor: {
     owner: 'session',
     module: 'src/backend/services/session/resources/closed-session.accessor',
+  },
+  ChatIntentAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/chat-intent.accessor',
   },
   sessionLifecycleEventAccessor: {
     owner: 'session',

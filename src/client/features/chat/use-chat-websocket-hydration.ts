@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type HydrationBatch = { loadRequestId?: string; type?: string };
 export type HydrationBatchDecision = 'pass' | 'drop' | 'match';
 export type LoadSessionRetryDecision = 'retry' | 'stale' | 'exhausted';
@@ -91,4 +93,15 @@ export function scheduleConnectLoadingStart(options: {
   return () => {
     clearTimeoutFn(timeout);
   };
+}
+
+const HydrationLoadErrorSchema = z.object({
+  type: z.literal('error'),
+  code: z.union([z.literal(413), z.literal(409)]),
+  loadRequestId: z.string(),
+  message: z.string().max(512),
+});
+export function parseHydrationLoadError(data: unknown) {
+  const result = HydrationLoadErrorSchema.safeParse(data);
+  return result.success ? result.data : null;
 }

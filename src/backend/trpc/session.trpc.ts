@@ -106,7 +106,12 @@ async function createAgentSessionFromInput(
 
   const session = creation.session;
   if (input.initialMessage) {
-    sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
+    try {
+      await sessionDomainService.storeInitialMessageDurably(session.id, input.initialMessage);
+    } catch (error) {
+      await rollbackCreatedSession(session.id, sessionDataService, sessionDomainService);
+      throw error;
+    }
   }
   return session;
 }
@@ -135,7 +140,33 @@ async function rollbackCreatedSession(
   }
 }
 
+function chatIntentOwner(ctx: Context) {
+  const owner = ctx.appContext.services.sessionDomainService.chatIntent;
+  if (!owner) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Chat intent service unavailable',
+    });
+  }
+  return owner;
+}
+
 export const sessionRouter = router({
+  listUncertainDispatches: trustedLocalProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .query(({ ctx, input }) => chatIntentOwner(ctx).store.listUncertain(input.sessionId)),
+  resolveUncertainDispatch: trustedLocalProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        attemptId: z.string(),
+        resolution: z.enum(['committed', 'cancelled']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await chatIntentOwner(ctx).resolve(input.sessionId, input.attemptId, input.resolution);
+      await ctx.appContext.services.sessionDispatchService.tryDispatchNextMessage(input.sessionId);
+    }),
   getLaunchOptions: trustedLocalProcedure
     .input(
       z.object({

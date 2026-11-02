@@ -95,7 +95,7 @@ export type SessionTerminationCoordinatorDependencies = {
     'finalizeDeliberateStop' | 'clearInactiveSession'
   >;
   getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState;
-  onBeforeStopSession?: (sessionId: string) => void;
+  onBeforeStopSession?: (sessionId: string) => void | Promise<void>;
 };
 
 export class SessionTerminationCoordinator {
@@ -235,7 +235,10 @@ export class SessionTerminationCoordinator {
     options?: StopSessionOptions
   ): Promise<void> {
     this.dependencies.promptTurnCompletionService.clearSession(sessionId);
-    this.dependencies.onBeforeStopSession?.(sessionId);
+    const beforeStop = this.dependencies.onBeforeStopSession?.(sessionId);
+    if (beforeStop !== undefined) {
+      await beforeStop;
+    }
     this.dependencies.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId =

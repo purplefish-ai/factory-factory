@@ -11,6 +11,7 @@ import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
+import type { SessionChatIntentService } from './chat/session-chat-intent.service';
 import { sessionResumeFences } from './session-resume-fence';
 import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from './store/session-local-transcript';
@@ -48,6 +49,7 @@ const RECENT_REJECTION_TTL_MS = 60_000;
 const MAX_RECENT_REJECTIONS = 100;
 
 export class SessionDomainService extends EventEmitter {
+  chatIntent?: SessionChatIntentService;
   private readonly registry = new SessionStoreRegistry();
   // Successful rollover identities fence delayed DB reads even after an inactive
   // transcript store is evicted. These contain no transcript data.
@@ -60,6 +62,43 @@ export class SessionDomainService extends EventEmitter {
   private readonly initialMessages = new Map<string, string>();
   // Retain publication evidence through cancellation and ordinary store eviction.
   private readonly publishedInitialMessages = new Map<string, string>();
+
+  async enqueueInitialMessageDurably(
+    sessionId: string,
+    message: QueuedMessage
+  ): Promise<{ position: number } | { error: string } | null> {
+    if (!this.chatIntent) {
+      throw new Error('Durable chat admission is not configured');
+    }
+    const result = await this.chatIntent.acceptInitial(sessionId, message);
+    return result.status === 'queued' && result.position !== undefined
+      ? { position: result.position }
+      : null;
+  }
+
+  recoverInitialMessageDurably(
+    sessionId: string,
+    messageId: string
+  ): Promise<QueuedMessage | null> {
+    if (!this.chatIntent) {
+      throw new Error('Durable chat admission is not configured');
+    }
+    return this.chatIntent.recoverInitial(sessionId, messageId);
+  }
+
+  async storeInitialMessageDurably(sessionId: string, text: string): Promise<void> {
+    await this.enqueueInitialMessageDurably(sessionId, {
+      id: `initial-human-${sessionId}`,
+      text,
+      timestamp: this.nowIso(),
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+  }
 
   storeInitialMessage(sessionId: string, text: string): void {
     this.initialMessages.set(sessionId, text);
@@ -167,6 +206,12 @@ export class SessionDomainService extends EventEmitter {
     }
     this.publisher.emitDelta(sessionId, event);
   }
+  clearMessageRejection(sessionId: string, messageId: string): void {
+    const store = this.registry.getExisting(sessionId);
+    if (store) {
+      store.recentRejections = store.recentRejections.filter((item) => item.id !== messageId);
+    }
+  }
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {
     this.recordRecentMessageRejection(sessionId, {
       id: messageId,
@@ -259,6 +304,16 @@ export class SessionDomainService extends EventEmitter {
     if ('error' in result) {
       return result;
     }
+    this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    return result;
+  }
+
+  restoreAcceptedMessage(
+    sessionId: string,
+    message: QueuedMessage
+  ): { position: number } | { error: string } {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const result = enqueueMessage(store, message, { restoreAccepted: true });
     this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
     return result;
   }

@@ -46,6 +46,12 @@ describe('chat router application composition', () => {
   });
 
   it('routes user queue, manual resume, and stop requests through the public dispatcher', async () => {
+    // This composition fixture has no persisted AgentSession; SQLite durability has integration coverage.
+    const intentStore = sessionDomainService.chatIntent!.store;
+    vi.spyOn(intentStore, 'read').mockResolvedValue([]);
+    vi.spyOn(intentStore, 'accept').mockImplementation((_id, message) =>
+      Promise.resolve({ status: 'queued', message, revision: 0 })
+    );
     const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
     const resume = vi.spyOn(sessionDispatchService, 'setManualDispatchResume');
     const reset = vi.spyOn(sessionDispatchService, 'resetDispatchState');

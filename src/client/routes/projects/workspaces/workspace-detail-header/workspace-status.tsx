@@ -2,6 +2,7 @@ import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
+import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -136,10 +137,13 @@ export function WorkspaceCiStatus({ workspace }: { workspace: WorkspaceHeaderWor
     <div className="flex items-center gap-2">
       <CiStatusChip
         ciState={workspace.sidebarStatus.ciState}
-        prState={workspace.prState}
+        prState={workspace.prSummary.state}
         size="md"
       />
-      <PrStateBadge prState={workspace.prState} size="md" />
+      <PrStateBadge
+        prState={getWorkspaceSelectedPR(workspace)?.state ?? workspace.prState}
+        size="md"
+      />
     </div>
   );
 }

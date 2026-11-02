@@ -285,6 +285,14 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     chatEventForwarderService,
     sessionCommandFactories,
     sessionLoadService: createSessionLoadService({
+      hydrateChatIntent: async (id) => {
+        const owner = services.sessionDomainService.chatIntent;
+        if (!owner) {
+          throw new Error('Durable chat load owner unavailable');
+        }
+        await owner.hydrate(id);
+        return owner.hasQueuedInput(id);
+      },
       domain: {
         getTranscriptSnapshot: (id) => services.sessionDomainService.getTranscriptSnapshot(id),
         getRuntimeSnapshot: (id) => services.sessionDomainService.getRuntimeSnapshot(id),

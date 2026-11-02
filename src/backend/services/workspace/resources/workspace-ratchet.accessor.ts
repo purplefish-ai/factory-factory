@@ -57,6 +57,8 @@ class WorkspaceRatchetAccessor {
     const {
       prs,
       prSummary,
+      selectedPrId,
+      selectedPr,
       prUrl,
       prNumber,
       prState,
@@ -70,6 +72,8 @@ class WorkspaceRatchetAccessor {
       ...fields,
       prs,
       prSummary,
+      selectedPrId,
+      selectedPr,
       prUrl,
       prNumber,
       prState,

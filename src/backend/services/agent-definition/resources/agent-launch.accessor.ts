@@ -31,6 +31,7 @@ export async function currentLaunch(
   });
   if (
     run?.status !== 'RUNNING' ||
+    run.contextExpiredAt !== null ||
     run.workerGeneration !== claim.workerGeneration ||
     run.attemptGeneration !== claim.attemptGeneration ||
     run.reservedWorkspaceId !== claim.reservedWorkspaceId ||

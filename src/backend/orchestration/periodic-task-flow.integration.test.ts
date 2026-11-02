@@ -256,14 +256,13 @@ describe('due periodic tasks through shared dispatch', () => {
         resume.promise.then(() => [stale])
       );
     });
-    configure(async () => {
+    const launchSources: PeriodicTaskLaunchSource[] = [];
+    const creation = new WorkspaceCreationService({ logger });
+    configure(async (source) => {
       // Editing after reservation must not replace the admitted configuration.
       await service.update(stale.id, { name: 'Later name', prompt: 'Later prompt' });
-      return {
-        workspace: await db.prisma.workspace.create({
-          data: { projectId: 'project', name: 'Admitted', periodicTaskId: stale.id },
-        }),
-      };
+      launchSources.push(source);
+      return { workspace: await creation.create(source) };
     });
     const cycle = runCycle();
     await read.promise;
@@ -271,6 +270,15 @@ describe('due periodic tasks through shared dispatch', () => {
     resume.resolve();
     await cycle;
 
+    // Assert outside dispatch: the poll catches launcher errors, including a
+    // failed assertion inside its callback, and settles the execution instead.
+    expect(launchSources).toEqual([
+      expect.objectContaining({
+        projectId: 'project',
+        name: expect.stringContaining('Current name'),
+        initialPrompt: 'Current prompt',
+      }),
+    ]);
     expect(events).toEqual([
       expect.objectContaining({
         name: expect.stringContaining('Current name'),

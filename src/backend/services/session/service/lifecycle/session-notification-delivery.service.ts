@@ -55,6 +55,7 @@ export type NotificationDeltaPort = {
 };
 
 export type SessionNotificationDeliveryServiceDependencies = {
+  isRecoveryHeld?(sessionId: string): Promise<boolean>;
   notificationPort: NotificationPersistencePort;
   queuePort: NotificationQueuePort;
   transcriptPort: NotificationTranscriptPort;
@@ -76,7 +77,9 @@ export class SessionNotificationDeliveryService {
   // roll back its provisional transcript entry. Retain that evidence until release.
   private readonly unsettledDispatchClaims = new Set<ActiveDispatchClaim>();
 
+  private readonly isRecoveryHeld;
   constructor(dependencies: SessionNotificationDeliveryServiceDependencies) {
+    this.isRecoveryHeld = dependencies.isRecoveryHeld;
     this.notificationPort = dependencies.notificationPort;
     this.queuePort = dependencies.queuePort;
     this.transcriptPort = dependencies.transcriptPort;
@@ -90,6 +93,9 @@ export class SessionNotificationDeliveryService {
   }): Promise<{ dispatchableCount: number }> {
     const { sessionId, workspaceId, assertAllowed } = input;
     try {
+      if (await this.isRecoveryHeld?.(sessionId)) {
+        return { dispatchableCount: 0 };
+      }
       const pending = await this.notificationPort.listPendingForDelivery(workspaceId);
       await assertAllowed();
       if (pending.length === 0) {

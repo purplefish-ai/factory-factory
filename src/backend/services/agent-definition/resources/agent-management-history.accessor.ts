@@ -5,6 +5,7 @@ import type { agentRecoveryTargetInputSchema } from '@/shared/event-agent-recove
 import { ownedAgent, pageAfter, type ManagementCursor } from './agent-management.accessor';
 
 const runSelect = {
+  contextExpiredAt: true,
   id: true,
   agentDefinitionId: true,
   triggerId: true,

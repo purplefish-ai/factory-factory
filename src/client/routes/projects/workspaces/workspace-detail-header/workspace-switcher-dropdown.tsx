@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from '@/client/components/workspace-item-content';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
+import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import {
   Select,
   SelectContent,
@@ -18,7 +19,7 @@ const workspaceDropdownItemClassName =
   'h-auto items-start py-1.5 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground [&>span:first-child]:hidden [&>span:last-child]:block [&>span:last-child]:w-full';
 
 function openWorkspacePr(workspace: ServerWorkspace) {
-  const prUrl = workspace.prUrl;
+  const prUrl = getWorkspaceSelectedPR(workspace)?.url;
   if (!prUrl) {
     return;
   }

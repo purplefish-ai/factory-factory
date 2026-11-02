@@ -15,16 +15,15 @@ import { eventWorkProofSchema, type EventWorkProof } from '@/shared/event-agent-
 import type { Prisma } from '@prisma-gen/client';
 import { currentLaunch, launchConflict, launchSnapshot } from './agent-launch.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
-import { assertAttempt, childHistoryIsClear } from './agent-run-settlement.accessor';
+import {
+  assertAttempt,
+  childHistoryIsClear,
+  hasStoppedRunWork,
+} from './agent-run-settlement.accessor';
 
 type Run = Awaited<ReturnType<typeof currentLaunch>>;
 function assertStoppedWork(evidence: InitialDeliveryEvidence, proof: EventWorkProof) {
-  if (
-    proof.mode !== 'STOPPED' ||
-    evidence.stop?.status !== 'LOCAL_RUNTIME_GROUP_STOPPED' ||
-    !isDeepStrictEqual(evidence.source, proof.source) ||
-    !isDeepStrictEqual(evidence.stop.source, proof.source)
-  ) {
+  if (!hasStoppedRunWork(evidence, proof)) {
     launchConflict();
   }
 }

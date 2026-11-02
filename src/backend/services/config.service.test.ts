@@ -15,6 +15,27 @@ describe('configService environment accessors', () => {
     configService.reload();
   });
 
+  it.each([undefined, '', 'abc', '123garbage', '0', '-1', '1048575', '268435457', '2097152.5'])(
+    'defaults invalid or absent websocket frame budget %s',
+    (value) => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, 'WEBSOCKET_MAX_FRAME_BYTES');
+      } else {
+        process.env.WEBSOCKET_MAX_FRAME_BYTES = value;
+      }
+      configService.reload();
+      expect(configService.getWebSocketConfig()).toEqual({ maxFrameBytes: 33_554_432 });
+    }
+  );
+  it.each(['1048576', '67108864', '268435456'])(
+    'reads bounded websocket frame budget %s',
+    (value) => {
+      process.env.WEBSOCKET_MAX_FRAME_BYTES = value;
+      configService.reload();
+      expect(configService.getWebSocketConfig()).toEqual({ maxFrameBytes: Number(value) });
+    }
+  );
+
   it('reads backend host from validated config', () => {
     process.env.BACKEND_HOST = '127.0.0.1';
     configService.reload();
@@ -286,4 +307,28 @@ describe('Codex native profile configuration', () => {
       expect(child.CODEX_SESSIONS_DIR).toBe(configService.getCodexSessionsDir());
     }
   );
+});
+
+describe('terminal agent run context retention policy', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it.each([undefined, '', '0', '-1', '1.5', '1day', '1e2', 'invalid', 'Infinity', '365001'])(
+    'retains indefinitely for missing/invalid opt-in %s',
+    (value) => {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, 'AGENT_RUN_CONTEXT_RETENTION_DAYS');
+      } else {
+        process.env.AGENT_RUN_CONTEXT_RETENTION_DAYS = value;
+      }
+      configService.reload();
+      expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBeNull();
+    }
+  );
+  it('accepts explicit positive days through configService', () => {
+    process.env.AGENT_RUN_CONTEXT_RETENTION_DAYS = '45';
+    configService.reload();
+    expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBe(45 * 86_400_000);
+  });
 });

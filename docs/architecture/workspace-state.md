@@ -49,7 +49,11 @@ calls using existing authentication; they consume the account's usage allowance.
 Several workspace concerns were split out of the `Workspace` table into 1:1 side
 tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot
-wire, the v4 export format and the client are unchanged.
+wire aliases and v4 export format retain compatibility. PR reads additionally
+expose the derived `selectedPrId`/`selectedPr` contract described in
+[pull requests](pull-requests.md#pr-event-delivery-destinations). The selected
+association's facts stay separate from the authoritative `prs`/`prSummary`
+collection; selection is never persisted as a primary preference.
 
 Worktree cleanup matches Git's registered paths against the real worktree base
 directory, so a symlinked base still removes Git metadata. Branch-resume
@@ -617,6 +621,16 @@ the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
 
+Git snapshots keep one running calculation per worktree/default-branch pair.
+Invalidation clears the cached result and fences the running generation without
+detaching its Git commands. Readers arriving after invalidation share one fresh
+calculation after the running work settles; bursts before that refresh starts
+coalesce into the same refresh. A stale completion is never cached. Removal and
+stop retire queued refreshes, and rejected Git commands reach callers
+immediately while sibling commands drain before releasing ownership. The
+existing three-command per-snapshot and six-command service budgets still apply
+across independent workspace keys.
+
 The board provider and its children are keyed by project ID. Switching projects
 resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
 the initial mobile tab. Archive results arriving after a switch still reconcile
@@ -722,3 +736,21 @@ replay setup after an earlier retry changes that state. Default-terminal
 registration retains the created PTY instance and row identity; rejected
 registration cleans up that instance only, and PID clearing compares the
 captured PID without treating a stored PID as process-stop authority.
+
+## Projection field contract
+
+`src/shared/workspace-projection-fields.ts` classifies every raw summary input
+with its merge group, hydration requirement and drift policy. Snapshot group
+merging, completeness checks, metadata schema selection and reconciliation drift
+consume that inventory. Input types derive from the shared summary contract;
+adding a raw field requires an explicit policy. Independent contract fixtures
+check policy semantics rather than importing the production inventory.
+
+The summary schema also supplies common snapshot validators and the HTTP
+projector's public field inventory. Legacy snapshots retain optional metadata,
+PR collections and selection facts, and cannot claim completeness from defaults.
+Selected PR identity and facts derive from accepted collections; they have no
+independent clock or hydration requirement. Name and branch provenance remain
+private and use their existing ordered-write fences. Reconciliation poll-start
+fencing and client connection epochs and optimistic archive fencing are
+unchanged.

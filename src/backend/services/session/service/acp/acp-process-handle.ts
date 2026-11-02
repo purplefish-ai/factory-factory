@@ -33,7 +33,12 @@ export class AcpProcessHandle {
   private promptLease?: AcpConfigurationLease;
   promptRevision = 0;
   private readonly promptCompletion = new AcpPromptReadiness();
+  private readonly promptAdmission = new AcpPromptReadiness();
   private pendingConfigUpdate?: Promise<void>;
+  private rejectConfigurationFailure!: (error: unknown) => void;
+  readonly configurationFailure = new Promise<never>((_resolve, reject) => {
+    this.rejectConfigurationFailure = reject;
+  });
   configOptions: SessionConfigOption[];
   readonly createdAt: Date;
   readonly sessionCreationOutcome: AcpSessionCreationOutcome;
@@ -51,6 +56,7 @@ export class AcpProcessHandle {
     agentCapabilities: Record<string, unknown>;
     supportsSteering?: boolean;
   }) {
+    void this.configurationFailure.catch(() => undefined);
     this.connection = params.connection;
     this.child = params.child;
     this.permissionBridge = params.permissionBridge;
@@ -108,6 +114,14 @@ export class AcpProcessHandle {
     this.pendingConfigUpdate = ready;
   }
 
+  get pendingPromptAdmission(): Promise<void> | undefined {
+    return this.promptAdmission.wait();
+  }
+
+  beginPromptAdmission(): AcpConfigurationLease {
+    return this.promptAdmission.begin();
+  }
+
   get configurationReady(): Promise<void> | undefined {
     return this.promptReadiness.wait();
   }
@@ -127,8 +141,10 @@ export class AcpProcessHandle {
 
   /** Permanently reject this incarnation's configuration and prompt-completion waiters. */
   failConfiguration(error: unknown): void {
+    this.rejectConfigurationFailure(error);
     this.promptReadiness.fail(error);
     this.promptCompletion.fail(error);
+    this.promptAdmission.fail(error);
   }
 
   supportsImages(): boolean {

@@ -533,6 +533,8 @@ model CodexAccount {
 }
 
 model AgentSession {
+  chatIntents ChatIntent[]
+  promptDispatchAttempts PromptDispatchAttempt[]
   dedicatedPRBinding WorkspacePRDedicatedSession?
   prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
   id                  String        @id @default(cuid())
@@ -785,9 +787,10 @@ model AgentRun {
   initialDelivery      AgentInitialDelivery?
   effectiveExecution   Json? // eventAgentExecutionSchema; immutable account and launch binding
   launchPreparation    Json? // eventLaunchPreparationSchema; safe boundary vs owned physical work
-  definitionSnapshot   Json // agentDefinitionInputSchema; frozen at admission
-  triggerSnapshot      Json? // agentTriggerInputSchema; null for manual runs
-  input                Json // agentRunInputSchema; normalized event context, never raw provider payloads
+  contextExpiredAt     DateTime? // Opt-in terminal context expiry; null retains full frozen context
+  definitionSnapshot   Json // agentDefinitionInputSchema or expiredAgentRunContextSchema
+  triggerSnapshot      Json? // agentTriggerInputSchema (null for manual) or expiredAgentRunContextSchema
+  input                Json // agentRunInputSchema or expiredAgentRunContextSchema
   workspaceId          String?               @unique
   workspace            Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   errorMessage         String?
@@ -802,9 +805,11 @@ model AgentRun {
   @@index([agentDefinitionId, createdAt])
   @@index([triggerId, agentDefinitionId])
   @@index([status, createdAt])
+  @@index([contextExpiredAt, completedAt])
 }
 
 model AgentSourceState {
+  authorityRevision Int @default(0) // SQLite triggers fence checkpoint validation between transactions
   lastSourceOrder Int @default(0) // Retained beyond event tombstones; canonical API-order high water
   connectionId   String          @id
   connection     AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
@@ -815,6 +820,7 @@ model AgentSourceState {
   updatedAt      DateTime        @updatedAt
   pages          AgentSourcePage[]
   baselines      AgentSourceBaseline[]
+  checkpoints    AgentSourceCheckpoint[]
 }
 
 /// Immutable ordered feed/control identities. PR and unsupported content is never retained.
@@ -832,6 +838,44 @@ model AgentSourcePage {
   createdAt DateTime @default(now())
 
   @@unique([connectionId, scanId, ordinal])
+  @@index([connectionId, phase, scanId, ordinal])
+}
+
+/// Retained interval proof. Only COMPLETE rows authorize historical reads and page compaction.
+model AgentSourceCheckpoint {
+  connectionId String
+  scanId String
+  source AgentSourceState @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
+  status String @default("BUILDING")
+  nextOrdinal Int @default(0)
+  entryCount Int @default(0)
+  executableCount Int @default(0)
+  verifiedCount Int @default(0)
+  verification Json? // Canonical verifier resume/overlap progress, validated by checkpoint verification schema
+  headEventId String?
+  boundaryKnown Boolean @default(false)
+  previousBoundaryEventId String?
+  initialSourceOrder Int?
+  sourceOrder Int?
+  validationCursor Json? // Bounded authority traversal and revision; never authorizes reads
+  heads AgentSourceHead[]
+
+  @@id([connectionId, scanId])
+  @@index([connectionId, status])
+}
+
+/// Every captured provider identity, including unsupported/control heads, in API order.
+model AgentSourceHead {
+  connectionId String
+  scanId String
+  providerEventId String
+  position Int
+  precedingEventCount Int // Canonical ordinal = completed checkpoint highwater minus this offset
+  checkpoint AgentSourceCheckpoint @relation(fields: [connectionId, scanId], references: [connectionId, scanId], onDelete: Cascade)
+
+  @@id([connectionId, scanId, providerEventId])
+  @@unique([connectionId, scanId, position])
+  @@index([connectionId, providerEventId])
 }
 
 /// Prepared provider head; an ordinal is assigned only after all older captured events.
@@ -845,6 +889,8 @@ model AgentSourceBaseline {
   createdAt DateTime @default(now())
 
   @@index([connectionId, sourceOrder])
+  @@index([connectionId, headEventId])
+  @@index([connectionId, id])
 }
 
 model AgentEvent {
@@ -1019,4 +1065,41 @@ model WorkspaceChildOrigin {
   createdAt DateTime @default(now())
 
   @@id([parentWorkspaceId, childWorkspaceId])
+}
+
+// Session-owned accepted HUMAN input. Submitted bytes never change.
+model ChatIntent {
+  id Int @id @default(autoincrement())
+  sessionId String
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId String
+  fingerprint String
+  submitted Json
+  desired Json
+  revision Int @default(0)
+  status String @default("queued")
+  attemptId String?
+  attempt PromptDispatchAttempt? @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@unique([sessionId, messageId])
+  @@index([sessionId, status, id])
+  @@index([attemptId])
+}
+
+// One provider effect, including its complete ordered background membership.
+model PromptDispatchAttempt {
+  id String @id @default(cuid())
+  sessionId String
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  members Json
+  content Json
+  effectiveSettings Json
+  providerIdentity Json
+  sendGeneration Int
+  status String @default("uncertain")
+  evidence String?
+  createdAt DateTime @default(now())
+  settledAt DateTime?
+  intents ChatIntent[]
+  @@index([sessionId, status])
 }

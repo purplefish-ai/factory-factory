@@ -527,10 +527,16 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
  * that gap for the workspace side tables and other single-writer models.
  */
 const OWNED_SIDE_TABLES = {
+  chatIntent: 'src/backend/services/session/resources/chat-intent.accessor.ts',
+  promptDispatchAttempt: 'src/backend/services/session/resources/chat-intent.accessor.ts',
   agentEvent: 'src/backend/services/agent-definition/resources/agent-event.accessor.ts',
   agentSourceState: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   agentSourcePage: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
   agentSourceBaseline: 'src/backend/services/agent-definition/resources/agent-source.accessor.ts',
+  agentSourceCheckpoint:
+    'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor.ts',
+  agentSourceHead:
+    'src/backend/services/agent-definition/resources/agent-source-checkpoint.accessor.ts',
   workspacePRDedicatedSession:
     'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
   sessionLifecycleEvent:
@@ -563,7 +569,7 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
   'deleteMany',
 ]);
 
-/** The relation field each owned side table hangs off `Workspace` under. */
+/** Relation field names matched in any nested data payload, including dependent models. */
 const SIDE_TABLE_RELATIONS = {
   dedicatedSession: 'workspacePRDedicatedSession',
   dedicatedPRBinding: 'workspacePRDedicatedSession',

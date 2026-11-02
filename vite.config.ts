@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { clientModuleManifest } from './scripts/client-module-manifest.ts';
 import { workerSafeAliases } from './scripts/vite-worker-aliases.ts';
 
 // Backend URL is set by the CLI when running in development mode
@@ -27,6 +28,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    clientModuleManifest(),
     {
       name: 'web-app-metadata',
       transformIndexHtml: () => [

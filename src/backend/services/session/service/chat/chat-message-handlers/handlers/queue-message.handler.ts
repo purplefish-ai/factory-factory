@@ -1,11 +1,14 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { ChatIntentConflictError } from '@/backend/services/session/resources/chat-intent.accessor';
 import { validateAttachment } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import type { SessionChatIntentService } from '@/backend/services/session/service/chat/session-chat-intent.service';
 import type {
   SessionCommandHandler,
+  SessionCommandOutcome,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
@@ -57,8 +60,9 @@ export function createQueueMessageHandler(
   deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
     domain: Pick<
       SessionExecutionCommandServices['domain'],
-      'enqueue' | 'emitDelta' | 'rejectMessage'
+      'enqueue' | 'emitDelta' | 'rejectMessage' | 'chatIntent'
     >;
+    chatIntent?: Pick<SessionChatIntentService, 'accept' | 'hasAccepted'>;
     tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   }
 ): SessionCommandHandler<QueueMessageInput> {
@@ -66,22 +70,35 @@ export function createQueueMessageHandler(
     const text = message.text?.trim();
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
-      if (message.id) {
-        deps.domain.rejectMessage(sessionId, message.id, validationError);
-        return { replies: [] };
+      if (message.id && (await deps.chatIntent?.hasAccepted(sessionId, message.id))) {
+        return rejectAcceptanceError(
+          deps.domain,
+          sessionId,
+          message.id,
+          new ChatIntentConflictError()
+        );
       }
-
-      return {
-        replies: [
-          { type: 'error', error: { kind: 'queue_input_invalid', reason: validationError } },
-        ],
-      };
+      return rejectInvalidMessage(deps.domain, sessionId, message.id, validationError);
     }
 
     const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
     const messageId = message.id;
-    const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
-    const result = deps.domain.enqueue(sessionId, queuedMsg);
+    let queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
+    let result: { position: number } | { error: string };
+    try {
+      if (deps.chatIntent) {
+        const accepted = await deps.chatIntent.accept(sessionId, queuedMsg, isCurrent);
+        if (accepted.position === undefined) {
+          return { replies: [] };
+        }
+        queuedMsg = accepted.message;
+        result = { position: accepted.position };
+      } else {
+        result = deps.domain.enqueue(sessionId, queuedMsg);
+      }
+    } catch (error) {
+      return rejectAcceptanceError(deps.domain, sessionId, messageId, error);
+    }
 
     if ('error' in result) {
       deps.domain.rejectMessage(sessionId, messageId, result.error);
@@ -99,4 +116,36 @@ export function createQueueMessageHandler(
     await deps.tryDispatchNextMessage(sessionId);
     return { replies: [] };
   };
+}
+
+function rejectInvalidMessage(
+  domain: Pick<SessionExecutionCommandServices['domain'], 'rejectMessage'>,
+  sessionId: string,
+  id: string,
+  reason: string
+): SessionCommandOutcome {
+  if (id) {
+    domain.rejectMessage(sessionId, id, reason);
+    return { replies: [] };
+  }
+  return { replies: [{ type: 'error', error: { kind: 'queue_input_invalid', reason } }] };
+}
+
+function rejectAcceptanceError(
+  domain: Pick<SessionExecutionCommandServices['domain'], 'rejectMessage'>,
+  sessionId: string,
+  messageId: string,
+  error: unknown
+): SessionCommandOutcome {
+  if (error instanceof ChatIntentConflictError) {
+    return {
+      replies: [{ type: 'error', error: { kind: 'queue_input_invalid', reason: error.message } }],
+    };
+  }
+  domain.rejectMessage(
+    sessionId,
+    messageId,
+    error instanceof Error ? error.message : 'Unable to durably accept message'
+  );
+  return { replies: [] };
 }

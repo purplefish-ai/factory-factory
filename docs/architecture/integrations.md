@@ -337,7 +337,8 @@ with configured triggers cannot be deleted. A trigger with run history must be
 paused rather than deleted. Deleting a definition cascades its triggers and run
 history but retains its workspaces. Deleting a workspace clears its run link
 without deleting run history. Editing definitions or triggers does not rewrite
-stored snapshots; future run writers must keep them immutable.
+stored snapshots; launch writers keep them frozen. Opt-in terminal context
+expiry is the sole maintenance exception, using a validated expired state.
 
 The agent-definition capsule also owns the durable event runtime foundation:
 `AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
@@ -405,12 +406,56 @@ historical events. An already-polled source retains a prepared head in
 have ordinal zero. Retained completed-interval evidence also resolves
 preparation that races a newer commit, even after event rows are pruned. These
 methods do not enable any trigger; trusted activation and its
-revision/generation checks remain separate work. CAPTURE/FINALIZED proof pairs,
-including immutable event-ID markers, and baseline metadata are retained beyond
-event identity expiry. A provider baseline read can still be in flight before
-its pending row exists. These compact provider/control identities have a
-separate lifetime from source text; no source-proof garbage collection or
-current-reference expiry is implemented.
+revision/generation checks remain separate work.
+
+`AgentSourceCheckpoint` and `AgentSourceHead` retain indexed API-order evidence
+for every captured identity, including unsupported/control heads. A head's
+canonical ordinal is its completed interval highwater minus the number of newer
+executable entries. Control-only intervals therefore retain identities even when
+the highwater does not advance. Each capture transaction adds at most 100
+provisional head rows; the finalization transaction publishes their highwater
+only after ordered verification, including the previous committed boundary.
+Verification persists the live scanner's page/resume state. Discarded shifted
+overlap observations restart proof from the fixed head; unknown identities
+between verified pages and capture after verification fail closed. Live and
+indexed verification share the skipped-identity and shifted-prefix guards.
+Legacy backfill reconstructs that boundary only from independent retained
+baseline/interval evidence; ambiguous proof remains intact. Partial or invalid
+checkpoints never serve historical lookups. Fully indexed intervals wait until
+all legacy finalized intervals have been indexed before conflict checks can
+publish them. Promotion keyset-traverses at most 100 retained authority rows per
+transaction across finalized markers, heads, and baselines. Each row uses unique
+point joins, so repeated head identities or baseline pins cannot turn one row
+into an unbounded conflict probe. A persisted cursor counts the candidate's
+heads and records the connection authority revision. SQLite triggers advance
+that revision when consulted proof or ordinal claims change; validation restarts
+from the beginning at a new revision. The final chunk and publication share the
+ledger writer lock. Small intervals can publish during finalization; larger
+intervals remain INDEXED with their full pages until maintenance finishes.
+Continuous authority writes can defer completion, but cannot authorize partial
+validation. Conflicting ordinals fail closed and retain their original proof.
+Any rejected interval fences new baseline preparation (including the current
+committed head) and page compaction for that connection, since later pages may
+contain unexamined conflicting heads. Already-issued baseline IDs remain
+readable through `getBaseline`. The verifier progress migration replays older
+BUILDING checkpoints from their retained pages, without deleting their heads or
+interrupting active source scans. INDEXED, COMPLETE, and rejected checkpoints
+retain their existing status.
+
+Each operational target in a poll cycle also advances at most one legacy proof
+page or one authority-validation chunk in a serialized maintenance transaction.
+Until its entire interval is verified, historical baseline preparation falls
+back to retained CAPTURE/FINALIZED proof. After completion, maintenance can
+remove at most 100 redundant CAPTURE/VERIFY pages per transaction. Proof pages
+for active scans, missing or malformed proof, and incomplete checkpoints remain
+retained. Checkpoint metadata can advance through backfill or become invalid
+without deleting those proof pages. FINALIZED markers, head checkpoints and
+issued baseline rows remain indefinitely, preserving both exact historical head
+lookups and `getBaseline(connectionId, id)` answers after event pruning and page
+compaction. No age or current-reference rule deletes that retained evidence: a
+provider baseline read may still be in flight before its pending row exists.
+Source pages contain compact provider/control identities, not full source text.
+These tables do not change event-ledger replay retention or activation fences.
 
 Defaults are one active run per definition, four globally, 100 waiting runs per
 definition and 24-hour waiting expiry. The first three limits are configurable
@@ -431,7 +476,53 @@ before identity deletion; retained run event links become null. Source high
 water, cursor, recovery health, proof pages and baselines remain unchanged.
 Automatic admission independently rejects events older than 30 days, including
 replays after tombstones expire. Frozen run input and provider conversations
-have separate lifetimes, so ledger pruning does not erase all source text.
+have separate lifetimes, so ledger pruning does not erase all source text. Run
+context defaults to indefinite retention. Setting
+`AGENT_RUN_CONTEXT_RETENTION_DAYS` to a positive whole number (at most 365000)
+opts into expiry measured from `completedAt`; absent, blank or invalid values
+retain context. Existing evaluation maintenance inspects one additional rotating
+page of at most 100 run candidates per cycle. It acquires the ledger write lock
+before sampling policy/time and rechecking terminal status, finished launch,
+retry/lease, source/evaluation, delivery and child-work dependencies. Active,
+uncertain, malformed or recovery-dependent rows remain intact; expiry never
+retries or resends provider effects. Batch metrics contain counts and bounded
+reason codes, without context or run identifiers.
+
+`AgentLedgerRetentionService.inspectRunContexts({ retentionDays?, after? }, signal)`
+previews one bounded page in a read-only transaction. Omit `retentionDays` to
+inspect the configured policy (default retain); supply prospective positive days
+to preview eligibility without enabling deletion. The result contains eligible
+and retained-reason counts, an independent next cursor, and logical UTF-8 byte
+impact for snapshot JSON plus diagnostic text. A positive `eligibleDelta` means
+growth; a negative value means reduction. This excludes SQLite/file overhead and
+is not a physical disk-space guarantee. Inspection neither updates rows nor
+advances the maintenance cursor. An exhausted inspection page is empty with a
+null cursor; only maintenance wraps to revisit retained candidates. Its snapshot
+is advisory: pruning independently rechecks eligibility under the ledger write
+lock. Byte serialization is confined to inspection rather than added to the
+destructive maintenance lock scope.
+
+A disposable mixed fixture measures lookup counts/timings and the observed
+write-lock scope without production data. Reproduce it with
+`pnpm test src/backend/services/agent-definition/resources/agent-run-context-retention.integration.test.ts -t "bounds a mixed fixture preview" --maxWorkers=1 --reporter=verbose --silent=false`.
+The fixture validates predicted versus actual logical byte change, read-only
+inspection, the 100-row bound, and cursor independence; its wall times are
+observations under the current host load, not production benchmarks or SLAs.
+
+Eligible expiry replaces `definitionSnapshot`, `triggerSnapshot` and `input`
+together with `{ version: 1, state: "EXPIRED", expiredAt }`, clears copied
+`errorMessage` diagnostics, and sets `contextExpiredAt` in the same transaction.
+`storedAgentRunContextSchema` validates the retained or fully expired state;
+launch input schemas continue to require complete executable snapshots. History
+reports context availability separately from the compact result/initial outcome.
+Run identity, status, revisions, result/PR links, execution binding, delivery
+proof, and retained workspace/session/child origins remain unchanged. Provider
+conversations, evaluation snapshots, source payloads and live authoring settings
+have their own lifetimes; run expiry is not a promise to erase all source text.
+The additive migration marks no existing contexts expired and needs no backfill.
+Logical recovery readers must preserve the expired representation and timestamp;
+expired context is historical data and cannot authorize a launch.
+
 Compact run results and PR links survive workspace and event deletion. Logical
 version-8 export/import includes disabled agent definitions, triggers and
 credential-free connection identities, plus disabled schedules and execution

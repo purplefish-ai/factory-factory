@@ -15,8 +15,11 @@ import { createUserInputHandler } from './chat-message-handlers/handlers/user-in
 export const sessionCommandFactories = {
   projectSessionStartupOptions,
   createPermissionResponseHandler,
-  createQueueMessageHandler,
-  createRemoveQueuedMessageHandler,
+  createQueueMessageHandler: (deps: Parameters<typeof createQueueMessageHandler>[0]) =>
+    createQueueMessageHandler({ ...deps, chatIntent: deps.domain.chatIntent }),
+  createRemoveQueuedMessageHandler: (
+    deps: Parameters<typeof createRemoveQueuedMessageHandler>[0]
+  ) => createRemoveQueuedMessageHandler({ ...deps, chatIntent: deps.domain.chatIntent }),
   createResumeQueuedMessagesHandler,
   createSetConfigOptionHandler,
   createSetModelHandler,

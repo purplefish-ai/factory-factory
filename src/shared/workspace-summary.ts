@@ -20,7 +20,7 @@ import {
   SESSION_RUNTIME_PROCESS_STATES,
 } from '@/shared/session-runtime';
 import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
-import { WorkspacePullRequestSchema } from '@/shared/workspace-pr';
+import { WorkspacePRSelectionSchema, WorkspacePullRequestSchema } from '@/shared/workspace-pr';
 import { WorkspacePRSummarySchema } from '@/shared/workspace-pr-summary';
 import {
   WORKSPACE_PENDING_REQUEST_TYPES,
@@ -72,6 +72,7 @@ export const WorkspaceStatusReasonSchema = z.object({
 
 /** Flat board/sidebar contract. */
 export const WorkspaceSummarySchema = z.object({
+  ...WorkspacePRSelectionSchema.shape,
   conversationSummary: WorkspaceConversationSummarySchema.nullable().optional(),
   id: z.string(),
   projectId: z.string(),
@@ -134,4 +135,18 @@ export function deserializeWorkspaceSummary<T extends WorkspaceSummary>(
   summary: T
 ): Omit<T, 'createdAt'> & { createdAt: Date } {
   return { ...summary, createdAt: new Date(summary.createdAt) };
+}
+
+/** Copy only public summary fields, retaining Date and object identity for HTTP. */
+export function pickWorkspaceSummary<TCreatedAt extends string | Date>(
+  source: WorkspaceSummary<TCreatedAt>
+): WorkspaceSummary<TCreatedAt> {
+  const result: Partial<WorkspaceSummary<TCreatedAt>> = {};
+  for (const field of Object.keys(WorkspaceSummarySchema.shape) as (keyof WorkspaceSummary)[]) {
+    if (source[field] !== undefined) {
+      Object.assign(result, { [field]: source[field] });
+    }
+  }
+  // The schema's complete key inventory is copied above; optional omissions stay absent.
+  return result as WorkspaceSummary<TCreatedAt>;
 }
