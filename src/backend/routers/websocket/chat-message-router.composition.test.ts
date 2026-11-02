@@ -50,7 +50,7 @@ describe('chat router application composition', () => {
     const intentStore = sessionDomainService.chatIntent!.store;
     vi.spyOn(intentStore, 'read').mockResolvedValue([]);
     vi.spyOn(intentStore, 'accept').mockImplementation((_id, message) =>
-      Promise.resolve({ status: 'queued', message, revision: 0 })
+      Promise.resolve({ status: 'queued', message, revision: 0, created: true })
     );
     const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
     const resume = vi.spyOn(sessionDispatchService, 'setManualDispatchResume');

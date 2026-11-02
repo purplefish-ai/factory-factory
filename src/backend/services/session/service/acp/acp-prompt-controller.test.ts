@@ -102,6 +102,19 @@ describe('AcpPromptController', () => {
     expect(handle.isPromptInFlight).toBe(false);
   });
 
+  it('retains uncertainty for an invoked RPC rejection even when its payload resembles a busy response', async () => {
+    const rejection = {
+      code: -32_600,
+      data: { reason: 'A turn is already in progress for this session' },
+    };
+    const connection = { prompt: vi.fn().mockRejectedValue(rejection) };
+    const handle = createTestProcessHandle({ connection });
+    await expect(
+      controller.sendPrompt(sessionId, handle, prompt, undefined, undefined, undefined, true)
+    ).rejects.toBe(rejection);
+    expect(connection.prompt).toHaveBeenCalledOnce();
+  });
+
   it('does not cancel when no handle was supplied', async () => {
     await expect(controller.cancelPrompt(sessionId, undefined)).resolves.toBe(false);
   });

@@ -182,7 +182,14 @@ export class SessionRuntimeExitCoordinator {
   ): Promise<void> {
     try {
       if (!deliberate) {
-        await this.dependencies.chatIntent?.cancel(event.sessionId, undefined, 'failed');
+        await this.dependencies.chatIntent
+          ?.cancel(event.sessionId, undefined, 'failed')
+          .catch((error) => {
+            logger.warn('Failed persisting queued input failure after runtime exit', {
+              sessionId: event.sessionId,
+              error,
+            });
+          });
       }
       this.dependencies.sessionDomainService.markProcessExit(
         event.sessionId,

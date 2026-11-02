@@ -833,10 +833,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({ text: expect.stringContaining('send_message_to_parent') })
-      );
+      expectInitialMessagePayload({ text: expect.stringContaining('send_message_to_parent') });
     });
 
     it('preserves initial attachments when composing child workspace context', async () => {
@@ -870,18 +867,15 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: expect.stringContaining('Review the evidence'),
-          attachments: [
-            expect.objectContaining({
-              id: 'att-child-1',
-              name: 'child-evidence.png',
-            }),
-          ],
-        })
-      );
+      expectInitialMessagePayload({
+        text: expect.stringContaining('Review the evidence'),
+        attachments: [
+          expect.objectContaining({
+            id: 'att-child-1',
+            name: 'child-evidence.png',
+          }),
+        ],
+      });
     });
 
     it('queues child workspace context with attachments when no initial prompt is provided', async () => {
@@ -914,18 +908,15 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: '## Child Workspace Context\nUse send_message_to_parent.',
-          attachments: [
-            expect.objectContaining({
-              id: 'att-child-only-1',
-              name: 'child-only-evidence.png',
-            }),
-          ],
-        })
-      );
+      expectInitialMessagePayload({
+        text: '## Child Workspace Context\nUse send_message_to_parent.',
+        attachments: [
+          expect.objectContaining({
+            id: 'att-child-only-1',
+            name: 'child-only-evidence.png',
+          }),
+        ],
+      });
     });
 
     it('queues child workspace context for a whitespace-only initial prompt', async () => {
@@ -947,12 +938,9 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: '## Child Workspace Context\nUse send_message_to_parent.',
-        })
-      );
+      expectInitialMessagePayload({
+        text: '## Child Workspace Context\nUse send_message_to_parent.',
+      });
     });
 
     it('ignores non-string child report-back metadata', async () => {
@@ -1025,18 +1013,15 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: '',
-          attachments: [
-            expect.objectContaining({
-              id: 'att-1',
-              name: 'evidence.png',
-            }),
-          ],
-        })
-      );
+      expectInitialMessagePayload({
+        text: '',
+        attachments: [
+          expect.objectContaining({
+            id: 'att-1',
+            name: 'evidence.png',
+          }),
+        ],
+      });
       expect(sessionDomainService.emitDelta).toHaveBeenCalledWith(
         'session-1',
         expect.objectContaining({
@@ -1075,12 +1060,9 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: 'Custom edited prompt',
-        })
-      );
+      expectInitialMessagePayload({
+        text: 'Custom edited prompt',
+      });
     });
 
     it('skips enqueue for saved empty initial prompt without rebuilding issue prompt', async () => {
@@ -1159,17 +1141,14 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(githubCLIService.getIssue).not.toHaveBeenCalled();
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: '',
-          attachments: [
-            expect.objectContaining({
-              id: 'att-1',
-            }),
-          ],
-        })
-      );
+      expectInitialMessagePayload({
+        text: '',
+        attachments: [
+          expect.objectContaining({
+            id: 'att-1',
+          }),
+        ],
+      });
     });
 
     it('enqueues GitHub issue prompt when workspace has linked issue', async () => {
@@ -1191,12 +1170,9 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: expect.stringContaining('Fix the bug'),
-        })
-      );
+      expectInitialMessagePayload({
+        text: expect.stringContaining('Fix the bug'),
+      });
     });
 
     it('emits delta when enqueue succeeds', async () => {
@@ -1332,12 +1308,9 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(enqueueInitialMessage).toHaveBeenCalledWith(
-        'session-1',
-        expect.objectContaining({
-          text: expect.stringContaining('(No description provided)'),
-        })
-      );
+      expectInitialMessagePayload({
+        text: expect.stringContaining('(No description provided)'),
+      });
     });
   });
 
@@ -1677,3 +1650,11 @@ describe('initializeWorkspaceWorktree', () => {
     });
   });
 });
+
+function expectInitialMessagePayload(expected: Record<string, unknown>): void {
+  expect(enqueueInitialMessage).toHaveBeenCalledWith(
+    'session-1',
+    expect.objectContaining(expected),
+    expect.any(Function)
+  );
+}

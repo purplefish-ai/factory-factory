@@ -84,9 +84,7 @@ import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const MAX_CONFIG_READ_RETIREMENTS = 3;
-
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
 export class SessionConfigService {
   private readonly startupPermissions = new SessionStartupPermissions();
   private readonly snapshotPersistence: SessionConfigSnapshotPersistence;
@@ -129,12 +127,17 @@ export class SessionConfigService {
     this.configUpdates = new SessionConfigMutationQueue(
       this.runtimeManager,
       (sessionId, configOptions) => {
-        this.sessionDomainService.emitDelta(sessionId, {
-          type: 'config_options_update',
-          configOptions,
-        } as SessionDeltaEvent);
+        if (!this.queuedSettings.hasPendingPersistence(sessionId)) {
+          this.sessionDomainService.emitDelta(sessionId, {
+            type: 'config_options_update',
+            configOptions,
+          } as SessionDeltaEvent);
+        }
       },
-      options.eventAuthority?.assertOrdinary.bind(options.eventAuthority)
+      async (sessionId) => {
+        await options.eventAuthority?.assertOrdinary(sessionId);
+        await this.queuedSettings.reconcile(sessionId);
+      }
     );
     this.queuedSettings = new SessionQueuedSettings(
       this.runtimeManager,
@@ -870,6 +873,10 @@ export class SessionConfigService {
       guard?.assertCurrent?.();
       assertConfiguredAcpHandle(this.runtimeManager, sessionId, acpHandle);
     });
+    await this.queuedSettings.persistBeforePublication(sessionId, {
+      provider: acpHandle.provider,
+      configOptions,
+    });
     if (
       !(await accepted.persist((assertCurrent) =>
         this.snapshotPersistence.persist(sessionId, {
@@ -907,11 +914,12 @@ export class SessionConfigService {
     if (!update) {
       return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
     }
+    await this.queuedSettings.persistBeforePublication(sessionId, update);
     if (
       this.runtimeManager.getClient(sessionId) ||
       this.runtimeManager.getPendingClient?.(sessionId) !== undefined
     ) {
-      return await this.setSessionConfigOptionUnserialized(sessionId, configId, value);
+      return update;
     }
     if (!update.accepted.isCurrent()) {
       return;

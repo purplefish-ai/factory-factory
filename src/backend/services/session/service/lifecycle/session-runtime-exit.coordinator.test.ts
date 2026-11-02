@@ -30,6 +30,7 @@ type ExitCoordinatorHarness = ReturnType<typeof createExitCoordinatorHarness>;
 
 function createExitCoordinatorHarness(options?: {
   browse?: boolean;
+  chatIntentFailure?: boolean;
   lifecycleStopping?: boolean;
   explicitStopReserved?: boolean;
   bulkShutdownReserved?: boolean;
@@ -75,7 +76,13 @@ function createExitCoordinatorHarness(options?: {
   };
   const onSessionExit = vi.fn();
   const providerIdentityService = { reconcile: vi.fn(async () => undefined) };
+  const cancelIntents = vi.fn(() =>
+    options?.chatIntentFailure
+      ? Promise.reject(new Error('intent database unavailable'))
+      : Promise.resolve()
+  );
   const coordinator = new SessionRuntimeExitCoordinator({
+    chatIntent: { cancel: cancelIntents },
     repository,
     providerIdentityService,
     sessionDomainService: domain,
@@ -438,4 +445,12 @@ it('finalizes a failed runtime even when delivery fencing fails', async () => {
   } finally {
     pause.mockRestore();
   }
+});
+
+it('continues exit cleanup, persisted status and finalization when queued-intent failure persistence fails', async () => {
+  const h = createExitCoordinatorHarness({ chatIntentFailure: true });
+  await h.coordinator.handleExit(runtimeExit());
+  expect(h.domain.markProcessExit).toHaveBeenCalled();
+  expect(h.repository.updateSession).toHaveBeenCalled();
+  expect(h.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalled();
 });

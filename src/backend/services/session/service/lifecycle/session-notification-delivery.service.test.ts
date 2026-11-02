@@ -806,3 +806,39 @@ it('does not infer delivery or enqueue while a durable prompt batch has an uncer
   expect(h.notificationPort.markDelivered).not.toHaveBeenCalled();
   expect(h.queuePort.enqueue).not.toHaveBeenCalled();
 });
+
+it('rechecks uncertainty after pending notification reads before inferring transcript delivery or projecting a queue', async () => {
+  let held = false;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const h = createHarness({
+    isRecoveryHeld: () => Promise.resolve(held),
+    pending: [createPendingWorkspaceNotification()],
+    transcript: [
+      {
+        id: 'workspace-notification-notif-parent',
+        source: 'user',
+        text: 'already shown',
+        timestamp: new Date(0).toISOString(),
+        order: 1,
+      },
+    ],
+  });
+  h.notificationPort.listPendingForDelivery.mockImplementationOnce(async () => {
+    await wait;
+    return [createPendingWorkspaceNotification()];
+  });
+  const recover = h.service.recoverPending({
+    sessionId: 's',
+    workspaceId: 'w',
+    assertAllowed: () => undefined,
+  });
+  await vi.waitFor(() => expect(h.notificationPort.listPendingForDelivery).toHaveBeenCalledOnce());
+  held = true;
+  release();
+  expect(await recover).toEqual({ dispatchableCount: 0 });
+  expect(h.notificationPort.markDelivered).not.toHaveBeenCalled();
+  expect(h.queuePort.enqueue).not.toHaveBeenCalled();
+});

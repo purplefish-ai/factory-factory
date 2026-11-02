@@ -56,6 +56,7 @@ export type NotificationDeltaPort = {
 
 export type SessionNotificationDeliveryServiceDependencies = {
   isRecoveryHeld?(sessionId: string): Promise<boolean>;
+  withRecoveryGate?<T>(sessionId: string, operation: () => Promise<T>): Promise<T>;
   notificationPort: NotificationPersistencePort;
   queuePort: NotificationQueuePort;
   transcriptPort: NotificationTranscriptPort;
@@ -78,8 +79,10 @@ export class SessionNotificationDeliveryService {
   private readonly unsettledDispatchClaims = new Set<ActiveDispatchClaim>();
 
   private readonly isRecoveryHeld;
+  private readonly withRecoveryGate;
   constructor(dependencies: SessionNotificationDeliveryServiceDependencies) {
     this.isRecoveryHeld = dependencies.isRecoveryHeld;
+    this.withRecoveryGate = dependencies.withRecoveryGate;
     this.notificationPort = dependencies.notificationPort;
     this.queuePort = dependencies.queuePort;
     this.transcriptPort = dependencies.transcriptPort;
@@ -97,72 +100,39 @@ export class SessionNotificationDeliveryService {
         return { dispatchableCount: 0 };
       }
       const pending = await this.notificationPort.listPendingForDelivery(workspaceId);
-      await assertAllowed();
-      if (pending.length === 0) {
-        return { dispatchableCount: 0 };
-      }
-
-      let enqueuedCount = 0;
-      let dispatchableCount = 0;
-      for (const notification of pending) {
+      const recover = async () => {
+        if (await this.isRecoveryHeld?.(sessionId)) {
+          return { dispatchableCount: 0 };
+        }
         await assertAllowed();
-        const messageId = workspaceNotificationMessageId(notification.id);
-        if (this.queuePort.hasQueuedMessage(sessionId, messageId)) {
-          dispatchableCount += 1;
-          continue;
+        if (pending.length === 0) {
+          return { dispatchableCount: 0 };
         }
 
-        const messageText = buildWorkspaceNotificationMessageText(notification);
-        const alreadyDelivered = await this.markDeliveredIfTranscriptMatch({
-          sessionId,
-          workspaceId,
-          notificationId: notification.id,
-          messageId,
-          messageText,
-        });
-        await assertAllowed();
-        if (alreadyDelivered) {
-          continue;
-        }
-        if (this.queuePort.hasQueuedMessage(sessionId, messageId)) {
-          dispatchableCount += 1;
-          continue;
-        }
-
-        const timestamp = notification.createdAt.toISOString();
-        const enqueueResult = this.queuePort.enqueue(sessionId, {
-          id: messageId,
-          text: messageText,
-          timestamp,
-          settings: {
-            selectedModel: null,
-            reasoningEffort: null,
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          },
-        });
-        if ('error' in enqueueResult) {
-          lifecycleLogger.warn('Failed to enqueue pending workspace notification', {
+        let enqueuedCount = 0;
+        let dispatchableCount = 0;
+        for (const notification of pending) {
+          const result = await this.recoverNotification(
             sessionId,
             workspaceId,
-            notificationId: notification.id,
-            error: enqueueResult.error,
-          });
-          continue;
+            notification,
+            assertAllowed
+          );
+          enqueuedCount += Number(result.enqueued);
+          dispatchableCount += Number(result.dispatchable);
         }
 
-        enqueuedCount += 1;
-        dispatchableCount += 1;
-        this.emitWorkspaceUpdateCard(sessionId, notification, timestamp);
-      }
-
-      lifecycleLogger.info('Queued pending workspace notifications', {
-        sessionId,
-        workspaceId,
-        count: enqueuedCount,
-        dispatchableCount,
-      });
-      return { dispatchableCount };
+        lifecycleLogger.info('Queued pending workspace notifications', {
+          sessionId,
+          workspaceId,
+          count: enqueuedCount,
+          dispatchableCount,
+        });
+        return { dispatchableCount };
+      };
+      return this.withRecoveryGate
+        ? await this.withRecoveryGate(sessionId, recover)
+        : await recover();
     } catch (error) {
       lifecycleLogger.warn('Failed to deliver pending workspace notifications', {
         sessionId,
@@ -171,6 +141,59 @@ export class SessionNotificationDeliveryService {
       });
       return { dispatchableCount: 0 };
     }
+  }
+
+  private async recoverNotification(
+    sessionId: string,
+    workspaceId: string,
+    notification: PendingWorkspaceNotification,
+    assertAllowed: () => void | Promise<void>
+  ) {
+    await assertAllowed();
+    const messageId = workspaceNotificationMessageId(notification.id);
+    if (this.queuePort.hasQueuedMessage(sessionId, messageId)) {
+      return { enqueued: false, dispatchable: true };
+    }
+
+    const messageText = buildWorkspaceNotificationMessageText(notification);
+    const alreadyDelivered = await this.markDeliveredIfTranscriptMatch({
+      sessionId,
+      workspaceId,
+      notificationId: notification.id,
+      messageId,
+      messageText,
+    });
+    await assertAllowed();
+    if (alreadyDelivered) {
+      return { enqueued: false, dispatchable: false };
+    }
+    if (this.queuePort.hasQueuedMessage(sessionId, messageId)) {
+      return { enqueued: false, dispatchable: true };
+    }
+
+    const timestamp = notification.createdAt.toISOString();
+    const enqueueResult = this.queuePort.enqueue(sessionId, {
+      id: messageId,
+      text: messageText,
+      timestamp,
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    if ('error' in enqueueResult) {
+      lifecycleLogger.warn('Failed to enqueue pending workspace notification', {
+        sessionId,
+        workspaceId,
+        notificationId: notification.id,
+        error: enqueueResult.error,
+      });
+      return { enqueued: false, dispatchable: false };
+    }
+    this.emitWorkspaceUpdateCard(sessionId, notification, timestamp);
+    return { enqueued: true, dispatchable: true };
   }
 
   claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim {

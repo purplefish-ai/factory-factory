@@ -131,7 +131,8 @@ async function rethrowAttemptFailure(
     await input.owner?.settleNotInvoked(
       input.sessionId,
       id,
-      input.isCurrent() ? 'queued' : 'cancelled'
+      input.isCurrent() ? 'queued' : 'cancelled',
+      error.evidence
     );
     throw error;
   }

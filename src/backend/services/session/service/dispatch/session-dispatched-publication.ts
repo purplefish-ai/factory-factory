@@ -39,7 +39,7 @@ export function getPermanentBlockedDispatchReason(workspace: {
     return 'Workspace is archived or archiving and cannot accept new messages.';
   }
 
-  if (workspace.status === 'FAILED' && !workspace.worktreePath) {
+  if (workspace.status === 'FAILED' && !workspace.worktreePath?.trim()) {
     return 'Workspace setup failed before worktree creation. Retry setup before sending messages.';
   }
 

@@ -174,3 +174,50 @@ describe('queued explicit settings', () => {
     expect(f.handle.configOptions[0]?.currentValue).toBe('default');
   });
 });
+
+it('does not persist an unsupported thinking capture with no setting change', async () => {
+  const { handle } = fixture();
+  const persist = vi.fn(() => Promise.resolve());
+  const queued = new SessionQueuedSettings(
+    { getClient: () => handle },
+    (_id, work) => work(),
+    persist
+  );
+  await queued.captureThinking('s', 99_999, () => Promise.resolve())();
+  expect(persist).not.toHaveBeenCalled();
+});
+
+it('keeps a replacement capture publication hook when an obsolete capture finishes later', async () => {
+  const first = createTestProcessHandle();
+  const second = createTestProcessHandle({ providerSessionId: 'replacement' });
+  first.configOptions = [reasoning({ id: 'thought_level' })];
+  second.configOptions = [reasoning({ id: 'thought_level' })];
+  let current = first;
+  const oldDone = createDeferred<void>();
+  const newDone = createDeferred<void>();
+  const entered = createDeferred<void>();
+  const order: string[] = [];
+  const queued = new SessionQueuedSettings(
+    { getClient: () => current },
+    (_id, operation) => operation(),
+    () => {
+      order.push('persist');
+      return Promise.resolve();
+    }
+  );
+  const obsolete = queued.capture('s', 'thought_level', () => oldDone.promise)();
+  queued.release('s');
+  current = second;
+  const replacement = queued.capture('s', 'thought_level', async () => {
+    entered.resolve();
+    await newDone.promise;
+    await queued.persistBeforePublication('s', second);
+    order.push('publish');
+  })();
+  await entered.promise;
+  oldDone.resolve();
+  await obsolete;
+  newDone.resolve();
+  await replacement;
+  expect(order).toEqual(['persist', 'publish']);
+});

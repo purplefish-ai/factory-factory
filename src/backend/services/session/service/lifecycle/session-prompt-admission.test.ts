@@ -1,11 +1,22 @@
 import { expect, it, vi } from 'vitest';
 import type { PromptConfigurationPermit } from '@/backend/services/session/service/acp/acp-prompt-configuration';
 import {
+  createManagerTestHarness,
+  setupSuccessfulSpawn,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-harness';
+import {
+  defaultOptions,
+  defaultHandlers,
+  defaultContext,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import {
   createDeferred,
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
+import { SessionPermissionService } from './session.permission.service';
 import { SessionService, type SessionServiceDependencies } from './session.service';
 
 it.each([false, true])(
@@ -117,4 +128,112 @@ it('fences an ordinary send accepted before stop even if admission resumes on a 
   release.resolve();
   await rejected;
   expect(sendPrompt).not.toHaveBeenCalled();
+});
+
+it('uses the real prompt limiter and ACP runtime across frozen claim, later edit, direct sender and permission reply', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  const handle = await manager.getOrCreateClient(
+    'session',
+    defaultOptions(),
+    defaultHandlers(),
+    defaultContext()
+  );
+  handle.configOptions = [
+    {
+      id: 'model',
+      category: 'model',
+      type: 'select',
+      name: 'Model',
+      currentValue: 'first',
+      options: [
+        { value: 'first', name: 'First' },
+        { value: 'second', name: 'Second' },
+      ],
+    },
+  ];
+  handle.configOptions.push({
+    id: 'mode',
+    category: 'mode',
+    type: 'select',
+    name: 'Mode',
+    currentValue: 'default',
+    options: [{ value: 'default', name: 'Default' }],
+  });
+  vi.spyOn(handle.connection, 'setSessionConfigOption').mockImplementation(({ configId, value }) =>
+    Promise.resolve({
+      configOptions: handle.configOptions.map((option) =>
+        option.id === configId && option.type === 'select' && typeof value === 'string'
+          ? { ...option, currentValue: value }
+          : option
+      ),
+    })
+  );
+  const queue = new SessionConfigMutationQueue(manager, vi.fn());
+  const domain = new SessionDomainService();
+  const permissions = new SessionPermissionService({ sessionDomainService: domain });
+  const bridge = permissions.createPermissionBridge('session');
+  const approval = bridge.waitForUserResponse('permission', {
+    sessionId: handle.acpSessionId,
+    toolCall: { toolCallId: 'tool', title: 'Edit' },
+    options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+  });
+  const observed: { text: string; model: unknown }[] = [];
+  vi.spyOn(handle.connection, 'prompt').mockImplementation(async ({ prompt }) => {
+    const text = prompt.find((block) => block.type === 'text');
+    observed.push({
+      text: text?.type === 'text' ? text.text : '',
+      model: handle.configOptions[0]?.currentValue,
+    });
+    if (observed.length === 1) {
+      await approval;
+    }
+    return { stopReason: 'end_turn' };
+  });
+  const service = new SessionService(
+    unsafeCoerce<SessionServiceDependencies>({
+      runtimeManager: manager,
+      admitPrompt: <T>(id: string, send: (permit: PromptConfigurationPermit) => Promise<T>) =>
+        queue.runPrompt(id, send),
+      sessionDomainService: domain,
+      acpEventProcessor: {
+        getWorkspaceId: () => undefined,
+        beginPromptTurn: () => 'turn',
+        finishPromptTurn: vi.fn(),
+        finalizeOrphanedToolCalls: vi.fn(),
+      },
+      promptTurnCompletionService: { schedule: vi.fn() },
+      lifecycleGate: {
+        getGeneration: () => 0,
+        isGenerationCurrent: () => true,
+        isSessionStopping: () => false,
+      },
+    })
+  );
+  const claiming = createDeferred<void>();
+  const entered = createDeferred<void>();
+  let frozen: unknown;
+  const a = queue.runPrompt('session', async (permit) => {
+    frozen = permit.configOptions()[0]?.currentValue;
+    entered.resolve();
+    await claiming.promise;
+    await service.sendSessionMessage('session', 'A', undefined, permit);
+  });
+  await entered.promise;
+  let editSettled = false;
+  const b = queue
+    .run('session', () => manager.setSessionModel('session', 'second'))
+    .then(() => {
+      editSettled = true;
+    });
+  const c = service.sendSessionMessage('session', 'C');
+  claiming.resolve();
+  await vi.waitFor(() => expect(observed).toEqual([{ text: 'A', model: frozen }]));
+  expect(editSettled).toBe(false);
+  expect(permissions.respondToPermission('session', 'permission', 'allow')).toBe(true);
+  await Promise.all([a, b, c]);
+  expect(observed).toEqual([
+    { text: 'A', model: 'first' },
+    { text: 'C', model: 'second' },
+  ]);
 });
