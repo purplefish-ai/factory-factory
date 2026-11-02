@@ -323,14 +323,16 @@ with empty values are rejected before any records are imported. Valid backup
 paths are preserved rather than recomputed for the current machine.
 
 Logical version-8 exports capture relational rows and account identity metadata
-inside one read transaction. The versioned recovery manifest classifies every
-registered model and explicitly names unsupported coverage. This is a limited
-logical recovery format: repository/worktree contents, account homes,
-credentials, encryption keys and provider-owned history are excluded. Captured
-closed-session transcripts are included as exact UTF-8 bytes with immutable
-identities and SHA-256 digests. The read transaction captures archive
-references; filesystem reads happen afterward. Missing or changed file bytes
-fail the export unless a validated transcript is retained in the database.
+inside one read transaction on a private, physically read-only connection, so
+ordinary application writes cannot enter or roll back with the snapshot. The
+versioned recovery manifest classifies every registered model and explicitly
+names unsupported coverage. This is a limited logical recovery format:
+repository/worktree contents, account homes, credentials, encryption keys and
+provider-owned history are excluded. Captured closed-session transcripts are
+included as exact UTF-8 bytes with immutable identities and SHA-256 digests. The
+read transaction captures archive references; filesystem reads happen afterward.
+Missing or changed file bytes fail the export unless a validated transcript is
+retained in the database.
 
 Full installation backups must retain `encryption.key` together with a
 consistent database snapshot, the application-owned `closed-sessions` directory,
