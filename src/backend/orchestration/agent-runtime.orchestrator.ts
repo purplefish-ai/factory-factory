@@ -1,5 +1,6 @@
 import {
   AgentSourcePollService,
+  AgentLedgerRetentionService,
   AgentEventEvaluationService,
   claimNextRun,
   maintainQueue,
@@ -25,6 +26,7 @@ type LaunchClaim = Extract<AgentClaimResult, { status: 'CLAIMED' }>;
 type EvaluationWorker = {
   evaluatePendingEvents(signal: AbortSignal): Promise<void>;
   maintainQueue(): Promise<void>;
+  pruneExpired?: (signal: AbortSignal) => Promise<unknown>;
   claimNextRun(): Promise<AgentClaimResult>;
   consumeClaim?: (claim: LaunchClaim, signal: AbortSignal) => Promise<void>;
   canClaim?: () => boolean;
@@ -58,6 +60,7 @@ export function createAgentRuntime(
     },
     () => getServices().configService.getAgentRuntimeLimits().githubPagesPerCycle
   );
+  const retention = new AgentLedgerRetentionService();
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
   });
@@ -66,6 +69,7 @@ export function createAgentRuntime(
     {
       evaluatePendingEvents: (signal) => evaluator.evaluatePendingEvents(signal),
       maintainQueue,
+      pruneExpired: (signal) => retention.pruneExpired(signal),
       claimNextRun,
       consumeClaim: consumeClaim ?? launcher?.consumeClaim,
       canClaim: launcher?.canClaim,
@@ -106,6 +110,10 @@ export function createAgentRuntimeLifecycle(
       runImmediately: true,
       run: async (signal) => {
         await worker.maintainQueue();
+        if (signal.aborted) {
+          return;
+        }
+        await worker.pruneExpired?.(signal);
         if (signal.aborted) {
           return;
         }

@@ -149,3 +149,42 @@ it('hands a committed claim to its consumer and drains it during shutdown', asyn
   await stopping;
   expect(finished).toBe(true);
 });
+
+it('uses the existing evaluation maintenance lifetime for pruning and drains its live shutdown signal', async () => {
+  vi.useFakeTimers();
+  const calls: string[] = [];
+  const runtime = createAgentRuntime(
+    { pollCycle: async () => undefined },
+    {
+      maintainQueue: () => {
+        calls.push('queue');
+        return Promise.resolve();
+      },
+      pruneExpired: async (signal) => {
+        calls.push('retention');
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              calls.push('prune-aborted');
+              resolve();
+            },
+            { once: true }
+          );
+        });
+      },
+      evaluatePendingEvents: () => {
+        calls.push('evaluation');
+        return Promise.resolve();
+      },
+      claimNextRun: async () => ({ status: 'DEFERRED', reason: 'EMPTY' }),
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(calls).toEqual(['queue', 'retention']);
+  await runtime.stop();
+  expect(calls).toEqual(['queue', 'retention', 'prune-aborted']);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(calls).toHaveLength(3);
+});
