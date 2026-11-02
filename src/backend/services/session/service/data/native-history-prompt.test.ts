@@ -103,6 +103,7 @@ it('takes Codex attachments independently from earlier multi-block prompt eviden
   expect(users[0]?.providerPrompt).toEqual([
     { type: 'text', text: 'first' },
     { type: 'text', text: 'second' },
+    image,
   ]);
   expect(users[0]?.attachments).toEqual([
     expect.objectContaining({ data: 'aGk=', type: 'image/png' }),

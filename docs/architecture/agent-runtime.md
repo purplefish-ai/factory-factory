@@ -123,7 +123,10 @@ messages; retained transcript bytes and identity inputs keep it. Native Claude
 text/image arrays and Codex input blocks retain the same provenance before their
 UI projection splits/joins text and restores images, including mixed PR/human
 prompts. Codex event projections also retain the matching native response prompt
-when it supplies the image/block evidence.
+when it supplies the image/block evidence. Split response records combine only
+for one explicitly identified turn and a matching single event prompt,
+preserving native block order. Ambiguous copies and unmatched user records
+remain separate.
 
 A reservation commits `PENDING` metadata, the exact serialized transcript and
 its digest before any file write. Archive writes opt into syncing temporary
