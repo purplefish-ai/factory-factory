@@ -1,5 +1,10 @@
 import { expect, it, vi } from 'vitest';
-import { db, h, readyRetryPRFixture } from '@/test-utils/event-generic-retry.test-support';
+import {
+  db,
+  h,
+  readyRetryPRFixture,
+  readPRDeliveryEvents,
+} from '@/test-utils/event-generic-retry.test-support';
 
 it.each([
   ['session-resume', 'delivered'],
@@ -70,8 +75,7 @@ it.each([
       bindingRevision: paused.bindingRevision + 1,
       deliveryPauseReason: null,
     });
-    const rows = () =>
-      db.prisma.workspacePREvent.findMany({ where: { workspaceId: workspace.id } });
+    const rows = () => readPRDeliveryEvents(workspace.id);
     expect(await rows()).toEqual(
       expect.arrayContaining(
         ready.delivery.eventIds.map((id) =>

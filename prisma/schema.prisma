@@ -307,6 +307,7 @@ model Workspace {
   notifications       WorkspaceNotification[]
   prMonitoring        WorkspacePRMonitoring?
   prEvents            WorkspacePREvent[]
+  prDeliveries        WorkspacePRDelivery[]
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
@@ -393,6 +394,26 @@ model WorkspacePRDedicatedSession {
   session AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 }
 
+/// Frozen external effect and complete ordered membership. Legacy event columns
+/// remain only for import compatibility and quarantined inconsistent evidence.
+model WorkspacePRDelivery {
+  id String @id
+  workspaceId String
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  eventIds Json
+  events WorkspacePREvent[]
+  state String
+  sessionId String?
+  provider String?
+  providerSessionId String?
+  bindingRevision Int?
+  text String?
+  attempts Int @default(0)
+  claimedAt DateTime?
+  deliveredAt DateTime?
+  @@index([workspaceId, state])
+}
+
 model WorkspacePREvent {
   id String @id @default(cuid())
   workspaceId String
@@ -404,6 +425,9 @@ model WorkspacePREvent {
   payload Json
   state String @default("PENDING")
   attempts Int @default(0)
+  // Legacy backup/evidence columns. New frozen effects use batchId only.
+  batchId String?
+  batch WorkspacePRDelivery? @relation(fields: [batchId], references: [id], onDelete: Cascade)
   deliveryId String?
   deliverySessionId String?
   deliveryProvider String?
@@ -417,6 +441,7 @@ model WorkspacePREvent {
   @@unique([workspaceId, deduplicationKey])
   @@index([workspaceId, state, createdAt])
   @@index([deliveryId])
+  @@index([batchId])
 }
 
 model WorkspacePRDiscovery {

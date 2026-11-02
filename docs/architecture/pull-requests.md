@@ -198,6 +198,41 @@ Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
 their reason while preserving transitions already written by successful reads.
 
+### Frozen delivery ownership
+
+`WorkspacePREvent` owns individual facts, deduplication and supersession.
+`WorkspacePRDelivery`, also owned by the workspace capsule, owns each frozen
+external effect: the original delivery/receipt ID, complete event ID membership,
+recipient and provider identity, binding revision, message text, attempt and
+settlement timestamps. `WorkspacePREvent.batchId` records membership. New claims
+store frozen fields only on the delivery; reads flatten them for the existing
+monitoring and reducer contracts. Pending counts join the delivery state.
+
+A claim, retry, settlement or receipt recovery validates the complete frozen
+membership inside its transaction. Workspace-wide exclusion includes blocked
+batches. Retry and settlement retain the original message and receipt identity,
+and stale binding revisions or attempts cannot settle a newer claim. Proven
+absence after a detach cancels the original batch and transfers attached facts'
+canonical dedupe keys to fresh events; original membership and receipt evidence
+remain intact. Ambiguous provider history never authorizes a resend.
+
+The migration groups legacy rows only by their exact delivery ID and checks all
+repeated metadata, lifecycle state and timestamps for agreement. Valid groups
+move to one delivery and clear redundant legacy columns. Inconsistent or
+incomplete groups become `BLOCKED`; their original event evidence remains
+verbatim. Resume cannot reset that evidence or unblock the batch. Explicit
+workspace deletion still cascades both deliveries and events.
+
+Logical backups retain the existing flattened event format. Export validates
+complete normalized membership; old imports reconstruct batches with the same
+receipt IDs and quarantine contradictory evidence. Delivery ID collisions abort
+restore rather than attaching imported facts to another effect. A damaged
+normalized batch cannot be flattened losslessly and makes export fail
+explicitly. Legacy event columns remain for this compatibility path and
+quarantined evidence. Delivery rows are durable external-effect recovery proof
+and must be retained with their full event membership in any future recovery
+manifest.
+
 ### Observations and events
 
 Polling, manual refresh, and dispatch preparation share normalized observation
