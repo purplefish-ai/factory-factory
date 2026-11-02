@@ -1,6 +1,12 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { AcpRuntimeEventHandlers } from '@/backend/services/session/service/acp';
+import {
+  createTestProcessHandle,
+  defaultOptions,
+  defaultContext,
+} from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { AcpRuntimeSupervisor } from '@/backend/services/session/service/acp/acp-runtime-supervisor';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   mergeLifecycleMessage,
@@ -9,12 +15,6 @@ import {
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import {
-  createTestProcessHandle,
-  defaultOptions,
-  defaultContext,
-} from '../acp/acp-runtime-manager.test-helpers';
-import { AcpRuntimeSupervisor } from '../acp/acp-runtime-supervisor';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
