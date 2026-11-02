@@ -38,7 +38,12 @@ vi.mock('@/hooks/use-websocket-transport', () => ({
 let queryClient: QueryClient;
 let root: Root | undefined;
 let latest: ReturnType<typeof useWorkspaceData>;
-let initStatus = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
+let initStatus: {
+  status: string;
+  hasWorktreePath: boolean;
+  initOutput: string;
+  retryAvailability?: { status: 'AVAILABLE' };
+} = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
 const requests: Array<(data: WorkspaceDetail) => void> = [];
 const detailKey = getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'query');
 function fetched(overrides: Partial<WorkspaceDetail> = {}) {
@@ -241,7 +246,12 @@ describe('workspace detail route hydration', () => {
       projectId: 'proj-1',
       entries: [entry({ name: 'Ready stream', status: 'READY' })],
     });
-    initStatus = { status: 'READY', hasWorktreePath: true, initOutput: 'setup complete' };
+    initStatus = {
+      status: 'READY',
+      hasWorktreePath: true,
+      initOutput: 'setup complete',
+      retryAvailability: { status: 'AVAILABLE' },
+    };
     await queryClient.invalidateQueries({ queryKey: initKey, exact: true });
     await vi.waitFor(() => expect(requests.length).toBeGreaterThan(0));
     for (const resolve of requests) {

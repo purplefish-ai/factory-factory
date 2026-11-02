@@ -17,6 +17,7 @@ describe('InitStatusBanner setup retry', () => {
     const root = createRoot(container);
     const onRetry = vi.fn();
     const props = {
+      retryAvailability: { status: 'AVAILABLE' as const },
       banner: {
         kind: 'error' as const,
         message: 'Setup failed',

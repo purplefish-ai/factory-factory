@@ -31,7 +31,6 @@ import type { AcpClientOptions } from './types';
 const logger = createLogger('acp-runtime-manager');
 const STOP_TIMEOUT_MS = 5000;
 const MAX_STARTUP_EVENTS = 10_000;
-
 export class AcpRuntimeSupervisor {
   private readonly clientFactory: Pick<AcpClientFactory, 'createClient'>;
   private readonly cancelPrompt: AcpRuntimeSupervisorDependencies['cancelPrompt'];
@@ -193,6 +192,8 @@ export class AcpRuntimeSupervisor {
     return await lock(async () => {
       try {
         await this.exitHandling.get(sessionId);
+        await options.assertCurrent?.();
+        options.assertCurrentSync?.();
         this.throwIfCreationCancelled(sessionId, stopGeneration);
 
         const existing = this.getBrowseClient(sessionId);

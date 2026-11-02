@@ -27,3 +27,12 @@ describe('shared session startup options', () => {
     });
   });
 });
+
+it('retains captured currentness callbacks without reconstructing authority', () => {
+  const assertCurrent = async () => undefined;
+  const assertCurrentSync = () => undefined;
+  expect(projectSessionStartupOptions({ assertCurrent, assertCurrentSync })).toMatchObject({
+    assertCurrent,
+    assertCurrentSync,
+  });
+});

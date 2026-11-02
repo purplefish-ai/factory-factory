@@ -2,6 +2,10 @@ import { type Mock, vi } from 'vitest';
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { createAgentManagement } from '@/backend/orchestration/agent-management.orchestrator';
 import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
+import {
+  captureWorkspaceRetryGuard,
+  readWorkspaceRetryAvailability,
+} from '@/backend/orchestration/workspace-retry-authority';
 import { agentManagementService } from '@/backend/services/agent-definition';
 import type {
   PreparedSessionLoad,
@@ -72,8 +76,13 @@ vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', 
 }));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
+  enqueueWorkspaceInitializationTask: vi.fn((_id: string, task: () => Promise<unknown>) => task()),
   recoverStaleProvisioningWorkspace: vi.fn(),
   retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
+}));
+vi.mock('@/backend/orchestration/workspace-retry-authority', () => ({
+  captureWorkspaceRetryGuard: vi.fn(),
+  readWorkspaceRetryAvailability: vi.fn(),
 }));
 vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
   executeStartupScriptPipeline: vi.fn(),
@@ -300,6 +309,7 @@ import {
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
+  enqueueWorkspaceInitializationTask,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
@@ -512,6 +522,9 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     githubCLIService,
     healthService,
     initializeWorkspaceWorktree,
+    enqueueWorkspaceInitializationTask,
+    captureWorkspaceRetryGuard,
+    readWorkspaceRetryAvailability,
     linearClientService,
     linearStateSyncService,
     listQuickActions,

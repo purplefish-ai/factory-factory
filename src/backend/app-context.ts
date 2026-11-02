@@ -36,6 +36,7 @@ import {
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
+  enqueueWorkspaceInitializationTask,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
@@ -43,6 +44,10 @@ import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadata.orchestrator';
 import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
+import {
+  captureWorkspaceRetryGuard,
+  readWorkspaceRetryAvailability,
+} from './orchestration/workspace-retry-authority';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { agentManagementService, type AgentManagementService } from './services/agent-definition';
 import { agentProposalService, slackConnectionService } from './services/agent-definition';
@@ -179,6 +184,9 @@ export type ApplicationServices = BridgeServices & {
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   healthService: typeof healthService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
+  enqueueWorkspaceInitializationTask: typeof enqueueWorkspaceInitializationTask;
+  captureWorkspaceRetryGuard: typeof captureWorkspaceRetryGuard;
+  readWorkspaceRetryAvailability: typeof readWorkspaceRetryAvailability;
   linearClientService: typeof linearClientService;
   linearStateSyncService: typeof linearStateSyncService;
   listQuickActions: typeof listQuickActions;
@@ -347,6 +355,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     getQuickAction,
     getWorkspaceLinearContext,
     healthService,
+    enqueueWorkspaceInitializationTask,
+    captureWorkspaceRetryGuard,
+    readWorkspaceRetryAvailability,
     initializeWorkspaceWorktree: (workspaceId, options) =>
       initializeWorkspaceWorktree(workspaceId, options, {
         sessionDispatch: services.sessionDispatchService,
@@ -485,10 +496,15 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     fireLifecycleNotification,
     persistChildNotification,
     persistParentNotification,
-    retryQueuedDispatchAfterWorkspaceReady: (workspaceId, startedSessionId) =>
-      retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId, {
-        sessionDispatch: services.sessionDispatchService,
-      }),
+    retryQueuedDispatchAfterWorkspaceReady: (workspaceId, startedSessionId, _dependencies, guard) =>
+      retryQueuedDispatchAfterWorkspaceReady(
+        workspaceId,
+        startedSessionId,
+        {
+          sessionDispatch: services.sessionDispatchService,
+        },
+        ...(guard ? ([guard] as const) : [])
+      ),
   };
 
   if (configService.getWorkspaceMetadataConfig().enabled) {

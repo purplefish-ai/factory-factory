@@ -2,6 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { FactoryConfigService } from '@/backend/services/run-script';
 import { startupScriptService } from '@/backend/services/run-script';
 import { workspaceStateMachine } from '@/backend/services/workspace';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-script-pipeline');
@@ -12,6 +13,7 @@ export interface StartupScriptPipelineResult {
 }
 
 interface StartupScriptPipelineContext {
+  guard?: WorkspaceInitGuard;
   workspaceId: string;
   workspaceWithProject: WorkspaceWithProject;
   worktreePath: string;
@@ -73,13 +75,21 @@ async function runScriptPhase(
     return null;
   }
 
+  await context.guard?.check();
+  context.guard?.assertCurrent();
   phaseDefinition.logStart(context);
   const scriptResult = await startupScriptService.runStartupScript(
     { ...context.workspaceWithProject, worktreePath: context.worktreePath },
     phaseDefinition.buildProjectConfig(context),
-    { deferStateTransition: true, preserveInitOutput }
+    {
+      deferStateTransition: true,
+      preserveInitOutput,
+      ...(context.guard && { guard: context.guard }),
+    }
   );
 
+  await context.guard?.check();
+  context.guard?.assertCurrent();
   if (!scriptResult.success) {
     logger.warn(phaseDefinition.scriptFailedLogMessage, {
       workspaceId: context.workspaceId,
@@ -109,6 +119,8 @@ export async function executeStartupScriptPipeline(
 
   await context.beforeReady?.();
 
+  await context.guard?.check();
+  context.guard?.assertCurrent();
   if (!handled) {
     return { handled: false, success: true };
   }
@@ -117,9 +129,16 @@ export async function executeStartupScriptPipeline(
   // If any phase failed, workspace reaches READY with a warning banner.
   // The agent session continues normally regardless.
   if (lastErrorMessage) {
-    await workspaceStateMachine.markReadyWithWarning(context.workspaceId, lastErrorMessage);
+    await workspaceStateMachine.markReadyWithWarning(
+      context.workspaceId,
+      lastErrorMessage,
+      ...(context.guard ? ([context.guard] as const) : [])
+    );
   } else {
-    await workspaceStateMachine.markReady(context.workspaceId);
+    await workspaceStateMachine.markReady(
+      context.workspaceId,
+      ...(context.guard ? ([{ guard: context.guard }] as const) : [])
+    );
   }
 
   return { handled: true, success: true };

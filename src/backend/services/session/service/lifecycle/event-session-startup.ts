@@ -4,7 +4,11 @@ import type { EventInitialPermit, EventSessionAuthority } from './event-session-
 import { createSessionLaunchMetadata } from './session-launch-settings';
 
 const cleanupIntent = new WeakMap<() => Promise<void>, boolean>();
-type GuardedStartup = { eventInitial?: EventInitialPermit; assertCurrent?: () => Promise<void> };
+type GuardedStartup = {
+  eventInitial?: EventInitialPermit;
+  assertCurrent?: () => Promise<void>;
+  assertCurrentSync?: () => void;
+};
 export async function guardEventStartup<T extends GuardedStartup>(
   authority: EventSessionAuthority | undefined,
   id: string,
@@ -21,6 +25,7 @@ export async function guardEventStartup<T extends GuardedStartup>(
   const assertCurrent = async () => {
     await checkFence();
     await options.assertCurrent?.();
+    options.assertCurrentSync?.();
   };
   cleanupIntent.set(assertCurrent, requestsStartupCleanup(options));
   return {

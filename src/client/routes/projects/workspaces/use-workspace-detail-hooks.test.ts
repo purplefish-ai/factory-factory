@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -288,4 +288,92 @@ describe('resolveSelectedSessionId', () => {
 
     expect(selected).toBe('s1');
   });
+});
+
+let observed: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
+function RetryStatusProbe({ id }: { id: string }) {
+  observed = useWorkspaceInitStatus(id, undefined, trpc.useUtils()).workspaceInitStatus;
+  return null;
+}
+
+it('polls blocked event authority at READY/FAILED and fails closed on refetch error or workspace switch', () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  const status = {
+    status: 'READY',
+    hasWorktreePath: true,
+    initErrorMessage: 'Setup failed',
+    retryAvailability: { status: 'AVAILABLE' },
+  };
+  getInitStatusUseQueryMock.mockReturnValue({ data: status, isPending: false, isError: false });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'one' })));
+  expect(observed?.retryAvailability.status).toBe('AVAILABLE');
+  const interval = getInitStatusUseQueryMock.mock.lastCall?.[1].refetchInterval;
+  expect(interval({ state: { status: 'error', data: status } })).toBe(1000);
+  expect(interval({ state: { data: { status: 'READY' } } })).toBe(1000);
+  for (const currentStatus of ['READY', 'FAILED']) {
+    expect(
+      interval({
+        state: {
+          data: {
+            status: currentStatus,
+            retryAvailability: { status: 'BLOCKED', reason: 'INITIAL_ACTIVE' },
+          },
+        },
+      })
+    ).toBe(1000);
+    expect(
+      interval({
+        state: { data: { status: currentStatus, retryAvailability: { status: 'AVAILABLE' } } },
+      })
+    ).toBe(false);
+  }
+  getInitStatusUseQueryMock.mockReturnValue({ data: status, isPending: false, isError: true });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'one' })));
+  expect(observed?.retryAvailability).toMatchObject({
+    status: 'BLOCKED',
+    reason: 'AUTHORITY_UNAVAILABLE',
+  });
+  getInitStatusUseQueryMock.mockReturnValue({ data: undefined, isPending: true });
+  flushSync(() => root.render(createElement(RetryStatusProbe, { id: 'two' })));
+  expect(observed).toBeUndefined();
+  expect(getInitStatusUseQueryMock.mock.lastCall?.[0]).toEqual({ id: 'two' });
+  root.unmount();
+});
+
+let renders = 0;
+function Probe() {
+  if (++renders > 8) {
+    throw new Error('Retry availability render loop');
+  }
+  observed = useWorkspaceInitStatus(
+    'error-workspace',
+    undefined,
+    trpc.useUtils()
+  ).workspaceInitStatus;
+  return null;
+}
+it('settles warning hydration on cached data plus refetch error without a render loop', async () => {
+  const status = {
+    status: 'READY',
+    hasWorktreePath: true,
+    initErrorMessage: 'Setup failed',
+    chatBanner: { showDismiss: true },
+    retryAvailability: { status: 'AVAILABLE' },
+  };
+  getInitStatusUseQueryMock.mockReturnValue({ data: status, isPending: false, isError: true });
+  const root = createRoot(document.createElement('div'));
+  renders = 0;
+  try {
+    await act(async () => root.render(createElement(Probe)));
+    expect(observed?.retryAvailability).toMatchObject({
+      status: 'BLOCKED',
+      reason: 'AUTHORITY_UNAVAILABLE',
+    });
+    expect(renders).toBeLessThan(4);
+  } finally {
+    await act(async () => root.unmount());
+  }
 });

@@ -110,6 +110,7 @@ export class AcpClientFactory {
         ? options.codexAccountContext.env
         : this.childProcessEnvProvider();
     const ownsGroup = options.ownedProcessGroup === true && process.platform !== 'win32';
+    options.assertCurrentSync?.();
     const child = spawn(spawnCommand.command, spawnCommand.args, {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],

@@ -402,6 +402,7 @@ class WorkspacePrEventAccessor {
     deliveryId: string;
     sessionId: string;
     bindingRevision: number;
+    attempt?: number;
     result: 'delivered' | 'retry' | 'failed';
   }) {
     const result = await prisma.workspacePREvent.updateMany({
@@ -410,6 +411,7 @@ class WorkspacePrEventAccessor {
         deliverySessionId: input.sessionId,
         deliveryBindingRevision: input.bindingRevision,
         state: 'DISPATCHING',
+        ...(input.attempt !== undefined && { attempts: input.attempt }),
       },
       data:
         input.result === 'delivered'

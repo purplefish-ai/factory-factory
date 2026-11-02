@@ -31,6 +31,7 @@ export const Archiving: Story = {
 export const ScriptFailedLongMessage: Story = {
   render: () => (
     <ScriptFailedBanner
+      retryAvailability={{ status: 'AVAILABLE' }}
       workspaceId="test-workspace"
       initErrorMessage="Command failed: pnpm install --filter very-long-package-name --reporter append-only because the generated lockfile checksum did not match the expected workspace state after bootstrap and postinstall hooks"
       initOutput="Installing dependencies...\npnpm install\nERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL"
@@ -54,6 +55,7 @@ export const DismissibleScriptFailure: Story = {
       <div />
     ) : (
       <ScriptFailedBanner
+        retryAvailability={{ status: 'AVAILABLE' }}
         workspaceId="test-workspace"
         initErrorMessage="Init script failed"
         initOutput="Setup exited with code 1"
@@ -71,6 +73,7 @@ export const ScriptFailureWithManualDispatch: Story = {
     return (
       <>
         <ScriptFailedBanner
+          retryAvailability={{ status: 'AVAILABLE' }}
           workspaceId="test-workspace"
           initErrorMessage="Setup failed; the worktree is available"
           initOutput="Setup exited with code 1"
@@ -82,4 +85,30 @@ export const ScriptFailureWithManualDispatch: Story = {
       </>
     );
   },
+};
+
+export const EventInitialUnresolved: Story = {
+  render: () => (
+    <ScriptFailedBanner
+      workspaceId="test-workspace"
+      initErrorMessage="Setup exited with code 1"
+      initOutput="Saved setup output"
+      hasStartupScript
+      retryAvailability={{
+        status: 'BLOCKED',
+        reason: 'INITIAL_UNRESOLVED',
+        explanation: 'Event initial delivery is unresolved. Setup cannot be retried yet.',
+      }}
+    />
+  ),
+};
+export const UnknownRetryAuthority: Story = {
+  render: () => (
+    <ScriptFailedBanner
+      workspaceId="test-workspace"
+      initErrorMessage="Setup exited with code 1"
+      initOutput="Saved setup output"
+      hasStartupScript
+    />
+  ),
 };

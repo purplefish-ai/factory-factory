@@ -98,6 +98,7 @@ function ScriptBanner({
   if (isScriptFailed && visibleBanner) {
     return (
       <ScriptFailedBanner
+        retryAvailability={workspaceInitStatus?.retryAvailability}
         workspaceId={workspaceId}
         initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
         initOutput={workspaceInitStatus?.initOutput ?? null}
@@ -214,6 +215,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         emptyState={
           workspaceState.workspaceInitStatus?.phase === 'BLOCKED_FAILED' ? (
             <SessionlessSetupFailure
+              retryAvailability={workspaceState.workspaceInitStatus.retryAvailability}
               workspaceId={workspaceState.workspaceId}
               banner={workspaceState.workspaceInitStatus.chatBanner}
               errorMessage={workspaceState.workspaceInitStatus.initErrorMessage}

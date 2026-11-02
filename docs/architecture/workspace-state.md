@@ -626,3 +626,32 @@ layout boundary: client-only terminal scroll and transient tool state can reset,
 while terminal processes remain alive and their buffered output is restored from
 the server. Folding within the compact range (including the 344px, 690px, and
 800px regression viewports) preserves the mounted drawer content.
+
+### Event workspace setup retry
+
+The existing setup Retry controls use
+`workspace.getInitStatus.retryAvailability` for availability and a bounded
+explanation. Unknown or unavailable authority keeps Retry disabled; blocked
+event authority continues polling even when the workspace is READY or FAILED.
+The backend independently rechecks every retry. The ordinary retry budget
+remains three attempts, including READY workspaces whose worktree is missing.
+
+An event workspace's retained origin identifies its owner before session or run
+linkage. PENDING initial delivery, unresolved delivery, and a locally active
+initial operation block generic setup retry. FINISHED delivery without active
+initial work permits ordinary retry, including historical STARTUP preparation
+and terminal runs. Missing or inconsistent owner facts fail closed.
+
+Retry captures the exact initial attempt and carries it through queued
+initialization, workspace transactions, scripts, startup and dispatch. Workspace
+writers validate the captured owner under their existing SQLite write lock and
+check local admission again before committing. Stale continuations cannot adopt
+a replacement attempt or publish READY/FAILED; already-started physical work is
+joined and cleanup targets only resources still owned by that operation.
+
+A queued setup-warning retry rechecks the captured READY status, worktree,
+warning and retry count after its predecessor drains. Concurrent requests do not
+replay setup after an earlier retry changes that state. Default-terminal
+registration retains the created PTY instance and row identity; rejected
+registration cleans up that instance only, and PID clearing compares the
+captured PID without treating a stored PID as process-stop authority.

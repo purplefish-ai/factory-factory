@@ -36,6 +36,9 @@ function createCaller() {
   return workspaceInitRouter.createCaller({
     appContext: {
       services: {
+        enqueueWorkspaceInitializationTask: (_id: string, task: () => Promise<unknown>) => task(),
+        captureWorkspaceRetryGuard: () => Promise.resolve(undefined),
+        readWorkspaceRetryAvailability: () => Promise.resolve({ status: 'AVAILABLE' }),
         createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
         workspaceDataService: {
           findByIdWithProject: vi.fn(async () => readyWithWarningButNoWorktree),

@@ -202,7 +202,8 @@ export class AcpRuntimeManager {
     sessionId: string,
     prompt: ContentBlock[],
     timeoutMs?: number,
-    observed?: ObservedAcpPrompt
+    observed?: ObservedAcpPrompt,
+    guard?: { check(): Promise<void>; assertCurrent?(): void }
   ): Promise<{ stopReason: string }> {
     const handle = this.requireInstalledHandle(sessionId);
     while (handle.configurationReady !== undefined || handle.pendingConfigUpdates !== undefined) {
@@ -215,7 +216,6 @@ export class AcpRuntimeManager {
     ) {
       throw new Error(`ACP session is not ready for prompts: ${sessionId}`);
     }
-    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     const providerSessionId = handle.acpSessionId;
     const assertCurrent = () => {
       if (
@@ -229,6 +229,12 @@ export class AcpRuntimeManager {
         throw new Error('Observed prompt runtime or configuration changed');
       }
     };
+    if (guard) {
+      await guard.check();
+    }
+    assertCurrent();
+    guard?.assertCurrent?.();
+    this.supervisor.forgetObservedEmptyProviderSession(sessionId);
     if (observed) {
       handle.eventLifecycleGeneration = observed.lifecycleGeneration;
     }
@@ -247,7 +253,11 @@ export class AcpRuntimeManager {
       handle,
       prompt,
       timeoutMs,
-      observation
+      observation,
+      () => {
+        assertCurrent();
+        guard?.assertCurrent?.();
+      }
     );
   }
 

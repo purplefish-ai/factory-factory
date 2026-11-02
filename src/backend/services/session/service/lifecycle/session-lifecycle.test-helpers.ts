@@ -113,6 +113,7 @@ export type LifecycleHarness = {
     | 'setRuntimeSnapshot'
     | 'isHistoryHydrated'
     | 'getRuntimeSnapshot'
+    | 'getQueueLength'
     | 'clearQueuedWork'
     | 'clearSession'
     | 'markProcessExit'
@@ -183,7 +184,7 @@ export type TerminationHarness = {
   >;
   sessionDomainService: MockedPick<
     SessionDomainService,
-    'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
+    'getQueueLength' | 'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
   >;
   sessionPermissionService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
   acpEventProcessor: MockedPick<
@@ -313,6 +314,7 @@ export function createTerminationHarness(
   >;
   const sessionDomainService = {
     clearQueuedWork: vi.fn(),
+    getQueueLength: vi.fn(() => 0),
     getRuntimeSnapshot: vi.fn<SessionDomainService['getRuntimeSnapshot']>(() => ({
       phase: 'idle',
       processState: 'stopped',
@@ -322,7 +324,7 @@ export function createTerminationHarness(
     setRuntimeSnapshot: vi.fn(),
   } satisfies Pick<
     SessionDomainService,
-    'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
+    'getQueueLength' | 'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
   >;
   const sessionPermissionService = {
     cancelPendingRequests: vi.fn<SessionPermissionService['cancelPendingRequests']>(),
@@ -647,6 +649,7 @@ export function createLifecycleHarness(
       updatedAt: '2026-07-15T00:00:00.000Z',
     })),
     clearQueuedWork: vi.fn(),
+    getQueueLength: vi.fn(() => 0),
     clearSession: vi.fn(),
     markProcessExit: vi.fn(),
     markError: vi.fn(),
@@ -662,6 +665,7 @@ export function createLifecycleHarness(
     | 'setRuntimeSnapshot'
     | 'isHistoryHydrated'
     | 'getRuntimeSnapshot'
+    | 'getQueueLength'
     | 'clearQueuedWork'
     | 'clearSession'
     | 'markProcessExit'

@@ -6,8 +6,10 @@ import { memo } from 'react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
+import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 
 export interface InitStatusBannerProps {
+  retryAvailability?: WorkspaceRetryAvailability;
   banner: WorkspaceInitBanner;
   retryPending: boolean;
   onRetry: () => void;
@@ -17,6 +19,7 @@ export interface InitStatusBannerProps {
 export const InitStatusBanner = memo(function InitStatusBanner({
   banner,
   retryPending,
+  retryAvailability,
   onRetry,
   onPlay,
 }: InitStatusBannerProps) {
@@ -37,10 +40,22 @@ export const InitStatusBanner = memo(function InitStatusBanner({
         )}
         <div className="min-w-0 flex-1">
           <p>{banner.message}</p>
+          {banner.showRetry && retryAvailability?.status !== 'AVAILABLE' && (
+            <p className="mt-1 text-xs">
+              {retryAvailability?.status === 'BLOCKED'
+                ? retryAvailability.explanation
+                : 'Checking setup retry availability…'}
+            </p>
+          )}
           {hasActions && (
             <div className="mt-2 flex items-center gap-2">
               {banner.showRetry && (
-                <Button size="sm" variant="outline" disabled={retryPending} onClick={onRetry}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryPending || retryAvailability?.status !== 'AVAILABLE'}
+                  onClick={onRetry}
+                >
                   {retryPending ? (
                     <SpinnerGapIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   ) : (

@@ -97,6 +97,7 @@ const rightPanelMock = vi.hoisted(() =>
 const workspaceContentViewMock = vi.hoisted(() => vi.fn());
 const retrySetup = vi.hoisted(() => vi.fn());
 const retryWorkspace = vi.hoisted(() => vi.fn());
+const retryAvailabilityObserved = vi.hoisted(() => vi.fn());
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('@/hooks/use-mobile', () => ({
@@ -155,8 +156,9 @@ vi.mock('./workspace-detail-chat-content', () => ({
 }));
 
 vi.mock('./use-retry-workspace-init', () => ({
-  useRetryWorkspaceInit: (workspaceId: string) => {
+  useRetryWorkspaceInit: (workspaceId: string, availability: unknown) => {
     retryWorkspace(workspaceId);
+    retryAvailabilityObserved(availability);
     return { retry: retrySetup, retryInit: { isPending: false } };
   },
 }));
@@ -165,6 +167,7 @@ function createInitStatus(
   showDismiss: boolean
 ): NonNullable<WorkspaceDetailViewProps['workspaceState']['workspaceInitStatus']> {
   return {
+    retryAvailability: { status: 'AVAILABLE' },
     status: 'READY',
     initErrorMessage: 'Setup failed',
     initOutput: null,
@@ -531,4 +534,57 @@ describe('sessionless setup recovery', () => {
       act(() => root.unmount());
     }
   });
+});
+
+it.each([
+  [false, 'blocked', 'warning'],
+  [true, 'blocked', 'warning'],
+  [false, 'unknown', 'warning'],
+  [true, 'unknown', 'warning'],
+  [false, 'blocked', 'sessionless'],
+  [true, 'blocked', 'sessionless'],
+  [false, 'unknown', 'sessionless'],
+  [true, 'unknown', 'sessionless'],
+] as const)('composes unavailable retry through mobile=%s %s %s', (mobile, state, surface) => {
+  useIsMobileMock.mockReturnValue(mobile);
+  const props = createViewProps(0);
+  const status = createInitStatus(false);
+  const blocked = {
+    status: 'BLOCKED' as const,
+    reason: 'INITIAL_PENDING' as const,
+    explanation: 'The event initial task is still pending.',
+  };
+  if (state === 'blocked') {
+    status.retryAvailability = blocked;
+  } else {
+    Reflect.deleteProperty(status, 'retryAvailability');
+  }
+  props.workspaceState.workspaceInitStatus = status;
+  props.workspaceState.isScriptFailed = surface === 'warning';
+  if (surface === 'sessionless') {
+    props.sessionTabs.sessions = [];
+    props.sessionTabs.hasWorktreePath = false;
+    status.status = 'FAILED';
+    status.phase = 'BLOCKED_FAILED';
+    status.hasWorktreePath = false;
+    status.chatBanner!.kind = 'error';
+  }
+  const { container, root } = renderView(props);
+  try {
+    const button = [...container.querySelectorAll('button')].find((node) =>
+      /Retry/.test(node.textContent ?? '')
+    );
+    expect(button).toBeDefined();
+    expect(button?.disabled).toBe(true);
+    expect(container.textContent).toContain(
+      state === 'blocked' ? blocked.explanation : 'Checking setup retry availability'
+    );
+    expect(retryAvailabilityObserved).toHaveBeenCalledWith(
+      state === 'blocked' ? blocked : undefined
+    );
+    act(() => button?.click());
+    expect(retrySetup).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+  }
 });

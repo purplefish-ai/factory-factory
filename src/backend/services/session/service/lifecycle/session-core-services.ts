@@ -217,8 +217,8 @@ const sessionStartupCoordinator = new SessionStartupCoordinator({
   runtimeExitCoordinator: sessionRuntimeExitCoordinator,
   lifecycleGate: sessionLifecycleGate,
   notificationDelivery: sessionNotificationDeliveryService,
-  sendSessionMessage: (sessionId, content): Promise<void> =>
-    sessionService.sendSessionMessage(sessionId, content),
+  sendSessionMessage: (sessionId, content, guard): Promise<void> =>
+    sessionService.sendSessionMessage(sessionId, content, ...(guard ? [guard] : [])),
   stopSession: (sessionId, options) =>
     sessionLifecycleServiceInstance.stopSession(sessionId, options),
 });

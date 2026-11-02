@@ -179,7 +179,11 @@ export class SessionRuntimeExitCoordinator {
     bulkShutdownReserved: boolean
   ): Promise<void> {
     try {
-      this.dependencies.sessionDomainService.markProcessExit(event.sessionId, event.exitCode);
+      this.dependencies.sessionDomainService.markProcessExit(
+        event.sessionId,
+        event.exitCode,
+        ...(deliberate ? [{ preserveQueuedInput: true }] : [])
+      );
       const session = await this.dependencies.repository.getSessionById(event.sessionId);
       if (!session) {
         logger.warn('Failed to find ACP session on exit', { sessionId: event.sessionId });

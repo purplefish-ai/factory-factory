@@ -60,3 +60,4 @@ export { AgentManagementService } from './service/agent-management.service';
 export { triggerCapability } from './service/agent-management-projection';
 
 export const agentManagementService = new AgentManagementService();
+export { workspaceRetryAuthorityService } from './service/workspace-retry-authority.service';

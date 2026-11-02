@@ -14,6 +14,7 @@ function createFinalizerHarness(options?: {
   workspace?: ReturnType<typeof createLifecycleTestWorkspace> | null;
   running?: boolean;
   viewerCount?: number;
+  queueLength?: number;
 }) {
   const session = options?.session === undefined ? createLifecycleTestSession() : options.session;
   const workspace =
@@ -37,6 +38,7 @@ function createFinalizerHarness(options?: {
       },
     ]),
     clearSession: vi.fn(),
+    getQueueLength: vi.fn(() => options?.queueLength ?? 0),
     getHistoryHydrationSource: vi.fn(() => undefined),
   };
   const persistence = {
@@ -416,4 +418,15 @@ describe('SessionWorkflowFinalizer', () => {
 
     expect(harness.repository.recoverStaleRunningSessions).toHaveBeenCalledOnce();
   });
+});
+
+it.each([
+  { running: false, viewerCount: 0, queueLength: 1, evict: false },
+  { running: false, viewerCount: 0, queueLength: 0, evict: true },
+  { running: true, viewerCount: 0, queueLength: 0, evict: false },
+  { running: false, viewerCount: 1, queueLength: 0, evict: false },
+])('evicts only inactive unviewed stores without queued input: %o', (options) => {
+  const h = createFinalizerHarness(options);
+  h.finalizer.clearInactiveSession('session-1', 'runtime_exit');
+  expect(h.domain.clearSession).toHaveBeenCalledTimes(options.evict ? 1 : 0);
 });

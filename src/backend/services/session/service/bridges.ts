@@ -38,9 +38,19 @@ export interface SessionLifecycleWorkspaceBridge {
   resetPRDiscoveryBackoff(workspaceId: string): Promise<boolean>;
 }
 
+/** Captured caller currentness carried through session configuration and provider effects. */
+export interface SessionCallerGuard {
+  check(): Promise<void>;
+  /** Present only when the caller also owns a synchronous local authority fence. */
+  assertCurrent?(): void;
+}
+
 /** Queued message dispatch callback needed by session lifecycle service */
 export interface SessionLifecycleMessageQueueBridge {
-  tryDispatchNextMessage(sessionId: string): Promise<void>;
+  tryDispatchNextMessage(
+    sessionId: string,
+    options?: { guard?: SessionCallerGuard }
+  ): Promise<void>;
 }
 
 /** Workspace init policy callback needed by session domain */

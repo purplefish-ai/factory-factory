@@ -4,6 +4,7 @@ import { toError } from '@/backend/lib/error-utils';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { getWorkspaceInitPolicy } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger('workspace-init-trpc');
 
@@ -17,12 +18,14 @@ function maxRetriesExceededError(maxRetries: number) {
 async function retryFailedWorkspaceWithExistingWorktree(
   ctx: Context,
   workspace: WorkspaceWithProject,
-  maxRetries: number
+  maxRetries: number,
+  guard?: WorkspaceInitGuard
 ) {
   const { initializeWorkspaceWorktree, workspaceStateMachine } = ctx.appContext.services;
   const logger = getLogger(ctx);
   const updatedWorkspace = await workspaceStateMachine.startProvisioning(workspace.id, {
     maxRetries,
+    ...(guard && { guard }),
   });
   if (!updatedWorkspace) {
     throw maxRetriesExceededError(maxRetries);
@@ -34,6 +37,7 @@ async function retryFailedWorkspaceWithExistingWorktree(
   initializeWorkspaceWorktree(workspace.id, {
     branchName: workspace.branchName ?? undefined,
     provisioningAlreadyStarted: true,
+    ...(guard && { guard }),
   }).catch((error) => {
     logger.error(
       'Unexpected error during background workspace initialization retry',
@@ -49,7 +53,8 @@ async function retryWorkspaceWithoutWorktree(
   ctx: Context,
   workspace: WorkspaceWithProject,
   useExistingBranch: boolean | undefined,
-  maxRetries: number
+  maxRetries: number,
+  guard?: WorkspaceInitGuard
 ) {
   const { initializeWorkspaceWorktree, workspaceStateMachine, worktreeLifecycleService } =
     ctx.appContext.services;
@@ -58,15 +63,29 @@ async function retryWorkspaceWithoutWorktree(
   // the workspace restarted without an initialization queued.
   const resumeMode =
     useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
+  await guard?.check();
+  guard?.assertCurrent();
   if (resumeMode !== undefined) {
-    await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
+    await worktreeLifecycleService.setInitMode(
+      workspace.id,
+      resumeMode,
+      ...(guard ? ([guard] as const) : [])
+    );
   }
   // FAILED resets to NEW so initializeWorkspaceWorktree starts provisioning
   // itself. READY cannot return to NEW, so it starts provisioning here.
   const isFailed = workspace.status === 'FAILED';
   const restartedWorkspace = isFailed
-    ? await workspaceStateMachine.resetToNew(workspace.id, maxRetries)
-    : await workspaceStateMachine.startProvisioningFromReady(workspace.id, maxRetries);
+    ? await workspaceStateMachine.resetToNew(
+        workspace.id,
+        maxRetries,
+        ...(guard ? ([guard] as const) : [])
+      )
+    : await workspaceStateMachine.startProvisioningFromReady(
+        workspace.id,
+        maxRetries,
+        ...(guard ? ([guard] as const) : [])
+      );
   if (!restartedWorkspace) {
     throw maxRetriesExceededError(maxRetries);
   }
@@ -74,6 +93,7 @@ async function retryWorkspaceWithoutWorktree(
   initializeWorkspaceWorktree(workspace.id, {
     branchName: workspace.branchName ?? undefined,
     useExistingBranch: resumeMode,
+    ...(guard && { guard }),
     ...(!isFailed && { provisioningAlreadyStarted: true }),
   }).catch((error) => {
     logger.error('Unexpected error during background workspace initialization', toError(error), {
@@ -86,7 +106,8 @@ async function retryReadyWorkspaceWithWarning(
   ctx: Context,
   workspace: WorkspaceWithProject,
   worktreePath: string,
-  maxRetries: number
+  maxRetries: number,
+  guard?: WorkspaceInitGuard
 ) {
   const {
     factoryConfigService,
@@ -100,7 +121,8 @@ async function retryReadyWorkspaceWithWarning(
 
   const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
     workspace.id,
-    maxRetries
+    maxRetries,
+    ...(guard ? ([guard] as const) : [])
   );
   if (!updatedWorkspace) {
     throw maxRetriesExceededError(maxRetries);
@@ -111,13 +133,18 @@ async function retryReadyWorkspaceWithWarning(
     workspaceWithProject: workspace,
     worktreePath,
     factoryConfig,
+    ...(guard && { guard }),
   });
 
   if (!startupScriptPipelineResult.handled) {
-    await workspaceStateMachine.markReady(workspace.id);
+    await workspaceStateMachine.markReady(workspace.id, ...(guard ? ([{ guard }] as const) : []));
   }
 
-  await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
+  if (guard) {
+    await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null, undefined, guard);
+  } else {
+    await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
+  }
 }
 
 // =============================================================================
@@ -141,6 +168,7 @@ export const workspaceInitRouter = router({
       const initPolicy = getWorkspaceInitPolicy(workspace);
 
       return {
+        retryAvailability: await ctx.appContext.services.readWorkspaceRetryAvailability(workspace),
         status: workspace.status,
         initErrorMessage: workspace.initErrorMessage,
         initOutput: workspace.initOutput,
@@ -189,23 +217,46 @@ export const workspaceInitRouter = router({
         });
       }
 
+      const guard = await ctx.appContext.services.captureWorkspaceRetryGuard(workspace);
       const maxRetries = 3;
 
       // If worktree wasn't created (early failure) or is missing, re-run full initialization
       if (!workspace.worktreePath) {
-        await retryWorkspaceWithoutWorktree(ctx, workspace, input.useExistingBranch, maxRetries);
+        await retryWorkspaceWithoutWorktree(
+          ctx,
+          workspace,
+          input.useExistingBranch,
+          maxRetries,
+          guard
+        );
         return workspaceDataService.findById(input.id);
       }
 
       // READY+warning: workspace is functional but setup script failed.
       // Retry by re-running the full startup script pipeline.
       if (isRetryableFromReadyWarning) {
-        await retryReadyWorkspaceWithWarning(ctx, workspace, workspace.worktreePath, maxRetries);
+        const worktreePath = workspace.worktreePath;
+        await ctx.appContext.services.enqueueWorkspaceInitializationTask(workspace.id, async () => {
+          await guard?.check();
+          guard?.assertCurrent();
+          const current = await workspaceDataService.findByIdWithProject(workspace.id);
+          if (
+            current?.status !== 'READY' ||
+            current.worktreePath !== worktreePath ||
+            current.initRetryCount !== workspace.initRetryCount ||
+            current.initErrorMessage !== workspace.initErrorMessage
+          ) {
+            return;
+          }
+          await guard?.check();
+          guard?.assertCurrent();
+          await retryReadyWorkspaceWithWarning(ctx, current, worktreePath, maxRetries, guard);
+        });
 
         return workspaceDataService.findById(input.id);
       }
 
-      await retryFailedWorkspaceWithExistingWorktree(ctx, workspace, maxRetries);
+      await retryFailedWorkspaceWithExistingWorktree(ctx, workspace, maxRetries, guard);
 
       return workspaceDataService.findById(input.id);
     }),

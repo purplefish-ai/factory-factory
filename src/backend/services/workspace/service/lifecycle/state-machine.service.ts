@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 /**
  * Workspace State Machine Service
  *
@@ -16,12 +17,11 @@
  *   FAILED → ARCHIVING → ARCHIVED
  *   ARCHIVING → READY/FAILED (rollback on archive failure)
  */
-
-import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceStatus } from '@/shared/core';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 
 const logger = createLogger('workspace-state-machine');
@@ -77,6 +77,7 @@ async function findRetryLimitWorkspaceOrThrowCasError(
 }
 
 export interface TransitionOptions {
+  guard?: WorkspaceInitGuard;
   /** Worktree path to set (for READY transition) */
   worktreePath?: string;
   /** Branch name to set (for READY transition) */
@@ -112,6 +113,7 @@ export interface WorkspaceStateChangedEvent {
 }
 
 export interface StartProvisioningOptions {
+  guard?: WorkspaceInitGuard;
   /** Maximum number of retries allowed (default 3) */
   maxRetries?: number;
 }
@@ -258,7 +260,8 @@ class WorkspaceStateMachineService extends EventEmitter {
     const result = await workspaceAccessor.transitionWithCas(
       workspaceId,
       currentStatus,
-      updateData
+      updateData,
+      options?.guard
     );
 
     if (result.count === 0) {
@@ -273,6 +276,8 @@ class WorkspaceStateMachineService extends EventEmitter {
     // Re-read workspace after successful CAS update
     const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
+    await options?.guard?.check();
+    options?.guard?.assertCurrent();
     this.emitStateChanged(workspaceId, currentStatus, targetStatus, updated);
 
     logger.debug('Workspace status transitioned', {
@@ -307,7 +312,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     // NEW → PROVISIONING (initial provisioning)
     if (currentStatus === 'NEW') {
-      return this.transition(workspaceId, 'PROVISIONING');
+      return this.transition(workspaceId, 'PROVISIONING', { guard: options?.guard });
     }
 
     // FAILED → PROVISIONING (retry)
@@ -315,7 +320,8 @@ class WorkspaceStateMachineService extends EventEmitter {
       // Use atomic conditional update to check retry count
       const result = await workspaceAccessor.startProvisioningRetryIfAllowed(
         workspaceId,
-        maxRetries
+        maxRetries,
+        options?.guard
       );
 
       if (result.count === 0) {
@@ -336,6 +342,8 @@ class WorkspaceStateMachineService extends EventEmitter {
 
       const updated = await workspaceAccessor.findRawById(workspaceId);
 
+      await options?.guard?.check();
+      options?.guard?.assertCurrent();
       this.emitStateChanged(workspaceId, 'FAILED', 'PROVISIONING', updated);
 
       logger.debug('Workspace retry started', {
@@ -360,7 +368,7 @@ class WorkspaceStateMachineService extends EventEmitter {
    */
   markReady(
     workspaceId: string,
-    options?: Pick<TransitionOptions, 'worktreePath' | 'branchName'>
+    options?: Pick<TransitionOptions, 'worktreePath' | 'branchName' | 'guard'>
   ): Promise<Workspace> {
     return this.transition(workspaceId, 'READY', options);
   }
@@ -368,8 +376,12 @@ class WorkspaceStateMachineService extends EventEmitter {
   /**
    * Mark workspace as failed (initialization error).
    */
-  markFailed(workspaceId: string, errorMessage?: string): Promise<Workspace> {
-    return this.transition(workspaceId, 'FAILED', { errorMessage });
+  markFailed(
+    workspaceId: string,
+    errorMessage?: string,
+    guard?: WorkspaceInitGuard
+  ): Promise<Workspace> {
+    return this.transition(workspaceId, 'FAILED', { errorMessage, guard });
   }
 
   /**
@@ -446,8 +458,12 @@ class WorkspaceStateMachineService extends EventEmitter {
    * Mark workspace as ready with a non-fatal setup script warning.
    * Workspace is fully usable; the warning is surfaced as a dismissable banner.
    */
-  markReadyWithWarning(workspaceId: string, warningMessage: string): Promise<Workspace> {
-    return this.transition(workspaceId, 'READY', { warningMessage });
+  markReadyWithWarning(
+    workspaceId: string,
+    warningMessage: string,
+    guard?: WorkspaceInitGuard
+  ): Promise<Workspace> {
+    return this.transition(workspaceId, 'READY', { warningMessage, guard });
   }
 
   /**
@@ -456,7 +472,11 @@ class WorkspaceStateMachineService extends EventEmitter {
    *
    * @returns The updated workspace, or null if max retries exceeded
    */
-  async startProvisioningFromReady(workspaceId: string, maxRetries = 3): Promise<Workspace | null> {
+  async startProvisioningFromReady(
+    workspaceId: string,
+    maxRetries = 3,
+    guard?: WorkspaceInitGuard
+  ): Promise<Workspace | null> {
     const workspace = await workspaceAccessor.findRawById(workspaceId);
 
     if (!workspace) {
@@ -474,7 +494,8 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const result = await workspaceAccessor.startProvisioningFromReadyIfAllowed(
       workspaceId,
-      maxRetries
+      maxRetries,
+      guard
     );
 
     if (result.count === 0) {
@@ -495,6 +516,8 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const updated = await workspaceAccessor.findRawById(workspaceId);
 
+    await guard?.check();
+    guard?.assertCurrent();
     this.emitStateChanged(workspaceId, 'READY', 'PROVISIONING', updated);
 
     logger.debug('Workspace setup script retry started from READY+warning', {
@@ -510,7 +533,11 @@ class WorkspaceStateMachineService extends EventEmitter {
    * Used when worktree creation itself failed (not just startup script).
    * Increments retry count to enforce max retries.
    */
-  async resetToNew(workspaceId: string, maxRetries = 3): Promise<Workspace | null> {
+  async resetToNew(
+    workspaceId: string,
+    maxRetries = 3,
+    guard?: WorkspaceInitGuard
+  ): Promise<Workspace | null> {
     const workspace = await workspaceAccessor.findRawById(workspaceId);
 
     if (!workspace) {
@@ -527,7 +554,7 @@ class WorkspaceStateMachineService extends EventEmitter {
     }
 
     // Use atomic conditional update to check retry count
-    const result = await workspaceAccessor.resetToNewIfAllowed(workspaceId, maxRetries);
+    const result = await workspaceAccessor.resetToNewIfAllowed(workspaceId, maxRetries, guard);
 
     if (result.count === 0) {
       const retryLimitWorkspace = await findRetryLimitWorkspaceOrThrowCasError(
@@ -547,6 +574,8 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const updated = await workspaceAccessor.findRawById(workspaceId);
 
+    await guard?.check();
+    guard?.assertCurrent();
     this.emitStateChanged(workspaceId, 'FAILED', 'NEW', updated);
 
     logger.debug('Workspace reset to NEW for retry', {

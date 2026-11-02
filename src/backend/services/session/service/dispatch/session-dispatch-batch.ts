@@ -1,4 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -149,8 +150,13 @@ async function dropDuplicateNotification(
   notifications: SessionDispatchNotificationDeliveryService,
   sessionId: string,
   messageId: string,
-  claims: Extract<NotificationDispatchClaim, { status: 'claimed' }>[]
+  claims: Extract<NotificationDispatchClaim, { status: 'claimed' }>[],
+  guard?: SessionCallerGuard
 ) {
+  if (guard) {
+    await guard.check();
+    guard.assertCurrent?.();
+  }
   const claim = notifications.claimForDispatch(sessionId, messageId);
   if (claim.status === 'claimed') {
     claims.push(claim);
@@ -159,6 +165,10 @@ async function dropDuplicateNotification(
     claim.status === 'duplicate' ||
     (claim.status === 'claimed' && (await notifications.isAlreadyDelivered(claim.notificationId)));
   if (duplicate) {
+    if (guard) {
+      await guard.check();
+      guard.assertCurrent?.();
+    }
     notifications.removeDuplicateFromQueue(sessionId, messageId);
   }
   return duplicate;
@@ -214,6 +224,7 @@ export async function collectDispatchBatch(input: {
   first: QueuedMessage;
   notifications: SessionDispatchNotificationDeliveryService;
   prepareBackground(message: QueuedMessage): Promise<boolean>;
+  guard?: SessionCallerGuard;
   isCurrent(): boolean;
 }) {
   const messages = [input.first];
@@ -233,7 +244,13 @@ export async function collectDispatchBatch(input: {
         break;
       }
       if (
-        await dropDuplicateNotification(input.notifications, input.sessionId, message.id, claims)
+        await dropDuplicateNotification(
+          input.notifications,
+          input.sessionId,
+          message.id,
+          claims,
+          input.guard
+        )
       ) {
         continue;
       }
@@ -247,4 +264,57 @@ export async function collectDispatchBatch(input: {
     release();
     throw error;
   }
+}
+
+export async function prepareBackgroundForDispatch(
+  dependencies: Pick<SessionDispatchDependencies, 'runtimeManager' | 'backgroundDelivery'>,
+  dbSessionId: string,
+  peeked: QueuedMessage,
+  isCurrent: () => boolean,
+  guard?: SessionCallerGuard
+): Promise<boolean> {
+  if (!peeked.source) {
+    return true;
+  }
+  if (
+    dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId) ||
+    sessionDomainService.getPendingInteractiveRequest(dbSessionId)
+  ) {
+    return false;
+  }
+  const prepared = await dependencies.backgroundDelivery.prepare(
+    dbSessionId,
+    peeked,
+    ...(guard ? [guard] : [])
+  );
+  try {
+    if (guard) {
+      await guard.check();
+      guard.assertCurrent?.();
+    }
+  } catch (error) {
+    if (prepared.status === 'ready') {
+      await prepared.releaseOnRejection(error);
+    }
+    throw error;
+  }
+  if (prepared.status === 'discard') {
+    sessionDomainService.removeQueuedMessage(dbSessionId, peeked.id, {
+      expectedMessage: peeked,
+    });
+    return false;
+  }
+  if (prepared.status !== 'ready') {
+    return false;
+  }
+  if (!isCurrent()) {
+    await dependencies.backgroundDelivery.fail(
+      peeked,
+      new Error('Session stopped before dispatch'),
+      'cancelled'
+    );
+    return false;
+  }
+
+  return true;
 }

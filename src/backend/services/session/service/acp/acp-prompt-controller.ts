@@ -44,7 +44,8 @@ export class AcpPromptController {
     handle: AcpProcessHandle,
     prompt: ContentBlock[],
     timeoutMs?: number,
-    observation?: AcpPromptObservation
+    observation?: AcpPromptObservation,
+    assertCallerCurrent?: () => void
   ): Promise<{ stopReason: string }> {
     const pending = { cancelled: false };
     if (observation) {
@@ -63,6 +64,7 @@ export class AcpPromptController {
         }
         this.releasePending(handle, pending);
       }
+      assertCallerCurrent?.();
       handle.isPromptInFlight = true;
       const promptPromise = handle.connection.prompt({
         sessionId: handle.acpSessionId,

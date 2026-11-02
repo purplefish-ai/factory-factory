@@ -14,6 +14,7 @@ import {
   type EventRunResolution,
 } from '@/shared/event-agent-delivery';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
+import type { WorkspaceRetryContext } from '@/shared/workspace-init-retry';
 import { EventSessionFenceError } from './event-session-fence-error';
 
 export type EventInitialPermit = Readonly<{
@@ -80,6 +81,51 @@ export class EventSessionAuthority {
   }
   async isOwned(sessionId: string): Promise<boolean> {
     return (await this.findOrigin(sessionId)) !== null;
+  }
+  /** Verified workspace provenance also fences admission before a session origin exists. */
+  createWorkspaceRetryGuard(context: WorkspaceRetryContext) {
+    let revoked = false;
+    const sessionId = context.fence.attempt.sessionId;
+    const assertCurrent = () => {
+      if (this.closing || !this.owner) {
+        revoked = true;
+        throw new Error('Event durable authority is unavailable');
+      }
+      if (revoked || this.active.has(sessionId)) {
+        revoked = true;
+        blocked();
+      }
+    };
+    const check = async () => {
+      try {
+        assertCurrent();
+        const fence = await this.readOwnedFence(
+          sessionId,
+          {
+            runId: context.fence.attempt.runId,
+            execution: context.fence.execution,
+          },
+          assertCurrent
+        );
+        if (
+          fence?.state !== 'FINISHED' ||
+          !isDeepStrictEqual(fence.attempt, context.fence.attempt)
+        ) {
+          blocked();
+        }
+        assertCurrent();
+      } catch (error) {
+        revoked = true;
+        throw error;
+      }
+    };
+    return {
+      assertCurrent,
+      check,
+      revoke: () => {
+        revoked = true;
+      },
+    };
   }
   async assertOrdinary(sessionId: string): Promise<void> {
     const fence = await this.read(sessionId);

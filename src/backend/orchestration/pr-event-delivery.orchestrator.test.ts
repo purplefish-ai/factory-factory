@@ -515,6 +515,7 @@ it.each([1, 0])(
   'publishes a failed delivery pause only when its fence applies (count %s)',
   async (count) => {
     mocks.pause.mockResolvedValue({ count });
+    mocks.settle.mockResolvedValue(true);
     const outcome = await prBackgroundDeliveryPort.fail(
       {
         deliveryId: 'delivery',

@@ -2,7 +2,10 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AcpEventProcessor } from './acp-event-processor';
+import { requestsStartupCleanup } from './event-session-startup';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { StartSessionOptions } from './session-startup-options';
+import type { StopSessionOptions } from './session-termination.coordinator';
 import { toErrorMessage } from './session.error-message';
 
 const logger = createLogger('session');
@@ -66,4 +69,41 @@ export async function stopStartupConfigurationFailure(
     }
   }
   throw error;
+}
+
+/** Request failure cleanup owns a captured candidate, never unrelated queued input. */
+export async function cleanupFailedStartup(
+  input: {
+    sessionId: string;
+    ownership: { handle?: AcpProcessHandle; shared: boolean };
+    stopGeneration: number;
+    options?: StartSessionOptions;
+    error: unknown;
+  },
+  deps: StartupFailureDependencies & {
+    runtimeManager: Pick<
+      AcpRuntimeManager,
+      'getClient' | 'stopClient' | 'hasClientCreationOperation'
+    >;
+    stopSession(sessionId: string, options?: StopSessionOptions): Promise<void>;
+  }
+): Promise<void> {
+  const { sessionId, ownership, stopGeneration, options, error } = input;
+  const current = deps.runtimeManager.getClient(sessionId);
+  if (
+    !(requestsStartupCleanup(options) && ownership.handle) ||
+    ownership.shared ||
+    deps.runtimeManager.hasClientCreationOperation(sessionId) ||
+    (current && current !== ownership.handle)
+  ) {
+    return;
+  }
+  if (options?.assertCurrentSync) {
+    await stopStartupConfigurationFailure(sessionId, ownership.handle, stopGeneration, error, deps);
+  }
+  await deps.stopSession(sessionId, {
+    reason: 'SYSTEM_STOP',
+    recordLifecycleEvent: false,
+    cleanupTransientRatchetSession: false,
+  });
 }

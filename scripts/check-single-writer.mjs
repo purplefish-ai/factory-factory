@@ -452,7 +452,7 @@ function collectWorkspaceMutatingMethods(
 
         if (
           ts.isIdentifier(methodTarget) &&
-          methodTarget.text === 'prisma' &&
+          (methodTarget.text === 'prisma' || methodTarget.text === 'transaction') &&
           inner.expression.name.text === '$executeRaw'
         ) {
           writes = true;
@@ -464,7 +464,7 @@ function collectWorkspaceMutatingMethods(
         const methodTarget = inner.tag.expression;
         if (
           ts.isIdentifier(methodTarget) &&
-          methodTarget.text === 'prisma' &&
+          (methodTarget.text === 'prisma' || methodTarget.text === 'transaction') &&
           inner.tag.name.text === '$executeRaw'
         ) {
           writes = true;

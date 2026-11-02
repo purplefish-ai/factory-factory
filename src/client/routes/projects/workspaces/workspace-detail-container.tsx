@@ -302,6 +302,7 @@ export function WorkspaceDetailContainer() {
   // A fresh object per render is fine: ChatContent is memoized on these fields,
   // and only the context consumer re-renders when it changes.
   const chatViewModel: ChatContentProps = {
+    retryAvailability: workspaceInitStatus?.retryAvailability,
     workspaceId,
     sessionId: selectedDbSessionId,
     codexAccountId: sessions?.find((session) => session.id === selectedDbSessionId)?.codexAccountId,

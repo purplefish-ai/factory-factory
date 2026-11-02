@@ -1,3 +1,4 @@
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   SessionResumeFences,
@@ -96,33 +97,74 @@ export class SessionBackgroundDeliveryService {
       }
     }
   }
-  async prepare(sessionId: string, message: QueuedMessage) {
+  async prepare(sessionId: string, message: QueuedMessage, guard?: SessionCallerGuard) {
+    if (guard) {
+      await guard.check();
+      guard.assertCurrent?.();
+    }
     if (!(message.source && this.port)) {
       this.forgetToken(message.id);
       return { status: 'discard' as const };
     }
     const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
-    const result = await this.port.prepare({ sessionId, request: message.source.request });
-    if (result.status === 'discard' && token && [...this.tokens.values()].includes(token)) {
-      this.forgetToken(message.id);
-    }
-    if (result.status === 'ready') {
-      const currentToken = [...this.tokens.values()].find(
-        (entry) => entry.messageId === message.id
-      );
-      if (!token || currentToken !== token || token.message !== message) {
-        // Receipt recovery checks active deliveries before settling. A direct
-        // stale failure could settle a replacement that reused the frozen ID.
-        await this.port.recover(sessionId);
-        return { status: 'discard' as const };
+    const port = this.port;
+    const result = await port.prepare({ sessionId, request: message.source.request });
+    try {
+      if (guard) {
+        await guard.check();
+        guard.assertCurrent?.();
       }
-      message.text = result.delivery.text;
-      this.deliveries.set(message.id, { delivery: result.delivery, message });
-      this.coalesceMainTokens(sessionId, message);
+      if (result.status === 'discard' && token && [...this.tokens.values()].includes(token)) {
+        this.forgetToken(message.id);
+      }
+      if (result.status === 'ready') {
+        const currentToken = [...this.tokens.values()].find(
+          (entry) => entry.messageId === message.id
+        );
+        if (!token || currentToken !== token || token.message !== message) {
+          // Receipt recovery checks active deliveries before settling. A direct
+          // stale failure could settle a replacement that reused the frozen ID.
+          await port.recover(sessionId);
+          return { status: 'discard' as const };
+        }
+        message.text = result.delivery.text;
+        this.deliveries.set(message.id, { delivery: result.delivery, message });
+        this.coalesceMainTokens(sessionId, message, guard);
+        return {
+          ...result,
+          releaseOnRejection: async (error: unknown) => {
+            try {
+              await port.fail(result.delivery, error);
+            } finally {
+              this.forgetCapturedDelivery(message, result.delivery);
+            }
+          },
+        };
+      }
+      return result;
+    } catch (error) {
+      if (
+        result.status === 'ready' &&
+        token?.message === message &&
+        [...this.tokens.values()].includes(token)
+      ) {
+        this.forgetCapturedDelivery(message, result.delivery);
+        await port.fail(result.delivery, error);
+      }
+      throw error;
     }
-    return result;
   }
-  private coalesceMainTokens(sessionId: string, message: QueuedMessage) {
+  private forgetCapturedDelivery(message: QueuedMessage, delivery: ClaimedPRDelivery) {
+    const owned = this.deliveries.get(message.id);
+    if (owned?.delivery === delivery && owned.message === message) {
+      this.deliveries.delete(message.id);
+    }
+  }
+  private coalesceMainTokens(
+    sessionId: string,
+    message: QueuedMessage,
+    guard?: SessionCallerGuard
+  ) {
     const request = message.source?.request;
     if (!request || (request.deliveryMode ?? 'MAIN') !== 'MAIN') {
       return;
@@ -140,6 +182,7 @@ export class SessionBackgroundDeliveryService {
       ) {
         continue;
       }
+      guard?.assertCurrent?.();
       const removed = sessionDomainService.removeQueuedMessage(sessionId, token.messageId, {
         expectedMessage: token.message,
         recordCancellation: false,

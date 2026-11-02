@@ -78,20 +78,14 @@ export function createPRBackgroundDeliveryPort(
         await workspacePRMonitoringService.deferBusy(delivery.deliveryId);
         return { paused: false };
       }
-      await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'retry' });
-      const session = await sessionDataService.findAgentSessionById(delivery.sessionId);
-      if (session && (delivery.attempt >= 3 || message.includes('existing conversation'))) {
-        const paused = await workspacePRMonitoringService.pauseWorkspace(
-          session.workspaceId,
-          message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
-          delivery.bindingRevision
-        );
-        if (paused.count) {
-          ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
-        }
-        return { paused: paused.count > 0 };
+      const settled = await workspacePRMonitoringService.settleDelivery({
+        ...delivery,
+        result: 'retry',
+      });
+      if (!settled) {
+        return { paused: false };
       }
-      return { paused: false };
+      return pauseAfterFailedDelivery(delivery, message, services);
     },
     recover: (sessionId) => recoverPRDeliveries(sessionId, undefined, services),
     async pause(sessionId, reason) {
@@ -144,4 +138,24 @@ async function invalidateRecipient(
       config.bindingRevision
     );
   }
+}
+
+async function pauseAfterFailedDelivery(
+  delivery: ClaimedPRDelivery,
+  message: string,
+  services: PRDeliveryPorts
+): Promise<{ paused: boolean }> {
+  const session = await services.sessionDataService.findAgentSessionById(delivery.sessionId);
+  if (!(session && (delivery.attempt >= 3 || message.includes('existing conversation')))) {
+    return { paused: false };
+  }
+  const paused = await services.workspacePRMonitoringService.pauseWorkspace(
+    session.workspaceId,
+    message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
+    delivery.bindingRevision
+  );
+  if (paused.count) {
+    services.ratchetService.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: session.workspaceId });
+  }
+  return { paused: paused.count > 0 };
 }

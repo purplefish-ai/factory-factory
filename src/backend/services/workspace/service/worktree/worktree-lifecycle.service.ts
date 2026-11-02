@@ -2,6 +2,7 @@ import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { gitOpsService } from './git-ops.service';
 
 export class WorktreePathSafetyError extends Error {
@@ -88,20 +89,25 @@ function getProjectOrThrow(workspace: WorkspaceWithProject) {
 
 class WorktreeLifecycleService {
   // DOM-04: Instance fields replace module-level globals
-  private readonly initModes = new Map<string, boolean>();
+  private readonly initModes = new Map<string, { value: boolean; owner?: WorkspaceInitGuard }>();
 
-  setInitMode(workspaceId: string, useExistingBranch: boolean | undefined): Promise<void> {
+  setInitMode(
+    workspaceId: string,
+    useExistingBranch: boolean | undefined,
+    guard?: WorkspaceInitGuard
+  ): Promise<void> {
+    guard?.assertCurrent();
     if (useExistingBranch === undefined) {
       return Promise.resolve();
     }
-    this.initModes.set(workspaceId, useExistingBranch);
+    this.initModes.set(workspaceId, { value: useExistingBranch, owner: guard });
     return Promise.resolve();
   }
 
   async getInitMode(workspaceId: string): Promise<boolean | undefined> {
     // First check in-memory cache for current-process initialization retries.
     if (this.initModes.has(workspaceId)) {
-      return this.initModes.get(workspaceId);
+      return this.initModes.get(workspaceId)?.value;
     }
 
     // Then check the database creationSource field (canonical source).
@@ -113,8 +119,11 @@ class WorktreeLifecycleService {
     return undefined;
   }
 
-  clearInitMode(workspaceId: string): Promise<void> {
-    this.initModes.delete(workspaceId);
+  clearInitMode(workspaceId: string, guard?: WorkspaceInitGuard): Promise<void> {
+    guard?.assertCurrent();
+    if (!guard || this.initModes.get(workspaceId)?.owner === guard) {
+      this.initModes.delete(workspaceId);
+    }
     return Promise.resolve();
   }
 
