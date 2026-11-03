@@ -82,7 +82,7 @@ async function releasePreparedBackgrounds(
 
 function takeDispatchBatch(sessionId: string, messages: QueuedMessage[]): boolean {
   if (messages.length > 1) {
-    return sessionDomainService.takeQueuedMessages(sessionId, messages);
+    return sessionDomainService.takeQueuedPrefix(sessionId, messages);
   }
   if (sessionDomainService.peekNextMessage(sessionId) !== messages[0]) {
     return false;
@@ -116,7 +116,7 @@ export async function dispatchCollectedBatch(input: {
       return;
     }
     // Every selected message remains visible until the complete batch is ready.
-    if (!takeDispatchBatch(input.sessionId, messages)) {
+    if (input.batch.status === 'retry' || !takeDispatchBatch(input.sessionId, messages)) {
       await releasePreparedBackgrounds(
         messages,
         input.backgroundDelivery,
@@ -230,10 +230,13 @@ export async function collectDispatchBatch(input: {
   const messages = [input.first];
   const claims: Extract<NotificationDispatchClaim, { status: 'claimed' }>[] = [];
   const release = () => claims.forEach((claim) => claim.release());
-  if (isCommand(input.first)) {
-    return { messages, release };
-  }
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
+  if (snapshot[0] !== input.first) {
+    return { status: 'retry' as const, messages, release };
+  }
+  if (isCommand(input.first)) {
+    return { status: 'ready' as const, messages, release };
+  }
   try {
     for (const message of snapshot.slice(1)) {
       if (
@@ -263,7 +266,7 @@ export async function collectDispatchBatch(input: {
       }
       messages.push(message);
     }
-    return { messages, release };
+    return { status: 'ready' as const, messages, release };
   } catch (error) {
     release();
     throw error;

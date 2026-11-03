@@ -109,7 +109,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSessionDomainService.getQueueSnapshot.mockReturnValue([]);
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() => {
+      const head = mockSessionDomainService.peekNextMessage();
+      return head ? [head] : [];
+    });
     sessionDispatchService.resetDispatchState('s1');
     sessionDispatchService.configure({
       initPolicy: {
