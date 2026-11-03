@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import { ClosedSessionReadTranscriptSchema } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
@@ -54,24 +55,40 @@ const mixed = [
   },
 ];
 
-function ArchiveFixture({ wire }: { wire: string }) {
+function ArchiveFixture({ wire, failRefetch = false }: { wire: string; failRefetch?: boolean }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
   );
-  const [client] = useState(() =>
-    trpc.createClient({
+  const failRead = useRef(false);
+  const [client] = useState(() => {
+    return trpc.createClient({
       links: [
         () => () =>
           observable((observer) => {
-            observer.next({ result: { data: wire } });
-            observer.complete();
+            if (failRead.current) {
+              observer.error(new TRPCClientError('Synthetic refetch failure'));
+            } else {
+              observer.next({ result: { data: wire } });
+              observer.complete();
+            }
           }),
       ],
-    })
-  );
+    });
+  });
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
+        {failRefetch && (
+          <button
+            type="button"
+            onClick={() => {
+              failRead.current = true;
+              void queryClient.refetchQueries();
+            }}
+          >
+            Refetch fixture
+          </button>
+        )}
         <div className="h-[560px] w-[760px] max-w-full rounded border bg-background text-foreground">
           <ClosedSessionTranscriptView sessionId="closed-story" />
         </div>
@@ -143,5 +160,49 @@ export const CorruptWire: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('Failed to load transcript')).toBeVisible();
     await expect(canvas.queryByText('Transcript not found')).not.toBeInTheDocument();
+  },
+};
+
+export const StaleBody: Story = {
+  render: () => (
+    <ArchiveFixture
+      wire={JSON.stringify(ClosedSessionReadTranscriptSchema.parse({ messages: mixed }))}
+      failRefetch
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Rich rendering resumes after raw rows.');
+    const control = canvas.getByRole('button', { name: /Reading file example.ts/ });
+    const viewport = canvasElement.querySelector<HTMLDivElement>(
+      '[data-radix-scroll-area-viewport]'
+    );
+    if (!viewport) {
+      throw new Error('Missing history viewport');
+    }
+    control.focus();
+    viewport.scrollTop = 80;
+    canvas.getByRole('button', { name: 'Refetch fixture' }).click();
+    await expect(await canvas.findByRole('status')).toHaveTextContent(
+      'Latest transcript read failed. Showing previously loaded history.'
+    );
+    await expect(canvas.getByRole('status')).toBeVisible();
+    await expect(document.activeElement).toBe(control);
+    await expect(viewport.scrollTop).toBe(80);
+    await expect(canvas.getAllByLabelText('Archived message JSON')).toHaveLength(3);
+  },
+};
+
+export const StaleEmpty: Story = {
+  render: () => <ArchiveFixture wire={JSON.stringify({ messages: [] })} failRefetch />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('No messages in this session');
+    canvas.getByRole('button', { name: 'Refetch fixture' }).click();
+    await expect(await canvas.findByRole('status')).toHaveTextContent(
+      'Latest transcript read failed. Showing previously loaded history.'
+    );
+    await expect(canvas.getByRole('status')).toBeVisible();
+    await expect(canvas.getByText('No messages in this session')).toBeVisible();
   },
 };

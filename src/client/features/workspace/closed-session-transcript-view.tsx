@@ -38,7 +38,7 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
-  if (error && error.data?.code !== 'NOT_FOUND') {
+  if (error && error.data?.code !== 'NOT_FOUND' && !transcript) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-sm text-muted-foreground">Failed to load transcript</div>
@@ -46,7 +46,7 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
-  if (!transcript || error) {
+  if (!transcript || error?.data?.code === 'NOT_FOUND') {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-sm text-muted-foreground">Transcript not found</div>
@@ -54,18 +54,27 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
+  const notice = error ? (
+    <div role="status" aria-live="polite" className="shrink-0 border-b p-3 text-sm">
+      Latest transcript read failed. Showing previously loaded history.
+    </div>
+  ) : null;
+
   if (transcript.messages.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-muted-foreground">No messages in this session</div>
+      <div className="flex h-full min-h-0 flex-col">
+        {notice}
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="text-sm text-muted-foreground">No messages in this session</div>
+        </div>
       </div>
     );
   }
 
   const items = projectClosedSessionTranscriptRows(transcript.messages);
 
-  return (
-    <ScrollArea ref={scrollAreaRef} className="h-full">
+  const history = (
+    <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
       <div className="p-4 space-y-4">
         {items.map(({ item, key }) =>
           item.kind === 'rich' ? (
@@ -81,5 +90,11 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
         )}
       </div>
     </ScrollArea>
+  );
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {notice}
+      {history}
+    </div>
   );
 }

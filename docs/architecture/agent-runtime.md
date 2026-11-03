@@ -130,9 +130,12 @@ schema. This preserves own `__proto__`, `constructor` and `prototype` fields
 that SuperJSON rejects when traversing object output. The existing object
 `getTranscript` endpoint remains compatible for ordinary data and retains that
 serializer limitation. Structural sharing is disabled for this archive query so
-changed selected objects retain reserved keys on refetch. Decode and load
-failures show a generic error even when previous selected data is cached;
-explicit missing archives retain the not-found state.
+changed selected objects retain reserved keys on refetch. A failed read with
+validated data for the same query retains the history, including empty history,
+with a persistent notice that the latest read failed and previously loaded
+history is shown. Invalid new input never renders. Without prior validated data,
+failures show a generic error; explicit missing archives hide cached history and
+retain the not-found state. Valid recovery clears the notice.
 
 The archive view uses `projectClosedSessionTranscriptRows` to validate each JSON
 row with the current-message codec before read-only rich rendering. Opaque and

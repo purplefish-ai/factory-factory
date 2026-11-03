@@ -42,16 +42,18 @@ function renderWire(wire: unknown, error?: TRPCClientError<AppRouter>) {
   const container = document.createElement('div');
   document.body.append(container);
   mounted = createRoot(container);
-  flushSync(() =>
-    mounted?.render(
-      <trpc.Provider client={client} queryClient={queryClient}>
-        <QueryClientProvider client={queryClient}>
-          <ClosedSessionTranscriptView sessionId="closed" />
-        </QueryClientProvider>
-      </trpc.Provider>
-    )
-  );
-  return { container, response, queryClient, client };
+  const renderSession = (sessionId: string) =>
+    flushSync(() =>
+      mounted?.render(
+        <trpc.Provider client={client} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <ClosedSessionTranscriptView sessionId={sessionId} />
+          </QueryClientProvider>
+        </trpc.Provider>
+      )
+    );
+  renderSession('closed');
+  return { container, response, queryClient, client, renderSession };
 }
 async function render(messages: unknown[]) {
   const wire: Wire = JSON.stringify({ messages });
@@ -87,6 +89,37 @@ const rawPre = (container: Element) =>
   [...container.querySelectorAll('section[aria-label="Archived message JSON"] pre')].map(
     (node) => node.textContent
   );
+
+const staleNotice = 'Latest transcript read failed. Showing previously loaded history.';
+const failureKinds = ['network', 'server', 'malformed', 'schema'] as const;
+function readFailure(kind: (typeof failureKinds)[number]): {
+  wire?: unknown;
+  error?: TRPCClientError<AppRouter>;
+} {
+  if (kind === 'network') {
+    return { error: new TRPCClientError<AppRouter>('Synthetic connection failure') };
+  }
+  if (kind === 'server') {
+    return {
+      error: TRPCClientError.from<AppRouter>({
+        error: {
+          code: -32_603,
+          message: 'Failed to read transcript file',
+          data: { code: 'INTERNAL_SERVER_ERROR' },
+        },
+      }),
+    };
+  }
+  return {
+    wire:
+      kind === 'malformed'
+        ? 'new-invalid-wire is not JSON'
+        : '{"messages":false,"invalidNewWireMarker":"must not render"}',
+  };
+}
+function failRead(fixture: ReturnType<typeof renderWire>, kind: (typeof failureKinds)[number]) {
+  Object.assign(fixture.response, readFailure(kind));
+}
 
 describe('compatible archive view with real query selection, projection and rich renderer', () => {
   it('retains the loading state while its query has no response', () => {
@@ -213,10 +246,14 @@ describe('compatible archive view with real query selection, projection and rich
     }
   });
 
-  it.each(['not JSON', '{"messages":false}'])(
-    'shows a select error despite retained selected data, then recovers: %s',
-    async (invalid) => {
-      const fixture = renderWire(JSON.stringify({ messages: [user('previous valid')] }));
+  it.each(failureKinds)(
+    'keeps validated rich/raw history with a visible %s read failure, then recovers',
+    async (kind) => {
+      const opaque = {
+        role: 'legacy',
+        nested: { kept: [true, null], text: '<script>archived</script>' },
+      };
+      const fixture = renderWire(JSON.stringify({ messages: [user('previous valid'), opaque] }));
       await vi.waitFor(() => expect(fixture.container.textContent).toContain('previous valid'));
       const observer = new QueryObserver(fixture.queryClient, {
         queryKey: getQueryKey(trpc.closedSessions.getTranscriptJson, { id: 'closed' }, 'query'),
@@ -228,23 +265,120 @@ describe('compatible archive view with real query selection, projection and rich
       const unsubscribe = observer.subscribe(() => undefined);
       try {
         const initial = await observer.refetch({ throwOnError: true });
-        fixture.response.wire = invalid;
+        failRead(fixture, kind);
         const failed = await observer.refetch();
         expect(failed.isError).toBe(true);
         expect(failed.data).toBe(initial.data);
         await vi.waitFor(() =>
-          expect(fixture.container.textContent).toContain('Failed to load transcript')
+          expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
         );
-        expect(fixture.container.textContent).not.toContain('previous valid');
+        expect(fixture.container.querySelectorAll('[role="status"]')).toHaveLength(1);
+        expect(fixture.container.querySelector('[role="status"]')?.getAttribute('aria-live')).toBe(
+          'polite'
+        );
+        expect(fixture.container.textContent).toContain('previous valid');
+        expect(rawPre(fixture.container)).toEqual([JSON.stringify(opaque, null, 2)]);
+        expect(fixture.container.querySelector('script')).toBeNull();
+        expect(fixture.container.textContent).not.toContain('new-invalid-wire');
+        expect(fixture.container.textContent).not.toContain('invalidNewWireMarker');
         expect(fixture.container.textContent).not.toContain('Transcript not found');
+        fixture.response.error = undefined;
         fixture.response.wire = JSON.stringify({ messages: [user('recovered valid')] });
         await observer.refetch({ throwOnError: true });
         await vi.waitFor(() => expect(fixture.container.textContent).toContain('recovered valid'));
-        expect(fixture.container.textContent).not.toContain('Failed to load transcript');
+        expect(fixture.container.querySelector('[role="status"]')).toBeNull();
+        expect(fixture.container.textContent).not.toContain('previous valid');
       } finally {
         unsubscribe();
         observer.destroy();
       }
     }
   );
+
+  it.each(failureKinds)('keeps validated empty history with a visible %s failure', async (kind) => {
+    const fixture = renderWire(JSON.stringify({ messages: [] }));
+    await vi.waitFor(() =>
+      expect(fixture.container.textContent).toContain('No messages in this session')
+    );
+    failRead(fixture, kind);
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() =>
+      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+    );
+    expect(fixture.container.textContent).toContain('No messages in this session');
+    fixture.response.error = undefined;
+    fixture.response.wire = JSON.stringify({ messages: [] });
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() => expect(fixture.container.querySelector('[role="status"]')).toBeNull());
+    expect(fixture.container.textContent).toContain('No messages in this session');
+  });
+
+  it.each(failureKinds)(
+    'keeps the generic failure without a prior validated DTO: %s',
+    async (kind) => {
+      const failure = readFailure(kind);
+      const fixture = renderWire(failure.wire, failure.error);
+      await vi.waitFor(() =>
+        expect(fixture.container.textContent).toContain('Failed to load transcript')
+      );
+      expect(fixture.container.querySelector('[role="status"]')).toBeNull();
+      expect(rawPre(fixture.container)).toEqual([]);
+      expect(fixture.container.textContent).not.toContain('new-invalid-wire');
+      expect(fixture.container.textContent).not.toContain('invalidNewWireMarker');
+    }
+  );
+
+  it('keeps cached history and its notice isolated from a new session query key', async () => {
+    const previousWire = JSON.stringify({ messages: [user('previous session')] });
+    const fixture = renderWire(previousWire);
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('previous session'));
+    failRead(fixture, 'network');
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() =>
+      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+    );
+    fixture.response.error = undefined;
+    fixture.response.wire = JSON.stringify({ messages: [user('new session')] });
+    fixture.renderSession('different-session');
+    expect(fixture.container.textContent).not.toContain('previous session');
+    expect(fixture.container.querySelector('[role="status"]')).toBeNull();
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('new session'));
+    expect(
+      fixture.queryClient.getQueryData(
+        getQueryKey(trpc.closedSessions.getTranscriptJson, { id: 'closed' }, 'query')
+      )
+    ).toBe(previousWire);
+  });
+
+  it('preserves its viewport, focused control and scroll on failure, and auto-scrolls valid recovery', async () => {
+    const fixture = renderWire(
+      JSON.stringify({ messages: [user('history'), agent('call', [tool('A')])] })
+    );
+    await vi.waitFor(() => expect(fixture.container.querySelector('button')).not.toBeNull());
+    const viewport = fixture.container.querySelector<HTMLDivElement>(
+      '[data-radix-scroll-area-viewport]'
+    );
+    const control = fixture.container.querySelector<HTMLButtonElement>('button');
+    if (!(viewport && control)) {
+      throw new Error('Expected actual history viewport and control');
+    }
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    viewport.scrollTop = 180;
+    control.focus();
+    expect(document.activeElement).toBe(control);
+    failRead(fixture, 'network');
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() =>
+      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+    );
+    expect(fixture.container.querySelector('[data-radix-scroll-area-viewport]')).toBe(viewport);
+    expect(fixture.container.querySelector('button')).toBe(control);
+    expect(document.activeElement).toBe(control);
+    expect(viewport.scrollTop).toBe(180);
+    fixture.response.error = undefined;
+    fixture.response.wire = JSON.stringify({ messages: [user('valid recovery')] });
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('valid recovery'));
+    await vi.waitFor(() => expect(viewport.scrollTop).toBe(1000));
+  });
 });
