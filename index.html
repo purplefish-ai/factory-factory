@@ -25,6 +25,28 @@
       }
     </style>
     <script>
+      // Match next-themes' saved mode and default before the browser paints its
+      // native PWA corners. React later replaces this fallback with the rendered
+      // appearance color, including custom palettes and dialog dimming.
+      (function () {
+        try {
+          var mode = localStorage.getItem('theme') || 'dark';
+          var dark =
+            mode === 'system'
+              ? window.matchMedia('(prefers-color-scheme: dark)').matches
+              : mode !== 'light';
+          var root = document.documentElement;
+          root.classList.toggle('dark', dark);
+          root.classList.toggle('light', !dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', dark ? '#0a0a0a' : '#fafafa');
+        } catch (_error) {
+          // Keep the dark default if browser storage is unavailable.
+        }
+      })();
+
       // Replay the last applied appearance (Settings → Appearance) before React
       // mounts so a reload doesn't flash the default font size and colors.
       // Written by src/client/lib/appearance.ts; keep the key in sync.

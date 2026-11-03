@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useEffect, useState } from 'react';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { ThemeProvider } from '@/client/components/theme-provider';
+import { Button } from '@/components/ui/button';
 import type { SearchResult } from '@/shared/search';
 import { SearchDialog, type SearchDialogProps } from './search-dialog';
 
@@ -92,6 +94,53 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Recent: Story = {};
+
+function BrowserChromeSearch(props: SearchDialogProps) {
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    if (document.querySelector('meta[name="theme-color"]')) {
+      return;
+    }
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.append(meta);
+    return () => meta.remove();
+  }, []);
+  return (
+    <ThemeProvider>
+      <InteractiveSearch
+        {...props}
+        open={open}
+        onOpenChange={setOpen}
+        trigger={<Button>Search</Button>}
+      />
+    </ThemeProvider>
+  );
+}
+
+export const BrowserChrome: Story = {
+  render: BrowserChromeSearch,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Opening search also dims the theme-color used for installed PWA corner backgrounds. Native window controls require an installed PWA to inspect visually.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const doc = canvasElement.ownerDocument;
+    const body = within(doc.body);
+    const themeColor = () => doc.querySelector('meta[name="theme-color"]')?.getAttribute('content');
+    await waitFor(() => expect(themeColor()).toBeTruthy());
+    const original = themeColor();
+    await userEvent.click(body.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(themeColor()).not.toBe(original));
+    await userEvent.click(body.getByRole('button', { name: 'Close search' }));
+    await waitFor(() => expect(themeColor()).toBe(original));
+  },
+};
+
 export const Results: Story = { args: { query: 'search' } };
 export const Empty: Story = { args: { query: 'missing', results: [] } };
 export const Loading: Story = { args: { query: 'search', loading: true } };
