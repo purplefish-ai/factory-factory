@@ -1,6 +1,7 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/client/features/chat/agent-activity/tool-renderers';
+import { formatThinkingText } from '@/client/features/chat/thinking-preview';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
@@ -9,7 +10,6 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import { formatThinkingText } from '../../thinking-preview';
 import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
 import {
   ErrorRenderer,
