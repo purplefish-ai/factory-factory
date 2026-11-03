@@ -4,6 +4,7 @@ import { workspaceDetailQueryOptions } from '@/client/lib/workspace-cache-reconc
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   type CreatedWorkspace,
+  createOptimisticWorkspaceCacheData,
   seedCreatedWorkspaceDetail,
   removeWorkspaceFromProjectWorkspaceCache,
 } from './workspace-cache-helpers';
@@ -46,6 +47,27 @@ describe('workspace-cache-helpers', () => {
     await client.fetchQuery(reopened);
     expect(client.getQueryData(reopened.queryKey)).toMatchObject({ name: 'Created' });
     client.clear();
+  });
+
+  it('seeds detail with the initial prompt but not creation metadata or init output', () => {
+    const detail = createOptimisticWorkspaceCacheData(
+      unsafeCoerce<CreatedWorkspace>({
+        id: 'ws-1',
+        projectId: 'proj-1',
+        status: 'NEW',
+        createdAt: new Date('2026-01-01'),
+        ratchetEnabled: false,
+        initOutput: 'setup log',
+        creationMetadata: {
+          initialPrompt: 'Fix the bug',
+          initialAttachments: [{ id: 'a', data: 'x'.repeat(1024) }],
+        },
+      })
+    );
+    expect(detail.initialPrompt).toBe('Fix the bug');
+    expect(detail).not.toHaveProperty('creationMetadata');
+    expect(detail).not.toHaveProperty('initOutput');
+    expect(JSON.stringify(detail)).not.toContain('initialAttachments');
   });
 
   it('removes one workspace from project workspace cache', () => {

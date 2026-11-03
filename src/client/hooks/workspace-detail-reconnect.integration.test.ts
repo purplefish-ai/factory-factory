@@ -47,7 +47,7 @@ const unsubscribes: Array<() => void> = [];
 function detail(id: string, projectId = 'proj-1', overrides: Partial<WorkspaceDetail> = {}) {
   return unsafeCoerce<WorkspaceDetail>({
     ...projectSnapshotToWorkspace(complete({ workspaceId: id, projectId })),
-    initOutput: `Cached ${id}`,
+    description: `Cached ${id}`,
     defaultSessionProvider: 'CLAUDE',
     ...overrides,
   });
@@ -129,8 +129,8 @@ describe('project reconnect detail healing with real queries', () => {
     expect(inactiveB.requests).toHaveLength(0);
     expect(queryClient.getQueryState(activeB.key)?.isInvalidated).toBe(false);
     expect(queryClient.getQueryState(inactiveB.key)?.isInvalidated).toBe(false);
-    expect(activeB.observer.getCurrentResult().data?.initOutput).toBe('Cached active-b');
-    expect(queryClient.getQueryData<WorkspaceDetail>(inactiveB.key)?.initOutput).toBe(
+    expect(activeB.observer.getCurrentResult().data?.description).toBe('Cached active-b');
+    expect(queryClient.getQueryData<WorkspaceDetail>(inactiveB.key)?.description).toBe(
       'Cached inactive-b'
     );
     expect(
@@ -153,16 +153,16 @@ describe('project reconnect detail healing with real queries', () => {
       );
     }
     activeA.requests[0]!.resolve(
-      detail('active-a', 'proj-1', { initOutput: 'Fresh active metadata' })
+      detail('active-a', 'proj-1', { description: 'Fresh active metadata' })
     );
     archivedA.requests[0]!.resolve(
-      detail('archived-a', 'proj-1', { status: 'ARCHIVED', initOutput: 'Fresh archived metadata' })
+      detail('archived-a', 'proj-1', { status: 'ARCHIVED', description: 'Fresh archived metadata' })
     );
     await vi.waitFor(() => {
-      expect(activeA.observer.getCurrentResult().data?.initOutput).toBe('Fresh active metadata');
+      expect(activeA.observer.getCurrentResult().data?.description).toBe('Fresh active metadata');
       expect(archivedA.observer.getCurrentResult().data).toMatchObject({
         status: 'ARCHIVED',
-        initOutput: 'Fresh archived metadata',
+        description: 'Fresh archived metadata',
       });
     });
     expect(activeA.requests[0]?.signal.aborted).toBe(false);
@@ -205,7 +205,7 @@ describe('project reconnect detail healing with real queries', () => {
       expect(queryClient.getQueryData(unknown.key)).toBeUndefined();
 
       unknown.requests[0]!.resolve(
-        detail('unknown', responseProject, { initOutput: 'Old epoch response' })
+        detail('unknown', responseProject, { description: 'Old epoch response' })
       );
       if (responseProject === 'proj-1') {
         // Ownership is learned only at HTTP resolution. The old response reaches
@@ -218,22 +218,22 @@ describe('project reconnect detail healing with real queries', () => {
           fetchStatus: 'fetching',
         });
         unknown.requests[1]!.resolve(
-          detail('unknown', 'proj-1', { initOutput: 'Current epoch metadata' })
+          detail('unknown', 'proj-1', { description: 'Current epoch metadata' })
         );
         await vi.waitFor(() =>
-          expect(unknown.observer.getCurrentResult().data?.initOutput).toBe(
+          expect(unknown.observer.getCurrentResult().data?.description).toBe(
             'Current epoch metadata'
           )
         );
         expect(unknown.requests).toHaveLength(2);
-        expect(unknown.rendered.some((value) => value?.initOutput === 'Old epoch response')).toBe(
+        expect(unknown.rendered.some((value) => value?.description === 'Old epoch response')).toBe(
           false
         );
       } else {
         await vi.waitFor(() =>
           expect(unknown.observer.getCurrentResult().data).toMatchObject({
             projectId: 'proj-2',
-            initOutput: 'Old epoch response',
+            description: 'Old epoch response',
           })
         );
         expect(unknown.requests).toHaveLength(1);

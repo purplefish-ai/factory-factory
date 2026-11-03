@@ -242,7 +242,12 @@ borrow another project's value. It warns when any agent's latest completed
 outcome is FAILED. RUNNING and SKIPPED retries retain that warning until the
 same agent completes a run or creates a PR. The scheduled summary query selects
 its latest terminal outcome by start time, then ID; the event owner uses
-terminal timestamp and ID. Each summary is independent of history limits.
+terminal timestamp and ID. Each summary is independent of history limits. Both
+lookups walk an index newest-first instead of sorting history: the
+`PeriodicTaskExecution(periodicTaskId, startedAt, id)` index and the raw-SQL
+partial expression index `AgentRun_latest_terminal_idx`. Prisma cannot see the
+latter, so keep the query's predicate and ordering identical to the index and
+recreate it after any `AgentRun` table redefinition; plan tests guard both.
 PR_CREATED clears an earlier event-run failure; source health errors do not
 count as failed runs. It refreshes with management's 10-second cadence and after
 definition changes. Unknown/loading projects hide the badge; loaded empty
