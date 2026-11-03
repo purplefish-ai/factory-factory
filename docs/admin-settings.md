@@ -48,7 +48,7 @@ requires all 37 canonical model classifications and all six global exclusions,
 and rejects unknown capabilities or sections before opening the writer. Versions
 4–7 remain accepted without inventing a versioned coverage declaration.
 
-The persistent result and its exact JSON download include partial-coverage
+The current-session result and its exact JSON download include partial-coverage
 warnings and, for v8, the file's manifest. Four numeric primary counters and the
 user-settings booleans remain measured import outcomes. Embedded row totals and
 account remapping totals are explicitly unreported, not zero; inert changes may

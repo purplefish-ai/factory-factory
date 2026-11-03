@@ -50,6 +50,11 @@ it.each([
   ['frozen base-1 v8', fixed, 8],
 ])('imports raw %s and reports actual repeated skips', async (_name, raw, normalizedVersion) => {
   expect(exportDataSchema.parse(raw).meta.schemaVersion).toBe(normalizedVersion);
+  if (raw.meta.schemaVersion === 7) {
+    await destination.prisma.codexAccount.create({
+      data: { id: 'account', label: 'Local login', kind: 'MANAGED', enabled: false },
+    });
+  }
   const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [raw]);
   expect(result.projects).toEqual({ imported: 1, skipped: 0 });
   expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
@@ -61,6 +66,57 @@ it.each([
   expect(
     await destination.prisma.agentSession.findUniqueOrThrow({ where: { id: 'session' } })
   ).toMatchObject({ status: 'COMPLETED', providerProcessPid: null });
+  if (raw.meta.schemaVersion === 4 || raw.meta.schemaVersion === 5) {
+    // Independent historical semantics: v4 synthesizes identity; v5 preserves nested PR identity.
+    const prId = raw.meta.schemaVersion === 4 ? 'legacy-pr-root' : 'pr-root';
+    expect(
+      await destination.prisma.workspacePR.findUniqueOrThrow({ where: { id: prId } })
+    ).toMatchObject({
+      workspaceId: 'root',
+      url: 'https://github.com/o/r/pull/1',
+      number: 1,
+      state: 'OPEN',
+      revision: 0,
+    });
+    expect(
+      await destination.prisma.agentSession.findUniqueOrThrow({ where: { id: 'session' } })
+    ).toMatchObject({
+      workspaceId: 'root',
+      workspacePrId: prId,
+      providerSessionId: 'history',
+      workflow: 'ratchet',
+      codexAccountId: null,
+    });
+    expect(
+      await destination.prisma.workspacePRMonitoring.findUniqueOrThrow({
+        where: { workspaceId: 'root' },
+      })
+    ).toMatchObject({
+      enabled: false,
+      recipientSessionId: null,
+      deliveryMode: 'MAIN',
+      eventEpoch: 1,
+      deliveryPauseReason: 'LEGACY_FIXER',
+      legacySessionIds: ['session'],
+    });
+    expect(await destination.prisma.workspacePREvent.count()).toBe(0);
+  }
+  if (raw.meta.schemaVersion === 7) {
+    const session = await destination.prisma.agentSession.findUniqueOrThrow({
+      where: { id: 'session' },
+      include: { codexAccount: true },
+    });
+    expect(session.codexAccountId).not.toBe('account');
+    expect(session.codexAccountId).toMatch(/^imported-codex-/);
+    expect(session.codexAccount).toMatchObject({
+      label: 'Imported account',
+      kind: 'MANAGED',
+      identityKey: null,
+    });
+    expect(
+      await destination.prisma.codexAccount.findUniqueOrThrow({ where: { id: 'account' } })
+    ).toMatchObject({ label: 'Local login', enabled: false });
+  }
   expect(await destination.prisma.workspacePRMonitoring.findFirstOrThrow()).toMatchObject({
     enabled: false,
   });
@@ -74,6 +130,9 @@ it.each([
   expect(repeated.workspaces).toEqual({ imported: 0, skipped: 3 });
   expect(repeated.agentSessions).toEqual({ imported: 0, skipped: 1 });
   expect(repeated.terminalSessions).toEqual({ imported: 0, skipped: 1 });
+  if (raw.meta.schemaVersion === 7) {
+    expect(await destination.prisma.codexAccount.count()).toBe(3);
+  }
 });
 it('exports only the existing serialized base data plus v8 coverage, then restores into another SQLite database', async () => {
   database.prisma = source.prisma;

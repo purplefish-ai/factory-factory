@@ -23,3 +23,28 @@ describe('frozen base-1 envelope', () => {
     expect(exportDataSchema.safeParse(file).success).toBe(false);
   });
 });
+
+it.each([4, 5, 6, 7])(
+  'keeps legacy version %s metadata/data unknown-field stripping',
+  (schemaVersion) => {
+    const parsed = exportDataSchema.parse({
+      meta: {
+        exportedAt: '2025-01-01T00:00:00.000Z',
+        version: 'legacy-permissiveness',
+        schemaVersion,
+        futureField: true,
+      },
+      data: {
+        projects: [],
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+        futureSection: {},
+      },
+    });
+    expect(parsed.meta).not.toHaveProperty('futureField');
+    expect(parsed.data).not.toHaveProperty('futureSection');
+    expect(parsed.meta.schemaVersion).toBe(schemaVersion === 7 ? 7 : 6);
+  }
+);

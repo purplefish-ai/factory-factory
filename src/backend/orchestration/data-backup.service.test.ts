@@ -471,7 +471,7 @@ describe('DataBackupService', () => {
       expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
     });
 
-    it('exports version 7 with account bindings and all settings fields', async () => {
+    it('exports version 8 with account bindings and all settings fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);

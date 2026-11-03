@@ -9,6 +9,18 @@ function entry(file: Backup, model = 'Project') {
 }
 export const malformedRecoveryCases: [string, (file: Backup) => void][] = [
   [
+    'unknown meta field',
+    (f) => {
+      Object.assign(f.meta, { futureField: { version: 1 } });
+    },
+  ],
+  [
+    'unknown data field',
+    (f) => {
+      Object.assign(f.data, { futureSection: { version: 1 } });
+    },
+  ],
+  [
     'overall FULL status',
     (f) => {
       f.meta.recovery.status = 'FULL';

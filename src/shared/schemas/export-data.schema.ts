@@ -462,11 +462,15 @@ function validateAccountReferences(
   });
 }
 const version8Schema = z.strictObject({
-  meta: legacyAndCurrentSchema.shape.meta.extend({
+  meta: z.strictObject({
+    ...legacyAndCurrentSchema.shape.meta.shape,
     schemaVersion: z.literal(8),
     recovery: recoveryMetadataSchema,
   }),
-  data: legacyAndCurrentSchema.shape.data.extend({ recovery: recoverySectionsSchema }),
+  data: z.strictObject({
+    ...legacyAndCurrentSchema.shape.data.shape,
+    recovery: recoverySectionsSchema,
+  }),
 });
 export const exportDataSchema = z
   .union([

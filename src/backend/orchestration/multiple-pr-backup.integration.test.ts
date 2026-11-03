@@ -18,15 +18,32 @@ vi.mock('@/backend/db', () => ({
     return database.prisma;
   },
 }));
-function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
-  const { codexAccounts: _accounts, ...historicalData } = exported.data;
+// Explicit published field mapping: v5 f16a9bd8e, v6 c2c6cce6a.
+// This seeded fixture has no settings; do not carry current-format envelope/account/summary fields.
+function publishedVersion6(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
   return {
-    ...exported,
-    meta: { ...exported.meta, schemaVersion: 5 },
+    meta: { exportedAt: exported.meta.exportedAt, version: 'published-v6', schemaVersion: 6 },
     data: {
-      ...historicalData,
+      projects: exported.data.projects,
+      workspaces: exported.data.workspaces.map(({ conversationMetadata: _summary, ...row }) => ({
+        ...row,
+        mode: 'STANDARD',
+        autoIterationConfig: null,
+      })),
       agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
-      workspaces: exported.data.workspaces.map((workspace) => {
+      terminalSessions: exported.data.terminalSessions,
+      userSettings: null,
+    },
+  };
+}
+function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService.exportData>>) {
+  const base = publishedVersion6(exported);
+  return {
+    meta: { exportedAt: exported.meta.exportedAt, version: 'published-v5', schemaVersion: 5 },
+    data: {
+      ...base.data,
+      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
+      workspaces: base.data.workspaces.map((workspace) => {
         const {
           prUrl: _url,
           prNumber: _number,
@@ -49,17 +66,25 @@ function publishedVersion5(exported: Awaited<ReturnType<typeof dataBackupService
           ratchetEnabled: true,
           ratchetActiveSessionId: 'fixer-a',
           ratchetActivePrId: 'a',
-          prs: workspace.prs.map((pr) => ({
-            ...pr,
-            ratchet: {
-              lastCheckedAt: null,
-              activeSessionId: pr.id === 'a' ? 'fixer-a' : null,
-              dispatchSnapshotKey: 'legacy-key',
-              dispatchOutcome: 'RUNNING',
-              dispatchRetryCount: 1,
-              dispatchStalled: false,
-            },
-          })),
+          prs: workspace.prs.map(
+            ({
+              dedicatedSession: _dedicated,
+              observation: _observation,
+              observationEpoch: _epoch,
+              transitionSequence: _transition,
+              ...pr
+            }) => ({
+              ...pr,
+              ratchet: {
+                lastCheckedAt: null,
+                activeSessionId: pr.id === 'a' ? 'fixer-a' : null,
+                dispatchSnapshotKey: 'legacy-key',
+                dispatchOutcome: 'RUNNING',
+                dispatchRetryCount: 1,
+                dispatchStalled: false,
+              },
+            })
+          ),
         };
       }),
     },
@@ -130,9 +155,18 @@ it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer 
   expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
   await clearIntegrationDatabase(db.prisma);
-  const normalized = exportDataSchema.parse(publishedVersion5(exported));
+  const historical = publishedVersion5(exported);
+  expect(historical.meta).not.toHaveProperty('recovery');
+  expect(historical.data).not.toHaveProperty('recovery');
+  expect(historical.data).not.toHaveProperty('codexAccounts');
+  expect(historical.data.workspaces[0]).not.toHaveProperty('conversationMetadata');
+  expect(historical.data.workspaces[0]?.prs[0]).not.toHaveProperty('observation');
+  expect(historical.data.workspaces[0]?.prs[0]).not.toHaveProperty('dedicatedSession');
+  const normalized = exportDataSchema.parse(historical);
   expect(normalized.meta.schemaVersion).toBe(6);
-  const imported = await dataBackupService.importData(normalized);
+  const imported = await Reflect.apply(dataBackupService.importData, dataBackupService, [
+    historical,
+  ]);
   expect(imported.workspaces.imported).toBe(1);
   const restored = await dataBackupService.exportData('test');
   expect(restored.data.workspaces[0]?.prs).toEqual(exported.data.workspaces[0]?.prs);
@@ -152,21 +186,20 @@ it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer 
 
 it('imports published version 6 PRs and discovery without account metadata', async () => {
   const exported = await dataBackupService.exportData('test');
-  const { codexAccounts: _accounts, ...historicalData } = exported.data;
-  const historical = {
-    ...exported,
-    meta: { ...exported.meta, schemaVersion: 6 },
-    data: {
-      ...historicalData,
-      agentSessions: exported.data.agentSessions.map(({ codexAccountId: _account, ...row }) => row),
-    },
-  };
+  const historical = publishedVersion6(exported);
+  expect(historical.meta).not.toHaveProperty('recovery');
+  expect(historical.data).not.toHaveProperty('recovery');
+  expect(historical.data.workspaces[0]).not.toHaveProperty('conversationMetadata');
+  expect(historical.data.workspaces[0]).toMatchObject({
+    mode: 'STANDARD',
+    autoIterationConfig: null,
+  });
   const normalized = exportDataSchema.parse(historical);
   expect(normalized.meta.schemaVersion).toBe(6);
   expect(normalized.data.codexAccounts).toEqual([]);
   expect(normalized.data.agentSessions[0]?.codexAccountId).toBeNull();
   await clearIntegrationDatabase(db.prisma);
-  await dataBackupService.importData(normalized);
+  await Reflect.apply(dataBackupService.importData, dataBackupService, [historical]);
   const restored = await dataBackupService.exportData('test');
   expect(restored.data.workspaces[0]?.prs).toEqual(exported.data.workspaces[0]?.prs);
   expect(restored.data.workspaces[0]?.prDiscovery).toEqual(
@@ -188,7 +221,7 @@ it('rejects duplicate and foreign ownership before any database write', async ()
       ...exported,
       ...publishedVersion5(exported),
       data: {
-        ...exported.data,
+        ...publishedVersion5(exported).data,
         workspaces: [
           { ...publishedVersion5(exported).data.workspaces[0]!, ratchetActivePrId: 'foreign' },
         ],
@@ -303,7 +336,7 @@ it.each([
     exportDataSchema.safeParse({
       ...publishedVersion5(exported),
       data: {
-        ...exported.data,
+        ...publishedVersion5(exported).data,
         workspaces: [{ ...publishedVersion5(exported).data.workspaces[0]!, ...ownership }],
       },
     }).success

@@ -9,6 +9,7 @@ it('retains validated v8 coverage and explicitly unreported side totals', () => 
   expect(report.unreportedTotals).toBe('EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS');
   expect(report.status).toBe('PARTIAL');
   expect(report.warnings.join(' ')).toMatch(/physical nullable-JSON/i);
+  expect(report.warnings.join(' ')).not.toMatch(/no versioned coverage declaration/i);
 });
 it('does not invent a legacy coverage declaration', () => {
   const report = createRecoveryImportReport(undefined);

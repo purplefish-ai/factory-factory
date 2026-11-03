@@ -59,9 +59,9 @@ export function DataBackupSection() {
         </div>
         <p className="text-sm text-muted-foreground">
           Partial export includes projects, workspaces, session metadata and preferences. Repository
-          and worktree files, provider history, archives, mail, automation, secrets, native account
-          homes and live runtime authority are excluded. Physical nullable-JSON fidelity is
-          unproven.
+          and worktree files, provider history bytes, archives, mail, automation, secrets, native
+          account homes and live runtime authority are excluded. Provider-session identities may
+          remain metadata. Physical nullable-JSON fidelity is unproven.
         </p>
       </CardContent>
     </Card>
