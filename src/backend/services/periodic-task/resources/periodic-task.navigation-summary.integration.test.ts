@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import { PeriodicTaskService } from '@/backend/services/periodic-task';
 import {
@@ -100,4 +101,26 @@ it('clears a failure when a later run completes without a PR', async () => {
   await run(agent.id, 'FAILED', 1);
   await run(agent.id, 'COMPLETED', 2);
   expect(await service.getNavigationSummary('alpha')).toEqual({ totalCount: 1, failedCount: 0 });
+});
+it('walks the newest executions through the start-time index without sorting', async () => {
+  const agent = await createAgent('Indexed');
+  await run(agent.id, 'FAILED', 1);
+  const raw = vi.spyOn(db.prisma, '$queryRaw');
+  try {
+    await service.getNavigationSummary('alpha');
+    const [template, ...values] = raw.mock.calls.at(-1) ?? [];
+    const sql = z.array(z.string()).parse(template).join('?');
+    const plan = z
+      .array(z.object({ detail: z.string() }))
+      .parse(await db.prisma.$queryRawUnsafe(`EXPLAIN QUERY PLAN ${sql}`, ...values));
+    const details = plan.map((row) => row.detail);
+    expect(details).toContainEqual(
+      expect.stringMatching(
+        /^SEARCH execution USING INDEX PeriodicTaskExecution_periodicTaskId_startedAt_id_idx \(/
+      )
+    );
+    expect(details.some((detail) => detail.includes('USE TEMP B-TREE'))).toBe(false);
+  } finally {
+    raw.mockRestore();
+  }
 });

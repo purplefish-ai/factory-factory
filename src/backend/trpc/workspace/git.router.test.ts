@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
-  findByIdWithProject: vi.fn(),
+  findWorktreeContext: vi.fn(),
 }));
-const mockGetWorkspaceWithProjectAndWorktreeOrThrow = vi.hoisted(() => vi.fn());
+const mockGetWorkspaceWithWorktreeOrThrow = vi.hoisted(() => vi.fn());
 const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
 const mockGetSnapshot = vi.hoisted(() => vi.fn());
@@ -17,8 +17,8 @@ vi.mock('./workspace-helpers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./workspace-helpers')>();
   return {
     ...actual,
-    getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
-      mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
+    getWorkspaceWithWorktreeOrThrow: (...args: unknown[]) =>
+      mockGetWorkspaceWithWorktreeOrThrow(...args),
   };
 });
 
@@ -108,7 +108,7 @@ describe('workspaceGitRouter', () => {
   });
 
   it('preserves NOT_FOUND errors for every aggregate endpoint when the workspace is missing', async () => {
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue(null);
+    mockWorkspaceDataService.findWorktreeContext.mockResolvedValue(null);
     const caller = createCaller();
 
     const requests = [
@@ -129,7 +129,7 @@ describe('workspaceGitRouter', () => {
   });
 
   it('preserves empty aggregate responses when workspace has no worktree', async () => {
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+    mockWorkspaceDataService.findWorktreeContext.mockResolvedValue({
       id: 'w1',
       worktreePath: null,
       project: { defaultBranch: 'main' },
@@ -156,7 +156,7 @@ describe('workspaceGitRouter', () => {
   });
 
   it('projects all aggregate endpoints from concurrent shared snapshot requests', async () => {
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+    mockWorkspaceDataService.findWorktreeContext.mockResolvedValue({
       id: 'w1',
       worktreePath: '/repo/w1',
       project: { defaultBranch: 'main' },
@@ -203,7 +203,7 @@ describe('workspaceGitRouter', () => {
 
   it('throws only errors from the section requested by each endpoint', async () => {
     const caller = createCaller();
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+    mockWorkspaceDataService.findWorktreeContext.mockResolvedValue({
       id: 'w1',
       worktreePath: '/repo/w1',
       project: { defaultBranch: 'main' },
@@ -264,7 +264,7 @@ describe('workspaceGitRouter', () => {
   it('handles no merge base, no upstream, and untracked file diff fallback', async () => {
     const caller = createCaller();
 
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+    mockWorkspaceDataService.findWorktreeContext.mockResolvedValue({
       id: 'w1',
       worktreePath: '/repo',
       project: { defaultBranch: 'main' },
@@ -291,7 +291,7 @@ describe('workspaceGitRouter', () => {
 
     const filePath = 'new-file.ts';
     writeFileSync(join(rootDir, filePath), 'export const x = 1;\n');
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValue({
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: rootDir,
     });
@@ -307,7 +307,7 @@ describe('workspaceGitRouter', () => {
 
   it('returns a complete untracked diff for a file exactly at the byte limit', async () => {
     writeFileSync(join(rootDir, 'exact.txt'), 'a'.repeat(1024 * 1024));
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValue({
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: rootDir,
     });
@@ -321,7 +321,7 @@ describe('workspaceGitRouter', () => {
 
   it('rejects oversized untracked files instead of constructing an unbounded diff', async () => {
     writeFileSync(join(rootDir, 'large.txt'), 'a'.repeat(1024 * 1024 + 1));
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValue({
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: rootDir,
     });
@@ -356,7 +356,7 @@ describe('workspaceGitRouter', () => {
         '-m',
         'Initial',
       ]);
-      mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+      mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValue({
         workspace: { id: 'w1', project: { defaultBranch: 'main' } },
         worktreePath: rootDir,
       });
@@ -375,7 +375,7 @@ describe('workspaceGitRouter', () => {
 
   it('reports a tracked-file lookup failure without fabricating a new-file diff', async () => {
     writeFileSync(join(rootDir, 'tracked.txt'), 'existing content');
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValue({
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: rootDir,
     });
@@ -394,7 +394,7 @@ describe('workspaceGitRouter', () => {
     const caller = createCaller();
     const filePath = 'src/main.ts';
 
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValueOnce({
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: '/repo',
     });
@@ -403,7 +403,7 @@ describe('workspaceGitRouter', () => {
       'Invalid file path'
     );
 
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValueOnce({
       workspace: { id: 'w2', project: { defaultBranch: 'main' } },
       worktreePath: '/repo',
     });
@@ -416,8 +416,8 @@ describe('workspaceGitRouter', () => {
       diff: '',
     });
 
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
-      workspace: { id: 'w3', project: null },
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValueOnce({
+      workspace: { id: 'w3', project: { defaultBranch: 'main' } },
       worktreePath: '/repo',
     });
     mockIsPathSafe.mockResolvedValueOnce(true);
@@ -432,7 +432,7 @@ describe('workspaceGitRouter', () => {
     });
     expect(mockGitCommand).toHaveBeenCalledWith(['diff', 'HEAD', '--', filePath], '/repo');
 
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+    mockGetWorkspaceWithWorktreeOrThrow.mockResolvedValueOnce({
       workspace: { id: 'w4', project: { defaultBranch: 'main' } },
       worktreePath: '/repo',
     });

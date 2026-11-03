@@ -3,6 +3,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
 import { workspaceDetailCacheOptions } from '@/client/lib/workspace-cache-reconciler';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import { readWorkspaceInitialPrompt } from '@/shared/workspace-initial-prompt';
 
 /**
  * A newly created workspace, as the create endpoint returns it. Typed from the
@@ -22,8 +23,12 @@ export type CreatedWorkspace = inferRouterOutputs<AppRouter>['workspace']['creat
  */
 export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) {
   const summary = createOptimisticWorkspaceSummary(workspace);
+  // Detail omits creation metadata (it retains base64 initial attachments) and
+  // the init log; it carries only the initial prompt.
+  const { creationMetadata, initOutput: _initOutput, ...detail } = workspace;
   return {
-    ...workspace,
+    ...detail,
+    initialPrompt: readWorkspaceInitialPrompt(creationMetadata),
     sessionSummaries: summary.sessionSummaries,
     agentSessions: [],
     terminalSessions: [],

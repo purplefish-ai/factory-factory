@@ -5,25 +5,22 @@ import { isPathSafe } from '@/backend/lib/file-helpers';
 import { readFilePrefix } from '@/backend/lib/file-preview';
 import { gitCommand } from '@/backend/lib/shell';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
-import {
-  getWorkspaceWithProjectAndWorktreeOrThrow,
-  getWorkspaceWithProjectOrThrow,
-} from './workspace-helpers';
+import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
 
 const loggerName = 'workspace-git-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 async function getSnapshotForWorkspace(ctx: Context, workspaceId: string) {
-  const workspace = await getWorkspaceWithProjectOrThrow(
+  const result = await getWorkspaceWithWorktree(
     ctx.appContext.services.workspaceDataService,
     workspaceId
   );
-  if (!workspace.worktreePath) {
+  if (!result) {
     return null;
   }
   return ctx.appContext.services.workspaceGitStateService.getSnapshot({
-    worktreePath: workspace.worktreePath,
-    defaultBranch: workspace.project?.defaultBranch ?? 'main',
+    worktreePath: result.worktreePath,
+    defaultBranch: result.workspace.project.defaultBranch,
   });
 }
 
@@ -126,7 +123,7 @@ export const workspaceGitRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { workspace, worktreePath } = await getWorkspaceWithProjectAndWorktreeOrThrow(
+      const { workspace, worktreePath } = await getWorkspaceWithWorktreeOrThrow(
         ctx.appContext.services.workspaceDataService,
         input.workspaceId
       );
@@ -137,7 +134,7 @@ export const workspaceGitRouter = router({
       }
 
       // Get merge base with the project's default branch
-      const defaultBranch = workspace.project?.defaultBranch ?? 'main';
+      const defaultBranch = workspace.project.defaultBranch;
       const mergeBase = await ctx.appContext.services.workspaceGitStateService.getMergeBase({
         worktreePath,
         defaultBranch,
