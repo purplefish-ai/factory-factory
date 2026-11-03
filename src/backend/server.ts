@@ -610,6 +610,9 @@ export function createServer(application: Application, requestedPort?: number): 
         acpTraceLogger.cleanupOldLogs();
         await interceptors.start();
         await startBackgroundWork();
+        if (cleanupStarted) {
+          throw new Error('Server startup interrupted by shutdown');
+        }
         startupComplete = true;
 
         logger.info('Server endpoints available', {

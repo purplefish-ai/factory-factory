@@ -766,17 +766,24 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(services.reconciliationService.stopPeriodicCleanup).mockReturnValueOnce(drained);
     const server = createTestServer(application, 0);
     vi.mocked(services.ratchetService.start).mockImplementationOnce(() => void server.stop());
-    await server.start();
+    const starting = server.start();
+    starting.catch(() => undefined);
+    await vi.waitFor(() =>
+      expect(services.sessionLifecycleService.stopAllClients).toHaveBeenCalledOnce()
+    );
     expect(services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
+    expect(
+      services.reconciliationService.stopPeriodicCleanup.mock.invocationCallOrder[0] ?? 0
+    ).toBeLessThan(
+      services.sessionLifecycleService.stopAllClients.mock.invocationCallOrder[0] ?? 0
+    );
     expect(services.reconciliationService.startNewWorkspaceInitialization).not.toHaveBeenCalled();
     // Cleanup has already stopped these; starting them now would revive them.
     expect(services.periodicTaskService.start).not.toHaveBeenCalled();
     expect(services.agentRuntime.start).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(services.periodicTaskService.stop).toHaveBeenCalled());
     expect(lifecycle.database.$disconnect).not.toHaveBeenCalled();
     drain(undefined);
-    await server.stop(); // Joins the cleanup started mid-startup.
+    await expect(starting).rejects.toThrow('Server startup interrupted by shutdown');
     expect(lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 

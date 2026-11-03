@@ -64,7 +64,8 @@ in order: the event collector stops after the PR sync drains, and the Git state
 service stops after snapshot reconciliation drains. A failed `stop()` is logged
 with its job name and does not block the other drains or the disconnect. Startup
 re-checks for cleanup after each await before starting more jobs, since a start
-issued after its stop would revive the job.
+issued after its stop would revive the job; a startup interrupted that way
+rejects once cleanup finishes.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
