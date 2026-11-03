@@ -1,5 +1,6 @@
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
+import { backupPRIdentities } from '@/shared/backup-pr-identities';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import type { Prisma } from '@prisma-gen/client';
 
@@ -31,7 +32,7 @@ export async function planLegacyImport(tx: Prisma.TransactionClient, data: Backu
   const identities = await workspaceDataService.readBackupIdentities(tx, {
     projects: data.projects,
     workspaceIds: data.workspaces.map((workspace) => workspace.id),
-    prIds: data.workspaces.flatMap((workspace) => workspace.prs.map((pr) => pr.id)),
+    prIds: data.workspaces.flatMap((workspace) => backupPRIdentities(workspace).map((pr) => pr.id)),
   });
   const projectsById = new Map(identities.projects.map((project) => [project.id, project]));
   const existingSlugs = new Set(identities.projects.map((project) => project.slug));
@@ -71,7 +72,7 @@ export async function planLegacyImport(tx: Prisma.TransactionClient, data: Backu
         (workspace) =>
           eligibleProjectIds.has(workspace.projectId) &&
           !identities.workspaceIds.has(workspace.id) &&
-          !workspace.prs.some((pr) => identities.prIds.has(pr.id)) &&
+          !backupPRIdentities(workspace).some((pr) => identities.prIds.has(pr.id)) &&
           !references.get(workspace.id)?.some((id) => existingSessionIds.has(id)) &&
           !eventConflicts.has(workspace.id)
       )

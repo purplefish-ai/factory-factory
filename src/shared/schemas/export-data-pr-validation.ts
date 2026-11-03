@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { backupPRIdentities } from '@/shared/backup-pr-identities';
 import { PR_DEDICATED_WORKFLOW, type PRMonitoringEventPayload } from '@/shared/pr-monitoring';
 
 interface Backup {
@@ -8,6 +9,7 @@ interface Backup {
     workspaces: readonly {
       id: string;
       projectId: string;
+      prUrl: string | null;
       ratchetActiveSessionId: string | null;
       prMonitoring: {
         recipientSessionId: string | null;
@@ -74,7 +76,7 @@ function validateSourceIdentities(data: Backup, ctx: z.RefinementCtx): boolean {
     ['workspaces']
   );
   unique(
-    data.data.workspaces.flatMap((row) => row.prs.map((pr) => pr.id)),
+    data.data.workspaces.flatMap((row) => backupPRIdentities(row).map((pr) => pr.id)),
     ['workspaces']
   );
   return valid;

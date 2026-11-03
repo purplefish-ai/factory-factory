@@ -246,6 +246,71 @@ it('excludes a globally colliding PR and its descendants', async () => {
   });
   await expectGroupSkipped();
 });
+it.each([5, 6, 7])(
+  'excludes a version %s fallback PR collision and descendants while importing a healthy group',
+  async (version) => {
+    const input = structuredClone(source);
+    Reflect.set(input.meta, 'schemaVersion', version);
+    const root = input.data.workspaces.find((workspace) => workspace.id === 'root')!;
+    root.prs = [];
+    expect(root.prUrl).toBe('https://github.com/o/r/pull/1');
+    expect(exportDataSchema.safeParse(input).success).toBe(true);
+    await local();
+    await db.prisma.workspacePR.create({
+      data: {
+        id: 'legacy-pr-root',
+        workspaceId: 'local',
+        url: 'https://github.com/local/repo/pull/99',
+        title: 'Local fallback owner',
+        revision: 7,
+      },
+    });
+    await expectGroupSkipped(input);
+    expect(await db.prisma.workspace.findUnique({ where: { id: 'root' } })).toBeNull();
+  }
+);
+
+it.each([5, 6, 7])(
+  'imports a version %s fallback PR with its original identity and fields',
+  async (version) => {
+    const input = structuredClone(source);
+    Reflect.set(input.meta, 'schemaVersion', version);
+    const root = input.data.workspaces.find((workspace) => workspace.id === 'root')!;
+    Object.assign(root, {
+      prs: [],
+      prNumber: 42,
+      prState: 'OPEN',
+      prReviewState: 'CHANGES_REQUESTED',
+      prCiStatus: 'FAILURE',
+      ratchetState: 'MERGE_CONFLICT',
+      prUpdatedAt: '2026-10-01T01:00:00.000Z',
+      prCiFailedAt: '2026-10-01T02:00:00.000Z',
+      prCiLastNotifiedAt: '2026-10-01T03:00:00.000Z',
+      prReviewLastCheckedAt: '2026-10-01T04:00:00.000Z',
+      prReviewLastCommentId: 'original-comment',
+    });
+    const result = await dataBackupService.importData(input);
+    expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+    expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'root' } })).toEqual([
+      expect.objectContaining({
+        id: 'legacy-pr-root',
+        workspaceId: 'root',
+        url: 'https://github.com/o/r/pull/1',
+        number: 42,
+        state: 'OPEN',
+        reviewState: 'CHANGES_REQUESTED',
+        ciStatus: 'FAILURE',
+        hasMergeConflict: true,
+        syncedAt: new Date('2026-10-01T01:00:00.000Z'),
+        ciFailedAt: new Date('2026-10-01T02:00:00.000Z'),
+        ciLastNotifiedAt: new Date('2026-10-01T03:00:00.000Z'),
+        reviewLastCheckedAt: new Date('2026-10-01T04:00:00.000Z'),
+        reviewLastCommentId: 'original-comment',
+      }),
+    ]);
+  }
+);
+
 it.each(['implement', 'pr-monitoring'])(
   'excludes a globally colliding %s session without borrowing its runtime',
   async (workflow) => {

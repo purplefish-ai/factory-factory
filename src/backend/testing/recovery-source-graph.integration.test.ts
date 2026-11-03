@@ -594,3 +594,31 @@ it.each([6, 7])('imports a version %s null-PR control as an inert fact', async (
   });
   await clearIntegrationDatabase(db.prisma);
 });
+
+it.each([5, 6, 7])(
+  'rejects a version %s fallback-versus-explicit PR identity before discovery',
+  async (version) => {
+    const b = backup();
+    Reflect.set(b.meta, 'schemaVersion', version);
+    root(b).prs = [];
+    root(b).prEvents = [];
+    expect(root(b).prUrl).toBe('https://github.com/o/r/pull/1');
+    expect(exportDataSchema.safeParse(b).success).toBe(true);
+    child(b).prs[0]!.id = 'legacy-pr-root';
+    state.reads = 0;
+    await expect(dataBackupService.importData(b)).rejects.toBeInstanceOf(ZodError);
+    expect(state.reads).toBe(0);
+    expect(await db.prisma.project.count()).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await db.prisma.workspacePR.count()).toBe(0);
+    const parsed = exportDataSchema.safeParse(b);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues).toContainEqual({
+        code: 'custom',
+        path: ['data', 'workspaces'],
+        message: duplicateIdentity,
+      });
+    }
+  }
+);

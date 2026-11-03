@@ -21,6 +21,7 @@ import {
   workspaceChildHistoryService,
 } from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
+import { backupPRIdentities } from '@/shared/backup-pr-identities';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
   ExportData,
@@ -181,6 +182,7 @@ async function importProjects(
 }
 
 function importedPRs(workspace: ExportedWorkspace) {
+  const [identity] = backupPRIdentities(workspace);
   return workspace.prs.length
     ? workspace.prs.map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
         ...pr,
@@ -191,11 +193,10 @@ function importedPRs(workspace: ExportedWorkspace) {
         reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
         observation: pr.observation ?? undefined,
       }))
-    : workspace.prUrl
+    : identity
       ? [
           {
-            id: `legacy-pr-${workspace.id}`,
-            url: workspace.prUrl,
+            ...identity,
 
             number: workspace.prNumber,
             state: workspace.prState,
