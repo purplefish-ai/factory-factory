@@ -304,6 +304,14 @@ that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 
+Backups using `base-json-periodic-links-1` preserve current workspace task links
+only when the workspace and disabled task are newly created by the same import.
+File-owned cross-project links remain valid. Null links stay null, including
+workspaces whose task was deleted; no execution history or launch authority is
+inferred. Earlier profiles retain their original field coverage. Link result
+counts cover nonnull source links and overlap the primary workspace counts;
+unavailable dependencies are skipped atomically with their workspace group.
+
 ## Event-triggered agent data model
 
 The agent-centered persistence foundation lives in `AgentDefinition`,

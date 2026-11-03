@@ -7,6 +7,7 @@ import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schem
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 const download = vi.hoisted(() => vi.fn());
@@ -278,4 +279,35 @@ it('renders exact periodic counters with entire-source enabled scope and downloa
   }
   await click('Download JSON');
   expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(periodicResult);
+});
+
+it('shows only source-link units, unavailable imported dependencies and overlapping workspace totals in the exact downloaded result', async () => {
+  await mount();
+  await click('Dismiss');
+  const linkedResult = {
+    ...result,
+    recovery: createRecoveryImportReport(
+      recoveryMetadataSchema.parse(links.meta.recovery),
+      undefined,
+      { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } }
+    ),
+  };
+  await act(() => publish(linkedResult));
+  const section = document.querySelector('[aria-label="Periodic workspace link recovery"]');
+  expect(section?.textContent).toBe(
+    'Periodic workspace links: 2 imported, 3 skippedOnly links present in the backup are counted; these counts overlap workspace totals.Skips by reason: workspace or task not created by this import: 3.'
+  );
+  expect(document.body.textContent).toContain('Workspaces: 3 imported, 4 skipped');
+  for (const warning of linkedResult.recovery.warnings) {
+    expect(document.body.textContent).toContain(warning);
+  }
+  await click('Download JSON');
+  expect(download).toHaveBeenCalledWith({
+    data: JSON.stringify(linkedResult, null, 2),
+    mimeType: 'application/json',
+    fileName: 'factory-factory-import-result.json',
+  });
+  await click('Dismiss');
+  await act(() => publish(result));
+  expect(document.querySelector('[aria-label="Periodic workspace link recovery"]')).toBeNull();
 });

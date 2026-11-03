@@ -206,6 +206,32 @@ type WorkspaceWithAgentSessionsAndProject = Flattened<
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
 class WorkspaceAccessor {
+  async restorePeriodicTaskLinks(
+    tx: Prisma.TransactionClient,
+    sourceRows: readonly { id: string; periodicTaskId: string; updatedAt: string }[],
+    createdWorkspaceIds: ReadonlySet<string>,
+    createdTaskIds: ReadonlySet<string>
+  ) {
+    let imported = 0;
+    for (const row of sourceRows) {
+      if (!(createdWorkspaceIds.has(row.id) && createdTaskIds.has(row.periodicTaskId))) {
+        continue;
+      }
+      await tx.workspace.update({
+        where: { id: row.id },
+        data: { periodicTaskId: row.periodicTaskId, updatedAt: new Date(row.updatedAt) },
+      });
+      imported++;
+    }
+    const skipped = sourceRows.length - imported;
+    return {
+      model: 'Workspace' as const,
+      imported,
+      skipped,
+      reasons: { INCOMPLETE_DEPENDENCY: skipped },
+    };
+  }
+
   create(data: CreateWorkspaceInput): Promise<WorkspaceWithRatchet> {
     return data.parentWorkspaceId
       ? prisma.$transaction((transaction) => this.insertWorkspace(data, transaction))

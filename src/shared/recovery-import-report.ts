@@ -9,7 +9,15 @@ export interface PeriodicConfigImportReport {
   reasons: { EXISTING_IDENTITY: number; INCOMPLETE_DEPENDENCY: number };
 }
 
+export interface PeriodicWorkspaceLinksImportReport {
+  model: 'Workspace';
+  imported: number;
+  skipped: number;
+  reasons: { INCOMPLETE_DEPENDENCY: number };
+}
+
 export interface RecoveryImportReport {
+  periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport;
   periodicConfig?: PeriodicConfigImportReport;
   status: 'PARTIAL';
   manifest: RecoveryMetadata | null;
@@ -18,15 +26,19 @@ export interface RecoveryImportReport {
 }
 export function createRecoveryImportReport(
   metadata: RecoveryMetadata | undefined,
-  periodicConfig?: PeriodicConfigImportReport
+  periodicConfig?: PeriodicConfigImportReport,
+  periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport
 ): RecoveryImportReport {
   return {
     ...(periodicConfig ? { periodicConfig } : {}),
+    ...(periodicWorkspaceLinks ? { periodicWorkspaceLinks } : {}),
     status: 'PARTIAL',
     manifest: metadata ?? null,
     warnings: [
       ...(!metadata ? ['This legacy backup has no versioned coverage declaration.'] : []),
-      metadata?.profile === 'base-json-1' || metadata?.profile === 'base-json-periodic-config-1'
+      metadata?.profile === 'base-json-1' ||
+      metadata?.profile === 'base-json-periodic-config-1' ||
+      metadata?.profile === 'base-json-periodic-links-1'
         ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata. Omitted domains are not restored.'
         : metadata?.profile === 'base-json-workspace-1'
           ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata only. WorkspacePR.observation and AgentSession.providerMetadata physical nullable-JSON fidelity is unproven. Omitted domains are not restored.'
@@ -35,6 +47,11 @@ export function createRecoveryImportReport(
       ...(periodicConfig
         ? [
             `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}. Periodic execution history excluded.`,
+          ]
+        : []),
+      ...(periodicWorkspaceLinks
+        ? [
+            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled; periodic execution history is excluded.`,
           ]
         : []),
     ],

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { prismaModelNames } from '@/backend/services/registry';
-import fixed from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import fixed from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { assertRecoveryModelCoverage, createBaseRecoveryManifest } from './data-backup-manifest';
 
 it('classifies every current model with the frozen limitations', () => {

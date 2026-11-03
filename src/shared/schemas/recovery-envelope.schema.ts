@@ -108,6 +108,12 @@ export const periodicConfigModelCoverage = {
     'complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority; periodic execution history excluded.'
   ),
 };
+export const periodicLinksModelCoverage = {
+  ...periodicConfigModelCoverage,
+  Workspace: partial(
+    'base metadata; Workspace.periodicTaskId links to newly imported disabled tasks; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded.'
+  ),
+};
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -128,6 +134,7 @@ export const recoveryMetadataSchema = z
       'base-json-workspace-1',
       'base-json-1',
       'base-json-periodic-config-1',
+      'base-json-periodic-links-1',
     ]),
     status: z.literal('PARTIAL'),
     capabilities: z.strictObject({
@@ -139,7 +146,9 @@ export const recoveryMetadataSchema = z
   })
   .superRefine((metadata, ctx) => {
     const workspaceJson = metadata.profile !== 'base-1';
-    const periodic = metadata.profile === 'base-json-periodic-config-1';
+    const periodic = ['base-json-periodic-config-1', 'base-json-periodic-links-1'].includes(
+      metadata.profile
+    );
     const full = metadata.profile === 'base-json-1' || periodic;
     if (
       periodic !== Object.hasOwn(metadata.capabilities, 'periodicConfig') ||
@@ -160,6 +169,7 @@ export const recoveryMetadataSchema = z
           'base-json-workspace-1': workspaceJsonModelCoverage,
           'base-json-1': baseJsonModelCoverage,
           'base-json-periodic-config-1': periodicConfigModelCoverage,
+          'base-json-periodic-links-1': periodicLinksModelCoverage,
         }[metadata.profile]
       )
     );

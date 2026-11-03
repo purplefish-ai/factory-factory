@@ -5,7 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
-import fixed from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -168,12 +168,26 @@ it('commits the existing base graph and account mapping through the private tran
   await seedSkippedWorkspace();
   const result = await dataBackupService.importData(backup);
   expect(result).toEqual({
-    recovery: expect.objectContaining({
+    recovery: {
       status: 'PARTIAL',
-      manifest: fixed.meta.recovery,
+      manifest: links.meta.recovery,
+      periodicConfig: {
+        model: 'PeriodicTask',
+        imported: 0,
+        skipped: 0,
+        sourceEnabled: 0,
+        restoredDisabled: 0,
+        reasons: { EXISTING_IDENTITY: 0, INCOMPLETE_DEPENDENCY: 0 },
+      },
+      periodicWorkspaceLinks: {
+        model: 'Workspace',
+        imported: 0,
+        skipped: 0,
+        reasons: { INCOMPLETE_DEPENDENCY: 0 },
+      },
       unreportedTotals: 'EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS',
       warnings: expect.any(Array),
-    }),
+    },
     inertTransforms: {
       workspaceWorkflows: 2,
       workspaceInitializations: 2,

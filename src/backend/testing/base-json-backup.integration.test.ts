@@ -9,6 +9,7 @@ import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -372,7 +373,7 @@ it('roundtrips PR and session SQL NULL versus JSON null at their existing insert
   ];
   expect(await read(source.prisma)).toEqual({ prs: expected, sessions: expected });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery.profile', 'base-json-periodic-config-1');
+  expect(backup.meta).toHaveProperty('recovery', links.meta.recovery);
   state.prisma = destination.prisma;
   const result = await dataBackupService.importData(backup);
   expect(result.agentSessions).toEqual({ imported: 3, skipped: 0 });

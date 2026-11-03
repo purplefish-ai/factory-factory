@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { type PrismaModelName, prismaModelNames } from '@/backend/services/registry';
 import {
   type RecoveryMetadata,
-  periodicConfigModelCoverage,
+  periodicLinksModelCoverage,
   recoveryMetadataSchema,
 } from '@/shared/schemas/recovery-envelope.schema';
 
 const coverage: Record<
   PrismaModelName,
   Omit<RecoveryMetadata['coverage'][number], 'model'>
-> = periodicConfigModelCoverage;
+> = periodicLinksModelCoverage;
 
 export function assertRecoveryModelCoverage(modelNames: readonly string[]): void {
   const names = new Set(modelNames);
@@ -21,14 +21,14 @@ export function assertRecoveryModelCoverage(modelNames: readonly string[]): void
   }
 }
 export function createBaseRecoveryManifest(): RecoveryMetadata & {
-  profile: 'base-json-periodic-config-1';
+  profile: 'base-json-periodic-links-1';
 } {
   assertRecoveryModelCoverage(prismaModelNames);
   return recoveryMetadataSchema
-    .safeExtend({ profile: z.literal('base-json-periodic-config-1') })
+    .safeExtend({ profile: z.literal('base-json-periodic-links-1') })
     .parse({
       version: 1,
-      profile: 'base-json-periodic-config-1',
+      profile: 'base-json-periodic-links-1',
       status: 'PARTIAL',
       capabilities: { baseJson: 1, periodicConfig: 1 },
       coverage: Object.entries(coverage).map(([model, entry]) => ({ model, ...entry })),
