@@ -410,12 +410,12 @@ does not substitute for checking momentum behavior on an actual iOS device.
 
 The archive-focused `ArchivedChatMessageSchema` and `ArchivedAgentMessageSchema`
 in `src/shared/acp-protocol/protocol/archived-message-schema.ts` validate the
-complete current serialized message structure. The compatible archive reader is
-not built yet; the live `transcript_message_committed` delta uses
-`ArchivedChatMessageSchema` to validate its committed entry. Unknown
-message/content/stream tags and malformed current fields reject. Preserving
-opaque legacy rows and rendering their fallback belongs to the archive reader
-adapter.
+complete current serialized message structure. The compatible archive reader
+uses `ArchivedJsonRecordSchema` to preserve own reserved keys; the live
+`transcript_message_committed` delta uses `ArchivedChatMessageSchema` to
+validate its committed entry. Unknown message/content/stream tags and malformed
+current fields reject. Preserving opaque legacy rows and rendering their
+fallback belongs to the archive reader adapter.
 
 Tool inputs, tool schemas and result values use JSON-valued records/values:
 functions, errors, cycles and nested `undefined` are outside the serialized
