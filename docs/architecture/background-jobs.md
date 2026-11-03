@@ -3,13 +3,14 @@
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, the
-periodic-task poll, GitHub agent source intake, event evaluation/admission, and
-workspace metadata updates. Each owning service or orchestrator registers its
-job and exposes thin `start()`/`stop()` delegates. GitHub agent intake registers
-through `createAgentRuntime()` in the agent-runtime orchestrator; its poll
-service owns neither registration nor lifecycle methods. These delegates are the
-injection seam `server.ts` and `server.upgrade.test.ts` use.
+sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, PR
+event ledger retention, the periodic-task poll, GitHub agent source intake,
+event evaluation/admission, and workspace metadata updates. Each owning service
+or orchestrator registers its job and exposes thin `start()`/`stop()` delegates.
+GitHub agent intake registers through `createAgentRuntime()` in the
+agent-runtime orchestrator; its poll service owns neither registration nor
+lifecycle methods. These delegates are the injection seam `server.ts` and
+`server.upgrade.test.ts` use.
 
 ## Pacing
 
@@ -157,7 +158,7 @@ reads, before mutations and at the final transaction boundary. Cursors publish
 only after commit, including progress past retained candidates; aborted batches
 roll back. A retention failure rolls back its current batch and logs a sanitized
 reason; evaluation and claims continue unless the live job signal is aborted.
-There is no additional retention job or timer. See
+There is no additional agent-ledger retention job or timer. See
 [integrations](./integrations.md) for the 30/90-day boundaries and retained
 source-proof/history lifetimes.
 

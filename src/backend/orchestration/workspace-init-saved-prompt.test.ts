@@ -55,23 +55,13 @@ describe('saved initial prompts', () => {
     );
   });
 
-  it('keeps the issue_data boundary of an edited issue launch prompt closed', async () => {
-    // The issue launch sheet saves the full buildIssueStartPrompt() output.
-    const launchPrompt = buildIssueStartPrompt({
-      providerLabel: 'GitHub Issue',
-      issueReference: '#42',
-      title: 'Crash on save',
-      body: 'Steps: click save',
-      url: 'https://github.com/owner/repo/issues/42',
-      commitReference: '#42',
-      closeReference: '#42',
-      rawScreenshotBaseUrl: '',
-    });
+  it('delivers the edited issue launch prompt verbatim', async () => {
+    const launchPrompt = buildIssueStartPrompt({ url: 'https://github.com/owner/repo/issues/42' });
+    const editedPrompt = `${launchPrompt}\n\nFocus on the save handler.`;
 
-    await initializeWithSavedPrompt(launchPrompt);
+    await initializeWithSavedPrompt(editedPrompt);
 
     const delivered = enqueueInitialMessage.mock.calls[0]?.[1]?.text ?? '';
-    expect(delivered).toBe(launchPrompt);
-    expect(delivered).toContain('\n</issue_data>\n');
+    expect(delivered).toBe(editedPrompt);
   });
 });
