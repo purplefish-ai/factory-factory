@@ -204,6 +204,14 @@ exit status. Successful commands retain the native CLI's background-job
 behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
 commands require the CLI to be installed.
 
+`ff serve` observes each child immediately after spawning, including while
+waiting for readiness or opening the browser. Any unexpected child exit
+(including exit code zero) or spawn error fails the session and stops its
+siblings. Interrupts cancel startup and join cleanup without starting additional
+services. Serve and Tailscale share CLI process-tree termination: SIGTERM with a
+five-second grace period, followed by SIGKILL for an unresponsive child.
+Electron utility-process supervision remains separate.
+
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
 Node (see [desktop backend process](#desktop-backend-process)), and are unpacked
 in desktop packages along with their complete production dependency trees. The
