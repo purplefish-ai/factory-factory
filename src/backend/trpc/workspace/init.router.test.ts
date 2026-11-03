@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
+const mockFindInitStatus = vi.hoisted(() => vi.fn());
 const mockMarkReady = vi.hoisted(() => vi.fn());
 const mockResetToNew = vi.hoisted(() => vi.fn());
 const mockStartProvisioning = vi.hoisted(() => vi.fn());
@@ -41,6 +42,7 @@ function createCaller(requestTrust?: {
         workspaceDataService: {
           findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
           findById: (...args: unknown[]) => mockFindById(...args),
+          findInitStatus: (...args: unknown[]) => mockFindInitStatus(...args),
         },
         workspaceStateMachine: {
           markReady: (...args: unknown[]) => mockMarkReady(...args),
@@ -73,7 +75,7 @@ describe('workspaceInitRouter', () => {
   });
 
   it('returns initialization status with policy fields', async () => {
-    mockFindByIdWithProject.mockResolvedValue({
+    mockFindInitStatus.mockResolvedValue({
       id: 'w1',
       status: 'FAILED',
       initErrorMessage: 'boom',
@@ -285,7 +287,7 @@ describe('workspaceInitRouter', () => {
   });
 
   it('throws NOT_FOUND when getInitStatus workspace is missing', async () => {
-    mockFindByIdWithProject.mockResolvedValue(null);
+    mockFindInitStatus.mockResolvedValue(null);
     const caller = createCaller();
     await expect(caller.getInitStatus({ id: 'missing' })).rejects.toMatchObject({
       code: 'NOT_FOUND',

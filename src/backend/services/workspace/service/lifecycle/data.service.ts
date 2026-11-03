@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { backupCollisionsAccessor } from '@/backend/services/workspace/resources/backup-collisions.accessor';
+import { workspaceDetailReadAccessor } from '@/backend/services/workspace/resources/workspace-detail-read.accessor';
 import { workspaceLaunchOriginAccessor } from '@/backend/services/workspace/resources/workspace-launch-origin.accessor';
 import { workspaceMetadataAccessor } from '@/backend/services/workspace/resources/workspace-metadata.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
@@ -57,6 +58,18 @@ class WorkspaceDataService {
 
   findByIdWithProject(id: string) {
     return workspaceAccessor.findByIdWithProject(id);
+  }
+
+  findDetailById(id: string) {
+    return workspaceDetailReadAccessor.findDetailById(id);
+  }
+
+  findWorktreeContext(id: string) {
+    return workspaceDetailReadAccessor.findWorktreeContext(id);
+  }
+
+  findInitStatus(id: string) {
+    return workspaceDetailReadAccessor.findInitStatus(id);
   }
 
   exists(id: string) {

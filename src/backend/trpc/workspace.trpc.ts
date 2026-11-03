@@ -116,11 +116,13 @@ export const workspaceCoreRouter = router({
       ctx.appContext.services.workspaceQueryService.listForProject(input.projectId)
     ),
 
-  // Get workspace by ID
+  // Get workspace by ID. Reads the client detail shape, which leaves out the
+  // init log, session provider metadata and creation metadata (whose initial
+  // attachments can be megabytes of base64) and exposes only `initialPrompt`.
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const { sessionDomainService, sessionLifecycleService, workspaceDataService } =
       ctx.appContext.services;
-    const workspace = await workspaceDataService.findById(input.id);
+    const workspace = await workspaceDataService.findDetailById(input.id);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }

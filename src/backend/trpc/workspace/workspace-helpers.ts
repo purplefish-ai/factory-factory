@@ -9,26 +9,14 @@ import type { ApplicationServices } from '@/backend/app-context';
 
 type WorkspaceDataService = Pick<
   ApplicationServices['workspaceDataService'],
-  'findById' | 'findByIdWithProject'
+  'findByIdWithProject' | 'findWorktreeContext'
 >;
 
-/**
- * Find a workspace by ID or throw a NOT_FOUND error.
- *
- * @throws TRPCError with NOT_FOUND code if workspace doesn't exist
- */
-export async function getWorkspaceOrThrow(
-  workspaceDataService: WorkspaceDataService,
-  workspaceId: string
-) {
-  const workspace = await workspaceDataService.findById(workspaceId);
-  if (!workspace) {
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: `Workspace not found: ${workspaceId}`,
-    });
-  }
-  return workspace;
+function notFound(workspaceId: string): TRPCError {
+  return new TRPCError({
+    code: 'NOT_FOUND',
+    message: `Workspace not found: ${workspaceId}`,
+  });
 }
 
 /**
@@ -42,10 +30,32 @@ export async function getWorkspaceWithProjectOrThrow(
 ) {
   const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
   if (!workspace) {
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: `Workspace not found: ${workspaceId}`,
-    });
+    throw notFound(workspaceId);
+  }
+  return workspace;
+}
+
+/**
+ * The narrow read behind git and file panels: id, worktree path and the
+ * project's default branch. Those panels poll, so they skip the full row
+ * (creation metadata, init output, sessions and side tables).
+ */
+export type WorkspaceWorktreeContext = NonNullable<
+  Awaited<ReturnType<WorkspaceDataService['findWorktreeContext']>>
+>;
+
+/**
+ * Find a workspace's worktree context by ID or throw a NOT_FOUND error.
+ *
+ * @throws TRPCError with NOT_FOUND code if workspace doesn't exist
+ */
+export async function getWorkspaceWorktreeContextOrThrow(
+  workspaceDataService: WorkspaceDataService,
+  workspaceId: string
+): Promise<WorkspaceWorktreeContext> {
+  const workspace = await workspaceDataService.findWorktreeContext(workspaceId);
+  if (!workspace) {
+    throw notFound(workspaceId);
   }
   return workspace;
 }
@@ -54,7 +64,7 @@ export async function getWorkspaceWithProjectOrThrow(
  * Result type for workspace with validated worktree.
  */
 export interface WorkspaceWithWorktree {
-  workspace: NonNullable<Awaited<ReturnType<WorkspaceDataService['findById']>>>;
+  workspace: WorkspaceWorktreeContext;
   worktreePath: string;
 }
 
@@ -68,7 +78,7 @@ export async function getWorkspaceWithWorktree(
   workspaceDataService: WorkspaceDataService,
   workspaceId: string
 ): Promise<WorkspaceWithWorktree | null> {
-  const workspace = await getWorkspaceOrThrow(workspaceDataService, workspaceId);
+  const workspace = await getWorkspaceWorktreeContextOrThrow(workspaceDataService, workspaceId);
 
   if (!workspace.worktreePath) {
     return null;
@@ -87,50 +97,12 @@ export async function getWorkspaceWithWorktreeOrThrow(
   workspaceDataService: WorkspaceDataService,
   workspaceId: string
 ): Promise<WorkspaceWithWorktree> {
-  const workspace = await getWorkspaceOrThrow(workspaceDataService, workspaceId);
-
-  if (!workspace.worktreePath) {
+  const result = await getWorkspaceWithWorktree(workspaceDataService, workspaceId);
+  if (!result) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'Workspace has no worktree path',
     });
   }
-
-  return { workspace, worktreePath: workspace.worktreePath };
-}
-
-/**
- * Result type for workspace with project and validated worktree.
- */
-export interface WorkspaceWithProjectAndWorktree {
-  workspace: NonNullable<Awaited<ReturnType<WorkspaceDataService['findByIdWithProject']>>>;
-  worktreePath: string;
-}
-
-/**
- * Find a workspace with project and require it has a worktree path.
- *
- * @throws TRPCError with NOT_FOUND if workspace doesn't exist
- * @throws TRPCError with BAD_REQUEST if workspace has no worktree
- */
-export async function getWorkspaceWithProjectAndWorktreeOrThrow(
-  workspaceDataService: WorkspaceDataService,
-  workspaceId: string
-): Promise<WorkspaceWithProjectAndWorktree> {
-  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
-  if (!workspace) {
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: `Workspace not found: ${workspaceId}`,
-    });
-  }
-
-  if (!workspace.worktreePath) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Workspace has no worktree path',
-    });
-  }
-
-  return { workspace, worktreePath: workspace.worktreePath };
+  return result;
 }
