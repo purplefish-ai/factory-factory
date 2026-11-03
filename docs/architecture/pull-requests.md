@@ -395,15 +395,19 @@ incomplete without blocking CI, conflict or terminal-state observations. They
 claim no review resolutions, and the existing incomplete-review acceptance
 retains pending feedback. Identity must be known before accepting review facts;
 failed lookups retry on the next poll without disabling self-review filtering.
+The app's own [adversarial-review marker](../design/adversarial-review.md)
+remains an explicit exception to that filtering under its authenticated GitHub
+identity.
+
 While a workspace's monitoring is off, observations read only the core facts
 (one `gh pr view`); identity, review, review-comment and thread reads are
 skipped and reviews are reported incomplete, since only the event reducer uses
 them and it creates no events then. The review decision shown in the UI is a
 core fact. Enabling renews the epoch, so a core-only observation still in flight
 is rejected, and the new epoch's first observation (the toggle's immediate check
-or the next poll) reads reviews and becomes the baseline. The app's own
-[adversarial-review marker](../design/adversarial-review.md) remains an explicit
-exception under its authenticated GitHub identity.
+or the next poll) reads reviews and becomes the baseline. An observation already
+in flight when monitoring turns off may still finish its review reads; it is
+accepted without creating events.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do
