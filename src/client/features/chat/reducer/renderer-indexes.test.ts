@@ -216,6 +216,19 @@ describe('renderer window hysteresis', () => {
     expectMatchesRescan(resolved);
   });
 
+  it('trims an unsafe window start once the window exceeds the limit', () => {
+    // An untrimmed history may start at a tool result; a cut past the limit may not.
+    const window = Array.from({ length: limit }, (_, index) => conversationMessage(index + 2));
+    const current = resolveRendererTranscript([], window, limit).retained;
+    expect(current).toBe(window);
+    expect(current[0]?.id).toBe('result-2');
+
+    const resolved = resolveRendererTranscript(current, [...current, assistant(102)], limit);
+    expect(resolved.retained.length).toBeLessThanOrEqual(limit);
+    expect(resolved.retained[0]?.id).toBe('assistant-3');
+    expectMatchesRescan(resolved);
+  });
+
   it('drops messages older than the window start while over the limit', () => {
     const window = Array.from({ length: limit + 5 }, (_, index) => assistant(index + 50));
     const current = resolveRendererTranscript([], window, limit + 5).retained;

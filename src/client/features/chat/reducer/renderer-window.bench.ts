@@ -1,7 +1,7 @@
 import { test } from 'vitest';
+import { createIncrementalChatGrouper } from '@/client/features/chat/incremental-chat-grouping';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 import { DEFAULT_RENDERER_TRANSCRIPT_LIMIT } from '@/lib/chat-protocol';
-import { createIncrementalChatGrouper } from '../incremental-chat-grouping';
 import { type ChatState, chatReducer, createInitialChatState } from './index';
 
 const timestamp = '2026-11-03T00:00:00.000Z';

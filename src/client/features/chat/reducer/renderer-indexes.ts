@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
   getToolUseIdFromEvent,
+  isSafeRendererWindowStart,
   isStreamEventMessage,
   trimTranscriptForRenderer,
 } from '@/lib/chat-protocol';
@@ -130,9 +131,10 @@ export function getRendererTrimSlack(limit: number): number {
 /**
  * The renderer trim with hysteresis. Within the limit it matches
  * `trimTranscriptForRenderer`. Above the limit but within the slack it keeps
- * the previous window start, so appends leave the front untouched while
- * messages that sort before the start are still dropped, as a strict trim would.
- * Beyond the slack it trims back to the limit at a render-safe start.
+ * the previous window start if that start is render-safe, so appends leave the
+ * front untouched while messages that sort before the start are still dropped,
+ * as a strict trim would. Otherwise it trims back to the limit at a render-safe
+ * start.
  */
 function trimRendererWindow(
   previous: ChatMessage[],
@@ -149,10 +151,31 @@ function trimRendererWindow(
   }
   const startId = previous[0]?.id;
   const startIndex = sorted.findIndex((message) => message.id === startId);
-  if (startIndex === -1 || sorted.length - startIndex < limit) {
+  const start = sorted[startIndex];
+  if (!start || sorted.length - startIndex < limit || !isSafeRendererWindowStart(start)) {
     return trimTranscriptForRenderer(sorted, limit);
   }
   return startIndex === 0 ? sorted : sorted.slice(startIndex);
+}
+
+/**
+ * Whether `trimRendererWindow` returns `messages` unchanged after an append or
+ * same-id replacement at `changedIndex`, which keeps the first message: the
+ * window is within the slack, still sorted, and render-safe once over the limit.
+ */
+function keepsRendererWindow(
+  messages: ChatMessage[],
+  changedIndex: number,
+  limit: number
+): boolean {
+  if (messages.length > limit + getRendererTrimSlack(limit)) {
+    return false;
+  }
+  if (!isOrderedAround(messages, changedIndex)) {
+    return false;
+  }
+  const start = messages[0];
+  return messages.length <= limit || (start !== undefined && isSafeRendererWindowStart(start));
 }
 
 function deriveFromPrevious(
@@ -161,10 +184,7 @@ function deriveFromPrevious(
   limit: number | null
 ): { retained: ChatMessage[]; indexes: RendererIndexes } | null {
   const cached = transcriptCache.get(previous);
-  if (
-    !cached ||
-    (limit !== null && (!cached.ordered || messages.length > limit + getRendererTrimSlack(limit)))
-  ) {
+  if (!cached || (limit !== null && !cached.ordered)) {
     return null;
   }
   const change = findSingleChange(previous, messages);
@@ -172,9 +192,7 @@ function deriveFromPrevious(
     return null;
   }
   const changedIndex = change.type === 'append' ? messages.length - 1 : change.index;
-  // Within the slack and still sorted, with the first message kept (an append, or
-  // a same-id replacement), the renderer trim returns the input unchanged.
-  if (limit !== null && !isOrderedAround(messages, changedIndex)) {
+  if (limit !== null && !keepsRendererWindow(messages, changedIndex, limit)) {
     return null;
   }
   const { indexes } = cached;
