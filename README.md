@@ -271,6 +271,17 @@ pnpm install
 pnpm dev
 ```
 
+Production builds use `pnpm build`. In a source checkout, the checkout's
+`ff build` command (or `pnpm exec tsx src/cli/index.ts build`) runs that same
+pipeline, including output cleanup, import validation and repairs, prompt
+copying, and client chunk budgets. Install dependencies first and use the pinned
+pnpm version on your `PATH`; the CLI does not download build tools.
+
+Published packages include production assets and omit the build sources and
+configuration. Their `ff build` command is unsupported, even when run inside a
+separate checkout. Reinstall the package if its production assets are missing;
+use the checkout's CLI when building from source.
+
 Follow the shared [verification policy](CONTRIBUTING.md#verification) before
 opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for project
 structure and conventions, and the [documentation index](docs/README.md) for
