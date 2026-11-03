@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from 'commander';
+import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { runProviderCommand } from './provider-command';
 
 function isSourceCheckout(projectRoot: string): boolean {
@@ -12,7 +13,7 @@ function isSourceCheckout(projectRoot: string): boolean {
 
 export function getBuildRecoveryGuidance(projectRoot: string): string {
   return isSourceCheckout(projectRoot)
-    ? 'Run `pnpm build` from the source checkout first (or use `ff build` from that checkout).'
+    ? 'Run `pnpm build` from the source checkout first (or use `pnpm exec tsx src/cli/index.ts build`).'
     : 'The installed package is missing production assets. Reinstall factory-factory; building requires a source checkout.';
 }
 
@@ -29,11 +30,17 @@ export function registerBuildCommand(program: Command, projectRoot: string): voi
         return;
       }
       try {
+        const windows = process.platform === 'win32';
+        // Windows pnpm installations can expose only a .cmd shim. Explicitly
+        // launch cmd.exe with a fixed command; never interpolate paths or input.
         process.exitCode = await runProviderCommand({
-          command: 'pnpm',
-          args: ['run', 'build'],
+          command: windows ? getCurrentProcessEnv().ComSpec || 'cmd.exe' : 'pnpm',
+          args: windows ? ['/d', '/s', '/c', 'pnpm run build'] : ['run', 'build'],
           cwd: projectRoot,
         });
+        if (process.exitCode !== 0) {
+          console.error(`pnpm build failed with exit code ${process.exitCode}.`);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(

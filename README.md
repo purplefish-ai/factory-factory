@@ -271,11 +271,12 @@ pnpm install
 pnpm dev
 ```
 
-Production builds use `pnpm build`. In a source checkout, the checkout's
-`ff build` command (or `pnpm exec tsx src/cli/index.ts build`) runs that same
-pipeline, including output cleanup, import validation and repairs, prompt
-copying, and client chunk budgets. Install dependencies first and use the pinned
-pnpm version on your `PATH`; the CLI does not download build tools.
+Production builds use `pnpm build`. From a fresh source checkout,
+`pnpm exec tsx src/cli/index.ts build` runs that same pipeline, including output
+cleanup, import validation and repairs, prompt copying, and client chunk
+budgets. A bare `ff build` works when `ff` is linked to that checkout. Install
+dependencies first and use the pinned pnpm version on your `PATH`; the CLI does
+not download build tools.
 
 Published packages include production assets and omit the build sources and
 configuration. Their `ff build` command is unsupported, even when run inside a

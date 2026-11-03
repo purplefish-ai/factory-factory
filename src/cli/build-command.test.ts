@@ -11,7 +11,7 @@ let root: string;
 let originalExitCode: typeof process.exitCode;
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'ff-build-')));
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'ff build-')));
   originalExitCode = process.exitCode;
 });
 
@@ -69,6 +69,27 @@ describe('ff build', () => {
     await build();
     expect(process.exitCode).toBe(23);
   });
+
+  it.runIf(process.platform === 'win32')(
+    'runs a cmd-only pnpm shim in a checkout with spaces and preserves failure status',
+    async () => {
+      checkout(23);
+      const bin = join(root, 'shim');
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, 'pnpm.cmd'),
+        `@echo off\r\n"${process.execPath}" "${join(root, 'build.cjs')}" %*\r\n`
+      );
+      vi.stubEnv('PATH', bin);
+      await build();
+      expect(
+        z
+          .object({ cwd: z.string(), args: z.array(z.string()) })
+          .parse(JSON.parse(readFileSync(join(root, 'build-result.json'), 'utf8')))
+      ).toEqual({ cwd: root, args: ['run', 'build'] });
+      expect(process.exitCode).toBe(23);
+    }
+  );
 
   it('reports a missing pnpm executable as an actionable command failure', async () => {
     checkout();
