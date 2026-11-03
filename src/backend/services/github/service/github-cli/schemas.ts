@@ -3,23 +3,6 @@ import { z } from 'zod';
 /**
  * Zod schemas for gh CLI JSON responses
  */
-const statusCheckRollupItemSchema = z
-  .object({
-    name: z.string().optional(),
-    workflowName: z.string().optional(),
-    status: z.string().optional(),
-    conclusion: z.string().optional(),
-    state: z.string().optional(),
-    context: z.string().optional(),
-    targetUrl: z.string().optional(),
-    detailsUrl: z.string().optional(),
-    startedAt: z.string().optional(),
-    completedAt: z.string().optional(),
-  })
-  .refine((item) => item.status !== undefined || item.state !== undefined, {
-    message: 'statusCheckRollup items must include status or state',
-  });
-
 /**
  * Transform empty string to null for reviewDecision field.
  * The gh CLI returns "" (empty string) when a PR has no review decision,
@@ -29,18 +12,6 @@ const reviewDecisionSchema = z.preprocess(
   (val) => (val === '' ? null : val),
   z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable()
 );
-
-export const prStatusSchema = z.object({
-  number: z.number(),
-  state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
-  isDraft: z.boolean(),
-  reviewDecision: reviewDecisionSchema,
-  statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
-  headRefName: z.string().optional(),
-  title: z.string().optional(),
-  baseRefName: z.string().optional(),
-  mergeStateStatus: z.string().optional(),
-});
 
 const authorSchema = z.object({
   login: z.string(),

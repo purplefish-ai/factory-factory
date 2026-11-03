@@ -6,16 +6,16 @@ import {
   deriveWorkspaceSidebarStatus,
   PRState,
 } from '@/shared/core';
-import { computeCIStatus, mapStatusChecks } from './mappers';
-import { fullPRDetailsSchema, prStatusSchema } from './schemas';
+import { mapStatusChecks } from './mappers';
+import { fullPRDetailsSchema } from './schemas';
 
-describe('legacy StatusContext rerun parity', () => {
+describe('legacy StatusContext rerun normalization', () => {
   it.each([
     ['SUCCESS', CIStatus.SUCCESS],
     ['FAILURE', CIStatus.FAILURE],
     ['PENDING', CIStatus.PENDING],
     ['EXPECTED', CIStatus.PENDING],
-  ])('classifies the latest Actions attempt with state %s identically', (state, expected) => {
+  ])('classifies the latest Actions attempt with state %s', (state, expected) => {
     const rollup = [
       {
         __typename: 'StatusContext',
@@ -30,12 +30,10 @@ describe('legacy StatusContext rerun parity', () => {
         targetUrl: 'https://github.com/owner/repo/actions/runs/2',
       },
     ];
-    const snapshot = computeCIStatus(prStatusSchema.shape.statusCheckRollup.parse(rollup));
-    const ratchet = deriveCiStatusFromCheckRollup(
+    const ciStatus = deriveCiStatusFromCheckRollup(
       mapStatusChecks(fullPRDetailsSchema.shape.statusCheckRollup.parse(rollup) ?? [])
     );
-    expect(snapshot).toBe(expected);
-    expect(snapshot).toBe(ratchet);
+    expect(ciStatus).toBe(expected);
   });
 
   it('retains failures for legacy contexts without Actions run identity', () => {
@@ -43,9 +41,6 @@ describe('legacy StatusContext rerun parity', () => {
       { context: 'ci/build', state: 'FAILURE', targetUrl: 'https://ci.example/jobs/1' },
       { context: 'ci/build', state: 'SUCCESS', targetUrl: 'https://ci.example/jobs/2' },
     ];
-    expect(computeCIStatus(prStatusSchema.shape.statusCheckRollup.parse(rollup))).toBe(
-      CIStatus.FAILURE
-    );
     expect(
       deriveCiStatusFromCheckRollup(
         mapStatusChecks(fullPRDetailsSchema.shape.statusCheckRollup.parse(rollup) ?? [])
@@ -66,7 +61,7 @@ describe('STARTUP_FAILURE check rollups', () => {
   );
 
   it.each(['SUCCESS', null])(
-    'keeps snapshot and ratchet sidebar states failing alongside conclusion %s',
+    'keeps the sidebar state failing alongside conclusion %s',
     (otherConclusion) => {
       const rollup = [
         { name: 'startup', status: 'COMPLETED', conclusion: 'STARTUP_FAILURE' },
@@ -76,28 +71,25 @@ describe('STARTUP_FAILURE check rollups', () => {
           ...(otherConclusion ? { conclusion: otherConclusion } : {}),
         },
       ];
-      const snapshotCiStatus = computeCIStatus(rollup);
-      const ratchetCiStatus = deriveCiStatusFromCheckRollup(mapStatusChecks(rollup));
+      const prCiStatus = deriveCiStatusFromCheckRollup(mapStatusChecks(rollup));
 
-      for (const prCiStatus of [snapshotCiStatus, ratchetCiStatus]) {
-        expect(prCiStatus).toBe(CIStatus.FAILURE);
-        const ratchetState = deriveRatchetState({
-          ratchetEnabled: true,
+      expect(prCiStatus).toBe(CIStatus.FAILURE);
+      const ratchetState = deriveRatchetState({
+        ratchetEnabled: true,
+        prState: PRState.OPEN,
+        prCiStatus,
+        prHasMergeConflict: false,
+        prReviewState: null,
+      });
+      expect(
+        deriveWorkspaceSidebarStatus({
+          isWorking: false,
+          prUrl: 'https://github.com/owner/repo/pull/123',
           prState: PRState.OPEN,
           prCiStatus,
-          prHasMergeConflict: false,
-          prReviewState: null,
-        });
-        expect(
-          deriveWorkspaceSidebarStatus({
-            isWorking: false,
-            prUrl: 'https://github.com/owner/repo/pull/123',
-            prState: PRState.OPEN,
-            prCiStatus,
-            ratchetState,
-          }).ciState
-        ).toBe('FAILING');
-      }
+          ratchetState,
+        }).ciState
+      ).toBe('FAILING');
     }
   );
 });

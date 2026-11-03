@@ -4,7 +4,7 @@ import { PRState } from './enums.js';
  * Cached `PRState` values that mean the GitHub PR is open.
  *
  * GitHub's raw `state` is just `OPEN`/`CLOSED`/`MERGED`, where a draft or
- * reviewed PR is `OPEN`. `computePRState` folds draft status and review
+ * reviewed PR is `OPEN`. PR observation folds draft status and review
  * decision into the same enum, so recovering "is this PR open" means naming the
  * four values that mean yes rather than comparing against `PRState.OPEN`.
  */

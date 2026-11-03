@@ -25,7 +25,6 @@ export {
   githubCLIService,
   type OpenPullRequest,
   type PRInfo,
-  type PRStatusFromGitHub,
   type ReviewRequestedPR,
 } from './github-cli.service';
 export {

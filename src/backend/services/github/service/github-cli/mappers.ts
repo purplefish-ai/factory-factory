@@ -1,5 +1,4 @@
 import type { z } from 'zod';
-import { type CIStatus, deriveCiStatusFromCheckRollup, PRState } from '@/shared/core';
 import type {
   GitHubComment,
   GitHubLabel,
@@ -151,72 +150,4 @@ export function mapLabels(labels: z.infer<typeof fullPRDetailsSchema>['labels'])
     name: label.name,
     color: label.color,
   }));
-}
-
-/**
- * Convert GitHub status check rollup to our CIStatus enum.
- * Handles both GitHub Check Run format (status + conclusion) and legacy format (state).
- */
-export function computeCIStatus(
-  statusCheckRollup: Array<{
-    name?: string;
-    workflowName?: string;
-    status?: string;
-    conclusion?: string;
-    state?: string;
-    context?: string;
-    targetUrl?: string;
-    detailsUrl?: string;
-    startedAt?: string;
-    completedAt?: string;
-  }> | null
-): CIStatus {
-  return deriveCiStatusFromCheckRollup(
-    statusCheckRollup?.map((check) =>
-      check.context !== undefined && check.state !== undefined
-        ? mapStatusContext({ ...check, context: check.context, state: check.state })
-        : check
-    ) ?? null
-  );
-}
-
-/**
- * Fold a raw GitHub observation into the enriched `PRState` the cache stores.
- *
- * The parameter is structural rather than `PRStatusFromGitHub` so the ratchet can
- * reach it through its bridge: its PR fetch returns the same three fields with
- * looser types, and both writers of `WorkspacePR.state` have to agree on what
- * `DRAFT` and `APPROVED` mean.
- */
-export function computePRState(status: {
-  state: string;
-  isDraft: boolean;
-  reviewDecision: string | null;
-}): PRState {
-  // Check if merged first
-  if (status.state === 'MERGED') {
-    return PRState.MERGED;
-  }
-
-  // Check if closed (but not merged)
-  if (status.state === 'CLOSED') {
-    return PRState.CLOSED;
-  }
-
-  // PR is open - check draft status and review state
-  if (status.isDraft) {
-    return PRState.DRAFT;
-  }
-
-  // Check review decision
-  if (status.reviewDecision === 'APPROVED') {
-    return PRState.APPROVED;
-  }
-
-  if (status.reviewDecision === 'CHANGES_REQUESTED') {
-    return PRState.CHANGES_REQUESTED;
-  }
-
-  // Default to OPEN for open PRs without special review state
-  return PRState.OPEN;
 }

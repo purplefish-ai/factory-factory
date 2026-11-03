@@ -23,7 +23,7 @@ export interface RatchetStateInput {
   prHasMergeConflict: boolean;
   /**
    * GitHub's `reviewDecision`, cached verbatim. Read in preference to
-   * `PRState.CHANGES_REQUESTED` because `computePRState` lets `DRAFT` mask the
+   * `PRState.CHANGES_REQUESTED` because PR observation lets `DRAFT` mask the
    * review decision, and a draft PR with changes requested is still
    * `REVIEW_PENDING` to the ratchet.
    */

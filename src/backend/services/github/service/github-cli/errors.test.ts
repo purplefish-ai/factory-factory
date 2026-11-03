@@ -30,3 +30,9 @@ describe('GitHub CLI error wrapping', () => {
     expect(classifyError(wrapGitHubCLIError('Failed to list issues', auth))).toBe('auth_required');
   });
 });
+
+it('classifies an unexpected EOF as a retryable network error', () => {
+  expect(classifyError(new Error('Post "https://api.github.com/graphql": unexpected EOF'))).toBe(
+    'network_error'
+  );
+});

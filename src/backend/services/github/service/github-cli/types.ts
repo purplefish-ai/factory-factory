@@ -8,29 +8,6 @@ export type GitHubCLIErrorType =
   | 'rate_limit'
   | 'unknown';
 
-export interface PRStatusFromGitHub {
-  number: number;
-  state: 'OPEN' | 'CLOSED' | 'MERGED';
-  isDraft: boolean;
-  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
-  statusCheckRollup: Array<{
-    name?: string;
-    workflowName?: string;
-    status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
-    conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
-    state?: string; // Legacy format support
-    context?: string;
-    targetUrl?: string;
-    detailsUrl?: string;
-    startedAt?: string;
-    completedAt?: string;
-  }> | null;
-  headRefName?: string;
-  title?: string;
-  baseRefName?: string;
-  mergeStateStatus?: string;
-}
-
 export interface PRInfo {
   owner: string;
   repo: string;

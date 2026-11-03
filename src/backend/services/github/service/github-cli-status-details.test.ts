@@ -137,3 +137,27 @@ it('preserves ordered review mapping and conversation timestamp fallback', async
     comments: [{ id: 'comment-1', updatedAt: metadata.updatedAt }],
   });
 });
+
+it.each([
+  { name: 'missing required fields', data: { number: 42 } },
+  { name: 'wrong field types', data: { ...metadata, number: '42', isDraft: 'false' } },
+  { name: 'invalid JSON', data: undefined },
+])('rejects $name on the live core read', async ({ data }) => {
+  vi.mocked(execFile).mockResolvedValue({
+    stdout: data === undefined ? 'not valid json{' : JSON.stringify(data),
+    stderr: '',
+  } as never);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 42)).rejects.toThrow(
+    /(?:Invalid gh CLI response|Failed to parse gh CLI JSON) for getPRStatusDetails/
+  );
+});
+
+it('propagates rate limits and prevents another core read during backoff', async () => {
+  const rateLimitError = new Error('HTTP 429 rate limit exceeded');
+  vi.mocked(execFile).mockRejectedValue(rateLimitError as never);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 42)).rejects.toBe(rateLimitError);
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 43)).rejects.toThrow(
+    'GitHub API rate limit exceeded, backing off'
+  );
+  expect(execFile).toHaveBeenCalledTimes(1);
+});
