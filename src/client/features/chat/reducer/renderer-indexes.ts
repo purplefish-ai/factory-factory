@@ -117,13 +117,54 @@ function isOrderedAround(messages: ChatMessage[], index: number): boolean {
   );
 }
 
+/**
+ * Extra messages a full renderer window may hold before it is trimmed back to
+ * the limit. Trimming the front changes every index and grouping position, so
+ * trimming on each append at the limit made every later message pay for full
+ * rebuilds; with slack, that cost is paid once per `slack` appends.
+ */
+export function getRendererTrimSlack(limit: number): number {
+  return Math.floor(limit / 10);
+}
+
+/**
+ * The renderer trim with hysteresis. Within the limit it matches
+ * `trimTranscriptForRenderer`. Above the limit but within the slack it keeps
+ * the previous window start, so appends leave the front untouched while
+ * messages that sort before the start are still dropped, as a strict trim would.
+ * Beyond the slack it trims back to the limit at a render-safe start.
+ */
+function trimRendererWindow(
+  previous: ChatMessage[],
+  messages: ChatMessage[],
+  limit: number
+): ChatMessage[] {
+  if (messages.length > limit + getRendererTrimSlack(limit)) {
+    return trimTranscriptForRenderer(messages, limit);
+  }
+  // A limit of at least the length only sorts.
+  const sorted = trimTranscriptForRenderer(messages, messages.length);
+  if (sorted.length <= limit) {
+    return sorted;
+  }
+  const startId = previous[0]?.id;
+  const startIndex = sorted.findIndex((message) => message.id === startId);
+  if (startIndex === -1 || sorted.length - startIndex < limit) {
+    return trimTranscriptForRenderer(sorted, limit);
+  }
+  return startIndex === 0 ? sorted : sorted.slice(startIndex);
+}
+
 function deriveFromPrevious(
   previous: ChatMessage[],
   messages: ChatMessage[],
   limit: number | null
 ): { retained: ChatMessage[]; indexes: RendererIndexes } | null {
   const cached = transcriptCache.get(previous);
-  if (!cached || (limit !== null && (!cached.ordered || messages.length > limit))) {
+  if (
+    !cached ||
+    (limit !== null && (!cached.ordered || messages.length > limit + getRendererTrimSlack(limit)))
+  ) {
     return null;
   }
   const change = findSingleChange(previous, messages);
@@ -131,7 +172,8 @@ function deriveFromPrevious(
     return null;
   }
   const changedIndex = change.type === 'append' ? messages.length - 1 : change.index;
-  // Within the limit and still sorted, the renderer trim returns the input unchanged.
+  // Within the slack and still sorted, with the first message kept (an append, or
+  // a same-id replacement), the renderer trim returns the input unchanged.
   if (limit !== null && !isOrderedAround(messages, changedIndex)) {
     return null;
   }
@@ -170,7 +212,8 @@ function deriveFromPrevious(
 }
 
 /**
- * Applies the renderer trim to `messages` and returns lookups for the result.
+ * Applies the renderer trim (with hysteresis relative to `previous`) to
+ * `messages` and returns lookups for the result.
  * Equivalent to trimming and rescanning, but O(1) lookup work (plus identity
  * checks) when one message was appended to or replaced in `previous`.
  */
@@ -181,7 +224,8 @@ export function resolveRendererTranscript(
 ): { retained: ChatMessage[]; indexes: RendererIndexes } {
   const derived = deriveFromPrevious(previous, messages, limit);
   const retained =
-    derived?.retained ?? (limit === null ? messages : trimTranscriptForRenderer(messages, limit));
+    derived?.retained ??
+    (limit === null ? messages : trimRendererWindow(previous, messages, limit));
   let indexes = derived?.indexes ?? transcriptCache.get(retained)?.indexes;
   if (!indexes) {
     indexes = buildIndexes(retained);

@@ -30,6 +30,10 @@ import {
   createInitialChatState,
   createUserMessageAction,
 } from './reducer';
+import { getRendererTrimSlack } from './reducer/renderer-indexes';
+
+const WINDOW_CAPACITY =
+  DEFAULT_RENDERER_TRANSCRIPT_LIMIT + getRendererTrimSlack(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
 
 // =============================================================================
 // Test Helpers
@@ -1129,21 +1133,20 @@ describe('chatReducer', () => {
     });
 
     it('retains the error and assistant delta at the renderer transcript limit', () => {
-      const replayEvents: WebSocketMessage[] = Array.from(
-        { length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT },
-        (_, order) => ({
-          type: 'agent_message',
-          messageId: `session-1-${order}`,
-          order,
-          data: {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [{ type: 'text', text: `Replayed response ${order}` }],
-            },
+      // The error fills the window; the delta then trims it back to the limit.
+      const replayedCount = WINDOW_CAPACITY - 1;
+      const replayEvents = Array.from({ length: replayedCount }, (_, order): WebSocketMessage => ({
+        type: 'agent_message',
+        messageId: `session-1-${order}`,
+        order,
+        data: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: `Replayed response ${order}` }],
           },
-        })
-      );
+        },
+      }));
       let state = chatReducer(initialState, {
         type: 'SESSION_REPLAY_BATCH',
         payload: { replayEvents },
@@ -1156,28 +1159,26 @@ describe('chatReducer', () => {
       state = chatReducer(
         state,
         textDelta(0, 'Visible response', {
-          messageId: `session-1-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT}`,
-          order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+          messageId: `session-1-${replayedCount}`,
+          order: replayedCount,
         })
       );
 
       const errorIndex = state.messages.findIndex((message) => message.message?.type === 'error');
       const assistantIndex = state.messages.findIndex(
-        (message) => message.id === `session-1-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT}`
+        (message) => message.id === `session-1-${replayedCount}`
       );
       expect(state.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
       expect(errorIndex).toBe(DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1);
       expect(state.agentMessageOrderToIndex.has(-1)).toBe(false);
       expect(state.messages[assistantIndex]).toMatchObject({
-        order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+        order: replayedCount,
         message: {
           type: 'assistant',
           message: { content: [{ type: 'text', text: 'Visible response' }] },
         },
       });
-      expect(state.agentMessageOrderToIndex.get(DEFAULT_RENDERER_TRANSCRIPT_LIMIT)).toBe(
-        assistantIndex
-      );
+      expect(state.agentMessageOrderToIndex.get(replayedCount)).toBe(assistantIndex);
     });
 
     it('applies many sequential deltas to one indexed assistant message', () => {
@@ -2135,33 +2136,31 @@ describe('chatReducer', () => {
 
   describe('renderer transcript retention', () => {
     it('caps live agent inserts to the recent renderer window and prunes rewind metadata', () => {
-      const messages = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT }, (_, order) =>
+      const messages = Array.from({ length: WINDOW_CAPACITY }, (_, order) =>
         createUserChatMessage(`msg-${order}`, order)
       );
       const state = createInitialChatState({
         messages,
         messageIdToUuid: new Map([
           ['msg-0', 'uuid-0'],
-          [`msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`, 'uuid-recent'],
+          [`msg-${WINDOW_CAPACITY - 1}`, 'uuid-recent'],
         ]),
-        localUserMessageIds: new Set(['msg-0', `msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`]),
+        localUserMessageIds: new Set(['msg-0', `msg-${WINDOW_CAPACITY - 1}`]),
       });
 
       const newState = chatReducer(state, {
         type: 'WS_AGENT_MESSAGE',
         payload: {
           message: createTestAssistantMessage(),
-          order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+          order: WINDOW_CAPACITY,
         },
       });
 
       expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
-      expect(newState.messages[0]!.id).toBe('msg-1');
+      expect(newState.messages[0]).toBe(messages.at(1 - DEFAULT_RENDERER_TRANSCRIPT_LIMIT));
       expect(newState.messages.at(-1)?.source).toBe('agent');
       expect(newState.messageIdToUuid.has('msg-0')).toBe(false);
-      expect(newState.messageIdToUuid.get(`msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`)).toBe(
-        'uuid-recent'
-      );
+      expect(newState.messageIdToUuid.get(`msg-${WINDOW_CAPACITY - 1}`)).toBe('uuid-recent');
       expect(newState.localUserMessageIds.has('msg-0')).toBe(false);
     });
 
