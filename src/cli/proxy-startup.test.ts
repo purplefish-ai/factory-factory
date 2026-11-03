@@ -122,7 +122,11 @@ const server = createServer((_req, res) => res.end(JSON.stringify({
   host: process.env.BACKEND_HOST,
   trust: process.env.TRUST_PROXY_HEADERS,
   origin: process.env.CORS_ALLOWED_ORIGINS,
-  disableChecks: process.env.DISABLE_CORS_CHECKS
+  disableChecks: process.env.DISABLE_CORS_CHECKS,
+  tailscaleOrigin: process.env.FF_TAILSCALE_ORIGIN,
+  tailscaleHttpsPort: process.env.FF_TAILSCALE_HTTPS_PORT,
+  runScriptProxy: process.env.FF_RUN_SCRIPT_PROXY_ENABLED,
+  emitPort: process.env.FF_EMIT_BACKEND_PORT
 })));
 server.listen(0, process.env.BACKEND_HOST, () => console.log('BACKEND_PORT:' + server.address().port));
 `
@@ -133,13 +137,17 @@ server.listen(0, process.env.BACKEND_HOST, () => console.log('BACKEND_PORT:' + s
       projectRoot,
       databasePath: join(projectRoot, 'data.db'),
       requestedPort: 3001,
-      trustedProxyOrigin: 'https://mac.tail123.ts.net',
+      tailscale: { origin: 'https://mac.tail123.ts.net', httpsPort: 8443 },
     });
     expect(await (await fetch(`http://127.0.0.1:${backend.port}`)).json()).toEqual({
       host: '127.0.0.1',
       trust: 'true',
       origin: 'https://mac.tail123.ts.net',
       disableChecks: 'false',
+      tailscaleOrigin: 'https://mac.tail123.ts.net',
+      tailscaleHttpsPort: '8443',
+      runScriptProxy: '0',
+      emitPort: '1',
     });
   } finally {
     if (backend && backend.process.exitCode === null && backend.process.signalCode === null) {

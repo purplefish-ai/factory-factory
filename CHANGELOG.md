@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Open agent localhost links and the Run button from other devices under
+  `ff tailscale` by sharing the port through Tailscale Serve
+
+### Changed
+
+- `ff tailscale` no longer starts public cloudflared tunnels for run scripts
+
 ## [0.5.3] - 2026-11-03
 
 ### Added

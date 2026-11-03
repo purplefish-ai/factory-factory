@@ -46,7 +46,7 @@ export async function runTailscaleSession(params: {
       projectRoot,
       databasePath,
       requestedPort,
-      trustedProxyOrigin: origin,
+      tailscale: { origin, httpsPort: options.httpsPort },
       signal,
     });
     children.push(backend.process);

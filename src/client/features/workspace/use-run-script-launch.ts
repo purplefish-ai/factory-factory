@@ -1,3 +1,4 @@
+import { usePortSharing } from '@/client/hooks/use-port-sharing';
 import { trpc } from '@/client/lib/trpc';
 
 interface RunScriptLaunchInfo {
@@ -7,6 +8,7 @@ interface RunScriptLaunchInfo {
 }
 
 export function useRunScriptLaunch(workspaceId: string): RunScriptLaunchInfo | null {
+  const portSharing = usePortSharing();
   const { data: status } = trpc.workspace.getRunScriptStatus.useQuery(
     { workspaceId },
     {
@@ -20,6 +22,9 @@ export function useRunScriptLaunch(workspaceId: string): RunScriptLaunchInfo | n
     return null;
   }
 
+  if (portSharing) {
+    return { href: `/proxy/${status.port}/`, port: status.port, usesProxyUrl: true };
+  }
   return {
     href: status.proxyUrl ?? `http://localhost:${status.port}`,
     port: status.port,

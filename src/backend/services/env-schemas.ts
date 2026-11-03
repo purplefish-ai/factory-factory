@@ -74,6 +74,9 @@ export const ConfigEnvSchema = z.object({
     .optional()
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  FF_EMIT_BACKEND_PORT: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  FF_TAILSCALE_ORIGIN: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  FF_TAILSCALE_HTTPS_PORT: PositiveIntEnvSchema.optional().catch(undefined),
   CODEX_HOME: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CODEX_SESSIONS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_CONFIG_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

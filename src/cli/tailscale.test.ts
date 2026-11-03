@@ -74,7 +74,7 @@ describe('owned Tailscale session', () => {
     expect(startFactoryFactoryServer).toHaveBeenCalledWith(
       expect.objectContaining({
         requestedPort: 3002,
-        trustedProxyOrigin: 'https://mac.tail123.ts.net',
+        tailscale: { origin: 'https://mac.tail123.ts.net', httpsPort: 443 },
         signal: controller.signal,
       })
     );

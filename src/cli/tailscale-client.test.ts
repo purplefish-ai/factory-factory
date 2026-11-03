@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertServePortAvailable, getTailscaleOrigin, parsePort } from './tailscale-client';
+import { assertServePortAvailable } from '@/backend/lib/tailscale-cli';
+import { getTailscaleOrigin, parsePort } from './tailscale-client';
 
 describe('Tailscale discovery', () => {
   it('uses the machine DNS name and removes its trailing dot', () => {

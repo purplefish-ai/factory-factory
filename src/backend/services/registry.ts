@@ -100,6 +100,7 @@ export const serviceNames = [
   'linear',
   'ratchet',
   'run-script',
+  'port-share',
   'settings',
   'decision-log',
   'periodic-task',
@@ -182,6 +183,10 @@ export const serviceRegistry = {
   },
   'run-script': {
     dependsOn: ['workspace'],
+    ownsModels: [],
+  },
+  'port-share': {
+    dependsOn: [],
     ownsModels: [],
   },
   settings: {

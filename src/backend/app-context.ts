@@ -67,6 +67,7 @@ import {
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
+import { type PortShareService, portShareService } from './services/port-share';
 import { findAvailablePort } from './services/port.service';
 import { ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
@@ -197,6 +198,7 @@ export type ApplicationServices = BridgeServices & {
   updateProjectSettings: (
     input: Parameters<typeof updateProjectSettings>[0]
   ) => ReturnType<typeof updateProjectSettings>;
+  portShareService: PortShareService;
   rateLimiter: typeof rateLimiter;
   runScriptConfigPersistenceService: typeof runScriptConfigPersistenceService;
   runScriptService: RunScriptService;
@@ -372,6 +374,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     linearStateSyncService,
     listQuickActions,
     periodicTaskService,
+    portShareService,
     projectManagementService,
     updateProjectSettings: (input) =>
       updateProjectSettings(input, {

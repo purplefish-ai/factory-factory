@@ -855,6 +855,19 @@ describe('server websocket upgrade routing', () => {
     expect(apiResponse.status).toBe(404);
   });
 
+  it('routes /proxy links to port sharing instead of the SPA fallback', async () => {
+    const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
+    const server = createTestServer(createTestApplication({ frontendStaticPath }));
+
+    const response = await request(server.getHttpServer())
+      .get('/proxy/6173/?path=/story/x')
+      .set({ 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate' });
+
+    expect(response.status).toBe(404);
+    expect(response.text).toContain('Port sharing is off');
+    expect(response.text).not.toContain('factory-factory');
+  });
+
   it('sets no-cache headers when index.html is requested directly', async () => {
     const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
     const server = createTestServer(createTestApplication({ frontendStaticPath }));

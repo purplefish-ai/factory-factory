@@ -61,6 +61,15 @@ export interface CorsConfig {
   disableCorsChecks?: boolean;
 }
 
+/** Remote access through `ff tailscale`. */
+export interface TailscaleConfig {
+  /** Factory Factory's HTTPS origin, e.g. `https://mac.tail123.ts.net`. */
+  origin: string;
+  hostname: string;
+  /** The Serve port Factory Factory itself uses. */
+  httpsPort: number;
+}
+
 /**
  * Debug configuration
  */
@@ -140,6 +149,8 @@ interface SystemConfig {
   acpTraceLogsEnabled: boolean;
   wsLogsEnabled: boolean;
   runScriptProxyEnabled: boolean;
+  emitBackendPort: boolean;
+  tailscale: TailscaleConfig | null;
 
   // Event compression settings
   compression: CompressionConfig;
@@ -171,6 +182,31 @@ function buildRateLimiterConfig(env: ConfigEnv): RateLimiterConfig {
     claudeRequestsPerHour: env.CLAUDE_RATE_LIMIT_PER_HOUR,
     maxQueueSize: env.RATE_LIMIT_QUEUE_SIZE,
     queueTimeoutMs: env.RATE_LIMIT_QUEUE_TIMEOUT_MS,
+  };
+}
+
+/**
+ * `ff tailscale` passes its HTTPS origin so the backend can share loopback
+ * ports on the same machine name. Anything but a bare HTTPS origin disables it.
+ */
+function buildTailscaleConfig(env: ConfigEnv): TailscaleConfig | null {
+  const rawOrigin = env.FF_TAILSCALE_ORIGIN;
+  if (!rawOrigin) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(rawOrigin);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.origin !== rawOrigin.replace(/\/$/, '')) {
+    return null;
+  }
+  return {
+    origin: url.origin,
+    hostname: url.hostname,
+    httpsPort: env.FF_TAILSCALE_HTTPS_PORT ?? (url.port ? Number(url.port) : 443),
   };
 }
 
@@ -290,6 +326,8 @@ function loadSystemConfig(): SystemConfig {
     acpTraceLogsEnabled,
     wsLogsEnabled: env.WS_LOGS_ENABLED,
     runScriptProxyEnabled: env.FF_RUN_SCRIPT_PROXY_ENABLED,
+    emitBackendPort: env.FF_EMIT_BACKEND_PORT,
+    tailscale: buildTailscaleConfig(env),
 
     // Event compression settings
     compression: {
@@ -580,6 +618,16 @@ class ConfigService {
    */
   isRunScriptProxyEnabled(): boolean {
     return this.config.runScriptProxyEnabled;
+  }
+
+  /** Whether launchers wait for the `BACKEND_PORT:<port>` startup line. */
+  shouldEmitBackendPort(): boolean {
+    return this.config.emitBackendPort || this.config.runScriptProxyEnabled;
+  }
+
+  /** The `ff tailscale` origin used to share loopback ports, if any. */
+  getTailscaleConfig(): TailscaleConfig | null {
+    return this.config.tailscale;
   }
 
   /**

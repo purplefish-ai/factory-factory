@@ -212,6 +212,16 @@ services. Serve and Tailscale share CLI process-tree termination: SIGTERM with a
 five-second grace period, followed by SIGKILL for an unresponsive child.
 Electron utility-process supervision remains separate.
 
+Under `ff tailscale`, the backend owns loopback port shares (`port-share`
+capsule, `/proxy/<port>` route). Each share runs foreground
+`tailscale serve --https=<port>` as a detached process group, because on macOS
+the `tailscale` command is a wrapper that leaves the real CLI (and the share)
+running if only the wrapper is signalled. Backend cleanup stops each group and
+then closes its in-process forwarder. Groups are recorded under
+`<base dir>/port-shares/<backend pid>.json`; the next start stops groups whose
+owning backend is gone. See
+[the design](../superpowers/specs/2026-11-03-tailscale-port-sharing-design.md).
+
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
 Node (see [desktop backend process](#desktop-backend-process)), and are unpacked
 in desktop packages along with their complete production dependency trees. The

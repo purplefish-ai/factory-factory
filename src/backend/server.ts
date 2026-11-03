@@ -29,6 +29,7 @@ import {
   securityMiddleware,
 } from './middleware';
 import { createHealthRouter } from './routers/health.router';
+import { createPortShareRouter } from './routers/port-share.router';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
@@ -63,6 +64,7 @@ export function createServer(application: Application, requestedPort?: number): 
     configService,
     createLogger,
     periodicTaskService,
+    portShareService,
     ratchetService,
     rateLimiter,
     reconciliationService,
@@ -252,6 +254,8 @@ export function createServer(application: Application, requestedPort?: number): 
   // Mount HTTP Routes
   // ============================================================================
   app.use('/health', createHealthRouter(application));
+  // Before the SPA fallback, which would otherwise answer every GET.
+  app.use('/proxy', createPortShareRouter(application));
   app.use(
     '/api/trpc',
     createExpressMiddleware({
@@ -507,6 +511,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
       terminalService.cleanup();
       await runScriptService.cleanup();
+      await portShareService.cleanup();
       sessionFileLogger.cleanup();
       acpTraceLogger.cleanup();
       await rateLimiter.stop();
@@ -602,12 +607,13 @@ export function createServer(application: Application, requestedPort?: number): 
           port: actualPort,
           environment: configService.getEnvironment(),
         });
-        if (configService.isRunScriptProxyEnabled()) {
+        if (configService.shouldEmitBackendPort()) {
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
         }
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
+        void portShareService.stopStaleShares();
         await interceptors.start();
         await startBackgroundWork();
         if (cleanupStarted) {
