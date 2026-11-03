@@ -125,6 +125,20 @@ describe('workspace side panel open/close animation', () => {
     expect(sizes()).toEqual([100]);
   });
 
+  it('opens and closes immediately when reduced motion is preferred', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' }))
+    );
+    await render('mock-a', false);
+    await render('mock-a');
+    expect(container.querySelector('#workspace-side')).not.toBeNull();
+    expect(sidePanelMotion()).toBeUndefined();
+    await render('mock-a', false);
+    expect(container.querySelector('#workspace-side')).toBeNull();
+    expect(container.querySelector('[role="separator"]')).toBeNull();
+  });
+
   it('does not animate a panel that is already open on mount', async () => {
     await render('mock-a');
     expect(container.querySelector('#workspace-side')).not.toBeNull();

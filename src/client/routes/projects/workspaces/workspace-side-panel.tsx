@@ -7,6 +7,13 @@ export const SIDE_PANEL_MOTION_MS = 150;
 
 type SidePanelMotion = 'opening' | 'closing' | null;
 
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 /**
  * The workspace tools panel inside the horizontal split. It animates its share
  * of the split when toggled, and stays mounted until the close animation ends.
@@ -28,10 +35,9 @@ export function WorkspaceSidePanel({
 
   if (visible !== prevVisible) {
     setPrevVisible(visible);
-    setMotion(visible ? 'opening' : 'closing');
-    if (visible) {
-      setMounted(true);
-    }
+    const animate = !prefersReducedMotion();
+    setMotion(animate ? (visible ? 'opening' : 'closing') : null);
+    setMounted(visible || animate);
   }
 
   useEffect(() => {
