@@ -71,8 +71,18 @@ original frozen ordering; import retains the existing creation-time/ID
 membership interpretation and never uses unfinished imported receipts to
 authorize another send.
 
-The import result lists counts of runtime changes for newly created rows.
-Already inert values and skipped existing runtime rows do not count as changes.
+Successful import results stay available in the current app session until you
+select **Dismiss**, including after navigation or a data refresh. Each completed
+import keeps its own result; dismissing one reveals the next. **Download JSON**
+saves the exact returned result without dismissing it. Results are held in
+memory and do not survive reloading or closing the app.
+
+The result lists actual imported and skipped counts for projects, workspaces,
+agent sessions and terminal sessions, plus runtime changes for newly created
+rows. User settings are reported as imported, skipped or none. Already inert
+values and skipped existing runtime rows do not count as changes. Runtime
+changes may overlap those record counts. Embedded row totals and account
+remapping totals are not reported; this does not mean zero.
 
 Destination collisions skip the affected workspace and its child workspaces as a
 group, including their sessions, PR configuration, events and metadata. Existing

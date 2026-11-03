@@ -6,6 +6,7 @@ import { Loading } from '@/client/components/loading';
 import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
 import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
+import { DataImportResultsProvider } from '@/client/features/data-import';
 import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
 import { hasExplicitLegacyProjectOwner } from '@/client/lib/project-navigation';
 import { TRPCProvider, useProjects } from '@/client/lib/providers';
@@ -37,6 +38,8 @@ function RootLayout() {
 
   return (
     <div
+      id="app-content"
+      tabIndex={-1}
       className="flex flex-col overflow-hidden"
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
@@ -56,9 +59,13 @@ export function Root() {
     <ThemeProvider>
       <TRPCProvider>
         <AppearanceProvider>
-          <WorkspaceNotificationManager />
-          <RootLayout />
-          <Toaster />
+          <DataImportResultsProvider
+            onDismiss={() => document.getElementById('app-content')?.focus()}
+          >
+            <WorkspaceNotificationManager />
+            <RootLayout />
+            <Toaster />
+          </DataImportResultsProvider>
         </AppearanceProvider>
       </TRPCProvider>
     </ThemeProvider>

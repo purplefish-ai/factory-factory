@@ -7,6 +7,7 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { useDataImportResults } from './data-import-results';
 
 type ParsedExportData = z.infer<typeof exportDataSchema>;
 
@@ -36,25 +37,17 @@ export function DataImportButton({
     summary: '',
   });
   const utils = trpc.useUtils();
+  const { publishImportResult } = useDataImportResults();
 
   const importData = trpc.admin.importData.useMutation({
     onSuccess: async (result) => {
-      const { results } = result;
-      const summary = [
-        `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
-        `Workspaces: ${results.workspaces.imported} imported, ${results.workspaces.skipped} skipped`,
-        `Agent Sessions: ${results.agentSessions.imported} imported, ${results.agentSessions.skipped} skipped`,
-        `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
-        `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
-        `Runtime recovery: ${results.inertTransforms.workspaceInitializations} initializations and ${results.inertTransforms.workspaceArchives} archives need manual attention; ${results.inertTransforms.runScripts} run scripts, ${results.inertTransforms.terminalSessions} terminals and ${results.inertTransforms.agentSessions} agent sessions stopped; ${results.inertTransforms.monitors} monitors disabled; ${results.inertTransforms.heldReceipts} receipts held; ${results.inertTransforms.cancelledFacts} pending facts cancelled.`,
-        ...results.inertTransforms.explanations,
-      ].join('\n');
-
-      toast.success('Import completed', { description: summary, duration: 10_000 });
+      publishImportResult(result.results);
       setConfirmState({ open: false, data: null, summary: '' });
-
-      // Invalidate all queries to refresh data
-      await utils.invalidate();
+      try {
+        await utils.invalidate();
+      } catch {
+        toast.error('Import completed, but refreshing data failed. Reload to refresh.');
+      }
 
       // Call success callback if provided
       onImportSuccess?.();
