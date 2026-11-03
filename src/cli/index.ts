@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { type ChildProcess, spawn } from 'node:child_process';
-import { cpSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -14,8 +14,10 @@ import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
-import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
+import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { runServeSession } from './serve-session';
+import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
 import { registerTailscaleCommand } from './tailscale';
 
@@ -40,84 +42,6 @@ function findProjectRoot(): string {
 }
 
 const PROJECT_ROOT = findProjectRoot();
-
-function resolveLocalBin(command: string): string {
-  const suffix = process.platform === 'win32' ? '.cmd' : '';
-  return join(PROJECT_ROOT, 'node_modules', '.bin', `${command}${suffix}`);
-}
-
-// Setup stdout/stderr forwarding for a child process in non-verbose mode
-function setupProcessOutput(proc: ChildProcess, name: string): void {
-  if (proc.stdout) {
-    proc.stdout.on('data', (data: Buffer) => {
-      process.stdout.write(data);
-    });
-    proc.stdout.on('error', (error) => {
-      // Log but don't crash - this is non-critical output
-      console.error(chalk.yellow(`  [${name}] stdout stream error: ${error.message}`));
-    });
-  }
-  if (proc.stderr) {
-    proc.stderr.on('data', (data: Buffer) => {
-      console.error(chalk.red(`  [${name}] ${data.toString().trim()}`));
-    });
-    proc.stderr.on('error', (error) => {
-      // Log but don't crash - this is non-critical output
-      console.error(chalk.yellow(`  [${name}] stderr stream error: ${error.message}`));
-    });
-  }
-}
-
-// Wait for a service to start on a port, killing all processes and exiting on failure
-async function waitForService(
-  port: number,
-  host: string,
-  serviceName: string,
-  processes: { name: string; proc: ChildProcess }[]
-): Promise<void> {
-  try {
-    await waitForPort(port, host);
-    console.log(chalk.green(`  ✓ ${serviceName} ready on port ${port}`));
-  } catch {
-    console.error(chalk.red(`\n  ✗ ${serviceName} failed to start on port ${port}`));
-    await killAllProcesses(processes);
-    process.exit(1);
-  }
-}
-
-// Kill all tracked processes and their child process trees
-async function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): Promise<void> {
-  await Promise.allSettled(
-    processes
-      .filter(({ proc }) => proc.pid)
-      .map(async ({ name, proc }) => {
-        try {
-          await treeKillAsync(proc.pid as number, 'SIGTERM');
-        } catch (err) {
-          console.error(
-            chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${(err as Error).message}`)
-          );
-        }
-      })
-  );
-}
-
-// Create an exit promise for a process that resolves during shutdown, rejects on unexpected exit
-function createExitPromise(
-  proc: ChildProcess,
-  name: string,
-  shutdownState: { shuttingDown: boolean }
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    proc.on('exit', (code) => {
-      if (shutdownState.shuttingDown) {
-        resolve();
-      } else if (code !== 0) {
-        reject(new Error(`${name} exited with code ${code}`));
-      }
-    });
-  });
-}
 
 // Read version from package.json
 function getVersion(): string {
@@ -219,94 +143,6 @@ async function runMigrationsOrExit(databasePath: string, verbose: boolean): Prom
   }
 }
 
-function createShutdownHandler(
-  processes: { name: string; proc: ChildProcess }[],
-  shutdownState: { shuttingDown: boolean },
-  portFilePath?: string
-) {
-  return (signal: string) => {
-    if (shutdownState.shuttingDown) {
-      return;
-    }
-    shutdownState.shuttingDown = true;
-
-    // Clean up port file
-    if (portFilePath) {
-      try {
-        unlinkSync(portFilePath);
-      } catch {
-        // File may not exist yet, ignore
-      }
-    }
-
-    console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-
-    // Send SIGTERM to all process trees
-    const termPromises = processes
-      .filter(({ proc }) => proc.pid)
-      .map(async ({ name, proc }) => {
-        try {
-          await treeKillAsync(proc.pid as number, 'SIGTERM');
-        } catch (err) {
-          console.error(
-            chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${(err as Error).message}`)
-          );
-        }
-      });
-
-    // Wait for graceful shutdown, then force kill remaining
-    const forceKillRemaining = async (): Promise<void> => {
-      try {
-        await Promise.allSettled(termPromises);
-
-        // A child that exits from a signal has `exitCode === null` and `signalCode !== null`.
-        // Treat those as already exited to avoid false "force killing" logs.
-        const alive = processes.filter(
-          ({ proc }) => proc.exitCode === null && proc.signalCode === null
-        );
-
-        if (alive.length > 0) {
-          console.log(
-            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
-          );
-          const killResults = await Promise.allSettled(
-            alive
-              .filter(({ proc }) => proc.pid)
-              .map(async ({ name, proc }) => {
-                try {
-                  await treeKillAsync(proc.pid as number, 'SIGKILL');
-                } catch (err) {
-                  console.error(
-                    chalk.yellow(
-                      `  Failed to force kill ${name} (${proc.pid}): ${(err as Error).message}`
-                    )
-                  );
-                  throw err;
-                }
-              })
-          );
-          const killFailed = killResults.some((r) => r.status === 'rejected');
-          if (killFailed) {
-            process.exitCode = 1;
-          }
-        }
-      } catch (err) {
-        // Handle any unexpected errors in shutdown handler to avoid unhandled rejection
-        console.error(chalk.red(`  Shutdown error: ${(err as Error).message}`));
-        process.exitCode = 1;
-      }
-    };
-    setTimeout(() => {
-      void forceKillRemaining();
-    }, 5000);
-  };
-}
-
-function registerShutdownHandlers(shutdown: (signal: string) => void): void {
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-}
-
 function printReadyBanner(opts: {
   isDev: boolean;
   host: string;
@@ -366,12 +202,10 @@ program
 
     const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
 
-    const processes: { name: string; proc: ChildProcess }[] = [];
-    const shutdownState = { shuttingDown: false };
+    const controller = new AbortController();
     const portFilePath = join(process.cwd(), '.factory-factory-port');
 
-    const shutdown = createShutdownHandler(processes, shutdownState, portFilePath);
-    registerShutdownHandlers(shutdown);
+    const unregisterShutdownHandlers = registerServeShutdownHandlers(controller, portFilePath);
 
     const createOnReady = (actualBackendPort: number) => async () => {
       const url = buildHttpOrigin(options.host, options.dev ? frontendPort : actualBackendPort);
@@ -398,146 +232,26 @@ program
       }
     };
 
-    if (options.dev) {
-      // Development mode - use tsx watch for backend, next dev for frontend
-      await startDevelopmentMode(
-        options,
+    try {
+      await runServeSession({
+        projectRoot: PROJECT_ROOT,
         env,
-        processes,
+        host: options.host,
         frontendPort,
         backendPort,
-        createOnReady,
-        shutdownState
-      );
-    } else {
-      // Production mode - use compiled backend and next start
-      await startProductionMode(
-        options,
-        env,
-        processes,
-        frontendPort,
-        backendPort,
-        createOnReady,
-        shutdownState
-      );
+        dev: options.dev,
+        verbose,
+        signal: controller.signal,
+        onReady: createOnReady(backendPort),
+      });
+    } catch (error) {
+      console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
+      process.exitCode = 1;
+    } finally {
+      unregisterShutdownHandlers();
+      removeServePortFile(portFilePath);
     }
   });
-
-async function startDevelopmentMode(
-  options: ServeOptions,
-  env: NodeJS.ProcessEnv,
-  processes: { name: string; proc: ChildProcess }[],
-  frontendPort: number,
-  backendPort: number,
-  createOnReady: (actualBackendPort: number) => () => Promise<void>,
-  shutdownState: { shuttingDown: boolean }
-): Promise<void> {
-  console.log(chalk.blue('  🔧 Starting backend (development mode)...'));
-
-  const backend = spawn(resolveLocalBin('tsx'), ['watch', 'src/backend/index.ts'], {
-    cwd: PROJECT_ROOT,
-    env,
-    stdio: options.verbose ? 'inherit' : 'pipe',
-  });
-  processes.push({ name: 'backend', proc: backend });
-
-  if (!options.verbose) {
-    setupProcessOutput(backend, 'backend');
-  }
-
-  await waitForService(backendPort, options.host, 'Backend', processes);
-
-  console.log(chalk.blue('  🎨 Starting frontend (development mode)...'));
-
-  // Update env with backend port for Vite proxy configuration
-  const frontendEnv = {
-    ...env,
-    BACKEND_URL: buildHttpOrigin(options.host, backendPort),
-  };
-
-  const frontend = spawn(
-    resolveLocalBin('vite'),
-    ['--port', frontendPort.toString(), '--strictPort'],
-    {
-      cwd: PROJECT_ROOT,
-      env: frontendEnv,
-      stdio: options.verbose ? 'inherit' : 'pipe',
-    }
-  );
-  processes.push({ name: 'frontend', proc: frontend });
-
-  if (!options.verbose) {
-    setupProcessOutput(frontend, 'frontend');
-  }
-
-  await waitForService(frontendPort, options.host, 'Frontend', processes);
-
-  const onReady = createOnReady(backendPort);
-  await onReady();
-
-  await Promise.race([
-    createExitPromise(backend, 'Backend', shutdownState),
-    createExitPromise(frontend, 'Frontend', shutdownState),
-  ]).catch(async (error) => {
-    console.error(chalk.red(`\n  ✗ ${error.message}`));
-    await killAllProcesses(processes);
-    process.exit(1);
-  });
-}
-
-async function startProductionMode(
-  options: ServeOptions,
-  env: NodeJS.ProcessEnv,
-  processes: { name: string; proc: ChildProcess }[],
-  _frontendPort: number,
-  backendPort: number,
-  createOnReady: (actualBackendPort: number) => () => Promise<void>,
-  shutdownState: { shuttingDown: boolean }
-): Promise<void> {
-  const frontendDist = join(PROJECT_ROOT, 'dist', 'client');
-  const backendDist = join(PROJECT_ROOT, 'dist', 'src', 'backend', 'index.js');
-
-  if (!existsSync(frontendDist)) {
-    console.error(chalk.red('\n  ✗ Frontend not built. Run `ff build` or `pnpm build` first.'));
-    console.error(chalk.gray('    Or use --dev flag for development mode.'));
-    process.exit(1);
-  }
-
-  if (!existsSync(backendDist)) {
-    console.error(chalk.red('\n  ✗ Backend not built. Run `ff build` or `pnpm build` first.'));
-    console.error(chalk.gray('    Or use --dev flag for development mode.'));
-    process.exit(1);
-  }
-
-  // In production, the backend serves both API and static files on a single port
-  // Set FRONTEND_STATIC_PATH so backend knows where to serve static files from
-  console.log(chalk.blue('  🔧 Starting server (production mode)...'));
-
-  const backend = spawn('node', [backendDist], {
-    cwd: PROJECT_ROOT,
-    env: {
-      ...env,
-      FRONTEND_STATIC_PATH: frontendDist,
-    },
-    stdio: options.verbose ? 'inherit' : 'pipe',
-  });
-  processes.push({ name: 'server', proc: backend });
-
-  if (!options.verbose) {
-    setupProcessOutput(backend, 'server');
-  }
-
-  await waitForService(backendPort, options.host, 'Server', processes);
-
-  const onReady = createOnReady(backendPort);
-  await onReady();
-
-  await createExitPromise(backend, 'Server', shutdownState).catch(async (error) => {
-    console.error(chalk.red(`\n  ✗ ${error.message}`));
-    await killAllProcesses(processes);
-    process.exit(1);
-  });
-}
 
 // ============================================================================
 // db:migrate command
