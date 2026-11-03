@@ -413,6 +413,46 @@ export function createServer(application: Application, requestedPort?: number): 
     }
   };
 
+  /**
+   * Cleanup stops every background job as soon as it begins, so a start issued
+   * after that would revive a job that nothing stops again before the database
+   * disconnects. Re-check after each await.
+   */
+  const startBackgroundWork = async (): Promise<void> => {
+    if (cleanupStarted) {
+      return;
+    }
+    reconciliationService.startPeriodicCleanup();
+    rateLimiter.start();
+    schedulerService.start();
+    await ratchetService.start();
+    if (cleanupStarted) {
+      return;
+    }
+    periodicTaskService.start();
+    services.agentRuntime?.start();
+    // Provisioning (git, startup script, agent session) can take minutes, so it
+    // must not hold back readiness. `stopPeriodicCleanup` drains it.
+    reconciliationService.startNewWorkspaceInitialization();
+  };
+
+  /**
+   * Signal one background job to stop now and return its drain. The drain
+   * never rejects: a failed stop is logged so it cannot keep the other jobs,
+   * or the database disconnect, from proceeding.
+   */
+  const beginJobStop = (job: string, stop: () => Promise<void>): Promise<void> => {
+    let drain: Promise<void>;
+    try {
+      drain = stop();
+    } catch (error) {
+      drain = Promise.reject(error);
+    }
+    return drain.catch((error: unknown) => {
+      logger.error('Failed to stop background job', toError(error), { job });
+    });
+  };
+
   const performCleanup = (): Promise<void> => {
     if (cleanupPromise !== null) {
       return cleanupPromise;
@@ -426,13 +466,25 @@ export function createServer(application: Application, requestedPort?: number): 
     }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
-      // Stop admitting reconciliation work (including startup workspace
-      // initialization) now, but drain it only after sessions and processes
-      // are torn down: an in-flight startup script cannot be cancelled and may
-      // outlast the stop budget, and new agent sessions fail fast once clients
-      // are stopped.
-      const reconciliationStopped = reconciliationService.stopPeriodicCleanup();
-      reconciliationStopped.catch(() => undefined);
+      // Abort every background job now so none starts new work during
+      // teardown, and let their in-flight runs drain concurrently with it and
+      // with each other: shutdown then waits for the slowest drain rather than
+      // the sum of them. Drains are awaited only after sessions and processes
+      // are torn down: reconciliation's includes startup workspace
+      // initialization, whose in-flight startup script cannot be cancelled and
+      // may outlast the stop budget, and new agent sessions fail fast once
+      // clients are stopped.
+      const jobDrains = {
+        reconciliation: beginJobStop('reconciliation-cleanup', () =>
+          reconciliationService.stopPeriodicCleanup()
+        ),
+        prSync: beginJobStop('pr-sync', () => schedulerService.stop()),
+        snapshotReconciliation: beginJobStop('snapshot-reconciliation', () =>
+          snapshotReconciliation.stop()
+        ),
+        ratchet: beginJobStop('ratchet', () => ratchetService.stop()),
+        periodicTasks: beginJobStop('periodic-task-poll', () => periodicTaskService.stop()),
+      };
       await services.agentRuntime?.stop();
       // Archive recovery still uses sessions, run scripts, caches and the database.
       await archiveRecoveryPromise;
@@ -459,13 +511,16 @@ export function createServer(application: Application, requestedPort?: number): 
       acpTraceLogger.cleanup();
       await rateLimiter.stop();
 
-      await schedulerService.stop();
+      // Every drain is already under way, so awaiting them one at a time costs
+      // only the slowest; the order below just keeps the edges that matter.
+      // The event collector keeps projecting until the PR sync has settled.
+      await jobDrains.prSync;
       eventCollector.stop();
-      await snapshotReconciliation.stop();
+      // Snapshot reconciliation's Git-stats pass must settle before the Git
+      // state service drops its watchers and cache.
+      await jobDrains.snapshotReconciliation;
       workspaceGitStateService.stop();
-      await ratchetService.stop();
-      await periodicTaskService.stop();
-      await reconciliationStopped;
+      await Promise.all([jobDrains.ratchet, jobDrains.periodicTasks, jobDrains.reconciliation]);
       await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
@@ -554,16 +609,9 @@ export function createServer(application: Application, requestedPort?: number): 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
         await interceptors.start();
-        reconciliationService.startPeriodicCleanup();
-        rateLimiter.start();
-        schedulerService.start();
-        await ratchetService.start();
-        periodicTaskService.start();
-        services.agentRuntime?.start();
-        // Provisioning (git, startup script, agent session) can take minutes, so
-        // it must not hold back readiness. `stopPeriodicCleanup` drains it.
-        if (!cleanupStarted) {
-          reconciliationService.startNewWorkspaceInitialization();
+        await startBackgroundWork();
+        if (cleanupStarted) {
+          throw new Error('Server startup interrupted by shutdown');
         }
         startupComplete = true;
 

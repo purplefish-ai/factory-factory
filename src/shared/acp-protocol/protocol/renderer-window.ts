@@ -24,7 +24,8 @@ function isStreamFragment(message: AgentMessage): boolean {
   return message.type === 'stream_event' && message.event?.type !== 'content_block_start';
 }
 
-function isSafeRendererWindowStart(message: ChatMessage): boolean {
+/** Whether a trimmed renderer window may start at `message`. */
+export function isSafeRendererWindowStart(message: ChatMessage): boolean {
   if (message.source === 'user') {
     return true;
   }

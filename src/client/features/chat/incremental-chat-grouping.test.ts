@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 import {
   filterDuplicateResultMessages,
@@ -6,6 +6,20 @@ import {
   isToolSequence,
 } from '@/lib/chat-protocol';
 import { createIncrementalChatGrouper } from './incremental-chat-grouping';
+import { resolveRendererTranscript } from './reducer/renderer-indexes';
+
+// Records how many messages each regroup scans, to tell full rebuilds from tail updates.
+const groupedInputLengths = vi.hoisted((): number[] => []);
+vi.mock('@/lib/chat-protocol', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/chat-protocol')>('@/lib/chat-protocol');
+  return {
+    ...actual,
+    groupAdjacentToolCalls: (messages: ChatMessage[]) => {
+      groupedInputLengths.push(messages.length);
+      return actual.groupAdjacentToolCalls(messages);
+    },
+  };
+});
 
 const timestamp = '2026-09-08T00:00:00.000Z';
 
@@ -295,5 +309,36 @@ describe('createIncrementalChatGrouper', () => {
     expect(createIncrementalChatGrouper({ filterDuplicateResults: true }).group(messages)).toEqual(
       oracle(messages, true)
     );
+  });
+
+  it('regroups only the tail between renderer window trims and matches a full rebuild', () => {
+    const limit = 100;
+    const grouper = createIncrementalChatGrouper({ filterDuplicateResults: true });
+    let window: ChatMessage[] = [];
+    let fullRegroups = 0;
+    for (let order = 0; order < 400; order += 1) {
+      const turn = Math.floor(order / 4);
+      const message = [
+        user(`user-${turn}`, order),
+        toolUse(`tool-${turn}`, `call-${turn}`, order),
+        toolResult(`result-${turn}`, `call-${turn}`, order),
+        assistant(`assistant-${turn}`, `done ${turn}`, order),
+      ][order % 4] as ChatMessage;
+      const previousStart = window[0];
+      window = resolveRendererTranscript(window, [...window, message], limit).retained;
+
+      groupedInputLengths.length = 0;
+      const grouped = grouper.group(window);
+      const scanned = Math.max(...groupedInputLengths);
+      expect(grouped).toEqual(oracle(window, true));
+      if (window[0] !== (previousStart ?? message)) {
+        fullRegroups += 1;
+        expect(scanned).toBe(window.length);
+      } else if (window.length > 4) {
+        expect(scanned).toBeLessThan(4);
+      }
+    }
+    expect(fullRegroups).toBeGreaterThan(1);
+    expect(fullRegroups).toBeLessThan(40);
   });
 });
