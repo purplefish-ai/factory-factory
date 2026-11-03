@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { AttachmentPreview } from '@/client/features/composer';
+import { AttachmentPreview } from '@/client/features/composer/attachment-preview';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { ImageDropZone } from './image-drop-zone';
 

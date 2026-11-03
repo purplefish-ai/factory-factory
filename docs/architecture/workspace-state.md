@@ -119,15 +119,16 @@ Dragging image files over the Kanban board highlights a drop target. Dropping
 opens the new workspace form and appends the images to the project's creation
 draft. The navigation sidebar has its own creation drop target, including while
 viewing a workspace: dropping there opens the sidebar's new workspace form with
-the images attached. The sidebar form loads on demand; images dropped while it
-loads are saved to the draft and shown once it opens. Dropping over the main
-chat transcript or composer highlights the message destination and appends
-images to that chat's composer. Existing instructions and attachments are
-retained. Image limits and per-file errors match the composer; chat drops
-require a connected, loaded chat that supports image attachments. File reads
-finishing after a project or session switch or explicit draft clearing are
-ignored. An accepted drop survives a temporary chat disconnect while its files
-are being read.
+the images attached. The sidebar form loads on demand. Images dropped before
+draft storage loads wait in memory, so a refresh in that brief window loses
+them; once it loads they are saved to the draft and shown when the form opens.
+Dropping over the main chat transcript or composer highlights the message
+destination and appends images to that chat's composer. Existing instructions
+and attachments are retained. Image limits and per-file errors match the
+composer; chat drops require a connected, loaded chat that supports image
+attachments. File reads finishing after a project or session switch or explicit
+draft clearing are ignored. An accepted drop survives a temporary chat
+disconnect while its files are being read.
 
 The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and

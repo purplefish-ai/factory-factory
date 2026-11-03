@@ -1,21 +1,56 @@
-import { lazy, type ReactNode, Suspense, useCallback, useSyncExternalStore } from 'react';
+import {
+  Component,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useSyncExternalStore,
+} from 'react';
+import { toast } from 'sonner';
 import { ImageDropZone } from '@/client/components/image-drop-zone';
-import { ErrorBoundary } from '@/client/error-boundary';
 import {
   getPendingWorkspaceCreationDropProjectIds,
   getWorkspaceCreationDropGeneration,
   stageWorkspaceCreationAttachments,
   subscribeWorkspaceCreationDrops,
+  takeWorkspaceCreationAttachments,
 } from './workspace-creation-drop-queue';
 
 // The sidebar mounts this zone at startup. Dropped images wait in the
 // dependency-free queue; draft storage and its launch option schemas load only
 // once an image is actually dropped.
-const WorkspaceCreationDropDrain = lazy(() =>
-  import('./workspace-creation-drop-drain').then((module) => ({
-    default: module.WorkspaceCreationDropDrain,
-  }))
-);
+function lazyDropDrain() {
+  return lazy(() =>
+    import('./workspace-creation-drop-drain').then((module) => ({
+      default: module.WorkspaceCreationDropDrain,
+    }))
+  );
+}
+let WorkspaceCreationDropDrain = lazyDropDrain();
+
+/** Reports a failed drain load and lets the next drop retry with a fresh import. */
+class DropDrainBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: Error) {
+    // React.lazy caches a rejected import for the lifetime of the component.
+    WorkspaceCreationDropDrain = lazyDropDrain();
+    // Discarding the queue unmounts this boundary, so the next drop starts clean.
+    for (const projectId of getPendingWorkspaceCreationDropProjectIds()) {
+      takeWorkspaceCreationAttachments(projectId);
+    }
+    toast.error('Dropped images could not be attached. Try dropping them again.');
+    globalThis.reportError?.(error);
+  }
+
+  override render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 interface WorkspaceCreationImageDropZoneProps {
   projectId: string | undefined;
@@ -55,15 +90,13 @@ export function WorkspaceCreationImageDropZone({
     >
       {children}
       {pendingProjectIds.length > 0 && (
-        // A null fallback would render the boundary's full-page error; the form
-        // reports chunk failures, so the drain stays invisible.
-        <ErrorBoundary fallback={<span hidden />}>
+        <DropDrainBoundary>
           <Suspense fallback={null}>
             {pendingProjectIds.map((pendingProjectId) => (
               <WorkspaceCreationDropDrain key={pendingProjectId} projectId={pendingProjectId} />
             ))}
           </Suspense>
-        </ErrorBoundary>
+        </DropDrainBoundary>
       )}
     </ImageDropZone>
   );

@@ -80,7 +80,7 @@ scrolling passed in all three cases.
 The production main chunk decreased from 1,869.37 KB (570.83 KB gzip) to 336.70
 KB (102.72 KB gzip), including the independently merged direct-icon imports.
 Later features grew it again: it measured 609.68 KB (180.71 KB gzip) before the
-sidebar's workspace creation form was made lazy, and 493.07 KB (146.22 KB gzip)
+sidebar's workspace creation form was made lazy, and 497.73 KB (147.51 KB gzip)
 afterwards; see [client loading](../architecture/client-loading.md). The file
 viewer chunk is approximately 7 KB and the highlight worker approximately 247
 KB. `pnpm build` checks independent raw-byte budgets: entry 650 KB, file viewer
