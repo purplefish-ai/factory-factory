@@ -169,6 +169,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/shared/testing/recovery-json-storage.fixture.ts": {
+      "disposition": "test-support",
+      "reason": "Malformed workspace JSON fixtures used by shared schema and public import tests; no production runtime callers."
+    },
     "src/test-utils/agent-authoring-eval-fixture.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
