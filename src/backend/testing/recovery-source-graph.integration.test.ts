@@ -10,6 +10,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from './integration-db';
+import { publishedVersion4Backup, publishedVersion5Backup } from './legacy-backup.fixture';
 
 const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined, reads: 0 }));
 vi.mock('@/backend/db', () => ({
@@ -73,10 +74,10 @@ afterAll(async () => destroyIntegrationDatabase(db));
 function backup() {
   return structuredClone(source);
 }
-function root(data: ExportData) {
+function root<T extends { id: string }>(data: { data: { workspaces: T[] } }) {
   return data.data.workspaces.find((w) => w.id === 'root')!;
 }
-function child(data: ExportData) {
+function child<T extends { id: string }>(data: { data: { workspaces: T[] } }) {
   return data.data.workspaces.find((w) => w.id === 'child')!;
 }
 type Mutation = (data: ExportData) => void;
@@ -125,14 +126,43 @@ const expectedIssues: Record<string, { path: (string | number)[]; message: strin
     message: 'Receipt members must belong to one workspace',
   },
 };
-function expectStructuralIssue(data: ExportData, name: string) {
+function expectStructuralIssue(data: unknown, name: string) {
+  expect(expectedIssues[name]).toBeDefined();
   const result = exportDataSchema.safeParse(data);
   expect(result.success).toBe(false);
   if (!result.success) {
     expect(result.error.issues).toContainEqual({ code: 'custom', ...expectedIssues[name] });
   }
 }
-const malformed: [string, Mutation][] = [
+interface IdentityGraph {
+  data: {
+    projects: { id: string; slug: string }[];
+    workspaces: {
+      id: string;
+      projectId: string;
+      parentWorkspaceId: string | null;
+      prs?: unknown[];
+      prEvents?: unknown[];
+      prUrl?: string | null;
+    }[];
+    agentSessions: { id: string; workspaceId: string }[];
+    terminalSessions: { id: string; workspaceId: string }[];
+  };
+}
+function versionedBackup(version: number) {
+  if (version === 4) {
+    return publishedVersion4Backup();
+  }
+  if (version === 5) {
+    return publishedVersion5Backup();
+  }
+  // v6/v7 cases use the current normalized-compatible export shape, including
+  // optional account fields. Only v4/v5 builders model published historical wire.
+  const b = backup();
+  Reflect.set(b.meta, 'schemaVersion', version);
+  return b;
+}
+const malformed: [string, (data: IdentityGraph) => void][] = [
   [
     'project ID',
     (b) => {
@@ -148,7 +178,7 @@ const malformed: [string, Mutation][] = [
   [
     'workspace ID',
     (b) => {
-      b.data.workspaces.push({ ...root(b), prs: [], prEvents: [] });
+      b.data.workspaces.push({ ...child(b), prs: [], prEvents: [], prUrl: null });
     },
   ],
   [
@@ -199,19 +229,15 @@ it.each(
 )(
   'rejects $name after version $version normalization before discovery',
   async ({ version, name, mutate }) => {
-    const invalid = backup();
-    if (version <= 5) {
-      for (const workspace of invalid.data.workspaces) {
-        workspace.prEvents = [];
-        workspace.prMonitoring = null;
-      }
-    }
-    Reflect.set(invalid.meta, 'schemaVersion', version);
+    const invalid = versionedBackup(version);
     expect(exportDataSchema.safeParse(invalid).success).toBe(true);
     mutate(invalid);
     expectStructuralIssue(invalid, name);
     state.reads = 0;
-    await expect(dataBackupService.importData(invalid)).rejects.toBeInstanceOf(ZodError);
+    // Exercise the runtime boundary with the unnormalized published wire input.
+    await expect(
+      Reflect.apply(dataBackupService.importData, dataBackupService, [invalid])
+    ).rejects.toBeInstanceOf(ZodError);
     expect(state.reads).toBe(0);
     expect(await db.prisma.project.count()).toBe(0);
     expect(await db.prisma.workspace.count()).toBe(0);
@@ -468,17 +494,41 @@ it('keeps missing source projects and absent session/terminal workspaces as scop
 it.each([4, 5, 6, 7])(
   'imports normalized version %s with a child preceding its root',
   async (version) => {
-    const b = backup();
-    b.data.workspaces = [child(b), b.data.workspaces.find((w) => w.id === 'healthy')!, root(b)];
+    const b = versionedBackup(version);
+    b.data.workspaces.reverse();
+    const normalized = exportDataSchema.parse(b);
     if (version <= 5) {
-      for (const workspace of b.data.workspaces) {
-        workspace.prEvents = [];
-        workspace.prMonitoring = null;
+      expect(b.data).not.toHaveProperty('codexAccounts');
+      expect(b.data.agentSessions[0]).not.toHaveProperty('codexAccountId');
+      const rawRoot = b.data.workspaces.find((workspace) => workspace.id === 'root')!;
+      expect(rawRoot).not.toHaveProperty('prMonitoring');
+      expect(rawRoot).not.toHaveProperty('prEvents');
+      expect(rawRoot).not.toHaveProperty('conversationMetadata');
+      expect(normalized.meta.schemaVersion).toBe(6);
+      expect(normalized.data.codexAccounts).toEqual([]);
+      expect(root(normalized).prs.map((pr) => pr.id)).toEqual([
+        version === 4 ? 'legacy-pr-root' : 'pr-root',
+      ]);
+      expect(normalized.data.agentSessions[0]).toMatchObject({
+        workspacePrId: version === 4 ? 'legacy-pr-root' : 'pr-root',
+        codexAccountId: null,
+      });
+      expect(root(normalized).prMonitoring).toMatchObject({
+        legacySessionIds: ['session'],
+        deliveryPauseReason: 'LEGACY_FIXER',
+      });
+      expect(root(normalized)).not.toHaveProperty('mode');
+      if (version === 4) {
+        expect(rawRoot).not.toHaveProperty('prs');
+        expect(rawRoot).not.toHaveProperty('prDiscovery');
+        expect(b.data.agentSessions[0]).not.toHaveProperty('workspacePrId');
+      } else {
+        expect(rawRoot).not.toHaveProperty('prUrl');
+        expect(rawRoot).toHaveProperty('prs.0.ratchet.dispatchSnapshotKey', 'historical-dispatch');
+        expect(root(normalized).prs[0]).not.toHaveProperty('ratchet');
       }
     }
-    Reflect.set(b.meta, 'schemaVersion', version);
-    expect(exportDataSchema.safeParse(b).success).toBe(true);
-    const imported = await dataBackupService.importData(b);
+    const imported = await dataBackupService.importData(normalized);
     expect(imported.workspaces).toEqual({ imported: 3, skipped: 0 });
     expect(await db.prisma.workspace.findUnique({ where: { id: 'child' } })).toMatchObject({
       parentWorkspaceId: 'root',
@@ -486,3 +536,61 @@ it.each([4, 5, 6, 7])(
     await clearIntegrationDatabase(db.prisma);
   }
 );
+
+it.each([6, 7])(
+  'rejects a version %s control with a non-null PR before discovery',
+  async (version) => {
+    const b = backup();
+    Reflect.set(b.meta, 'schemaVersion', version);
+    const event = root(b).prEvents[0]!;
+    event.kind = 'MONITORING_ENABLED';
+    event.prId = null;
+    event.payload = {
+      kind: 'MONITORING_ENABLED',
+      workspaceId: 'root',
+      bindingRevision: 0,
+      replyToPrComments: false,
+    };
+    expect(exportDataSchema.safeParse(b).success).toBe(true);
+    event.prId = 'pr-root';
+    const result = exportDataSchema.safeParse(b);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual({
+        code: 'custom',
+        path: ['data', 'workspaces', 0, 'prEvents'],
+        message: foreignEvent,
+      });
+    }
+    state.reads = 0;
+    await expect(dataBackupService.importData(b)).rejects.toBeInstanceOf(ZodError);
+    expect(state.reads).toBe(0);
+    expect(await db.prisma.project.count()).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+    expect(await db.prisma.workspacePREvent.count()).toBe(0);
+  }
+);
+
+it.each([6, 7])('imports a version %s null-PR control as an inert fact', async (version) => {
+  const b = backup();
+  Reflect.set(b.meta, 'schemaVersion', version);
+  const event = root(b).prEvents[0]!;
+  event.kind = 'MONITORING_ENABLED';
+  event.prId = null;
+  event.payload = {
+    kind: 'MONITORING_ENABLED',
+    workspaceId: 'root',
+    bindingRevision: 0,
+    replyToPrComments: false,
+  };
+  expect(exportDataSchema.safeParse(b).success).toBe(true);
+  const result = await dataBackupService.importData(b);
+  expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+  expect(result.inertTransforms.cancelledFacts).toBe(1);
+  expect(await db.prisma.workspacePREvent.findUnique({ where: { id: event.id } })).toMatchObject({
+    prId: null,
+    state: 'CANCELLED',
+    deliveredAt: null,
+  });
+  await clearIntegrationDatabase(db.prisma);
+});

@@ -150,11 +150,15 @@ function eventOwnershipMatches(
   prs: ReadonlySet<string>
 ): boolean {
   const target = event.payload.kind === 'MONITORING_ENABLED' ? event.payload : event.payload.target;
+  const prMatches =
+    event.payload.kind === 'MONITORING_ENABLED'
+      ? event.prId === null
+      : event.payload.target.prId === event.prId;
   return (
     event.workspaceId === workspaceId &&
     target.workspaceId === workspaceId &&
     (event.prId === null || prs.has(event.prId)) &&
-    (!('prId' in target) || target.prId === event.prId)
+    prMatches
   );
 }
 
