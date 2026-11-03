@@ -29,6 +29,7 @@ import {
   securityMiddleware,
 } from './middleware';
 import { createHealthRouter } from './routers/health.router';
+import { createPortShareRouter } from './routers/port-share.router';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
@@ -63,6 +64,7 @@ export function createServer(application: Application, requestedPort?: number): 
     configService,
     createLogger,
     periodicTaskService,
+    portShareService,
     ratchetService,
     rateLimiter,
     reconciliationService,
@@ -252,6 +254,8 @@ export function createServer(application: Application, requestedPort?: number): 
   // Mount HTTP Routes
   // ============================================================================
   app.use('/health', createHealthRouter(application));
+  // Before the SPA fallback, which would otherwise answer every GET.
+  app.use('/proxy', createPortShareRouter(application));
   app.use(
     '/api/trpc',
     createExpressMiddleware({
@@ -436,6 +440,23 @@ export function createServer(application: Application, requestedPort?: number): 
     reconciliationService.startNewWorkspaceInitialization();
   };
 
+  const assertStartupNotInterrupted = (): void => {
+    if (cleanupStarted) {
+      throw new Error('Server startup interrupted by shutdown');
+    }
+  };
+
+  /** Readiness work that must not run once shutdown has begun. */
+  const startRuntimeWork = async (): Promise<void> => {
+    // Before readiness, so a crashed backend's leftover Serve listener cannot
+    // make the first share of that port fail as already configured.
+    await portShareService.stopStaleShares();
+    assertStartupNotInterrupted();
+    await interceptors.start();
+    await startBackgroundWork();
+    assertStartupNotInterrupted();
+  };
+
   /**
    * Signal one background job to stop now and return its drain. The drain
    * never rejects: a failed stop is logged so it cannot keep the other jobs,
@@ -507,6 +528,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
       terminalService.cleanup();
       await runScriptService.cleanup();
+      await portShareService.cleanup();
       sessionFileLogger.cleanup();
       acpTraceLogger.cleanup();
       await rateLimiter.stop();
@@ -602,17 +624,13 @@ export function createServer(application: Application, requestedPort?: number): 
           port: actualPort,
           environment: configService.getEnvironment(),
         });
-        if (configService.isRunScriptProxyEnabled()) {
+        if (configService.shouldEmitBackendPort()) {
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
         }
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
-        await interceptors.start();
-        await startBackgroundWork();
-        if (cleanupStarted) {
-          throw new Error('Server startup interrupted by shutdown');
-        }
+        await startRuntimeWork();
         startupComplete = true;
 
         logger.info('Server endpoints available', {

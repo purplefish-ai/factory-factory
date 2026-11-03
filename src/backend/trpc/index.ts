@@ -7,6 +7,7 @@ import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
 import { linearRouter } from './linear.trpc';
 import { periodicTaskRouter } from './periodic-task.trpc';
+import { portShareRouter } from './port-share.trpc';
 import { prReviewRouter } from './pr-review.trpc';
 import { projectRouter } from './project.trpc';
 import { searchRouter } from './search.trpc';
@@ -33,6 +34,7 @@ export const appRouter = router({
   github: githubRouter,
   linear: linearRouter,
   periodicTask: periodicTaskRouter,
+  portShare: portShareRouter,
   voice: voiceRouter,
   slack: slackRouter,
 });

@@ -166,6 +166,31 @@ reach this endpoint can manage workspaces and execute commands. This command
 uses Serve, not public Funnel, and configures HTTP and WebSocket origins without
 requiring manual environment changes.
 
+#### Open the agent's localhost links
+
+Agents run on the host, so they print links such as
+`http://127.0.0.1:6173/?path=/story/...`. When you use Factory Factory through
+`ff tailscale` from another device, chat links to `localhost`, `127.0.0.1`,
+`[::1]` or `0.0.0.0` with a port, and the Run button, open through
+`/proxy/<port>/...` on the Factory Factory address. That shares the port with
+foreground Tailscale Serve and redirects to
+`https://<machine>.ts.net:<port>/...`. The link text stays as the agent wrote
+it. Each app keeps its own origin, so root-relative assets, live reload and
+WebSockets work, and it cannot use Factory Factory's API as you.
+
+- Clicks inside Factory Factory share immediately. Links opened from other
+  sites, or prefetched, show a **Share port** confirmation first.
+- Ports below 1024, Factory Factory's own ports, other Factory Factory servers,
+  and well-known database and infrastructure ports (Docker, PostgreSQL, MySQL,
+  Redis, MongoDB, Elasticsearch, memcached, Prisma Studio) are never shared.
+- Shared ports reach everyone who can reach this machine on your tailnet,
+  including node sharing. Tailnet policies that allow only port 443 block them.
+- Shares last until Factory Factory stops or the share's Tailscale Serve process
+  exits; the next visit shares the port again. If Factory Factory crashes on
+  macOS or Linux, the next start stops leftover Serve listeners.
+- Under `ff tailscale`, the Run button no longer starts a public cloudflared
+  tunnel.
+
 Press Ctrl+C to stop both the owned server and its Tailscale exposure. Existing
 Serve/Funnel listeners are preserved; if HTTPS port 443 is occupied, use
 `ff tailscale --https-port 8443` (or `pnpm tailscale --https-port 8443`).

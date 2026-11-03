@@ -12,7 +12,8 @@ export async function startFactoryFactoryServer(params: {
   projectRoot: string;
   databasePath: string;
   requestedPort: number;
-  trustedProxyOrigin?: string;
+  /** `ff tailscale` access; trusts its reverse proxy and enables port sharing. */
+  tailscale?: { origin: string; httpsPort: number };
   signal?: AbortSignal;
 }): Promise<{ process: ChildProcess; port: number }> {
   const frontendDist = join(params.projectRoot, 'dist', 'client');
@@ -24,24 +25,36 @@ export async function startFactoryFactoryServer(params: {
     );
   }
 
+  const { tailscale } = params;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: 'production',
+    DATABASE_PATH: params.databasePath,
+    BACKEND_PORT: params.requestedPort.toString(),
+    BACKEND_HOST: LOCAL_HOST,
+    // Public tunnel traffic must never inherit a trusted reverse-proxy opt-in.
+    TRUST_PROXY_HEADERS: tailscale ? 'true' : 'false',
+    ...(tailscale
+      ? {
+          CORS_ALLOWED_ORIGINS: tailscale.origin,
+          DISABLE_CORS_CHECKS: 'false',
+          FF_TAILSCALE_ORIGIN: tailscale.origin,
+          FF_TAILSCALE_HTTPS_PORT: tailscale.httpsPort.toString(),
+        }
+      : // Present but empty, so neither the parent environment nor a dotenv
+        // file can turn on port sharing for a non-Tailscale launch.
+        { FF_TAILSCALE_ORIGIN: '', FF_TAILSCALE_HTTPS_PORT: '' }),
+    DOTENV_CONFIG_OVERRIDE: 'false',
+    DOTENV_OVERRIDE: 'false',
+    FF_EMIT_BACKEND_PORT: '1',
+    // Private Tailscale sessions share run-script ports through Serve, never a
+    // public cloudflared tunnel.
+    FF_RUN_SCRIPT_PROXY_ENABLED: tailscale ? '0' : '1',
+    FRONTEND_STATIC_PATH: frontendDist,
+  };
   const backend = spawn('node', [backendDist], {
     cwd: params.projectRoot,
-    env: {
-      ...process.env,
-      NODE_ENV: 'production',
-      DATABASE_PATH: params.databasePath,
-      BACKEND_PORT: params.requestedPort.toString(),
-      BACKEND_HOST: LOCAL_HOST,
-      // Public tunnel traffic must never inherit a trusted reverse-proxy opt-in.
-      TRUST_PROXY_HEADERS: params.trustedProxyOrigin ? 'true' : 'false',
-      ...(params.trustedProxyOrigin
-        ? { CORS_ALLOWED_ORIGINS: params.trustedProxyOrigin, DISABLE_CORS_CHECKS: 'false' }
-        : {}),
-      DOTENV_CONFIG_OVERRIDE: 'false',
-      DOTENV_OVERRIDE: 'false',
-      FF_RUN_SCRIPT_PROXY_ENABLED: '1',
-      FRONTEND_STATIC_PATH: frontendDist,
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
     signal: params.signal,
   });

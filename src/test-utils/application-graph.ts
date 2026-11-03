@@ -335,6 +335,7 @@ import { JobRunner } from '@/backend/services/job-runner.service';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
+import { PortShareService } from '@/backend/services/port-share';
 import { findAvailablePort } from '@/backend/services/port.service';
 import { ratchetService } from '@/backend/services/ratchet';
 import { rateLimiter } from '@/backend/services/rate-limiter.service';
@@ -427,6 +428,8 @@ const fakeSystemConfig = {
   acpTraceLogsEnabled: false,
   wsLogsEnabled: false,
   runScriptProxyEnabled: false,
+  emitBackendPort: false,
+  tailscale: null,
   compression: { enabled: false },
   workspaceMetadata: { enabled: false, codexModel: 'gpt-6-luna', claudeModel: 'haiku' },
   appVersion: 'test',
@@ -549,6 +552,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     retryQueuedDispatchAfterWorkspaceReady,
     runScriptConfigPersistenceService,
     runScriptService: createRunScriptService({ registerShutdownHandlers: false }),
+    portShareService: new PortShareService({ getTailscaleConfig: () => null }),
     runScriptStateMachine,
     schedulerService,
     serverInstanceService: createServerInstanceService(),

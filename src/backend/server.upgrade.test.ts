@@ -760,6 +760,18 @@ describe('server websocket upgrade routing', () => {
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
+  it('does not start interceptors when shutdown begins during stale share recovery', async () => {
+    const { application, lifecycle, services } = createTestHarness();
+    const server = createTestServer(application, 0);
+    vi.mocked(services.portShareService.stopStaleShares).mockImplementationOnce(async () => {
+      await server.stop();
+    });
+
+    await expect(server.start()).rejects.toThrow('Server startup interrupted by shutdown');
+    expect(lifecycle.interceptors.start).not.toHaveBeenCalled();
+    expect(services.ratchetService.start).not.toHaveBeenCalled();
+  });
+
   it('stops reconciliation when shutdown begins but drains it before disconnecting', async () => {
     const { application, lifecycle, services } = createTestHarness();
     const { promise: drained, resolve: drain } = deferred<undefined>();
@@ -853,6 +865,21 @@ describe('server websocket upgrade routing', () => {
       'no-cache, no-store, must-revalidate'
     );
     expect(apiResponse.status).toBe(404);
+  });
+
+  it('routes /proxy links to port sharing instead of the SPA fallback', async () => {
+    const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
+    const server = createTestServer(createTestApplication({ frontendStaticPath }));
+
+    const response = await request(server.getHttpServer()).get('/proxy/6173/?path=/story/x').set({
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Dest': 'document',
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.text).toContain('Port sharing is off');
+    expect(response.text).not.toContain('factory-factory');
   });
 
   it('sets no-cache headers when index.html is requested directly', async () => {

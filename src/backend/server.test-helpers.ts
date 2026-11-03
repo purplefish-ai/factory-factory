@@ -24,6 +24,8 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       getFrontendStaticPath: () => options.frontendStaticPath ?? null,
       isDevelopment: () => false,
       isRunScriptProxyEnabled: () => options.isRunScriptProxyEnabled ?? false,
+      shouldEmitBackendPort: () => options.isRunScriptProxyEnabled ?? false,
+      getTailscaleConfig: () => null,
       getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
       getAppVersion: () => 'test-version',
       getDatabasePath: () => '/tmp/test.db',
@@ -67,6 +69,13 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
     },
     runScriptService: {
       cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    },
+    portShareService: {
+      cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      stopStaleShares: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      isAvailable: () => false,
+      getShareOrigin: () => null,
+      ensure: vi.fn<(port: number) => Promise<string>>(),
     },
     acpTraceLogger: {
       cleanup: vi.fn<(...args: unknown[]) => void>(),
