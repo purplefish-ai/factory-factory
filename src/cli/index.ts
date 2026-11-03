@@ -16,6 +16,7 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { registerStudioCommand } from './studio';
 import { registerTailscaleCommand } from './tailscale';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -569,28 +570,7 @@ program
 // db:studio command
 // ============================================================================
 
-program
-  .command('db:studio')
-  .description('Open Prisma Studio for database management')
-  .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
-  .action(async (options: MigrateOptions) => {
-    const effectivePath = resolveDatabasePath({ databasePath: options.databasePath });
-
-    console.log(chalk.blue(`Opening Prisma Studio for ${effectivePath}...`));
-
-    const studio = spawn('npx', ['prisma', 'studio'], {
-      cwd: PROJECT_ROOT,
-      env: {
-        ...process.env,
-        DATABASE_URL: `file:${effectivePath}`,
-      },
-      stdio: 'inherit',
-    });
-
-    await new Promise<void>((resolve) => {
-      studio.on('exit', () => resolve());
-    });
-  });
+registerStudioCommand(program, PROJECT_ROOT);
 
 // ============================================================================
 // build command
