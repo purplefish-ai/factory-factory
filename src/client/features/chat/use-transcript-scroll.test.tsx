@@ -45,6 +45,17 @@ function Probe() {
   return null;
 }
 
+function KeysProbe({ keys }: { keys: string[] }) {
+  ({ engine } = useTranscriptScroll(viewport, keys, {
+    identity: 'keys',
+    active: true,
+    ready: true,
+    initialIntent: 'reading',
+    initialPosition: null,
+  }));
+  return null;
+}
+
 function row(height = 100) {
   const node = document.createElement('div');
   node.dataset.index = '0';
@@ -172,4 +183,30 @@ it('tracks content below the viewport through scrolling and layout changes', asy
   contentHeight = 200;
   await act(() => root.render(<Probe />));
   expect(hasContentBelow).toBe(false);
+});
+
+it('keeps virtualizer key callbacks stable until the row keys change', async () => {
+  Object.defineProperty(viewport, 'clientHeight', { get: () => 400 });
+  const keys = ['transcript:header', 'a'];
+  await act(() => root.render(<KeysProbe keys={keys} />));
+  const { getItemKey, rangeExtractor } = engine.options;
+  expect(rangeExtractor({ startIndex: 1, endIndex: 1, overscan: 0, count: 2 })).toEqual([0, 1]);
+
+  // Unrelated renders must not invalidate every cached row measurement.
+  await act(() => root.render(<KeysProbe keys={keys} />));
+  expect(engine.options.getItemKey).toBe(getItemKey);
+  expect(engine.options.rangeExtractor).toBe(rangeExtractor);
+  engine.resizeItem(1, 300);
+  const measuredTotal = engine.getTotalSize();
+
+  // A replaced row with the same count must not reuse the old row's size.
+  await act(() => root.render(<KeysProbe keys={['transcript:header', 'b']} />));
+  expect(engine.options.getItemKey).not.toBe(getItemKey);
+  expect(engine.options.getItemKey(1)).toBe('b');
+  expect(engine.getTotalSize()).toBe(measuredTotal - 300 + 80);
+
+  await act(() => root.render(<KeysProbe keys={['b']} />));
+  expect(
+    engine.options.rangeExtractor({ startIndex: 0, endIndex: 0, overscan: 0, count: 1 })
+  ).toEqual([0]);
 });

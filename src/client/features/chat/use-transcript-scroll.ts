@@ -2,6 +2,7 @@ import {
   defaultRangeExtractor,
   elementScroll,
   measureElement,
+  type Range,
   useVirtualizer,
   type Virtualizer,
 } from '@tanstack/react-virtual';
@@ -121,21 +122,31 @@ export function useTranscriptScroll(
     };
   }, [viewport]);
 
+  // The virtualizer rebuilds every row measurement whenever `getItemKey` or
+  // `rangeExtractor` change identity. Tie them to the memoized row keys so
+  // unrelated renders keep the cache, while a new row structure still
+  // invalidates it.
+  const getItemKey = useCallback((index: number) => keys[index] ?? `missing-${index}`, [keys]);
+  const leadingHeader = keys[0] === 'transcript:header';
+  // A banner/image can resize while scrolled out of view. Keep this one
+  // leading row measured so its size and native compensation stay current.
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      return leadingHeader && indexes[0] !== 0 ? [0, ...indexes] : indexes;
+    },
+    [leadingHeader]
+  );
   const engine = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: keys.length,
     getScrollElement: () => viewport,
-    getItemKey: (index) => keys[index] ?? `missing-${index}`,
+    getItemKey,
     estimateSize: () => 80,
     overscan: 5,
     paddingStart: 16,
     paddingEnd: 16,
     gap: 8,
-    // A banner/image can resize while scrolled out of view. Keep this one
-    // leading row measured so its size and native compensation stay current.
-    rangeExtractor: (range) => {
-      const indexes = defaultRangeExtractor(range);
-      return keys[0] === 'transcript:header' && indexes[0] !== 0 ? [0, ...indexes] : indexes;
-    },
+    rangeExtractor,
     anchorTo: 'start',
     followOnAppend: false,
     // Native compensation can synchronously render more measured rows. Deliver

@@ -292,6 +292,14 @@ duplicate-result filtering creates a new grouper. Message edits must replace the
 array and changed message objects; in-place appends and truncation are detected
 by length, but same-length in-place edits are unsupported.
 
+The composer draft lives in the same chat state as the transcript, so every
+keystroke re-renders `ChatContent`. `ChatTranscript` is memoized and skips those
+renders only while its props keep their identity: the transcript header, running
+sub-agent list, sub-agent callbacks and list state are memoized from the data
+they show. Inside the transcript, the virtualizer's `getItemKey` and
+`rangeExtractor` change only with the row keys, because a new `getItemKey`
+rebuilds every row measurement.
+
 The renderer keeps a recent transcript window of
 `DEFAULT_RENDERER_TRANSCRIPT_LIMIT` messages. Snapshots and replay arrive
 trimmed to the limit; live appends then grow the window by up to a tenth of the

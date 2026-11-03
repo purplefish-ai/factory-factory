@@ -163,9 +163,10 @@ function useSubagentNavigation(
   timeline: ReturnType<typeof useSubagentTimelineMessages>
 ) {
   const { sessionId, parentSessionName, onOpenSubagent } = props;
+  const { subagents, subagentListState } = timeline;
   const handleOpenSubagent = useCallback(
     (subagentId: string) => {
-      const subagent = timeline.subagents.find((agent) => agent.id === subagentId);
+      const subagent = subagents.find((agent) => agent.id === subagentId);
       if (sessionId && subagent) {
         onOpenSubagent?.({
           parentSessionId: sessionId,
@@ -174,22 +175,45 @@ function useSubagentNavigation(
         });
       }
     },
-    [sessionId, parentSessionName, onOpenSubagent, timeline.subagents]
+    [sessionId, parentSessionName, onOpenSubagent, subagents]
   );
-  const runningSubagents = timeline.subagents.filter((agent) => agent.status === 'running');
-  const singleSubagent = runningSubagents.length === 1 ? runningSubagents[0] : undefined;
+  const runningSubagents = subagents.filter((agent) => agent.status === 'running');
+  const singleSubagentId = runningSubagents.length === 1 ? runningSubagents[0]?.id : undefined;
+  const openSingleSubagent = useCallback(() => {
+    if (singleSubagentId) {
+      handleOpenSubagent(singleSubagentId);
+    }
+  }, [handleOpenSubagent, singleSubagentId]);
+  const canOpen = Boolean(onOpenSubagent);
+  // Stable identities let the memoized transcript skip composer-only renders.
+  const runningSubagentList = useMemo(
+    () =>
+      canOpen ? (
+        <SubagentList
+          activeOnly
+          state={subagentListState}
+          onSelect={(subagent) => handleOpenSubagent(subagent.id)}
+        />
+      ) : undefined,
+    [canOpen, subagentListState, handleOpenSubagent]
+  );
   return {
-    onOpenSubagent: onOpenSubagent ? handleOpenSubagent : undefined,
-    onOpenSingleSubagent:
-      onOpenSubagent && singleSubagent ? () => handleOpenSubagent(singleSubagent.id) : undefined,
-    runningSubagentList: onOpenSubagent ? (
-      <SubagentList
-        activeOnly
-        state={timeline.subagentListState}
-        onSelect={(subagent) => handleOpenSubagent(subagent.id)}
-      />
-    ) : undefined,
+    onOpenSubagent: canOpen ? handleOpenSubagent : undefined,
+    onOpenSingleSubagent: canOpen && singleSubagentId ? openSingleSubagent : undefined,
+    runningSubagentList,
   };
+}
+
+function useSessionRuntimeBanner(sessionRuntime: SessionRuntimeState) {
+  const message =
+    sessionRuntime.phase === 'error' ? getSessionRuntimeErrorMessage(sessionRuntime) : null;
+  return useMemo<WorkspaceInitBanner | null>(
+    () =>
+      message
+        ? { kind: 'error', message, showRetry: false, showPlay: false, showDismiss: false }
+        : null,
+    [message]
+  );
 }
 
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
@@ -251,31 +275,33 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     sessionRuntime: props.sessionRuntime,
     messageCount: props.messages.length,
   });
-  const sessionRuntimeError = getSessionRuntimeErrorMessage(props.sessionRuntime);
-  const sessionRuntimeBanner: WorkspaceInitBanner | null =
-    props.sessionRuntime.phase === 'error' && sessionRuntimeError
-      ? {
-          kind: 'error',
-          message: sessionRuntimeError,
-          showRetry: false,
-          showPlay: false,
-          showDismiss: false,
-        }
-      : null;
-
+  const sessionRuntimeBanner = useSessionRuntimeBanner(props.sessionRuntime);
   const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
+  const { retryAvailability, resumeQueuedMessages } = props;
+  const header = useMemo(
+    () =>
+      createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
+        retryAvailability,
+        retryPending: retryInit.isPending,
+        onRetry: retry,
+        onPlay: resumeQueuedMessages,
+      }),
+    [
+      sessionRuntimeBanner,
+      visibleInitBanner,
+      retryAvailability,
+      retryInit.isPending,
+      retry,
+      resumeQueuedMessages,
+    ]
+  );
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
         sessionId={props.sessionId}
         thinkingInFooter
-        header={createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
-          retryAvailability: props.retryAvailability,
-          retryPending: retryInit.isPending,
-          onRetry: retry,
-          onPlay: props.resumeQueuedMessages,
-        })}
+        header={header}
         workspaceId={props.workspaceId}
         messages={groupedMessages}
         subagentTimelineError={timeline.error}

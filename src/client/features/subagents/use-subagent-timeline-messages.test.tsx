@@ -75,6 +75,7 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 let projectedMessages: ChatMessage[] = [];
 let runningIconIndices: number[] | undefined;
 let timelineError: { message: string; onRetry: () => void } | null = null;
+let listState: ReturnType<typeof useSubagentTimelineMessages>['subagentListState'] | undefined;
 type HarnessProps = {
   sessionId: string | null;
   enabled: boolean;
@@ -86,6 +87,7 @@ function Harness({ sessionId, enabled, rawMessages = EMPTY_MESSAGES, list = fals
     useSubagentTimelineMessages(rawMessages, sessionId, enabled);
   runningIconIndices = runningSubagentIconIndices;
   timelineError = error;
+  listState = subagentListState;
   projectedMessages = messages;
   if (list) {
     return createElement(SubagentList, {
@@ -272,4 +274,33 @@ it('shows pagination and recovery when loaded pages contain only completed agent
   expect(harness.container.textContent).toContain('Build');
   expect(harness.container.textContent).not.toContain('Retry');
   expect(harness.container.textContent).not.toContain('Load more');
+});
+
+it('keeps the active list state stable across unrelated renders', () => {
+  const pages: SubagentListResult[] = [{ supported: true, subagents: [agent], nextCursor: 'next' }];
+  mocks.pagesBySession.set('parent', pages);
+  const harness = createHarness({ sessionId: 'parent', enabled: true });
+  const initial = listState;
+  harness.render({ sessionId: 'parent', enabled: true });
+  expect(listState).toBe(initial);
+
+  mocks.pagesBySession.set('parent', [
+    ...pages,
+    { supported: true, subagents: [{ ...agent, id: 'b', name: 'Build' }], nextCursor: null },
+  ]);
+  mocks.pageParams = [null, 'next'];
+  harness.render({ sessionId: 'parent', enabled: true });
+  expect(listState).not.toBe(initial);
+  expect(listState).toMatchObject({
+    kind: 'ready',
+    hasMore: false,
+    subagents: [expect.objectContaining({ id: 'a' }), expect.objectContaining({ id: 'b' })],
+  });
+  if (listState?.kind !== 'ready' || initial?.kind !== 'ready') {
+    throw new Error('Expected ready list states');
+  }
+  expect(listState.onLoadMore).toBe(initial.onLoadMore);
+  mocks.next.mockClear();
+  listState.onLoadMore?.();
+  expect(mocks.next).toHaveBeenCalledOnce();
 });

@@ -97,13 +97,19 @@ export function useSubagentTimelineMessages(
     () => mergeSubagentTimeline(messages, events),
     [messages, events]
   );
-  const subagentListState = getListState(pages, subagents, error, {
-    hasMore: hasNextPage,
-    loadingMore: isFetching,
-    onLoadMore: () => {
-      void fetchNextPage();
-    },
-  });
+  const onLoadMore = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
+  // Keep the list state stable so composer-only renders skip the transcript.
+  const subagentListState = useMemo(
+    () =>
+      getListState(pages, subagents, error, {
+        hasMore: hasNextPage,
+        loadingMore: isFetching,
+        onLoadMore,
+      }),
+    [pages, subagents, error, hasNextPage, isFetching, onLoadMore]
+  );
   return {
     messages: timelineMessages,
     error,
