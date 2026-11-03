@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useEffect } from 'react';
-import { trpc } from '@/client/lib/trpc';
+import { INITIAL_VIEWPORTS } from 'storybook/viewport';
+import { GitHubPreviewTooltip } from './github-link-preview';
 import { GitHubPRPreviewCard } from './github-pr-link';
-import { MarkdownRenderer } from './markdown';
 
 const data = {
   title: 'docs: record oval bubble detection in the grid lines design',
   state: 'OPEN' as const,
   isDraft: false,
   author: { login: 'martin-purplefish' },
+  // Relative-time labels intentionally follow the clock when the story opens.
   createdAt: new Date(Date.now() - 52 * 60_000).toISOString(),
   additions: 4,
   deletions: 3,
@@ -56,12 +56,20 @@ export const LongTitle: Story = {
 };
 
 function HoverExample() {
-  const utils = trpc.useUtils();
-  useEffect(() => {
-    utils.github.getPRPreview.setData({ repo: 'purplefish-ai/iron-fillet', number: 12_675 }, data);
-  }, [utils]);
   return (
-    <MarkdownRenderer content="[#12675](https://github.com/purplefish-ai/iron-fillet/pull/12675) is ready for review. Hover or focus the link to preview it." />
+    <GitHubPreviewTooltip
+      link={
+        <a
+          href="https://github.com/purplefish-ai/iron-fillet/pull/12675"
+          target="_blank"
+          rel="noreferrer"
+        >
+          #12675
+        </a>
+      }
+    >
+      <GitHubPRPreviewCard repo="purplefish-ai/iron-fillet" number={12_675} data={data} />
+    </GitHubPreviewTooltip>
   );
 }
 
@@ -72,4 +80,10 @@ export const HoverPreview: Story = {
       <HoverExample />
     </div>
   ),
+};
+
+export const Mobile: Story = {
+  ...LongTitle,
+  parameters: { viewport: { options: INITIAL_VIEWPORTS } },
+  globals: { viewport: { value: 'iphonex', isRotated: false } },
 };

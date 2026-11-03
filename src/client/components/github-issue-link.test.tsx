@@ -47,18 +47,23 @@ it('loads issue metadata only when focused and keeps normal link navigation', as
     },
     isError: false,
   });
-  const link = await render('[#42](https://github.com/Owner/Repo/issues/42#discussion)');
+  const link = await render('[#42](https://github.com/Owner/Repo/IsSuEs/42#discussion)');
   expect(useQuery).not.toHaveBeenCalled();
   expect(link.target).toBe('_blank');
-  expect(link.href).toBe('https://github.com/Owner/Repo/issues/42#discussion');
+  expect(link.href).toBe('https://github.com/Owner/Repo/IsSuEs/42#discussion');
   await act(() => link.focus());
   expect(document.body.textContent).toContain('Show issue previews');
   expect(document.body.textContent).toContain('Owner/Repo #42');
+  const description = document.getElementById(link.getAttribute('aria-describedby')!);
+  expect(description?.getAttribute('role')).toBe('tooltip');
+  expect(description?.textContent).toContain('Owner/Repo #42');
+  expect(document.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-28T12:00:00Z');
   expect(document.body.textContent).toContain('martin');
   expect(document.body.textContent).toContain('Open');
+  expect(document.body.textContent).not.toContain('files');
   expect(useQuery).toHaveBeenCalledWith(
     { repo: 'owner/repo', number: 42 },
-    expect.objectContaining({ staleTime: 60_000, retry: false })
+    expect.objectContaining({ staleTime: 60_000, retry: false, refetchOnWindowFocus: false })
   );
   await act(() =>
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -89,8 +94,13 @@ it.each([
   }
 });
 
-it('leaves other links without previews', async () => {
-  const link = await render('[Other](https://example.com/o/r/issues/42)');
+it.each([
+  'https://example.com/o/r/issues/42',
+  'https://github.com/o/r/issues/0',
+  'https://github.com/o/r/pull/42oops',
+])('leaves unsupported links without previews: %s', async (href) => {
+  const link = await render(`[Other](${href})`);
+  expect(link.href).toBe(href);
   await act(() => link.focus());
   expect(useQuery).not.toHaveBeenCalled();
   expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();

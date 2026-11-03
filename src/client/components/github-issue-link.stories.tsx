@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useEffect } from 'react';
-import { trpc } from '@/client/lib/trpc';
+import { INITIAL_VIEWPORTS } from 'storybook/viewport';
 import { GitHubIssuePreviewCard } from './github-issue-link';
-import { MarkdownRenderer } from './markdown';
+import { GitHubPreviewTooltip } from './github-link-preview';
 
 const data = {
   title: 'Show GitHub issue previews in conversations',
   state: 'OPEN' as const,
   author: { login: 'martin-purplefish' },
+  // Relative-time labels intentionally follow the clock when the story opens.
   createdAt: new Date(Date.now() - 52 * 60_000).toISOString(),
 };
 
@@ -48,15 +48,20 @@ export const LongTitle: Story = {
 };
 
 function HoverExample() {
-  const utils = trpc.useUtils();
-  useEffect(() => {
-    utils.github.getIssuePreview.setData(
-      { repo: 'purplefish-ai/iron-fillet', number: 12_675 },
-      data
-    );
-  }, [utils]);
   return (
-    <MarkdownRenderer content="[#12675](https://github.com/purplefish-ai/iron-fillet/issues/12675) is open. Hover or focus the link to preview it." />
+    <GitHubPreviewTooltip
+      link={
+        <a
+          href="https://github.com/purplefish-ai/iron-fillet/issues/12675"
+          target="_blank"
+          rel="noreferrer"
+        >
+          #12675
+        </a>
+      }
+    >
+      <GitHubIssuePreviewCard repo="purplefish-ai/iron-fillet" number={12_675} data={data} />
+    </GitHubPreviewTooltip>
   );
 }
 
@@ -67,4 +72,10 @@ export const HoverPreview: Story = {
       <HoverExample />
     </div>
   ),
+};
+
+export const Mobile: Story = {
+  ...LongTitle,
+  parameters: { viewport: { options: INITIAL_VIEWPORTS } },
+  globals: { viewport: { value: 'iphonex', isRotated: false } },
 };
