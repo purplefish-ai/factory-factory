@@ -9,6 +9,23 @@ const html = readFileSync(resolve('index.html'), 'utf8');
 afterEach(() => localStorage.clear());
 
 describe('theme bootstrap before React mounts', () => {
+  it('applies the dark fallback to both page and corners when storage is blocked', () => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const script of doc.querySelectorAll('script:not([src])')) {
+      runInNewContext(script.textContent ?? '', {
+        document: doc,
+        localStorage: {
+          getItem() {
+            throw new Error('Storage unavailable');
+          },
+        },
+      });
+    }
+    expect(doc.documentElement.classList.contains('dark')).toBe(true);
+    expect(doc.documentElement.style.colorScheme).toBe('dark');
+    expect(doc.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#0a0a0a');
+  });
+
   it.each([
     { saved: 'light', systemDark: true, theme: 'light', color: '#fafafa' },
     { saved: 'dark', systemDark: false, theme: 'dark', color: '#0a0a0a' },

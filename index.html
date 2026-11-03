@@ -29,22 +29,23 @@
       // native PWA corners. React later replaces this fallback with the rendered
       // appearance color, including custom palettes and dialog dimming.
       (function () {
+        var dark = true;
         try {
           var mode = localStorage.getItem('theme') || 'dark';
-          var dark =
+          dark =
             mode === 'system'
               ? window.matchMedia('(prefers-color-scheme: dark)').matches
               : mode !== 'light';
-          var root = document.documentElement;
-          root.classList.toggle('dark', dark);
-          root.classList.toggle('light', !dark);
-          root.style.colorScheme = dark ? 'dark' : 'light';
-          document
-            .querySelector('meta[name="theme-color"]')
-            .setAttribute('content', dark ? '#0a0a0a' : '#fafafa');
         } catch (_error) {
           // Keep the dark default if browser storage is unavailable.
         }
+        var root = document.documentElement;
+        root.classList.toggle('dark', dark);
+        root.classList.toggle('light', !dark);
+        root.style.colorScheme = dark ? 'dark' : 'light';
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute('content', dark ? '#0a0a0a' : '#fafafa');
       })();
 
       // Replay the last applied appearance (Settings → Appearance) before React

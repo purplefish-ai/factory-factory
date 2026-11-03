@@ -5,7 +5,8 @@ interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
-const backdropSelector = '[data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"]';
+const backdropSelector =
+  '[data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"]';
 
 function containsBackdrop(node: Node) {
   return (
@@ -25,7 +26,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       const backdropCount = document.querySelectorAll(backdropSelector).length;
       let color = background;
       if (backdropCount > 0) {
-        // Both shared dialog primitives use bg-black/50. Native PWA corners
+        // Shared dialog and sheet primitives use bg-black/50. Native PWA corners
         // cannot be covered by DOM backdrops; tint them with the same composite.
         colorProbe.style.backgroundColor = `color-mix(in srgb, ${background} ${100 * 0.5 ** backdropCount}%, black)`;
         color = getComputedStyle(colorProbe).backgroundColor;

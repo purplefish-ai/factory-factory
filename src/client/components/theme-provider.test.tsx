@@ -50,16 +50,19 @@ async function addOverlay(slot = 'dialog-overlay') {
 }
 
 describe('ThemeProvider browser chrome', () => {
-  it('dims the native background for a search backdrop and restores it on removal', async () => {
-    expect(meta.content).toBe('rgb(240, 240, 240)');
-    const overlay = await addOverlay();
-    expect(meta.content).toBe('color(srgb 0.470588 0.470588 0.470588)');
-    // Radix keeps the backdrop mounted during its closing animation.
-    await act(() => overlay.firstElementChild?.setAttribute('data-state', 'closed'));
-    expect(meta.content).toBe('color(srgb 0.470588 0.470588 0.470588)');
-    await act(() => overlay.remove());
-    expect(meta.content).toBe('rgb(240, 240, 240)');
-  });
+  it.each(['dialog-overlay', 'alert-dialog-overlay', 'sheet-overlay'])(
+    'dims the native background for %s and restores it on removal',
+    async (slot) => {
+      expect(meta.content).toBe('rgb(240, 240, 240)');
+      const overlay = await addOverlay(slot);
+      expect(meta.content).toBe('color(srgb 0.470588 0.470588 0.470588)');
+      // Radix keeps the backdrop mounted during its closing animation.
+      await act(() => overlay.firstElementChild?.setAttribute('data-state', 'closed'));
+      expect(meta.content).toBe('color(srgb 0.470588 0.470588 0.470588)');
+      await act(() => overlay.remove());
+      expect(meta.content).toBe('rgb(240, 240, 240)');
+    }
+  );
 
   it('composites stacked dialog and alert backdrops independently', async () => {
     const first = await addOverlay();
