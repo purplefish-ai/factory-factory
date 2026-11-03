@@ -277,14 +277,16 @@ describe('window shown while the backend starts', () => {
     expect(html).not.toMatch(/<script|https?:|src=|href=/i);
   });
 
-  it('focuses the loading window instead of opening another on activate', async () => {
+  it('keeps one loading window across activate and repeated createWindow calls', async () => {
     const { serverManager, resolveStart } = gatedServerManager();
     const { lifecycle } = createTestLifecycle({ serverManager });
 
     const createPromise = lifecycle.createWindow();
+    // macOS raises existing windows on activate itself; only a missing window is created.
     await lifecycle.handleActivate();
-    const secondCreate = lifecycle.createWindow();
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
 
+    const secondCreate = lifecycle.createWindow();
     expect(FakeBrowserWindow.instances).toHaveLength(1);
     expect(FakeBrowserWindow.instances[0]?.focus).toHaveBeenCalledTimes(1);
     expect(serverManager.start).toHaveBeenCalledTimes(1);
