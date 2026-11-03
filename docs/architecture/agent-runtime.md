@@ -18,6 +18,18 @@ likewise restores user `input_image` data URLs, and images on legacy
 are skipped. Restoration rejects malformed base64 and images above the shared 10
 MiB decoded size limit used for uploads.
 
+Chat Markdown and structured tool-result images share an inline preview with a
+full-size dialog. Local Markdown paths load through `workspace.readChatImage`,
+which requires an existing workspace and restricts reads to that worktree or
+absolute OS temporary-file paths (including `/tmp` on macOS). Relative paths
+cannot escape the worktree; resolved symlinks must stay within the selected
+root. Only PNG, JPEG, GIF and WebP files with matching image signatures are
+returned, with bounded reads and a 10 MiB limit. Missing, unsupported or failed
+images show a selectable source path or URI. Temporary previews require the
+original file to remain available after reload. Codex image-bearing tool outputs
+retain structured image items on replay rather than serializing their base64 as
+text.
+
 Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
 and transcript projection use a 16 ms cooperative target. Projection uses the
 same per-entry builder as synchronous callers and yields between small batches,
@@ -784,8 +796,17 @@ not supply a custom system prompt. Task prompts are sent as ordinary session
 messages:
 
 - Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
-  preview. It supplies untrusted issue data, the implementation/PR outcome,
-  repository-defined verification, and screenshot/PR metadata.
+  preview. It asks the agent to fetch and address the linked GitHub or Linear
+  issue, then create a PR with a closing reference. The concise handoff quotes
+  the URL and marks fetched content as untrusted; issue bodies and detailed
+  workflow instructions are not embedded. Repository guidance defines
+  implementation and verification. Backend fallback prompts use the stored issue
+  URL (or derive a GitHub URL from repository metadata), without fetching issue
+  content. The read-only `get_linear_issue` workspace MCP tool fetches the
+  linked Linear issue on demand through `workspace.get` and `linear.getIssue`,
+  using backend-held project credentials. It accepts no workspace/project/issue
+  overrides and returns only issue fields, treating provider text as untrusted
+  data.
 - PR updates: `src/backend/prompts/pr-event.ts` renders bounded PR facts with
   maintenance instructions only when an attached PR has actionable events.
   Delivery uses the source-aware session queue and strict provider resume; see

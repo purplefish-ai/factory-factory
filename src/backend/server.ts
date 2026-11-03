@@ -426,6 +426,13 @@ export function createServer(application: Application, requestedPort?: number): 
     }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
+      // Stop admitting reconciliation work (including startup workspace
+      // initialization) now, but drain it only after sessions and processes
+      // are torn down: an in-flight startup script cannot be cancelled and may
+      // outlast the stop budget, and new agent sessions fail fast once clients
+      // are stopped.
+      const reconciliationStopped = reconciliationService.stopPeriodicCleanup();
+      reconciliationStopped.catch(() => undefined);
       await services.agentRuntime?.stop();
       // Archive recovery still uses sessions, run scripts, caches and the database.
       await archiveRecoveryPromise;
@@ -458,7 +465,7 @@ export function createServer(application: Application, requestedPort?: number): 
       workspaceGitStateService.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
-      await reconciliationService.stopPeriodicCleanup();
+      await reconciliationStopped;
       await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
@@ -505,10 +512,10 @@ export function createServer(application: Application, requestedPort?: number): 
           }
         });
 
-        // Reconcile workspaces that may have been left in inconsistent states
-        // (e.g., stuck in PROVISIONING due to server crash)
+        // Fail workspaces left stuck in PROVISIONING by a crash. NEW workspaces
+        // are initialized in the background once startup completes.
         await runStartupTask('Failed to reconcile workspaces on startup', () =>
-          reconciliationService.reconcile()
+          reconciliationService.recoverStaleProvisioningWorkspaces()
         );
 
         // Reset run script states left in transient STARTING/STOPPING by a prior crash
@@ -553,6 +560,11 @@ export function createServer(application: Application, requestedPort?: number): 
         await ratchetService.start();
         periodicTaskService.start();
         services.agentRuntime?.start();
+        // Provisioning (git, startup script, agent session) can take minutes, so
+        // it must not hold back readiness. `stopPeriodicCleanup` drains it.
+        if (!cleanupStarted) {
+          reconciliationService.startNewWorkspaceInitialization();
+        }
         startupComplete = true;
 
         logger.info('Server endpoints available', {

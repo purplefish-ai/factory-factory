@@ -18,6 +18,7 @@ type ToolResponse = z.infer<typeof toolResponseSchema>;
 async function callToolWithHttpResponse(options: {
   childWorkspacesEnabled?: boolean;
   body: unknown;
+  linkedWorkspace?: unknown;
   status: number;
   toolName:
     | 'spawn_child_workspace'
@@ -26,6 +27,7 @@ async function callToolWithHttpResponse(options: {
     | 'propose_agent'
     | 'list_agent_sources'
     | 'get_agent_proposal'
+    | 'get_linear_issue'
     | 'list_mail'
     | 'read_mail'
     | 'ack_mail'
@@ -56,6 +58,11 @@ async function callToolWithHttpResponse(options: {
           },
         })
       );
+      return;
+    }
+    if (options.linkedWorkspace && req.url?.startsWith('/api/trpc/workspace.get')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ result: { data: { json: options.linkedWorkspace } } }));
       return;
     }
     requestMethod = req.method;
@@ -144,6 +151,99 @@ describe('child workspace MCP tRPC errors', () => {
     expect(response.result.isError).toBe(true);
     expect(requestMethod).toBeUndefined();
   });
+
+  it('reports an unlinked Linear issue even when child workspaces are disabled', async () => {
+    const { response, requestMethod } = await callToolWithHttpResponse({
+      childWorkspacesEnabled: false,
+      status: 200,
+      toolName: 'get_linear_issue',
+      body: {
+        result: {
+          data: {
+            json: {
+              id: 'parent-workspace',
+              projectId: 'project-1',
+              linearIssueId: null,
+            },
+          },
+        },
+      },
+    });
+    expect(requestMethod).toBe('GET');
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0]?.text).toBe('No Linear issue is linked to this workspace.');
+  });
+
+  it('reads the linked Linear issue through backend credentials and omits unrelated data', async () => {
+    const { response, requestMethod, requestUrl } = await callToolWithHttpResponse({
+      childWorkspacesEnabled: false,
+      status: 200,
+      toolName: 'get_linear_issue',
+      toolArguments: { workspaceId: 'spoofed', projectId: 'other', issueId: 'other' },
+      linkedWorkspace: {
+        id: 'parent-workspace',
+        projectId: 'project-1',
+        linearIssueId: 'linear-42',
+      },
+      body: {
+        result: {
+          data: {
+            json: {
+              issue: {
+                id: 'linear-42',
+                identifier: 'ENG-42',
+                title: 'Fix login',
+                description: 'Preserve the redirect after login.',
+                url: 'https://linear.app/issue/ENG-42',
+                state: 'Todo',
+                extraPrivateData: 'must not be returned',
+              },
+              error: null,
+            },
+          },
+        },
+      },
+    });
+    expect(requestMethod).toBe('GET');
+    expect(requestUrl).toContain('/api/trpc/linear.getIssue?');
+    const input = new URL(`http://localhost${requestUrl}`).searchParams.get('input');
+    expect(JSON.parse(input ?? '')).toEqual({
+      json: { projectId: 'project-1', issueId: 'linear-42' },
+    });
+    expect(response.result.isError).not.toBe(true);
+    expect(JSON.parse(response.result.content[0]?.text ?? '')).toEqual({
+      id: 'linear-42',
+      identifier: 'ENG-42',
+      title: 'Fix login',
+      description: 'Preserve the redirect after login.',
+      url: 'https://linear.app/issue/ENG-42',
+      state: 'Todo',
+    });
+  });
+
+  it.each([
+    { issue: null, error: 'Provider failure details' },
+    { issue: null, error: null },
+  ])(
+    'reports a Linear integration failure without exposing provider details: %j',
+    async (result) => {
+      const { response } = await callToolWithHttpResponse({
+        childWorkspacesEnabled: false,
+        status: 200,
+        toolName: 'get_linear_issue',
+        linkedWorkspace: {
+          id: 'parent-workspace',
+          projectId: 'project-1',
+          linearIssueId: 'linear-42',
+        },
+        body: { result: { data: { json: result } } },
+      });
+      expect(response.result.isError).toBe(true);
+      expect(response.result.content[0]?.text).toBe(
+        'Could not fetch the linked Linear issue. Check the project’s Linear integration.'
+      );
+    }
+  );
 
   it('binds proposals to the current workspace and returns a renderable reference', async () => {
     const { requestBody, response } = await callToolWithHttpResponse({
@@ -427,6 +527,7 @@ it.each([
                 'send_message_to_child',
                 'archive_child_workspace',
               ]),
+        'get_linear_issue',
         'list_mail',
         'read_mail',
         'ack_mail',

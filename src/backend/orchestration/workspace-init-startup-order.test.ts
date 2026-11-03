@@ -1,6 +1,5 @@
 import './workspace-init.test-harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { githubCLIService } from '@/backend/services/github';
 import { FactoryConfigService, startupScriptService } from '@/backend/services/run-script';
 import {
   sessionDataService,
@@ -8,14 +7,22 @@ import {
   sessionDomainService,
   sessionLifecycleService,
 } from '@/backend/services/session';
-import { gitOpsService, workspaceStateMachine } from '@/backend/services/workspace';
+import {
+  gitOpsService,
+  workspaceDataService,
+  workspaceStateMachine,
+} from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,
 } from './workspace-init.orchestrator';
-import { WORKSPACE_ID, setupHappyPath } from './workspace-init.test-harness';
+import {
+  WORKSPACE_ID,
+  makeWorkspaceWithProject,
+  setupHappyPath,
+} from './workspace-init.test-harness';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -105,14 +112,17 @@ describe('workspace initialization startup order', () => {
     expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
   });
 
-  it('runs setup during issue fetching and publishes the queue before readiness', async () => {
+  it('runs setup during prompt preparation and publishes the queue before readiness', async () => {
     setupHappyPath({ githubIssueNumber: 42 });
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
-    const issue = deferred<Awaited<ReturnType<typeof githubCLIService.getIssue>>>();
+    const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
+    const promptWorkspaceRead = deferred<typeof workspace>();
     const setupFinished = deferred<{ success: boolean }>();
-    vi.mocked(githubCLIService.getIssue).mockReturnValue(issue.promise);
+    vi.mocked(workspaceDataService.findByIdWithProject)
+      .mockResolvedValueOnce(workspace)
+      .mockReturnValueOnce(promptWorkspaceRead.promise);
     vi.mocked(sessionDomainService.enqueueInitialMessage).mockReturnValue({ position: 0 });
     vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
       unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
@@ -130,9 +140,7 @@ describe('workspace initialization startup order', () => {
       expect(workspaceStateMachine.markReady).not.toHaveBeenCalled();
       await expectAgentNotStarted();
     } finally {
-      issue.resolve(
-        unsafeCoerce({ number: 42, title: 'Queued task', body: '', url: 'https://example.com/42' })
-      );
+      promptWorkspaceRead.resolve(workspace);
       setupFinished.resolve({ success: true });
       await initialization;
     }
@@ -147,25 +155,24 @@ describe('workspace initialization startup order', () => {
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
     ]);
-    const issue = deferred<Awaited<ReturnType<typeof githubCLIService.getIssue>>>();
+    const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
+    const promptWorkspaceRead = deferred<typeof workspace>();
     const cleanupFinished =
       deferred<Awaited<ReturnType<typeof workspaceStateMachine.markFailed>>>();
-    vi.mocked(githubCLIService.getIssue).mockReturnValue(issue.promise);
+    vi.mocked(workspaceDataService.findByIdWithProject)
+      .mockResolvedValueOnce(workspace)
+      .mockReturnValueOnce(promptWorkspaceRead.promise);
     vi.mocked(gitOpsService.createWorktree).mockRejectedValue(new Error('Worktree failed'));
     vi.mocked(workspaceStateMachine.markFailed).mockReturnValue(cleanupFinished.promise);
     const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
     try {
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledOnce();
-      issue.resolve(
-        unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
-      );
+      promptWorkspaceRead.resolve(workspace);
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(sessionDomainService.enqueueInitialMessage).not.toHaveBeenCalled();
     } finally {
-      issue.resolve(
-        unsafeCoerce({ number: 42, title: 'Late task', body: '', url: 'https://example.com/42' })
-      );
+      promptWorkspaceRead.resolve(workspace);
       cleanupFinished.resolve(unsafeCoerce({}));
       await initialization;
       await new Promise<void>((resolve) => setImmediate(resolve));
