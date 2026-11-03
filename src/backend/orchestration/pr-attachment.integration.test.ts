@@ -368,7 +368,10 @@ describe('automatic PR refresh throttling', () => {
     expect(fetchObservation).toHaveBeenCalledTimes(1);
 
     // An automatic refresh right after an accepted observation reuses it.
-    await prSnapshotService.refreshWorkspace(workspaceId, { force: false });
+    expect(await prSnapshotService.refreshWorkspace(workspaceId, { force: false })).toMatchObject({
+      success: true,
+      snapshot: { prState: 'OPEN' },
+    });
     expect(fetchObservation).toHaveBeenCalledTimes(1);
 
     const realNow = Date.now();
@@ -385,7 +388,9 @@ describe('automatic PR refresh throttling', () => {
 
       // Past every cooldown, the committed merge keeps automatic refreshes off GitHub.
       now.mockReturnValue(realNow + 10 * 60_000);
-      await prSnapshotService.refreshWorkspace(workspaceId, { force: false });
+      expect(await prSnapshotService.refreshWorkspace(workspaceId, { force: false })).toMatchObject(
+        { success: true, snapshot: { prState: 'MERGED' } }
+      );
       expect(fetchObservation).toHaveBeenCalledTimes(2);
 
       await prSnapshotService.refreshWorkspace(workspaceId, { force: true });

@@ -183,6 +183,22 @@ it('still observes a merge that has not been committed for the current epoch', a
   expect(ports.fetchObservation).toHaveBeenCalledTimes(2);
 });
 
+it('does not let an explicit refresh settle on an in-flight automatic terminal skip', async () => {
+  const ports = observationPorts();
+  const target = { workspaceId: 'w', prId: 'p' };
+  const lookup = deferred<ReturnType<typeof storedPR>>();
+  ports.findPR.mockReturnValueOnce(lookup.promise).mockResolvedValue(storedPR('MERGED'));
+  const automatic = observeMonitoredPR(ports, target);
+  const explicit = [
+    observeMonitoredPR({ ...ports }, target, { force: true }),
+    observeMonitoredPR({ ...ports }, target, { force: true }),
+  ];
+  lookup.resolve(storedPR('MERGED'));
+  expect(await Promise.all([automatic, ...explicit])).toEqual([true, true, true]);
+  // The automatic call kept committed facts; both explicit calls share one forced read.
+  expect(ports.fetchObservation).toHaveBeenCalledOnce();
+});
+
 it('paces unforced CLOSED PR observations with the background reopen interval', async () => {
   const ports = observationPorts();
   const target = { workspaceId: 'w', prId: 'p' };
