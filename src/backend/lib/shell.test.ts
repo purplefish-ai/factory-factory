@@ -4,8 +4,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { LIB_LIMITS } from './constants';
-import { escapeForOsascript, execCommand } from './shell';
+import { execCommand } from './shell';
 
 describe('execCommand', () => {
   it('preserves UTF-8 output when stdout bytes are split across chunks', async () => {
@@ -186,23 +185,5 @@ describe('execCommand', () => {
     expect(result.stdoutOverflowed).toBe(false);
     expect(result.stderrOverflowed).toBe(true);
     expect(result.stderr).toContain('exceeded maxBuffer of 16 bytes');
-  });
-});
-
-describe('escapeForOsascript', () => {
-  it('does not leave a dangling backslash when truncation boundary ends with a quote', () => {
-    const input = `${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}"`;
-
-    const escaped = escapeForOsascript(input);
-
-    expect(escaped).toBe(`${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\"`);
-  });
-
-  it('does not leave a dangling backslash when truncation boundary ends with a backslash', () => {
-    const input = `${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\`;
-
-    const escaped = escapeForOsascript(input);
-
-    expect(escaped).toBe(`${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\\\`);
   });
 });

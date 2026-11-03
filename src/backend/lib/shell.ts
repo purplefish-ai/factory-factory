@@ -48,23 +48,6 @@ export interface ExecCommandOptions extends SpawnOptions {
 }
 
 // ============================================================================
-// Escaping Functions
-// ============================================================================
-
-/**
- * Escape a string for AppleScript osascript commands.
- * Handles multiple escaping layers: shell -> AppleScript.
- */
-export function escapeForOsascript(str: string): string {
-  return str
-    .slice(0, LIB_LIMITS.osascriptEscapedMaxChars) // Truncate before escaping to avoid dangling escape sequences
-    .replace(/[\r\n]+/g, ' ') // Normalize newlines
-    .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
-    .replace(/"/g, '\\"') // Escape double quotes for AppleScript
-    .replace(/'/g, "'\\''"); // Escape single quotes for shell
-}
-
-// ============================================================================
 // Execution Functions
 // ============================================================================
 
@@ -291,34 +274,4 @@ export function gitCommand(args: string[], cwd: string): Promise<ExecResult> {
  */
 export function gitCommandC(repoPath: string, args: string[]): Promise<ExecResult> {
   return execCommand('git', ['-C', repoPath, ...args]);
-}
-
-// ============================================================================
-// Platform-specific Commands
-// ============================================================================
-
-/**
- * Send a macOS notification using osascript.
- */
-export async function sendMacNotification(
-  title: string,
-  message: string,
-  sound?: string
-): Promise<void> {
-  const escapedTitle = escapeForOsascript(title);
-  const escapedMessage = escapeForOsascript(message);
-
-  let script = `display notification "${escapedMessage}" with title "${escapedTitle}"`;
-  if (sound) {
-    script += ` sound name "${escapeForOsascript(sound)}"`;
-  }
-
-  await execShell(`osascript -e '${script}'`);
-}
-
-/**
- * Send a Linux notification using notify-send.
- */
-export async function sendLinuxNotification(title: string, message: string): Promise<void> {
-  await execCommand('notify-send', [title, message]);
 }

@@ -1,7 +1,8 @@
 # 🔔 Workspace Agent Completion Notification System - Implementation Proposal
 
-> **Historical proposal.** Proposed paths and event wiring may be obsolete.
-> Current behavior is documented in
+> **Historical proposal.** Proposed paths and event wiring may be obsolete. The
+> backend `notification.service.ts` referenced below has been removed. Current
+> behavior is documented in
 > [workspace state](architecture/workspace-state.md#completion-notifications).
 
 ## Executive Summary

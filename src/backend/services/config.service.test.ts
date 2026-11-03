@@ -189,11 +189,6 @@ describe('configService environment accessors', () => {
     process.env.FF_RUN_SCRIPT_PROXY_ENABLED = '1';
     process.env.WS_LOGS_ENABLED = 'true';
     process.env.DEBUG_CHAT_WS = 'true';
-    process.env.NOTIFICATION_SOUND_ENABLED = 'false';
-    process.env.NOTIFICATION_PUSH_ENABLED = 'true';
-    process.env.NOTIFICATION_SOUND_FILE = '/tmp/sound.wav';
-    process.env.NOTIFICATION_QUIET_HOURS_START = '22';
-    process.env.NOTIFICATION_QUIET_HOURS_END = '7';
     process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:9999, https://example.com';
     process.env.TRUSTED_LOCAL_CIDRS = '172.17.0.1/32, 172.18.0.0/16';
     process.env.TRUST_PROXY_HEADERS = 'true';
@@ -234,13 +229,6 @@ describe('configService environment accessors', () => {
         queueTimeoutMs: expect.any(Number),
       })
     );
-    expect(configService.getNotificationConfig()).toEqual({
-      soundEnabled: false,
-      pushEnabled: true,
-      soundFile: '/tmp/sound.wav',
-      quietHoursStart: 22,
-      quietHoursEnd: 7,
-    });
     expect(configService.getCorsConfig()).toEqual({
       allowedOrigins: ['http://localhost:9999', 'https://example.com'],
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],

@@ -54,7 +54,6 @@ function toLowerString(value: unknown): string | undefined {
 }
 
 const PositiveIntEnvSchema = z.preprocess(parseInteger, z.number().int().positive());
-const HourEnvSchema = z.preprocess(parseInteger, z.number().int().min(0).max(23));
 
 export const LoggerEnvSchema = z.object({
   LOG_LEVEL: z.preprocess(toLowerString, LogLevelSchema).catch('info'),
@@ -82,11 +81,6 @@ export const ConfigEnvSchema = z.object({
   CLAUDE_RATE_LIMIT_PER_HOUR: PositiveIntEnvSchema.catch(1000),
   RATE_LIMIT_QUEUE_SIZE: PositiveIntEnvSchema.catch(100),
   RATE_LIMIT_QUEUE_TIMEOUT_MS: PositiveIntEnvSchema.catch(30_000),
-  NOTIFICATION_SOUND_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
-  NOTIFICATION_PUSH_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
-  NOTIFICATION_SOUND_FILE: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
-  NOTIFICATION_QUIET_HOURS_START: HourEnvSchema.optional().catch(undefined),
-  NOTIFICATION_QUIET_HOURS_END: HourEnvSchema.optional().catch(undefined),
   CORS_ALLOWED_ORIGINS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   TRUSTED_LOCAL_CIDRS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   TRUST_PROXY_HEADERS: z.preprocess(parseBoolean, z.boolean()).catch(false),

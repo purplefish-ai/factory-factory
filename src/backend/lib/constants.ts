@@ -6,7 +6,6 @@ export const LIB_LIMITS = Object.freeze({
   shellDefaultMaxBufferBytes: 10 * 1024 * 1024,
   execCommandDefaultMaxBufferBytes: 10 * 1024 * 1024,
   execCommandDefaultTimeoutMs: 5 * 60 * 1000,
-  osascriptEscapedMaxChars: 200,
 } as const);
 
 /**
