@@ -34,15 +34,19 @@ export function AppHeader() {
   const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
 
   return (
-    <header className="app-header @container/header flex shrink-0 items-center gap-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)] md:gap-x-2">
-      <SidebarToggleButton />
-      <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
-        <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold empty:hidden">{title}</span>
-        <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1 empty:hidden" />
+    <header className="app-header flex shrink-0 items-stretch border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
+      <div className="app-header-controls @container/header flex min-w-0 flex-1 items-center gap-1 md:gap-x-2">
+        <SidebarToggleButton />
+        <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
+          <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold empty:hidden">
+            {title}
+          </span>
+          <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1 empty:hidden" />
+        </div>
+        <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1 empty:hidden" />
+        <GlobalSearch />
       </div>
-      <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1 empty:hidden" />
-      <GlobalSearch />
     </header>
   );
 }
