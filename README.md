@@ -251,6 +251,13 @@ Use pnpm 12.15.0, pinned in `package.json`. Dependency build permissions live in
 `pnpm-workspace.yaml` under `allowBuilds`; review new build scripts with
 `pnpm approve-builds` when adding or updating dependencies.
 
+Source checkout installation generates the Prisma TypeScript client.
+`pnpm build` regenerates it before compiling the runtime client into
+`dist/prisma/generated`. Published packages ship that compiled client; their
+postinstall only prepares native helper permissions and does not generate an
+unused source client. The Prisma CLI remains a runtime dependency for database
+Studio.
+
 Development requires Git 2.32 or newer for lint-staged. Builds and typechecks
 use TypeScript 7 through the `@typescript/native` package alias. The
 `typescript` alias provides Microsoft's TypeScript 6 compatibility API for
