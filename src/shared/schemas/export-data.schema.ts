@@ -480,7 +480,9 @@ const version8Schema = z
     if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
       ctx.addIssue({ code: 'custom', message: 'Profile sections do not match' });
     }
-    const periodic = backup.meta.recovery.profile === 'base-json-periodic-config-1';
+    const periodic =
+      backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
+      backup.meta.recovery.profile === 'base-json-periodic-links-1';
     const config = backup.data.recovery.periodicConfig;
     if (
       periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
@@ -503,7 +505,8 @@ const version8Schema = z
         backup.data,
         section,
         backup.meta.recovery.profile === 'base-json-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-config-1',
+          backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
+          backup.meta.recovery.profile === 'base-json-periodic-links-1',
         ctx
       );
     }
@@ -529,6 +532,33 @@ const fullVersion8Schema = version8Schema.safeExtend({
     ),
   }),
 });
+const periodicLinksVersion8Schema = version8Schema
+  .safeExtend({
+    meta: version8Schema.shape.meta.extend({
+      recovery: recoveryMetadataSchema.safeExtend({
+        profile: z.literal('base-json-periodic-links-1'),
+      }),
+    }),
+    data: fullVersion8Schema.shape.data.extend({
+      workspaces: z.array(
+        fullVersion8Schema.shape.data.shape.workspaces.element.extend({
+          periodicTaskId: z.string().nullable(),
+        })
+      ),
+    }),
+  })
+  .superRefine((backup, ctx) => {
+    const tasks = new Set(backup.data.recovery.periodicConfig?.tasks.map((task) => task.id));
+    backup.data.workspaces.forEach((workspace, index) => {
+      if (workspace.periodicTaskId !== null && !tasks.has(workspace.periodicTaskId)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Workspace periodic task is absent from backup',
+          path: ['data', 'workspaces', index, 'periodicTaskId'],
+        });
+      }
+    });
+  });
 const historicalVersion8Schema = version8Schema.safeExtend({
   meta: version8Schema.shape.meta.extend({
     recovery: recoveryMetadataSchema.safeExtend({
@@ -546,6 +576,7 @@ export const exportDataSchema = z
     ),
     historicalVersion8Schema,
     fullVersion8Schema,
+    periodicLinksVersion8Schema,
   ])
   .superRefine(validateBackupPRs)
   .superRefine(validateAccountReferences);

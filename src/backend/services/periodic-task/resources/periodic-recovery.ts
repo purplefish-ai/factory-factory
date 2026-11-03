@@ -18,14 +18,19 @@ export async function exportPeriodicConfigRecovery(
   };
 }
 
+export async function readPeriodicConfigRecoveryIds(
+  tx: Prisma.TransactionClient
+): Promise<ReadonlySet<string>> {
+  return new Set((await tx.periodicTask.findMany({ select: { id: true } })).map((task) => task.id));
+}
+
 export async function restorePeriodicConfigRecovery(
   tx: Prisma.TransactionClient,
   section: PeriodicConfigRecovery,
-  acceptedProjectIds: ReadonlySet<string>
-): Promise<PeriodicConfigImportReport> {
-  const occupiedIds = new Set(
-    (await tx.periodicTask.findMany({ select: { id: true } })).map((task) => task.id)
-  );
+  acceptedProjectIds: ReadonlySet<string>,
+  occupiedIds: ReadonlySet<string>
+): Promise<{ report: PeriodicConfigImportReport; createdTaskIds: Set<string> }> {
+  const createdTaskIds = new Set<string>();
   const report: PeriodicConfigImportReport = {
     model: 'PeriodicTask',
     imported: 0,
@@ -55,8 +60,9 @@ export async function restorePeriodicConfigRecovery(
         updatedAt: new Date(task.updatedAt),
       },
     });
+    createdTaskIds.add(task.id);
     report.imported++;
     report.restoredDisabled++;
   }
-  return report;
+  return { report, createdTaskIds };
 }

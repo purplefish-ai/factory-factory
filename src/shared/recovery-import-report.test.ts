@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { createRecoveryImportReport } from './recovery-import-report';
 import { recoveryMetadataSchema } from './schemas/recovery-envelope.schema';
 import workspace from './testing/recovery-base-json-workspace-v8.fixture.json';
@@ -66,5 +67,33 @@ it('reports typed periodic totals separately while preserving historical result 
     const old = createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery));
     expect(Object.keys(old)).toEqual(['status', 'manifest', 'warnings', 'unreportedTotals']);
     expect(old).not.toHaveProperty('periodicConfig');
+  }
+});
+
+it.each([
+  { imported: 0, skipped: 0 },
+  { imported: 0, skipped: 5 },
+  { imported: 2, skipped: 3 },
+])('retains exact typed source-link counters %j and historical warnings', (counts) => {
+  const report = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(links.meta.recovery),
+    undefined,
+    { model: 'Workspace', ...counts, reasons: { INCOMPLETE_DEPENDENCY: counts.skipped } }
+  );
+  expect(report.periodicWorkspaceLinks).toEqual({
+    model: 'Workspace',
+    ...counts,
+    reasons: { INCOMPLETE_DEPENDENCY: counts.skipped },
+  });
+  expect(report.warnings.slice(0, 2)).toEqual(
+    createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)).warnings
+  );
+  expect(report.warnings[2]).toBe(
+    `Periodic workspace links: ${counts.imported} imported, ${counts.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled; periodic execution history is excluded.`
+  );
+  for (const original of [fixed, workspace, full, periodic]) {
+    expect(
+      createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery))
+    ).not.toHaveProperty('periodicWorkspaceLinks');
   }
 });

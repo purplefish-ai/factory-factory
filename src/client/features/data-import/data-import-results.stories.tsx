@@ -6,6 +6,7 @@ import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 type ImportResult = Parameters<ReturnType<typeof useDataImportResults>['publishImportResult']>[0];
@@ -127,6 +128,26 @@ export const PeriodicConfigRecovery: Story = {
         restoredDisabled: 2,
         reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
       }),
+    },
+  },
+};
+
+export const PeriodicWorkspaceLinksRecovery: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(
+        recoveryMetadataSchema.parse(links.meta.recovery),
+        {
+          model: 'PeriodicTask',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        },
+        { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } }
+      ),
     },
   },
 };

@@ -12,6 +12,10 @@ import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/
 import { AcceptedBranchPublisher, type AcceptedWorkspaceBranch } from './accepted-branch';
 
 class WorkspaceDataService {
+  restorePeriodicTaskLinks(...args: Parameters<typeof workspaceAccessor.restorePeriodicTaskLinks>) {
+    return workspaceAccessor.restorePeriodicTaskLinks(...args);
+  }
+
   readBackupIdentities(
     tx: Prisma.TransactionClient,
     input: Parameters<typeof backupCollisionsAccessor.readIdentities>[1]

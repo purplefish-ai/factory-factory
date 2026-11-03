@@ -13,4 +13,5 @@ export const periodicTaskService = new PeriodicTaskService(createLogger('periodi
 export {
   exportPeriodicConfigRecovery,
   restorePeriodicConfigRecovery,
+  readPeriodicConfigRecoveryIds,
 } from './service/periodic-recovery';

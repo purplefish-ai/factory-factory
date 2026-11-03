@@ -60,6 +60,7 @@ beforeAll(async () => {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     },
   });
+  await db.prisma.workspace.update({ where: { id: 'w' }, data: { periodicTaskId: 'periodic' } });
   await db.prisma.codexAccount.create({
     data: { id: 'before-account', label: 'Before account', kind: 'MANAGED' },
   });
@@ -95,6 +96,7 @@ it('exports account metadata and session bindings from one snapshot while the ap
         data: { codexAccountId: 'after-account' },
       });
       await tx.codexAccount.delete({ where: { id: 'before-account' } });
+      await tx.workspace.update({ where: { id: 'w' }, data: { periodicTaskId: null } });
       await tx.project.update({ where: { id: 'p' }, data: { name: 'After' } });
       await tx.periodicTask.update({
         where: { id: 'periodic' },
@@ -114,6 +116,11 @@ it('exports account metadata and session bindings from one snapshot while the ap
   const exported = exportDataSchema.parse(await pendingExport);
   expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.projects[0]?.name).toBe('Before');
+  expect(exported.data.workspaces[0]).toHaveProperty('periodicTaskId', 'periodic');
+  expect(await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'w' } })).toHaveProperty(
+    'periodicTaskId',
+    null
+  );
   expect(exported.data).toHaveProperty('recovery.periodicConfig.tasks', [
     expect.objectContaining({
       id: 'periodic',

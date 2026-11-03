@@ -37,6 +37,7 @@ export function DataImportResultsProvider({
   const active = pending[0];
   const runtime = active?.inertTransforms;
   const periodic = active?.recovery.periodicConfig;
+  const links = active?.recovery.periodicWorkspaceLinks;
   return (
     <ImportResultsContext.Provider
       value={{ publishImportResult: (result) => setPending((queue) => [...queue, result]) }}
@@ -93,6 +94,21 @@ export function DataImportResultsProvider({
                   <p>
                     Skips by reason: existing task ID: {periodic.reasons.EXISTING_IDENTITY}; project
                     not created by this import: {periodic.reasons.INCOMPLETE_DEPENDENCY}.
+                  </p>
+                </section>
+              )}
+              {links && (
+                <section aria-label="Periodic workspace link recovery">
+                  <p>
+                    Periodic workspace links: {links.imported} imported, {links.skipped} skipped
+                  </p>
+                  <p>
+                    Only links present in the backup are counted; these counts overlap workspace
+                    totals.
+                  </p>
+                  <p>
+                    Skips by reason: workspace or task not created by this import:{' '}
+                    {links.reasons.INCOMPLETE_DEPENDENCY}.
                   </p>
                 </section>
               )}

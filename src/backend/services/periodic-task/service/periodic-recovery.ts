@@ -6,10 +6,15 @@ export function exportPeriodicConfigRecovery(tx: Prisma.TransactionClient) {
   return recovery.exportPeriodicConfigRecovery(tx);
 }
 
+export function readPeriodicConfigRecoveryIds(tx: Prisma.TransactionClient) {
+  return recovery.readPeriodicConfigRecoveryIds(tx);
+}
+
 export function restorePeriodicConfigRecovery(
   tx: Prisma.TransactionClient,
   section: PeriodicConfigRecovery,
-  acceptedProjectIds: ReadonlySet<string>
+  acceptedProjectIds: ReadonlySet<string>,
+  occupiedIds: ReadonlySet<string>
 ) {
-  return recovery.restorePeriodicConfigRecovery(tx, section, acceptedProjectIds);
+  return recovery.restorePeriodicConfigRecovery(tx, section, acceptedProjectIds, occupiedIds);
 }
