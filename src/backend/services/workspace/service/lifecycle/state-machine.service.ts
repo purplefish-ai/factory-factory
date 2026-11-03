@@ -435,23 +435,11 @@ class WorkspaceStateMachineService extends EventEmitter {
     };
   }
 
-  startArchiving(workspaceId: string): Promise<Workspace> {
-    return this.startArchivingWithSourceStatus(workspaceId).then((result) => result.workspace);
-  }
-
   /**
    * Mark an archiving workspace as fully archived.
    */
   markArchived(workspaceId: string): Promise<Workspace> {
     return this.transition(workspaceId, 'ARCHIVED');
-  }
-
-  /**
-   * Backward-compatible archive helper.
-   * Expects workspace to already be in ARCHIVING state.
-   */
-  archive(workspaceId: string): Promise<Workspace> {
-    return this.markArchived(workspaceId);
   }
 
   /**

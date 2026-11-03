@@ -156,11 +156,10 @@ terminal PR — an archiving workspace with a merged PR still reads as
 now lives, as persisted state rather than a recomputation: `dispatchStalled` on
 the PR's `WorkspacePRRatchet` row is set when a settled dispatch achieved
 nothing for an unchanged snapshot key, or when a `DIED` fixer exhausts its
-retries (`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`, currently 3), and
-cleared by `resetSettledDispatch` (a PR aggregate change) or `disable`. While it
-is set, Ratchet-enabled workspaces report `RATCHET_STALLED` (`WAITING`) instead
-of whatever the CI/review flow would otherwise select. A live merge conflict
-reports through the same function ahead of the flow check:
+retries, and cleared by `resetSettledDispatch` (a PR aggregate change) or
+`disable`. While it is set, Ratchet-enabled workspaces report `RATCHET_STALLED`
+(`WAITING`) instead of whatever the CI/review flow would otherwise select. A
+live merge conflict reports through the same function ahead of the flow check:
 `FIXING_MERGE_CONFLICT` (`WORKING`) while Ratchet is enabled and working it,
 `MERGE_CONFLICT` (`WAITING`) when Ratchet cannot act on its own.
 

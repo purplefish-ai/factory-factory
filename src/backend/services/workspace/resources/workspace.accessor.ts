@@ -712,7 +712,7 @@ class WorkspaceAccessor {
     return deleteWorkspace(id, capture);
   }
 
-  // Note: archive functionality is provided by workspaceStateMachine.archive()
+  // Note: archive functionality is provided by workspaceStateMachine.markArchived()
 
   /**
    * Find workspaces that need worktree creation or recovery.

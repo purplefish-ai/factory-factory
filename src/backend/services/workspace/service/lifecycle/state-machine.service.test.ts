@@ -614,38 +614,12 @@ describe('WorkspaceStateMachineService', () => {
     });
   });
 
-  describe('startArchiving', () => {
-    it('should transition workspace to ARCHIVING from READY', async () => {
-      const workspace = { id: 'ws-1', status: 'READY' };
-      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
-
-      mockFindUnique.mockResolvedValue(workspace);
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
-
-      const result = await workspaceStateMachine.startArchiving('ws-1');
-
-      expect(result.status).toBe('ARCHIVING');
-    });
-
-    it('should transition workspace to ARCHIVING from FAILED', async () => {
-      const workspace = { id: 'ws-1', status: 'FAILED' };
-      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
-
-      mockFindUnique.mockResolvedValue(workspace);
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
-
-      const result = await workspaceStateMachine.startArchiving('ws-1');
-
-      expect(result.status).toBe('ARCHIVING');
-    });
-
+  describe('startArchivingWithSourceStatus', () => {
     it('should throw error when trying to start archiving from NEW', async () => {
       const workspace = { id: 'ws-1', status: 'NEW' };
       mockFindUnique.mockResolvedValue(workspace);
 
-      await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
+      await expect(workspaceStateMachine.startArchivingWithSourceStatus('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
       );
     });
@@ -654,13 +628,11 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
       mockFindUnique.mockResolvedValue(workspace);
 
-      await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
+      await expect(workspaceStateMachine.startArchivingWithSourceStatus('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
       );
     });
-  });
 
-  describe('startArchivingWithSourceStatus', () => {
     it('should return previous READY status when starting archiving', async () => {
       const workspace = { id: 'ws-1', status: 'READY' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };

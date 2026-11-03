@@ -15,8 +15,6 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
   claudeCliAuthCheck: 5000,
   codexCliVersionCheck: 5000,
   codexCliAuthCheck: 5000,
-  cliLatestVersionCheck: 3000,
-  cliUpgrade: 120_000,
   startupScriptForceKillGrace: 5000,
   startupScriptOutputDrain: 1000,
   portLsof: 2000,
@@ -27,7 +25,6 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   agentSourcePoll: 60_000,
   agentEventEvaluation: 5000,
   workspaceMetadata: 10_000,
-  fileLockCleanup: 5 * 60 * 1000,
   ratchetPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
   schedulerPrSync: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
   reconciliationCleanup: 5 * 60 * 1000,
@@ -45,9 +42,4 @@ export const SERVICE_CACHE_TTL_MS = Object.freeze({
 
 export const SERVICE_THRESHOLDS = Object.freeze({
   schedulerStaleMinutes: 2,
-  ratchetDispatchMaxRetries: 3, // Max re-dispatches of a DIED fixer for an unchanged PR state
-} as const);
-
-export const SERVICE_TTL_SECONDS = Object.freeze({
-  fileLockDefault: 30 * 60,
 } as const);
