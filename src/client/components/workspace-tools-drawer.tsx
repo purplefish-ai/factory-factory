@@ -6,6 +6,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { useTitlebarBottom } from '@/hooks/use-overlay-positioning';
 
 export function WorkspaceToolsDrawer({
   open,
@@ -16,6 +17,7 @@ export function WorkspaceToolsDrawer({
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
+  const titlebarBottom = useTitlebarBottom();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
@@ -35,6 +37,7 @@ export function WorkspaceToolsDrawer({
       visibleViewport.removeEventListener('scroll', update);
     };
   }, [open]);
+  const top = Math.max(viewport?.top ?? 0, titlebarBottom);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -42,7 +45,7 @@ export function WorkspaceToolsDrawer({
         className="flex w-[calc(100%-1.5rem)] max-w-[44rem] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-[44rem] [&>button]:right-2 [&>button]:top-2 [&>button]:flex [&>button]:size-11 [&>button]:items-center [&>button]:justify-center"
         style={
           viewport
-            ? { top: viewport.top, height: viewport.height, bottom: 'auto' }
+            ? { top, height: Math.max(0, viewport.height - (top - viewport.top)), bottom: 'auto' }
             : { height: '100dvh' }
         }
         onOpenAutoFocus={(event) => {

@@ -1,5 +1,6 @@
-import { type CSSProperties, type ReactNode, useEffect } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useState } from 'react';
 import headerCss from '@/client/components/app-header.css?raw';
+import overlayCss from '@/client/components/pwa-overlays.css?raw';
 
 // Storybook has no native window. Substitute only browser-owned geometry and
 // the media query, so the preview exercises the production CSS and controls.
@@ -7,8 +8,8 @@ const overlayMediaQuery = /\(\s*display-mode\s*:\s*window-controls-overlay\s*\)/
 if (!overlayMediaQuery.test(headerCss)) {
   throw new Error('PWA header preview could not find the Window Controls Overlay media query.');
 }
-const previewCss = headerCss
-  .replace(overlayMediaQuery, 'all')
+const previewCss = `${headerCss}\n${overlayCss}`
+  .replace(new RegExp(overlayMediaQuery.source, 'g'), 'all')
   .replace(/env\((titlebar-area-[\w-]+)(?:,[^)]*)?\)/g, (_match, name: string) => {
     const values: Record<string, string> = {
       'titlebar-area-x': 'var(--preview-titlebar-left)',
@@ -28,6 +29,27 @@ export function WorkspaceHeaderPwaPreview({
   fontScale?: number;
   children: ReactNode;
 }) {
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    const previous = Object.getOwnPropertyDescriptor(navigator, 'windowControlsOverlay');
+    const overlay = Object.assign(new EventTarget(), {
+      visible: true,
+      getTitlebarAreaRect: () => new DOMRect(0, 0, window.innerWidth, 32),
+    });
+    Object.defineProperty(navigator, 'windowControlsOverlay', {
+      configurable: true,
+      value: overlay,
+    });
+    setReady(true);
+    return () => {
+      if (previous) {
+        Object.defineProperty(navigator, 'windowControlsOverlay', previous);
+      } else {
+        Reflect.deleteProperty(navigator, 'windowControlsOverlay');
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const previous = document.documentElement.style.fontSize;
     document.documentElement.style.fontSize = `${fontScale}%`;
@@ -49,7 +71,7 @@ export function WorkspaceHeaderPwaPreview({
       }
     >
       <style>{previewCss}</style>
-      {children}
+      {ready && children}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute top-0 flex items-center text-muted-foreground"

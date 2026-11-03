@@ -4,6 +4,7 @@
 @source '../../node_modules/streamdown/dist/*.js';
 @plugin '@tailwindcss/typography';
 @import './theme-presets.css';
+@import './components/pwa-overlays.css';
 
 @media (prefers-reduced-motion: reduce) {
   [data-sd-animate],

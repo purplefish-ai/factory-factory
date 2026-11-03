@@ -3,6 +3,7 @@ import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import type * as React from 'react';
+import { useOverlayPositioning } from '@/hooks/use-overlay-positioning';
 import { cn } from '@/lib/utils';
 
 function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
@@ -59,10 +60,14 @@ function ContextMenuSubTrigger({
 
 function ContextMenuSubContent({
   className,
+  collisionPadding,
+  sticky,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+  const positioning = useOverlayPositioning(collisionPadding, sticky);
   return (
     <ContextMenuPrimitive.SubContent
+      {...positioning}
       data-slot="context-menu-sub-content"
       className={cn(
         'z-50 min-w-[8rem] origin-(--radix-context-menu-content-transform-origin) overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
@@ -75,11 +80,15 @@ function ContextMenuSubContent({
 
 function ContextMenuContent({
   className,
+  collisionPadding,
+  sticky,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+  const positioning = useOverlayPositioning(collisionPadding, sticky);
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
+        {...positioning}
         data-slot="context-menu-content"
         className={cn(
           'z-50 max-h-(--radix-context-menu-content-available-height) min-w-[8rem] origin-(--radix-context-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',

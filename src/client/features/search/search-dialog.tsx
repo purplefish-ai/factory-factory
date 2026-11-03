@@ -60,7 +60,7 @@ export function SearchDialog({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent
         showCloseButton={false}
-        className="top-4 max-h-[calc(100dvh-2rem)] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:top-[min(18vh,8rem)]"
+        className="top-[calc(var(--overlay-titlebar-bottom,0px)+1rem)] max-h-[calc(100dvh-2rem)] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:top-[max(calc(var(--overlay-titlebar-bottom,0px)+1rem),min(18vh,8rem))]"
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">

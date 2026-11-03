@@ -43,6 +43,10 @@ restores the current page color; the browser still draws the window buttons. The
 saved Mode is also applied before React starts, so a refresh initializes the
 corner backgrounds with the selected light or dark mode.
 
+Tooltips, menus, popovers, dialogs, and sheets treat the bottom of the native
+title bar as the top edge of their usable area. Tooltips for title-bar controls
+open into the page below it, including the side-panel toggles.
+
 ## Backup imports
 
 New exports use schema version 8 with the frozen `base-json-1` partial coverage
