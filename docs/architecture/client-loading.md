@@ -10,6 +10,17 @@ lazy `mermaid-diagram.tsx` component and initializes the diagram engine, with
 strict security enabled. While that chunk loads, the block displays its source.
 Ordinary Markdown and workspace file links do not wait for it.
 
+The sidebar is part of the startup bundle, so its new-workspace form is a lazy
+import: launch controls, draft storage and the prompt composer load on the first
+"+" click or image drop. The always-mounted image drop zones import only the
+shared `ImageDropZone` component and a dependency-free queue in
+`workspace-creation-drop-queue.ts`. Dropped images wait there until a lazily
+loaded drain appends them to the project's persisted creation draft, whether or
+not the form chunk has finished loading. Clearing or discarding a draft resets
+the queue, so reads still in flight are dropped as before. Import the composer
+barrel or draft hooks from these zones and the whole creation stack, about 125
+KB raw and 36 KB gzip, returns to startup.
+
 Use `pnpm exec vite build --manifest` to inspect the production chunks. The
 initial JavaScript cost includes the entry and its transitive static imports in
 `dist/client/.vite/manifest.json`; dynamic imports load when needed. Compare

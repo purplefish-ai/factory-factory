@@ -1,6 +1,7 @@
 import type { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent } from 'react';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import { collectAttachments } from '@/client/lib/attachment-file-conversion';
 import {
   clipboardEventHasConfirmedImageType,
   clipboardEventHasImageItem,
@@ -11,7 +12,6 @@ import {
 } from '@/client/lib/paste-utils';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
-import { collectAttachments } from './attachment-file-conversion';
 
 interface UsePasteDropHandlerOptions {
   setAttachments: (

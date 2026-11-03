@@ -10,6 +10,7 @@ import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { WorkspaceChatImageDropZone } from '@/client/routes/projects/workspaces/workspace-chat-image-drop-zone';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { waitForReact } from '@/test-utils/react-act';
 import { AppSidebar } from './app-sidebar';
 
 vi.mock('@/client/hooks/use-project-issues', () => ({ useProjectIssues: () => ({ issues: [] }) }));
@@ -124,13 +125,12 @@ it('routes sidebar images to new workspace creation and transcript images only t
   await drag(sidebar, 'dragenter');
   expect(container.querySelector('[role="status"]')?.textContent).toContain('new workspace');
   await drag(sidebar, 'drop');
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(container.querySelector('[aria-label="New workspace"]')?.textContent).toContain(
-        'sidebar.png'
-      )
-    );
-  });
+  // The form and the draft drain load lazily; let their chunks settle between polls.
+  await waitForReact(() =>
+    expect(container.querySelector('[aria-label="New workspace"]')?.textContent).toContain(
+      'sidebar.png'
+    )
+  );
   expect(conversation.textContent).not.toContain('sidebar.png');
 
   await drag(conversation.querySelector('p')!, 'dragenter', 'message.png');
