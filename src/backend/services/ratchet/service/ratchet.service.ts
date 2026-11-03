@@ -14,6 +14,7 @@ import { shouldPollPR } from '@/shared/pr-polling';
 
 const logger = createLogger('ratchet');
 const POLL_JOB = 'pr-event-poll';
+const RETENTION_JOB = 'pr-event-retention';
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
 export const RATCHET_TOGGLED = 'ratchet_toggled' as const;
 export const RATCHET_DISPATCH_CHANGED = 'ratchet_dispatch_changed' as const;
@@ -121,6 +122,16 @@ export class RatchetService extends EventEmitter {
       },
       computeDelay: (base) => this.backoff.computeDelay(base),
     });
+    jobRunner.register({
+      name: RETENTION_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.prEventRetention,
+      run: async (signal) => {
+        const result = await workspacePRMonitoringService.pruneTerminalEvents({ signal });
+        if (result.deleted > 0) {
+          logger.info('Pruned terminal PR events', { ...result });
+        }
+      },
+    });
   }
   configure(bridge: MonitoringBridge) {
     this.bridge = bridge;
@@ -130,6 +141,7 @@ export class RatchetService extends EventEmitter {
     await this.bridge?.retireLegacy?.();
     if (!this.stopped) {
       jobRunner.start(POLL_JOB);
+      jobRunner.start(RETENTION_JOB);
     }
   }
   async stop() {
@@ -138,7 +150,7 @@ export class RatchetService extends EventEmitter {
     for (const controller of this.controllers) {
       controller.abort();
     }
-    await jobRunner.stop(POLL_JOB);
+    await Promise.all([jobRunner.stop(POLL_JOB), jobRunner.stop(RETENTION_JOB)]);
     await Promise.allSettled(this.pendingWakes);
   }
   async wakePendingEvents(workspaceId: string): Promise<void> {

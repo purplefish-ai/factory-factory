@@ -3,13 +3,14 @@
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, the
-periodic-task poll, GitHub agent source intake, event evaluation/admission, and
-workspace metadata updates. Each owning service or orchestrator registers its
-job and exposes thin `start()`/`stop()` delegates. GitHub agent intake registers
-through `createAgentRuntime()` in the agent-runtime orchestrator; its poll
-service owns neither registration nor lifecycle methods. These delegates are the
-injection seam `server.ts` and `server.upgrade.test.ts` use.
+sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, PR
+event ledger retention, the periodic-task poll, GitHub agent source intake,
+event evaluation/admission, and workspace metadata updates. Each owning service
+or orchestrator registers its job and exposes thin `start()`/`stop()` delegates.
+GitHub agent intake registers through `createAgentRuntime()` in the
+agent-runtime orchestrator; its poll service owns neither registration nor
+lifecycle methods. These delegates are the injection seam `server.ts` and
+`server.upgrade.test.ts` use.
 
 ## Pacing
 

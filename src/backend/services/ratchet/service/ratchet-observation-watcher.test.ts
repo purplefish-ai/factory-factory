@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   listEnabled: vi.fn(),
   listPending: vi.fn(),
   markChecked: vi.fn(),
+  pruneTerminalEvents: vi.fn(),
   register: vi.fn(),
   snapshot: vi.fn(),
   get: vi.fn(),
@@ -135,6 +136,20 @@ it('observes every association and wakes the main queue once without creating fi
   await ratchetService.checkAllWorkspaces();
   expect(observe).toHaveBeenCalledTimes(1);
   expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+});
+
+it('registers bounded PR event retention as its own job', async () => {
+  mocks.register.mockClear();
+  new RatchetService();
+  const retention = mocks.register.mock.calls
+    .map(([job]) => job)
+    .find((job) => job.name === 'pr-event-retention');
+  expect(retention).toMatchObject({ intervalMs: 30 * 60_000 });
+  expect(retention.runImmediately).toBeUndefined();
+  const signal = new AbortController().signal;
+  mocks.pruneTerminalEvents.mockResolvedValue({ deleted: 3, batches: 1, complete: true });
+  await retention.run(signal);
+  expect(mocks.pruneTerminalEvents).toHaveBeenCalledExactlyOnceWith({ signal });
 });
 
 const config = {

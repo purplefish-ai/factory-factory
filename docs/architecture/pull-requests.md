@@ -272,6 +272,36 @@ authorizes a resend. Resume, supersession and cancellation preserve its original
 evidence. Empty receipt IDs are quarantined rather than treated as new delivery
 requests.
 
+### Ledger retention
+
+The `pr-event-retention` job, registered beside `pr-event-poll`, runs every 30
+minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts
+older than 24 hours in batches of 100, oldest first, with at most 20 batches per
+run. Each batch is a separate short write; the delete re-checks the predicate,
+and the loop yields between batches and stops on shutdown. Superseded review
+facts copy the whole observation, so these rows hold most of the ledger's size.
+
+Only rows that no reader uses are eligible. Rows must have no `batchId`, no
+legacy receipt or frozen metadata, and a PR target. The reducer reads only
+pending, in-flight and delivered history; pending counts and delivery read only
+live states. Delivery members are never pruned, whatever their own state, so
+frozen batches keep the complete membership that recovery and export validate.
+Delivered history stays the deduplication record that prevents re-emission.
+Eligible kinds are those whose deduplication key includes the PR's transition
+sequence: review feedback, CI failure, conflict, merge and close. That sequence
+persists with every accepted observation and only increases, so the reducer
+never regenerates a pruned key. `CI_RECOVERED` and legacy `MONITORING_ENABLED`
+rows are retained. ARCHIVED workspaces cannot return to READY; their terminal
+facts are pruned under the same rule, while their delivery evidence and
+unclaimed pending facts remain until workspace deletion. Logical backups simply
+omit pruned facts.
+
+Deletion returns pages to SQLite's free list for reuse by later writes; it does
+not shrink the file. The app does not run `VACUUM` automatically: it rewrites
+the whole database under an exclusive lock and needs temporary space roughly
+equal to the database. Enabling incremental vacuum would also require a full
+`VACUUM` first. Compact a large database manually while the app is stopped.
+
 ### Terminal PR polling
 
 Both background schedulers use the persisted per-association observation and

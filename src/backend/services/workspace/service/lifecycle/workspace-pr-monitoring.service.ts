@@ -1,6 +1,8 @@
 import { workspacePrEventAccessor } from '@/backend/services/workspace/resources/workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from '@/backend/services/workspace/resources/workspace-pr-monitoring.accessor';
+import { pruneTerminalPREvents } from './workspace-pr-event-retention.service';
 export const workspacePRMonitoringService = {
+  pruneTerminalEvents: pruneTerminalPREvents,
   projectEvents: workspacePrEventAccessor.projectEvents,
   exportEvents: workspacePrEventAccessor.exportEvents,
   cancelRecoveredDelivery:
