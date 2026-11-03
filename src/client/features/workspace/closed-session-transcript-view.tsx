@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
-import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
+import { projectClosedSessionTranscriptRows } from './closed-session-transcript-items';
 
 interface ClosedSessionTranscriptViewProps {
   sessionId: string;
@@ -49,19 +48,23 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
-  // Group messages using the same logic as the live chat
-  const groupedMessages = groupAdjacentToolCalls(transcript.messages);
+  const items = projectClosedSessionTranscriptRows(transcript.messages);
 
   return (
     <ScrollArea ref={scrollAreaRef} className="h-full">
       <div className="p-4 space-y-4">
-        {withOccurrenceKeys(groupedMessages, (item) => item.id).map(({ item, key }) => (
-          <GroupedMessageItemRenderer
-            key={key}
-            item={item}
-            // Read-only mode - no interactivity callbacks
-          />
-        ))}
+        {items.map(({ item, key }) =>
+          item.kind === 'rich' ? (
+            <GroupedMessageItemRenderer key={key} item={item.value} />
+          ) : (
+            <section key={key} aria-label="Archived message JSON">
+              <div className="text-xs text-muted-foreground">Archived message JSON</div>
+              <pre className="whitespace-pre-wrap break-words text-sm">
+                {JSON.stringify(item.value, null, 2)}
+              </pre>
+            </section>
+          )
+        )}
       </div>
     </ScrollArea>
   );

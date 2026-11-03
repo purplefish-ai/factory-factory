@@ -115,20 +115,25 @@ falls back to another account or default history on failure. Legacy archives
 without an account retain default-history lookup only when no live binding is
 available; their headers do not independently prove account ownership.
 
-This header-only extraction leaves the full `getTranscript` route unchanged. Its
-existing unchecked body-type assignment remains debt for the separate compatible
-body DTO and archive-view change. Archive storage performance and durability
-acceptance remain blocked; this reader change clears neither gate.
+The full `getTranscript` route delegates to the session owner's compatible body
+reader, sharing the header reader's FK-root lexical and realpath containment. It
+requires a JSON object with a messages array, retaining legacy role/content
+rows, opaque metadata/version/summary and unknown fields, including own reserved
+keys at every JSON depth. Malformed full bodies fail with safe application
+errors even when the bounded header probe can still recover identity. Archive
+storage performance and durability acceptance remain blocked; this reader change
+clears neither gate.
 
-The passive `projectClosedSessionTranscriptRows` helper validates each JSON row
-with the archive current-message codec before grouping. It preserves opaque
-barriers and uses optional observations from the existing grouping owner to
-identify exact consumed result blocks. A row with any unconsumed result retains
-one entire raw fallback, even if part of it is already represented richly;
+The archive view uses `projectClosedSessionTranscriptRows` to validate each JSON
+row with the current-message codec before read-only rich rendering. Opaque and
+invalid rows appear as labeled, escaped JSON text. Projection preserves array
+order and opaque barriers, using observations from the existing grouping owner
+to identify exact consumed result blocks. A row with any unconsumed result
+retains one entire raw fallback, even if part is already represented richly;
 same-index rich content precedes that inspection row. Successful current rows
-with undeclared extras remain rich-only, while the original JSON stays intact.
-The current route and archive view do not use this helper yet; compatible body
-validation and view activation remain a separate atomic change.
+with undeclared extras remain rich-only, while the original API JSON stays
+intact. Full bodies are presentation data; headers still only select native
+provider history and never establish delivery proof.
 
 ## ACP runtime
 
