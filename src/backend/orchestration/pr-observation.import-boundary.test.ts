@@ -29,7 +29,13 @@ it('loads and accepts an observation with only five supplied capabilities', asyn
   const publish = vi.fn();
   const ports = {
     cacheScope: {},
-    findPR: async () => ({ revision: 7, state: 'NONE' }),
+    findPR: async () => ({
+      revision: 7,
+      state: 'NONE',
+      observation: null,
+      observationEpoch: 0,
+      syncedAt: null,
+    }),
     getMonitoring: async () => ({ eventEpoch: 3 }),
     fetchObservation: async () => redObservation,
     acceptObservation: async () => ({ applied: true, eventIds: [] }),

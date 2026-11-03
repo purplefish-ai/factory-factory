@@ -16,7 +16,13 @@ export interface PRAcceptedObservation {
 export interface PRObservationPorts {
   /** Stable identity shared by every observation entry point in one application graph. */
   readonly cacheScope: object;
-  findPR(target: PRTarget): Promise<{ revision: number; state: string } | null>;
+  findPR(target: PRTarget): Promise<{
+    revision: number;
+    state: string;
+    observation: unknown;
+    observationEpoch: number;
+    syncedAt: Date | null;
+  } | null>;
   getMonitoring(workspaceId: string): Promise<{ eventEpoch: number } | null>;
   fetchObservation(target: PRTarget, signal?: AbortSignal): Promise<PRObservation>;
   acceptObservation(input: {

@@ -333,14 +333,18 @@ class WorkspaceQueryService {
       .map(({ workspace }) => workspace.id);
   }
 
-  async syncPRStatus(workspaceId: string) {
+  /**
+   * Refresh one workspace's PRs. Without `force` (page-load syncs) the refresh
+   * respects the automatic throttles; `force` is for explicit user requests.
+   */
+  async syncPRStatus(workspaceId: string, options: { force?: boolean } = {}) {
     let limit = this.manualPRSyncLimits.get(workspaceId);
     if (!limit) {
       limit = pLimit(1);
       this.manualPRSyncLimits.set(workspaceId, limit);
     }
     try {
-      return await limit(() => this.syncPRStatusSerial(workspaceId));
+      return await limit(() => this.syncPRStatusSerial(workspaceId, options.force ?? false));
     } finally {
       if (limit.activeCount === 0 && limit.pendingCount === 0) {
         this.manualPRSyncLimits.delete(workspaceId);
@@ -348,7 +352,7 @@ class WorkspaceQueryService {
     }
   }
 
-  private async syncPRStatusSerial(workspaceId: string) {
+  private async syncPRStatusSerial(workspaceId: string, force: boolean) {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       throw new Error('Workspace not found');
@@ -360,7 +364,7 @@ class WorkspaceQueryService {
     }
 
     const previousPrState = workspace.prState;
-    const prResult = await this.prSnapshot.refreshWorkspace(workspaceId);
+    const prResult = await this.prSnapshot.refreshWorkspace(workspaceId, { force });
     if (!prResult.success) {
       logger.warn('PR status refresh failed for one or more associations', {
         workspaceId,
@@ -386,13 +390,24 @@ class WorkspaceQueryService {
     return { success: true, prState: refreshedWorkspace.prState, previousPrState };
   }
 
-  async syncAllPRStatuses(projectId: string) {
-    if (this.prStatusSyncProjectsInFlight.has(projectId)) {
-      logger.info('Batch PR status sync already in flight for project, skipping', { projectId });
+  /**
+   * Refresh PRs for every live workspace in a project. Without `force` (the
+   * app-load/project-switch sweep) merged PRs, recently closed PRs and PRs
+   * observed in the last 90 seconds are skipped; the Kanban sync button forces.
+   */
+  async syncAllPRStatuses(projectId: string, options: { force?: boolean } = {}) {
+    const force = options.force ?? false;
+    // An automatic sweep in flight must not swallow an explicit sync request.
+    const syncKey = `${force ? 'manual' : 'automatic'}:${projectId}`;
+    if (this.prStatusSyncProjectsInFlight.has(syncKey)) {
+      logger.info('Batch PR status sync already in flight for project, skipping', {
+        projectId,
+        force,
+      });
       return { queued: 0 };
     }
 
-    this.prStatusSyncProjectsInFlight.add(projectId);
+    this.prStatusSyncProjectsInFlight.add(syncKey);
 
     try {
       const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
@@ -402,25 +417,25 @@ class WorkspaceQueryService {
       const workspacesWithPRs = workspaces.filter((w) => w.prs.length > 0);
 
       if (workspacesWithPRs.length === 0) {
-        this.prStatusSyncProjectsInFlight.delete(projectId);
+        this.prStatusSyncProjectsInFlight.delete(syncKey);
         return { queued: 0 };
       }
 
       // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
       Promise.all(
         workspacesWithPRs.map((workspace) =>
-          gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id))
+          gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, { force }))
         )
       )
         .then(() => logger.info('Batch PR status sync completed', { projectId }))
         .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
         .finally(() => {
-          this.prStatusSyncProjectsInFlight.delete(projectId);
+          this.prStatusSyncProjectsInFlight.delete(syncKey);
         });
 
       return { queued: workspacesWithPRs.length };
     } catch (error) {
-      this.prStatusSyncProjectsInFlight.delete(projectId);
+      this.prStatusSyncProjectsInFlight.delete(syncKey);
       throw error;
     }
   }

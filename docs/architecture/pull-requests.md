@@ -288,9 +288,19 @@ observation are initialized before this policy applies. Enabling monitoring or
 changing its recipient/destination initializes facts for the new observation
 epoch before terminal backoff applies. A reopened PR returns to the normal
 cadence. The stale-data scheduler applies the same terminal policy, so its
-three-minute pass cannot bypass the closed-PR backoff. Explicit workspace and
-per-PR refreshes, and delivery preparation's freshness checks, remain
-unrestricted.
+three-minute pass cannot bypass the closed-PR backoff. Explicit refreshes (the
+Kanban Sync button and PR attachment) and delivery preparation's freshness
+checks force their observation and remain unrestricted.
+
+Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
+project-switch sweep, and the workspace page-load sync. They reuse an
+observation accepted in the last 90 seconds, apply the same terminal policy, and
+defer to the scheduler's per-PR fetch coordinator. A merge is still observed
+once, because the policy reads the committed state, which remains open until a
+MERGED observation is accepted. `refreshWorkspace` and the `syncPRStatus` and
+`syncAllPRStatuses` procedures take an explicit `force` flag (default `false`
+for the procedures). An automatic project sweep in flight does not suppress an
+explicit forced sync.
 
 ### Observations and events
 

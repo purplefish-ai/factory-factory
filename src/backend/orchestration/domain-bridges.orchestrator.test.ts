@@ -407,8 +407,8 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);
 
-      await bridge.prSnapshot.refreshWorkspace('ws1', 'https://pr.url');
-      expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws1', 'https://pr.url');
+      await bridge.prSnapshot.refreshWorkspace('ws1', { force: false });
+      expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws1', { force: false });
     });
   });
 

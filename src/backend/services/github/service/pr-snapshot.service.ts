@@ -4,6 +4,7 @@ import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
+import { prFetchCoordinator } from './pr-fetch-coordinator';
 
 const logger = createLogger('pr-snapshot');
 
@@ -18,6 +19,9 @@ type ObservePR = (
   target: { workspaceId: string; prId: string },
   options?: { force?: boolean }
 ) => Promise<boolean>;
+
+/** `force` bypasses every automatic-refresh throttle; reserve it for explicit requests. */
+export type RefreshOptions = { force: boolean };
 
 export type PRSnapshotRefreshResult =
   | { success: true; snapshot: SnapshotData }
@@ -102,13 +106,22 @@ class PRSnapshotService extends EventEmitter {
     }
     return removed;
   }
-  async refreshPR(target: { workspaceId: string; prId: string }): Promise<PRSnapshotRefreshResult> {
+  /**
+   * Refresh one PR. Forced refreshes (the default) always read GitHub; they are
+   * for explicit user requests and new attachments. Automatic refreshes reuse
+   * recent observations, skip terminal PRs under the background polling policy,
+   * and defer to the shared fetch coordinator.
+   */
+  async refreshPR(
+    target: { workspaceId: string; prId: string },
+    options: RefreshOptions = { force: true }
+  ): Promise<PRSnapshotRefreshResult> {
     try {
       const pr = await this.workspace.findPR(target);
       if (!pr) {
         return { success: false, reason: 'no_pr_url' };
       }
-      if (!(await this.observe(target, { force: true }))) {
+      if (!(await this.observeForRefresh(target, options))) {
         return { success: false, reason: 'stale_observation' };
       }
       const current = await this.workspace.findPR(target);
@@ -136,24 +149,27 @@ class PRSnapshotService extends EventEmitter {
       return { success: false, reason: 'error' };
     }
   }
+  /**
+   * Refresh every attached PR in a workspace. Callers must choose: `force: true`
+   * only for explicit user requests, `force: false` for automatic triggers such
+   * as idle transitions and page-load sweeps.
+   */
   async refreshWorkspace(
     workspaceId: string,
-    explicitPrUrl?: string | null
+    options: RefreshOptions
   ): Promise<PRSnapshotRefreshResult> {
     try {
       if (!(await this.workspace.findPRContext(workspaceId))) {
         return { success: false, reason: 'workspace_not_found' };
       }
-      const prs = (await this.workspace.listPRs(workspaceId)).filter(
-        (pr) => !explicitPrUrl || pr.url === explicitPrUrl
-      );
+      const prs = await this.workspace.listPRs(workspaceId);
       if (!prs.length) {
         return { success: false, reason: 'no_pr_url' };
       }
       let result: PRSnapshotRefreshResult = { success: false, reason: 'no_pr_url' };
       let failed: PRSnapshotRefreshResult | undefined;
       for (const pr of prs) {
-        result = await this.refreshPR({ workspaceId, prId: pr.id });
+        result = await this.refreshPR({ workspaceId, prId: pr.id }, options);
         if (!result.success) {
           failed = result;
         }
@@ -163,6 +179,21 @@ class PRSnapshotService extends EventEmitter {
       logger.error('Failed to refresh workspace PRs', toError(error), { workspaceId });
       return { success: false, reason: 'error' };
     }
+  }
+  private async observeForRefresh(
+    target: { workspaceId: string; prId: string },
+    options: RefreshOptions
+  ): Promise<boolean> {
+    if (options.force) {
+      return await this.observe(target, { force: true });
+    }
+    const outcome = await prFetchCoordinator.coordinate(target, () => this.observe(target), {
+      // A rejected observation must leave the PR eligible for the next attempt.
+      countsAsFetched: (applied) => applied,
+    });
+    // Another background fetch for this PR is running or just finished; the
+    // committed facts are as fresh as the shared polling budget allows.
+    return outcome.status === 'skipped' || outcome.value;
   }
   async attachDiscoveredPRAndRefresh(
     workspaceId: string,
