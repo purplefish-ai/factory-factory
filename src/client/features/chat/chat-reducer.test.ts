@@ -901,7 +901,7 @@ describe('chatReducer', () => {
       expect(secondEvent?.content_block?.thinking).toBe('second');
     });
 
-    it('should append latest thinking from stream events only', () => {
+    it('should append thinking deltas after the initial block content', () => {
       let state = chatReducer(initialState, {
         type: 'WS_AGENT_MESSAGE',
         payload: { message: createTestThinkingMessage(), order: 0 },
@@ -926,7 +926,7 @@ describe('chatReducer', () => {
         | { content_block?: { thinking?: string } }
         | undefined;
       expect(event?.content_block?.thinking).toBe('Analyzing the problem... +delta');
-      expect(state.latestThinking).toBe(' +delta');
+      expect(state.latestThinking).toBe('Analyzing the problem... +delta');
     });
 
     it('clears latest thinking when a reasoning tool starts', () => {
