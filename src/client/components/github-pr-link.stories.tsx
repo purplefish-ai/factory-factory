@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { INITIAL_VIEWPORTS } from 'storybook/viewport';
 import { GitHubPreviewTooltip } from './github-link-preview';
 import { GitHubPRPreviewCard } from './github-pr-link';
 
@@ -7,7 +8,8 @@ const data = {
   state: 'OPEN' as const,
   isDraft: false,
   author: { login: 'martin-purplefish' },
-  createdAt: '2026-10-28T12:00:00Z',
+  // Relative-time labels intentionally follow the clock when the story opens.
+  createdAt: new Date(Date.now() - 52 * 60_000).toISOString(),
   additions: 4,
   deletions: 3,
   changedFiles: 1,
@@ -82,11 +84,6 @@ export const HoverPreview: Story = {
 
 export const Mobile: Story = {
   ...LongTitle,
-  decorators: [
-    (Story) => (
-      <div className="w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl">
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { viewport: { options: INITIAL_VIEWPORTS } },
+  globals: { viewport: { value: 'iphonex', isRotated: false } },
 };
