@@ -78,11 +78,11 @@ saves the exact returned result without dismissing it. Results are held in
 memory and do not survive reloading or closing the app.
 
 The result lists actual imported and skipped counts for projects, workspaces,
-agent sessions, terminal sessions and user settings, plus runtime changes for
-newly created rows. Already inert values and skipped existing runtime rows do
-not count as changes. Runtime changes may overlap those record counts. Embedded
-row totals and account remapping totals are not reported; this does not mean
-zero.
+agent sessions and terminal sessions, plus runtime changes for newly created
+rows. User settings are reported as imported, skipped or none. Already inert
+values and skipped existing runtime rows do not count as changes. Runtime
+changes may overlap those record counts. Embedded row totals and account
+remapping totals are not reported; this does not mean zero.
 
 Destination collisions skip the affected workspace and its child workspaces as a
 group, including their sessions, PR configuration, events and metadata. Existing
