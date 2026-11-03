@@ -4,19 +4,16 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   history: vi.fn(),
   archives: vi.fn(),
-  read: vi.fn(),
-}));
-vi.mock('./closed-session-transcript-header', () => ({
-  readClosedSessionTranscriptHeader: async (
-    _path: string,
-    schema: { parse: (v: unknown) => unknown }
-  ) => schema.parse(JSON.parse(await mocks.read())),
+  identity: vi.fn(),
 }));
 vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
   closedSessionAccessor: { findBySessionIdWithWorkspace: mocks.archives },
 }));
 vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
-  sessionDataService: { findAgentSessionById: mocks.session },
+  sessionDataService: {
+    findAgentSessionById: mocks.session,
+    readClosedSessionProviderIdentity: mocks.identity,
+  },
 }));
 vi.mock('@/backend/services/session/service/data/session-history-loader.service', () => ({
   claudeSessionHistoryLoaderService: { loadSessionHistory: mocks.history },
@@ -37,7 +34,7 @@ it.each(['CLAUDE', 'CODEX'])(
     mocks.session.mockResolvedValue({
       provider,
       providerSessionId: 'existing',
-      workspace: { worktreePath: '/tmp/repo' },
+      workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
     });
     mocks.history.mockResolvedValue({ status: 'not_found' });
     expect(await findPRDeliveryReceipt('main', 'delivery')).not.toBe('delivered');
@@ -59,23 +56,25 @@ it.each(['CLAUDE', 'CODEX'])(
     mocks.session.mockResolvedValue(null);
     mocks.archives.mockResolvedValue([
       {
+        id: 'closed-1',
         sessionId: 'main',
+        workspaceId: 'workspace-1',
         provider,
         transcriptPath: '.context/closed-sessions/main.json',
-        workspace: { worktreePath: '/tmp/repo' },
+        workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
       },
     ]);
-    mocks.read.mockResolvedValue(
-      JSON.stringify({
-        sessionId: 'main',
-        metadata: { provider, providerSessionId: 'closed-provider' },
-      })
-    );
+    mocks.identity.mockResolvedValue({
+      provider,
+      providerSessionId: 'closed-provider',
+      workingDir: '/tmp/repo',
+    });
     mocks.history.mockResolvedValue({
       status: 'loaded',
       history: [{ type: 'user', content: '<!-- factory-factory-pr-event:delivery -->' }],
     });
     expect(await findPRDeliveryReceipt('main', 'delivery')).toBe('delivered');
+    expect(mocks.identity).toHaveBeenCalledExactlyOnceWith('closed-1');
     expect(mocks.history).toHaveBeenLastCalledWith({
       providerSessionId: 'closed-provider',
       workingDir: '/tmp/repo',
@@ -94,22 +93,25 @@ it.each(['loaded', 'not_found', 'throws'])(
     mocks.session.mockResolvedValue({
       provider: 'CODEX',
       providerSessionId: 'replacement',
-      workspace: { worktreePath: '/tmp/repo' },
+      codexAccountId: null,
+      workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
     });
     mocks.archives.mockResolvedValue([
       {
+        id: 'closed-1',
         sessionId: 'main',
+        workspaceId: 'workspace-1',
         provider: 'CODEX',
         transcriptPath: 'old.json',
-        workspace: { worktreePath: '/tmp/repo' },
+        workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
       },
     ]);
-    mocks.read.mockResolvedValue(
-      JSON.stringify({
-        sessionId: 'main',
-        metadata: { provider: 'CODEX', providerSessionId: 'original' },
-      })
-    );
+    mocks.identity.mockResolvedValue({
+      provider: 'CODEX',
+      providerSessionId: 'original',
+      codexAccountId: null,
+      workingDir: '/tmp/repo',
+    });
     mocks.history.mockImplementation(({ providerSessionId }) => {
       if (providerSessionId !== 'original' && status === 'throws') {
         return Promise.reject(new Error('live history unavailable'));
@@ -130,17 +132,19 @@ it('does not conclude absence when the rolled-over transcript is unavailable', a
   mocks.session.mockResolvedValue({
     provider: 'CODEX',
     providerSessionId: 'replacement',
-    workspace: { worktreePath: '/tmp/repo' },
+    workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
   });
   mocks.archives.mockResolvedValue([
     {
+      id: 'closed-1',
       sessionId: 'main',
+      workspaceId: 'workspace-1',
       provider: 'CODEX',
       transcriptPath: 'old.json',
-      workspace: { worktreePath: '/tmp/repo' },
+      workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
     },
   ]);
-  mocks.read.mockRejectedValue(new Error('missing old transcript'));
+  mocks.identity.mockRejectedValue(new Error('missing old transcript'));
   mocks.history.mockResolvedValue({ status: 'loaded', history: [] });
   expect(await findPRDeliveryReceipt('main', 'delivery')).toBe('unavailable');
 });
@@ -150,7 +154,7 @@ it('checks retained rollover identities when no local transcript was archived', 
     provider: 'CODEX',
     providerSessionId: 'replacement',
     providerMetadata: { providerIdentityRollovers: [{ previousProviderSessionId: 'original' }] },
-    workspace: { worktreePath: '/tmp/repo' },
+    workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
   });
   mocks.history.mockImplementation(async ({ providerSessionId }) => ({
     status: 'loaded',
@@ -161,3 +165,45 @@ it('checks retained rollover identities when no local transcript was archived', 
   }));
   expect(await findPRDeliveryReceipt('main', 'delivery')).toBe('delivered');
 });
+
+it.each([
+  ['account-1', undefined],
+  [null, undefined],
+  ['account-1', 'account-2'],
+  ['account-1', null],
+  [null, 'account-1'],
+])(
+  'does not match known live account %s to archived account %s',
+  async (codexAccountId, archivedAccountId) => {
+    mocks.session.mockResolvedValue({
+      provider: 'CODEX',
+      providerSessionId: 'replacement',
+      codexAccountId,
+      workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
+    });
+    mocks.archives.mockResolvedValue([
+      {
+        id: 'closed-1',
+        sessionId: 'main',
+        workspaceId: 'workspace-1',
+        provider: 'CODEX',
+        transcriptPath: 'old.json',
+        workspace: { id: 'workspace-1', worktreePath: '/tmp/repo' },
+      },
+    ]);
+    mocks.identity.mockResolvedValue({
+      provider: 'CODEX',
+      providerSessionId: 'original',
+      codexAccountId: archivedAccountId,
+      workingDir: '/tmp/repo',
+    });
+    mocks.history.mockImplementation(async ({ providerSessionId }) => ({
+      status: 'loaded',
+      history:
+        providerSessionId === 'original'
+          ? [{ type: 'user', content: '<!-- factory-factory-pr-event:delivery -->' }]
+          : [],
+    }));
+    expect(await findPRDeliveryReceipt('main', 'delivery')).toBe('unavailable');
+  }
+);

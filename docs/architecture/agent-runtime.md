@@ -97,6 +97,29 @@ backend restart; an unprompted session without a file then remains protected
 until provider history can be confirmed. Empty ACP fallbacks remain eligible for
 a JSONL read.
 
+Archived PR receipt lookup reads provider identity through the session owner's
+`readClosedSessionProviderIdentity` API. The actual Workspace FK supplies the
+worktree root; relative legacy paths such as `transcripts/` remain readable,
+while absolute paths, lexical escapes and existing-file symlink escapes are
+rejected. Session/provider identity and workspace identity, when present, must
+match the archive row. The bounded header probe can recover identity from a
+pretty-printed archive with a truncated message body; complete compact or
+reordered archives retain their full-file fallback.
+
+Headers only select native provider history. Delivery still requires a user
+marker from that scoped Claude/Codex history, using the original worktree path.
+Closed-session rows have no account column: an absent header account is unknown,
+distinct from an explicit default account (`null`). When a live Codex account is
+known, archived identity must match it; an explicitly selected account never
+falls back to another account or default history on failure. Legacy archives
+without an account retain default-history lookup only when no live binding is
+available; their headers do not independently prove account ownership.
+
+This header-only extraction leaves the full `getTranscript` route unchanged. Its
+existing unchecked body-type assignment remains debt for the separate compatible
+body DTO and archive-view change. Archive storage performance and durability
+acceptance remain blocked; this reader change clears neither gate.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

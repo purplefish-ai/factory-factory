@@ -12,6 +12,7 @@ import {
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
 import { prDedicatedSessionAccessor } from '@/backend/services/session/resources/pr-dedicated-session.accessor';
+import { readClosedSessionProviderIdentity } from '@/backend/services/session/service/lifecycle/closed-session-reader';
 import { createSessionLaunchMetadata } from '@/backend/services/session/service/lifecycle/session-launch-settings';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
@@ -292,6 +293,10 @@ class SessionDataImplementation {
 
   findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
     return closedSessionAccessor.findByIdWithWorkspace(id);
+  }
+
+  readClosedSessionProviderIdentity(id: string) {
+    return readClosedSessionProviderIdentity(id);
   }
 
   deleteClosedSession(id: string): Promise<ClosedSessionRecord> {

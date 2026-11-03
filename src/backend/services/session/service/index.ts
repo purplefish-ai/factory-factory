@@ -59,6 +59,7 @@ export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export { ClaudeModelCatalogService } from './lifecycle/claude-model-catalog.service';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
+export type { ArchivedProviderIdentity } from './lifecycle/closed-session-reader';
 export { CodexModelCatalogService } from './lifecycle/codex-model-catalog.service';
 export { SessionConfigService } from './lifecycle/session.config.service';
 export {
