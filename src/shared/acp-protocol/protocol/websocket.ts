@@ -82,6 +82,19 @@ interface WebSocketMessagePayloadByType {
   session_delta: {
     data: SessionDeltaEvent;
   };
+  /** Authoritative queue after a queue-only change; replaces the client's queue. */
+  queue_updated: {
+    queuedMessages: QueuedMessage[];
+  };
+  /** Authoritative pending interactive request after it is shown, resolved, or cleared. */
+  pending_request_updated: {
+    pendingInteractiveRequest: PendingInteractiveRequest | null;
+  };
+  /** A transcript entry committed from the queue, plus the queue that remains. */
+  transcript_message_committed: {
+    chatMessage: ChatMessage;
+    queuedMessages: QueuedMessage[];
+  };
   subagents_changed: {
     sessionId: string;
     subagentId: string;
@@ -290,6 +303,9 @@ export type WebSocketMessage = {
 const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   session_snapshot: true,
   session_delta: true,
+  queue_updated: true,
+  pending_request_updated: true,
+  transcript_message_committed: true,
   subagents_changed: true,
   session_runtime_snapshot: true,
   session_runtime_updated: true,

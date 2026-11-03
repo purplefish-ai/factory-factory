@@ -21,6 +21,7 @@ import { runRendererTranscriptBatch } from './renderer-indexes';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
 import { reduceMessageResetSlice } from './slices/messages/reset';
+import { reduceSessionStateDeltaSlice } from './slices/messages/session-state-delta';
 import { reduceMessageSnapshotSlice } from './slices/messages/snapshot';
 import { reduceMessageStateMachineSlice } from './slices/messages/state-machine';
 import { reduceMessageTransportSlice } from './slices/messages/transport';
@@ -72,6 +73,7 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceMessageQueueSlice,
   reduceMessageResetSlice,
   reduceMessageSnapshotSlice,
+  reduceSessionStateDeltaSlice,
   reduceMessageStateMachineSlice,
   reduceMessageUuidSlice,
   reduceMessageCompactSlice,
@@ -285,6 +287,33 @@ function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
   };
 }
 
+function handleQueueUpdated(data: WebSocketMessage): ChatAction | null {
+  if (data.type !== 'queue_updated') {
+    return null;
+  }
+  return { type: 'QUEUE_UPDATED', payload: { queuedMessages: data.queuedMessages } };
+}
+
+function handleTranscriptMessageCommitted(data: WebSocketMessage): ChatAction | null {
+  if (data.type !== 'transcript_message_committed') {
+    return null;
+  }
+  return {
+    type: 'TRANSCRIPT_MESSAGE_COMMITTED',
+    payload: { message: data.chatMessage, queuedMessages: data.queuedMessages },
+  };
+}
+
+function handlePendingRequestUpdated(data: WebSocketMessage): ChatAction | null {
+  if (data.type !== 'pending_request_updated') {
+    return null;
+  }
+  return {
+    type: 'PENDING_REQUEST_UPDATED',
+    payload: { pendingInteractiveRequest: data.pendingInteractiveRequest },
+  };
+}
+
 function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
   if (!Array.isArray(data.replayEvents)) {
     return null;
@@ -492,6 +521,9 @@ const messageHandlers: MessageHandlerMap = {
   message_used_as_response: handleMessageUsedAsResponseMessage,
   session_snapshot: handleSessionSnapshot,
   session_delta: null,
+  queue_updated: handleQueueUpdated,
+  pending_request_updated: handlePendingRequestUpdated,
+  transcript_message_committed: handleTranscriptMessageCommitted,
   subagents_changed: null,
   session_replay_batch: handleSessionReplayBatch,
   session_replay_chunk: null,

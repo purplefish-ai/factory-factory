@@ -44,7 +44,7 @@ const commonFields = {
   status: z.string().optional(),
 };
 
-/** Complete current serialized rows for archive readers; does not alter live acceptance. */
+/** Complete current serialized rows for archive readers and committed-entry deltas. */
 export const ArchivedAgentMessageSchema = z.discriminatedUnion('type', [
   z.object({
     ...commonFields,

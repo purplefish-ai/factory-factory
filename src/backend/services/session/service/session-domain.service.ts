@@ -259,7 +259,12 @@ export class SessionDomainService extends EventEmitter {
     if ('error' in result) {
       return result;
     }
-    this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    if (message.source) {
+      // Background enqueue can replace a prior PR outcome entry in the transcript.
+      this.publisher.forwardSnapshot(store, { reason: 'enqueue' });
+    } else {
+      this.publisher.forwardQueue(store);
+    }
     return result;
   }
 
@@ -286,11 +291,17 @@ export class SessionDomainService extends EventEmitter {
     if (!store) {
       return false;
     }
+    const queued = store.queue.find((message) => message.id === messageId);
     const removed = removeQueuedMessage(store, messageId, options);
     if (!removed) {
       return false;
     }
-    this.publisher.forwardSnapshot(store, { reason: 'remove_queued_message' });
+    if (queued?.source && options?.recordCancellation !== false) {
+      // Cancelling a PR delivery records its outcome in the transcript.
+      this.publisher.forwardSnapshot(store, { reason: 'remove_queued_message' });
+    } else {
+      this.publisher.forwardQueue(store);
+    }
     return true;
   }
 
@@ -299,11 +310,11 @@ export class SessionDomainService extends EventEmitter {
     return peekNext(store);
   }
 
-  dequeueNext(sessionId: string, options?: { emitSnapshot?: boolean }): QueuedMessage | undefined {
+  dequeueNext(sessionId: string, options?: { publish?: boolean }): QueuedMessage | undefined {
     const store = this.registry.getOrCreateActive(sessionId);
     const next = dequeueNext(store);
-    if (next && options?.emitSnapshot !== false) {
-      this.publisher.forwardSnapshot(store, { reason: 'dequeue' });
+    if (next && options?.publish !== false) {
+      this.publisher.forwardQueue(store);
     }
     return next;
   }
@@ -311,13 +322,22 @@ export class SessionDomainService extends EventEmitter {
   requeueFront(sessionId: string, message: QueuedMessage): void {
     const store = this.registry.getOrCreateActive(sessionId);
     requeueFront(store, message);
-    this.publisher.forwardSnapshot(store, { reason: 'requeue' });
+    // The requeued entry replaces any committed copy with the same id on viewers.
+    this.publisher.forwardQueue(store);
+  }
+
+  /** Publish the current queue after it changed without its own publication. */
+  publishQueue(sessionId: string): void {
+    const store = this.registry.getExisting(sessionId);
+    if (store) {
+      this.publisher.forwardQueue(store);
+    }
   }
 
   commitSentUserMessage(
     sessionId: string,
     message: QueuedMessage,
-    options?: { emitSnapshot?: boolean }
+    options?: { publish?: boolean }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     const order = store.nextOrder;
@@ -344,7 +364,7 @@ export class SessionDomainService extends EventEmitter {
     sessionId: string,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { publish?: boolean }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     this.commitSentUserMessageWithOrder(store, message, order, options);
@@ -354,13 +374,13 @@ export class SessionDomainService extends EventEmitter {
     store: SessionStore,
     message: QueuedMessage,
     order: number,
-    options?: { emitSnapshot?: boolean }
+    options?: { publish?: boolean }
   ): void {
-    commitSentUserMessageWithOrder(store, message, order);
+    const committed = commitSentUserMessageWithOrder(store, message, order);
     this.emit('user_message_committed', { sessionId: store.sessionId });
 
-    if (options?.emitSnapshot !== false) {
-      this.publisher.forwardSnapshot(store, { reason: 'commit_user_message' });
+    if (options?.publish !== false) {
+      this.publisher.forwardCommittedMessage(store, committed);
     }
   }
 
@@ -424,7 +444,7 @@ export class SessionDomainService extends EventEmitter {
   setPendingInteractiveRequest(sessionId: string, request: PendingInteractiveRequest): void {
     const store = this.registry.getOrCreateActive(sessionId);
     setPendingInteractiveRequest(store, request);
-    this.publisher.forwardSnapshot(store, { reason: 'pending_request_set' });
+    this.publisher.forwardPendingRequest(store);
     this.emit('pending_request_changed', {
       sessionId,
       requestId: request.requestId,
@@ -447,7 +467,7 @@ export class SessionDomainService extends EventEmitter {
     if (!clearPendingInteractiveRequest(store)) {
       return;
     }
-    this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
+    this.publisher.forwardPendingRequest(store);
     this.emit('pending_request_changed', {
       sessionId,
       requestId: pendingRequest.requestId,
@@ -461,7 +481,7 @@ export class SessionDomainService extends EventEmitter {
     if (!clearPendingInteractiveRequestIfMatches(store, requestId)) {
       return false;
     }
-    this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
+    this.publisher.forwardPendingRequest(store);
     this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
     return true;
   }

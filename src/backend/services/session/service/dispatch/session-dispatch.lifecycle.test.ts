@@ -26,6 +26,7 @@ const {
     allocateOrder: vi.fn(),
     emitDelta: vi.fn(),
     emitSessionSnapshot: vi.fn(),
+    publishQueue: vi.fn(),
     failMessage: vi.fn(),
     commitSentUserMessageAtOrder: vi.fn(),
     removeTranscriptMessageById: vi.fn(),
@@ -371,7 +372,8 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
     expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).not.toHaveBeenCalled();
     expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
-    expect(mockSessionDomainService.emitSessionSnapshot).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.publishQueue).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.emitSessionSnapshot).not.toHaveBeenCalled();
   });
 
   it('fails a message once when ACP reports an internal error', async () => {
@@ -788,16 +790,13 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     });
 
+    // The commit publishes its own targeted delta instead of a full snapshot.
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
       's1',
       queuedMessage,
-      0,
-      { emitSnapshot: false }
+      0
     );
-    expect(mockSessionDomainService.emitSessionSnapshot).toHaveBeenCalledWith('s1');
-    expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledBefore(
-      mockSessionDomainService.emitSessionSnapshot
-    );
+    expect(mockSessionDomainService.emitSessionSnapshot).not.toHaveBeenCalled();
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
@@ -849,7 +848,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     await sessionDispatchService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.dequeueNext).toHaveBeenCalledWith('s1', {
-      emitSnapshot: false,
+      publish: false,
     });
     expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
       's1',

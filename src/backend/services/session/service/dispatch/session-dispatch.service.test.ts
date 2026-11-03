@@ -7,6 +7,7 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { visibleIdsAfterEachEvent } from './session-dispatch-visibility.test-helpers';
 import { SessionDispatchService } from './session-dispatch.service';
 
 function deferred() {
@@ -124,19 +125,19 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
-  it('keeps every batch message visible in each snapshot during the queue-to-transcript handoff', async () => {
+  it('keeps every batch message visible after each published delta during the queue-to-transcript handoff', async () => {
     const h = harness();
     enqueue('first');
     enqueue('second');
     const publish = vi.spyOn(sessionEventBus, 'publishToSession');
     await h.dispatcher.tryDispatchNextMessage('session');
-    const snapshots = publish.mock.calls.flatMap(([, payload]) =>
-      payload.type === 'session_snapshot' ? [payload] : []
-    );
-    expect(snapshots.length).toBeGreaterThan(0);
-    for (const snapshot of snapshots) {
-      expect(snapshot.messages.map(({ id }) => id)).toEqual(['first', 'second']);
+    const payloads = publish.mock.calls.map(([, payload]) => payload);
+    const states = visibleIdsAfterEachEvent(payloads, ['first', 'second']);
+    expect(states.length).toBeGreaterThan(0);
+    for (const { visible } of states) {
+      expect([...visible].sort()).toEqual(['first', 'second']);
     }
+    expect(states.at(-1)).toMatchObject({ queued: [], committed: ['first', 'second'] });
   });
 
   it('sends all waiting human messages in one turn and retains their individual transcript entries', async () => {
@@ -745,22 +746,20 @@ describe('session dispatcher queue and lifecycle coordination', () => {
 });
 
 describe('explicit queued-message steering', () => {
-  it('keeps the steered message visible in every published snapshot until committed', async () => {
+  it('keeps the steered message visible after every published delta until committed', async () => {
     const h = harness();
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     enqueue('first');
     enqueue('selected');
     const publish = vi.spyOn(sessionEventBus, 'publishToSession');
     await h.dispatcher.steerQueuedMessage('session', 'selected');
-    const snapshots = publish.mock.calls.flatMap(([, payload]) =>
-      payload.type === 'session_snapshot' ? [payload] : []
-    );
-    expect(snapshots.length).toBeGreaterThan(0);
-    for (const snapshot of snapshots) {
-      expect(snapshot.messages.filter(({ id }) => id === 'selected')).toHaveLength(1);
-      expect(snapshot.messages.some(({ id }) => id === 'first')).toBe(true);
+    const payloads = publish.mock.calls.map(([, payload]) => payload);
+    const states = visibleIdsAfterEachEvent(payloads, ['first', 'selected']);
+    expect(states.length).toBeGreaterThan(0);
+    for (const { visible } of states) {
+      expect([...visible].sort()).toEqual(['first', 'selected']);
     }
-    expect(snapshots.at(-1)?.queuedMessages.map(({ id }) => id)).toEqual(['first']);
+    expect(states.at(-1)).toMatchObject({ queued: ['first'], committed: ['selected'] });
   });
 
   it('injects only the selected queued message while the original turn remains active', async () => {
