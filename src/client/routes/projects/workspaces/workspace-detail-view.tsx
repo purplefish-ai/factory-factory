@@ -9,7 +9,7 @@ import { WorkspaceContentView } from '@/client/features/workspace/workspace-cont
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { SessionlessSetupFailure } from './sessionless-setup-failure';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
@@ -17,6 +17,7 @@ import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import { getVisibleInitBanner } from './workspace-detail-container.utils';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
+import { WorkspaceSidePanel } from './workspace-side-panel';
 
 const TAKE_SCREENSHOTS_PROMPT =
   'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.';
@@ -271,14 +272,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
             {mainContent}
           </ResizablePanel>
 
-          {rightPanelVisible && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel id="workspace-side" defaultSize="30%" minSize="15%" maxSize="50%">
-                <div className="h-full border-l">{rightPanel}</div>
-              </ResizablePanel>
-            </>
-          )}
+          <WorkspaceSidePanel visible={rightPanelVisible}>{rightPanel}</WorkspaceSidePanel>
         </ResizablePanelGroup>
       )}
 

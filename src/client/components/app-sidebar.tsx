@@ -614,7 +614,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   return (
     <div
       className={cn(
-        'shrink-0 overflow-hidden transition-[width] duration-200 ease-linear',
+        'shrink-0 overflow-hidden transition-[width] duration-150 ease-out motion-reduce:transition-none',
         isResizingSidebar && 'duration-0'
       )}
       style={{ width: open ? `${sidebarWidth}px` : '0px' }}

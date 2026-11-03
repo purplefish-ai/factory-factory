@@ -7,6 +7,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { ChatContentPropsProvider } from './workspace-chat-slot';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
+import { SIDE_PANEL_MOTION_MS } from './workspace-side-panel';
 
 // Mock workspace content only; exercise the real resizable wrapper and v4 library.
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
@@ -96,6 +97,52 @@ async function resize() {
   });
 }
 
+async function finishSidePanelMotion() {
+  await act(() => vi.advanceTimersByTime(SIDE_PANEL_MOTION_MS));
+}
+
+function sidePanelMotion() {
+  return container.querySelector<HTMLElement>('#workspace-side')?.dataset.sidePanelMotion;
+}
+
+describe('workspace side panel open/close animation', () => {
+  it('animates open and keeps the panel mounted until the close animation ends', async () => {
+    await render('mock-a', false);
+    expect(container.querySelector('#workspace-side')).toBeNull();
+
+    await render('mock-a');
+    expect(sidePanelMotion()).toBe('opening');
+    await finishSidePanelMotion();
+    expect(sidePanelMotion()).toBeUndefined();
+
+    await render('mock-a', false);
+    expect(sidePanelMotion()).toBe('closing');
+    expect(container.textContent).toContain('Mock workspace files');
+    expect(sizes()).toEqual([70, 30]);
+    await finishSidePanelMotion();
+    expect(container.querySelector('#workspace-side')).toBeNull();
+    expect(container.querySelector('[role="separator"]')).toBeNull();
+    expect(sizes()).toEqual([100]);
+  });
+
+  it('does not animate a panel that is already open on mount', async () => {
+    await render('mock-a');
+    expect(container.querySelector('#workspace-side')).not.toBeNull();
+    expect(sidePanelMotion()).toBeUndefined();
+  });
+
+  it('reopens without unmounting when toggled mid-close', async () => {
+    await render('mock-a');
+    await render('mock-a', false);
+    await act(() => vi.advanceTimersByTime(SIDE_PANEL_MOTION_MS / 2));
+    await render('mock-a');
+    expect(sidePanelMotion()).toBe('opening');
+    await finishSidePanelMotion();
+    expect(sidePanelMotion()).toBeUndefined();
+    expect(sizes()).toEqual([70, 30]);
+  });
+});
+
 describe('workspace split persistence with real panels', () => {
   it('restores a saved split on mount and keeps it through close/open', async () => {
     const stored = JSON.stringify({ 'workspace-chat': 60, 'workspace-side': 40 });
@@ -104,6 +151,7 @@ describe('workspace split persistence with real panels', () => {
     expect(sizes()).toEqual([60, 40]);
     const chat = container.querySelector('[data-testid="chat"]');
     await render('mock-a', false);
+    await finishSidePanelMotion();
     expect(sizes()).toEqual([100]);
     expect(localStorage.getItem(storageKey)).toBe(stored);
     await render('mock-a');
