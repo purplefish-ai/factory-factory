@@ -44,7 +44,10 @@ function getInitialProjectSlug(): string {
 }
 
 /**
- * Syncs PR statuses when project changes.
+ * Syncs PR statuses when the app loads or the project changes. This sweep is
+ * automatic, so it is unforced: the server skips merged PRs, recently closed
+ * PRs, and PRs observed in the last 90 seconds. The scheduler's first pass runs
+ * three minutes after startup, so this keeps launch data fresh without a burst.
  */
 function usePRStatusSync(selectedProjectId: string | undefined) {
   const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
@@ -55,7 +58,7 @@ function usePRStatusSync(selectedProjectId: string | undefined) {
   useEffect(() => {
     if (selectedProjectId && selectedProjectId !== lastSyncedProjectRef.current) {
       lastSyncedProjectRef.current = selectedProjectId;
-      syncAllPRStatuses.mutate({ projectId: selectedProjectId });
+      syncAllPRStatuses.mutate({ projectId: selectedProjectId, force: false });
     }
   }, [selectedProjectId, syncAllPRStatuses]);
 }

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import type { GitHubWorkspaceBridge } from './bridges';
+import { prFetchCoordinator } from './pr-fetch-coordinator';
 import { PR_URL_ATTACHED, prSnapshotService } from './pr-snapshot.service';
 
 const logger = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }));
@@ -32,6 +33,7 @@ const bridge = {
 const observe = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  prFetchCoordinator.clear();
   prSnapshotService.removeAllListeners();
   prSnapshotService.configure({ workspace: bridge, observe });
   bridge.findPRContext.mockResolvedValue({ branchName: 'branch', prUrl: url });
@@ -63,6 +65,38 @@ it('routes manual refresh through the same full observation pipeline', async () 
     success: true,
   });
   expect(observe).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' }, { force: true });
+});
+it('forces explicit workspace refreshes past every automatic throttle', async () => {
+  await prFetchCoordinator.coordinate({ workspaceId: 'w', prId: 'p' }, async () => true);
+  expect(await prSnapshotService.refreshWorkspace('w', { force: true })).toMatchObject({
+    success: true,
+  });
+  expect(observe).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' }, { force: true });
+});
+it('leaves automatic workspace refreshes unforced so observation throttles apply', async () => {
+  expect(await prSnapshotService.refreshWorkspace('w', { force: false })).toMatchObject({
+    success: true,
+    snapshot: { prState: 'OPEN' },
+  });
+  expect(observe).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w', prId: 'p' });
+});
+it('defers automatic refreshes to the shared PR fetch coordinator', async () => {
+  // A scheduler fetch for this PR completed within the coordinator cooldown.
+  await prFetchCoordinator.coordinate({ workspaceId: 'w', prId: 'p' }, async () => true);
+  expect(await prSnapshotService.refreshWorkspace('w', { force: false })).toMatchObject({
+    success: true,
+    snapshot: { prState: 'OPEN' },
+  });
+  expect(observe).not.toHaveBeenCalled();
+});
+it('keeps a rejected automatic observation eligible for the next attempt', async () => {
+  observe.mockResolvedValueOnce(false);
+  expect(await prSnapshotService.refreshWorkspace('w', { force: false })).toEqual({
+    success: false,
+    reason: 'stale_observation',
+  });
+  await prSnapshotService.refreshWorkspace('w', { force: false });
+  expect(observe).toHaveBeenCalledTimes(2);
 });
 it('reports retryable network failures and recovers on the next refresh', async () => {
   observe.mockRejectedValueOnce(
@@ -119,7 +153,9 @@ it.each(['lookup', 'persistence', 'readback'])(
 it('refreshes every explicit association and reports a sibling failure', async () => {
   bridge.listPRs.mockResolvedValue([row, { ...row, id: 'p2' }]);
   observe.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-  expect(await prSnapshotService.refreshWorkspace('w')).toMatchObject({ success: false });
+  expect(await prSnapshotService.refreshWorkspace('w', { force: true })).toMatchObject({
+    success: false,
+  });
   expect(observe).toHaveBeenCalledTimes(2);
 });
 it('does not attach discovery results when their claim is stale', async () => {
@@ -146,7 +182,7 @@ it('detaches only the explicit target', async () => {
 });
 it('returns an error result when listing associations fails', async () => {
   bridge.listPRs.mockRejectedValueOnce(new Error('database unavailable'));
-  await expect(prSnapshotService.refreshWorkspace('w')).resolves.toEqual({
+  await expect(prSnapshotService.refreshWorkspace('w', { force: true })).resolves.toEqual({
     success: false,
     reason: 'error',
   });

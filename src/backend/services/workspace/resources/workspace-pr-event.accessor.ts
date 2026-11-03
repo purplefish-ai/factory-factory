@@ -17,6 +17,7 @@ import type {
   WorkspacePRDelivery,
   WorkspacePREvent,
 } from '@prisma-gen/client';
+import { backupCollisionsAccessor } from './backup-collisions.accessor';
 import {
   readDeliveryEvents,
   getFrozenDeliveryMembers,
@@ -404,9 +405,12 @@ class WorkspacePrEventAccessor {
     rawEvents: z.infer<typeof prEventBackupSchema>[],
     options: { inert?: boolean } = {}
   ) {
+    const events = rawEvents.map((raw) => prEventBackupSchema.parse(raw));
+    if ((await backupCollisionsAccessor.findEventConflicts(tx, events)).size) {
+      throw new Error('Imported PR event or delivery identity already exists');
+    }
     let heldReceipts = 0;
-    for (const raw of rawEvents) {
-      const event = prEventBackupSchema.parse(raw);
+    for (const event of events) {
       if (
         event.workspaceId !== workspaceId ||
         (event.prId &&
@@ -415,6 +419,8 @@ class WorkspacePrEventAccessor {
         throw new Error('Imported PR event target is invalid');
       }
       validateImportedTarget(event, workspaceId);
+    }
+    for (const event of events) {
       await tx.workspacePREvent.create({
         data: {
           ...event,
@@ -427,9 +433,6 @@ class WorkspacePrEventAccessor {
     for (const id of new Set(
       rawEvents.flatMap((event) => (event.deliveryId ? [event.deliveryId] : []))
     )) {
-      if (await tx.workspacePRDelivery.findUnique({ where: { id } })) {
-        throw new Error('Imported PR delivery identity already exists');
-      }
       const delivery = await normalizeLegacyDelivery(tx, id, options.inert);
       heldReceipts += Number(
         options.inert &&
@@ -515,10 +518,27 @@ class WorkspacePrEventAccessor {
       })
     ).filter((event) => ['PENDING', 'DISPATCHING'].includes(event.state));
   }
-  async listForPR(tx: Prisma.TransactionClient, prId: string) {
-    return (await readDeliveryEvents(tx, { prId })).filter((event) =>
-      ['PENDING', 'DISPATCHING', 'DELIVERED'].includes(event.state)
-    );
+  /**
+   * Reducer history for one PR's current observation epoch: projected PENDING,
+   * DISPATCHING and DELIVERED facts. This runs inside the serialized acceptance
+   * transaction, so SQL excludes old-epoch rows and unbound inactive rows (for
+   * example large SUPERSEDED review payloads). Current-epoch rows bound to a
+   * delivery are read regardless of their own state because the delivery's
+   * state replaces theirs in the projection; the in-memory filters below
+   * define the result.
+   */
+  async listForPR(tx: Prisma.TransactionClient, prId: string, eventEpoch: number) {
+    const prefix = `${prId}:epoch:${eventEpoch}:`;
+    // A BINARY-collated range equal to startsWith(prefix), served by @@unique([prId, deduplicationKey]).
+    const prefixEnd = `${prefix.slice(0, -1)};`;
+    const states = ['PENDING', 'DISPATCHING', 'DELIVERED'];
+    return (
+      await readDeliveryEvents(tx, {
+        prId,
+        deduplicationKey: { gte: prefix, lt: prefixEnd },
+        OR: [{ state: { in: states } }, { batchId: { not: null } }, { deliveryId: { not: null } }],
+      })
+    ).filter((event) => states.includes(event.state) && event.deduplicationKey.startsWith(prefix));
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
     return tx.workspacePREvent.updateMany({

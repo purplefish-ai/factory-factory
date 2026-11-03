@@ -23,9 +23,10 @@ export interface WorkspaceGitHubBridge {
 
 /** PR snapshot capability needed by workspace domain */
 export interface WorkspacePRSnapshotBridge {
+  /** `force` is for explicit user requests; automatic refreshes must pass `false`. */
   refreshWorkspace(
     workspaceId: string,
-    prUrl?: string
+    options: { force: boolean }
   ): Promise<{
     success: boolean;
     reason?: string;

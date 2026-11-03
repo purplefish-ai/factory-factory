@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/backend/services/workspace', () => ({
   workspacePRMonitoringService: {
-    listConfigs: mocks.configs,
+    listLegacyRetirementCandidates: mocks.configs,
     pauseWorkspace: mocks.pause,
     completeLegacyRetirement: mocks.retired,
   },

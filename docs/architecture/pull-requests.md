@@ -288,9 +288,19 @@ observation are initialized before this policy applies. Enabling monitoring or
 changing its recipient/destination initializes facts for the new observation
 epoch before terminal backoff applies. A reopened PR returns to the normal
 cadence. The stale-data scheduler applies the same terminal policy, so its
-three-minute pass cannot bypass the closed-PR backoff. Explicit workspace and
-per-PR refreshes, and delivery preparation's freshness checks, remain
-unrestricted.
+three-minute pass cannot bypass the closed-PR backoff. Explicit refreshes (the
+Kanban Sync button and PR attachment) and delivery preparation's freshness
+checks force their observation and remain unrestricted.
+
+Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
+project-switch sweep, and the workspace page-load sync. They reuse an
+observation accepted in the last 90 seconds, apply the same terminal policy, and
+defer to the scheduler's per-PR fetch coordinator. A merge is still observed
+once, because the policy reads the committed state, which remains open until a
+MERGED observation is accepted. `refreshWorkspace` and the `syncPRStatus` and
+`syncAllPRStatuses` procedures take an explicit `force` flag (default `false`
+for the procedures). An automatic project sweep in flight does not suppress an
+explicit forced sync.
 
 ### Observations and events
 
@@ -344,7 +354,10 @@ The ledger retains its compatible payload union, but rendering rejects mixed
 control/fact batches instead of silently omitting facts. The reducer
 deliberately reads pending, in-flight, and delivered fact history for
 deduplication and recovery semantics; it does not choose a session, destination,
-or prompt.
+or prompt. Acceptance holds the serialized SQLite transaction, so that history
+query is limited in SQL to the current epoch's deduplication-key range and
+excludes undelivered inactive rows such as superseded review payloads. It still
+reads delivery-bound rows because their delivery state replaces the event state.
 
 Unclaimed PR event messages use the current trusted reply preference at
 delivery. Legacy controls retain their captured `replyToPrComments` in
@@ -487,11 +500,15 @@ updates, paused delivery, and idle red CI do not imply live agent work.
 
 The cutover retains exact legacy fixer IDs and all session/transcript rows,
 retires and archives each legacy fixer, and fences delivery until retention is
-confirmed. It drops old fixer dispatch tables and the Ratchet provider override.
-Existing enabled workspaces bind their sole ordinary conversation during
-migration. Ambiguous workspaces require an explicit recipient selection. Main
-conversation settings remain intact. The later auto-iteration removal drops its
-obsolete permission setting without changing PR recipient access.
+confirmed. Startup retirement visits only monitoring rows with retained (or
+corrupt) legacy IDs, a `LEGACY_FIXER` fence, or any `ratchet` session row (any
+status); other rows are no-ops and are filtered in SQL. Retained IDs are never
+cleared, so those rows are rechecked each startup. It drops old fixer dispatch
+tables and the Ratchet provider override. Existing enabled workspaces bind their
+sole ordinary conversation during migration. Ambiguous workspaces require an
+explicit recipient selection. Main conversation settings remain intact. The
+later auto-iteration removal drops its obsolete permission setting without
+changing PR recipient access.
 
 Version-6 backups preserve every PR association, normalized observation,
 monitoring binding/pause, and event including frozen delivery metadata. Versions

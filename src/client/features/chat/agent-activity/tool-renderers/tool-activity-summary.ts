@@ -137,6 +137,11 @@ function activityGroupLabel(kind: ToolActivityKind, group: PairedToolCall[]): st
   }
 }
 
+/** Activity kinds in a collapsed group, classified the same way as its label. */
+export function getToolGroupKinds(calls: PairedToolCall[]): Set<ToolActivityKind> {
+  return new Set(calls.map(summaryKind));
+}
+
 export function getToolGroupLabel(calls: PairedToolCall[]): string {
   const groups = new Map<ToolActivityKind, PairedToolCall[]>();
   for (const call of calls) {

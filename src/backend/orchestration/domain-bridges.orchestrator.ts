@@ -177,7 +177,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       listReviewRequests: () => listVisibleReviewRequests(services),
     },
     prSnapshot: {
-      refreshWorkspace: (id, url) => prSnapshotService.refreshWorkspace(id, url),
+      refreshWorkspace: (id, options) => prSnapshotService.refreshWorkspace(id, options),
     },
   });
 
