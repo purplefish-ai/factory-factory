@@ -12,6 +12,7 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { formatBytes } from '@/lib/formatters';
 import { FileCode } from './file-code';
 import { usePersistentScroll } from './use-persistent-scroll';
 
@@ -27,20 +28,6 @@ interface FileViewerProps {
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type FileData = RouterOutputs['workspace']['readFile'];
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // =============================================================================
 // Main Component
@@ -255,7 +242,7 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
     restoreDeps: [showPreview, filePath, data.content.length, data.size, data.isBinary],
   });
 
-  const fileSizeLabel = formatFileSize(data.size);
+  const fileSizeLabel = formatBytes(data.size, { precision: 1 });
   const onTogglePreview = () => setShowPreview((prev) => !prev);
 
   return (

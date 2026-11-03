@@ -1,5 +1,6 @@
 import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import type { MessageAttachment } from './chat-protocol';
+import { formatBytes } from './formatters';
 
 export { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 
@@ -98,8 +99,8 @@ export async function fileToAttachment(file: File): Promise<MessageAttachment> {
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatFileSize(file.size);
-    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    const actualSize = formatBytes(file.size, { precision: 1 });
+    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
     throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
   }
 
@@ -113,19 +114,6 @@ export async function fileToAttachment(file: File): Promise<MessageAttachment> {
     data: base64,
     contentType: 'image',
   };
-}
-
-/**
- * Format file size for display.
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**
@@ -154,8 +142,8 @@ export async function textFileToAttachment(file: File): Promise<MessageAttachmen
   }
 
   if (file.size > MAX_TEXT_FILE_SIZE) {
-    const actualSize = formatFileSize(file.size);
-    const maxSize = formatFileSize(MAX_TEXT_FILE_SIZE);
+    const actualSize = formatBytes(file.size, { precision: 1 });
+    const maxSize = formatBytes(MAX_TEXT_FILE_SIZE, { precision: 1 });
     throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
   }
 

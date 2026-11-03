@@ -7,7 +7,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { MessageAttachment } from '@/lib/chat-protocol';
-import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';
+import { formatBytes } from '@/lib/formatters';
+import { formatLineCount, isTextAttachment } from '@/lib/image-utils';
 
 interface AttachmentViewerDialogProps {
   attachment: MessageAttachment | null;
@@ -39,7 +40,9 @@ export function AttachmentViewerDialog({
             {attachment.name}
           </DialogTitle>
           <DialogDescription>
-            {isText ? formatLineCount(attachment.data) : formatFileSize(attachment.size)}
+            {isText
+              ? formatLineCount(attachment.data)
+              : formatBytes(attachment.size, { precision: 1 })}
           </DialogDescription>
         </DialogHeader>
 

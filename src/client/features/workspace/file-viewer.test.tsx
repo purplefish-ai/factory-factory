@@ -11,7 +11,7 @@ import { FileViewer } from './file-viewer';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const mocks = vi.hoisted(() => ({ theme: 'dark' }));
+const mocks = vi.hoisted(() => ({ theme: 'dark', size: 12, truncated: false }));
 
 vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: mocks.theme }) }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -22,9 +22,9 @@ vi.mock('@/client/lib/trpc', () => ({
           data: {
             content: 'const x = 1;',
             language: 'typescript',
-            size: 12,
+            size: mocks.size,
             isBinary: false,
-            truncated: false,
+            truncated: mocks.truncated,
           },
           isLoading: false,
           error: null,
@@ -39,6 +39,8 @@ vi.mock('./use-persistent-scroll', () => ({
 
 afterEach(() => {
   applyAppearance(DEFAULT_APPEARANCE);
+  mocks.size = 12;
+  mocks.truncated = false;
 });
 
 describe('FileViewer appearance', () => {
@@ -212,3 +214,15 @@ it.each(['ready', 'pending', 'visible'])(
     }
   }
 );
+
+it('shows gigabytes consistently in the file header and truncation warning', () => {
+  mocks.size = 1024 ** 3;
+  mocks.truncated = true;
+  const container = document.createElement('div');
+  container.innerHTML = renderToStaticMarkup(
+    createElement(FileViewer, { workspaceId: 'workspace-1', filePath: 'large.ts', tabId: 'large' })
+  );
+  expect(container.textContent).toContain('1.0 GB');
+  expect(container.textContent).toContain('File truncated to 1MB. Actual size: 1.0 GB');
+  expect(container.textContent).not.toContain('1024.0 MB');
+});

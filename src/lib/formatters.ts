@@ -1,20 +1,36 @@
+interface FormatBytesOptions {
+  /** Decimal places for scaled units; bytes remain unrounded. */
+  precision?: number;
+}
+
 /**
- * Format bytes to human-readable string (B, KB, MB, GB)
+ * Format nonnegative byte counts using binary (1024) thresholds and B/KB/MB/GB
+ * labels. GB is the largest unit, including for terabyte-sized values.
+ * Null and undefined display as "-"; zero displays as "0 B".
+ *
+ * Defaults preserve admin memory precision: one decimal for KB/MB, two for GB.
+ * File previews and upload errors pass { precision: 1 } for compact labels.
+ * Units are selected before rounding, so a value just below 1 MB can show
+ * "1024.0 KB". Precision follows Number.toFixed's supported range (0–100).
  */
-export function formatBytes(bytes: number | null | undefined): string {
+export function formatBytes(
+  bytes: number | null | undefined,
+  { precision }: FormatBytesOptions = {}
+): string {
   if (bytes === null || bytes === undefined) {
     return '-';
   }
-  if (bytes < 1024) {
+  const units = ['B', 'KB', 'MB', 'GB'] as const;
+  let unit = 0;
+  let value = bytes;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  if (unit === 0) {
     return `${bytes} B`;
   }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  return `${value.toFixed(precision ?? (unit === 3 ? 2 : 1))} ${units[unit]}`;
 }
 
 /**
