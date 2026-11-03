@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { registerBuildCommand } from './build-command';
+import { runServeSession } from './serve-session';
 import { startFactoryFactoryServer } from './server-startup';
 
 let root: string;
@@ -132,3 +133,31 @@ describe('missing build recovery', () => {
     ).rejects.toThrow(/reinstall/i);
   });
 });
+
+it.each([
+  { asset: 'frontend', source: true, expected: /pnpm exec tsx src\/cli\/index.ts build/ },
+  { asset: 'backend', source: true, expected: /pnpm exec tsx src\/cli\/index.ts build/ },
+  { asset: 'frontend', source: false, expected: /reinstall/i },
+  { asset: 'backend', source: false, expected: /reinstall/i },
+])(
+  'uses supported serve recovery when $asset is missing (source: $source)',
+  async ({ asset, source, expected }) => {
+    if (source) {
+      checkout();
+    }
+    if (asset === 'backend') {
+      mkdirSync(join(root, 'dist', 'client'), { recursive: true });
+    }
+    await expect(
+      runServeSession({
+        projectRoot: root,
+        env: {},
+        host: '127.0.0.1',
+        frontendPort: 3000,
+        backendPort: 3001,
+        signal: new AbortController().signal,
+        onReady: () => Promise.resolve(),
+      })
+    ).rejects.toThrow(expected);
+  }
+);
