@@ -8,6 +8,99 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-03
+
+### Added
+
+- Create agent proposals from workspace chat and manage saved event agents
+  alongside scheduled agents, with GitHub label triggers, durable run history,
+  fair queue admission, recovery controls, and retained PR results (#2746,
+  #2750, #2776, #2779, #2780, #2786, #2788, #2791, #2794, #2796, #2797)
+- Add encrypted Slack bot credential settings with connection validation (#2746)
+- Add a durable workspace inbox and agent mail, with compact expandable
+  notifications (#2831, #2877)
+- Show workspace parentage and family navigation, and make child workspace
+  creation optional in Settings (#2826, #2827)
+- Add explicit steering for queued messages and targeted Stop controls for
+  background agent work (#2749, #2775, #2784)
+- Open running sub-agent transcripts and tabs directly from chat activity,
+  remember expanded rows, and reuse released sub-agent icons (#2781, #2787,
+  #2806, #2812)
+- Render agent-generated images inline in chat and route image drops to
+  workspace creation or the active conversation (#2800, #2863)
+- Add opt-in expiry for completed agent run context, with a preview and retained
+  recovery evidence (#2816)
+
+### Changed
+
+- Generate clearer workspace names and conversation summaries (#2752)
+- Reduce chat rendering work with throttled Markdown blocks, a bounded
+  transcript window, indexed tool activity, cached sub-agent timestamps, and
+  isolated composer updates (#2855, #2866, #2867, #2871, #2876)
+- Reduce workspace polling payloads, publish targeted state updates, memoize
+  Kanban cards, and coalesce Git snapshots across invalidations (#2808, #2825,
+  #2861, #2869, #2872, #2873)
+- Back off terminal PR polling, avoid forced GitHub reads on automatic
+  refreshes, skip review reads when monitoring is disabled, and prune obsolete
+  terminal PR events in bounded batches (#2810, #2817, #2821, #2852, #2856,
+  #2858, #2860)
+- Lazy-load workspace viewers and the sidebar creation form, strip unused icon
+  weights, show the desktop window while its backend starts, initialize new
+  workspaces in the background, and drain shutdown jobs concurrently (#2809,
+  #2859, #2868, #2870, #2874, #2875)
+- Simplify task and tool activity summaries, improve MCP tool labels and file
+  listing previews, remove message copy icons and the draft discard button, and
+  integrate the installed PWA title bar with navigation (#2748, #2756, #2757,
+  #2811, #2830, #2851, #2862, #2878)
+- Export backup format v8 with explicit partial recovery coverage, exclusions,
+  and import warnings; preserve import results across navigation (#2865, #2879)
+- Refresh dependencies, including ACP SDK 2.2, Claude Agent SDK 0.3.316, and
+  Electron 45.2.1 (#2778)
+- Cancel superseded checks on main and make Docker workflows manual (#2753)
+
+### Fixed
+
+- Keep active chats from leaving workspaces in Done, prevent long Kanban titles
+  from overflowing, smooth workspace launch handoffs, and reset canceled task
+  drafts to defaults (#2747, #2755, #2798, #2803)
+- Restore complete Codex replies during history backfill, keep history hydration
+  responsive, bound replay frames, hide background notification XML, and prevent
+  queued message handoffs from flickering (#2774, #2802, #2804, #2813, #2822)
+- Fix thinking preview boundaries and formatting, hide the scroll button when no
+  content remains below, and keep running sub-agent icons consistent (#2751,
+  #2754, #2850)
+- Avoid ACP startup buffer overflow when resuming long sessions and remove the
+  four-hour limit on Codex turns (#2799, #2849)
+- Preserve image tool results and concurrent attachment pastes, fail queued
+  messages when an agent crashes, and deliver saved initial prompts verbatim
+  (#2805)
+- Preserve known merge conflicts during unknown GitHub mergeability, avoid
+  duplicate delivered review feedback, reject stale dispatch batches, and
+  validate frozen PR delivery batches during recovery (#2805, #2824, #2839)
+- Preserve pending scheduled runs and weekly schedules across edits and resume,
+  use canonical task snapshots for admission, and fix event-agent query
+  validation (#2805, #2815, #2828)
+- Fence event-agent setup retries and runtime cleanup, preserve source ordering
+  and recovery proof during retention, and keep archive recovery from blocking
+  backend startup (#2782, #2783, #2785, #2792, #2793, #2795, #2801, #2818)
+- Bound fatal logging when console pipes break, preserve diagnostics when file
+  logging fails, clean up failed atomic writes, prevent duplicate log replay,
+  and decode UTF-8 across script output chunks (#2805, #2807, #2820, #2838)
+- Read legacy archives through validated compatible views and project archived
+  transcripts without restoring live runtime behavior (#2843, #2844, #2847,
+  #2854)
+
+### Security
+
+- Export backups from a read-only SQLite snapshot, isolate imports in bounded
+  transactions, validate source ownership and collisions, and restore runtime
+  metadata with processes stopped and pending PR delivery inert (#2840, #2841,
+  #2842, #2845, #2846, #2848)
+- Strip Factory Factory environment variables from user terminals and scripts
+  (#2805)
+- Update vulnerable transitive dependencies, including minimatch, glob, ASAR,
+  and Joi, with compatibility patches for legacy callers (#2778)
+
 ## [0.5.2] - 2026-10-31
 
 ### Added
