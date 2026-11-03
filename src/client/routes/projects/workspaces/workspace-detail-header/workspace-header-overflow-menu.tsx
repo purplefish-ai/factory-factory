@@ -94,8 +94,7 @@ export function WorkspaceHeaderOverflowMenu({
     }
   };
 
-  const metadata = workspace.creationMetadata as Record<string, unknown> | null | undefined;
-  const initialPrompt = typeof metadata?.initialPrompt === 'string' ? metadata.initialPrompt : null;
+  const initialPrompt = workspace.initialPrompt;
   const hasContent = workspace.description || initialPrompt;
 
   return (

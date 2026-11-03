@@ -31,7 +31,7 @@ const workspace: Partial<WorkspaceHeaderWorkspace> & { id: string } = {
   status: 'READY',
   worktreePath: '/fixture/worktree',
   description: 'Frontend-only header fixture.',
-  creationMetadata: null,
+  initialPrompt: null,
   defaultSessionProvider: 'WORKSPACE_DEFAULT',
   ratchetEnabled: true,
   ratchetState: 'IDLE',

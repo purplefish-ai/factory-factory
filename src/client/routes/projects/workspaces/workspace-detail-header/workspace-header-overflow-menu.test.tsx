@@ -36,7 +36,7 @@ it.each(['READY', 'ARCHIVING', 'ARCHIVED'] as const)(
       name: 'Workspace',
       status,
       description: null,
-      creationMetadata: null,
+      initialPrompt: null,
     };
     const container = document.createElement('div');
     document.body.append(container);

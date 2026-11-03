@@ -139,6 +139,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace.accessor',
   },
+  workspaceDetailReadAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-detail-read.accessor',
+  },
   workspaceMetadataAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-metadata.accessor',

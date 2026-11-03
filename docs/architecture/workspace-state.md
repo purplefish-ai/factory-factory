@@ -507,6 +507,13 @@ do not erase deliberately reopened archived detail. Initialization retains
 `getInitStatus` polling and readiness/worktree-path invalidations; those repairs
 hydrate omitted metadata through the shared detail options.
 
+`workspace.get` reads `findDetailById`, not the server's full `findById`. It
+leaves out `initOutput` (served by `getInitStatus`), agent-session
+`providerMetadata`, and `creationMetadata`, which keeps base64
+`initialAttachments` after init; detail exposes only `initialPrompt` for the
+details dialog. Polled git, file and init-status reads use the narrow
+`findWorktreeContext`/`findInitStatus` selects instead of full rows.
+
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector and snapshot summaries share
 that contract. Retired loop configuration and progress are absent from list,

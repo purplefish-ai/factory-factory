@@ -281,8 +281,7 @@ function WorkspaceDetailsDialog({
   onOpenChange: (open: boolean) => void;
   workspace: WorkspaceHeaderProps['workspace'];
 }) {
-  const metadata = workspace.creationMetadata as Record<string, unknown> | null | undefined;
-  const initialPrompt = typeof metadata?.initialPrompt === 'string' ? metadata.initialPrompt : null;
+  const initialPrompt = workspace.initialPrompt;
   const hasContent = workspace.description || initialPrompt;
 
   return (
