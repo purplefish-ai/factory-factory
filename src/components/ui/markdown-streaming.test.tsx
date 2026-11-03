@@ -94,6 +94,25 @@ function renderHtml(props: MarkdownRendererProps) {
 }
 
 describe('MarkdownRenderer streaming blocks', () => {
+  it('lets an alternate parser reuse the application rendering options', () => {
+    const renderContent = vi.fn(({ content }) => <p>Alternate: {content}</p>);
+    const html = renderHtml({ content: '**source**', streaming: true, renderContent });
+
+    expect(html).toContain('Alternate: **source**');
+    expect(renderContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: '**source**',
+        streaming: true,
+        components: expect.objectContaining({
+          a: expect.any(Function),
+          code: expect.any(Function),
+        }),
+        urlTransform: expect.any(Function),
+      })
+    );
+    expect(html).not.toContain('<strong>');
+  });
+
   it('renders sampled and line-boundary prefixes exactly like the whole document', () => {
     for (const end of streamingPrefixEnds()) {
       const content = REPLY.slice(0, end);
