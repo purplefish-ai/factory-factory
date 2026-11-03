@@ -223,6 +223,12 @@ Monitoring-only refreshes publish facts without invoking those effects. The
 worker owns retries and archive/stop fences, and has no GitHub, delivery,
 session, or Linear runtime dependency.
 
+PR-switch handling immediately recomputes monitoring and wakes delivery using
+`checkWorkspaceById`. This automatic check retains the shared 90-second
+observation cooldown and terminal-PR policy; a just-accepted attachment or
+discovery observation is reused rather than fetched again. Explicit refreshes
+and delivery preparation retain their separate forced-observation contract.
+
 Legacy events without an association ID retain immediate scalar cache updates
 and PR-switch handling. Their Linear-completion gate retains its narrow read and
 missing-row fallback; association-aware completion uses the accepted projection

@@ -997,9 +997,7 @@ describe('configureEventCollector', () => {
       prUrl: 'https://github.com/org/repo/pull/42',
     });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
-      bypassPrFetchCooldown: true,
-    });
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
   });
 
   it.each(['OPEN', 'APPROVED', 'CHANGES_REQUESTED', 'DRAFT'])(
@@ -1035,9 +1033,7 @@ describe('configureEventCollector', () => {
         prUrl: 'https://github.com/org/repo/pull/42',
       });
 
-      expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
-        bypassPrFetchCooldown: true,
-      });
+      expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
     }
   );
 
@@ -1157,9 +1153,7 @@ describe('configureEventCollector', () => {
       prUrl: 'https://github.com/org/repo/pull/42',
     });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
-      bypassPrFetchCooldown: true,
-    });
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
   });
 
   it('does not trigger immediate ratchet recompute when PR identity is unchanged', () => {

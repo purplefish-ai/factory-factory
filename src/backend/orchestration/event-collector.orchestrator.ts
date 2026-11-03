@@ -154,14 +154,12 @@ export type EventCollectorDependencies = {
 };
 
 function requestImmediateRatchetCheck(state: EventCollectorState, workspaceId: string): void {
-  void state.dependencies.ratchetService
-    .checkWorkspaceById(workspaceId, { bypassPrFetchCooldown: true })
-    .catch((error) => {
-      state.logger.warn('Failed immediate ratchet refresh after PR switch', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  void state.dependencies.ratchetService.checkWorkspaceById(workspaceId).catch((error) => {
+    state.logger.warn('Failed immediate ratchet refresh after PR switch', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
     });
+  });
 }
 
 /**
