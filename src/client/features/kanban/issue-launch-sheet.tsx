@@ -38,52 +38,8 @@ interface IssueLaunchSheetProps {
 
 type LaunchMode = 'non_interactive' | 'plan';
 type AgentProvider = 'CLAUDE' | 'CODEX';
-type PromptProject = {
-  githubOwner?: string | null;
-  githubRepo?: string | null;
-};
-
 function getIssueProviderLabel(issue: NormalizedIssue) {
   return issue.provider === 'linear' ? 'Linear' : 'GitHub';
-}
-
-function buildProjectRawScreenshotBaseUrl(project: PromptProject | null | undefined) {
-  if (project?.githubOwner && project.githubRepo) {
-    return `https://raw.githubusercontent.com/${project.githubOwner}/${project.githubRepo}/`;
-  }
-
-  return '';
-}
-
-function buildPromptPreview(issue: NormalizedIssue, project: PromptProject | null | undefined) {
-  const providerLabel = issue.provider === 'linear' ? 'Linear Issue' : 'GitHub Issue';
-  const projectRawScreenshotBaseUrl = buildProjectRawScreenshotBaseUrl(project);
-  return buildIssueStartPrompt({
-    providerLabel,
-    issueReference: issue.displayId,
-    title: issue.title,
-    body: issue.body,
-    url: issue.url,
-    commitReference: issue.displayId,
-    closeReference: issue.displayId,
-    rawScreenshotBaseUrl:
-      projectRawScreenshotBaseUrl ||
-      (issue.provider === 'github' ? deriveGitHubRawScreenshotBaseUrl(issue.url) : ''),
-  });
-}
-
-function deriveGitHubRawScreenshotBaseUrl(issueUrl: string) {
-  try {
-    const url = new URL(issueUrl);
-    const [owner, repo] = url.pathname.split('/').filter(Boolean);
-    if (url.hostname === 'github.com' && owner && repo) {
-      return `https://raw.githubusercontent.com/${owner}/${repo}/`;
-    }
-  } catch {
-    // Fall through to an empty base URL for malformed issue links.
-  }
-
-  return '';
 }
 
 export function IssueLaunchSheet({
@@ -96,10 +52,7 @@ export function IssueLaunchSheet({
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
-  const { data: project, isLoading: isLoadingProject } = trpc.project.getById.useQuery({
-    id: projectId,
-  });
-  const promptPreview = useMemo(() => buildPromptPreview(issue, project), [issue, project]);
+  const promptPreview = useMemo(() => buildIssueStartPrompt({ url: issue.url }), [issue.url]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
@@ -303,7 +256,7 @@ export function IssueLaunchSheet({
               id={`issue-prompt-${issue.id}`}
               value={promptText}
               onChange={(event) => setPromptText(event.target.value)}
-              disabled={createWorkspaceMutation.isPending || isLoadingSettings || isLoadingProject}
+              disabled={createWorkspaceMutation.isPending || isLoadingSettings}
               className="min-h-64 resize-y whitespace-pre-wrap bg-muted/20 font-mono text-xs leading-relaxed text-muted-foreground"
             />
           </div>
@@ -315,7 +268,6 @@ export function IssueLaunchSheet({
             disabled={
               createWorkspaceMutation.isPending ||
               isLoadingSettings ||
-              isLoadingProject ||
               isPromptPreviewSyncPending ||
               (issue.provider === 'github' && !promptText.trim())
             }

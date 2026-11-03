@@ -3,93 +3,99 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
-    getIssue: vi.fn(),
+    getIssue: vi.fn(() => {
+      throw new Error('GitHub unavailable');
+    }),
   },
 }));
-
 vi.mock('@/backend/services/linear', () => ({
   linearClientService: {
-    getIssue: vi.fn(),
+    getIssue: vi.fn(() => {
+      throw new Error('Linear unavailable');
+    }),
   },
 }));
-
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findByIdWithProject: vi.fn(),
-  },
+  workspaceDataService: { findByIdWithProject: vi.fn() },
 }));
 
-vi.mock('./linear-config.helper', () => ({
-  getDecryptedLinearConfig: vi.fn(),
-}));
-
+import { githubCLIService } from '@/backend/services/github';
 import { linearClientService } from '@/backend/services/linear';
 import { workspaceDataService } from '@/backend/services/workspace';
-import { getDecryptedLinearConfig } from './linear-config.helper';
-import { buildInitialPromptFromLinearIssue } from './workspace-init-issue-prompts';
+import {
+  buildInitialPromptFromGitHubIssue,
+  buildInitialPromptFromLinearIssue,
+} from './workspace-init-issue-prompts';
 
 const logger = unsafeCoerce<Parameters<typeof buildInitialPromptFromLinearIssue>[1]>({
   info: vi.fn(),
   warn: vi.fn(),
 });
 
-function mockLinearIssueWorkspace(githubOwner: string | null, githubRepo: string | null) {
-  vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
-    unsafeCoerce({
-      id: 'workspace-1',
-      linearIssueId: 'linear-issue-1',
-      project: {
-        githubOwner,
-        githubRepo,
-        issueTrackerConfig: {},
-      },
-    })
-  );
-}
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
-describe('buildInitialPromptFromLinearIssue', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getDecryptedLinearConfig).mockReturnValue({
-      apiKey: 'linear-api-key',
-      teamId: 'linear-team-1',
-    });
-    vi.mocked(linearClientService.getIssue).mockResolvedValue({
-      id: 'linear-issue-1',
-      identifier: 'ENG-123',
-      title: 'Fix screenshot instructions',
-      description: 'Keep screenshot links usable without GitHub metadata.',
-      url: 'https://linear.app/acme/issue/ENG-123',
-      state: 'Todo',
-      createdAt: '2026-07-30T00:00:00.000Z',
-      creatorName: 'Test User',
-    });
+describe('issue prompt fallbacks', () => {
+  it('uses the linked GitHub URL without a provider read or repository metadata', async () => {
+    vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+      unsafeCoerce({
+        githubIssueNumber: 42,
+        githubIssueUrl: 'https://github.com/acme/repo/issues/42',
+        project: {},
+      })
+    );
+    expect(await buildInitialPromptFromGitHubIssue('workspace-1', logger)).toBe(
+      'Fetch and address this issue: https://github.com/acme/repo/issues/42\n\nCreate a PR when done.'
+    );
+    expect(githubCLIService.getIssue).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { githubOwner: null, githubRepo: null },
-    { githubOwner: 'purplefish-ai', githubRepo: null },
-    { githubOwner: null, githubRepo: 'factory-factory' },
-  ])(
-    'omits an assumed GitHub image URL when repository metadata is incomplete',
-    async ({ githubOwner, githubRepo }) => {
-      mockLinearIssueWorkspace(githubOwner, githubRepo);
+  it('derives a missing GitHub URL from the repository and issue number', async () => {
+    vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+      unsafeCoerce({
+        githubIssueNumber: 42,
+        githubIssueUrl: null,
+        project: { githubOwner: 'acme', githubRepo: 'repo' },
+      })
+    );
+    expect(await buildInitialPromptFromGitHubIssue('workspace-1', logger)).toContain(
+      'https://github.com/acme/repo/issues/42'
+    );
+    expect(githubCLIService.getIssue).not.toHaveBeenCalled();
+  });
 
-      const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
+  it('uses the linked Linear URL without credentials or a provider read', async () => {
+    vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+      unsafeCoerce({
+        linearIssueId: 'linear-issue-1',
+        linearIssueUrl: 'https://linear.app/acme/issue/ENG-42',
+        project: { issueTrackerConfig: null },
+      })
+    );
+    expect(await buildInitialPromptFromLinearIssue('workspace-1', logger)).toBe(
+      'Fetch and address this issue: https://linear.app/acme/issue/ENG-42\n\nCreate a PR when done.'
+    );
+    expect(linearClientService.getIssue).not.toHaveBeenCalled();
+  });
 
-      expect(prompt).toContain('# Linear Issue ENG-123');
-      expect(prompt).toContain('.factory-factory/screenshots/');
-      expect(prompt).not.toContain('raw.githubusercontent.com');
+  it.each([buildInitialPromptFromGitHubIssue, buildInitialPromptFromLinearIssue])(
+    'returns no prompt without a linked issue',
+    async (buildPrompt) => {
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+        unsafeCoerce({ project: {} })
+      );
+      expect(await buildPrompt('workspace-1', logger)).toBe('');
     }
   );
 
-  it('uses the configured GitHub repository for screenshot paths', async () => {
-    mockLinearIssueWorkspace('purplefish-ai', 'factory-factory');
-
-    const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
-
-    expect(prompt).toContain(
-      `https://raw.githubusercontent.com/purplefish-ai/factory-factory/\${branch}/.factory-factory/screenshots/<filename>`
+  it('returns no Linear prompt when the linked URL is missing', async () => {
+    vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+      unsafeCoerce({
+        linearIssueId: 'linear-issue-1',
+        linearIssueUrl: null,
+      })
     );
+    expect(await buildInitialPromptFromLinearIssue('workspace-1', logger)).toBe('');
   });
 });
