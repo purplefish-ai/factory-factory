@@ -158,7 +158,13 @@ PRs for the selected conversation; DEDICATED batches contain only their bound
 PR's facts. Legacy workspace-level enablement controls are not delivered or
 included in pending counts; they remain available for receipt recovery.
 Collection projections report MERGED only when every attached PR is merged; an
-open sibling remains visible.
+open sibling remains visible. Poll results, collection state-change events, and
+workspace projections use `deriveWorkspacePRSummary` over the same four PR
+facts. Active associations take precedence over terminal history; failures
+outrank conflicts, running CI outranks pending review, and an attached `NONE`
+association waits for its first observation as running CI. Disabling monitoring
+projects IDLE without hiding GitHub facts. Per-association observation and
+terminal polling eligibility remain separate from this collection policy.
 
 Accepted per-PR observations from `NONE` to any open state (`OPEN`, `DRAFT`,
 `CHANGES_REQUESTED`, or `APPROVED`) notify the parent workspace once for each
