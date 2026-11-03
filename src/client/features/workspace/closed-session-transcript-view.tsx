@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { parseClosedSessionReadTranscript } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
 import { projectClosedSessionTranscriptRows } from './closed-session-transcript-items';
 
 interface ClosedSessionTranscriptViewProps {
@@ -10,9 +11,14 @@ interface ClosedSessionTranscriptViewProps {
 
 export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscriptViewProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { data: transcript, isLoading } = trpc.closedSessions.getTranscript.useQuery({
-    id: sessionId,
-  });
+  const {
+    data: transcript,
+    isLoading,
+    error,
+  } = trpc.closedSessions.getTranscriptJson.useQuery(
+    { id: sessionId },
+    { select: parseClosedSessionReadTranscript, structuralSharing: false }
+  );
 
   // Auto-scroll to bottom when transcript loads
   useEffect(() => {
@@ -32,7 +38,15 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
-  if (!transcript) {
+  if (error && error.data?.code !== 'NOT_FOUND') {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-sm text-muted-foreground">Failed to load transcript</div>
+      </div>
+    );
+  }
+
+  if (!transcript || error) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-sm text-muted-foreground">Transcript not found</div>

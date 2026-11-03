@@ -4,10 +4,7 @@ import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
-import {
-  ClosedSessionReadTranscriptSchema,
-  type ClosedSessionReadTranscript,
-} from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
+import { ClosedSessionReadTranscriptSchema } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 
 const current = (id: string, content: unknown[]) => ({
@@ -57,7 +54,7 @@ const mixed = [
   },
 ];
 
-function ArchiveFixture({ transcript }: { transcript: ClosedSessionReadTranscript }) {
+function ArchiveFixture({ wire }: { wire: string }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
   );
@@ -66,7 +63,7 @@ function ArchiveFixture({ transcript }: { transcript: ClosedSessionReadTranscrip
       links: [
         () => () =>
           observable((observer) => {
-            observer.next({ result: { data: transcript } });
+            observer.next({ result: { data: wire } });
             observer.complete();
           }),
       ],
@@ -94,7 +91,9 @@ type Story = StoryObj<typeof meta>;
 
 export const CurrentRich: Story = {
   render: () => (
-    <ArchiveFixture transcript={ClosedSessionReadTranscriptSchema.parse({ messages: rich })} />
+    <ArchiveFixture
+      wire={JSON.stringify(ClosedSessionReadTranscriptSchema.parse({ messages: rich }))}
+    />
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -105,10 +104,12 @@ export const CurrentRich: Story = {
 export const LegacyOnly: Story = {
   render: () => (
     <ArchiveFixture
-      transcript={ClosedSessionReadTranscriptSchema.parse({
-        messages: legacy,
-        sessionSummary: 'No version or metadata required',
-      })}
+      wire={JSON.stringify(
+        ClosedSessionReadTranscriptSchema.parse({
+          messages: legacy,
+          sessionSummary: 'No version or metadata required',
+        })
+      )}
     />
   ),
   play: async ({ canvasElement }) => {
@@ -119,11 +120,13 @@ export const LegacyOnly: Story = {
 export const MixedOrphans: Story = {
   render: () => (
     <ArchiveFixture
-      transcript={ClosedSessionReadTranscriptSchema.parse({
-        messages: mixed,
-        metadata: null,
-        version: ['future'],
-      })}
+      wire={JSON.stringify(
+        ClosedSessionReadTranscriptSchema.parse({
+          messages: mixed,
+          metadata: null,
+          version: ['future'],
+        })
+      )}
     />
   ),
   play: async ({ canvasElement }) => {
@@ -131,5 +134,14 @@ export const MixedOrphans: Story = {
     await expect(await canvas.findAllByLabelText('Archived message JSON')).toHaveLength(3);
     await expect(canvas.getByText('Rich rendering resumes after raw rows.')).toBeVisible();
     await expect(canvasElement.querySelector('script')).toBeNull();
+  },
+};
+
+export const CorruptWire: Story = {
+  render: () => <ArchiveFixture wire={'{"messages":false}'} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Failed to load transcript')).toBeVisible();
+    await expect(canvas.queryByText('Transcript not found')).not.toBeInTheDocument();
   },
 };

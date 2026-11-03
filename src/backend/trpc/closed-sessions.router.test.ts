@@ -54,6 +54,14 @@ describe('closedSessionsRouter', () => {
     await expect(createCaller().getTranscript({ id: 'closed-1' })).resolves.toEqual(transcript);
   });
 
+  it('adds a JSON-text endpoint without changing the existing object response', async () => {
+    const encoded = '{"__proto__":{"keep":1},"messages":[{"constructor":{"prototype":2}}]}';
+    const value: unknown = JSON.parse(encoded);
+    mockSessionDataService.readClosedSessionTranscript.mockResolvedValue(value);
+    await expect(createCaller().getTranscriptJson({ id: 'closed-1' })).resolves.toBe(encoded);
+    await expect(createCaller().getTranscript({ id: 'closed-1' })).resolves.toEqual(value);
+  });
+
   it.each([
     ['NOT_FOUND', 'NOT_FOUND', 'Closed session not found'],
     ['INVALID_INPUT', 'BAD_REQUEST', 'Workspace has no worktree path'],
@@ -64,6 +72,10 @@ describe('closedSessionsRouter', () => {
       new ApplicationError(application, message)
     );
     await expect(createCaller().getTranscript({ id: 'closed-1' })).rejects.toMatchObject({
+      code: transport,
+      message,
+    });
+    await expect(createCaller().getTranscriptJson({ id: 'closed-1' })).rejects.toMatchObject({
       code: transport,
       message,
     });

@@ -1,35 +1,65 @@
-import type { inferRouterOutputs } from '@trpc/server';
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
+import { getQueryKey } from '@trpc/react-query';
 // @vitest-environment jsdom
-import { createElement } from 'react';
+import type { inferRouterOutputs } from '@trpc/server';
+import { observable } from '@trpc/server/observable';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppRouter } from '@/client/lib/trpc';
-import { ArchivedJsonValueSchema } from '@/shared/acp-protocol/protocol/archived-content-schema';
-
-type Transcript = inferRouterOutputs<AppRouter>['closedSessions']['getTranscript'];
-const query = vi.hoisted(() => ({ data: undefined as Transcript | undefined, isLoading: false }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: { closedSessions: { getTranscript: { useQuery: () => query } } },
-}));
+import { trpc, type AppRouter } from '@/client/lib/trpc';
+import { parseClosedSessionReadTranscript } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 
+type Wire = inferRouterOutputs<AppRouter>['closedSessions']['getTranscriptJson'];
 let mounted: Root | undefined;
+const queryClients: QueryClient[] = [];
 afterEach(() => {
   mounted?.unmount();
+  queryClients.splice(0).forEach((client) => client.clear());
   document.body.innerHTML = '';
-  query.data = undefined;
-  query.isLoading = false;
 });
-function render(messages?: unknown[]) {
-  query.data = messages ? { messages: ArchivedJsonValueSchema.array().parse(messages) } : undefined;
+function renderWire(wire: unknown, error?: TRPCClientError<AppRouter>) {
+  const response: { wire: unknown; error?: TRPCClientError<AppRouter> } = { wire, error };
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClients.push(queryClient);
+  const client = trpc.createClient({
+    links: [
+      () =>
+        ({ op }) =>
+          observable((observer) => {
+            if (op.path !== 'closedSessions.getTranscriptJson') {
+              observer.error(new TRPCClientError(`Unexpected operation: ${op.path}`));
+            } else if (response.error) {
+              observer.error(response.error);
+            } else if (response.wire !== undefined) {
+              observer.next({ result: { data: response.wire } });
+              observer.complete();
+            }
+          }),
+    ],
+  });
   const container = document.createElement('div');
   document.body.append(container);
   mounted = createRoot(container);
   flushSync(() =>
-    mounted?.render(createElement(ClosedSessionTranscriptView, { sessionId: 'closed' }))
+    mounted?.render(
+      <trpc.Provider client={client} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <ClosedSessionTranscriptView sessionId="closed" />
+        </QueryClientProvider>
+      </trpc.Provider>
+    )
   );
-  return container;
+  return { container, response, queryClient, client };
+}
+async function render(messages: unknown[]) {
+  const wire: Wire = JSON.stringify({ messages });
+  const fixture = renderWire(wire);
+  await vi.waitFor(() =>
+    expect(fixture.container.textContent).not.toContain('Loading transcript...')
+  );
+  return fixture.container;
 }
 const user = (text: string, extra = {}) => ({
   id: 'duplicate',
@@ -53,38 +83,55 @@ const agent = (id: string, content: unknown[]) => ({
   order: 0,
   message: { type: 'assistant', message: { role: 'assistant', content } },
 });
+const rawPre = (container: Element) =>
+  [...container.querySelectorAll('section[aria-label="Archived message JSON"] pre')].map(
+    (node) => node.textContent
+  );
 
-describe('compatible archive view with real projection and rich renderer', () => {
-  it('retains loading, missing and empty states', () => {
-    query.isLoading = true;
-    expect(render().textContent).toContain('Loading transcript...');
-    query.isLoading = false;
-    flushSync(() =>
-      mounted?.render(createElement(ClosedSessionTranscriptView, { sessionId: 'closed' }))
-    );
-    expect(document.body.textContent).toContain('Transcript not found');
-    query.data = { messages: [] };
-    flushSync(() =>
-      mounted?.render(createElement(ClosedSessionTranscriptView, { sessionId: 'closed' }))
-    );
-    expect(document.body.textContent).toContain('No messages in this session');
+describe('compatible archive view with real query selection, projection and rich renderer', () => {
+  it('retains the loading state while its query has no response', () => {
+    expect(renderWire(undefined).container.textContent).toContain('Loading transcript...');
   });
 
-  it('keeps rich/opaque/orphan order and escapes full hostile raw JSON as text', () => {
+  it('retains the empty state for a valid empty messages array', async () => {
+    expect((await render([])).textContent).toContain('No messages in this session');
+  });
+
+  it('retains the explicit NOT_FOUND state', async () => {
+    const fixture = renderWire(
+      undefined,
+      TRPCClientError.from<AppRouter>({
+        error: { code: -32_004, message: 'Missing archive', data: { code: 'NOT_FOUND' } },
+      })
+    );
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('Transcript not found'));
+  });
+
+  it('shows NOT_FOUND after a cached success rather than stale content', async () => {
+    const fixture = renderWire(JSON.stringify({ messages: [user('previous valid')] }));
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('previous valid'));
+    fixture.response.error = TRPCClientError.from<AppRouter>({
+      error: { code: -32_004, message: 'Missing archive', data: { code: 'NOT_FOUND' } },
+    });
+    await fixture.queryClient.refetchQueries();
+    await vi.waitFor(() => expect(fixture.container.textContent).toContain('Transcript not found'));
+    expect(fixture.container.textContent).not.toContain('previous valid');
+  });
+
+  it('keeps rich/opaque/orphan order and escapes full hostile raw JSON as text', async () => {
     const hostile = {
       role: 'future',
       nested: { text: '<script>alert(1)</script><img src=x onerror=alert(2)>', keep: [null, 7] },
     };
     const orphan = agent('orphan', [result('A')]);
-    const container = render([
+    const container = await render([
       user('first rich'),
       agent('call', [tool('A')]),
       hostile,
       orphan,
       user('last rich'),
     ]);
-    const pre = [...container.querySelectorAll('section[aria-label="Archived message JSON"] pre')];
-    expect(pre.map((node) => node.textContent)).toEqual([
+    expect(rawPre(container)).toEqual([
       JSON.stringify(hostile, null, 2),
       JSON.stringify(orphan, null, 2),
     ]);
@@ -104,17 +151,15 @@ describe('compatible archive view with real projection and rich renderer', () =>
 
   it.each(['adjacent', 'late'])(
     'keeps an entire %s multi-result row once after rich content',
-    (mode) => {
+    async (mode) => {
       const mixed = agent('mixed', [result('A'), result('B')]);
-      const container = render([
+      const container = await render([
         agent('call', [tool('A')]),
         ...(mode === 'late' ? [user('between rich')] : []),
         mixed,
         user('after rich'),
       ]);
-      const pre = container.querySelectorAll('section[aria-label="Archived message JSON"] pre');
-      expect(pre.length).toBe(1);
-      expect(pre[0]?.textContent).toBe(JSON.stringify(mixed, null, 2));
+      expect(rawPre(container)).toEqual([JSON.stringify(mixed, null, 2)]);
       expect(container.textContent?.indexOf('Read')).toBeLessThan(
         container.textContent?.indexOf('mixed') ?? 0
       );
@@ -124,18 +169,18 @@ describe('compatible archive view with real projection and rich renderer', () =>
     }
   );
 
-  it('renders a same-index current rich item before its complete orphan fallback', () => {
+  it('renders a same-index current rich item before its complete orphan fallback', async () => {
     const mixed = agent('mixed', [tool('B'), result('unknown')]);
-    const container = render([mixed]);
+    const container = await render([mixed]);
     expect(container.textContent?.indexOf('Read')).toBeLessThan(
       container.textContent?.indexOf('mixed') ?? 0
     );
-    expect(container.querySelector('pre')?.textContent).toBe(JSON.stringify(mixed, null, 2));
+    expect(rawPre(container)).toEqual([JSON.stringify(mixed, null, 2)]);
   });
 
-  it('keeps current undeclared extras rich-only and invalid-known rows opaque', () => {
+  it('keeps current undeclared extras rich-only and invalid-known rows opaque', async () => {
     const invalid = { ...user('invalid'), order: 'not numeric', extra: { keep: true } };
-    const container = render([
+    const container = await render([
       user('current rich', { extension: 'not shown' }),
       invalid,
       null,
@@ -144,8 +189,62 @@ describe('compatible archive view with real projection and rich renderer', () =>
     ]);
     expect(container.textContent).toContain('current rich');
     expect(container.textContent).not.toContain('not shown');
-    expect([...container.querySelectorAll('pre')].map((node) => node.textContent)).toEqual(
+    expect(rawPre(container)).toEqual(
       [invalid, null, 3, ['legacy']].map((value) => JSON.stringify(value, null, 2))
     );
   });
+
+  it('preserves own reserved fallback fields after a changed response in the same mounted view', async () => {
+    const row = (revision: number) =>
+      `{"role":"future","__proto__":{"archiveSentinel":"row-${revision}"},"constructor":${revision},"prototype":true,"changed":${revision},"nested":{"__proto__":{"archiveSentinel":"nested-${revision}"},"changed":${revision}}}`;
+    const wire = (revision: number) =>
+      `{"__proto__":{"archiveSentinel":"envelope-${revision}"},"changed":${revision},"messages":[${row(revision)}]}`;
+    const fixture = renderWire(wire(1));
+    for (const revision of [1, 2]) {
+      if (revision === 2) {
+        fixture.response.wire = wire(revision);
+        await fixture.queryClient.refetchQueries();
+      }
+      const expected: unknown = JSON.parse(row(revision));
+      await vi.waitFor(() =>
+        expect(rawPre(fixture.container)).toEqual([JSON.stringify(expected, null, 2)])
+      );
+      expect(Reflect.has(Object.prototype, 'archiveSentinel')).toBe(false);
+    }
+  });
+
+  it.each(['not JSON', '{"messages":false}'])(
+    'shows a select error despite retained selected data, then recovers: %s',
+    async (invalid) => {
+      const fixture = renderWire(JSON.stringify({ messages: [user('previous valid')] }));
+      await vi.waitFor(() => expect(fixture.container.textContent).toContain('previous valid'));
+      const observer = new QueryObserver(fixture.queryClient, {
+        queryKey: getQueryKey(trpc.closedSessions.getTranscriptJson, { id: 'closed' }, 'query'),
+        queryFn: () => fixture.client.closedSessions.getTranscriptJson.query({ id: 'closed' }),
+        select: parseClosedSessionReadTranscript,
+        structuralSharing: false,
+        retry: false,
+      });
+      const unsubscribe = observer.subscribe(() => undefined);
+      try {
+        const initial = await observer.refetch({ throwOnError: true });
+        fixture.response.wire = invalid;
+        const failed = await observer.refetch();
+        expect(failed.isError).toBe(true);
+        expect(failed.data).toBe(initial.data);
+        await vi.waitFor(() =>
+          expect(fixture.container.textContent).toContain('Failed to load transcript')
+        );
+        expect(fixture.container.textContent).not.toContain('previous valid');
+        expect(fixture.container.textContent).not.toContain('Transcript not found');
+        fixture.response.wire = JSON.stringify({ messages: [user('recovered valid')] });
+        await observer.refetch({ throwOnError: true });
+        await vi.waitFor(() => expect(fixture.container.textContent).toContain('recovered valid'));
+        expect(fixture.container.textContent).not.toContain('Failed to load transcript');
+      } finally {
+        unsubscribe();
+        observer.destroy();
+      }
+    }
+  );
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ClosedSessionReadTranscriptSchema } from './closed-session-transcript-schema';
+import {
+  ClosedSessionReadTranscriptSchema,
+  parseClosedSessionReadTranscript,
+} from './closed-session-transcript-schema';
 
 describe('compatible closed-session envelope', () => {
   it('retains legacy role/content and summary without fabricating current metadata', () => {
@@ -60,5 +63,27 @@ describe('compatible closed-session envelope', () => {
     { messages: [undefined] },
   ])('rejects non-JSON or nonarray envelopes %#', (value) => {
     expect(ClosedSessionReadTranscriptSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe('closed-session JSON text decode', () => {
+  it('requires text and preserves reserved fields in validated decoded JSON', () => {
+    const encoded =
+      '{"__proto__":{"kept":1},"messages":[{"constructor":{"extra":true},"prototype":[null]}]}';
+    expect(JSON.stringify(parseClosedSessionReadTranscript(encoded))).toBe(encoded);
+  });
+
+  it.each([
+    undefined,
+    null,
+    1,
+    { messages: [] },
+    'not JSON',
+    'null',
+    '[]',
+    '{}',
+    '{"messages":false}',
+  ])('rejects invalid wire or envelope %#', (wire) => {
+    expect(() => parseClosedSessionReadTranscript(wire)).toThrow();
   });
 });

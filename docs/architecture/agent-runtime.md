@@ -124,6 +124,16 @@ errors even when the bounded header probe can still recover identity. Archive
 storage performance and durability acceptance remain blocked; this reader change
 clears neither gate.
 
+The archive view reads `getTranscriptJson`, which returns the validated owner
+DTO as JSON text through SuperJSON, then decodes it through the same compatible
+schema. This preserves own `__proto__`, `constructor` and `prototype` fields
+that SuperJSON rejects when traversing object output. The existing object
+`getTranscript` endpoint remains compatible for ordinary data and retains that
+serializer limitation. Structural sharing is disabled for this archive query so
+changed selected objects retain reserved keys on refetch. Decode and load
+failures show a generic error even when previous selected data is cached;
+explicit missing archives retain the not-found state.
+
 The archive view uses `projectClosedSessionTranscriptRows` to validate each JSON
 row with the current-message codec before read-only rich rendering. Opaque and
 invalid rows appear as labeled, escaped JSON text. Projection preserves array

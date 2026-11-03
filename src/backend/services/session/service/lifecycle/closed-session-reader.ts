@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve, sep, win32 } from 'node:path';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
-import { ClosedSessionReadTranscriptSchema } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
+import { parseClosedSessionReadTranscript } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
 import { readClosedSessionTranscriptHeader } from './closed-session-transcript-header';
 
 const providerIdentitySchema = z.object({
@@ -83,8 +83,7 @@ export async function readClosedSessionProviderIdentity(
 export async function readClosedSessionTranscript(id: string) {
   try {
     const { realFile } = await findTranscriptFile(id);
-    const value: unknown = JSON.parse(await readFile(realFile, 'utf-8'));
-    return ClosedSessionReadTranscriptSchema.parse(value);
+    return parseClosedSessionReadTranscript(await readFile(realFile, 'utf-8'));
   } catch (error) {
     throwReadError(error);
   }

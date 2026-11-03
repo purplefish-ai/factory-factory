@@ -35,6 +35,14 @@ export const closedSessionsRouter = router({
     return sessionDataService.readClosedSessionTranscript(input.id);
   }),
 
+  // JSON text preserves reserved keys through the shared SuperJSON transformer.
+  getTranscriptJson: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
+      return JSON.stringify(await sessionDataService.readClosedSessionTranscript(input.id));
+    }),
+
   /**
    * Delete a closed session and its transcript file
    */

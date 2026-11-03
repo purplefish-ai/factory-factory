@@ -20,3 +20,8 @@ export const ClosedSessionReadTranscriptSchema = ArchivedJsonRecordSchema.transf
 );
 
 export type ClosedSessionReadTranscript = z.infer<typeof ClosedSessionReadTranscriptSchema>;
+
+export function parseClosedSessionReadTranscript(serialized: unknown) {
+  const value: unknown = JSON.parse(z.string().parse(serialized));
+  return ClosedSessionReadTranscriptSchema.parse(value);
+}
