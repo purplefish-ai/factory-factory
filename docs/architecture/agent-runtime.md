@@ -160,6 +160,15 @@ with undeclared extras remain rich-only, while the original API JSON stays
 intact. Full bodies are presentation data; headers still only select native
 provider history and never establish delivery proof.
 
+## Chat tool previews
+
+Chat tool previews format recognized MCP identifiers from both providers as a
+readable action and service (for example, `Fetch PR comments · GitHub`). Unknown
+tools use the same word formatting without requiring a tool catalog. Collapsed
+activity groups count MCP calls by service; the full identifier and input remain
+available in expanded details. File-list previews omit the target directory and
+show `List files`.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through

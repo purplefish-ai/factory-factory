@@ -1,6 +1,7 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
+import { PlugIcon } from '@phosphor-icons/react/dist/csr/Plug';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
@@ -16,6 +17,7 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { getMcpToolDisplay, isListFilesToolName } from './mcp-tool-display';
 import {
   getToolActivityKind,
   getToolActivityLabel,
@@ -31,10 +33,13 @@ const triggerClassName =
   'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 function iconForKind(kind: ToolActivityKind) {
+  if (kind === 'mcp') {
+    return PlugIcon;
+  }
   if (kind === 'edit') {
     return PencilSimpleIcon;
   }
-  if (kind === 'search' || kind === 'read') {
+  if (kind === 'search' || kind === 'read' || kind === 'list') {
     return MagnifyingGlassIcon;
   }
   return TerminalIcon;
@@ -45,7 +50,9 @@ function groupIcon(calls: PairedToolCall[]) {
   const kinds = [...getToolGroupKinds(calls)];
   const [only] = kinds;
   // Reads and searches are both lookups, so they count as one kind here.
-  const lookupsOnly = kinds.every((kind) => kind === 'read' || kind === 'search');
+  const lookupsOnly = kinds.every(
+    (kind) => kind === 'read' || kind === 'search' || kind === 'list'
+  );
   return only && (kinds.length === 1 || lookupsOnly) ? iconForKind(only) : StackSimpleIcon;
 }
 
@@ -249,6 +256,8 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
       ? parseWebSearchToolResult(call.result.content)
       : null;
   const label = getToolActivityLabel(payload ? { ...call, input: { ...payload } } : call);
+  const mcp = getMcpToolDisplay(call.name);
+  const showIdentifier = mcp !== null || isListFilesToolName(call.name);
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="min-w-0">
       <CollapsibleTrigger asChild>
@@ -261,8 +270,15 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             pending={call.status === 'pending'}
             error={call.status === 'error'}
           />
-          <span className="min-w-0 truncate" title={label}>
-            {label}
+          <span className="min-w-0 truncate" title={showIdentifier ? call.name : label}>
+            {mcp ? (
+              <>
+                {mcp.action}
+                <span className="opacity-60"> · {mcp.service}</span>
+              </>
+            ) : (
+              label
+            )}
           </span>
           {call.status === 'pending' && <span className="sr-only">Running</span>}
           {call.status === 'error' && <span className="sr-only">Error</span>}
@@ -277,6 +293,9 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           )}
           style={detailsMaxHeight ? { maxHeight: `${detailsMaxHeight}px` } : undefined}
         >
+          {showIdentifier && (
+            <div className="break-all font-mono text-xs text-muted-foreground">{call.name}</div>
+          )}
           <div className="min-w-0">
             <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Input</div>
             <ToolInputRenderer

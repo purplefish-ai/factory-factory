@@ -43,6 +43,46 @@ describe('tool-display-utils', () => {
   });
 
   describe('getDisplayToolName', () => {
+    it.each([
+      ['mcp.codex_apps.github.fetch_pr_comments', 'Fetch PR comments · GitHub'],
+      ['mcp.codex_apps.github.list_pull_request_review_threads', 'List PR review threads · GitHub'],
+      ['mcp__github__list_pull_request_review_threads', 'List PR review threads · GitHub'],
+      ['mcp__playwright__browser_take_screenshot', 'Take screenshot · Playwright'],
+      ['mcp__my_server__fetch_build_status', 'Fetch build status · My server'],
+      ['mcp.acme.lookupCustomer', 'Lookup customer · Acme'],
+      ['mcp__acme__getAPIStatus', 'Get API status · Acme'],
+      ['mcp__acme__getJSONSchema', 'Get JSON schema · Acme'],
+      ['mcp__acme__getURLs', 'Get URLs · Acme'],
+      ['mcp__acme__getURLsForIDs', 'Get URLs for IDs · Acme'],
+      ['mcp__GitHub__fetch_pr_comments', 'Fetch PR comments · GitHub'],
+      ['mcp.codex_apps.GitHub.fetch_pr_comments', 'Fetch PR comments · GitHub'],
+      ['mcp__acme__getSHA256Hash', 'Get SHA256 hash · Acme'],
+      ['mcp__acme__readHTTP2Headers', 'Read HTTP2 headers · Acme'],
+      ['mcp__acme__encode_base64', 'Encode base64 · Acme'],
+      ['mcp__acme__list_v2_items', 'List v2 items · Acme'],
+      ['mcp__acme__cafe\u0301Tool', 'Cafe\u0301 tool · Acme'],
+      ['mcp__acme__caféTool', 'Café tool · Acme'],
+      ['mcp__acme__café', 'Café · Acme'],
+      ['mcp__acme__get.PR', 'Get.PR · Acme'],
+      ['mcp__acme__getJSONsForURLs', 'Get JSONs for URLs · Acme'],
+      ['mcp__acme__delete-records', 'Delete records · Acme'],
+      ['mcp__acme__tool__with_separator', 'Tool with separator · Acme'],
+      ['mcp__broken', 'mcp__broken'],
+      ['mcp__acme__', 'mcp__acme__'],
+      ['mcp..lookup', 'mcp..lookup'],
+      ['CustomTool', 'CustomTool'],
+    ])('formats %s without requiring a known tool', (name, label) => {
+      expect(getDisplayToolName(name, {})).toBe(label);
+    });
+
+    it('shortens file listings without exposing their target', () => {
+      expect(getDisplayToolName('List files in task workspace/src', {})).toBe('List files');
+      expect(getDisplayToolName('List files', {})).toBe('List files');
+      expect(getDisplayToolName('List files matching a pattern', {})).toBe(
+        'List files matching a pattern'
+      );
+    });
+
     it('shows compact run labels in summary mode', () => {
       const display = getDisplayToolName(
         'Run cat > /tmp/pr-body.md <<EOF',

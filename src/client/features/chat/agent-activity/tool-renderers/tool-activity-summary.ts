@@ -1,6 +1,7 @@
 import type { PairedToolCall } from '@/lib/chat-protocol';
 import { compactCommandLabel } from './compact-command-label';
 import { isCodexFileChangeToolName } from './file-change-parser';
+import { getMcpToolDisplay, isListFilesToolName } from './mcp-tool-display';
 import {
   extractCommandPreviewFromInput,
   getDisplayToolName,
@@ -11,7 +12,7 @@ import {
 } from './tool-display-utils';
 import { isWebSearchToolName } from './web-search-parser';
 
-export type ToolActivityKind = 'command' | 'edit' | 'read' | 'search' | 'other';
+export type ToolActivityKind = 'command' | 'edit' | 'read' | 'search' | 'list' | 'mcp' | 'other';
 const VERBS = {
   command: { pending: 'Running', error: 'Failed', success: 'Ran' },
   edit: { pending: 'Editing', error: 'Failed to edit', success: 'Edited' },
@@ -19,6 +20,12 @@ const VERBS = {
 };
 
 export function getToolActivityKind(name: string): ToolActivityKind {
+  if (getMcpToolDisplay(name)) {
+    return 'mcp';
+  }
+  if (isListFilesToolName(name)) {
+    return 'list';
+  }
   if (
     isRunLikeToolName(name) ||
     /^(bash|shell|terminal|exec_command|execute_command)$/i.test(name.trim())
@@ -88,6 +95,10 @@ function commandGroupTarget(group: PairedToolCall[]): string {
 }
 
 function summaryKind(call: PairedToolCall): ToolActivityKind {
+  const kind = getToolActivityKind(call.name);
+  if (kind === 'mcp' || kind === 'list') {
+    return kind;
+  }
   // ACP titles can be a full command or a friendly description. Recognize
   // command payloads here without changing the expanded action's display name.
   if (
@@ -97,7 +108,7 @@ function summaryKind(call: PairedToolCall): ToolActivityKind {
   ) {
     return 'command';
   }
-  return getToolActivityKind(call.name);
+  return kind;
 }
 
 export function getToolActivityLabel(call: PairedToolCall): string {
@@ -114,6 +125,17 @@ export function getToolActivityLabel(call: PairedToolCall): string {
   return getDisplayToolName(call.name, call.input);
 }
 
+function mcpGroupLabel(group: PairedToolCall[]): string {
+  const services = new Map<string, number>();
+  for (const call of group) {
+    const service = getMcpToolDisplay(call.name)?.service ?? call.name;
+    services.set(service, (services.get(service) ?? 0) + 1);
+  }
+  return [...services]
+    .map(([service, count]) => (count > 1 ? `${service} ×${count}` : service))
+    .join(', ');
+}
+
 function activityGroupLabel(kind: ToolActivityKind, group: PairedToolCall[]): string {
   const pending = group.some((call) => call.status === 'pending');
   switch (kind) {
@@ -128,6 +150,10 @@ function activityGroupLabel(kind: ToolActivityKind, group: PairedToolCall[]): st
       return `${pending ? 'Reading' : 'Read'} ${readGroupTarget(group)}`;
     case 'search':
       return pending ? 'Searching' : 'Searched';
+    case 'list':
+      return pending ? 'Listing files' : 'Listed files';
+    case 'mcp':
+      return mcpGroupLabel(group);
     case 'other':
       return [
         ...new Set(
@@ -153,7 +179,7 @@ export function getToolGroupLabel(calls: PairedToolCall[]): string {
   return [...groups]
     .map(([kind, group], index) => {
       const label = activityGroupLabel(kind, group);
-      return index === 0 || kind === 'other'
+      return index === 0 || kind === 'other' || kind === 'mcp'
         ? label
         : label.charAt(0).toLowerCase() + label.slice(1);
     })
