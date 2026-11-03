@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
 import { exportDataSchema } from './export-data.schema';
@@ -56,3 +58,161 @@ it('locates covered field and marker failures within the whole backup', () => {
     ])
   );
 });
+
+it('accepts the independent full catalog with explicit PR observations through three parses', () => {
+  let parsed = exportDataSchema.parse(full);
+  for (let i = 0; i < 2; i++) {
+    parsed = exportDataSchema.parse(parsed);
+  }
+  expect(parsed.meta).toEqual(full.meta);
+});
+
+it.each(['missing', 'undefined'])(
+  'rejects %s full-profile observation without borrowing the old default',
+  (kind) => {
+    const file = structuredClone(full);
+    const pr = file.data.workspaces[0]!.prs[0]!;
+    if (kind === 'missing') {
+      Reflect.deleteProperty(pr, 'observation');
+    } else {
+      Object.assign(pr, { observation: undefined });
+    }
+    file.data.recovery.baseJson.jsonStorage = [];
+    expect(exportDataSchema.safeParse(file).success).toBe(false);
+  }
+);
+it('keeps same text identities distinct across the three catalog models', () => {
+  const file = structuredClone(full);
+  const id = file.data.workspaces[0]!.id;
+  const pr = file.data.workspaces[0]!.prs[0]!;
+  pr.id = id;
+  const session = file.data.agentSessions[0]!;
+  session.id = id;
+  Object.assign(session, { workspacePrId: null });
+  Object.assign(file.data.recovery.baseJson, {
+    jsonStorage: [
+      { model: 'Workspace', identity: [id], field: 'creationMetadata' },
+      { model: 'WorkspacePR', identity: [id], field: 'observation' },
+      { model: 'AgentSession', identity: [id], field: 'providerMetadata' },
+    ],
+  });
+  expect(exportDataSchema.safeParse(file).success).toBe(true);
+});
+it('rejects PR and session markers in the historical workspace catalog', () => {
+  for (const marker of [
+    {
+      model: 'WorkspacePR',
+      identity: [fixed.data.workspaces[0]!.prs[0]!.id],
+      field: 'observation',
+    },
+    {
+      model: 'AgentSession',
+      identity: [fixed.data.agentSessions[0]!.id],
+      field: 'providerMetadata',
+    },
+  ]) {
+    const file = structuredClone(fixed);
+    Object.assign(file.data.recovery.baseJson, { jsonStorage: [marker] });
+    expect(exportDataSchema.safeParse(file).success).toBe(false);
+  }
+});
+
+it.each([
+  [
+    'undefined workspace field',
+    (file: typeof full) => Object.assign(file.data.workspaces[0]!, { creationMetadata: undefined }),
+  ],
+  [
+    'undefined session field',
+    (file: typeof full) =>
+      Object.assign(file.data.agentSessions[0]!, { providerMetadata: undefined }),
+  ],
+  [
+    'unknown meta undefined',
+    (file: typeof full) => Object.assign(file.meta, { unsupported: undefined }),
+  ],
+  [
+    'unknown data undefined',
+    (file: typeof full) => Object.assign(file.data, { unsupported: undefined }),
+  ],
+  [
+    'missing capability',
+    (file: typeof full) => Reflect.deleteProperty(file.meta.recovery.capabilities, 'baseJson'),
+  ],
+  [
+    'undefined section',
+    (file: typeof full) => Object.assign(file.data.recovery, { baseJson: undefined }),
+  ],
+  [
+    'duplicate marker',
+    (file: typeof full) =>
+      file.data.recovery.baseJson.jsonStorage.push(file.data.recovery.baseJson.jsonStorage[0]!),
+  ],
+  [
+    'missing marker target',
+    (file: typeof full) =>
+      file.data.recovery.baseJson.jsonStorage[0]!.identity.splice(0, 1, 'absent'),
+  ],
+  [
+    'non-null marker target',
+    (file: typeof full) =>
+      Object.assign(file.data.workspaces[0]!, { creationMetadata: { nested: null } }),
+  ],
+  [
+    'empty PR marker identity',
+    (file: typeof full) =>
+      Object.assign(file.data.recovery.baseJson, {
+        jsonStorage: [{ model: 'WorkspacePR', identity: [''], field: 'observation' }],
+      }),
+  ],
+  [
+    'wrong model/field pairing',
+    (file: typeof full) =>
+      Object.assign(file.data.recovery.baseJson.jsonStorage[0]!, { model: 'AgentSession' }),
+  ],
+  [
+    'wrong arity',
+    (file: typeof full) => file.data.recovery.baseJson.jsonStorage[0]!.identity.push('extra'),
+  ],
+] as const)('rejects full-profile %s before normalization', (_name, mutate) => {
+  const file = structuredClone(full);
+  mutate(file);
+  expect(exportDataSchema.safeParse(file).success).toBe(false);
+});
+
+it.each(['WorkspacePR', 'AgentSession'] as const)(
+  'rejects a %s JSON-null marker only because its otherwise-valid target is non-null',
+  (model) => {
+    const file = structuredClone(full);
+    const pr = file.data.workspaces[0]!.prs[0]!;
+    const session = file.data.agentSessions[0]!;
+    if (model === 'WorkspacePR') {
+      Object.assign(pr, { observation: redObservation });
+    } else {
+      Object.assign(session, { providerMetadata: { nested: null } });
+    }
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    const otherMarkers = structuredClone(file.data.recovery.baseJson.jsonStorage);
+    const marker =
+      model === 'WorkspacePR'
+        ? { model, identity: [pr.id], field: 'observation' }
+        : { model, identity: [session.id], field: 'providerMetadata' };
+    Object.assign(file.data.recovery.baseJson, { jsonStorage: [...otherMarkers, marker] });
+    const result = exportDataSchema.safeParse(file);
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error('Expected invalid JSON-null marker');
+    }
+    const issues = result.error.issues.flatMap((issue) =>
+      issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+    );
+    expect(issues).toContainEqual({
+      code: 'custom',
+      message: `Invalid ${model} JSON-null target`,
+      path: ['data', 'recovery', 'baseJson', 'jsonStorage', otherMarkers.length, 'identity'],
+    });
+    file.data.recovery.baseJson.jsonStorage.pop();
+    expect(file.data.recovery.baseJson.jsonStorage).toEqual(otherMarkers);
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+  }
+);

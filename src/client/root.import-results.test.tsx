@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { DataImportButton } from './features/data-import/data-import-button';
 import { Root } from './root';
@@ -231,4 +232,23 @@ describe('Root import results', () => {
       'Import completed'
     );
   });
+});
+
+it('retains the exact full-profile server report through Root navigation and download', async () => {
+  const previous = result.recovery;
+  result.recovery = createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery));
+  try {
+    await mount();
+    await importBackup();
+    await click('Import');
+    expect(document.body.textContent).toContain('Destination route');
+    for (const warning of result.recovery.warnings) {
+      expect(document.body.textContent).toContain(warning);
+    }
+    expect(document.body.textContent).toContain('actual included PR rows');
+    await click('Download JSON');
+    expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(result);
+  } finally {
+    result.recovery = previous;
+  }
 });

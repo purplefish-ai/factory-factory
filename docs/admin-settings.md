@@ -45,18 +45,20 @@ corner backgrounds with the selected light or dark mode.
 
 ## Backup imports
 
-New exports use schema version 8 with the frozen `base-json-workspace-1` partial
-coverage manifest. Only existing logical metadata is included;
-repository/worktree files, provider history bytes, archives, mail, automation,
-secrets, native account homes and live runtime authority are excluded. Paths and
-provider-session IDs may remain metadata. Workspace creation metadata preserves
-SQL NULL versus top-level JSON null; PR observation and session metadata
-fidelity remains unproven. The strict `baseJson` version 1 section records
-Workspace JSON-null identities, including when no markers are needed. Frozen
-`base-1` imports retain their historical null normalization and warnings. Import
-requires all 37 canonical model classifications and all six global exclusions,
-and rejects unknown capabilities or sections before opening the writer. Versions
-4–7 remain accepted without inventing a versioned coverage declaration.
+New exports use schema version 8 with the frozen `base-json-1` partial coverage
+manifest. Only existing logical metadata is included; repository/worktree files,
+provider history bytes, archives, mail, automation, secrets, native account
+homes and live runtime authority are excluded. Paths and provider-session IDs
+may remain metadata. Workspace.creationMetadata, WorkspacePR.observation on
+actual included PR rows, and AgentSession.providerMetadata preserve SQL NULL
+versus top-level JSON null. The strict `baseJson` version 1 section records
+these JSON-null identities, including when no markers are needed. Frozen
+`base-1` and `base-json-workspace-1` imports retain their historical null
+semantics and warnings. Import requires all 37 canonical model classifications
+and the profile's exact global exclusions (five for `base-json-1`, six for older
+profiles), and rejects unknown capabilities or sections before opening the
+writer. Versions 4–7 remain accepted without inventing a versioned coverage
+declaration.
 
 The current-session result and its exact JSON download include partial-coverage
 warnings and, for v8, the file's manifest. Four numeric primary counters and the

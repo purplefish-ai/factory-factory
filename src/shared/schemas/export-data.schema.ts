@@ -475,15 +475,46 @@ const version8Schema = z
     }),
   })
   .superRefine((backup, ctx) => {
-    const covered = backup.meta.recovery.profile === 'base-json-workspace-1';
+    const covered = backup.meta.recovery.profile !== 'base-1';
     const section = backup.data.recovery.baseJson;
     if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
       ctx.addIssue({ code: 'custom', message: 'Profile sections do not match' });
     }
     if (covered && section) {
-      validateBaseJsonTargets(backup.data.workspaces, section, ctx);
+      validateBaseJsonTargets(
+        backup.data,
+        section,
+        backup.meta.recovery.profile === 'base-json-1',
+        ctx
+      );
     }
   });
+const fullVersion8Schema = version8Schema.safeExtend({
+  meta: version8Schema.shape.meta.extend({
+    recovery: recoveryMetadataSchema.safeExtend({ profile: z.literal('base-json-1') }),
+  }),
+  data: version8Schema.shape.data.extend({
+    workspaces: z.array(
+      exportedWorkspaceSchema.extend({
+        prs: z
+          .array(
+            prAssociationBackupSchema.extend({
+              observation: prAssociationBackupSchema.shape.observation.removeDefault(),
+            })
+          )
+          .optional()
+          .default([]),
+      })
+    ),
+  }),
+});
+const historicalVersion8Schema = version8Schema.safeExtend({
+  meta: version8Schema.shape.meta.extend({
+    recovery: recoveryMetadataSchema.safeExtend({
+      profile: z.enum(['base-1', 'base-json-workspace-1']),
+    }),
+  }),
+});
 export const exportDataSchema = z
   .union([
     publishedVersion5Schema.transform((input, ctx) =>
@@ -492,7 +523,8 @@ export const exportDataSchema = z
     legacyAndCurrentSchema.transform((input, ctx) =>
       safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
     ),
-    version8Schema,
+    historicalVersion8Schema,
+    fullVersion8Schema,
   ])
   .superRefine(validateBackupPRs)
   .superRefine(validateAccountReferences);

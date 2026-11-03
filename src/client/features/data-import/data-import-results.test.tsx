@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
@@ -229,4 +230,25 @@ it('shows legacy uncertainty without inventing model coverage', async () => {
   await act(() => publish({ ...result, recovery: createRecoveryImportReport(undefined) }));
   expect(document.body.textContent).toContain('no versioned coverage declaration');
   expect(document.querySelector('details')).toBeNull();
+});
+
+it('renders and downloads the exact full catalog report without a physical-fidelity exclusion', async () => {
+  await mount();
+  await click('Dismiss');
+  const fullResult = {
+    ...result,
+    recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)),
+  };
+  await act(() => publish(fullResult));
+  for (const warning of fullResult.recovery.warnings) {
+    expect(document.body.textContent).toContain(warning);
+  }
+  for (const model of ['Workspace', 'WorkspacePR', 'AgentSession']) {
+    expect(document.body.textContent).toContain(
+      full.meta.recovery.coverage.find((entry) => entry.model === model)!.limitation
+    );
+  }
+  expect(document.body.textContent).not.toContain('physical nullable json fidelity');
+  await click('Download JSON');
+  expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(fullResult);
 });

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { Button } from '@/components/ui/button';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
@@ -100,6 +101,15 @@ export const WorkspaceJsonFidelity: Story = {
       recovery: createRecoveryImportReport(
         recoveryMetadataSchema.parse(workspaceJson.meta.recovery)
       ),
+    },
+  },
+};
+
+export const BaseJsonFidelity: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(fullJson.meta.recovery)),
     },
   },
 };
