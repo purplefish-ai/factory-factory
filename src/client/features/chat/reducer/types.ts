@@ -179,6 +179,8 @@ export interface ChatState {
   agentMessageOrderToIndex: Map<number, number>;
   /** Accumulated thinking for the current sequence; text/tool starts clear it. */
   latestThinking: string | null;
+  /** Last thinking-affecting agent order, retained independently of transcript trimming. */
+  latestThinkingOrder: number | null;
   /**
    * Pending messages awaiting backend confirmation (shown with "sending..." indicator).
    * Map from message ID to content. Presence in map = pending, content = for recovery on rejection.

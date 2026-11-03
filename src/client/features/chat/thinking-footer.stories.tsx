@@ -52,6 +52,13 @@ export const PartialMarkdown: Story = {
   args: { latestThinking: '**Previous step**\n\n**Checking the latest' },
 };
 
+export const IdentifiersAndBullets: Story = {
+  args: {
+    latestThinking:
+      '**Checking** user_id and MAX_RETRY_COUNT\n\n* inspect `__init__`\n* keep a*b*c',
+  },
+};
+
 export const ActivityChanges: Story = {
   render: (args) => {
     const [active, setActive] = useState(true);

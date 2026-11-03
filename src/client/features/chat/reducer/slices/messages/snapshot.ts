@@ -29,6 +29,14 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         {
           ...state,
           messages: [],
+          latestThinking: null,
+          latestThinkingOrder: snapshotMessages.reduce<number | null>(
+            (latest, message) =>
+              message.source === 'agent' && message.order >= 0
+                ? Math.max(latest ?? message.order, message.order)
+                : latest,
+            null
+          ),
           acpPlan: action.payload.acpPlan ?? null,
           queuedMessages,
           pendingRequest,

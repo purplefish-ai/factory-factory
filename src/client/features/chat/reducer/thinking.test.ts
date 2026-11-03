@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage } from '@/lib/chat-protocol';
+import { MessageState } from '@/lib/chat-protocol';
 import {
   AcpEventTranslator,
   type TranslatableSessionUpdate,
@@ -16,6 +17,142 @@ const thought = (text: string): AgentMessage => ({
 });
 
 describe('live thinking sequences', () => {
+  it('keeps replay protection across accepted user turns, then resets on a session switch', () => {
+    let state = chatReducer(createInitialChatState(), {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('Old turn'), order: 10 },
+    });
+    state = chatReducer(state, {
+      type: 'MESSAGE_STATE_CHANGED',
+      payload: { id: 'queued', newState: MessageState.ACCEPTED },
+    });
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('New turn'), order: 11 },
+    });
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'old', order: 5, offset: 0, text: 'Old text' },
+    });
+    expect(state.latestThinking).toBe('New turn');
+    state = chatReducer(state, { type: 'RESET_FOR_SESSION_SWITCH' });
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('New session'), order: 0 },
+    });
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'fresh', order: 1, offset: 0, text: 'Fresh text' },
+    });
+    expect(state.latestThinking).toBeNull();
+  });
+
+  it('seeds snapshot replay protection from agent orders while ignoring queued user orders', () => {
+    let state = createInitialChatState({
+      latestThinking: 'Stale preview',
+      rendererTranscriptLimit: 1,
+    });
+    state = chatReducer(state, {
+      type: 'SESSION_SNAPSHOT',
+      payload: {
+        sessionRuntime: state.sessionRuntime,
+        queuedMessages: [],
+        messages: [
+          {
+            id: 'snapshot-text',
+            source: 'agent',
+            order: 10,
+            timestamp: '2026-11-03T00:00:00Z',
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: [{ type: 'text', text: 'Snapshot text' }] },
+            },
+          },
+          {
+            id: 'queued',
+            source: 'user',
+            order: 1_000_000_000,
+            timestamp: '2026-11-03T00:00:00Z',
+            text: 'Queued input',
+          },
+        ],
+      },
+    });
+    expect(state.latestThinking).toBeNull();
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('Current'), order: 11 },
+    });
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'snapshot-text', order: 10, offset: 0, text: 'Snapshot text' },
+    });
+    expect(state.latestThinking).toBe('Current');
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'next', order: 12, offset: 0, text: 'Next text' },
+    });
+    expect(state.latestThinking).toBeNull();
+  });
+
+  it('reconstructs thinking order when a replay batch replaces the session transcript', () => {
+    let state = createInitialChatState({ latestThinking: 'Stale', latestThinkingOrder: 100 });
+    state = chatReducer(state, {
+      type: 'SESSION_REPLAY_BATCH',
+      payload: {
+        replayEvents: [{ type: 'agent_message', order: 0, data: thought('Replayed thought') }],
+      },
+    });
+    expect(state.latestThinking).toBe('Replayed thought');
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'next', order: 1, offset: 0, text: 'Next text' },
+    });
+    expect(state.latestThinking).toBeNull();
+  });
+
+  it.each(['text', 'tool'] as const)(
+    'preserves newer thinking when a trimmed %s start is replayed',
+    (kind) => {
+      const tool: AgentMessage = {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'old-tool', name: 'Terminal', input: {} },
+        },
+      };
+      const oldAction =
+        kind === 'text'
+          ? {
+              type: 'WS_ASSISTANT_TEXT_DELTA' as const,
+              payload: { messageId: 'old-text', order: 0, offset: 0, text: 'Old commentary' },
+            }
+          : { type: 'WS_AGENT_MESSAGE' as const, payload: { message: tool, order: 0 } };
+      let state = chatReducer(createInitialChatState({ rendererTranscriptLimit: 1 }), oldAction);
+      state = chatReducer(state, {
+        type: 'WS_ASSISTANT_TEXT_DELTA',
+        payload: { messageId: 'new-text', order: 1, offset: 0, text: 'New commentary' },
+      });
+      expect(state.agentMessageOrderToIndex.has(0)).toBe(false);
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: thought('Current '), order: 2 },
+      });
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: thought('block'), order: 3 },
+      });
+      state = chatReducer(state, oldAction);
+      expect(state.latestThinking).toBe('Current block');
+      state = chatReducer(state, {
+        type: 'WS_ASSISTANT_TEXT_DELTA',
+        payload: { messageId: 'next-text', order: 4, offset: 0, text: 'Next commentary' },
+      });
+      expect(state.latestThinking).toBeNull();
+    }
+  );
+
   it.each<TranslatableSessionUpdate>([
     {
       sessionUpdate: 'tool_call',

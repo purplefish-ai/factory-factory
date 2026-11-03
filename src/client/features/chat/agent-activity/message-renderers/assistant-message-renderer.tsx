@@ -192,10 +192,7 @@ function truncateLoadingText(input: string): string {
 }
 
 function getLoadingText(latestReasoning: string | null | undefined): string {
-  const latestParagraph = formatThinkingText(latestReasoning)
-    .split(/\n\s*\n/)
-    .at(-1);
-  const normalized = latestParagraph?.replace(/\s+/g, ' ').trim();
+  const normalized = formatThinkingText(latestReasoning).replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }

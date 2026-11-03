@@ -5,6 +5,31 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it('preserves identifiers, literal operators and bullet markers in readable reasoning', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter
+            active
+            latestThinking={
+              '**Checking** user_id and MAX_RETRY_COUNT\n\n* inspect `__init__`\n* keep a*b*c'
+            }
+          />
+        )
+      );
+      flushSync(() => host.querySelector('button')?.click());
+      expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toBe(
+        'Checking user_id and MAX_RETRY_COUNT\n\n* inspect __init__\n* keep a*b*c'
+      );
+    } finally {
+      flushSync(() => root.unmount());
+      host.remove();
+    }
+  });
+
   it('shows the latest paragraph inline and readable full reasoning in the popup', () => {
     const host = document.createElement('div');
     document.body.append(host);

@@ -233,6 +233,17 @@ function hasExistingAgentMessageAtOrder(state: ChatState, order: number): boolea
   return state.messages.some((msg) => msg.source === 'agent' && msg.order === order);
 }
 
+function resetThinkingAtOrder(
+  state: ChatState,
+  order: number,
+  thinking: string | null = null
+): ChatState {
+  if (state.latestThinkingOrder !== null && order <= state.latestThinkingOrder) {
+    return state;
+  }
+  return { ...state, latestThinking: thinking || null, latestThinkingOrder: order };
+}
+
 function resetThinkingAtBoundary(
   state: ChatState,
   message: AgentMessage,
@@ -246,7 +257,7 @@ function resetThinkingAtBoundary(
     event?.type === 'content_block_start' && event.content_block.type === 'thinking'
       ? event.content_block.thinking
       : null;
-  return { ...state, latestThinking: thinking || null };
+  return resetThinkingAtOrder(state, order, thinking);
 }
 
 /**
@@ -323,6 +334,7 @@ export function handleClaudeMessage(
     baseState = {
       ...baseState,
       latestThinking: (baseState.latestThinking ?? '') + claudeMsg.event.delta.thinking,
+      latestThinkingOrder: Math.max(baseState.latestThinkingOrder ?? order, order),
     };
   }
 
@@ -390,7 +402,7 @@ export function handleAssistantTextDelta(
       return state;
     }
     return applyRendererMessages(
-      { ...state, latestThinking: null },
+      resetThinkingAtOrder(state, payload.order),
       insertMessageByOrder(state.messages, createAssistantTextMessage(payload))
     );
   }

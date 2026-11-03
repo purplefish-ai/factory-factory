@@ -13,6 +13,10 @@ export function ThinkingFooter({
   latestThinking?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const latestParagraph = latestThinking
+    ?.trim()
+    .split(/\n\s*\n/)
+    .at(-1);
   if (!active && open) {
     setOpen(false);
   }
@@ -37,7 +41,7 @@ export function ThinkingFooter({
               aria-label="Show thinking preview"
               className="block w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <LoadingIndicator latestReasoning={latestThinking} singleLine />
+              <LoadingIndicator latestReasoning={latestParagraph} singleLine />
             </button>
           </PopoverTrigger>
           <PopoverContent
