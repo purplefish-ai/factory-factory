@@ -276,7 +276,7 @@ it('imports a metadata-free version 4 wire backup and converts its flattened PR'
   expect(
     await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
   ).toMatchObject({
-    enabled: true,
+    enabled: false,
     deliveryPauseReason: 'LEGACY_FIXER',
     legacySessionIds: ['legacy-fixer'],
   });
@@ -322,7 +322,7 @@ it('imports a metadata-free published version 5 wire backup and normalizes per-P
   expect(
     await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
   ).toMatchObject({
-    enabled: true,
+    enabled: false,
     recipientSessionId: null,
     deliveryPauseReason: 'LEGACY_FIXER',
     legacySessionIds: ['legacy-fixer'],
@@ -388,7 +388,7 @@ it.each([6, 7])(
     expect(
       await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'workspace' } })
     ).toMatchObject({
-      enabled: true,
+      enabled: false,
       bindingRevision: 4,
       eventEpoch: 2,
       deliveryPauseReason: 'USER_STOPPED',

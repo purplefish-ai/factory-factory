@@ -31,6 +31,7 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  workspacePREvent: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
@@ -741,17 +742,18 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          // The v4 format's flat run-script fields land in the nested row too.
+          // Preserve authored run-script and cleanup commands in the nested row;
+          // clear process identity, port, start time and running authority.
           // `postRunCommand` is absent because the format never carried it, so it
           // restores as null and the next reconcile reads it back off disk.
           runScript: {
             create: {
               command: 'npm run dev',
               cleanupCommand: 'npm run cleanup',
-              pid: 12_345,
-              port: 3000,
-              startedAt: new Date('2025-01-01T00:10:00.000Z'),
-              status: RunScriptStatus.RUNNING,
+              pid: null,
+              port: null,
+              startedAt: null,
+              status: RunScriptStatus.IDLE,
             },
           },
           // The v4 format's flat ratchet fields land in the nested row, and

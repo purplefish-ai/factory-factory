@@ -46,6 +46,8 @@ export function DataImportButton({
         `Agent Sessions: ${results.agentSessions.imported} imported, ${results.agentSessions.skipped} skipped`,
         `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
         `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
+        `Runtime recovery: ${results.inertTransforms.workspaceInitializations} initializations and ${results.inertTransforms.workspaceArchives} archives need manual attention; ${results.inertTransforms.runScripts} run scripts, ${results.inertTransforms.terminalSessions} terminals and ${results.inertTransforms.agentSessions} agent sessions stopped; ${results.inertTransforms.monitors} monitors disabled; ${results.inertTransforms.heldReceipts} receipts held; ${results.inertTransforms.cancelledFacts} pending facts cancelled.`,
+        ...results.inertTransforms.explanations,
       ].join('\n');
 
       toast.success('Import completed', { description: summary, duration: 10_000 });

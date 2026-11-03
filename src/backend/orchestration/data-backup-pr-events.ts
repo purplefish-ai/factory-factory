@@ -8,6 +8,7 @@ import {
   prEventBackupSchema,
   prMonitoringBackupSchema,
 } from '@/shared/schemas/pr-monitoring-backup.schema';
+import type { InertImportReport } from './data-backup-runtime';
 
 function iso(date: Date | null): string | null {
   return date?.toISOString() ?? null;
@@ -82,7 +83,8 @@ async function restoreDedicatedBindings(
 export async function restorePRBackupState(
   workspaces: ExportData['data']['workspaces'],
   importedWorkspaceIds: string[],
-  tx: DataBackupTransactionClient
+  tx: DataBackupTransactionClient,
+  report: InertImportReport
 ) {
   for (const workspace of workspaces) {
     if (!importedWorkspaceIds.includes(workspace.id)) {
@@ -99,7 +101,18 @@ export async function restorePRBackupState(
       lastCheckedAt: workspace.ratchetLastCheckedAt,
     };
     await restoreDedicatedBindings(workspace, tx);
-    await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, config);
-    await workspacePRMonitoringService.restoreEventsBackup(tx, workspace.id, workspace.prEvents);
+    await workspacePRMonitoringService.restoreConfigBackup(tx, workspace.id, {
+      ...config,
+      enabled: false,
+    });
+    const effects = await workspacePRMonitoringService.restoreEventsBackup(
+      tx,
+      workspace.id,
+      workspace.prEvents,
+      { inert: true }
+    );
+    report.monitors += Number(config.enabled);
+    report.heldReceipts += effects.heldReceipts;
+    report.cancelledFacts += effects.cancelledFacts;
   }
 }
