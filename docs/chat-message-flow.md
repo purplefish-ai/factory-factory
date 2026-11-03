@@ -297,8 +297,8 @@ keystroke re-renders `ChatContent`. `ChatTranscript` is memoized and skips those
 renders only while its props keep their identity: the transcript header, running
 sub-agent list, sub-agent callbacks and list state are memoized from the data
 they show. Inside the transcript, the virtualizer's `getItemKey` and
-`rangeExtractor` change only with the row keys, because a new `getItemKey`
-rebuilds every row measurement.
+`rangeExtractor` change only when the row key values change, because a new
+`getItemKey` rebuilds every row measurement.
 
 The renderer keeps a recent transcript window of
 `DEFAULT_RENDERER_TRANSCRIPT_LIMIT` messages. Snapshots and replay arrive

@@ -196,6 +196,10 @@ it('keeps virtualizer key callbacks stable until the row keys change', async () 
   await act(() => root.render(<KeysProbe keys={keys} />));
   expect(engine.options.getItemKey).toBe(getItemKey);
   expect(engine.options.rangeExtractor).toBe(rangeExtractor);
+  // Streamed content edits rebuild the keys array without changing its rows.
+  await act(() => root.render(<KeysProbe keys={[...keys]} />));
+  expect(engine.options.getItemKey).toBe(getItemKey);
+  expect(engine.options.rangeExtractor).toBe(rangeExtractor);
   engine.resizeItem(1, 300);
   const measuredTotal = engine.getTotalSize();
 
@@ -205,8 +209,8 @@ it('keeps virtualizer key callbacks stable until the row keys change', async () 
   expect(engine.options.getItemKey(1)).toBe('b');
   expect(engine.getTotalSize()).toBe(measuredTotal - 300 + 80);
 
-  await act(() => root.render(<KeysProbe keys={['b']} />));
+  await act(() => root.render(<KeysProbe keys={['b', 'c']} />));
   expect(
-    engine.options.rangeExtractor({ startIndex: 0, endIndex: 0, overscan: 0, count: 1 })
-  ).toEqual([0]);
+    engine.options.rangeExtractor({ startIndex: 1, endIndex: 1, overscan: 0, count: 2 })
+  ).toEqual([1]);
 });
