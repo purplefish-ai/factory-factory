@@ -286,7 +286,11 @@ and user turns, and resets with session replay or switching. Snapshots seed it
 from agent orders, excluding queued user orders. The fixed-height footer shows
 the latest paragraph as plain text; its popup preserves the current sequence's
 paragraphs with the same Markdown cleanup, retaining identifiers, bullet
-markers, and literal code. Inline activity indicators retain all paragraphs.
+markers, and literal code. Stale or repeated thinking deltas are ignored before
+updating either transcript blocks or previews. A block start and its first delta
+may share an order; later deltas must advance it. Partial Markdown markers do
+not hide the latest readable paragraph. Inline activity indicators retain all
+paragraphs.
 
 ## Transcript scrolling
 

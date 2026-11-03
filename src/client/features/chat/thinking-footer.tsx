@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { LoadingIndicator } from './agent-activity';
-import { formatThinkingText } from './thinking-preview';
+import { formatThinkingText, getLatestThinkingParagraph } from './thinking-preview';
 
 /** Always occupies one line; activity changes cannot resize the transcript viewport. */
 export function ThinkingFooter({
@@ -13,10 +13,7 @@ export function ThinkingFooter({
   latestThinking?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const latestParagraph = latestThinking
-    ?.trim()
-    .split(/\n\s*\n/)
-    .at(-1);
+  const latestParagraph = getLatestThinkingParagraph(latestThinking);
   if (!active && open) {
     setOpen(false);
   }

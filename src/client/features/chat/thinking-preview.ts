@@ -21,7 +21,10 @@ export function formatThinkingText(input: string | null | undefined): string {
 }
 
 function stripThinkingMarkdown(input: string): string {
-  let text = input.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  let text = input
+    .replace(/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/gm, '')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   // Remove complete nested emphasis before considering unfinished streaming markers.
   let previous: string;
   do {
@@ -30,8 +33,18 @@ function stripThinkingMarkdown(input: string): string {
   } while (text !== previous);
   return (
     text
+      .replace(/`/g, '')
       // Hide incomplete streaming emphasis without stripping intraword punctuation or bullets.
       .replace(/(?<!\w)[*_~`]{2,}(?=[^\s*_~`])/g, '')
+      .replace(/[*_~]+(?=\s*$)/g, '')
       .replace(/^[\s`*~_]+$/g, '')
   );
+}
+
+/** Ignore marker-only paragraphs when choosing the current work to show inline. */
+export function getLatestThinkingParagraph(input: string | null | undefined): string | undefined {
+  return input
+    ?.split(/\n\s*\n/)
+    .reverse()
+    .find((paragraph) => formatThinkingText(paragraph).length > 0);
 }

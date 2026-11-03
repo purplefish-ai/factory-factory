@@ -5,6 +5,20 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it.each(['**', '---'])('keeps the latest readable paragraph before a trailing %s', (marker) => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(<ThinkingFooter active latestThinking={`**Checking CI**\n\n${marker}`} />)
+      );
+      expect(host.textContent).toContain('Checking CI');
+      expect(host.textContent).not.toContain('Agent is working...');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('preserves identifiers, literal operators and bullet markers in readable reasoning', () => {
     const host = document.createElement('div');
     document.body.append(host);

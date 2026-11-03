@@ -52,6 +52,10 @@ export const PartialMarkdown: Story = {
   args: { latestThinking: '**Previous step**\n\n**Checking the latest' },
 };
 
+export const TrailingMarkers: Story = {
+  args: { latestThinking: '**Checking CI**\n\n**' },
+};
+
 export const IdentifiersAndBullets: Story = {
   args: {
     latestThinking:

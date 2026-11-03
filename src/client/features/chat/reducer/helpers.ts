@@ -73,6 +73,28 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
   return state;
 }
 
+function applyThinkingDelta(
+  state: ChatState,
+  index: number,
+  text: string,
+  order: number
+): ChatState {
+  if (
+    !text ||
+    (state.latestThinkingOrder !== null && order < state.latestThinkingOrder) ||
+    (state.latestThinkingDeltaOrder !== null && order <= state.latestThinkingDeltaOrder)
+  ) {
+    return state;
+  }
+  const next = appendThinkingDelta(state, index, text);
+  return {
+    ...next,
+    latestThinking: (next.latestThinking ?? '') + text,
+    latestThinkingOrder: order,
+    latestThinkingDeltaOrder: order,
+  };
+}
+
 function createClaudeMessage(
   message: AgentMessage,
   order: number,
@@ -326,16 +348,12 @@ export function handleClaudeMessage(
     claudeMsg.event.type === 'content_block_delta' &&
     claudeMsg.event.delta.type === 'thinking_delta'
   ) {
-    baseState = appendThinkingDelta(
+    baseState = applyThinkingDelta(
       baseState,
       claudeMsg.event.index,
-      claudeMsg.event.delta.thinking
+      claudeMsg.event.delta.thinking,
+      order
     );
-    baseState = {
-      ...baseState,
-      latestThinking: (baseState.latestThinking ?? '') + claudeMsg.event.delta.thinking,
-      latestThinkingOrder: Math.max(baseState.latestThinkingOrder ?? order, order),
-    };
   }
 
   // Check if message should be stored

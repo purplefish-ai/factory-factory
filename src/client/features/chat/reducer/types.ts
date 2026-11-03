@@ -181,6 +181,8 @@ export interface ChatState {
   latestThinking: string | null;
   /** Last thinking-affecting agent order, retained independently of transcript trimming. */
   latestThinkingOrder: number | null;
+  /** Last accepted thinking delta; a block start may share its first delta's order. */
+  latestThinkingDeltaOrder: number | null;
   /**
    * Pending messages awaiting backend confirmation (shown with "sending..." indicator).
    * Map from message ID to content. Presence in map = pending, content = for recovery on rejection.

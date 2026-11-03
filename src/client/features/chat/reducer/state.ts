@@ -12,6 +12,7 @@ function createBaseResetState(): Pick<
   | 'agentMessageOrderToIndex'
   | 'latestThinking'
   | 'latestThinkingOrder'
+  | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
   | 'lastRejectedMessage'
   | 'isCompacting'
@@ -42,6 +43,7 @@ function createBaseResetState(): Pick<
     agentMessageOrderToIndex: new Map(),
     latestThinking: null,
     latestThinkingOrder: null,
+    latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,
     isCompacting: false,
@@ -77,6 +79,7 @@ function createSessionSwitchResetState(): Pick<
   | 'agentMessageOrderToIndex'
   | 'latestThinking'
   | 'latestThinkingOrder'
+  | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
   | 'lastRejectedMessage'
   | 'queuedMessages'
@@ -147,6 +150,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     agentMessageOrderToIndex: new Map(),
     latestThinking: null,
     latestThinkingOrder: null,
+    latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,
     isCompacting: false,

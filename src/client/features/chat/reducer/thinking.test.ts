@@ -17,6 +17,60 @@ const thought = (text: string): AgentMessage => ({
 });
 
 describe('live thinking sequences', () => {
+  it('ignores stale and duplicate thinking deltas while accepting the first delta at its block start order', () => {
+    let state = chatReducer(createInitialChatState(), {
+      type: 'WS_AGENT_MESSAGE',
+      payload: {
+        order: 0,
+        message: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: 'Current ' },
+          },
+        },
+      },
+    });
+    const first = {
+      type: 'WS_AGENT_MESSAGE' as const,
+      payload: { message: thought('block'), order: 0 },
+    };
+    state = chatReducer(state, first);
+    expect(state.latestThinking).toBe('Current block');
+    state = chatReducer(state, first);
+    expect(state.latestThinking).toBe('Current block');
+    const event = state.messages[0]?.message?.event;
+    expect(
+      event?.type === 'content_block_start' && event.content_block.type === 'thinking'
+        ? event.content_block.thinking
+        : null
+    ).toBe('Current block');
+    state = chatReducer(state, {
+      type: 'WS_ASSISTANT_TEXT_DELTA',
+      payload: { messageId: 'new-text', order: 2, offset: 0, text: 'Next step' },
+    });
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('Old reasoning'), order: 1 },
+    });
+    expect(state.latestThinking).toBeNull();
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought('New thinking'), order: 4 },
+    });
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought(' stale chunk'), order: 3 },
+    });
+    expect(state.latestThinking).toBe('New thinking');
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: thought(' continued'), order: 5 },
+    });
+    expect(state.latestThinking).toBe('New thinking continued');
+  });
+
   it('keeps replay protection across accepted user turns, then resets on a session switch', () => {
     let state = chatReducer(createInitialChatState(), {
       type: 'WS_AGENT_MESSAGE',
@@ -50,6 +104,8 @@ describe('live thinking sequences', () => {
   it('seeds snapshot replay protection from agent orders while ignoring queued user orders', () => {
     let state = createInitialChatState({
       latestThinking: 'Stale preview',
+      latestThinkingOrder: 100,
+      latestThinkingDeltaOrder: 100,
       rendererTranscriptLimit: 1,
     });
     state = chatReducer(state, {
@@ -96,7 +152,11 @@ describe('live thinking sequences', () => {
   });
 
   it('reconstructs thinking order when a replay batch replaces the session transcript', () => {
-    let state = createInitialChatState({ latestThinking: 'Stale', latestThinkingOrder: 100 });
+    let state = createInitialChatState({
+      latestThinking: 'Stale',
+      latestThinkingOrder: 100,
+      latestThinkingDeltaOrder: 100,
+    });
     state = chatReducer(state, {
       type: 'SESSION_REPLAY_BATCH',
       payload: {

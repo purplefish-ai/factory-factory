@@ -30,6 +30,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
           ...state,
           messages: [],
           latestThinking: null,
+          latestThinkingDeltaOrder: null,
           latestThinkingOrder: snapshotMessages.reduce<number | null>(
             (latest, message) =>
               message.source === 'agent' && message.order >= 0
