@@ -1,8 +1,8 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
-import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { memo, useState } from 'react';
@@ -19,7 +19,9 @@ import { cn } from '@/lib/utils';
 import {
   getToolActivityKind,
   getToolActivityLabel,
+  getToolGroupKinds,
   getToolGroupLabel,
+  type ToolActivityKind,
 } from './tool-activity-summary';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
@@ -27,6 +29,23 @@ import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-pars
 
 const triggerClassName =
   'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+function iconForKind(kind: ToolActivityKind) {
+  if (kind === 'edit') {
+    return PencilSimpleIcon;
+  }
+  if (kind === 'search' || kind === 'read') {
+    return MagnifyingGlassIcon;
+  }
+  return TerminalIcon;
+}
+
+/** One kind of activity shares its row icon; mixed groups use a neutral stack. */
+function groupIcon(calls: PairedToolCall[]) {
+  const icons = new Set([...getToolGroupKinds(calls)].map(iconForKind));
+  const [only] = icons;
+  return icons.size === 1 && only ? only : StackSimpleIcon;
+}
 
 function ActivityIcon({
   name,
@@ -37,16 +56,11 @@ function ActivityIcon({
   pending?: boolean;
   error?: boolean;
 }) {
-  const kind = getToolActivityKind(name);
   const Icon = error
     ? WarningCircleIcon
     : pending
       ? SpinnerGapIcon
-      : kind === 'edit'
-        ? PencilSimpleIcon
-        : kind === 'search' || kind === 'read'
-          ? MagnifyingGlassIcon
-          : TerminalIcon;
+      : iconForKind(getToolActivityKind(name));
   return (
     <Icon
       aria-hidden="true"
@@ -153,6 +167,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   }
   const pending = calls.some((call) => call.status === 'pending');
   const label = getToolGroupLabel(calls);
+  const GroupIcon = groupIcon(calls);
   const proposals = new Map(
     calls.flatMap((call) => {
       const proposal =
@@ -172,7 +187,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
             {pending ? (
               <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
             ) : (
-              <FolderSimpleIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+              <GroupIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
             )}
             <span className="min-w-0 truncate" title={label}>
               {label}

@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
+import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
+import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
+import { type ComponentType, createElement, type ReactElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -297,5 +301,44 @@ describe('single activity summaries', () => {
     } finally {
       root.unmount();
     }
+  });
+});
+
+describe('tool group icon', () => {
+  function renderMarkup(element: ReactElement) {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    flushSync(() => root.render(element));
+    const svg = container.querySelector('button svg')?.innerHTML ?? container.innerHTML;
+    root.unmount();
+    return svg;
+  }
+
+  function iconMarkup(Icon: ComponentType) {
+    return renderMarkup(createElement('button', null, createElement(Icon)));
+  }
+
+  function groupIconMarkup(pairedCalls: PairedToolCall[]) {
+    return renderMarkup(
+      createElement(ToolSequenceGroup, {
+        sequence: { type: 'tool_sequence', id: 'seq', pairedCalls },
+      })
+    );
+  }
+
+  const command = (id: string) => ({
+    ...createCall(id, 'Bash'),
+    input: { command: 'pnpm test' },
+  });
+
+  it.each([
+    ['commands', [command('a'), command('b')], TerminalIcon],
+    ['edits', [createCall('a', 'Edit'), createCall('b', 'Write')], PencilSimpleIcon],
+    ['reads and searches', [createCall('a', 'Read'), createCall('b', 'Grep')], MagnifyingGlassIcon],
+    ['mixed activity', [command('a'), createCall('b', 'Edit')], StackSimpleIcon],
+  ] as const)('uses the matching icon for %s', (_label, calls, Icon) => {
+    const expected = iconMarkup(Icon);
+    expect(expected).not.toBe('');
+    expect(groupIconMarkup([...calls])).toBe(expected);
   });
 });
