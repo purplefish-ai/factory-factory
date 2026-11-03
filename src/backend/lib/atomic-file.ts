@@ -21,18 +21,17 @@ export async function writeFileAtomic(
 
   const tmpPath = path.join(directory, `.tmp-${randomUUID()}`);
 
-  if (typeof content === 'string') {
-    await fs.writeFile(tmpPath, content, {
-      encoding: options.encoding ?? 'utf-8',
-      mode: options.mode,
-    });
-  } else {
-    await fs.writeFile(tmpPath, content, {
-      mode: options.mode,
-    });
-  }
-
   try {
+    if (typeof content === 'string') {
+      await fs.writeFile(tmpPath, content, {
+        encoding: options.encoding ?? 'utf-8',
+        mode: options.mode,
+      });
+    } else {
+      await fs.writeFile(tmpPath, content, {
+        mode: options.mode,
+      });
+    }
     await fs.rename(tmpPath, targetPath);
   } catch (error) {
     await fs.unlink(tmpPath).catch(() => {
