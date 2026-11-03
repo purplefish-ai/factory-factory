@@ -517,6 +517,48 @@ it.each(['preview', 'sources'])(
     expect(container.textContent).not.toContain('confirmed-model');
   }
 );
+it('inspects recovered zero-event bodies and validates only an explicitly authored complete replacement', async () => {
+  saved = {
+    ...saved,
+    configurationMembership: 'KNOWN',
+    specification: null,
+    instructions: 'Recovered literal body',
+    executionConfig: { version: 1, provider: 'CODEX', model: 'custom-model' },
+    configuredTriggers: [],
+    retainedTriggers: [],
+    retainedNextCursor: null,
+  };
+  await render();
+  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await click('Edit Agent');
+  expect(container.textContent).toContain('Recovered literal body');
+  expect(container.textContent).toContain('custom-model');
+  expect(container.querySelector('form')).toBeNull();
+  await click('Replace complete specification');
+  expect(
+    container.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Full saved specification JSON"]'
+    )?.value
+  ).toBe('');
+  await click('Validate draft');
+  expect(requests.some((item) => item.path === 'agent.validateDraft')).toBe(false);
+  const specification = {
+    name: saved.name,
+    instructions: saved.instructions,
+    executionConfig: saved.executionConfig,
+    triggers: [
+      { type: 'SCHEDULE', description: 'Fresh event', config: { version: 1, cadence: 'DAILY' } },
+    ],
+  };
+  await edit('textarea[aria-label="Full saved specification JSON"]', JSON.stringify(specification));
+  await click('Validate draft');
+  await waitForReact(() =>
+    expect(requests.some((item) => item.path === 'agent.validateDraft')).toBe(true)
+  );
+  expect(requests.find((item) => item.path === 'agent.validateDraft')?.input).toMatchObject({
+    specification,
+  });
+});
 it('requires an explicit blank complete replacement for unknown or invalid stored data', async () => {
   saved = {
     ...saved,

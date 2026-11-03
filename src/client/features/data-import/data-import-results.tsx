@@ -38,6 +38,7 @@ export function DataImportResultsProvider({
   const runtime = active?.inertTransforms;
   const periodic = active?.recovery.periodicConfig;
   const history = active?.recovery.periodicHistory;
+  const definitions = active?.recovery.automationDefinitions;
   const links = active?.recovery.periodicWorkspaceLinks;
   return (
     <ImportResultsContext.Provider
@@ -82,6 +83,31 @@ export function DataImportResultsProvider({
                       : 'none'}
                 </p>
               </div>
+              {definitions && (
+                <section aria-label="Automation definition body recovery">
+                  <p>
+                    Automation definition bodies: {definitions.imported} imported,{' '}
+                    {definitions.skipped} skipped
+                  </p>
+                  <p>
+                    Enabled in entire source section: {definitions.sourceEnabled}; restored
+                    disabled: {definitions.restoredDisabled}
+                  </p>
+                  <p>
+                    Only definition bodies and execution preferences are restored. Connections,
+                    event configuration and automation history are excluded.
+                  </p>
+                  <p>
+                    Inspect recovered bodies and author new complete event configuration where
+                    editing is available.
+                  </p>
+                  <p>
+                    Skips by reason: existing definition ID: {definitions.reasons.EXISTING_IDENTITY}
+                    ; project not created by this import:{' '}
+                    {definitions.reasons.INCOMPLETE_DEPENDENCY}.
+                  </p>
+                </section>
+              )}
               {history && (
                 <section aria-label="Periodic execution history recovery">
                   <p>

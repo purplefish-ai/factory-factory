@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import definitions from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
@@ -350,4 +351,54 @@ it('renders source history versus actual transforms and downloads the exact type
   );
   await click('Download JSON');
   expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(historyResult);
+});
+
+it('keeps and downloads exact definition-body results with all five normative paragraphs', async () => {
+  await mount();
+  await click('Dismiss');
+  const imported = {
+    ...result,
+    recovery: createRecoveryImportReport(
+      recoveryMetadataSchema.parse(definitions.meta.recovery),
+      undefined,
+      undefined,
+      undefined,
+      {
+        model: 'AgentDefinition',
+        imported: 2,
+        skipped: 3,
+        sourceEnabled: 4,
+        restoredDisabled: 2,
+        reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+      }
+    ),
+  };
+  await act(() => publish(imported));
+  const section = document.querySelector('[aria-label="Automation definition body recovery"]');
+  expect(
+    [...section!.querySelectorAll('p')].map((node) => node.textContent?.replace(/\s+/g, ' ').trim())
+  ).toEqual([
+    'Automation definition bodies: 2 imported, 3 skipped',
+    'Enabled in entire source section: 4; restored disabled: 2',
+    'Only definition bodies and execution preferences are restored. Connections, event configuration and automation history are excluded.',
+    'Inspect recovered bodies and author new complete event configuration where editing is available.',
+    'Skips by reason: existing definition ID: 1; project not created by this import: 2.',
+  ]);
+  await act(() =>
+    root.render(
+      <DataImportResultsProvider>
+        <Publisher />
+        <p>Navigation changed</p>
+      </DataImportResultsProvider>
+    )
+  );
+  expect(
+    document.querySelector('[aria-label="Automation definition body recovery"]')
+  ).not.toBeNull();
+  await click('Download JSON');
+  expect(download).toHaveBeenCalledWith({
+    data: JSON.stringify(imported, null, 2),
+    mimeType: 'application/json',
+    fileName: 'factory-factory-import-result.json',
+  });
 });

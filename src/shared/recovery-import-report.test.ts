@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import definitions from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
@@ -128,4 +129,66 @@ it('reports history source scope separately from actual transforms without old h
   expect(report.warnings.at(-1)).toBe(
     'Periodic execution history: 3 imported, 6 skipped; 5 RUNNING in the entire source section; 2 restored FAILED as historical only, provider outcome unknown; 1 restored settled. Skips by reason: existing execution ID: 1; occupied workspace: 2; dependency not created by this import: 3. Imported executions will not be resumed.'
   );
+});
+
+it('reports exact definition-body scope and retains every cumulative history/null warning', () => {
+  const config = {
+    model: 'PeriodicTask' as const,
+    imported: 2,
+    skipped: 3,
+    sourceEnabled: 4,
+    restoredDisabled: 2,
+    reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+  };
+  const linkCounts = {
+    model: 'Workspace' as const,
+    imported: 2,
+    skipped: 3,
+    reasons: { INCOMPLETE_DEPENDENCY: 3 },
+  };
+  const executions = {
+    model: 'PeriodicTaskExecution' as const,
+    imported: 3,
+    skipped: 6,
+    sourceRunning: 5,
+    restoredHistoricalFailed: 2,
+    restoredSettled: 1,
+    reasons: { EXISTING_IDENTITY: 1, CONFLICTING_IDENTITY_OR_PARENT: 2, INCOMPLETE_DEPENDENCY: 3 },
+  };
+  const bodies = {
+    model: 'AgentDefinition' as const,
+    imported: 2,
+    skipped: 3,
+    sourceEnabled: 4,
+    restoredDisabled: 2,
+    reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+  };
+  const report = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(definitions.meta.recovery),
+    config,
+    linkCounts,
+    executions,
+    bodies
+  );
+  const old = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(history.meta.recovery),
+    config,
+    linkCounts,
+    executions
+  );
+  expect(report.automationDefinitions).toEqual(bodies);
+  expect(
+    report.warnings.filter((text) => !text.startsWith('Automation definition bodies'))
+  ).toEqual(old.warnings);
+  expect(report.warnings).toContain(
+    'Automation definition bodies restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing definition ID: 1; project not created by this import: 2. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.'
+  );
+  expect(report.manifest).toEqual(definitions.meta.recovery);
+  for (const file of [fixed, workspace, full, periodic, links, history]) {
+    if ('meta' in file) {
+      expect(
+        createRecoveryImportReport(recoveryMetadataSchema.parse(file.meta.recovery))
+      ).not.toHaveProperty('automationDefinitions');
+    }
+  }
 });

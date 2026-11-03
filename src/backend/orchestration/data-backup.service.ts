@@ -6,6 +6,11 @@
  */
 import type { z } from 'zod';
 import {
+  exportAutomationDefinitionsRecovery,
+  planAutomationDefinitionsRecovery,
+  restoreAutomationDefinitionsRecovery,
+} from '@/backend/services/agent-definition';
+import {
   exportCodexAccountMetadata,
   restoreCodexAccountMetadata,
   resolveRestoredCodexAccountId as restoredAccountId,
@@ -35,6 +40,7 @@ import {
   createRecoveryImportReport,
   type RecoveryImportReport,
 } from '@/shared/recovery-import-report';
+import type { AutomationDefinitionsRecovery } from '@/shared/schemas/automation-definitions-recovery.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
   ExportData,
@@ -57,6 +63,14 @@ import {
 type TransactionClient = DataBackupTransactionClient;
 
 const logger = createLogger('data-backup');
+
+function planAutomationDefinitionImport(
+  tx: TransactionClient,
+  section: AutomationDefinitionsRecovery | undefined,
+  projectIds: ReadonlySet<string>
+) {
+  return section ? planAutomationDefinitionsRecovery(tx, section, projectIds) : undefined;
+}
 
 // ============================================================================
 // Types
@@ -567,12 +581,14 @@ class DataBackupService {
       jsonStorage,
       periodicConfig,
       periodicHistory,
+      automationDefinitions,
     } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
       ...(await dataBackupAccessor.getSnapshotForExport(tx)),
       codexAccounts: await exportCodexAccountMetadata(tx),
       jsonStorage: await dataBackupAccessor.getBaseJsonStorageForExport(tx),
       periodicConfig: await exportPeriodicConfigRecovery(tx),
       periodicHistory: await exportPeriodicHistoryRecovery(tx),
+      automationDefinitions: await exportAutomationDefinitionsRecovery(tx),
     }));
 
     const exportData: ExportData = {
@@ -583,7 +599,12 @@ class DataBackupService {
         recovery,
       },
       data: {
-        recovery: { baseJson: { version: 1, jsonStorage }, periodicConfig, periodicHistory },
+        recovery: {
+          baseJson: { version: 1, jsonStorage },
+          periodicConfig,
+          periodicHistory,
+          automationDefinitions,
+        },
         projects: projects.map((p) => ({
           id: p.id,
           name: p.name,
@@ -755,7 +776,8 @@ class DataBackupService {
           input.meta.recovery.profile === 'base-json-1' ||
           input.meta.recovery.profile === 'base-json-periodic-config-1' ||
           input.meta.recovery.profile === 'base-json-periodic-links-1' ||
-          input.meta.recovery.profile === 'base-json-periodic-history-1'
+          input.meta.recovery.profile === 'base-json-periodic-history-1' ||
+          input.meta.recovery.profile === 'base-json-automation-definitions-1'
         ) {
           jsonNullIds.set(
             model,
@@ -769,12 +791,15 @@ class DataBackupService {
       }
     }
 
+    const automationSection =
+      'recovery' in input.data ? input.data.recovery.automationDefinitions : undefined;
     const historySection =
       'recovery' in input.data ? input.data.recovery.periodicHistory : undefined;
     const recoveryMetadata = input.meta.schemaVersion === 8 ? input.meta.recovery : undefined;
     const restoresPeriodicLinks =
       recoveryMetadata?.profile === 'base-json-periodic-links-1' ||
-      recoveryMetadata?.profile === 'base-json-periodic-history-1';
+      recoveryMetadata?.profile === 'base-json-periodic-history-1' ||
+      recoveryMetadata?.profile === 'base-json-automation-definitions-1';
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const admission = await planLegacyImport(tx, input.data);
@@ -788,6 +813,11 @@ class DataBackupService {
             admission.eligibleWorkspaceIds
           )
         : undefined;
+      const automationPlan = await planAutomationDefinitionImport(
+        tx,
+        automationSection,
+        admission.createProjectIds
+      );
       const inertTransforms = createInertImportReport();
       const createdProjectIds = new Set<string>();
       const projects = await importProjects(
@@ -796,6 +826,9 @@ class DataBackupService {
         admission.createProjectIds,
         createdProjectIds
       );
+      const automationDefinitions = automationPlan
+        ? await restoreAutomationDefinitionsRecovery(tx, automationPlan, createdProjectIds)
+        : undefined;
       const periodicConfig = section
         ? await restorePeriodicConfigRecovery(tx, section, createdProjectIds, occupiedTaskIds)
         : undefined;
@@ -850,7 +883,8 @@ class DataBackupService {
           recoveryMetadata,
           periodicConfig?.report,
           periodicWorkspaceLinks,
-          periodicHistory
+          periodicHistory,
+          automationDefinitions
         ),
         inertTransforms,
         projects,
