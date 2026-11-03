@@ -614,6 +614,5 @@ export async function disposeApplication(application: Application): Promise<void
 }
 
 export type AppContext = Application;
-export const createAppContext = createApplication;
 
 export type { AcpTraceLogger, SessionFileLogger };

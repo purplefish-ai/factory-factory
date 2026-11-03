@@ -36,7 +36,7 @@ const LONG_LIVED_BACKEND_ROOT_MODULES = new Set([
 ]);
 
 const APPLICATION_FACTORY_MODULES = new Set(['src/backend/app-context', 'src/backend/server']);
-const APPLICATION_FACTORY_EXPORTS = new Set(['createApplication', 'createAppContext']);
+const APPLICATION_FACTORY_EXPORTS = new Set(['createApplication']);
 
 type BoundaryViolation = {
   readonly kind: 'composition' | 'import';

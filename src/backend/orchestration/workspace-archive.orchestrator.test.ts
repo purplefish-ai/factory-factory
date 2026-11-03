@@ -20,7 +20,6 @@ vi.mock('@/backend/services/workspace', () => ({
   },
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
-    startArchiving: vi.fn(),
     startArchivingWithSourceStatus: vi.fn(),
     markArchived: vi.fn(),
     transition: vi.fn(),
@@ -97,9 +96,6 @@ describe('archiveWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(workspaceStateMachine.isValidTransition).mockReturnValue(true);
-    vi.mocked(workspaceStateMachine.startArchiving).mockResolvedValue(
-      unsafeCoerce({ id: 'ws-1', status: 'ARCHIVING' })
-    );
     vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
       unsafeCoerce({
         workspace: { id: 'ws-1', status: 'ARCHIVING' },
