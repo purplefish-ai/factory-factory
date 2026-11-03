@@ -5,7 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
-import fixed from '@/shared/testing/recovery-base-json-v8.fixture.json';
+import fixed from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,

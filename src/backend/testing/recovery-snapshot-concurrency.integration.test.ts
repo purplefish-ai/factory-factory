@@ -47,6 +47,19 @@ beforeAll(async () => {
     data: { id: 'p', name: 'Before', slug: 'p', repoPath: '/tmp/p', worktreeBasePath: '/tmp/w' },
   });
   await db.prisma.workspace.create({ data: { id: 'w', projectId: 'p', name: 'W' } });
+  await db.prisma.periodicTask.create({
+    data: {
+      id: 'periodic',
+      projectId: 'p',
+      name: 'Before task',
+      prompt: 'Before prompt',
+      cadence: 'DAILY',
+      scheduledTime: '10:00',
+      timezone: 'UTC',
+      nextRunAt: new Date('2026-01-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    },
+  });
   await db.prisma.codexAccount.create({
     data: { id: 'before-account', label: 'Before account', kind: 'MANAGED' },
   });
@@ -83,6 +96,16 @@ it('exports account metadata and session bindings from one snapshot while the ap
       });
       await tx.codexAccount.delete({ where: { id: 'before-account' } });
       await tx.project.update({ where: { id: 'p' }, data: { name: 'After' } });
+      await tx.periodicTask.update({
+        where: { id: 'periodic' },
+        data: {
+          prompt: 'After prompt',
+          timezone: 'Asia/Tokyo',
+          scheduledTime: '22:30',
+          nextRunAt: new Date('2026-10-01T13:30:00.000Z'),
+          updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      });
     });
   } finally {
     writerCommitted.resolve();
@@ -91,6 +114,25 @@ it('exports account metadata and session bindings from one snapshot while the ap
   const exported = exportDataSchema.parse(await pendingExport);
   expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.projects[0]?.name).toBe('Before');
+  expect(exported.data).toHaveProperty('recovery.periodicConfig.tasks', [
+    expect.objectContaining({
+      id: 'periodic',
+      prompt: 'Before prompt',
+      timezone: 'UTC',
+      scheduledTime: '10:00',
+      nextRunAt: '2026-01-01T10:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }),
+  ]);
+  expect(
+    await db.prisma.periodicTask.findUniqueOrThrow({ where: { id: 'periodic' } })
+  ).toMatchObject({
+    prompt: 'After prompt',
+    timezone: 'Asia/Tokyo',
+    scheduledTime: '22:30',
+    nextRunAt: new Date('2026-10-01T13:30:00.000Z'),
+    updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+  });
   expect(exported.data.agentSessions[0]?.codexAccountId).toBe('before-account');
   expect(exported.data.codexAccounts).toEqual([
     {

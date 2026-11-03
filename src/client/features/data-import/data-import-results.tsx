@@ -36,6 +36,7 @@ export function DataImportResultsProvider({
   const [pending, setPending] = useState<ImportResult[]>([]);
   const active = pending[0];
   const runtime = active?.inertTransforms;
+  const periodic = active?.recovery.periodicConfig;
   return (
     <ImportResultsContext.Provider
       value={{ publishImportResult: (result) => setPending((queue) => [...queue, result]) }}
@@ -79,6 +80,22 @@ export function DataImportResultsProvider({
                       : 'none'}
                 </p>
               </div>
+              {periodic && (
+                <section aria-label="Periodic configuration recovery">
+                  <p>
+                    Periodic configurations: {periodic.imported} imported, {periodic.skipped}{' '}
+                    skipped
+                  </p>
+                  <p>
+                    Enabled in entire source section: {periodic.sourceEnabled}; restored disabled:{' '}
+                    {periodic.restoredDisabled}
+                  </p>
+                  <p>
+                    Skips by reason: existing task ID: {periodic.reasons.EXISTING_IDENTITY}; project
+                    not created by this import: {periodic.reasons.INCOMPLETE_DEPENDENCY}.
+                  </p>
+                </section>
+              )}
               <p>
                 Runtime changes: {runtime.workspaceWorkflows} workspace workflows need manual
                 attention: {runtime.workspaceInitializations} initializations and{' '}

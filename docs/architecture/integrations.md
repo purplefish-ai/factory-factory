@@ -125,6 +125,16 @@ changes, or newer validation have superseded the submission.
 
 ## Scheduled agents
 
+Schema-8 backups with the `base-json-periodic-config-1` profile include complete
+periodic task scalar configuration and timestamps. Import preserves due slots,
+clock/timezone values and monthly anchors, but restores every accepted task
+**disabled**. Only tasks under newly imported projects are accepted; existing
+identities and children of skipped projects remain untouched and are reported as
+skips. Import results distinguish enabled tasks across the entire source section
+from rows actually restored disabled. Periodic execution history is excluded.
+Import and startup do not reserve or dispatch these tasks; enabling one later
+uses the ordinary periodic task scheduling policy.
+
 <a id="periodic-tasks"></a>
 
 Agents are recurring instructions that create a fresh workspace on a configured

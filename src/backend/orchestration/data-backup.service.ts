@@ -12,6 +12,10 @@ import {
 } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import {
+  exportPeriodicConfigRecovery,
+  restorePeriodicConfigRecovery,
+} from '@/backend/services/periodic-task';
+import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
   type WorkspaceForExport,
@@ -520,10 +524,12 @@ class DataBackupService {
       userSettings,
       codexAccounts,
       jsonStorage,
+      periodicConfig,
     } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
       ...(await dataBackupAccessor.getSnapshotForExport(tx)),
       codexAccounts: await exportCodexAccountMetadata(tx),
       jsonStorage: await dataBackupAccessor.getBaseJsonStorageForExport(tx),
+      periodicConfig: await exportPeriodicConfigRecovery(tx),
     }));
 
     const exportData: ExportData = {
@@ -534,7 +540,7 @@ class DataBackupService {
         recovery,
       },
       data: {
-        recovery: { baseJson: { version: 1, jsonStorage } },
+        recovery: { baseJson: { version: 1, jsonStorage }, periodicConfig },
         projects: projects.map((p) => ({
           id: p.id,
           name: p.name,
@@ -700,7 +706,11 @@ class DataBackupService {
       'recovery' in input.data
     ) {
       for (const model of ['Workspace', 'WorkspacePR', 'AgentSession'] as const) {
-        if (model === 'Workspace' || input.meta.recovery.profile === 'base-json-1') {
+        if (
+          model === 'Workspace' ||
+          input.meta.recovery.profile === 'base-json-1' ||
+          input.meta.recovery.profile === 'base-json-periodic-config-1'
+        ) {
           jsonNullIds.set(
             model,
             new Set(
@@ -718,6 +728,14 @@ class DataBackupService {
       const admission = await planLegacyImport(tx, input.data);
       const inertTransforms = createInertImportReport();
       const projects = await importProjects(input.data.projects, tx, admission.createProjectIds);
+      const periodicConfig =
+        'recovery' in input.data && input.data.recovery.periodicConfig
+          ? await restorePeriodicConfigRecovery(
+              tx,
+              input.data.recovery.periodicConfig,
+              admission.createProjectIds
+            )
+          : undefined;
       const importedWorkspaceIds: string[] = [];
       const workspaces = await importWorkspaces(
         input.data.workspaces,
@@ -748,7 +766,8 @@ class DataBackupService {
 
       return {
         recovery: createRecoveryImportReport(
-          input.meta.schemaVersion === 8 ? input.meta.recovery : undefined
+          input.meta.schemaVersion === 8 ? input.meta.recovery : undefined,
+          periodicConfig
         ),
         inertTransforms,
         projects,

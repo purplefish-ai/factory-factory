@@ -6,6 +6,7 @@ import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
+import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 const download = vi.hoisted(() => vi.fn());
@@ -251,4 +252,30 @@ it('renders and downloads the exact full catalog report without a physical-fidel
   expect(document.body.textContent).not.toContain('physical nullable json fidelity');
   await click('Download JSON');
   expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(fullResult);
+});
+
+it('renders exact periodic counters with entire-source enabled scope and downloads the typed outcome', async () => {
+  await mount();
+  await click('Dismiss');
+  const periodicResult = {
+    ...result,
+    recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(periodic.meta.recovery), {
+      model: 'PeriodicTask',
+      imported: 2,
+      skipped: 3,
+      sourceEnabled: 4,
+      restoredDisabled: 2,
+      reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+    }),
+  };
+  await act(() => publish(periodicResult));
+  for (const text of [
+    'Periodic configurations: 2 imported, 3 skipped',
+    'Enabled in entire source section: 4; restored disabled: 2',
+    'Skips by reason: existing task ID: 1; project not created by this import: 2.',
+  ]) {
+    expect(document.body.textContent).toContain(text);
+  }
+  await click('Download JSON');
+  expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(periodicResult);
 });
