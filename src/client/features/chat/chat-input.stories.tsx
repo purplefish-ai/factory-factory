@@ -106,6 +106,10 @@ export const Running: Story = {
     running: true,
     promptInFlight: true,
     placeholder: 'Message will be queued...',
+    capabilities: {
+      ...EMPTY_CHAT_BAR_CAPABILITIES,
+      attachments: { enabled: true, kinds: ['image', 'text'] },
+    },
   },
 };
 

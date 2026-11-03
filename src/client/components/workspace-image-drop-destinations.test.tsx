@@ -46,7 +46,7 @@ const navigation: AppNavigationData = {
   currentWorkspaceId: 'workspace',
 };
 
-function MainChat({ sessionId }: { sessionId: string }) {
+function MainChat({ sessionId, running }: { sessionId: string; running: boolean }) {
   const chat = useChatState({ dbSessionId: sessionId, send: () => true, connected: true });
   const { inputAttachments: attachments, setInputAttachments: setAttachments, inputRef } = chat;
   return (
@@ -54,7 +54,7 @@ function MainChat({ sessionId }: { sessionId: string }) {
       workspaceId="workspace"
       sessionId={sessionId}
       connected
-      sessionStatus={{ phase: 'ready' }}
+      sessionStatus={{ phase: running ? 'running' : 'ready' }}
       chatCapabilities={{
         ...EMPTY_CHAT_BAR_CAPABILITIES,
         attachments: { enabled: true, kinds: ['image', 'text'] },
@@ -95,13 +95,13 @@ afterEach(async () => {
   container.remove();
   vi.unstubAllGlobals();
 });
-async function render(sessionId = 'session-a') {
+async function render(sessionId = 'session-a', running = false) {
   await act(() =>
     root.render(
       <MemoryRouter initialEntries={['/projects/drop-project/workspaces/workspace']}>
         <SidebarProvider>
           <AppSidebar navData={navigation} />
-          <MainChat sessionId={sessionId} />
+          <MainChat sessionId={sessionId} running={running} />
         </SidebarProvider>
       </MemoryRouter>
     )
@@ -228,4 +228,18 @@ it('retains both overlapping image drops when reads complete before React commit
   } finally {
     vi.restoreAllMocks();
   }
+});
+
+it('attaches a dropped image to the current draft while the agent is running', async () => {
+  await render('running-session', true);
+  const textarea = container.querySelector('[aria-label="Message"]')!;
+  await drag(textarea, 'dragenter', 'follow-up.png');
+  expect(container.querySelector('[role="status"]')?.textContent).toContain('your message');
+  await drag(textarea, 'drop', 'follow-up.png');
+  await waitForReact(() =>
+    expect(container.querySelector('[aria-label="Conversation"]')?.textContent).toContain(
+      'follow-up.png'
+    )
+  );
+  expect(sessionStorage.getItem('chat-attachments-running-session')).toContain('follow-up.png');
 });

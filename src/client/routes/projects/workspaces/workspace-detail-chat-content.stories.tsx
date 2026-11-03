@@ -81,7 +81,7 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
           workspaceId="scroll-button-story"
           sessionId="story-session"
           connected
-          sessionStatus={{ phase: 'ready' }}
+          sessionStatus={{ phase: work ? 'running' : 'ready' }}
           chatCapabilities={{
             ...EMPTY_CHAT_BAR_CAPABILITIES,
             attachments: { enabled: true, kinds: ['image', 'text'] },
@@ -205,4 +205,9 @@ export const MessageImageDrop: Story = {
     }
     target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
   },
+};
+
+export const MessageImageDropWhileRunning: Story = {
+  args: PromptInFlight.args,
+  play: MessageImageDrop.play,
 };
