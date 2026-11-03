@@ -344,7 +344,10 @@ The ledger retains its compatible payload union, but rendering rejects mixed
 control/fact batches instead of silently omitting facts. The reducer
 deliberately reads pending, in-flight, and delivered fact history for
 deduplication and recovery semantics; it does not choose a session, destination,
-or prompt.
+or prompt. Acceptance holds the serialized SQLite transaction, so that history
+query is limited in SQL to the current epoch's deduplication-key range and
+excludes undelivered inactive rows such as superseded review payloads. It still
+reads delivery-bound rows because their delivery state replaces the event state.
 
 Unclaimed PR event messages use the current trusted reply preference at
 delivery. Legacy controls retain their captured `replyToPrComments` in
