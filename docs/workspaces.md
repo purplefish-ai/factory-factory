@@ -98,8 +98,10 @@ policy requires one.
 
 The PR scheduler in `src/backend/orchestration/scheduler.service.ts` uses
 `SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover
-new PRs every three minutes. Manual `syncPRStatus` calls and these periodic
-syncs converge cached PR state.
+new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
+syncs converge cached PR state; see
+[terminal PR polling](architecture/pull-requests.md#terminal-pr-polling) for
+which refreshes are forced.
 
 Enabling Ratchet through `workspace.toggleRatcheting` also starts a background
 `ratchetService.checkWorkspaceById(...)` evaluation so the workspace does not

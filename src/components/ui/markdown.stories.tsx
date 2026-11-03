@@ -18,6 +18,57 @@ export const PlainMarkdown: Story = {
   args: { content: '# Workspace notes\n\nPlain **Markdown** loads without the diagram engine.' },
 };
 
+const STREAMING_REPLY = [
+  '## Streaming reply',
+  '',
+  'Completed blocks stay parsed while the **last** block grows.',
+  '',
+  '```ts',
+  'const first = 1;',
+  '',
+  'const second = 2;',
+  '```',
+  '',
+  '- tight item',
+  '- loose item',
+  '',
+  '  continued',
+  '',
+  '| Column | Value |',
+  '| ------ | ----: |',
+  '| a      |     1 |',
+  '',
+  'The final paragraph is still arriving',
+].join('\n');
+
+function StreamingMarkdownDemo() {
+  const [length, setLength] = useState(STREAMING_REPLY.indexOf('| Column'));
+  const streaming = length < STREAMING_REPLY.length;
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={() => setLength(0)}>
+          Restart
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setLength((current) => Math.min(STREAMING_REPLY.length, current + 40))}
+        >
+          Stream 40 characters
+        </Button>
+      </div>
+      <MarkdownRenderer content={STREAMING_REPLY.slice(0, length)} streaming={streaming} />
+    </div>
+  );
+}
+
+/** Streaming renders the same output as a finished message, one block at a time. */
+export const Streaming: Story = {
+  args: { content: STREAMING_REPLY },
+  render: () => <StreamingMarkdownDemo />,
+};
+
 export const WindowsFileLinks: Story = {
   args: {
     content: [

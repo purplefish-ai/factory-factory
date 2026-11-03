@@ -945,7 +945,7 @@ describe('WorkspaceQueryService', () => {
     try {
       await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 1 });
       await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1');
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1', { force: false });
       });
 
       await expect(workspaceQueryService.syncAllPRStatuses('p2')).resolves.toEqual({ queued: 1 });
@@ -953,7 +953,7 @@ describe('WorkspaceQueryService', () => {
         excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       });
       await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2');
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2', { force: false });
       });
     } finally {
       resolveFirstRefresh?.({ success: true });

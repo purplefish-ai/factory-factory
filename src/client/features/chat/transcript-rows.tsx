@@ -2,7 +2,10 @@ import type { Virtualizer } from '@tanstack/react-virtual';
 import type { ReactNode } from 'react';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
 import { GroupedMessageItemRenderer } from './agent-activity';
-import { ThinkingCompletionProvider } from './agent-activity/message-renderers';
+import {
+  StreamingTextProvider,
+  ThinkingCompletionProvider,
+} from './agent-activity/message-renderers';
 import {
   createToolCallExpansionKey,
   createToolSequenceExpansionKey,
@@ -68,6 +71,17 @@ function TranscriptMessage({
   );
 }
 
+/** Queued prompts render after the active response, which may still be streaming. */
+function latestUnqueuedId(messages: GroupedMessageItem[], display: TranscriptDisplayProps) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const id = messages[index]?.id;
+    if (id !== undefined && !display.queuedMessageIds?.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
 /** Rendering only. The measured row includes its tail, so there is one extent. */
 export function TranscriptRows({
   display,
@@ -108,45 +122,48 @@ export function TranscriptRows({
       </>
     );
   };
+  const streamingMessageId = display.running ? latestUnqueuedId(layout.messages, display) : null;
   return (
     <ThinkingCompletionProvider
       lastThinkingMessageId={layout.lastThinkingMessageId}
       running={display.running}
     >
-      {display.loadingSession ? (
-        <div className="px-4 py-4">
-          {layout.keys.map((key, index) => (
-            <div key={key} className={contentClassName}>
-              {content(index)}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
-          {engine.getVirtualItems().map((row) => {
-            const item = layout.messages[row.index - layout.headerOffset];
-            return (
-              <div
-                key={row.key}
-                ref={engine.measureElement}
-                data-index={row.index}
-                data-transcript-key={row.key}
-                data-tool-sequence={item && isToolSequence(item) ? 'true' : undefined}
-                className="px-4 min-w-0"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${row.start}px)`,
-                }}
-              >
-                <div className={contentClassName}>{content(row.index)}</div>
+      <StreamingTextProvider streamingMessageId={streamingMessageId}>
+        {display.loadingSession ? (
+          <div className="px-4 py-4">
+            {layout.keys.map((key, index) => (
+              <div key={key} className={contentClassName}>
+                {content(index)}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        ) : (
+          <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
+            {engine.getVirtualItems().map((row) => {
+              const item = layout.messages[row.index - layout.headerOffset];
+              return (
+                <div
+                  key={row.key}
+                  ref={engine.measureElement}
+                  data-index={row.index}
+                  data-transcript-key={row.key}
+                  data-tool-sequence={item && isToolSequence(item) ? 'true' : undefined}
+                  className="px-4 min-w-0"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${row.start}px)`,
+                  }}
+                >
+                  <div className={contentClassName}>{content(row.index)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </StreamingTextProvider>
     </ThinkingCompletionProvider>
   );
 }

@@ -10,7 +10,7 @@ const sibling = { id: 'sibling', parentWorkspace: { id: 'parent' }, childWorkspa
 const unrelated = { id: 'other', parentWorkspace: null, childWorkspaceCount: 0 };
 const rows = [parent, child, sibling, unrelated];
 function Card({ workspace }: { workspace: (typeof rows)[number] }) {
-  const { highlighted, ...events } = useKanbanFamilyHighlight(workspace.id);
+  const { highlighted, ...events } = useKanbanFamilyHighlight(workspace);
   return (
     <div {...events} data-id={workspace.id} data-highlighted={highlighted}>
       <a href={`#${workspace.id}`}>{workspace.id}</a>
@@ -20,7 +20,7 @@ function Card({ workspace }: { workspace: (typeof rows)[number] }) {
 }
 const MemoConsumer = memo(function MemoConsumer({ onRender }: { onRender: () => void }) {
   onRender();
-  const { highlighted } = useKanbanFamilyHighlight('child');
+  const { highlighted } = useKanbanFamilyHighlight(child);
   return <span>{String(highlighted)}</span>;
 });
 // jsdom does not model browser :focus-visible modality. Send the keyboard event
@@ -185,4 +185,62 @@ it('clears only the unmounted card even when its workspace still exists in anoth
   expect(container.querySelectorAll('[data-highlighted="true"]')).toHaveLength(3);
   await act(() => root.render(render('child')));
   expect(container.querySelector('[data-highlighted="true"]')).toBeNull();
+});
+
+type Row = (typeof rows)[number] & { name?: string };
+const CountedCard = memo(function CountedCard({
+  workspace,
+  onRender,
+}: {
+  workspace: Row;
+  onRender: (id: string) => void;
+}) {
+  onRender(workspace.id);
+  const { highlighted, ...events } = useKanbanFamilyHighlight(workspace);
+  return <div {...events} data-id={workspace.id} data-highlighted={highlighted} />;
+});
+
+it('rerenders only the cards affected by a workspace update or a family hover', async () => {
+  const renders: string[] = [];
+  const countRender = (id: string) => renders.push(id);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (workspaces: Row[]) => (
+    <KanbanFamilyProvider workspaces={workspaces}>
+      {workspaces.map((workspace) => (
+        <CountedCard key={workspace.id} workspace={workspace} onRender={countRender} />
+      ))}
+    </KanbanFamilyProvider>
+  );
+  await act(() => root.render(render(rows)));
+  renders.length = 0;
+
+  // A snapshot patch yields a new list where only the changed row is replaced.
+  const updated = rows.map((row) => (row.id === 'other' ? { ...row, name: 'renamed' } : row));
+  await act(() => root.render(render(updated)));
+  expect(renders).toEqual(['other']);
+
+  renders.length = 0;
+  const hovered = container.querySelector('[data-id="child"]')!;
+  await act(() => hovered.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+  expect(
+    [...container.querySelectorAll('[data-highlighted="true"]')].map((node) =>
+      node.getAttribute('data-id')
+    )
+  ).toEqual(['parent', 'child', 'sibling']);
+  expect(renders.sort()).toEqual(['child', 'parent', 'sibling']);
+
+  renders.length = 0;
+  await act(() => root.render(render(updated.map((row) => ({ ...row })))));
+  expect(container.querySelectorAll('[data-highlighted="true"]')).toHaveLength(3);
+  renders.length = 0;
+  await act(() =>
+    hovered.dispatchEvent(
+      new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })
+    )
+  );
+  expect(container.querySelector('[data-highlighted="true"]')).toBeNull();
+  expect(renders.sort()).toEqual(['child', 'parent', 'sibling']);
 });

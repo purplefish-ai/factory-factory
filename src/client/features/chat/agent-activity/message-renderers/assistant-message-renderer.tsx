@@ -106,6 +106,7 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
       >
         <TextRenderer
           text={text}
+          messageId={messageId}
           resolveWorkspaceFileLink={resolveWorkspaceFileLink}
           onWorkspaceFileLink={onWorkspaceFileLink}
         />

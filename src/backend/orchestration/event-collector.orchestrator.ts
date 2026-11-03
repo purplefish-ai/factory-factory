@@ -615,7 +615,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     state.lastIdlePrRefreshByWorkspace.set(workspaceId, now);
 
     void dependencies.prSnapshotService
-      .refreshWorkspace(workspaceId)
+      .refreshWorkspace(workspaceId, { force: false })
       .then((result) => {
         if (result.success || result.reason === 'no_pr_url') {
           return;

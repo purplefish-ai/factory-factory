@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   workspaceListSetDataMock: vi.fn(),
   workspaceGetInvalidateMock: vi.fn(),
   refetchWorkspacesMock: vi.fn(),
+  syncAllPRStatusesMock: vi.fn(),
   workspaceListInvalidateMock: vi.fn(),
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
@@ -152,7 +153,7 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       syncAllPRStatuses: {
-        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+        useMutation: () => ({ mutate: mocks.syncAllPRStatusesMock, isPending: false }),
       },
       rename: {
         useMutation: () => ({ mutateAsync: vi.fn() }),
@@ -280,6 +281,17 @@ afterEach(() => {
   root = undefined;
   context = undefined;
   document.body.innerHTML = '';
+});
+
+describe('KanbanProvider PR sync', () => {
+  it('forces the explicit Sync action past the automatic refresh throttles', () => {
+    const kanban = renderProvider();
+    kanban.syncAndRefetch();
+    expect(mocks.syncAllPRStatusesMock).toHaveBeenCalledExactlyOnceWith({
+      projectId: 'project-1',
+      force: true,
+    });
+  });
 });
 
 describe('KanbanProvider archive failure handling', () => {

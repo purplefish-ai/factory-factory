@@ -1,12 +1,13 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const { mockFindById, mockRefreshWorkspace, mockWarn } = vi.hoisted(() => ({
+const { mockFindById, mockFindByProject, mockRefreshWorkspace, mockWarn } = vi.hoisted(() => ({
   mockFindById: vi.fn(),
+  mockFindByProject: vi.fn(),
   mockRefreshWorkspace: vi.fn(),
   mockWarn: vi.fn(),
 }));
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
-  workspaceAccessor: { findById: mockFindById },
+  workspaceAccessor: { findById: mockFindById, findByProjectIdWithSessions: mockFindByProject },
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -117,7 +118,9 @@ it('does not block another workspace while a manual sync is pending', async () =
     return { success: true };
   });
   const slow = workspaceQueryService.syncPRStatus('slow');
-  await vi.waitFor(() => expect(mockRefreshWorkspace).toHaveBeenCalledWith('slow'));
+  await vi.waitFor(() =>
+    expect(mockRefreshWorkspace).toHaveBeenCalledWith('slow', { force: false })
+  );
   try {
     await expect(workspaceQueryService.syncPRStatus('other')).resolves.toMatchObject({
       success: true,
@@ -137,4 +140,43 @@ it('releases the workspace queue after a failed sync', async () => {
   const next = workspaceQueryService.syncPRStatus('w');
   await expect(failed).rejects.toThrow('network unavailable');
   await expect(next).resolves.toMatchObject({ success: true });
+});
+
+it('keeps page-load syncs unforced and forwards explicit syncs as forced', async () => {
+  mockFindById.mockResolvedValue({ id: 'w', prState: 'OPEN', prs: [{ id: 'a' }] });
+  mockRefreshWorkspace.mockResolvedValue({ success: true });
+  await workspaceQueryService.syncPRStatus('w');
+  expect(mockRefreshWorkspace).toHaveBeenLastCalledWith('w', { force: false });
+  await workspaceQueryService.syncPRStatus('w', { force: true });
+  expect(mockRefreshWorkspace).toHaveBeenLastCalledWith('w', { force: true });
+});
+
+it('runs an explicit project sync while the automatic sweep is in flight', async () => {
+  let resolveAutomatic: ((result: { success: boolean }) => void) | undefined;
+  const automaticRefresh = new Promise<{ success: boolean }>((resolve) => {
+    resolveAutomatic = resolve;
+  });
+  mockFindByProject.mockResolvedValue([{ id: 'w', prs: [{ id: 'a' }] }]);
+  mockRefreshWorkspace.mockImplementation((_id: string, options: { force: boolean }) =>
+    options.force ? Promise.resolve({ success: true }) : automaticRefresh
+  );
+  try {
+    await expect(workspaceQueryService.syncAllPRStatuses('p')).resolves.toEqual({ queued: 1 });
+    await vi.waitFor(() => {
+      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: false });
+    });
+    // A repeated automatic sweep is still deduplicated.
+    await expect(workspaceQueryService.syncAllPRStatuses('p')).resolves.toEqual({ queued: 0 });
+    await expect(workspaceQueryService.syncAllPRStatuses('p', { force: true })).resolves.toEqual({
+      queued: 1,
+    });
+    await vi.waitFor(() => {
+      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: true });
+    });
+    expect(mockRefreshWorkspace).toHaveBeenCalledTimes(2);
+  } finally {
+    resolveAutomatic?.({ success: true });
+    await automaticRefresh;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
 });

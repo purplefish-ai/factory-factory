@@ -17,6 +17,7 @@ import type {
   WorkspacePRDelivery,
   WorkspacePREvent,
 } from '@prisma-gen/client';
+import { backupCollisionsAccessor } from './backup-collisions.accessor';
 import {
   readDeliveryEvents,
   getFrozenDeliveryMembers,
@@ -434,9 +435,12 @@ class WorkspacePrEventAccessor {
     rawEvents: z.infer<typeof prEventBackupSchema>[],
     options: { inert?: boolean } = {}
   ) {
+    const events = rawEvents.map((raw) => prEventBackupSchema.parse(raw));
+    if ((await backupCollisionsAccessor.findEventConflicts(tx, events)).size) {
+      throw new Error('Imported PR event or delivery identity already exists');
+    }
     let heldReceipts = 0;
-    for (const raw of rawEvents) {
-      const event = prEventBackupSchema.parse(raw);
+    for (const event of events) {
       if (
         event.workspaceId !== workspaceId ||
         (event.prId &&
@@ -445,6 +449,8 @@ class WorkspacePrEventAccessor {
         throw new Error('Imported PR event target is invalid');
       }
       validateImportedTarget(event, workspaceId);
+    }
+    for (const event of events) {
       await tx.workspacePREvent.create({
         data: {
           ...event,
@@ -457,9 +463,6 @@ class WorkspacePrEventAccessor {
     for (const id of new Set(
       rawEvents.flatMap((event) => (event.deliveryId ? [event.deliveryId] : []))
     )) {
-      if (await tx.workspacePRDelivery.findUnique({ where: { id } })) {
-        throw new Error('Imported PR delivery identity already exists');
-      }
       const delivery = await normalizeLegacyDelivery(tx, id, options.inert);
       heldReceipts += Number(
         options.inert &&
