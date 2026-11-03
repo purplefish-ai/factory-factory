@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -161,7 +161,9 @@ export const MultiplePullRequests: Story = {
       })
     );
     const menu = within(canvasElement.ownerDocument.body).getByRole('menu');
-    await expect(within(menu).getByText('#42 · Simplify workspace PR controls')).toBeVisible();
+    await waitFor(async () => {
+      await expect(within(menu).getByText('#42 · Simplify workspace PR controls')).toBeVisible();
+    });
     await expect(within(menu).getByText('#43 · Previous workspace change')).toBeVisible();
     await expect(within(menu).getByText('Closed')).toBeVisible();
     await expect(within(menu).getByText('CI Passing')).toBeVisible();
