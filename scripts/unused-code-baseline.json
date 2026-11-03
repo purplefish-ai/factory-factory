@@ -1007,19 +1007,7 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/client/features/composer/index.ts::exports::convertFileToAttachment": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/client/features/composer/index.ts::exports::usePaletteKeyboardNavigation": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::AttachmentCollectionResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::AttachmentConversionError": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
@@ -1327,17 +1315,9 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/shared/core/index.ts::exports::getWorkspaceActivityTooltip": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/shared/core/index.ts::types::WorkspaceSidebarActivityState": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/shared/core/workspace-sidebar-status.ts::exports::getWorkspaceActivityTooltip": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/shared/github-types.ts::types::SubmitReviewParams": {
       "disposition": "review-required",
@@ -1396,14 +1376,6 @@
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/shared/workspace-notifications.ts::exports::workspaceNotificationMessageId": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/shared/workspace-sidebar-status.ts::exports::getWorkspaceActivityTooltip": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/shared/workspace-sidebar-status.ts::types::WorkspaceSidebarActivityState": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     }
