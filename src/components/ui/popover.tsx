@@ -1,5 +1,6 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import type * as React from 'react';
+import { useOverlayPositioning } from '@/hooks/use-overlay-positioning';
 import { cn } from '@/lib/utils';
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -12,13 +13,17 @@ function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimiti
 
 function PopoverContent({
   className,
+  collisionPadding,
+  sticky,
   align = 'center',
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  const positioning = useOverlayPositioning(collisionPadding, sticky);
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        {...positioning}
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}

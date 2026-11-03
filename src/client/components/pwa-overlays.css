@@ -1,0 +1,23 @@
+/* Native window controls are outside the usable viewport for overlay content.
+ * Keep backdrops full-window so the title bar still dims with modal dialogs.
+ */
+@media (display-mode: window-controls-overlay) {
+  :root {
+    --overlay-titlebar-bottom: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px));
+    --overlay-dialog-top: calc(50% + var(--overlay-titlebar-bottom) / 2);
+  }
+
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'] {
+    max-height: calc(100dvh - var(--overlay-titlebar-bottom) - 2rem);
+    overflow-y: auto;
+  }
+
+  [data-slot='sheet-content'] {
+    max-height: calc(100dvh - var(--overlay-titlebar-bottom));
+  }
+
+  [data-slot='sheet-content']:not([data-side='bottom']) {
+    top: var(--overlay-titlebar-bottom);
+  }
+}

@@ -1,5 +1,6 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import type * as React from 'react';
+import { useOverlayPositioning } from '@/hooks/use-overlay-positioning';
 import { cn } from '@/lib/utils';
 
 function TooltipProvider({
@@ -25,14 +26,18 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
 
 function TooltipContent({
   className,
+  collisionPadding,
+  sticky,
   sideOffset = 4,
   children,
   showArrow = true,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content> & { showArrow?: boolean }) {
+  const positioning = useOverlayPositioning(collisionPadding, sticky);
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
+        {...positioning}
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
