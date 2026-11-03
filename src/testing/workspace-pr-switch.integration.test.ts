@@ -249,7 +249,7 @@ describe('successful PR switch snapshot publication', () => {
     emitOpen(fixture.prs, { prNumber: 41, prUrl: undefined });
 
     expectOpen(fixture.store);
-    expect(fixture.check).toHaveBeenCalledExactlyOnceWith('ws', { bypassPrFetchCooldown: true });
+    expect(fixture.check).toHaveBeenCalledExactlyOnceWith('ws');
   });
 
   it('still reports a newly linked merged PR as done during projection refresh', () => {

@@ -154,14 +154,12 @@ export type EventCollectorDependencies = {
 };
 
 function requestImmediateRatchetCheck(state: EventCollectorState, workspaceId: string): void {
-  void state.dependencies.ratchetService
-    .checkWorkspaceById(workspaceId, { bypassPrFetchCooldown: true })
-    .catch((error) => {
-      state.logger.warn('Failed immediate ratchet refresh after PR switch', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  void state.dependencies.ratchetService.checkWorkspaceById(workspaceId).catch((error) => {
+    state.logger.warn('Failed immediate ratchet refresh after PR switch', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
     });
+  });
 }
 
 /**
@@ -738,9 +736,9 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     );
 
     if (shouldRefreshRatchet) {
-      // Bypass the PR-fetch cooldown: this event was emitted by a sync that
-      // just registered its own fetch, so a plain check would be deduped into
-      // a no-op and the "immediate" refresh would wait for the next poll.
+      // Recompute monitoring and wake delivery immediately after the switch.
+      // Reuse observations just accepted by the sync; GitHub fetching retains
+      // the shared observation cooldown and terminal-PR policy.
       requestImmediateRatchetCheck(state, event.workspaceId);
     }
 

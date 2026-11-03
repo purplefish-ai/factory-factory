@@ -364,11 +364,7 @@ it.each(['switch', 'reopen'] as const)(
         prCiStatus: 'FAILURE',
         prReviewState: null,
       });
-      await vi.waitFor(() =>
-        expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1', {
-          bypassPrFetchCooldown: true,
-        })
-      );
+      await vi.waitFor(() => expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1'));
       expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber, prState: 'OPEN' });
     } finally {
       collector.stop();
@@ -529,9 +525,7 @@ it('shares PR and monitoring freshness without a broad workspace read or repeate
     resolveRead({ ...projection, prNumber: 99 });
     await vi.waitFor(() => expect(findRatchetProjection).toHaveBeenCalledTimes(3));
     expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber: 8, prState: 'OPEN' });
-    expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1', {
-      bypassPrFetchCooldown: true,
-    });
+    expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1');
     expect(markIssueCompleted).not.toHaveBeenCalled();
     expect(findById).not.toHaveBeenCalled();
 

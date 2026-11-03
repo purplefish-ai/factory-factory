@@ -166,7 +166,8 @@ export class RatchetService extends EventEmitter {
       results,
     };
   }
-  async checkWorkspaceById(workspaceId: string, _options?: { bypassPrFetchCooldown?: boolean }) {
+  /** Recompute and wake delivery using the same throttled observations as polling. */
+  async checkWorkspaceById(workspaceId: string) {
     if (this.stopped) {
       return null;
     }
