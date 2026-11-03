@@ -1,0 +1,116 @@
+import type { inferRouterOutputs } from '@trpc/server';
+import { createContext, type ReactElement, type ReactNode, useContext, useState } from 'react';
+import { downloadFile } from '@/client/lib/download-file';
+import type { AppRouter } from '@/client/lib/trpc';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+
+type ImportResult = inferRouterOutputs<AppRouter>['admin']['importData']['results'];
+const ImportResultsContext = createContext<{
+  publishImportResult: (result: ImportResult) => void;
+} | null>(null);
+
+export function useDataImportResults() {
+  const context = useContext(ImportResultsContext);
+  if (!context) {
+    throw new Error('DataImportButton requires DataImportResultsProvider');
+  }
+  return context;
+}
+
+export function DataImportResultsProvider({
+  children,
+  onDismiss,
+}: {
+  children: ReactNode;
+  onDismiss?: () => void;
+}): ReactElement {
+  const [pending, setPending] = useState<ImportResult[]>([]);
+  const active = pending[0];
+  const runtime = active?.inertTransforms;
+  return (
+    <ImportResultsContext.Provider
+      value={{ publishImportResult: (result) => setPending((queue) => [...queue, result]) }}
+    >
+      {children}
+      {active && runtime && (
+        <AlertDialog open>
+          <AlertDialogContent
+            className="max-h-[calc(100dvh-2rem)] flex flex-col"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              onDismiss?.();
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Import completed</AlertDialogTitle>
+              <AlertDialogDescription>
+                Actual imported and skipped records and runtime changes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="min-h-0 overflow-y-auto text-sm space-y-3">
+              <div>
+                {(
+                  [
+                    ['Projects', active.projects],
+                    ['Workspaces', active.workspaces],
+                    ['Agent sessions', active.agentSessions],
+                    ['Terminal sessions', active.terminalSessions],
+                  ] as const
+                ).map(([label, counts]) => (
+                  <p key={label}>
+                    {label}: {counts.imported} imported, {counts.skipped} skipped
+                  </p>
+                ))}
+                <p>
+                  User settings:{' '}
+                  {active.userSettings.imported
+                    ? 'imported'
+                    : active.userSettings.skipped
+                      ? 'skipped'
+                      : 'none'}
+                </p>
+              </div>
+              <p>
+                Runtime changes: {runtime.workspaceWorkflows} workspace workflows need manual
+                attention: {runtime.workspaceInitializations} initializations and{' '}
+                {runtime.workspaceArchives} archives; {runtime.runScripts} run scripts,{' '}
+                {runtime.terminalSessions} terminals and {runtime.agentSessions} agent sessions
+                stopped; {runtime.monitors} monitors disabled; {runtime.heldReceipts} receipts held;{' '}
+                {runtime.cancelledFacts} pending facts cancelled.
+              </p>
+              <p className="whitespace-pre-line">{runtime.explanations.join('\n\n')}</p>
+              <p>Runtime changes can overlap the record counts above.</p>
+              <p>Embedded row totals and account remapping totals: not reported.</p>
+            </div>
+            <AlertDialogFooter>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  downloadFile({
+                    data: JSON.stringify(active, null, 2),
+                    mimeType: 'application/json',
+                    fileName: 'factory-factory-import-result.json',
+                  })
+                }
+              >
+                Download JSON
+              </Button>
+              <AlertDialogCancel onClick={() => setPending((queue) => queue.slice(1))}>
+                Dismiss
+              </AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </ImportResultsContext.Provider>
+  );
+}
