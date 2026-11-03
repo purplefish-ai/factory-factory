@@ -4,10 +4,10 @@ import { toast } from 'sonner';
 import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import type { FileMentionKeyResult, SlashKeyResult } from '@/client/features/composer';
+import { collectAttachments } from '@/client/lib/attachment-file-conversion';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import { processFiles } from './file-processing';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
@@ -323,7 +323,10 @@ export function useChatInputActions({
         return;
       }
 
-      const { attachments: newAttachments, errors } = await processFiles(Array.from(files));
+      const { attachments: newAttachments, errors } = await collectAttachments({
+        mode: 'images-only',
+        files,
+      });
 
       // Show error toasts for failed files
       for (const { fileName, message } of errors) {

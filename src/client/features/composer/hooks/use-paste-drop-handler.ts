@@ -68,7 +68,10 @@ async function handleFileDrop(
     updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
   ) => void
 ): Promise<void> {
-  const { attachments: newAttachments, errors } = await collectAttachments(files);
+  const { attachments: newAttachments, errors } = await collectAttachments({
+    mode: 'images-and-text',
+    files,
+  });
 
   if (newAttachments.length > 0) {
     setAttachments((prev) => [...prev, ...newAttachments]);

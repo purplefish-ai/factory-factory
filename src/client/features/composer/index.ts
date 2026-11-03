@@ -14,15 +14,8 @@ export type {
   FileMentionPaletteProps,
 } from './file-mention-palette';
 export { FileMentionPalette } from './file-mention-palette';
-export type {
-  AttachmentCollectionResult,
-  AttachmentConversionError,
-} from '@/client/lib/attachment-file-conversion';
 // Hooks
-export {
-  collectAttachments,
-  convertFileToAttachment,
-} from '@/client/lib/attachment-file-conversion';
+export { collectAttachments } from '@/client/lib/attachment-file-conversion';
 export { usePasteDropHandler } from './hooks/use-paste-drop-handler';
 export { useProjectFileMentions } from './hooks/use-project-file-mentions';
 export { useSlashCommands } from './hooks/use-slash-commands';

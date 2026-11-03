@@ -1,11 +1,6 @@
 import type { MessageAttachment } from '@/lib/chat-protocol';
-import { formatBytes } from '@/lib/formatters';
-import {
-  fileToBase64,
-  generateAttachmentId,
-  isSupportedImageType,
-  MAX_IMAGE_SIZE,
-} from '@/lib/image-utils';
+import { generateAttachmentId, isSupportedImageType } from '@/lib/image-utils';
+import { collectAttachments } from './attachment-file-conversion';
 import { getClipboardImageBlob } from './clipboard-image';
 
 /**
@@ -84,11 +79,6 @@ export interface ClipboardImagesResult {
   errors: string[];
 }
 
-interface ClipboardImageProcessingResult {
-  attachment?: MessageAttachment;
-  error?: string;
-}
-
 interface ExtractedClipboardImage {
   type: string;
   file: File | null;
@@ -109,76 +99,6 @@ function extractClipboardImages(items: DataTransferItemList): ExtractedClipboard
     .map((item) => ({ type: item.type, file: item.getAsFile() }));
 }
 
-function buildClipboardImageName(file: File, itemType: string): string {
-  if (file.name) {
-    return file.name;
-  }
-
-  const extension = itemType.split('/')[1];
-  return `pasted-image-${Date.now()}.${extension}`;
-}
-
-async function processClipboardImage(
-  file: File | null,
-  type: string
-): Promise<ClipboardImageProcessingResult> {
-  if (!file) {
-    return { error: `Could not extract image from clipboard (${type})` };
-  }
-
-  if (file.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatBytes(file.size, { precision: 1 });
-    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
-    return { error: `Image too large: ${actualSize} (max ${maxSize})` };
-  }
-
-  try {
-    const base64 = await fileToBase64(file);
-    return {
-      attachment: {
-        id: generateAttachmentId(),
-        name: buildClipboardImageName(file, type),
-        type,
-        size: file.size,
-        data: base64,
-        contentType: 'image',
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { error: `Failed to read image: ${message}` };
-  }
-}
-
-async function processClipboardImageBlob(blob: Blob): Promise<ClipboardImageProcessingResult> {
-  if (blob.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatBytes(blob.size, { precision: 1 });
-    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
-    return { error: `Image too large: ${actualSize} (max ${maxSize})` };
-  }
-
-  const type = blob.type || 'image/png';
-  const extension = type.split('/')[1] ?? 'png';
-  const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type });
-
-  try {
-    const base64 = await fileToBase64(file);
-    return {
-      attachment: {
-        id: generateAttachmentId(),
-        name: file.name,
-        type,
-        size: blob.size,
-        data: base64,
-        contentType: 'image',
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { error: `Failed to read image: ${message}` };
-  }
-}
-
 /**
  * Extract images from clipboard and convert to MessageAttachments.
  * Uses partial success pattern - continues processing after individual failures,
@@ -194,33 +114,32 @@ async function processClipboardImageBlob(blob: Blob): Promise<ClipboardImageProc
 export async function getClipboardImages(event: ClipboardEvent): Promise<ClipboardImagesResult> {
   const items = event.clipboardData?.items;
 
-  const attachments: MessageAttachment[] = [];
-  const errors: string[] = [];
-
   // Extract synchronously first — see extractClipboardImages — then convert.
-  const imageItems = items ? extractClipboardImages(items) : [];
-  for (const { file, type } of imageItems) {
-    const result = await processClipboardImage(file, type);
-    if (result.attachment) {
-      attachments.push(result.attachment);
-    }
-    if (result.error) {
-      errors.push(result.error);
-    }
-  }
+  const images = items ? extractClipboardImages(items) : [];
+  // With no usable event items, start the platform fallback in this dispatch.
+  const result =
+    images.length > 0
+      ? await collectAttachments({ mode: 'clipboard-images', images })
+      : { attachments: [], errors: [] };
+  const attachments = result.attachments;
+  const errors = result.errors.map(({ message }) => message);
 
   if (attachments.length === 0) {
     const blob = await getClipboardImageBlob();
     if (blob) {
-      const result = await processClipboardImageBlob(blob);
-      if (result.attachment) {
-        // The fallback recovered the same image the direct extraction above
-        // failed on — drop those errors so a successful paste doesn't still
-        // surface an error toast.
+      const type = blob.type || 'image/png';
+      const extension = type.split('/')[1] ?? 'png';
+      const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type });
+      const fallback = await collectAttachments({
+        mode: 'clipboard-images',
+        images: [{ file, type }],
+      });
+      if (fallback.attachments.length > 0) {
+        // The fallback recovered the same image; suppress direct-extraction errors.
         errors.length = 0;
-        attachments.push(result.attachment);
-      } else if (result.error) {
-        errors.push(result.error);
+        attachments.push(...fallback.attachments);
+      } else {
+        errors.push(...fallback.errors.map(({ message }) => message));
       }
     }
   }

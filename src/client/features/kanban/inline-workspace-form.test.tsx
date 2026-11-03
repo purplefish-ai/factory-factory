@@ -436,6 +436,10 @@ it('keeps late attachment conversion in its original project after switching', a
   const input = mounted.container.querySelector<HTMLInputElement>('input[type="file"]');
   Object.defineProperty(input, 'files', { value: [new File(['x'], 'notes.txt')] });
   actFlushSync(() => input?.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(collectAttachmentsMock).toHaveBeenCalledWith({
+    mode: 'images-and-text',
+    files: input?.files,
+  });
   await act(() => {
     mounted.root.render(
       createFormElement({

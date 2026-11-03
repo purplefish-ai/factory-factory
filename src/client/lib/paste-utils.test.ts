@@ -125,7 +125,7 @@ describe('getClipboardImages', () => {
   });
 
   it('falls back to the platform PNG channel for an unsupported image type', async () => {
-    const pngBlob = { size: 4, type: 'image/png' } as Blob;
+    const pngBlob = new Blob(['data'], { type: 'image/png' });
     vi.mocked(getClipboardImageBlob).mockResolvedValueOnce(pngBlob);
 
     // A macOS screenshot's TIFF representation: present but not directly usable.
@@ -141,6 +141,63 @@ describe('getClipboardImages', () => {
       data: 'base64-data',
       contentType: 'image',
     });
+  });
+
+  it('captures all clipboard files before waiting for the first image read', async () => {
+    let finish: (value: string) => void = () => undefined;
+    vi.mocked(fileToBase64).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    let expired = false;
+    const items = ['first.png', 'second.png'].map(
+      (name) =>
+        ({
+          kind: 'file',
+          get type() {
+            return expired ? '' : 'image/png';
+          },
+          getAsFile: () => (expired ? null : new File(['img'], name, { type: 'image/png' })),
+        }) as DataTransferItem
+    );
+    const pending = getClipboardImages(createClipboardEvent(items));
+    expired = true;
+    finish('first');
+    const result = await pending;
+    expect(result.attachments.map(({ name }) => name)).toEqual(['first.png', 'second.png']);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('starts the platform fallback before yielding when no supported items exist', async () => {
+    const pending = getClipboardImages(
+      createClipboardEvent([createClipboardItem({ type: 'image/tiff', file: null })])
+    );
+    expect(getClipboardImageBlob).toHaveBeenCalledOnce();
+    await pending;
+  });
+
+  it('suppresses direct extraction errors after a successful platform fallback', async () => {
+    vi.mocked(getClipboardImageBlob).mockResolvedValueOnce(new Blob(['png'], { type: '' }));
+    const result = await getClipboardImages(
+      createClipboardEvent([createClipboardItem({ type: 'image/png', file: null })])
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.attachments[0]).toMatchObject({
+      name: expect.stringMatching(/^pasted-image-.*\.png$/),
+      type: 'image/png',
+      size: 3,
+    });
+  });
+
+  it('reports an oversized fallback image without attempting a read', async () => {
+    vi.mocked(getClipboardImageBlob).mockResolvedValueOnce(
+      new Blob(['123456'], { type: 'image/png' })
+    );
+    const result = await getClipboardImages(createClipboardEvent());
+    expect(result).toEqual({ attachments: [], errors: ['Image too large: 6 B (max 5 B)'] });
+    expect(fileToBase64).not.toHaveBeenCalled();
   });
 
   it('does not use the platform fallback when a supported image was extracted', async () => {
