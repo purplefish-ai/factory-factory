@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
@@ -249,15 +250,30 @@ it('bounds held-writer contention, returns whole-import CONFLICT and permits a f
 it('rejects invalid input before discovering or opening a private writer', async () => {
   const discovery = vi.spyOn(db.prisma, '$queryRaw');
   try {
-    await expect(
-      dataBackupService.importData({
-        ...backup,
-        data: {
-          ...backup.data,
-          projects: backup.data.projects.map((row) => ({ ...row, slug: '' })),
-        },
-      })
-    ).rejects.toThrow();
+    const imported = dataBackupService.importData({
+      ...backup,
+      data: {
+        ...backup.data,
+        projects: backup.data.projects.map((row) => ({ ...row, slug: '' })),
+      },
+    });
+    await expect(imported).rejects.toBeInstanceOf(ZodError);
+    await expect(imported).rejects.toMatchObject({
+      issues: [
+        expect.objectContaining({
+          code: 'invalid_union',
+          errors: expect.arrayContaining([
+            [
+              expect.objectContaining({
+                code: 'too_small',
+                minimum: 1,
+                path: ['data', 'projects', 0, 'slug'],
+              }),
+            ],
+          ]),
+        }),
+      ],
+    });
     expect(discovery).not.toHaveBeenCalled();
     await expectRolledBack();
   } finally {

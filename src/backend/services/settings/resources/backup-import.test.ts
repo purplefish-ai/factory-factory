@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { PrismaClient } from '@prisma-gen/client';
 
@@ -49,19 +50,36 @@ it('uses a private tuned writer on the actual file with finite budgets', async (
 });
 
 it.each([
-  null,
-  {},
-  [],
-  [{ name: 'main', file: '' }],
-  [{ name: 'main', file: ':memory:' }],
-  [{ name: 'main', file: 'relative.db' }],
-  [{ name: 'main', file: 4 }],
-  [
-    { name: 'main', file: '/a' },
-    { name: 'main', file: '/b' },
-  ],
-])('rejects invalid main paths before private construction: %j', async (rows) => {
-  await expect(withBackupImport(source(rows), vi.fn())).rejects.toThrow();
+  { rows: null, path: [], expected: 'array' },
+  { rows: {}, path: [], expected: 'array' },
+  { rows: [{ name: 'main', file: 4 }], path: [0, 'file'], expected: 'string' },
+])(
+  'rejects malformed source database rows with the original validation error: $rows',
+  async ({ rows, path, expected }) => {
+    const imported = withBackupImport(source(rows), vi.fn());
+    await expect(imported).rejects.toBeInstanceOf(ZodError);
+    await expect(imported).rejects.toMatchObject({
+      issues: [expect.objectContaining({ code: 'invalid_type', path, expected })],
+    });
+    expect(state.adapter).not.toHaveBeenCalled();
+  }
+);
+
+it.each([
+  { rows: [] },
+  { rows: [{ name: 'main', file: '' }] },
+  { rows: [{ name: 'main', file: ':memory:' }] },
+  { rows: [{ name: 'main', file: 'relative.db' }] },
+  {
+    rows: [
+      { name: 'main', file: '/a' },
+      { name: 'main', file: '/b' },
+    ],
+  },
+])('rejects invalid main paths before private construction: $rows', async ({ rows }) => {
+  await expect(withBackupImport(source(rows), vi.fn())).rejects.toThrow(
+    new Error('Backup requires exactly one file-backed main database')
+  );
   expect(state.adapter).not.toHaveBeenCalled();
 });
 
@@ -93,7 +111,9 @@ it('classifies discovery and adapter construction failures too', async () => {
   const failure = { code: 'SQLITE_BUSY' };
   const db = source();
   vi.mocked(db.$queryRaw).mockRejectedValue(failure);
-  await expect(withBackupImport(db, vi.fn())).rejects.toBeInstanceOf(ApplicationError);
+  const discoveryFailure = withBackupImport(db, vi.fn());
+  await expect(discoveryFailure).rejects.toBeInstanceOf(ApplicationError);
+  await expect(discoveryFailure).rejects.toMatchObject({ code: 'CONFLICT', cause: failure });
   expect(state.adapter).not.toHaveBeenCalled();
   state.adapter.mockImplementation(() => {
     throw failure;

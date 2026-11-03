@@ -67,7 +67,10 @@ it('rejects missing files without creating them and uses the configured physical
   const source: Pick<PrismaClient, '$queryRaw'> = {
     $queryRaw: vi.fn().mockResolvedValue([{ name: 'main', file: missing }]),
   };
-  await expect(withBackupImport(source, (tx) => tx.project.findMany())).rejects.toThrow();
+  await expect(withBackupImport(source, (tx) => tx.project.findMany())).rejects.toMatchObject({
+    code: 'SQLITE_CANTOPEN',
+    message: 'unable to open database file',
+  });
   expect(existsSync(missing)).toBe(false);
   await expect(
     withBackupImport(db.prisma, (tx) => tx.$queryRaw`PRAGMA busy_timeout`)
