@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { captureWorkspaceRunResults } from '@/backend/orchestration/workspace-deletion.orchestrator';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -76,6 +76,7 @@ beforeEach(async () => {
   await db.prisma.workspaceLaunchOrigin.deleteMany();
 });
 afterAll(async () => destroyIntegrationDatabase(db));
+afterEach(() => vi.restoreAllMocks());
 
 async function local() {
   await db.prisma.project.create({ data: project('local') });
@@ -108,9 +109,9 @@ function snapshot() {
     db.prisma.workspaceChildOrigin.findMany(),
   ]);
 }
-async function expectGroupSkipped(input = structuredClone(source)) {
+async function expectGroupSkipped(input: unknown = structuredClone(source)) {
   const before = await snapshot();
-  const result = await dataBackupService.importData(input);
+  const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [input]);
   expect(result.workspaces).toEqual({ imported: 1, skipped: 2 });
   expect(result.agentSessions).toEqual({ imported: 0, skipped: 1 });
   expect(result.terminalSessions).toEqual({ imported: 0, skipped: 1 });
@@ -246,9 +247,13 @@ it('excludes a globally colliding PR and its descendants', async () => {
   });
   await expectGroupSkipped();
 });
-it.each([5, 6, 7])(
-  'excludes a version %s fallback PR collision and descendants while importing a healthy group',
-  async (version) => {
+it.each([
+  { version: 5, format: 'compatible v5 union' },
+  { version: 6, format: 'current v6' },
+  { version: 7, format: 'current v7' },
+])(
+  'excludes a $format fallback PR collision and descendants while importing a healthy group',
+  async ({ version }) => {
     const input = structuredClone(source);
     Reflect.set(input.meta, 'schemaVersion', version);
     const root = input.data.workspaces.find((workspace) => workspace.id === 'root')!;
@@ -270,46 +275,47 @@ it.each([5, 6, 7])(
   }
 );
 
-it.each([5, 6, 7])(
-  'imports a version %s fallback PR with its original identity and fields',
-  async (version) => {
-    const input = structuredClone(source);
-    Reflect.set(input.meta, 'schemaVersion', version);
-    const root = input.data.workspaces.find((workspace) => workspace.id === 'root')!;
-    Object.assign(root, {
-      prs: [],
-      prNumber: 42,
-      prState: 'OPEN',
-      prReviewState: 'CHANGES_REQUESTED',
-      prCiStatus: 'FAILURE',
-      ratchetState: 'MERGE_CONFLICT',
-      prUpdatedAt: '2026-10-01T01:00:00.000Z',
-      prCiFailedAt: '2026-10-01T02:00:00.000Z',
-      prCiLastNotifiedAt: '2026-10-01T03:00:00.000Z',
-      prReviewLastCheckedAt: '2026-10-01T04:00:00.000Z',
-      prReviewLastCommentId: 'original-comment',
-    });
-    const result = await dataBackupService.importData(input);
-    expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
-    expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'root' } })).toEqual([
-      expect.objectContaining({
-        id: 'legacy-pr-root',
-        workspaceId: 'root',
-        url: 'https://github.com/o/r/pull/1',
-        number: 42,
-        state: 'OPEN',
-        reviewState: 'CHANGES_REQUESTED',
-        ciStatus: 'FAILURE',
-        hasMergeConflict: true,
-        syncedAt: new Date('2026-10-01T01:00:00.000Z'),
-        ciFailedAt: new Date('2026-10-01T02:00:00.000Z'),
-        ciLastNotifiedAt: new Date('2026-10-01T03:00:00.000Z'),
-        reviewLastCheckedAt: new Date('2026-10-01T04:00:00.000Z'),
-        reviewLastCommentId: 'original-comment',
-      }),
-    ]);
-  }
-);
+it.each([
+  { version: 5, format: 'compatible v5 union' },
+  { version: 6, format: 'current v6' },
+  { version: 7, format: 'current v7' },
+])('imports a $format fallback PR with its original identity and fields', async ({ version }) => {
+  const input = structuredClone(source);
+  Reflect.set(input.meta, 'schemaVersion', version);
+  const root = input.data.workspaces.find((workspace) => workspace.id === 'root')!;
+  Object.assign(root, {
+    prs: [],
+    prNumber: 42,
+    prState: 'OPEN',
+    prReviewState: 'CHANGES_REQUESTED',
+    prCiStatus: 'FAILURE',
+    ratchetState: 'MERGE_CONFLICT',
+    prUpdatedAt: '2026-10-01T01:00:00.000Z',
+    prCiFailedAt: '2026-10-01T02:00:00.000Z',
+    prCiLastNotifiedAt: '2026-10-01T03:00:00.000Z',
+    prReviewLastCheckedAt: '2026-10-01T04:00:00.000Z',
+    prReviewLastCommentId: 'original-comment',
+  });
+  const result = await dataBackupService.importData(input);
+  expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+  expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'root' } })).toEqual([
+    expect.objectContaining({
+      id: 'legacy-pr-root',
+      workspaceId: 'root',
+      url: 'https://github.com/o/r/pull/1',
+      number: 42,
+      state: 'OPEN',
+      reviewState: 'CHANGES_REQUESTED',
+      ciStatus: 'FAILURE',
+      hasMergeConflict: true,
+      syncedAt: new Date('2026-10-01T01:00:00.000Z'),
+      ciFailedAt: new Date('2026-10-01T02:00:00.000Z'),
+      ciLastNotifiedAt: new Date('2026-10-01T03:00:00.000Z'),
+      reviewLastCheckedAt: new Date('2026-10-01T04:00:00.000Z'),
+      reviewLastCommentId: 'original-comment',
+    }),
+  ]);
+});
 
 it.each(['implement', 'pr-monitoring'])(
   'excludes a globally colliding %s session without borrowing its runtime',
@@ -494,4 +500,200 @@ it('never attaches sessions or terminals whose file workspace is absent to an ex
   expect(result.inertTransforms.agentSessions).toBe(0);
   expect(result.inertTransforms.terminalSessions).toBe(0);
   expect((await snapshot()).slice(1)).toEqual(before.slice(1));
+});
+
+async function expectPublishedV5Baseline() {
+  const input = publishedVersion5Backup();
+  const root = input.data.workspaces.find((w) => w.id === 'root')!;
+  expect(root).not.toHaveProperty('prUrl');
+  expect(root.ratchetActivePrId).toBe('pr-root');
+  expect(root.prs[0]!.ratchet.dispatchSnapshotKey).toBe('historical-dispatch');
+  expect(input.data.agentSessions[0]!.workspacePrId).toBe('pr-root');
+  const parsed = exportDataSchema.parse(input);
+  const normalized = parsed.data.workspaces.find((w) => w.id === 'root')!;
+  expect(parsed.meta.schemaVersion).toBe(6);
+  expect(normalized.prUrl).toBeNull();
+  expect(normalized.prs[0]).not.toHaveProperty('ratchet');
+  expect(normalized.prMonitoring).toMatchObject({
+    legacySessionIds: ['session'],
+    deliveryPauseReason: 'LEGACY_FIXER',
+  });
+  const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [input]);
+  expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+  expect(result.agentSessions).toEqual({ imported: 1, skipped: 0 });
+  expect(result.terminalSessions).toEqual({ imported: 1, skipped: 0 });
+  expect(await db.prisma.workspacePR.findUnique({ where: { id: 'pr-root' } })).toMatchObject({
+    workspaceId: 'root',
+    number: 1,
+  });
+  expect(await db.prisma.workspacePR.findUnique({ where: { id: 'legacy-pr-root' } })).toBeNull();
+  expect(await db.prisma.agentSession.findUnique({ where: { id: 'session' } })).toMatchObject({
+    workspacePrId: 'pr-root',
+  });
+  expect(
+    await db.prisma.workspacePRDiscovery.findUnique({ where: { workspaceId: 'root' } })
+  ).toMatchObject({ retryCount: 2 });
+  expect(
+    await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: 'root' } })
+  ).toMatchObject({
+    enabled: false,
+    legacySessionIds: ['session'],
+    deliveryPauseReason: 'LEGACY_FIXER',
+  });
+  expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
+  await clearIntegrationDatabase(db.prisma);
+  await db.prisma.workspaceChildOrigin.deleteMany();
+  await db.prisma.workspaceLaunchOrigin.deleteMany();
+}
+
+it('excludes published v5 explicit PR collisions after proving raw migration', async () => {
+  await expectPublishedV5Baseline();
+  await local();
+  await db.prisma.workspacePR.create({
+    data: { id: 'pr-root', workspaceId: 'local', url: 'https://github.com/local/repo/pull/99' },
+  });
+  await expectGroupSkipped(publishedVersion5Backup());
+});
+
+it('preserves published v5 nested PR identity and fields after proving raw migration', async () => {
+  await expectPublishedV5Baseline();
+  const input = publishedVersion5Backup();
+  const pr = input.data.workspaces.find((w) => w.id === 'root')!.prs[0]!;
+  Object.assign(pr, {
+    number: 42,
+    reviewState: 'CHANGES_REQUESTED',
+    ciStatus: 'FAILURE',
+    hasMergeConflict: true,
+    syncedAt: '2026-10-01T01:00:00.000Z',
+    ciFailedAt: '2026-10-01T02:00:00.000Z',
+    ciLastNotifiedAt: '2026-10-01T03:00:00.000Z',
+    reviewLastCheckedAt: '2026-10-01T04:00:00.000Z',
+    reviewLastCommentId: 'original-comment',
+  });
+  expect(
+    (await Reflect.apply(dataBackupService.importData, dataBackupService, [input])).workspaces
+      .imported
+  ).toBe(3);
+  expect(await db.prisma.workspacePR.findUnique({ where: { id: 'pr-root' } })).toMatchObject({
+    id: 'pr-root',
+    workspaceId: 'root',
+    url: 'https://github.com/o/r/pull/1',
+    number: 42,
+    state: 'OPEN',
+    reviewState: 'CHANGES_REQUESTED',
+    ciStatus: 'FAILURE',
+    hasMergeConflict: true,
+    syncedAt: new Date('2026-10-01T01:00:00.000Z'),
+    ciFailedAt: new Date('2026-10-01T02:00:00.000Z'),
+    ciLastNotifiedAt: new Date('2026-10-01T03:00:00.000Z'),
+    reviewLastCheckedAt: new Date('2026-10-01T04:00:00.000Z'),
+    reviewLastCommentId: 'original-comment',
+  });
+  expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
+});
+
+it('emits only explicit PR identities when a flat URL and foreign fallback ID also exist', async () => {
+  await local();
+  await db.prisma.workspacePR.create({
+    data: {
+      id: 'legacy-pr-root',
+      workspaceId: 'local',
+      url: 'https://github.com/local/repo/pull/99',
+    },
+  });
+  const before = await snapshot();
+  expect((await dataBackupService.importData(source)).workspaces.imported).toBe(3);
+  expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'root' } })).toEqual([
+    expect.objectContaining({ id: 'pr-root' }),
+  ]);
+  const after = await snapshot();
+  expect(after[1].find((w) => w.id === 'local')).toEqual(before[1].find((w) => w.id === 'local'));
+});
+
+function expectSkipDiagnostics(output: string[], id: string, reason: string) {
+  expect(
+    output.some((line) => line.includes(`"${id}"`) && line.includes(`"reason":"${reason}"`))
+  ).toBe(true);
+}
+function captureWarnings() {
+  const output: string[] = [];
+  vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+    output.push(String(message));
+  });
+  return output;
+}
+it('explains PR group and child/session/terminal skips without disclosing authored content', async () => {
+  await local();
+  await db.prisma.workspacePR.create({
+    data: {
+      id: 'pr-root',
+      workspaceId: 'local',
+      url: 'https://github.com/private-secret/repo/pull/99',
+    },
+  });
+  const input = structuredClone(source);
+  input.data.workspaces.find((w) => w.id === 'root')!.creationMetadata = {
+    secret: 'authored-secret-sentinel',
+  };
+  const output = captureWarnings();
+  await expectGroupSkipped(input);
+  expectSkipDiagnostics(output, 'root', 'pr-id-collision');
+  expectSkipDiagnostics(output, 'child', 'parent-not-admitted');
+  expectSkipDiagnostics(output, 'session', 'workspace-not-imported');
+  expectSkipDiagnostics(output, 'terminal', 'workspace-not-imported');
+  expect(output.join('\n')).not.toMatch(/private-secret|authored-secret-sentinel|https:\/\//);
+});
+
+it.each(['missing', 'incompatible', 'slug'] as const)(
+  'explains %s project exclusions and orphan session/terminal skips',
+  async (kind) => {
+    const input = structuredClone(source);
+    if (kind === 'missing') {
+      input.data.projects = input.data.projects.filter((p) => p.id !== 'p');
+      input.data.agentSessions[0]!.workspaceId = 'absent-workspace';
+      input.data.terminalSessions[0]!.workspaceId = 'absent-workspace';
+    } else {
+      await db.prisma.project.create({
+        data:
+          kind === 'slug'
+            ? { ...project('local'), slug: 'p' }
+            : { ...project('p'), repoPath: '/private-secret-path' },
+      });
+    }
+    const before = await db.prisma.project.findMany();
+    const output = captureWarnings();
+    const result = await dataBackupService.importData(input);
+    expect(result.workspaces).toEqual({ imported: 1, skipped: 2 });
+    expect(result.agentSessions).toEqual({ imported: 0, skipped: 1 });
+    expect(result.terminalSessions).toEqual({ imported: 0, skipped: 1 });
+    expect(await db.prisma.workspace.findUnique({ where: { id: 'healthy' } })).not.toBeNull();
+    for (const p of before) {
+      expect(await db.prisma.project.findUnique({ where: { id: p.id } })).toEqual(p);
+    }
+    expectSkipDiagnostics(output, 'root', 'project-unavailable');
+    expectSkipDiagnostics(output, 'session', 'workspace-not-imported');
+    expectSkipDiagnostics(output, 'terminal', 'workspace-not-imported');
+    if (kind !== 'missing') {
+      expectSkipDiagnostics(
+        output,
+        'p',
+        kind === 'slug' ? 'project-slug-collision' : 'incompatible-project-identity'
+      );
+    }
+    expect(output.join('\n')).not.toContain('/private-secret-path');
+  }
+);
+
+it('explains an independent terminal collision while preserving its local owner', async () => {
+  await local();
+  await db.prisma.terminalSession.create({
+    data: { id: 'terminal', workspaceId: 'local', name: 'Local', status: 'RUNNING', pid: 789 },
+  });
+  const before = await db.prisma.terminalSession.findUnique({ where: { id: 'terminal' } });
+  const output = captureWarnings();
+  const result = await dataBackupService.importData(source);
+  expect(result.workspaces.imported).toBe(3);
+  expect(result.terminalSessions).toEqual({ imported: 0, skipped: 1 });
+  expect(await db.prisma.terminalSession.findUnique({ where: { id: 'terminal' } })).toEqual(before);
+  expectSkipDiagnostics(output, 'terminal', 'terminal-id-collision');
 });

@@ -234,6 +234,12 @@ async function importWorkspaces(
       (workspace.parentWorkspaceId !== null &&
         !importedWorkspaceIds.includes(workspace.parentWorkspaceId))
     ) {
+      if (eligibleWorkspaceIds.has(workspace.id)) {
+        logger.warn('Skipping backup child workspace', {
+          workspaceId: workspace.id,
+          reason: 'parent-not-imported',
+        });
+      }
       counter.skipped++;
       continue;
     }
@@ -314,6 +320,10 @@ async function importAgentSessions(
 
   for (const s of sessions) {
     if (!importedWorkspaceIds.has(s.workspaceId)) {
+      logger.warn('Skipping backup agent session', {
+        sessionId: s.id,
+        reason: 'workspace-not-imported',
+      });
       counter.skipped++;
       continue;
     }
@@ -368,12 +378,20 @@ async function importTerminalSessions(
 
   for (const s of sessions) {
     if (!importedWorkspaceIds.has(s.workspaceId)) {
+      logger.warn('Skipping backup terminal session', {
+        terminalSessionId: s.id,
+        reason: 'workspace-not-imported',
+      });
       counter.skipped++;
       continue;
     }
 
     const existing = await tx.terminalSession.findUnique({ where: { id: s.id } });
     if (existing) {
+      logger.warn('Skipping backup terminal session', {
+        terminalSessionId: s.id,
+        reason: 'terminal-id-collision',
+      });
       counter.skipped++;
       continue;
     }

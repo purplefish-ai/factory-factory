@@ -595,9 +595,13 @@ it.each([6, 7])('imports a version %s null-PR control as an inert fact', async (
   await clearIntegrationDatabase(db.prisma);
 });
 
-it.each([5, 6, 7])(
-  'rejects a version %s fallback-versus-explicit PR identity before discovery',
-  async (version) => {
+it.each([
+  { version: 5, format: 'compatible v5 union' },
+  { version: 6, format: 'current v6' },
+  { version: 7, format: 'current v7' },
+])(
+  'rejects a $format fallback-versus-explicit PR identity before discovery',
+  async ({ version }) => {
     const b = backup();
     Reflect.set(b.meta, 'schemaVersion', version);
     root(b).prs = [];
@@ -622,3 +626,202 @@ it.each([5, 6, 7])(
     }
   }
 );
+
+function fallbackBackup(version: number) {
+  const b = backup();
+  Reflect.set(b.meta, 'schemaVersion', version);
+  root(b).prs = [];
+  const event = root(b).prEvents[0]!;
+  event.prId = 'legacy-pr-root';
+  event.payload = {
+    kind: 'CI_FAILED',
+    target: { workspaceId: 'root', prId: 'legacy-pr-root' },
+    observation: redObservation,
+  };
+  b.data.agentSessions[0]!.workspacePrId = 'legacy-pr-root';
+  return b;
+}
+
+it.each([6, 7])(
+  'imports a v%s fallback-owned event without a referring session',
+  async (version) => {
+    const b = fallbackBackup(version);
+    b.data.agentSessions[0]!.workspacePrId = null;
+    expect(exportDataSchema.safeParse(b).success).toBe(true);
+    const result = await dataBackupService.importData(b);
+    expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+    expect(result.inertTransforms.cancelledFacts).toBe(1);
+    expect(await db.prisma.workspacePREvent.findUnique({ where: { id: 'event' } })).toMatchObject({
+      workspaceId: 'root',
+      prId: 'legacy-pr-root',
+      state: 'CANCELLED',
+      deliveredAt: null,
+      payload: { target: { workspaceId: 'root', prId: 'legacy-pr-root' } },
+    });
+    expect(
+      await db.prisma.workspacePR.findUnique({ where: { id: 'legacy-pr-root' } })
+    ).toMatchObject({ workspaceId: 'root' });
+    await clearIntegrationDatabase(db.prisma);
+  }
+);
+
+it.each([6, 7])(
+  'imports a v%s fallback-owned dedicated-workflow session without inventing a binding',
+  async (version) => {
+    const b = fallbackBackup(version);
+    root(b).prEvents = [];
+    b.data.agentSessions[0]!.workflow = 'pr-monitoring';
+    expect(exportDataSchema.safeParse(b).success).toBe(true);
+    const result = await dataBackupService.importData(b);
+    expect(result.agentSessions).toEqual({ imported: 1, skipped: 0 });
+    expect(await db.prisma.agentSession.findUnique({ where: { id: 'session' } })).toMatchObject({
+      workspaceId: 'root',
+      workspacePrId: 'legacy-pr-root',
+      workflow: 'pr-monitoring',
+    });
+    expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
+    expect(await db.prisma.workspace.findUnique({ where: { id: 'healthy' } })).not.toBeNull();
+    await clearIntegrationDatabase(db.prisma);
+  }
+);
+
+const invalidFallbackReferences: [string, Mutation, (string | number)[], string][] = [
+  [
+    'unknown event PR',
+    (b) => {
+      root(b).prEvents[0]!.prId = 'absent';
+    },
+    ['data', 'workspaces', 0, 'prEvents'],
+    foreignEvent,
+  ],
+  [
+    'payload PR',
+    (b) => {
+      root(b).prEvents[0]!.payload = {
+        kind: 'CI_FAILED',
+        target: { workspaceId: 'root', prId: 'pr-child' },
+        observation: redObservation,
+      };
+    },
+    ['data', 'workspaces', 0, 'prEvents'],
+    foreignEvent,
+  ],
+  [
+    'outer workspace',
+    (b) => {
+      root(b).prEvents[0]!.workspaceId = 'child';
+    },
+    ['data', 'workspaces', 0, 'prEvents'],
+    foreignEvent,
+  ],
+  [
+    'payload workspace',
+    (b) => {
+      root(b).prEvents[0]!.payload = {
+        kind: 'CI_FAILED',
+        target: { workspaceId: 'child', prId: 'legacy-pr-root' },
+        observation: redObservation,
+      };
+    },
+    ['data', 'workspaces', 0, 'prEvents'],
+    foreignEvent,
+  ],
+  [
+    'control PR',
+    (b) => {
+      root(b).prEvents[0]!.kind = 'MONITORING_ENABLED';
+      root(b).prEvents[0]!.payload = {
+        kind: 'MONITORING_ENABLED',
+        workspaceId: 'root',
+        bindingRevision: 0,
+        replyToPrComments: false,
+      };
+    },
+    ['data', 'workspaces', 0, 'prEvents'],
+    foreignEvent,
+  ],
+  [
+    'foreign session PR',
+    (b) => {
+      b.data.agentSessions[0]!.workspacePrId = 'pr-child';
+    },
+    ['data', 'agentSessions', 0, 'workspacePrId'],
+    'Session PR must belong to its workspace',
+  ],
+  [
+    'unknown session PR',
+    (b) => {
+      b.data.agentSessions[0]!.workspacePrId = 'absent';
+    },
+    ['data', 'agentSessions', 0, 'workspacePrId'],
+    'Session PR must belong to its workspace',
+  ],
+];
+it.each(invalidFallbackReferences)(
+  'rejects a fallback %s before discovery after a valid public import',
+  async (_name, mutate, path, message) => {
+    const b = fallbackBackup(7);
+    expect(exportDataSchema.safeParse(b).success).toBe(true);
+    expect((await dataBackupService.importData(b)).workspaces).toEqual({ imported: 3, skipped: 0 });
+    expect(await db.prisma.agentSession.findUnique({ where: { id: 'session' } })).toMatchObject({
+      workspacePrId: 'legacy-pr-root',
+    });
+    await clearIntegrationDatabase(db.prisma);
+    mutate(b);
+    const parsed = exportDataSchema.safeParse(b);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues).toContainEqual({ code: 'custom', path, message });
+    }
+    state.reads = 0;
+    await expect(dataBackupService.importData(b)).rejects.toBeInstanceOf(ZodError);
+    expect(state.reads).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+  }
+);
+
+it.each([null, ''])(
+  'emits no fallback for flat URL %s and rejects invented PR references',
+  async (url) => {
+    const b = fallbackBackup(7);
+    root(b).prUrl = url;
+    root(b).prEvents = [];
+    b.data.agentSessions[0]!.workspacePrId = null;
+    expect((await dataBackupService.importData(b)).workspaces.imported).toBe(3);
+    expect(await db.prisma.workspacePR.count({ where: { workspaceId: 'root' } })).toBe(0);
+    await clearIntegrationDatabase(db.prisma);
+    b.data.agentSessions[0]!.workspacePrId = 'legacy-pr-root';
+    state.reads = 0;
+    await expect(dataBackupService.importData(b)).rejects.toBeInstanceOf(ZodError);
+    expect(state.reads).toBe(0);
+    expect(await db.prisma.workspace.count()).toBe(0);
+  }
+);
+
+it('rejects published v5 explicit PR duplicates after proving raw parser and service migration', async () => {
+  const baseline = publishedVersion5Backup();
+  expect(root(baseline)).not.toHaveProperty('prUrl');
+  expect(root(baseline)).toHaveProperty('ratchetActivePrId', 'pr-root');
+  expect(root(baseline)).toHaveProperty('prs.0.ratchet.dispatchSnapshotKey', 'historical-dispatch');
+  const parsed = exportDataSchema.parse(baseline);
+  expect(parsed.meta.schemaVersion).toBe(6);
+  expect(root(parsed).prUrl).toBeNull();
+  expect(root(parsed).prs[0]).not.toHaveProperty('ratchet');
+  expect(
+    (await Reflect.apply(dataBackupService.importData, dataBackupService, [baseline])).workspaces
+  ).toEqual({ imported: 3, skipped: 0 });
+  expect(await db.prisma.agentSession.findUnique({ where: { id: 'session' } })).toMatchObject({
+    workspacePrId: 'pr-root',
+  });
+  expect(await db.prisma.workspacePRDedicatedSession.count()).toBe(0);
+  await clearIntegrationDatabase(db.prisma);
+  const invalid = publishedVersion5Backup();
+  child(invalid).prs[0]!.id = 'pr-root';
+  state.reads = 0;
+  await expect(
+    Reflect.apply(dataBackupService.importData, dataBackupService, [invalid])
+  ).rejects.toBeInstanceOf(ZodError);
+  expect(state.reads).toBe(0);
+  expect(await db.prisma.workspace.count()).toBe(0);
+  expectStructuralIssue(invalid, 'global PR ID');
+});

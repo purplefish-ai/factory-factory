@@ -74,7 +74,7 @@ authorize another send.
 The import result lists counts of runtime changes for newly created rows.
 Already inert values and skipped existing runtime rows do not count as changes.
 
-Destination collisions skip the affected workspace and its file children as a
+Destination collisions skip the affected workspace and its child workspaces as a
 group, including their sessions, PR configuration, events and metadata. Existing
 workspace history and runtime owners stay unchanged. A project already present
 admits new workspaces only when its ID, slug, repository/worktree paths and

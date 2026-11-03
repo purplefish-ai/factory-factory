@@ -168,7 +168,7 @@ function validateSourceEvents(data: Backup, ctx: z.RefinementCtx): void {
   const prKeys = new Map<string, Set<string>>();
   for (const [index, workspace] of data.data.workspaces.entries()) {
     const keys = new Set<string>();
-    const prs = new Set(workspace.prs.map((pr) => pr.id));
+    const prs = new Set(backupPRIdentities(workspace).map((pr) => pr.id));
     workspace.prEvents.forEach((event) => {
       const issue = (message: string) =>
         ctx.addIssue({ code: 'custom', path: ['data', 'workspaces', index, 'prEvents'], message });
@@ -227,7 +227,7 @@ export function validateBackupPRs(data: Backup, ctx: z.RefinementCtx): void {
   const ownership = new Map<string, string>();
   for (const [index, workspace] of data.data.workspaces.entries()) {
     const urls = new Set<string>();
-    for (const [prIndex, pr] of workspace.prs.entries()) {
+    for (const [prIndex, pr] of backupPRIdentities(workspace).entries()) {
       if (ids.has(pr.id) || urls.has(pr.url)) {
         ctx.addIssue({
           code: 'custom',
