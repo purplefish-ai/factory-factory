@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { createRecoveryImportReport } from './recovery-import-report';
 import { recoveryMetadataSchema } from './schemas/recovery-envelope.schema';
@@ -29,4 +30,13 @@ it('narrows physical-fidelity warnings only for the workspace profile', () => {
   ).toBe(
     'Partial logical metadata only; physical nullable-JSON fidelity is unproven. Omitted domains are not restored.'
   );
+});
+
+it('names the exact full-profile physical catalog and preserves other warnings', () => {
+  const report = createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery));
+  expect(report.manifest).toEqual(full.meta.recovery);
+  expect(report.warnings).toEqual([
+    'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata. Omitted domains are not restored.',
+    createRecoveryImportReport(recoveryMetadataSchema.parse(fixed.meta.recovery)).warnings[1],
+  ]);
 });

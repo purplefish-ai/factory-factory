@@ -16,6 +16,7 @@ import {
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
@@ -148,7 +149,7 @@ it('exports only the existing serialized base data plus v8 coverage, then restor
   await Reflect.apply(dataBackupService.importData, dataBackupService, [v7]);
   const exported = await dataBackupService.exportData('test');
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', workspaceJson.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery', fullJson.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', { baseJson: { version: 1, jsonStorage: [] } });
   const legacy = exportDataSchema.parse({
     ...exported,
@@ -192,4 +193,25 @@ it('rolls back a valid v8 import after a late write failure without returning a 
   expect(await destination.prisma.workspace.count()).toBe(0);
   expect(await destination.prisma.agentSession.count()).toBe(0);
   await destination.prisma.$executeRawUnsafe('DROP TRIGGER fail_terminal');
+});
+
+it('imports the frozen workspace-only profile with historical PR/session null normalization', async () => {
+  const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [
+    workspaceJson,
+  ]);
+  expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+  expect(result.agentSessions).toEqual({ imported: 1, skipped: 0 });
+  expect(result.recovery.manifest).toEqual(workspaceJson.meta.recovery);
+  expect(
+    await destination.prisma
+      .$queryRaw`SELECT typeof("creationMetadata") AS storage, json_type("creationMetadata") AS kind FROM "Workspace" WHERE id = 'root'`
+  ).toEqual([{ storage: 'text', kind: 'null' }]);
+  expect(
+    await destination.prisma
+      .$queryRaw`SELECT typeof("observation") AS storage, json_type("observation") AS kind FROM "WorkspacePR" WHERE id = 'pr-root'`
+  ).toEqual([{ storage: 'null', kind: null }]);
+  expect(
+    await destination.prisma
+      .$queryRaw`SELECT typeof("providerMetadata") AS storage, json_type("providerMetadata") AS kind FROM "AgentSession" WHERE id = 'session'`
+  ).toEqual([{ storage: 'null', kind: null }]);
 });

@@ -89,6 +89,18 @@ export const workspaceJsonModelCoverage = {
     'base metadata; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded; WorkspacePR.observation and AgentSession.providerMetadata physical nullable-JSON fidelity unproven.'
   ),
 };
+export const baseJsonModelCoverage = {
+  ...r4aModelCoverage,
+  Workspace: partial(
+    'base metadata; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded.'
+  ),
+  WorkspacePR: partial(
+    'existing associations/cache; WorkspacePR.observation preserves SQL NULL versus top-level JSON null for actual included PR rows; no exact normalized full ledger guarantee.'
+  ),
+  AgentSession: partial(
+    'base metadata/provider history identities; AgentSession.providerMetadata preserves SQL NULL versus top-level JSON null; provider history bytes/live process excluded.'
+  ),
+};
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -103,14 +115,15 @@ export const recoverySectionsSchema = z.strictObject({
 export const recoveryMetadataSchema = z
   .strictObject({
     version: z.literal(1),
-    profile: z.enum(['base-1', 'base-json-workspace-1']),
+    profile: z.enum(['base-1', 'base-json-workspace-1', 'base-json-1']),
     status: z.literal('PARTIAL'),
     capabilities: z.strictObject({ baseJson: z.literal(1).optional() }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
   })
   .superRefine((metadata, ctx) => {
-    const workspaceJson = metadata.profile === 'base-json-workspace-1';
+    const workspaceJson = metadata.profile !== 'base-1';
+    const full = metadata.profile === 'base-json-1';
     if (
       workspaceJson !== Object.hasOwn(metadata.capabilities, 'baseJson') ||
       (workspaceJson && metadata.capabilities.baseJson !== 1)
@@ -118,7 +131,9 @@ export const recoveryMetadataSchema = z
       ctx.addIssue({ code: 'custom', message: 'Profile capabilities do not match' });
     }
     const expected = new Map<string, Coverage>(
-      Object.entries(workspaceJson ? workspaceJsonModelCoverage : r4aModelCoverage)
+      Object.entries(
+        full ? baseJsonModelCoverage : workspaceJson ? workspaceJsonModelCoverage : r4aModelCoverage
+      )
     );
     for (const entry of metadata.coverage) {
       const canonical = expected.get(entry.model);
@@ -135,8 +150,9 @@ export const recoveryMetadataSchema = z
       ctx.addIssue({ code: 'custom', message: 'Missing base-1 model classifications' });
     }
     if (
-      metadata.exclusions.length !== exclusions.length ||
-      new Set(metadata.exclusions).size !== exclusions.length
+      metadata.exclusions.length !== exclusions.length - Number(full) ||
+      new Set(metadata.exclusions).size !== exclusions.length - Number(full) ||
+      (full && metadata.exclusions.includes('PHYSICAL_NULLABLE_JSON_FIDELITY'))
     ) {
       ctx.addIssue({
         code: 'custom',

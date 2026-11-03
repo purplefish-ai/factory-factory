@@ -61,8 +61,8 @@ export function DataBackupSection() {
           Partial export includes projects, workspaces, session metadata and preferences. Repository
           and worktree files, provider history bytes, archives, mail, automation, secrets, native
           account homes and live runtime authority are excluded. Provider-session identities may
-          remain metadata. Workspace creation metadata preserves SQL NULL versus JSON null; PR and
-          session metadata fidelity remains unproven.
+          remain metadata. Workspace.creationMetadata, WorkspacePR.observation on actual included PR
+          rows, and AgentSession.providerMetadata preserve SQL NULL versus top-level JSON null.
         </p>
       </CardContent>
     </Card>

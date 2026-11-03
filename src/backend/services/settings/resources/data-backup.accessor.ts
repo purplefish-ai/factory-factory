@@ -49,11 +49,33 @@ class DataBackupAccessor {
       .parse(
         await tx.$queryRaw`SELECT id FROM "Workspace" WHERE json_type("creationMetadata") = 'null' ORDER BY id`
       );
-    return rows.map(({ id }) => ({
-      model: 'Workspace',
-      identity: [id],
-      field: 'creationMetadata',
-    }));
+    const prs = z
+      .array(z.strictObject({ id: z.string() }))
+      .parse(
+        await tx.$queryRaw`SELECT id FROM "WorkspacePR" WHERE json_type("observation") = 'null' ORDER BY id`
+      );
+    const sessions = z
+      .array(z.strictObject({ id: z.string() }))
+      .parse(
+        await tx.$queryRaw`SELECT id FROM "AgentSession" WHERE json_type("providerMetadata") = 'null' ORDER BY id`
+      );
+    return [
+      ...rows.map(({ id }) => ({
+        model: 'Workspace' as const,
+        identity: [id] as [string],
+        field: 'creationMetadata' as const,
+      })),
+      ...prs.map(({ id }) => ({
+        model: 'WorkspacePR' as const,
+        identity: [id] as [string],
+        field: 'observation' as const,
+      })),
+      ...sessions.map(({ id }) => ({
+        model: 'AgentSession' as const,
+        identity: [id] as [string],
+        field: 'providerMetadata' as const,
+      })),
+    ];
   }
 
   getSnapshotForExport(tx: DataBackupTransactionClient): Promise<DataBackupSnapshot> {
