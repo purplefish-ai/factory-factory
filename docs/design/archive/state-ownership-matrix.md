@@ -45,11 +45,10 @@ Reads flatten back to the old `pr*` names at the accessor boundary
 (`flattenWorkspacePR`), so derived state, the snapshot stream, the v4 export
 format and the client are unchanged by the split.
 
-Two writes span this table and `Workspace`, and both take a transaction:
-correcting a branch name alongside a PR refresh
-(`recordPrSnapshotWithBranchName`, `applyPrSnapshotWithDispatchReset`), and
-clearing the discovery schedule when a branch is renamed
-(`setBranchNameAndClearDiscoverySchedule`).
+Branch renaming clears the discovery schedule in the same transaction
+(`setBranchNameAndClearDiscoverySchedule`). PR refreshes persist observations
+through `acceptMonitoredObservation`; attached PR metadata does not change the
+workspace branch.
 
 ## WorkspaceRatchet field ownership
 

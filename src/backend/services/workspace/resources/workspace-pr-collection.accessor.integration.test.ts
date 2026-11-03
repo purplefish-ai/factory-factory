@@ -4,6 +4,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { Prisma, PrismaClient } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import {
@@ -135,29 +136,28 @@ it('finds review-request associations by PR identity regardless of URL casing', 
     [urls[4], urls[14]]
   );
 });
-it('reads and writes every cache field on its explicit PR', async () => {
+it('reads every restored cache field on its explicit PR', async () => {
   await workspace('cache');
   const { prId } = await workspacePrAccessor.attach('cache', 'https://github.com/org/repo/pull/7');
   const at = new Date();
-  await workspacePrAccessor.write(
-    'cache',
-    {
-      prNumber: 7,
-      prState: 'APPROVED',
-      prCiStatus: 'SUCCESS',
-      prReviewState: 'APPROVED',
-      prHasMergeConflict: true,
-      prUpdatedAt: at,
-      prCiFailedAt: at,
-      prCiLastNotifiedAt: at,
-      prReviewLastCheckedAt: at,
-      prReviewLastCommentId: 'comment',
+  await db.prisma.workspacePR.update({
+    where: { id: prId },
+    data: {
+      number: 7,
+      state: 'APPROVED',
+      ciStatus: 'SUCCESS',
+      reviewState: 'APPROVED',
+      hasMergeConflict: true,
+      syncedAt: at,
+      ciFailedAt: at,
+      ciLastNotifiedAt: at,
+      reviewLastCheckedAt: at,
+      reviewLastCommentId: 'comment',
       title: 'Title',
       headRefName: 'head',
       baseRefName: 'main',
     },
-    prId
-  );
+  });
   const pr = await workspacePrAccessor.findByIdentity({ workspaceId: 'cache', prId });
   expect(pr).toMatchObject({
     number: 7,
@@ -178,24 +178,29 @@ it('reads and writes every cache field on its explicit PR', async () => {
     prReviewLastCheckedAt: at,
   });
 });
-it('rejects stale aggregate revisions and cross-workspace updates', async () => {
+it('rejects stale observation revisions and cross-workspace updates', async () => {
   await workspace('cas');
-  const { prId } = await workspacePrAccessor.attach('cas', 'https://github.com/org/repo/pull/8');
-  await db.prisma.$transaction(async (tx) => {
-    const guard = await workspacePrAccessor.readAggregate(tx, 'cas', prId);
-    expect(guard).not.toBeNull();
-    expect(
-      await workspacePrAccessor.applyAggregateIfUnchanged(tx, 'cas', guard!, { prState: 'OPEN' })
-    ).toBe(true);
-    expect(
-      await workspacePrAccessor.applyAggregateIfUnchanged(tx, 'cas', guard!, { prState: 'MERGED' })
-    ).toBe(false);
-    expect(
-      await workspacePrAccessor.applyAggregateIfUnchanged(tx, 'different', guard!, {
-        prState: 'MERGED',
-      })
-    ).toBe(false);
+  const { prId } = await workspacePrAccessor.attach('cas', redObservation.url);
+  const input = {
+    target: { workspaceId: 'cas', prId },
+    expectedPrRevision: 0,
+    expectedEventEpoch: 0,
+    observation: redObservation,
+  };
+  expect(await workspacePrAccessor.acceptMonitoredObservation(input)).toMatchObject({
+    applied: true,
   });
+  expect(await workspacePrAccessor.acceptMonitoredObservation(input)).toEqual({
+    applied: false,
+    eventIds: [],
+  });
+  expect(
+    await workspacePrAccessor.acceptMonitoredObservation({
+      ...input,
+      target: { workspaceId: 'different', prId },
+      expectedPrRevision: 1,
+    })
+  ).toEqual({ applied: false, eventIds: [] });
 });
 it('attaches discovery matches atomically while preserving tombstones and duplicates', async () => {
   const row = await workspace('discovery');

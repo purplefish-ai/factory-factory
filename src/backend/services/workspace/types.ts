@@ -1,4 +1,4 @@
-import type { CIStatus, PRState, WorkspaceProviderSelection, WorkspaceStatus } from '@/shared/core';
+import type { WorkspaceProviderSelection, WorkspaceStatus } from '@/shared/core';
 import type { Prisma } from '@prisma-gen/client';
 
 export type WorkspaceDeletionCapture = (
@@ -18,13 +18,6 @@ export interface PRDiscoveryClaim {
   checkedAt: Date;
   retryCount: number;
   nextCheckAt: Date;
-}
-
-export interface PRSnapshotFields {
-  prNumber: number;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
 }
 
 export interface WorkspaceProviderSelectionSnapshot {
