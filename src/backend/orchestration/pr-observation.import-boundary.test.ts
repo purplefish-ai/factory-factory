@@ -36,7 +36,7 @@ it('loads and accepts an observation with only five supplied capabilities', asyn
       observationEpoch: 0,
       syncedAt: null,
     }),
-    getMonitoring: async () => ({ eventEpoch: 3 }),
+    getMonitoring: async () => ({ eventEpoch: 3, enabled: true }),
     fetchObservation: async () => redObservation,
     acceptObservation: async () => ({ applied: true, eventIds: [] }),
     publishAcceptedObservation: publish,

@@ -17,6 +17,7 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { workspaceMailSendMetadataSchema } from '@/shared/workspace-mail';
 import { AGENT_AUTHORING_TOOLS, callAgentAuthoringTool } from './agent-authoring-tools';
+import { callLinearIssueTool, LINEAR_ISSUE_TOOL } from './linear-issue-tool';
 import { callWorkspaceMailTool, WORKSPACE_MAIL_TOOLS } from './workspace-mail-tools';
 
 // ---------------------------------------------------------------------------
@@ -375,6 +376,11 @@ async function dispatchToolCall(
 ): Promise<void> {
   const params = toolCallSchema.parse(req.params);
   const args = params.arguments;
+  if (params.name === LINEAR_ISSUE_TOOL.name) {
+    const result = await callLinearIssueTool({ workspaceId, apiBase, query: callTrpcQuery });
+    send({ jsonrpc: '2.0', id: req.id, result });
+    return;
+  }
   if (WORKSPACE_MAIL_TOOLS.some((tool) => tool.name === params.name)) {
     const result = await callWorkspaceMailTool({
       name: params.name,
@@ -476,6 +482,7 @@ async function handleRequest(
     const childToolsEnabled = await childWorkspacesEnabled(apiBase).catch(() => false);
     const tools = [
       ...(childToolsEnabled ? workspaceTools : []),
+      LINEAR_ISSUE_TOOL,
       ...WORKSPACE_MAIL_TOOLS,
       ...AGENT_AUTHORING_TOOLS,
     ];

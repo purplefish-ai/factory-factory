@@ -33,6 +33,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   reconciliationCleanup: 5 * 60 * 1000,
   periodicTaskPoll: 60_000, // Check for due periodic tasks every 60 seconds
   snapshotReconciliation: 60_000, // Safety-net recompute of workspace snapshots
+  prEventRetention: 30 * 60_000, // Bounded deletion of old terminal PR facts
 } as const);
 
 export const SERVICE_CACHE_TTL_MS = Object.freeze({

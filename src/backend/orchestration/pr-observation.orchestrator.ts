@@ -91,7 +91,13 @@ async function observeOnce(
   if (!options?.force && committedFactsAreCurrent(recent, key, row, config.eventEpoch)) {
     return { applied: true, fetched: false };
   }
-  const observation = await ports.fetchObservation(target, signal);
+  // Review data only feeds the event reducer, which creates no events while
+  // monitoring is off. Enabling renews the epoch, so this review-less observation
+  // is rejected if monitoring turns on before acceptance, and the new epoch's
+  // first (full) observation becomes its baseline.
+  const observation = await ports.fetchObservation(target, signal, {
+    includeReviews: config.enabled,
+  });
   signal?.throwIfAborted();
   const result = await ports.acceptObservation({
     target,

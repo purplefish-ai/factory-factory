@@ -257,8 +257,7 @@ function readInitialPromptFromMetadata(
   }
 
   if (typeof metadata.initialPrompt === 'string') {
-    // Deliver the user's saved prompt verbatim. Issue launch prompts carry their
-    // own JSON-escaped <issue_data> boundary; rewriting `</` would unclose it.
+    // Deliver saved prompts verbatim, including edited and legacy issue prompts.
     return { provided: true, text: metadata.initialPrompt };
   }
 
@@ -770,7 +769,7 @@ async function runWorkspaceInitialization(
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
     project = workspaceWithProject.project;
 
-    // Fetch issue prompts alongside setup, publishing the queue as soon as it is ready.
+    // Build issue prompts alongside setup, publishing the queue as soon as it is ready.
     preparedSessionPromise = prepareDefaultAgentSession(
       workspaceId,
       preparationController.signal,

@@ -91,7 +91,7 @@ beforeEach(() => {
   vi.spyOn(githubCLIService, 'getResolvedReviewCommentIds').mockResolvedValue(new Set());
 });
 
-async function setup() {
+async function setup({ enabled = true }: { enabled?: boolean } = {}) {
   const workspaceId = `review-flow-${sequence}`;
   const prId = `${workspaceId}-pr`;
   const target = { workspaceId, prId };
@@ -101,7 +101,7 @@ async function setup() {
       projectId: 'project',
       name: 'Review flow',
       status: 'READY',
-      prMonitoring: { create: { enabled: true, eventEpoch: 1 } },
+      prMonitoring: { create: { enabled, eventEpoch: 1 } },
       prs: { create: { id: prId, url: core.url } },
     },
   });
@@ -109,7 +109,8 @@ async function setup() {
     cacheScope: {},
     findPR: (input) => workspacePrSnapshotService.find(input),
     getMonitoring: (id) => workspacePRMonitoringService.get(id),
-    fetchObservation: (input, signal) => prObservationService.fetch(input, signal),
+    fetchObservation: (input, signal, options) =>
+      prObservationService.fetch(input, signal, options),
     acceptObservation: (input) => workspacePrSnapshotService.acceptMonitoredObservation(input),
     publishAcceptedObservation: vi.fn(),
   } satisfies PRObservationPorts;
@@ -247,4 +248,77 @@ it.each(['core', 'abort'])('never accepts or publishes after a %s failure', asyn
     []
   );
   expect(ports.publishAcceptedObservation).not.toHaveBeenCalled();
+});
+
+function reviewReads() {
+  return [
+    githubCLIService.getPRReviewDetails,
+    githubCLIService.getReviewComments,
+    githubCLIService.getResolvedReviewCommentIds,
+  ].reduce((total, read) => total + vi.mocked(read).mock.calls.length, 0);
+}
+async function setMonitoring(workspaceId: string, enabled: boolean) {
+  const config = await workspacePRMonitoringService.get(workspaceId);
+  const result = await workspacePRMonitoringService.setBinding({
+    workspaceId,
+    enabled,
+    expectedBindingRevision: config?.bindingRevision ?? 0,
+  });
+  expect(result.applied).toBe(true);
+}
+
+it('reads only core facts while monitoring is off and baselines reviews when it turns on', async () => {
+  const { target, ports } = await setup({ enabled: false });
+  const poll = () => observeMonitoredPR(ports, target);
+  expect(await poll()).toBe(true);
+  expect(reviewReads()).toBe(0);
+  expect(await workspacePrSnapshotService.find(target)).toMatchObject({
+    state: 'OPEN',
+    observation: { reviewsComplete: false, actionableReviews: [] },
+  });
+  expect(await workspacePRMonitoringService.listPending(target.workspaceId)).toEqual([]);
+
+  // Enabling renews the epoch, so the next automatic poll reads reviews without
+  // waiting for the recent-observation window.
+  await setMonitoring(target.workspaceId, true);
+  expect(await poll()).toBe(true);
+  expect(reviewReads()).toBe(3);
+  const pending = await workspacePRMonitoringService.listPending(target.workspaceId);
+  expect(pending.map((event) => event.kind)).toEqual(['REVIEW_FEEDBACK']);
+
+  // The full observation is the new baseline: unchanged feedback is not repeated.
+  expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+  expect(
+    (await workspacePRMonitoringService.listPending(target.workspaceId)).map((event) => event.id)
+  ).toEqual(pending.map((event) => event.id));
+
+  // Turning monitoring off again stops review reads.
+  await setMonitoring(target.workspaceId, false);
+  expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+  expect(reviewReads()).toBe(6);
+});
+
+it('rejects a core-only observation when monitoring turns on before it is accepted', async () => {
+  const { target, ports } = await setup({ enabled: false });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.mocked(githubCLIService.getPRStatusDetails).mockImplementationOnce(async () => {
+    await released;
+    return core;
+  });
+  const observing = observeMonitoredPR(ports, target, { force: true });
+  await vi.waitFor(() => expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledOnce());
+  await setMonitoring(target.workspaceId, true);
+  release();
+  expect(await observing).toBe(false);
+  expect(reviewReads()).toBe(0);
+  expect(await workspacePrSnapshotService.find(target)).toMatchObject({ revision: 0 });
+
+  expect(await observeMonitoredPR(ports, target)).toBe(true);
+  expect(reviewReads()).toBe(3);
+  expect(
+    (await workspacePRMonitoringService.listPending(target.workspaceId)).map((event) => event.kind)
+  ).toEqual(['REVIEW_FEEDBACK']);
 });

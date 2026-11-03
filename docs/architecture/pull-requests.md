@@ -148,7 +148,8 @@ superseded turns do not reset discovery.
 
 `WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
 preference, binding revision, epoch, and delivery pause. Turning monitoring off
-cancels unclaimed events while facts continue to refresh. Re-enabling or
+cancels unclaimed events while core facts continue to refresh without review
+data (see [Observations and events](#observations-and-events)). Re-enabling or
 changing destinations/recipients starts an observation epoch. Enabling
 monitoring or binding a recipient does not queue a chat message. Both MAIN and
 DEDICATED batches carry concise maintenance instructions with actionable events
@@ -271,6 +272,36 @@ Frozen legacy metadata without a receipt ID blocks new claims but never
 authorizes a resend. Resume, supersession and cancellation preserve its original
 evidence. Empty receipt IDs are quarantined rather than treated as new delivery
 requests.
+
+### Ledger retention
+
+The `pr-event-retention` job, registered beside `pr-event-poll`, runs every 30
+minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts
+older than 24 hours in batches of 100, oldest first, with at most 20 batches per
+run. Each batch is a separate short write; the delete re-checks the predicate,
+and the loop yields between batches and stops on shutdown. Superseded review
+facts copy the whole observation, so these rows hold most of the ledger's size.
+
+Only rows that no reader uses are eligible. Rows must have no `batchId`, no
+legacy receipt or frozen metadata, and a PR target. The reducer reads only
+pending, in-flight and delivered history; pending counts and delivery read only
+live states. Delivery members are never pruned, whatever their own state, so
+frozen batches keep the complete membership that recovery and export validate.
+Delivered history stays the deduplication record that prevents re-emission.
+Eligible kinds are those whose deduplication key includes the PR's transition
+sequence: review feedback, CI failure, conflict, merge and close. That sequence
+persists with every accepted observation and only increases, so the reducer
+never regenerates a pruned key. `CI_RECOVERED` and legacy `MONITORING_ENABLED`
+rows are retained. ARCHIVED workspaces cannot return to READY; their terminal
+facts are pruned under the same rule, while their delivery evidence and
+unclaimed pending facts remain until workspace deletion. Logical backups simply
+omit pruned facts.
+
+Deletion returns pages to SQLite's free list for reuse by later writes; it does
+not shrink the file. The app does not run `VACUUM` automatically: it rewrites
+the whole database under an exclusive lock and needs temporary space roughly
+equal to the database. Enabling incremental vacuum would also require a full
+`VACUUM` first. Compact a large database manually while the app is stopped.
 
 ### Terminal PR polling
 
@@ -395,7 +426,18 @@ claim no review resolutions, and the existing incomplete-review acceptance
 retains pending feedback. Identity must be known before accepting review facts;
 failed lookups retry on the next poll without disabling self-review filtering.
 The app's own [adversarial-review marker](../design/adversarial-review.md)
-remains an explicit exception under its authenticated GitHub identity.
+remains an explicit exception to that filtering under its authenticated GitHub
+identity.
+
+While a workspace's monitoring is off, observations read only the core facts
+(one `gh pr view`); identity, review, review-comment and thread reads are
+skipped and reviews are reported incomplete, since only the event reducer uses
+them and it creates no events then. The review decision shown in the UI is a
+core fact. Enabling renews the epoch, so a core-only observation still in flight
+is rejected, and the new epoch's first observation (the toggle's immediate check
+or the next poll) reads reviews and becomes the baseline. An observation already
+in flight when monitoring turns off may still finish its review reads; it is
+accepted without creating events.
 
 Approvals supersede earlier feedback only with reliable same-author ordering.
 Submission times and REST review ordinals provide that ordering; opaque IDs do

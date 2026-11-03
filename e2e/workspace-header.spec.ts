@@ -2,14 +2,14 @@ import { expect, test, type Page } from '@playwright/test';
 
 // Headless Chromium has no installed OS window. Emulate only the browser-owned
 // media query and env() geometry; keep the production declarations and UI intact.
-function emulateTitleBar(page: Page, left: number, right: number) {
+function emulateTitleBar(page: Page, left: number, right: number, height = 32, top = 0) {
   return page.evaluate(
-    ({ left, right }) => {
+    ({ left, right, height, top }) => {
       const values: Record<string, string> = {
         'titlebar-area-x': `${left}px`,
-        'titlebar-area-y': '0px',
-        'titlebar-area-width': `${window.innerWidth - left - right}px`,
-        'titlebar-area-height': '32px',
+        'titlebar-area-y': `${top}px`,
+        'titlebar-area-width': `calc(100% - ${left + right}px)`,
+        'titlebar-area-height': `${height}px`,
       };
       const rules = [...document.styleSheets]
         .filter((sheet) => !sheet.href || new URL(sheet.href).origin === location.origin)
@@ -40,7 +40,7 @@ function emulateTitleBar(page: Page, left: number, right: number) {
       }
       return true;
     },
-    { left, right }
+    { left, right, height, top }
   );
 }
 
@@ -54,24 +54,35 @@ for (const { platform, left, right } of [
     await page.setViewportSize({ width: 1100, height: 720 });
     await page.goto('/__mobile-baseline?surface=header');
     const header = page.locator('header');
+    await expect(header).toBeVisible({ timeout: 15_000 });
     await expect(header).toHaveCSS('padding-left', '8px');
     await expect(header).toHaveCSS('-webkit-app-region', 'none');
     expect(await emulateTitleBar(page, left, right)).toBe(true);
     await expectOneRow(page);
+    await expect(header).toHaveCSS('height', '32px');
     await expect(header).toHaveCSS('-webkit-app-region', 'drag');
     const controls = header.locator('button, a, [role="combobox"]:not(button)');
     for (const control of await controls.all()) {
       if (!(await control.isVisible())) {
         continue;
       }
+      // Overlay toggling changes sizes covered by the buttons' transition-all.
+      await expect(control).toHaveCSS('height', '24px');
       const box = await control.boundingBox();
       if (!box) {
         throw new Error('Visible header control has no bounding box');
       }
       expect(box.x).toBeGreaterThanOrEqual(left);
       expect(box.x + box.width).toBeLessThanOrEqual(1100 - right);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeLessThanOrEqual(28);
+      expect(
+        Math.abs(box.y + box.height / 2 - 16),
+        await control.getAttribute('aria-label')
+      ).toBeLessThanOrEqual(0.5);
       await expect(control).toHaveCSS('-webkit-app-region', 'no-drag');
     }
+    await expect(header).toHaveScreenshot(`installed-pwa-header-${platform}.png`);
     await page.getByRole('combobox', { name: 'Open project menu' }).click();
     await expect(page.getByRole('listbox')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -80,7 +91,66 @@ for (const { platform, left, right } of [
   });
 }
 
-async function expectOneRow(page: Page) {
+for (const scenario of [
+  {
+    variant: 'workspace',
+    width: 810,
+    left: 86,
+    right: 40,
+    scale: 100,
+    height: 32,
+    top: 0,
+    row: 32,
+  },
+  { variant: 'family', width: 1100, left: 0, right: 140, scale: 150, height: 32, top: 0, row: 40 },
+  {
+    variant: 'workspace',
+    width: 810,
+    left: 86,
+    right: 40,
+    scale: 200,
+    height: 32,
+    top: 0,
+    row: 52,
+  },
+  { variant: 'project', width: 768, left: 0, right: 140, scale: 100, height: 40, top: 6, row: 46 },
+  { variant: 'generic', width: 640, left: 86, right: 40, scale: 150, height: 32, top: 0, row: 40 },
+]) {
+  test(`installed PWA ${scenario.variant} fits at ${scenario.width}px and ${scenario.scale}% font`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: scenario.width, height: 720 });
+    await page.goto(`/__mobile-baseline?surface=header&header=${scenario.variant}`);
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
+    await page.evaluate((scale) => {
+      document.documentElement.style.fontSize = `${scale}%`;
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.setProperty('--background', '#17111f');
+      document.documentElement.style.setProperty('--foreground', '#e6d8f7');
+    }, scenario.scale);
+    expect(
+      await emulateTitleBar(page, scenario.left, scenario.right, scenario.height, scenario.top)
+    ).toBe(true);
+    const header = page.locator('header');
+    await expect(header).toHaveCSS('height', `${scenario.row}px`);
+    await expectOneRow(page, scenario.row);
+    for (const control of await header.locator('button, a').all()) {
+      if (!(await control.isVisible())) {
+        continue;
+      }
+      const box = await control.boundingBox();
+      expect(box?.x).toBeGreaterThanOrEqual(scenario.left);
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+        scenario.width - scenario.right
+      );
+      expect(box?.y).toBeGreaterThanOrEqual(scenario.top);
+    }
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+}
+
+async function expectOneRow(page: Page, maxHeight = 49) {
   const geometry = await page.locator('header').evaluate((header) => {
     const controls = [...header.querySelectorAll('button, [role="combobox"], a')]
       .map((node) => ({
@@ -103,12 +173,13 @@ async function expectOneRow(page: Page) {
       right: rect.right,
     };
   });
-  expect(geometry.height).toBeLessThanOrEqual(49);
+  expect(geometry.height).toBeLessThanOrEqual(maxHeight);
   expect(geometry.overflow).toBeLessThanOrEqual(1);
   for (const [index, control] of geometry.controls.entries()) {
     expect(control.x, control.label ?? '').toBeGreaterThanOrEqual(0);
     expect(control.right, control.label ?? '').toBeLessThanOrEqual(geometry.right);
-    expect(control.bottom, control.label ?? '').toBeLessThanOrEqual(48);
+    expect(control.y, control.label ?? '').toBeGreaterThanOrEqual(0);
+    expect(control.bottom, control.label ?? '').toBeLessThanOrEqual(geometry.height);
     for (const other of geometry.controls.slice(index + 1)) {
       expect(
         Math.min(control.right, other.right) - Math.max(control.x, other.x),

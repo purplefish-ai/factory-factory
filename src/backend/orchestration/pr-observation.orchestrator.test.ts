@@ -14,7 +14,7 @@ function deferred<T>() {
 function observationPorts() {
   return {
     cacheScope: {},
-    getMonitoring: vi.fn().mockResolvedValue({ eventEpoch: 3 }),
+    getMonitoring: vi.fn().mockResolvedValue({ eventEpoch: 3, enabled: true }),
     findPR: vi.fn().mockResolvedValue({
       revision: 7,
       state: 'NONE',
@@ -32,7 +32,7 @@ it('accepts and publishes a normalized observation using only producer ports', a
   const ports = observationPorts();
   const target = { workspaceId: 'w', prId: 'p' };
   expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
-  expect(ports.fetchObservation).toHaveBeenCalledWith(target, undefined);
+  expect(ports.fetchObservation).toHaveBeenCalledWith(target, undefined, { includeReviews: true });
   expect(ports.acceptObservation).toHaveBeenCalledWith({
     target,
     expectedPrRevision: 7,
@@ -117,7 +117,7 @@ it('shares recent acceptance by scope while honoring forced refresh, revision, a
   await observeMonitoredPR({ ...ports }, target);
   expect(ports.fetchObservation).toHaveBeenCalledTimes(3);
   ports.findPR.mockResolvedValue({ revision: 11, state: 'OPEN' });
-  ports.getMonitoring.mockResolvedValue({ eventEpoch: 4 });
+  ports.getMonitoring.mockResolvedValue({ eventEpoch: 4, enabled: true });
   await observeMonitoredPR({ ...ports }, target);
   expect(ports.fetchObservation).toHaveBeenCalledTimes(4);
 });
@@ -210,4 +210,26 @@ it('paces unforced CLOSED PR observations with the background reopen interval', 
   );
   await observeMonitoredPR(ports, target);
   expect(ports.fetchObservation).toHaveBeenCalledOnce();
+});
+
+it('fetches review data only while monitoring is enabled', async () => {
+  const ports = observationPorts();
+  const target = { workspaceId: 'w', prId: 'p' };
+  ports.getMonitoring.mockResolvedValue({ eventEpoch: 3, enabled: false });
+  expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+  expect(ports.fetchObservation).toHaveBeenLastCalledWith(target, undefined, {
+    includeReviews: false,
+  });
+
+  // Enabling renews the epoch, so the next automatic poll reads review data again.
+  ports.getMonitoring.mockResolvedValue({ eventEpoch: 4, enabled: true });
+  ports.findPR.mockResolvedValue(storedPR('OPEN', { observationEpoch: 3 }));
+  expect(await observeMonitoredPR(ports, target)).toBe(true);
+  expect(ports.fetchObservation).toHaveBeenCalledTimes(2);
+  expect(ports.fetchObservation).toHaveBeenLastCalledWith(target, undefined, {
+    includeReviews: true,
+  });
+  expect(ports.acceptObservation).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedEventEpoch: 4 })
+  );
 });

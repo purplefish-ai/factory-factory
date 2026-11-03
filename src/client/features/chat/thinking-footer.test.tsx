@@ -5,6 +5,85 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it('shows literal separators from the latest paragraph of fenced code', () => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter active latestThinking={'**Step**\n\n```text\n\n__init__\n\n---\n```'} />
+        )
+      );
+      expect(host.querySelector('button')?.textContent).toBe('---');
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it.each(['**', '---'])('keeps the latest readable paragraph before a trailing %s', (marker) => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(<ThinkingFooter active latestThinking={`**Checking CI**\n\n${marker}`} />)
+      );
+      expect(host.textContent).toContain('Checking CI');
+      expect(host.textContent).not.toContain('Agent is working...');
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('preserves identifiers, literal operators and bullet markers in readable reasoning', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter
+            active
+            latestThinking={
+              '**Checking** user_id and MAX_RETRY_COUNT\n\n* inspect `__init__`\n* keep a*b*c'
+            }
+          />
+        )
+      );
+      flushSync(() => host.querySelector('button')?.click());
+      expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toBe(
+        'Checking user_id and MAX_RETRY_COUNT\n\n* inspect __init__\n* keep a*b*c'
+      );
+    } finally {
+      flushSync(() => root.unmount());
+      host.remove();
+    }
+  });
+
+  it('shows the latest paragraph inline and readable full reasoning in the popup', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter active latestThinking={'**Preparing PR body**\n\n**Checking** `CI`'} />
+        )
+      );
+      expect(host.textContent).toContain('Checking CI');
+      expect(host.textContent).not.toContain('Preparing PR body');
+      flushSync(() => host.querySelector('button')?.click());
+      const popup = document.querySelector('[data-slot="popover-content"]');
+      expect(popup?.textContent).toBe('Preparing PR body\n\nChecking CI');
+      expect(popup?.textContent).not.toContain('**');
+      flushSync(() => root.render(<ThinkingFooter active latestThinking="**Current step**" />));
+      expect(popup?.textContent).toBe('Current step');
+      expect(host.textContent).not.toContain('Preparing PR body');
+    } finally {
+      flushSync(() => root.unmount());
+      host.remove();
+    }
+  });
+
   it('shows fallback activity and makes the full long preview available outside layout', () => {
     const host = document.createElement('div');
     document.body.append(host);
