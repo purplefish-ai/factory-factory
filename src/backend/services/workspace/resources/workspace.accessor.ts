@@ -146,6 +146,14 @@ const sideTables = {
 
 type SideTableInclude = typeof sideTables;
 
+/** Side-table reads and flattening for sibling accessors that project their own workspace shape. */
+export {
+  flatten as flattenWorkspaceRow,
+  sideTables as workspaceSideTables,
+  type Flattened as FlattenedWorkspaceRow,
+  type SideTableInclude as WorkspaceSideTableInclude,
+};
+
 /** A bare workspace row with its side-table fields flattened on. */
 export type WorkspaceWithRatchet = Flattened<
   Prisma.WorkspaceGetPayload<{ include: SideTableInclude }>

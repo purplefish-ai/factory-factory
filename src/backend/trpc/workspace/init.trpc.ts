@@ -157,7 +157,8 @@ export const workspaceInitRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const { workspaceDataService } = ctx.appContext.services;
-      const workspace = await workspaceDataService.findByIdWithProject(input.id);
+      // Polled every second during setup, so read only the fields reported here.
+      const workspace = await workspaceDataService.findInitStatus(input.id);
       if (!workspace) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -177,7 +178,7 @@ export const workspaceInitRouter = router({
         phase: initPolicy.phase,
         chatBanner: initPolicy.banner,
         hasStartupScript: !!(
-          workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
+          workspace.project.startupScriptCommand || workspace.project.startupScriptPath
         ),
         hasWorktreePath: !!workspace.worktreePath,
       };

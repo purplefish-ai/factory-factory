@@ -8,8 +8,8 @@ import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
-  findByProjectId: vi.fn(),
   findById: vi.fn(),
+  findDetailById: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
 }));
@@ -366,7 +366,7 @@ describe('workspaceCoreRouter', () => {
       hasHadSessions: true,
       agentSessions: [],
     };
-    mockWorkspaceDataService.findById.mockResolvedValue(workspace);
+    mockWorkspaceDataService.findDetailById.mockResolvedValue(workspace);
 
     const { caller } = createCaller();
     await expect(caller.get({ id: 'w1' })).resolves.toEqual(
