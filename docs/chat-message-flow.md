@@ -63,6 +63,9 @@ orchestrator calls retain an explicit default dispatcher binding.
 stores transcript changes, and emits session deltas. Streaming text accumulates
 under a stable message order so the client updates the existing message. Runtime
 and permission events update session state through their respective handlers.
+The client renders the streaming message's Markdown from a throttled snapshot,
+parsing only its growing tail block; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 `SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
 wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
