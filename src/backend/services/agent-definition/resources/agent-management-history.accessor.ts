@@ -111,6 +111,8 @@ export const agentManagementHistoryAccessor = {
     if (!(await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } }))) {
       throw new ApplicationError('NOT_FOUND', 'Project not found.');
     }
+    // The subquery's predicate and ORDER BY must match the partial expression
+    // index AgentRun_latest_terminal_idx exactly, or SQLite sorts every run.
     const rows = await prisma.$queryRaw`
       SELECT COUNT(*) AS totalCount, COALESCE(SUM(CASE WHEN (
         SELECT r.status FROM AgentRun r WHERE r.agentDefinitionId = d.id AND r.triggerId IS NOT NULL

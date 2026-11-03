@@ -808,6 +808,9 @@ model AgentRun {
   @@index([triggerId, agentDefinitionId])
   @@index([status, createdAt])
   @@index([contextExpiredAt, completedAt])
+  // Raw-SQL partial expression index "AgentRun_latest_terminal_idx" (migration
+  // 20261103120000_navigation_summary_indexes) serves the navigation summary.
+  // Prisma cannot express or see it; recreate it after any table redefinition.
 }
 
 model AgentSourceState {
@@ -1013,7 +1016,7 @@ model PeriodicTaskExecution {
   startedAt       DateTime                     @default(now())
   completedAt     DateTime?
 
-  @@index([periodicTaskId])
+  @@index([periodicTaskId, startedAt, id])
   @@index([periodicTaskId, status])
   @@index([status])
 }
