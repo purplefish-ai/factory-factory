@@ -12,6 +12,19 @@ afterEach(() => {
 });
 
 describe('LoadingIndicator', () => {
+  it('preserves all paragraphs for the inline activity indicator', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(<LoadingIndicator latestReasoning={'**First step**\n\n**Current step**'} />)
+      );
+      expect(container.textContent).toBe('First step Current step');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('renders reasoning text as plain text with markdown stripped', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

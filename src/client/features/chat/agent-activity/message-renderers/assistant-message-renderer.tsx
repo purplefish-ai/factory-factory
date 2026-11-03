@@ -1,6 +1,7 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/client/features/chat/agent-activity/tool-renderers';
+import { formatThinkingText } from '@/client/features/chat/thinking-preview';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
@@ -174,6 +175,8 @@ export const MessageWrapper = memo(function MessageWrapper({
 
 interface LoadingIndicatorProps {
   singleLine?: boolean;
+  /** The footer has already cleaned its paragraph in the context of the full sequence. */
+  plainText?: boolean;
   latestReasoning?: string | null;
   className?: string;
 }
@@ -181,19 +184,6 @@ interface LoadingIndicatorProps {
 const LOADING_TEXT_MAX_LENGTH = 200;
 const LOADING_TEXT_ELLIPSIS = '...';
 const LOADING_TEXT_BODY_MAX_LENGTH = LOADING_TEXT_MAX_LENGTH - LOADING_TEXT_ELLIPSIS.length;
-
-function stripMarkdownSyntax(input: string): string {
-  return input
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/[`*~_]/g, '');
-}
 
 function truncateLoadingText(input: string): string {
   if (input.length <= LOADING_TEXT_MAX_LENGTH) {
@@ -204,18 +194,14 @@ function truncateLoadingText(input: string): string {
   return `${truncated}${LOADING_TEXT_ELLIPSIS}`;
 }
 
-function getLoadingText(latestReasoning: string | null | undefined): string {
-  const normalized = latestReasoning?.replace(/\s+/g, ' ').trim();
+function getLoadingText(latestReasoning: string | null | undefined, plainText: boolean): string {
+  const text = plainText ? (latestReasoning ?? '') : formatThinkingText(latestReasoning);
+  const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }
 
-  const stripped = stripMarkdownSyntax(normalized).trim();
-  if (!stripped) {
-    return 'Agent is working...';
-  }
-
-  return truncateLoadingText(stripped);
+  return truncateLoadingText(normalized);
 }
 
 /**
@@ -224,9 +210,10 @@ function getLoadingText(latestReasoning: string | null | undefined): string {
 export const LoadingIndicator = memo(function LoadingIndicator({
   latestReasoning = null,
   singleLine = false,
+  plainText = false,
   className,
 }: LoadingIndicatorProps) {
-  const loadingText = getLoadingText(latestReasoning);
+  const loadingText = getLoadingText(latestReasoning, plainText);
   return (
     <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
       <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin shrink-0 mt-0.5" />
