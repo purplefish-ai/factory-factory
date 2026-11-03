@@ -10,6 +10,19 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
+/** Report a caught render error with its component trace, without console methods. */
+export function reportBoundaryError(error: Error, errorInfo: React.ErrorInfo) {
+  const componentStack = errorInfo.componentStack ?? '';
+  const stackWithComponentTrace =
+    componentStack.trim().length > 0
+      ? `${error.stack ?? error.message}\n${componentStack}`
+      : (error.stack ?? error.message);
+
+  const loggedError = new Error(error.message, { cause: error });
+  loggedError.stack = stackWithComponentTrace;
+  globalThis.reportError?.(loggedError);
+}
+
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -21,16 +34,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Preserve observability without relying on console methods.
-    const componentStack = errorInfo.componentStack ?? '';
-    const stackWithComponentTrace =
-      componentStack.trim().length > 0
-        ? `${error.stack ?? error.message}\n${componentStack}`
-        : (error.stack ?? error.message);
-
-    const loggedError = new Error(error.message, { cause: error });
-    loggedError.stack = stackWithComponentTrace;
-    globalThis.reportError?.(loggedError);
+    reportBoundaryError(error, errorInfo);
   }
 
   handleReset = () => {

@@ -5,9 +5,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import type { Application } from '@/backend/app-context';
 import { deferred } from '@/test-utils/deferred';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
   const upgradeHandlers = {
@@ -60,128 +58,7 @@ vi.mock('@trpc/server/adapters/express', () => ({
 }));
 
 import { createServer } from './server';
-
-type TestHarnessOptions = {
-  backendHost?: string;
-  frontendStaticPath?: string | null;
-  isRunScriptProxyEnabled?: boolean;
-};
-
-function createTestHarness(options: TestHarnessOptions = {}) {
-  const logger = {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  };
-
-  const services = {
-    configService: {
-      getBackendPort: () => 0,
-      getBackendHost: () => options.backendHost,
-      getEnvironment: () => 'test',
-      getFrontendStaticPath: () => options.frontendStaticPath ?? null,
-      isDevelopment: () => false,
-      isRunScriptProxyEnabled: () => options.isRunScriptProxyEnabled ?? false,
-      getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
-      getAppVersion: () => 'test-version',
-      getDatabasePath: () => '/tmp/test.db',
-      getDatabasePathFromEnv: () => undefined,
-    },
-    createLogger: () => logger,
-    findAvailablePort: vi.fn(async (startPort: number) => startPort),
-    ratchetService: {
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-    },
-    rateLimiter: {
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-      getApiUsageStats: vi.fn(() => ({
-        requestsLastMinute: 0,
-        isRateLimited: false,
-      })),
-    },
-    schedulerService: {
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-    },
-    periodicTaskService: {
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-    },
-    agentRuntime: {
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-    },
-    reconciliationService: {
-      cleanupOrphans: vi.fn(async () => undefined),
-      recoverStaleProvisioningWorkspaces: vi.fn(async () => undefined),
-      startNewWorkspaceInitialization: vi.fn(),
-      startPeriodicCleanup: vi.fn(),
-      stopPeriodicCleanup: vi.fn(async () => undefined),
-    },
-    runScriptStateMachine: {
-      recoverStaleStates: vi.fn(async () => undefined),
-    },
-    runScriptService: {
-      cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-    },
-    acpTraceLogger: {
-      cleanup: vi.fn(),
-      cleanupOldLogs: vi.fn(),
-    },
-    sessionFileLogger: {
-      cleanup: vi.fn(),
-      cleanupOldLogs: vi.fn(),
-    },
-    sessionLifecycleService: {
-      recoverStaleRunningSessions: vi.fn(async () => 0),
-      stopAllClients: vi.fn(async () => undefined),
-    },
-    terminalService: {
-      cleanup: vi.fn(),
-    },
-    workspaceGitStateService: {
-      stop: vi.fn(),
-    },
-  };
-
-  const lifecycle = {
-    database: {
-      $disconnect: vi.fn(async () => undefined),
-    },
-    interceptors: {
-      register: vi.fn(),
-      start: vi.fn(async () => undefined),
-      stop: vi.fn(async () => undefined),
-    },
-    wireDomainBridges: vi.fn(),
-    eventCollector: {
-      configure: vi.fn(),
-      stop: vi.fn(),
-    },
-    snapshotReconciliation: {
-      configure: vi.fn(),
-      start: vi.fn(),
-      stop: vi.fn(async () => undefined),
-    },
-    recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
-  };
-
-  const application = unsafeCoerce<Application>({ services, lifecycle, config: {} });
-
-  return {
-    application,
-    lifecycle,
-    logger,
-    services,
-  };
-}
-
-function createTestApplication(options: TestHarnessOptions = {}): Application {
-  return createTestHarness(options).application;
-}
+import { createTestApplication, createTestHarness } from './server.test-helpers';
 
 async function occupyPort(port = 0): Promise<{ port: number; server: NetServer }> {
   const server = createNetServer();
@@ -889,14 +766,24 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(services.reconciliationService.stopPeriodicCleanup).mockReturnValueOnce(drained);
     const server = createTestServer(application, 0);
     vi.mocked(services.ratchetService.start).mockImplementationOnce(() => void server.stop());
-    await server.start();
+    const starting = server.start();
+    starting.catch(() => undefined);
+    await vi.waitFor(() =>
+      expect(services.sessionLifecycleService.stopAllClients).toHaveBeenCalledOnce()
+    );
     expect(services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
+    expect(
+      services.reconciliationService.stopPeriodicCleanup.mock.invocationCallOrder[0] ?? 0
+    ).toBeLessThan(
+      services.sessionLifecycleService.stopAllClients.mock.invocationCallOrder[0] ?? 0
+    );
     expect(services.reconciliationService.startNewWorkspaceInitialization).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(services.periodicTaskService.stop).toHaveBeenCalled());
+    // Cleanup has already stopped these; starting them now would revive them.
+    expect(services.periodicTaskService.start).not.toHaveBeenCalled();
+    expect(services.agentRuntime.start).not.toHaveBeenCalled();
     expect(lifecycle.database.$disconnect).not.toHaveBeenCalled();
     drain(undefined);
-    await server.stop(); // Joins the cleanup started mid-startup.
+    await expect(starting).rejects.toThrow('Server startup interrupted by shutdown');
     expect(lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 

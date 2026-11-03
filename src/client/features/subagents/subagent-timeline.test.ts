@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   groupAdjacentToolCalls,
   filterDuplicateResultMessages,
@@ -235,4 +235,167 @@ it('assigns distinct icons in creation order and retains them for finish events'
       .filter((event) => event.id.startsWith('subagent-d-'))
       .map((event) => event.subagentIconIndex)
   ).toEqual([1, 1]);
+});
+
+// Copy of the pre-cache implementation, kept to prove the cached merge is equivalent.
+function legacyTranscriptTimestamp(message: ChatMessage): number {
+  const providerTime = Date.parse(message.message?.timestamp ?? '');
+  return Number.isFinite(providerTime) ? providerTime : Date.parse(message.timestamp);
+}
+function legacyMerge(messages: ChatMessage[], pending: ChatMessage[]): ChatMessage[] {
+  if (pending.length === 0) {
+    return messages;
+  }
+  const merged: ChatMessage[] = [];
+  let index = 0;
+  for (const message of messages) {
+    while (index < pending.length) {
+      const event = pending[index];
+      if (!event || Date.parse(event.timestamp) > legacyTranscriptTimestamp(message)) {
+        break;
+      }
+      merged.push(event);
+      index += 1;
+    }
+    merged.push(message);
+  }
+  merged.push(...pending.slice(index));
+  return merged;
+}
+
+function seededRandom(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return state / 2_147_483_648;
+  };
+}
+
+const RANDOM_TIMES = [
+  '2026-10-30T12:00:00Z',
+  '2026-10-30T12:00:01Z',
+  '2026-10-30T12:00:01.000Z',
+  '2026-10-30T12:00:02Z',
+  '2026-10-30T12:00:03Z',
+  'not a date',
+  '',
+];
+
+function randomTranscript(random: () => number, length: number): ChatMessage[] {
+  const pick = () => RANDOM_TIMES[Math.floor(random() * RANDOM_TIMES.length)] ?? '';
+  return Array.from({ length }, (_, index): ChatMessage => {
+    const message = text(`m${index}`, pick());
+    const providerRoll = random();
+    if (providerRoll < 0.3) {
+      return message;
+    }
+    return {
+      ...message,
+      message: {
+        type: 'assistant',
+        ...(providerRoll < 0.8 ? { timestamp: pick() } : {}),
+        message: { role: 'assistant', content: message.id },
+      },
+    };
+  });
+}
+
+function randomSubagents(random: () => number, count: number): SubagentSummary[] {
+  const pick = () => {
+    const value = RANDOM_TIMES[Math.floor(random() * (RANDOM_TIMES.length + 1))];
+    return value === undefined ? null : value;
+  };
+  const statuses = ['running', 'completed', 'failed', 'cancelled', 'interrupted'] as const;
+  return Array.from({ length: count }, (_, index) => ({
+    ...agent,
+    id: `agent-${index}`,
+    status: statuses[Math.floor(random() * statuses.length)] ?? 'running',
+    createdAt: pick(),
+    completedAt: pick(),
+    updatedAt: pick(),
+  }));
+}
+
+describe('cached timeline timestamps', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('matches the uncached merge on randomized transcripts with ties and invalid times', () => {
+    const random = seededRandom(42);
+    for (let run = 0; run < 300; run += 1) {
+      const messages = randomTranscript(random, Math.floor(random() * 30));
+      const events = createSubagentTimelineEvents(
+        randomSubagents(random, Math.floor(random() * 6))
+      );
+      const legacyEvents = [...events].sort(
+        (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)
+      );
+      expect(events).toEqual(legacyEvents);
+      const expected = legacyMerge(messages, events);
+      // Merge twice so the second pass exercises cached message and event times.
+      expect(mergeEvents(messages, events)).toEqual(expected);
+      const merged = mergeEvents(messages, events);
+      expect(merged).toHaveLength(expected.length);
+      merged.forEach((item, index) => expect(item).toBe(expected[index]));
+    }
+  });
+
+  it('matches the uncached merge for externally built events without cached times', () => {
+    const random = seededRandom(7);
+    for (let run = 0; run < 100; run += 1) {
+      const messages = randomTranscript(random, 20);
+      const pending = randomTranscript(random, 3).map((event) => ({
+        ...event,
+        id: `e-${event.id}`,
+      }));
+      expect(mergeEvents(messages, pending)).toEqual(legacyMerge(messages, pending));
+    }
+  });
+
+  it('places events before transcript rows whose times cannot be parsed', () => {
+    const invalid = text('invalid', 'not a date');
+    const missing: ChatMessage = { ...text('missing', ''), message: undefined };
+    const valid = text('valid', '2026-10-30T11:00:00Z');
+    const merged = mergeSubagentTimeline([valid, invalid, missing], [agent]);
+    expect(merged.map((item) => item.text ?? item.id)).toEqual([
+      'valid',
+      'Audit capture fix started working',
+      'Audit capture fix finished',
+      'invalid',
+      'missing',
+    ]);
+  });
+
+  it('parses each streamed message once across repeated merges', () => {
+    const base = '2026-10-30T12:00:00.000Z';
+    const messages = Array.from({ length: 1000 }, (_, index) =>
+      text(`m${index}`, new Date(Date.parse(base) + index * 1000).toISOString())
+    );
+    // A recently finished agent keeps lifecycle events pending until the tail.
+    const events = createSubagentTimelineEvents([
+      {
+        ...agent,
+        createdAt: new Date(Date.parse(base) + 998_500).toISOString(),
+        completedAt: new Date(Date.parse(base) + 1_000_000).toISOString(),
+      },
+    ]);
+    const parse = vi.spyOn(Date, 'parse');
+    let transcript = messages;
+    const first = mergeEvents(transcript, events);
+    expect(first.at(-1)?.text).toBe('Audit capture fix finished');
+    // At most a provider and local parse for each first-seen transcript message.
+    expect(parse.mock.calls.length).toBeLessThanOrEqual(2 * messages.length);
+
+    for (let chunk = 0; chunk < 50; chunk += 1) {
+      parse.mockClear();
+      const tail = transcript.at(-1);
+      if (!tail) {
+        throw new Error('missing tail');
+      }
+      transcript = [...transcript.slice(0, -1), { ...tail, id: `${tail.id}-${chunk}` }];
+      mergeEvents(transcript, events);
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(2);
+    }
+  });
 });
