@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 
-const mockReadFile = vi.hoisted(() => vi.fn());
 const mockUnlink = vi.hoisted(() => vi.fn());
 const mockSessionDataService = vi.hoisted(() => ({
   findClosedSessionsByWorkspaceId: vi.fn(),
   findClosedSessionByIdWithWorkspace: vi.fn(),
   deleteClosedSession: vi.fn(),
+  readClosedSessionTranscript: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', () => ({
-  readFile: (...args: unknown[]) => mockReadFile(...args),
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
@@ -45,76 +45,40 @@ describe('closedSessionsRouter', () => {
     );
   });
 
-  it('returns a parsed transcript when the transcript file exists', async () => {
+  it('returns the compatible owner DTO without adding current fields', async () => {
     const transcript = {
       messages: [{ role: 'user', content: 'hello' }],
       sessionSummary: 'Test summary',
     };
-    mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
-      id: 'closed-1',
-      transcriptPath: 'transcripts/closed-1.json',
-      workspace: { worktreePath: '/tmp/worktree' },
-    });
-    mockReadFile.mockResolvedValue(JSON.stringify(transcript));
-
-    const caller = createCaller();
-    await expect(caller.getTranscript({ id: 'closed-1' })).resolves.toEqual(transcript);
-
-    expect(mockReadFile).toHaveBeenCalledWith('/tmp/worktree/transcripts/closed-1.json', 'utf-8');
+    mockSessionDataService.readClosedSessionTranscript.mockResolvedValue(transcript);
+    await expect(createCaller().getTranscript({ id: 'closed-1' })).resolves.toEqual(transcript);
   });
 
-  it('throws NOT_FOUND when transcript session metadata is missing', async () => {
-    mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue(null);
-    const caller = createCaller();
-
-    await expect(caller.getTranscript({ id: 'missing' })).rejects.toThrow(
-      'Closed session not found: missing'
-    );
+  it('adds a JSON-text endpoint without changing the existing object response', async () => {
+    const encoded = '{"__proto__":{"keep":1},"messages":[{"constructor":{"prototype":2}}]}';
+    const value: unknown = JSON.parse(encoded);
+    mockSessionDataService.readClosedSessionTranscript.mockResolvedValue(value);
+    await expect(createCaller().getTranscriptJson({ id: 'closed-1' })).resolves.toBe(encoded);
+    await expect(createCaller().getTranscript({ id: 'closed-1' })).resolves.toEqual(value);
   });
 
-  it('throws BAD_REQUEST when workspace has no worktree path', async () => {
-    mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
-      id: 'closed-1',
-      transcriptPath: 'transcripts/closed-1.json',
-      workspace: { worktreePath: null },
+  it.each([
+    ['NOT_FOUND', 'NOT_FOUND', 'Closed session not found'],
+    ['INVALID_INPUT', 'BAD_REQUEST', 'Workspace has no worktree path'],
+    ['NOT_FOUND', 'NOT_FOUND', 'Transcript file not found'],
+    ['INTERNAL_ERROR', 'INTERNAL_SERVER_ERROR', 'Failed to read transcript file'],
+  ] as const)('maps owner %s to %s: %s', async (application, transport, message) => {
+    mockSessionDataService.readClosedSessionTranscript.mockRejectedValue(
+      new ApplicationError(application, message)
+    );
+    await expect(createCaller().getTranscript({ id: 'closed-1' })).rejects.toMatchObject({
+      code: transport,
+      message,
     });
-    const caller = createCaller();
-
-    await expect(caller.getTranscript({ id: 'closed-1' })).rejects.toThrow(
-      'Workspace has no worktree path'
-    );
-  });
-
-  it('maps ENOENT transcript reads to NOT_FOUND', async () => {
-    mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
-      id: 'closed-1',
-      transcriptPath: 'transcripts/closed-1.json',
-      workspace: { worktreePath: '/tmp/worktree' },
+    await expect(createCaller().getTranscriptJson({ id: 'closed-1' })).rejects.toMatchObject({
+      code: transport,
+      message,
     });
-    mockReadFile.mockRejectedValue(
-      Object.assign(new Error('missing file'), {
-        code: 'ENOENT',
-      })
-    );
-    const caller = createCaller();
-
-    await expect(caller.getTranscript({ id: 'closed-1' })).rejects.toThrow(
-      'Transcript file not found'
-    );
-  });
-
-  it('maps non-ENOENT transcript read failures to INTERNAL_SERVER_ERROR', async () => {
-    mockSessionDataService.findClosedSessionByIdWithWorkspace.mockResolvedValue({
-      id: 'closed-1',
-      transcriptPath: 'transcripts/closed-1.json',
-      workspace: { worktreePath: '/tmp/worktree' },
-    });
-    mockReadFile.mockRejectedValue(new Error('permission denied'));
-    const caller = createCaller();
-
-    await expect(caller.getTranscript({ id: 'closed-1' })).rejects.toThrow(
-      'Failed to read transcript file'
-    );
   });
 
   it('deletes closed sessions and best-effort deletes transcript files', async () => {

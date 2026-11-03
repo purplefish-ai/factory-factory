@@ -8,7 +8,10 @@ vi.mock('@/backend/services/session/resources/closed-session.accessor', () => ({
   closedSessionAccessor: { findByIdWithWorkspace: mocks.find },
 }));
 
-import { readClosedSessionProviderIdentity } from './closed-session-reader';
+import {
+  readClosedSessionProviderIdentity,
+  readClosedSessionTranscript,
+} from './closed-session-reader';
 
 let dir: string;
 let root: string;
@@ -80,6 +83,7 @@ describe('readClosedSessionProviderIdentity', () => {
   });
 
   it.each([
+    '',
     '../outside.json',
     'transcripts/../../outside.json',
     '../repo-other/main.json',
@@ -92,6 +96,10 @@ describe('readClosedSessionProviderIdentity', () => {
     writeFileSync(join(dir, 'outside.json'), JSON.stringify({ ...header, messages: [] }));
     mocks.find.mockResolvedValue(row(path));
     await expect(readClosedSessionProviderIdentity('closed-1')).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'Invalid closed session transcript path',
+    });
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
       code: 'INVALID_INPUT',
       message: 'Invalid closed session transcript path',
     });
@@ -111,6 +119,9 @@ describe('readClosedSessionProviderIdentity', () => {
         mocks.find.mockResolvedValue(row('linked/main.json'));
       }
       await expect(readClosedSessionProviderIdentity('closed-1')).rejects.toMatchObject({
+        code: 'INVALID_INPUT',
+      });
+      await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
         code: 'INVALID_INPUT',
       });
     }
@@ -168,6 +179,91 @@ describe('readClosedSessionProviderIdentity', () => {
     });
     mocks.find.mockResolvedValue(row('transcripts'));
     await expect(readClosedSessionProviderIdentity('closed-1')).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to read transcript file',
+    });
+  });
+});
+
+describe('readClosedSessionTranscript', () => {
+  it('reads legacy subdirectories through the actual FK worktree spelling', async () => {
+    const legacy = {
+      messages: [{ role: 'user', content: 'hello' }],
+      sessionSummary: 'Test summary',
+    };
+    write(legacy);
+    const linkedRoot = join(dir, 'linked-repo');
+    symlinkSync(root, linkedRoot);
+    mocks.find.mockResolvedValue(row('transcripts/../transcripts/main.json', linkedRoot));
+    await expect(readClosedSessionTranscript('closed-1')).resolves.toEqual(legacy);
+  });
+
+  it.each(['compact', 'reordered'] as const)(
+    'reads complete %s bodies with opaque metadata',
+    async (format) => {
+      const messages = [null, 1, ['legacy']];
+      const value =
+        format === 'compact'
+          ? { messages, metadata: null, version: ['future'], sessionSummary: { x: 1 } }
+          : { sessionSummary: { x: 1 }, version: ['future'], metadata: null, messages };
+      const content = JSON.stringify(value, null, format === 'compact' ? 0 : 2);
+      expect(content.indexOf('"messages"') > content.indexOf('"metadata"')).toBe(
+        format === 'reordered'
+      );
+      writeFileSync(join(root, 'transcripts/main.json'), content);
+      await expect(readClosedSessionTranscript('closed-1')).resolves.toEqual(value);
+    }
+  );
+
+  it.each(['not json', 'null', '1', '[]', '{}', '{"messages":null}', '{"messages":{}}'])(
+    'rejects malformed full body %s without leaking paths',
+    async (body) => {
+      writeFileSync(join(root, 'transcripts/main.json'), body);
+      await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to read transcript file',
+      });
+    }
+  );
+
+  it('rejects a truncated body that still has a usable provider header', async () => {
+    const pretty = JSON.stringify(
+      { ...header, messages: [{ text: 'x'.repeat(200_000) }] },
+      null,
+      2
+    );
+    writeFileSync(join(root, 'transcripts/main.json'), pretty.slice(0, 100_000));
+    await expect(readClosedSessionProviderIdentity('closed-1')).resolves.toMatchObject(
+      header.metadata
+    );
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+    });
+  });
+
+  it('maps missing rows/worktrees/files and IO failures to safe application errors', async () => {
+    mocks.find.mockResolvedValue(null);
+    await expect(readClosedSessionTranscript('missing')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Closed session not found',
+    });
+    mocks.find.mockResolvedValue(row('transcripts/main.json', null));
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'Workspace has no worktree path',
+    });
+    mocks.find.mockResolvedValue(row('transcripts/main.json', join(dir, 'absent-worktree')));
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Transcript file not found',
+    });
+    mocks.find.mockResolvedValue(row());
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Transcript file not found',
+    });
+    mocks.find.mockResolvedValue(row('transcripts'));
+    await expect(readClosedSessionTranscript('closed-1')).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
       message: 'Failed to read transcript file',
     });

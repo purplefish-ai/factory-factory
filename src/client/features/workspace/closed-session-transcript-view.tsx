@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
-import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
+import { parseClosedSessionReadTranscript } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
+import { projectClosedSessionTranscriptRows } from './closed-session-transcript-items';
 
 interface ClosedSessionTranscriptViewProps {
   sessionId: string;
@@ -11,9 +11,14 @@ interface ClosedSessionTranscriptViewProps {
 
 export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscriptViewProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { data: transcript, isLoading } = trpc.closedSessions.getTranscript.useQuery({
-    id: sessionId,
-  });
+  const {
+    data: transcript,
+    isLoading,
+    error,
+  } = trpc.closedSessions.getTranscriptJson.useQuery(
+    { id: sessionId },
+    { select: parseClosedSessionReadTranscript, structuralSharing: false }
+  );
 
   // Auto-scroll to bottom when transcript loads
   useEffect(() => {
@@ -33,7 +38,15 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
-  if (!transcript) {
+  if (error && error.data?.code !== 'NOT_FOUND' && !transcript) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-sm text-muted-foreground">Failed to load transcript</div>
+      </div>
+    );
+  }
+
+  if (!transcript || error?.data?.code === 'NOT_FOUND') {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-sm text-muted-foreground">Transcript not found</div>
@@ -41,28 +54,47 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     );
   }
 
+  const notice = error ? (
+    <div role="status" aria-live="polite" className="shrink-0 border-b p-3 text-sm">
+      Latest transcript read failed. Showing previously loaded history.
+    </div>
+  ) : null;
+
   if (transcript.messages.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-muted-foreground">No messages in this session</div>
+      <div className="flex h-full min-h-0 flex-col">
+        {notice}
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="text-sm text-muted-foreground">No messages in this session</div>
+        </div>
       </div>
     );
   }
 
-  // Group messages using the same logic as the live chat
-  const groupedMessages = groupAdjacentToolCalls(transcript.messages);
+  const items = projectClosedSessionTranscriptRows(transcript.messages);
 
-  return (
-    <ScrollArea ref={scrollAreaRef} className="h-full">
+  const history = (
+    <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
       <div className="p-4 space-y-4">
-        {withOccurrenceKeys(groupedMessages, (item) => item.id).map(({ item, key }) => (
-          <GroupedMessageItemRenderer
-            key={key}
-            item={item}
-            // Read-only mode - no interactivity callbacks
-          />
-        ))}
+        {items.map(({ item, key }) =>
+          item.kind === 'rich' ? (
+            <GroupedMessageItemRenderer key={key} item={item.value} />
+          ) : (
+            <section key={key} aria-label="Archived message JSON">
+              <div className="text-xs text-muted-foreground">Archived message JSON</div>
+              <pre className="whitespace-pre-wrap break-words text-sm">
+                {JSON.stringify(item.value, null, 2)}
+              </pre>
+            </section>
+          )
+        )}
       </div>
     </ScrollArea>
+  );
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {notice}
+      {history}
+    </div>
   );
 }
