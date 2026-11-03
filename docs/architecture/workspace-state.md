@@ -463,6 +463,14 @@ closing its session, run-script, cache, and database dependencies. If shutdown
 begins during essential reconciliation, startup aborts before launching archive
 recovery or starting background services.
 
+Startup reconciliation marks stale PROVISIONING workspaces FAILED before
+readiness, but initializes NEW workspaces left by a prior process in the
+background once startup completes: worktree creation, the startup script and the
+default agent session can take minutes. Those workspaces initialize one at a
+time; periodic reconciliation waits for that pass before querying, so it cannot
+initialize a workspace twice. Shutdown stops it between workspaces and drains
+the one in flight before disconnecting the database.
+
 The board keeps issue intake suppressed per pending operation and owns locked
 subset recovery, retries and selection. The detail route owns its dialogs and
 post-success navigation; leaving its committed workspace lifetime suppresses

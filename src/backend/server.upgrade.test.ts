@@ -115,7 +115,8 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     },
     reconciliationService: {
       cleanupOrphans: vi.fn(async () => undefined),
-      reconcile: vi.fn(async () => undefined),
+      recoverStaleProvisioningWorkspaces: vi.fn(async () => undefined),
+      startNewWorkspaceInitialization: vi.fn(),
       startPeriodicCleanup: vi.fn(),
       stopPeriodicCleanup: vi.fn(async () => undefined),
     },
@@ -533,13 +534,12 @@ describe('server websocket upgrade routing', () => {
 
   it('logs startup reconciliation failures and continues starting', async () => {
     const harness = createTestHarness();
-    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockRejectedValueOnce(
-      new Error('cleanup failed')
-    );
+    const reconciliation = harness.services.reconciliationService;
+    vi.mocked(reconciliation.cleanupOrphans).mockRejectedValueOnce(new Error('cleanup failed'));
     vi.mocked(
       harness.services.sessionLifecycleService.recoverStaleRunningSessions
     ).mockRejectedValueOnce(new Error('session recovery failed'));
-    vi.mocked(harness.services.reconciliationService.reconcile).mockRejectedValueOnce(
+    vi.mocked(reconciliation.recoverStaleProvisioningWorkspaces).mockRejectedValueOnce(
       new Error('reconcile failed')
     );
     vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
@@ -552,6 +552,7 @@ describe('server websocket upgrade routing', () => {
     const server = createTestServer(harness.application, 0);
 
     await expect(server.start()).resolves.toBe('http://localhost:0');
+    expect(reconciliation.startNewWorkspaceInitialization).toHaveBeenCalledOnce();
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to cleanup orphan sessions on startup',
       expect.any(Object)

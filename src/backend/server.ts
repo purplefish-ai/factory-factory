@@ -505,10 +505,10 @@ export function createServer(application: Application, requestedPort?: number): 
           }
         });
 
-        // Reconcile workspaces that may have been left in inconsistent states
-        // (e.g., stuck in PROVISIONING due to server crash)
+        // Fail workspaces left stuck in PROVISIONING by a crash. NEW workspaces
+        // are initialized in the background once startup completes.
         await runStartupTask('Failed to reconcile workspaces on startup', () =>
-          reconciliationService.reconcile()
+          reconciliationService.recoverStaleProvisioningWorkspaces()
         );
 
         // Reset run script states left in transient STARTING/STOPPING by a prior crash
@@ -553,6 +553,9 @@ export function createServer(application: Application, requestedPort?: number): 
         await ratchetService.start();
         periodicTaskService.start();
         services.agentRuntime?.start();
+        // Provisioning (git, startup script, agent session) can take minutes, so
+        // it must not hold back readiness. `stopPeriodicCleanup` drains it.
+        reconciliationService.startNewWorkspaceInitialization();
         startupComplete = true;
 
         logger.info('Server endpoints available', {
