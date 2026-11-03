@@ -1166,6 +1166,13 @@ frontend and log paths through the child environment. The child runs migrations,
 starts the server, and posts `ready` with its URL or `error` over
 `process.parentPort`; startup that takes longer than two minutes is killed.
 
+Electron main opens the window as soon as the app is ready, showing a
+self-contained loading page (`electron/main/loading-page.ts`, a `data:` URL with
+no scripts or remote resources) while the backend starts, then loads the app
+URL. A failed start destroys the loading window before the startup error dialog
+and quit; closing it during startup stops the backend like closing any last
+window, and the app URL is never loaded into a closed window.
+
 On macOS a utility process runs from the Electron Helper binary, so Electron
 main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
 provider CLIs and the child-workspace MCP server launch with

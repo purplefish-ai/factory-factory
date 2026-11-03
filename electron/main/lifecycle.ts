@@ -5,6 +5,7 @@ import type {
   OpenDialogOptions,
   OpenDialogReturnValue,
 } from 'electron';
+import { LOADING_PAGE_URL } from './loading-page.js';
 
 interface PreventableEventLike {
   preventDefault(): void;
@@ -222,10 +223,16 @@ export function createElectronLifecycle({
     });
   };
 
-  const createAndLoadWindow = async (url: string): Promise<BrowserWindowLike> => {
+  // Open the window with a local loading page so it appears while the backend
+  // starts; the app URL is loaded once the backend is ready.
+  const openLoadingWindow = (): {
+    window: BrowserWindowLike;
+    loadingPageLoaded: Promise<void>;
+  } => {
     const window = new browserWindow({
       width: 1400,
       height: 900,
+      title: 'Factory Factory',
       webPreferences: {
         preload: preloadPath,
         contextIsolation: true,
@@ -233,12 +240,15 @@ export function createElectronLifecycle({
       },
     });
     mainWindow = window;
-
     registerWindowHandlers(window);
-    await window.loadURL(url);
-    logger.log('[electron] Window created and URL loaded');
 
-    return window;
+    // The loading page is cosmetic: a failure to show it must not block startup.
+    const loadingPageLoaded = window.loadURL(LOADING_PAGE_URL).catch((error: unknown) => {
+      logger.error('[electron] Failed to show the loading page:', error);
+    });
+    logger.log('[electron] Window created, waiting for backend...');
+
+    return { window, loadingPageLoaded };
   };
 
   const handleCreateWindowFailure = (
@@ -247,6 +257,10 @@ export function createElectronLifecycle({
     stopRequestCountAtStart: number
   ): BrowserWindowLike | null => {
     const failedWindow = window ?? mainWindow;
+    // Classify before destroying the window: destroying the last window emits
+    // `window-all-closed`, which requests a stop and would look like a cancellation.
+    const stoppedByQuit = quitting;
+    const stoppedByStopRequest = stopRequestCount !== stopRequestCountAtStart;
 
     if (failedWindow !== null && !failedWindow.isDestroyed()) {
       failedWindow.destroy();
@@ -255,12 +269,12 @@ export function createElectronLifecycle({
       mainWindow = null;
     }
 
-    if (quitting) {
+    if (stoppedByQuit) {
       // Quitting stops a backend that is still starting; that is not a failure.
       logger.log('[electron] Window creation stopped because the app is quitting');
       return null;
     }
-    if (stopRequestCount !== stopRequestCountAtStart) {
+    if (stoppedByStopRequest) {
       // Closing the last window stops the backend and cancels a start in flight.
       logger.log('[electron] Window creation stopped because the backend was stopped');
       return null;
@@ -276,16 +290,40 @@ export function createElectronLifecycle({
     return null;
   };
 
+  const loadAppWhenReady = async (
+    window: BrowserWindowLike,
+    loadingPageLoaded: Promise<void>,
+    url: string
+  ): Promise<BrowserWindowLike | null> => {
+    // Let the loading page settle so loading the app does not abort it.
+    if (!window.isDestroyed()) {
+      await loadingPageLoaded;
+    }
+    if (window.isDestroyed()) {
+      // The user closed the window while the backend started; closing the
+      // last window already stops the backend (and quits off macOS).
+      logger.log('[electron] Window closed before the backend was ready');
+      return null;
+    }
+
+    await window.loadURL(url);
+    logger.log('[electron] App URL loaded');
+    return window;
+  };
+
   const createWindow = (): Promise<BrowserWindowLike | null> => {
     const existingWindow = resolveMainWindow();
     if (existingWindow) {
       existingWindow.show();
       existingWindow.focus();
-      return Promise.resolve(existingWindow);
     }
 
+    // A window that is still waiting for the backend resolves with the creation.
     if (createWindowPromise !== null) {
       return createWindowPromise;
+    }
+    if (existingWindow) {
+      return Promise.resolve(existingWindow);
     }
 
     createWindowPromise = (async () => {
@@ -305,11 +343,13 @@ export function createElectronLifecycle({
           return null;
         }
 
+        const loading = openLoadingWindow();
+        window = loading.window;
+
         const url = await serverManager.start();
         logger.log('[electron] Server started, URL:', url);
 
-        window = await createAndLoadWindow(url);
-        return window;
+        return await loadAppWhenReady(window, loading.loadingPageLoaded, url);
       } catch (error) {
         return handleCreateWindowFailure(window, error, stopRequestCountAtStart);
       } finally {
