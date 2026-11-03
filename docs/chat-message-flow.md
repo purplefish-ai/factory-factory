@@ -340,6 +340,30 @@ composer expansion, attachments, prompts and jump-button reachability in
 Storybook. The iOS-branch engine characterization exercises deferred writes; it
 does not substitute for checking momentum behavior on an actual iOS device.
 
+## Passive archive message validation
+
+The archive-focused `ArchivedChatMessageSchema` and `ArchivedAgentMessageSchema`
+in `src/shared/acp-protocol/protocol/archived-message-schema.ts` validate the
+complete current serialized message structure. They are a passive dependency for
+the compatible archive reader; no reader or live WebSocket path uses them yet.
+Unknown message/content/stream tags and malformed current fields reject.
+Preserving opaque legacy rows and rendering their fallback belongs to the
+archive reader adapter.
+
+Tool inputs, tool schemas and result values use JSON-valued records/values:
+functions, errors, cycles and nested `undefined` are outside the serialized
+archive scope. Declared optional properties can remain absent or explicitly
+`undefined` before serialization. The codec preserves every declared present
+rich field without adding source/tag coupling, date formats, numeric positivity
+or order constraints. Its tests compare recursive declared field paths and rich
+roundtrips as well as output assignability, so optional additions cannot
+silently be stripped.
+
+JSON records validate entries recursively and reconstruct with
+`Object.fromEntries`, preserving own `__proto__` keys as data without changing
+object prototypes. Standard Zod JSON/record parsing strips that key, so it
+cannot provide the archive's lossless tool-record or model-name boundary.
+
 ## Sources of truth
 
 | Concern                                               | Source                                                                                                                                                                                                             |
