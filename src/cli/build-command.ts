@@ -11,10 +11,15 @@ function isSourceCheckout(projectRoot: string): boolean {
   );
 }
 
-export function getBuildRecoveryGuidance(projectRoot: string): string {
-  return isSourceCheckout(projectRoot)
-    ? 'Run `pnpm build` from the source checkout first (or use `pnpm exec tsx src/cli/index.ts build`).'
-    : 'The installed package is missing production assets. Reinstall factory-factory; building requires a source checkout.';
+export function getBuildRecoveryGuidance(
+  projectRoot: string,
+  options: { supportsDevMode?: boolean } = {}
+): string {
+  if (!isSourceCheckout(projectRoot)) {
+    return 'The installed package is missing production assets. Reinstall factory-factory; building requires a source checkout.';
+  }
+  const devHint = options.supportsDevMode ? ' Or use --dev for development mode.' : '';
+  return `Run \`pnpm build\` from the source checkout first (or use \`pnpm exec tsx src/cli/index.ts build\`).${devHint}`;
 }
 
 export function registerBuildCommand(program: Command, projectRoot: string): void {

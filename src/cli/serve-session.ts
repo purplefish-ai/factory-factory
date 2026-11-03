@@ -118,10 +118,14 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
       const frontendDist = join(projectRoot, 'dist', 'client');
       const backendDist = join(projectRoot, 'dist', 'src', 'backend', 'index.js');
       if (!existsSync(frontendDist)) {
-        throw new Error(`Frontend not built. ${getBuildRecoveryGuidance(projectRoot)}`);
+        throw new Error(
+          `Frontend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+        );
       }
       if (!existsSync(backendDist)) {
-        throw new Error(`Backend not built. ${getBuildRecoveryGuidance(projectRoot)}`);
+        throw new Error(
+          `Backend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+        );
       }
       console.log(chalk.blue('  🔧 Starting server (production mode)...'));
       track(

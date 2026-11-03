@@ -114,23 +114,23 @@ describe('ff build', () => {
 describe('missing build recovery', () => {
   it('directs checkout users to the canonical package build', async () => {
     checkout();
-    await expect(
-      startFactoryFactoryServer({
-        projectRoot: root,
-        databasePath: ':memory:',
-        requestedPort: 3001,
-      })
-    ).rejects.toThrow(/pnpm build/);
+    const pending = startFactoryFactoryServer({
+      projectRoot: root,
+      databasePath: ':memory:',
+      requestedPort: 3001,
+    });
+    await expect(pending).rejects.toThrow(/pnpm build/);
+    await expect(pending).rejects.not.toThrow(/--dev/);
   });
 
   it('directs installed-package users to reinstall rather than build missing sources', async () => {
-    await expect(
-      startFactoryFactoryServer({
-        projectRoot: root,
-        databasePath: ':memory:',
-        requestedPort: 3001,
-      })
-    ).rejects.toThrow(/reinstall/i);
+    const pending = startFactoryFactoryServer({
+      projectRoot: root,
+      databasePath: ':memory:',
+      requestedPort: 3001,
+    });
+    await expect(pending).rejects.toThrow(/reinstall/i);
+    await expect(pending).rejects.not.toThrow(/--dev/);
   });
 });
 
@@ -148,16 +148,20 @@ it.each([
     if (asset === 'backend') {
       mkdirSync(join(root, 'dist', 'client'), { recursive: true });
     }
-    await expect(
-      runServeSession({
-        projectRoot: root,
-        env: {},
-        host: '127.0.0.1',
-        frontendPort: 3000,
-        backendPort: 3001,
-        signal: new AbortController().signal,
-        onReady: () => Promise.resolve(),
-      })
-    ).rejects.toThrow(expected);
+    const pending = runServeSession({
+      projectRoot: root,
+      env: {},
+      host: '127.0.0.1',
+      frontendPort: 3000,
+      backendPort: 3001,
+      signal: new AbortController().signal,
+      onReady: () => Promise.resolve(),
+    });
+    await expect(pending).rejects.toThrow(expected);
+    if (source) {
+      await expect(pending).rejects.toThrow(/--dev/);
+    } else {
+      await expect(pending).rejects.not.toThrow(/--dev/);
+    }
   }
 );
