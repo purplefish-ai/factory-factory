@@ -19,6 +19,7 @@ function Session() {
 }
 
 afterEach(() => {
+  Reflect.deleteProperty(navigator, 'windowControlsOverlay');
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -67,4 +68,46 @@ it('fits the visible viewport above the keyboard and restores focus to the opene
   document.removeEventListener('focusin', captureReopenHeight);
   expect(heightAtFocus).toBe('882px');
   await act(() => root.unmount());
+});
+
+it('keeps the drawer below native controls while preserving a lower keyboard viewport offset', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const viewport = Object.assign(new EventTarget(), { height: 882, offsetTop: 0 });
+  vi.stubGlobal('visualViewport', viewport);
+  const overlay = Object.assign(new EventTarget(), {
+    visible: true,
+    getTitlebarAreaRect: () => new DOMRect(86, 0, 700, 32),
+  });
+  Object.defineProperty(navigator, 'windowControlsOverlay', { configurable: true, value: overlay });
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<Session />));
+    await act(() => container.querySelector('button')!.click());
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.style.top).toBe('32px');
+    expect(dialog.style.height).toBe('850px');
+    await act(() => {
+      viewport.height = 420;
+      viewport.offsetTop = 60;
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(dialog.style.top).toBe('60px');
+    expect(dialog.style.height).toBe('420px');
+    await act(() => {
+      viewport.offsetTop = 12;
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(dialog.style.top).toBe('32px');
+    expect(dialog.style.height).toBe('400px');
+    await act(() => {
+      overlay.visible = false;
+      overlay.dispatchEvent(new Event('geometrychange'));
+    });
+    expect(dialog.style.top).toBe('12px');
+    expect(dialog.style.height).toBe('420px');
+  } finally {
+    await act(() => root.unmount());
+  }
 });

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkspaceHeaderFixture } from './workspace-header-fixture';
@@ -138,6 +139,29 @@ export const InstalledPwaSearch: Story = {
       await expect(bounds.top).toBeGreaterThanOrEqual(32);
       await expect(bounds.top).toBeLessThan(
         canvasElement.ownerDocument.defaultView!.innerHeight / 3
+      );
+    });
+  },
+};
+
+export const InstalledPwaToolsDrawer: Story = {
+  decorators: InstalledPwaControlsRight.decorators,
+  render: () => (
+    <>
+      <WorkspaceHeaderFixture />
+      <WorkspaceToolsDrawer open onOpenChange={() => undefined}>
+        <div className="p-4">Workspace tools</div>
+      </WorkspaceToolsDrawer>
+    </>
+  ),
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    const dialog = await body.findByRole('dialog', { name: 'Workspace tools' });
+    await waitFor(async () => {
+      const bounds = dialog.getBoundingClientRect();
+      await expect(bounds.top).toBe(32);
+      await expect(bounds.bottom).toBeLessThanOrEqual(
+        canvasElement.ownerDocument.defaultView!.innerHeight
       );
     });
   },

@@ -29,12 +29,16 @@ function getTitlebarBottom() {
   return rect.y + rect.height;
 }
 
+export function useTitlebarBottom() {
+  return useSyncExternalStore(subscribe, getTitlebarBottom, () => 0);
+}
+
 // Radix otherwise allows portalled popups into the browser-owned title bar.
 export function useOverlayPositioning(
   padding: CollisionPadding = 0,
   sticky: 'partial' | 'always' = 'partial'
 ) {
-  const top = useSyncExternalStore(subscribe, getTitlebarBottom, () => 0);
+  const top = useTitlebarBottom();
   if (top === 0) {
     return { collisionPadding: padding, sticky };
   }
