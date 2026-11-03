@@ -3,8 +3,12 @@ import headerCss from '@/client/components/app-header.css?raw';
 
 // Storybook has no native window. Substitute only browser-owned geometry and
 // the media query, so the preview exercises the production CSS and controls.
+const overlayMediaQuery = /\(\s*display-mode\s*:\s*window-controls-overlay\s*\)/;
+if (!overlayMediaQuery.test(headerCss)) {
+  throw new Error('PWA header preview could not find the Window Controls Overlay media query.');
+}
 const previewCss = headerCss
-  .replace('(display-mode: window-controls-overlay)', 'all')
+  .replace(overlayMediaQuery, 'all')
   .replace(/env\((titlebar-area-[\w-]+)(?:,[^)]*)?\)/g, (_match, name: string) => {
     const values: Record<string, string> = {
       'titlebar-area-x': 'var(--preview-titlebar-left)',
