@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { prisma } from '@/backend/db';
+import { readWorkspaceInitialPrompt } from '@/shared/workspace-initial-prompt';
 import type { Prisma } from '@prisma-gen/client';
 import {
   type FlattenedWorkspaceRow,
@@ -54,13 +54,6 @@ export type WorkspaceInitStatusRow = Prisma.WorkspaceGetPayload<{
   select: typeof workspaceInitStatusSelect;
 }>;
 
-const initialPromptMetadataSchema = z.object({ initialPrompt: z.string() });
-
-function readInitialPrompt(creationMetadata: Prisma.JsonValue): string | null {
-  const parsed = initialPromptMetadataSchema.safeParse(creationMetadata);
-  return parsed.success ? parsed.data.initialPrompt : null;
-}
-
 class WorkspaceDetailReadAccessor {
   /**
    * The workspace detail served to clients: the full flattened row minus the
@@ -81,7 +74,7 @@ class WorkspaceDetailReadAccessor {
       return null;
     }
     const { creationMetadata, ...rest } = flattenWorkspaceRow(row);
-    return { ...rest, initialPrompt: readInitialPrompt(creationMetadata) };
+    return { ...rest, initialPrompt: readWorkspaceInitialPrompt(creationMetadata) };
   }
 
   /** The worktree path and project default branch, for git and file reads. */

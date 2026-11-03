@@ -1,9 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
-import { z } from 'zod';
 import type { AppRouter } from '@/client/lib/trpc';
 import { workspaceDetailCacheOptions } from '@/client/lib/workspace-cache-reconciler';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import { readWorkspaceInitialPrompt } from '@/shared/workspace-initial-prompt';
 
 /**
  * A newly created workspace, as the create endpoint returns it. Typed from the
@@ -11,8 +11,6 @@ import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary
  * ratchet's, which live in their own table — are part of the shape.
  */
 export type CreatedWorkspace = inferRouterOutputs<AppRouter>['workspace']['create'];
-
-const initialPromptMetadataSchema = z.object({ initialPrompt: z.string() });
 
 /**
  * Creates an enriched workspace object with computed fields for optimistic cache updates.
@@ -28,10 +26,9 @@ export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) 
   // Detail omits creation metadata (it retains base64 initial attachments) and
   // the init log; it carries only the initial prompt.
   const { creationMetadata, initOutput: _initOutput, ...detail } = workspace;
-  const metadata = initialPromptMetadataSchema.safeParse(creationMetadata);
   return {
     ...detail,
-    initialPrompt: metadata.success ? metadata.data.initialPrompt : null,
+    initialPrompt: readWorkspaceInitialPrompt(creationMetadata),
     sessionSummaries: summary.sessionSummaries,
     agentSessions: [],
     terminalSessions: [],
