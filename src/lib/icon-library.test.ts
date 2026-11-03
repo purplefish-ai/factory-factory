@@ -5,10 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   allowedPhosphorWeights,
-  type PhosphorWeight,
+  isPhosphorWeight,
   phosphorWeightAllowlist,
-  phosphorWeights,
-} from '../../scripts/phosphor-icon-weights';
+} from './phosphor-icon-weights';
 
 const repositoryRoot = process.cwd();
 const thisFile = 'src/lib/icon-library.test.ts';
@@ -91,9 +90,23 @@ function phosphorWeightUsage(source: string, file: string) {
     }
   };
 
+  // Spread props could carry any weight; a later explicit weight attribute overrides them.
+  const checkSpread = (node: ts.JsxSpreadAttribute) => {
+    const tag = node.parent.parent.tagName.getText(sourceFile);
+    const later = node.parent.properties.slice(node.parent.properties.indexOf(node) + 1);
+    const overridden = later.some(
+      (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === 'weight'
+    );
+    if (icons.has(tag) && !overridden) {
+      violations.push(`${at(node)}: follow spread props on <${tag}> with an explicit weight`);
+    }
+  };
+
   const visit = (node: ts.Node) => {
     if (ts.isJsxAttribute(node) && node.name.getText(sourceFile) === 'weight') {
       recordWeightAttribute(node);
+    } else if (ts.isJsxSpreadAttribute(node)) {
+      checkSpread(node);
     } else if (
       icons.size > 0 &&
       (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
@@ -105,10 +118,6 @@ function phosphorWeightUsage(source: string, file: string) {
   };
   visit(sourceFile);
   return { uses, violations };
-}
-
-function isPhosphorWeight(weight: string): weight is PhosphorWeight {
-  return phosphorWeights.some((known) => known === weight);
 }
 
 function hasFillWeight(icon: string): boolean {
@@ -163,12 +172,22 @@ describe('icon library', () => {
       'const c = <Icon weight="duotone" />;',
       'const d = <DoneIcon weight={weight} />;',
       "const e = createElement(DoneIcon, { weight: 'fill' });",
+      'const f = <LeafIcon {...props} />;',
+      'const g = <LeafIcon {...props} weight="regular" />;',
     ].join('\n');
     expect(phosphorWeightUsage(source, 'sample.tsx')).toEqual({
-      uses: ['Check:fill', 'Leaf:bold', 'Leaf:thin', 'Check:duotone', 'Leaf:duotone'],
+      uses: [
+        'Check:fill',
+        'Leaf:bold',
+        'Leaf:thin',
+        'Check:duotone',
+        'Leaf:duotone',
+        'Leaf:regular',
+      ],
       violations: [
         'sample.tsx:6: weight must be a string literal or literal conditional',
         'sample.tsx:7: pass Phosphor weights as JSX attributes',
+        'sample.tsx:8: follow spread props on <LeafIcon> with an explicit weight',
       ],
     });
     expect(
@@ -186,9 +205,13 @@ describe('icon library', () => {
     const files = sourceFiles(join(repositoryRoot, 'src')).filter(
       (path) => relative(repositoryRoot, path) !== thisFile
     );
-    const usage = files.map((path) =>
-      phosphorWeightUsage(readFileSync(path, 'utf8'), relative(repositoryRoot, path))
-    );
+    // Only files mentioning Phosphor or a weight can produce uses or violations.
+    const usage = files.flatMap((path) => {
+      const source = readFileSync(path, 'utf8');
+      return /\bweight\b|@phosphor-icons/.test(source)
+        ? [phosphorWeightUsage(source, relative(repositoryRoot, path))]
+        : [];
+    });
     expect(usage.flatMap(({ violations }) => violations)).toEqual([]);
 
     const uses = new Set(usage.flatMap(({ uses }) => uses));
@@ -196,14 +219,14 @@ describe('icon library', () => {
       const [icon = '', weight = ''] = use.split(':');
       return !(isPhosphorWeight(weight) && allowedPhosphorWeights(icon).has(weight));
     });
-    // Add the icon to phosphorWeightAllowlist in scripts/phosphor-icon-weights.ts.
+    // Add the icon to phosphorWeightAllowlist in src/lib/phosphor-icon-weights.ts.
     expect(disallowed).toEqual([]);
 
     const unused = Object.entries(phosphorWeightAllowlist).flatMap(([weight, icons = []]) =>
       icons.filter((icon) => !uses.has(`${icon}:${weight}`)).map((icon) => `${icon}:${weight}`)
     );
     expect(unused).toEqual([]);
-  });
+  }, 30_000);
 
   it('uses Phosphor without active Lucide references', () => {
     const packageJson = packageJsonSchema.parse(

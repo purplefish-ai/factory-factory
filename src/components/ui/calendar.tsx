@@ -131,12 +131,12 @@ function CalendarRoot({ className, rootRef, ...props }: RootProps) {
 
 function CalendarChevron({ className, orientation, ...props }: ChevronProps) {
   if (orientation === 'left') {
-    return <CaretLeftIcon className={cn('size-4', className)} {...props} />;
+    return <CaretLeftIcon className={cn('size-4', className)} {...props} weight="regular" />;
   }
   if (orientation === 'right') {
-    return <CaretRightIcon className={cn('size-4', className)} {...props} />;
+    return <CaretRightIcon className={cn('size-4', className)} {...props} weight="regular" />;
   }
-  return <CaretDownIcon className={cn('size-4', className)} {...props} />;
+  return <CaretDownIcon className={cn('size-4', className)} {...props} weight="regular" />;
 }
 
 function CalendarWeekNumber({ children, ...props }: WeekNumberProps) {

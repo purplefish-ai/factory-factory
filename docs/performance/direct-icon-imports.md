@@ -17,31 +17,33 @@ module-specific test doubles use the same direct paths.
 
 Each `dist/defs/<Name>.es.js` module ships SVG paths for all six weights. The
 `phosphorIconWeights` Vite plugin in `scripts/phosphor-icon-weights.ts` keeps
-`regular` plus the per-icon weights listed in `phosphorWeightAllowlist`. It runs
-for production builds, the dev server's dependency pre-bundling, and Storybook,
-which loads `vite.config.ts`. Its plugin names include the allowlist, so editing
-the list invalidates Vite's dependency cache. If a defs module does not have the
-expected `new Map([[weight, element], ...])` shape with all six weights, the
-build fails instead of emitting icons without paths.
+`regular` plus the per-icon weights listed in `phosphorWeightAllowlist`
+(`src/lib/phosphor-icon-weights.ts`). It runs for production builds, the dev
+server's dependency pre-bundling, and Storybook, which loads `vite.config.ts`.
+Its plugin names include the allowlist, so editing the list invalidates Vite's
+dependency cache. If a defs module does not have the expected
+`new Map([[weight, element], ...])` shape with all six weights, the build fails
+instead of emitting icons without paths.
 
 The icon policy test in `src/lib/icon-library.test.ts` parses source and fails
 for weights outside the allowlist and for unused allowlist entries. Write
 weights as string literals or conditionals of literals on a Phosphor icon
 element. A weight on another tag, such as a dynamically chosen `<Icon />`,
-applies to every Phosphor icon the file imports. Weight props in objects,
-non-literal weights, and Phosphor imports other than `dist/csr/<Name>` and
-`dist/lib/types` are rejected. To use a new weight, add the icon to the
-allowlist.
+applies to every Phosphor icon the file imports. Spread props on a Phosphor icon
+must be followed by an explicit `weight`. Weight props in objects, non-literal
+weights, and Phosphor imports other than `dist/csr/<Name>` and `dist/lib/types`
+are rejected. To use a new weight, add the icon to the allowlist.
 
-With `pnpm exec vite build --manifest`, the entry chunk changes from 493 KB /
-144 KB gzip to 412 KB / 124 KB gzip. The startup static closure changes from
-1,067 KB / 329 KB gzip to 963 KB / 303 KB gzip. Total emitted JavaScript shrinks
-by 262 KB.
+Measured with `pnpm exec vite build --manifest` on main at `c58d26eaf`, before
+and after adding the plugin. The application has grown since the direct-import
+comparison below. The entry chunk changes from 493 KB / 144 KB gzip to 412 KB /
+124 KB gzip. The startup static closure changes from 1,067 KB / 329 KB gzip to
+963 KB / 303 KB gzip. Total emitted JavaScript shrinks by 262 KB.
 
 ## Local comparison
 
-Matching source before/after the import change, macOS arm64, Node 26.8.1,
-headless Chrome, single samples:
+Matching source before/after the import change (before the weight plugin), macOS
+arm64, Node 26.8.1, headless Chrome, single samples:
 
 | Measurement                          | Barrel imports | Direct imports |
 | ------------------------------------ | -------------: | -------------: |

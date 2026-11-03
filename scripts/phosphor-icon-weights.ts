@@ -1,57 +1,26 @@
 import { type Plugin, parseAst } from 'vite';
 
-/** Every weight a Phosphor icon definition module ships. */
-export const phosphorWeights = ['thin', 'light', 'regular', 'bold', 'fill', 'duotone'] as const;
-export type PhosphorWeight = (typeof phosphorWeights)[number];
-
 /**
- * Non-default weights each icon may render, keyed by its `dist/csr/<Name>` module name.
- * `regular` (the IconBase default) is always kept. The icon policy test in
- * `src/lib/icon-library.test.ts` fails when source uses a weight not listed here,
- * and when an entry here is no longer used.
+ * The weight policy from `src/lib/phosphor-icon-weights.ts`. `vite.config.ts` passes it
+ * in so this module, which Vite's config loader bundles, has no extensionless imports.
  */
-export const phosphorWeightAllowlist: Readonly<
-  Partial<Record<Exclude<PhosphorWeight, 'regular'>, readonly string[]>>
-> = {
-  fill: ['CheckCircle', 'Circle', 'Play', 'Square', 'Wrench'],
-  duotone: [
-    'Acorn',
-    'Butterfly',
-    'Cactus',
-    'Clover',
-    'Flower',
-    'FlowerLotus',
-    'Leaf',
-    'Plant',
-    'PottedPlant',
-    'Sun',
-    'Tree',
-    'TreeEvergreen',
-  ],
-};
-
-export function allowedPhosphorWeights(icon: string): ReadonlySet<PhosphorWeight> {
-  return new Set<PhosphorWeight>([
-    'regular',
-    ...phosphorWeights.filter((weight) =>
-      weight === 'regular' ? false : phosphorWeightAllowlist[weight]?.includes(icon)
-    ),
-  ]);
+export interface PhosphorWeightPolicy {
+  /** Every weight a definition module ships. */
+  weights: readonly string[];
+  /** Serializable allowlist; plugin names include it to invalidate Vite's dep cache. */
+  allowlist: unknown;
+  allowedWeights: (icon: string) => ReadonlySet<string>;
 }
 
 const definitionIdPattern =
   /[\\/]@phosphor-icons[\\/]react[\\/]dist[\\/]defs[\\/]([A-Za-z0-9]+)\.es\.js$/;
-
-function isPhosphorWeight(value: unknown): value is PhosphorWeight {
-  return phosphorWeights.some((weight) => weight === value);
-}
 
 interface Span {
   start: number;
   end: number;
 }
 
-function locateWeightEntries(code: string) {
+function locateWeightEntries(code: string, weights: readonly string[]) {
   const program = parseAst(code);
   const [imported, declaration, exported] = program.body;
   if (
@@ -86,21 +55,22 @@ function locateWeightEntries(code: string) {
     throw new Error('expected the default export to be `new Map([...])`');
   }
   const list = init.arguments[0];
-  const entries = new Map<PhosphorWeight, Span>();
+  const entries = new Map<string, Span>();
   for (const element of list.elements) {
     const key = element?.type === 'ArrayExpression' ? element.elements[0] : undefined;
     if (
       element?.type !== 'ArrayExpression' ||
       element.elements.length !== 2 ||
       key?.type !== 'Literal' ||
-      !isPhosphorWeight(key.value) ||
+      typeof key.value !== 'string' ||
+      !weights.includes(key.value) ||
       entries.has(key.value)
     ) {
       throw new Error('expected each Map entry to be a unique `[weight, element]` pair');
     }
     entries.set(key.value, { start: element.start, end: element.end });
   }
-  const missing = phosphorWeights.filter((weight) => !entries.has(weight));
+  const missing = weights.filter((weight) => !entries.has(weight));
   if (missing.length > 0) {
     throw new Error(`missing weights: ${missing.join(', ')}`);
   }
@@ -108,10 +78,14 @@ function locateWeightEntries(code: string) {
 }
 
 /** Drop the weights `icon` never renders from a Phosphor `dist/defs/<Name>.es.js` module. */
-export function stripPhosphorWeights(code: string, icon: string): string {
+export function stripPhosphorWeights(
+  code: string,
+  icon: string,
+  policy: PhosphorWeightPolicy
+): string {
   let located: ReturnType<typeof locateWeightEntries>;
   try {
-    located = locateWeightEntries(code);
+    located = locateWeightEntries(code, policy.weights);
   } catch (error) {
     throw new Error(
       `Unexpected Phosphor icon definition shape for ${icon}: ${
@@ -120,26 +94,25 @@ export function stripPhosphorWeights(code: string, icon: string): string {
       { cause: error }
     );
   }
-  const allowed = allowedPhosphorWeights(icon);
+  const allowed = policy.allowedWeights(icon);
   const kept = [...located.entries]
     .filter(([weight]) => allowed.has(weight))
     .map(([, span]) => code.slice(span.start, span.end));
   return `${code.slice(0, located.list.start)}[\n  ${kept.join(',\n  ')}\n]${code.slice(located.list.end)}`;
 }
 
-function transformDefinition(code: string, id: string) {
-  const icon = definitionIdPattern.exec(id.replace(/\?.*$/, ''))?.[1];
-  return icon ? { code: stripPhosphorWeights(code, icon), map: null } : null;
-}
-
 const transformFilter = { id: /@phosphor-icons[\\/]react[\\/]dist[\\/]defs[\\/]/ };
 
 /**
  * Strip unused icon weights in builds, the dev server, and dependency pre-bundling.
- * The allowlist is part of the plugin names so changing it invalidates Vite's dep cache.
  */
-export function phosphorIconWeights(): Plugin {
-  const name = `phosphor-icon-weights:${JSON.stringify(phosphorWeightAllowlist)}`;
+export function phosphorIconWeights(policy: PhosphorWeightPolicy): Plugin {
+  const name = `phosphor-icon-weights:${JSON.stringify(policy.allowlist)}`;
+  const transformDefinition = (code: string, id: string) => {
+    const icon = definitionIdPattern.exec(id.replace(/\?.*$/, ''))?.[1];
+    // Rewriting the Map moves code, so explicitly drop mappings for this vendor data module.
+    return icon ? { code: stripPhosphorWeights(code, icon, policy), map: { mappings: '' } } : null;
+  };
   return {
     name,
     config: () => ({

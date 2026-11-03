@@ -4,7 +4,19 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, parseAst, resolveConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
-import { phosphorWeights, stripPhosphorWeights } from './phosphor-icon-weights';
+import {
+  allowedPhosphorWeights,
+  phosphorWeightAllowlist,
+  phosphorWeights,
+} from '../src/lib/phosphor-icon-weights';
+import { stripPhosphorWeights as stripWithPolicy } from './phosphor-icon-weights';
+
+const policy = {
+  weights: phosphorWeights,
+  allowlist: phosphorWeightAllowlist,
+  allowedWeights: allowedPhosphorWeights,
+};
+const stripPhosphorWeights = (code: string, icon: string) => stripWithPolicy(code, icon, policy);
 
 const packageDist = dirname(
   dirname(fileURLToPath(import.meta.resolve('@phosphor-icons/react/dist/csr/Check')))
