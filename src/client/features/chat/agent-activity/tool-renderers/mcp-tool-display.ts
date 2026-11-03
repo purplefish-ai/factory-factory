@@ -36,7 +36,7 @@ function humanize(value: string): string {
   }
   const words = value
     .replace(/(\p{Lu}+)(\p{Lu}\p{Ll})/gu, splitAcronymBoundary)
-    .replace(/([\p{Ll}0-9])(\p{Lu})/gu, '$1 $2')
+    .replace(/([\p{Ll}\p{M}0-9])(\p{Lu})/gu, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .replace(/[\p{L}\p{N}]+/gu, formatWord)
     .trim()

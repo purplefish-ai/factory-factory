@@ -60,6 +60,8 @@ describe('tool-display-utils', () => {
       ['mcp__acme__readHTTP2Headers', 'Read HTTP2 headers · Acme'],
       ['mcp__acme__encode_base64', 'Encode base64 · Acme'],
       ['mcp__acme__list_v2_items', 'List v2 items · Acme'],
+      ['mcp__acme__cafe\u0301Tool', 'Cafe\u0301 tool · Acme'],
+      ['mcp__acme__caféTool', 'Café tool · Acme'],
       ['mcp__acme__café', 'Café · Acme'],
       ['mcp__acme__get.PR', 'Get.PR · Acme'],
       ['mcp__acme__getJSONsForURLs', 'Get JSONs for URLs · Acme'],
