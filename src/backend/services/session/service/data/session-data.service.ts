@@ -245,6 +245,9 @@ class SessionDataImplementation {
     const session = await prDedicatedSessionAccessor.find(target);
     return session ? toAgentSessionRecord(session) : null;
   }
+  findExistingBackupSessionIds(tx: Prisma.TransactionClient, ids: readonly string[]) {
+    return agentSessionAccessor.findExistingBackupSessionIds(tx, ids);
+  }
   restorePRDedicatedSession(
     tx: Prisma.TransactionClient,
     input: PRTarget & { sessionId: string | null }

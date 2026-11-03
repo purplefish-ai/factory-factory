@@ -106,6 +106,10 @@ export interface AgentSessionAccessor {
   ): Promise<LimitedAgentSessionCreation>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
   findByIds(ids: string[]): Promise<AgentSessionRecord[]>;
+  findExistingBackupSessionIds(
+    tx: Prisma.TransactionClient,
+    ids: readonly string[]
+  ): Promise<Set<string>>;
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
@@ -191,6 +195,21 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         id: { in: ids },
       },
     });
+  }
+
+  async findExistingBackupSessionIds(tx: Prisma.TransactionClient, ids: readonly string[]) {
+    const existing = new Set<string>();
+    const unique = [...new Set(ids)];
+    for (let index = 0; index < unique.length; index += 100) {
+      const rows = await tx.agentSession.findMany({
+        where: { id: { in: unique.slice(index, index + 100) } },
+        select: { id: true },
+      });
+      for (const row of rows) {
+        existing.add(row.id);
+      }
+    }
+    return existing;
   }
 
   findByWorkspaceId(

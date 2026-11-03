@@ -127,6 +127,10 @@ const ACCESSOR_POLICIES = {
     owner: 'search',
     module: 'src/backend/services/search/resources/metadata-search.accessor',
   },
+  backupCollisionsAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/backup-collisions.accessor',
+  },
   projectAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/project.accessor',

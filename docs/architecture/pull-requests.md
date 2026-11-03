@@ -258,6 +258,15 @@ quarantined evidence. Delivery rows are durable external-effect recovery proof
 and must be retained with their full event membership in any future recovery
 manifest.
 
+Backup admission preparation has transaction-scoped owner reads:
+`workspaceDataService.readBackupIdentities` projects repository identity and
+existing workspace/PR IDs, `findBackupEventConflicts` returns incoming workspace
+IDs with event, deduplication or raw/normalized receipt collisions, and
+`sessionDataService.findExistingBackupSessionIds` returns existing session IDs.
+Reads use the supplied transaction in chunks of at most 100 candidates and
+preserve local evidence. These passive APIs leave current import admission
+unchanged.
+
 Frozen legacy metadata without a receipt ID blocks new claims but never
 authorizes a resend. Resume, supersession and cancellation preserve its original
 evidence. Empty receipt IDs are quarantined rather than treated as new delivery
