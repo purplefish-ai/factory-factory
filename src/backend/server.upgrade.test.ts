@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { Application } from '@/backend/app-context';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
@@ -477,8 +478,8 @@ describe('server websocket upgrade routing', () => {
 
   it.each([false, true])('rejects interrupted startup (shutdown=%s)', async (stopDuringStartup) => {
     const harness = createTestHarness();
-    const reconciliationStarted = Promise.withResolvers<void>();
-    const continueReconciliation = Promise.withResolvers<void>();
+    const reconciliationStarted = deferred();
+    const continueReconciliation = deferred();
     vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockImplementationOnce(
       async () => {
         reconciliationStarted.resolve();
@@ -589,7 +590,7 @@ describe('server websocket upgrade routing', () => {
 
   it('serves requests and signals readiness while archive recovery is pending', async () => {
     const harness = createTestHarness({ isRunScriptProxyEnabled: true });
-    const { promise: recovery, resolve: finishRecovery } = Promise.withResolvers<void>();
+    const { promise: recovery, resolve: finishRecovery } = deferred();
     harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
       await recovery;
       return { archived: [], failed: [] };
@@ -621,7 +622,7 @@ describe('server websocket upgrade routing', () => {
 
   it('drains archive recovery before shutting down its dependencies', async () => {
     const harness = createTestHarness();
-    const { promise: recovery, resolve: finishRecovery } = Promise.withResolvers<void>();
+    const { promise: recovery, resolve: finishRecovery } = deferred();
     harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
       await recovery;
       return { archived: [], failed: [] };
@@ -651,8 +652,8 @@ describe('server websocket upgrade routing', () => {
 
   it('gates HTTP requests and websocket upgrades while startup reconciliation is pending', async () => {
     const harness = createTestHarness();
-    const reconciliationStarted = Promise.withResolvers<void>();
-    const continueReconciliation = Promise.withResolvers<void>();
+    const reconciliationStarted = deferred();
+    const continueReconciliation = deferred();
     vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
       async () => {
         reconciliationStarted.resolve();
@@ -884,18 +885,17 @@ describe('server websocket upgrade routing', () => {
 
   it('stops reconciliation when shutdown begins but drains it before disconnecting', async () => {
     const { application, lifecycle, services } = createTestHarness();
-    const { reconciliationService: reconciliation, sessionLifecycleService } = services;
-    const drained = Promise.withResolvers<undefined>();
-    vi.mocked(reconciliation.stopPeriodicCleanup).mockReturnValueOnce(drained.promise);
+    const { promise: drained, resolve: drain } = deferred<undefined>();
+    vi.mocked(services.reconciliationService.stopPeriodicCleanup).mockReturnValueOnce(drained);
     const server = createTestServer(application, 0);
     vi.mocked(services.ratchetService.start).mockImplementationOnce(() => void server.stop());
     await server.start();
-    expect(reconciliation.stopPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
-    expect(reconciliation.startNewWorkspaceInitialization).not.toHaveBeenCalled();
+    expect(services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
+    expect(services.reconciliationService.startNewWorkspaceInitialization).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(services.periodicTaskService.stop).toHaveBeenCalled());
     expect(lifecycle.database.$disconnect).not.toHaveBeenCalled();
-    drained.resolve(undefined);
+    drain(undefined);
     await server.stop(); // Joins the cleanup started mid-startup.
     expect(lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
