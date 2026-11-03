@@ -6,8 +6,10 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
+  lazy,
   memo,
   type PointerEvent as ReactPointerEvent,
+  Suspense,
   useEffect,
   useId,
   useMemo,
@@ -16,7 +18,7 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
-import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
 import {
   getProjectSlugFromPath,
@@ -59,6 +61,14 @@ import { WorkspaceItemContent } from './workspace-item-content';
 import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 
 type NavigationData = ReturnType<typeof useAppNavigationData>;
+
+// The creation form pulls in launch controls, draft storage and the composer;
+// load it on the first "+" click or image drop instead of at startup.
+const InlineWorkspaceForm = lazy(() =>
+  import('@/client/features/kanban/inline-workspace-form').then((module) => ({
+    default: module.InlineWorkspaceForm,
+  }))
+);
 
 // =============================================================================
 // Workspace item component
@@ -349,20 +359,36 @@ function SidebarInner({
           <SidebarGroupContent>
             {showNewWorkspaceForm && selectedProjectId ? (
               <div className="px-1">
-                <InlineWorkspaceForm
-                  projectId={selectedProjectId}
-                  existingNames={existingWorkspaceNames}
-                  onCancel={() => onShowNewWorkspaceFormChange(false)}
-                  onCreated={(workspaceId) => {
-                    onShowNewWorkspaceFormChange(false);
-                    if (navData.selectedProjectSlug) {
-                      void navigate(
-                        `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
-                      );
+                <ErrorBoundary
+                  fallback={
+                    <div role="alert" className="p-2 text-sm text-destructive">
+                      Unable to load the new workspace form. Reload the app to try again.
+                    </div>
+                  }
+                >
+                  <Suspense
+                    fallback={
+                      <div role="status" className="p-2 text-sm text-muted-foreground">
+                        Loading new workspace form…
+                      </div>
                     }
-                    onNavigate?.();
-                  }}
-                />
+                  >
+                    <InlineWorkspaceForm
+                      projectId={selectedProjectId}
+                      existingNames={existingWorkspaceNames}
+                      onCancel={() => onShowNewWorkspaceFormChange(false)}
+                      onCreated={(workspaceId) => {
+                        onShowNewWorkspaceFormChange(false);
+                        if (navData.selectedProjectSlug) {
+                          void navigate(
+                            `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
+                          );
+                        }
+                        onNavigate?.();
+                      }}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               </div>
             ) : (
               <SidebarMenu>

@@ -6,7 +6,6 @@
 // lifted out whole rather than exported piecemeal through chat's barrel.
 
 // Components
-export { ImageDropZone } from './image-drop-zone';
 export { AttachmentPreview } from './attachment-preview';
 export { AttachmentViewerDialog } from './attachment-viewer-dialog';
 export type {
@@ -18,9 +17,12 @@ export { FileMentionPalette } from './file-mention-palette';
 export type {
   AttachmentCollectionResult,
   AttachmentConversionError,
-} from './hooks/attachment-file-conversion';
+} from '@/client/lib/attachment-file-conversion';
 // Hooks
-export { collectAttachments, convertFileToAttachment } from './hooks/attachment-file-conversion';
+export {
+  collectAttachments,
+  convertFileToAttachment,
+} from '@/client/lib/attachment-file-conversion';
 export { usePasteDropHandler } from './hooks/use-paste-drop-handler';
 export { useProjectFileMentions } from './hooks/use-project-file-mentions';
 export { useSlashCommands } from './hooks/use-slash-commands';

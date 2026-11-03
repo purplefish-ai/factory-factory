@@ -17,6 +17,7 @@ import {
   getWorkspaceCreationDraftSnapshot,
   saveWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
+import { WorkspaceCreationImageDropZone } from './workspace-creation-image-drop-zone';
 
 const onCreate = fn();
 const onCancel = fn();
@@ -182,6 +183,7 @@ function WorkspaceCreationPreviewSession({
   projectId = 'preview-project',
   creationError,
   creationPending = false,
+  imageDrop = false,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
@@ -191,6 +193,7 @@ function WorkspaceCreationPreviewSession({
   projectId?: string;
   creationError?: string;
   creationPending?: boolean;
+  imageDrop?: boolean;
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -233,6 +236,16 @@ function WorkspaceCreationPreviewSession({
             </Button>
           )}
           {creationPending && <WorkspaceLaunchProgress projectId={projectId} />}
+          {imageDrop && (
+            <WorkspaceCreationImageDropZone
+              projectId={projectId}
+              onDropAccepted={() => setOpen(true)}
+            >
+              <p className="mt-3 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Drop an image here to start a workspace
+              </p>
+            </WorkspaceCreationImageDropZone>
+          )}
         </div>
       </trpc.Provider>
     </QueryClientProvider>
@@ -248,8 +261,9 @@ function WorkspaceCreationPreview(props: {
   projectId?: string;
   creationError?: string;
   creationPending?: boolean;
+  imageDrop?: boolean;
 }) {
-  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}:${Boolean(props.imageDrop)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 
@@ -281,6 +295,22 @@ export const LaunchInProgress: Story = {
       )
     ).toBeVisible();
     await expect(canvas.queryByRole('button', { name: /^Launch$/ })).not.toBeInTheDocument();
+  },
+};
+/** Dropped images queue until the lazily loaded draft code appends them. */
+export const ImageDropToCreate: Story = {
+  args: { startCollapsed: true, imageDrop: true, projectId: 'preview-image-drop' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['image'], 'reference.png', { type: 'image/png' }));
+    canvas
+      .getByText('Drop an image here to start a workspace')
+      .dispatchEvent(
+        new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })
+      );
+    await expect(await canvas.findByAltText('reference.png')).toBeVisible();
+    await expect(canvas.getByRole('textbox')).toBeVisible();
   },
 };
 export const Narrow: Story = {

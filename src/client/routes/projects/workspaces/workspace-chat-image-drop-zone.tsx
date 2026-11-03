@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ImageDropZone } from '@/client/features/composer';
+import { ImageDropZone } from '@/client/components/image-drop-zone';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 
 type WorkspaceChatImageDropZoneProps = Pick<

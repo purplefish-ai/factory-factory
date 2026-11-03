@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { sessionLaunchSelectionSnapshotSchema } from '@/client/features/session-selection';
 import { AttachmentSchema } from '@/shared/websocket';
+import { resetWorkspaceCreationDrops } from './workspace-creation-drop-queue';
 import { WorkspaceDraftRevisions } from './workspace-draft-revisions';
 
 export const workspaceCreationDraftSchema = z.object({
@@ -42,6 +43,7 @@ export interface WorkspaceDraftSnapshot {
   persistenceError: string | null;
 }
 interface Entry {
+  projectId: string;
   snapshot: WorkspaceDraftSnapshot;
   listeners: Set<() => void>;
   loading?: Promise<WorkspaceCreationDraft | null>;
@@ -53,6 +55,7 @@ function entryFor(projectId: string): Entry {
   let entry = entries.get(projectId);
   if (!entry) {
     entry = {
+      projectId,
       snapshot: {
         hasUnreadableDraft: false,
         draft: null,
@@ -69,7 +72,12 @@ function entryFor(projectId: string): Entry {
   return entry;
 }
 function publish(entry: Entry, patch: Partial<WorkspaceDraftSnapshot>) {
+  const previousGeneration = entry.snapshot.generation;
   entry.snapshot = { ...entry.snapshot, ...patch };
+  if (entry.snapshot.generation !== previousGeneration) {
+    // Sidebar and board drops queue outside this module until it loads.
+    resetWorkspaceCreationDrops(entry.projectId);
+  }
   entry.listeners.forEach((listener) => listener());
 }
 export function getWorkspaceCreationDraftSnapshot(projectId: string) {
