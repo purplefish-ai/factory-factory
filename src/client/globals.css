@@ -277,6 +277,33 @@
   }
 }
 
+/*
+ * Workspace side panel open/close (see workspace-side-panel.tsx). The resizable
+ * panel library owns the inline flex-grow, so the closing state overrides it.
+ * Content is pinned to its open width and anchored to the right edge.
+ */
+[data-side-panel-motion] {
+  overflow: hidden !important;
+  justify-content: flex-end;
+  transition: flex-grow 150ms ease-out;
+}
+
+[data-side-panel-motion='opening'] {
+  @starting-style {
+    flex-grow: 0 !important;
+  }
+}
+
+[data-side-panel-motion='closing'] {
+  flex-grow: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-side-panel-motion] {
+    transition: none;
+  }
+}
+
 /* Workspace attention glow animation */
 @keyframes waiting-pulse-animation {
   0%,

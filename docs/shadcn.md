@@ -23,9 +23,10 @@ current toast styling.
   size selectors must not override compact controls or wide attachment dialogs.
   Alert actions merge caller classes through Button to retain destructive
   styling.
-- Dialogs and sheets honor reduced-motion preferences. Command dialog titles and
-  descriptions belong inside the modal so outside-content hiding does not hide
-  their accessible labels.
+- Dialogs and sheets honor reduced-motion preferences. Sheets open in 200ms and
+  close in 150ms, faster than upstream. Command dialog titles and descriptions
+  belong inside the modal so outside-content hiding does not hide their
+  accessible labels.
 - ScrollArea retains `viewportRef`, viewport `onScroll`, `smoothScroll`,
   both-axis scrollbars and hover visibility on fine-pointer devices. Touch
   scrollbars remain visible while mounted. File and diff viewers depend on
