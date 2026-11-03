@@ -320,13 +320,11 @@ class WorkspacePRAccessor {
       }
       const baseline = row.observation === null ? null : prObservationSchema.parse(row.observation);
       const previous = row.observationEpoch === config.eventEpoch ? baseline : null;
-      const rows = await workspacePrEventAccessor.listForPR(tx, row.id);
-      const events = rows
-        .filter((e) => e.deduplicationKey.startsWith(`${row.id}:epoch:${config.eventEpoch}:`))
-        .map((e) => {
-          const payload = prFactPayloadSchema.parse(e.payload);
-          return { ...e, kind: payload.kind, payload };
-        });
+      const rows = await workspacePrEventAccessor.listForPR(tx, row.id, config.eventEpoch);
+      const events = rows.map((e) => {
+        const payload = prFactPayloadSchema.parse(e.payload);
+        return { ...e, kind: payload.kind, payload };
+      });
       const reduction = reducePRObservation({
         hashIdentity: (identity) => createHash('sha256').update(identity).digest('hex'),
         target: input.target,
