@@ -16,15 +16,6 @@ export interface ModelInfo {
 }
 
 /**
- * Available models exposed by ACP providers.
- * Opus is the default (when selectedModel is null).
- */
-export const AVAILABLE_MODELS: ModelInfo[] = [
-  { value: 'opus', displayName: 'Opus' },
-  { value: 'sonnet', displayName: 'Sonnet' },
-];
-
-/**
  * Chat session settings that persist per-session.
  */
 export interface ChatSettings {
@@ -56,8 +47,3 @@ export function resolveSelectedModel(selectedModel: string | null | undefined): 
  * Used with the SDK's set_max_thinking_tokens control request.
  */
 export const DEFAULT_THINKING_BUDGET = 10_000;
-
-/**
- * Valid model values for server-side validation.
- */
-export const VALID_MODEL_VALUES = AVAILABLE_MODELS.map((m) => m.value);
