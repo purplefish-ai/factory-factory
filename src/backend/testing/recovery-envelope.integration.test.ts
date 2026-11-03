@@ -15,7 +15,7 @@ import {
 } from '@/backend/testing/legacy-backup.fixture';
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
-import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
@@ -144,10 +144,40 @@ it.each([
     expect(await destination.prisma.codexAccount.count()).toBe(3);
   }
 });
-it('exports the current profile with explicit null links for published v7 rows, then restores into another SQLite database', async () => {
+it('roundtrips the complete base graph with explicit null task links from published v7 through the current profile', async () => {
   database.prisma = source.prisma;
   await Reflect.apply(dataBackupService.importData, dataBackupService, [v7]);
+  // Native profiles import as isolated managed copies; keep this exact graph
+  // witness limited to fixture accounts, with no unrelated bootstrap login.
+  for (const db of [source, destination]) {
+    expect(
+      await db.prisma.agentSession.count({ where: { codexAccountId: 'codex-native-default' } })
+    ).toBe(0);
+    await db.prisma.codexAccount.delete({ where: { id: 'codex-native-default' } });
+  }
   const exported = await dataBackupService.exportData('test');
+  expect(exported.data.projects).toEqual(v7.data.projects);
+  expect(exported.data.agentSessions).toEqual(v7.data.agentSessions);
+  expect(exported.data.terminalSessions).toEqual(v7.data.terminalSessions);
+  expect(exported.data.codexAccounts).toEqual(v7.data.codexAccounts);
+  expect(exported.data.userSettings).toEqual(v7.data.userSettings);
+  const associations = (
+    workspaces: readonly {
+      id: string;
+      projectId: string;
+      parentWorkspaceId: string | null;
+      prs: readonly { id: string; url: string; number: number | null }[];
+    }[]
+  ) =>
+    workspaces
+      .map(({ id, projectId, parentWorkspaceId, prs }) => ({
+        id,
+        projectId,
+        parentWorkspaceId,
+        prs: prs.map(({ id, url, number }) => ({ id, url, number })),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  expect(associations(exported.data.workspaces)).toEqual(associations(v7.data.workspaces));
   expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.meta).toHaveProperty('recovery', links.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', {
@@ -176,6 +206,16 @@ it('exports the current profile with explicit null links for published v7 rows, 
       orderBy: { id: 'asc' },
     })
   ).toEqual(expectedLinks);
+  const baseGraph = (data: ExportData['data']) => {
+    if (!('recovery' in data)) {
+      throw new Error('Expected current recovery export');
+    }
+    const { recovery: _recovery, ...base } = data;
+    // All fixture timestamps tie, so compare workspace identities in stable order.
+    return { ...base, workspaces: [...base.workspaces].sort((a, b) => a.id.localeCompare(b.id)) };
+  };
+  const roundtripped = await dataBackupService.exportData('destination-roundtrip');
+  expect(baseGraph(roundtripped.data)).toEqual(baseGraph(exported.data));
 });
 it.each(malformedRecoveryCases)(
   'rejects %s before service or router opens the writer',
