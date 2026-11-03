@@ -670,6 +670,14 @@ when it still exists, falling back to the first available project otherwise.
 
 ## Completion notifications
 
+Desktop completion alerts use the renderer’s browser `Notification` API in both
+the web app and Electron. The unused backend desktop notification service and
+its environment options (`NOTIFICATION_PUSH_ENABLED`,
+`NOTIFICATION_SOUND_ENABLED`, `NOTIFICATION_SOUND_FILE`,
+`NOTIFICATION_QUIET_HOURS_START`, and `NOTIFICATION_QUIET_HOURS_END`) have been
+removed. These options never controlled the renderer alerts or durable
+workspace/session notification delivery.
+
 Workspace completion notifications count the distinct sessions that worked in
 the uninterrupted busy interval ending at the idle transition. Historical idle
 sessions do not inflate the count, and repeated turns from one session count

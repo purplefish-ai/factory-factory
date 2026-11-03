@@ -67,10 +67,6 @@ export const infrastructureServiceRegistry = {
     fileName: 'logger.service.ts',
     description: 'Process-wide structured logging',
   },
-  'notification.service': {
-    fileName: 'notification.service.ts',
-    description: 'Operating-system notifications',
-  },
   'port.service': {
     fileName: 'port.service.ts',
     description: 'Backend server port probing',

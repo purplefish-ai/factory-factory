@@ -39,17 +39,6 @@ export interface RateLimiterConfig {
 }
 
 /**
- * Notification configuration
- */
-export interface NotificationConfig {
-  soundEnabled: boolean;
-  pushEnabled: boolean;
-  soundFile?: string;
-  quietHoursStart?: number;
-  quietHoursEnd?: number;
-}
-
-/**
  * CORS configuration
  */
 export interface CorsConfig {
@@ -140,9 +129,6 @@ interface SystemConfig {
   // Rate limiter settings
   rateLimiter: RateLimiterConfig;
 
-  // Notification settings
-  notification: NotificationConfig;
-
   // CORS settings
   cors: CorsConfig;
 
@@ -185,19 +171,6 @@ function buildRateLimiterConfig(env: ConfigEnv): RateLimiterConfig {
     claudeRequestsPerHour: env.CLAUDE_RATE_LIMIT_PER_HOUR,
     maxQueueSize: env.RATE_LIMIT_QUEUE_SIZE,
     queueTimeoutMs: env.RATE_LIMIT_QUEUE_TIMEOUT_MS,
-  };
-}
-
-/**
- * Build notification configuration from environment
- */
-function buildNotificationConfig(env: ConfigEnv): NotificationConfig {
-  return {
-    soundEnabled: env.NOTIFICATION_SOUND_ENABLED,
-    pushEnabled: env.NOTIFICATION_PUSH_ENABLED,
-    soundFile: env.NOTIFICATION_SOUND_FILE,
-    quietHoursStart: env.NOTIFICATION_QUIET_HOURS_START,
-    quietHoursEnd: env.NOTIFICATION_QUIET_HOURS_END,
   };
 }
 
@@ -303,9 +276,6 @@ function loadSystemConfig(): SystemConfig {
 
     // Rate limiter settings
     rateLimiter: buildRateLimiterConfig(env),
-
-    // Notification settings
-    notification: buildNotificationConfig(env),
 
     // CORS settings
     cors: buildCorsConfig(env),
@@ -558,13 +528,6 @@ class ConfigService {
    */
   getRateLimiterConfig(): RateLimiterConfig {
     return { ...this.config.rateLimiter };
-  }
-
-  /**
-   * Get notification configuration
-   */
-  getNotificationConfig(): NotificationConfig {
-    return { ...this.config.notification };
   }
 
   /**
