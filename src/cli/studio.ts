@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import { resolveDatabasePath } from './database-path';
 import { runProviderCommand } from './provider-command';
+import { getStudioDatabaseUrl } from './studio-database-url';
 
 const require = createRequire(import.meta.url);
 
@@ -20,8 +21,7 @@ export function registerStudioCommand(program: Command, projectRoot: string): vo
           require.resolve('prisma/build/index.js'),
           'studio',
           '--url',
-          // Studio treats the file: suffix as a filesystem path without URL decoding.
-          `file://${effectivePath.replaceAll('\\', '/')}`,
+          getStudioDatabaseUrl(effectivePath),
         ];
         if (options.port !== undefined) {
           args.push('--port', options.port);

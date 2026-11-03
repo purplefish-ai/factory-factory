@@ -140,7 +140,8 @@ checkouts (`pnpm db:studio`). It opens the database selected by
 directory. Use `--port 5556` to request a specific Studio port; otherwise Prisma
 selects an available port. Set `BROWSER=none` to start Studio without opening a
 browser. Launch failures return a nonzero exit status. The command does not
-download Prisma or other packages.
+download Prisma or other packages. Windows UNC and device paths are rejected
+because Prisma Studio cannot preserve their location; use a local drive path.
 
 ### Access through Tailscale
 
