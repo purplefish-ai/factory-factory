@@ -477,24 +477,18 @@ describe('server websocket upgrade routing', () => {
 
   it.each([false, true])('rejects interrupted startup (shutdown=%s)', async (stopDuringStartup) => {
     const harness = createTestHarness();
-    let reconciliationStarted!: () => void;
-    let continueReconciliation!: () => void;
-    const reconciliationStartedPromise = new Promise<void>((resolve) => {
-      reconciliationStarted = resolve;
-    });
-    const continueReconciliationPromise = new Promise<void>((resolve) => {
-      continueReconciliation = resolve;
-    });
+    const reconciliationStarted = Promise.withResolvers<void>();
+    const continueReconciliation = Promise.withResolvers<void>();
     vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockImplementationOnce(
       async () => {
-        reconciliationStarted();
-        await continueReconciliationPromise;
+        reconciliationStarted.resolve();
+        await continueReconciliation.promise;
       }
     );
 
     const server = createTestServer(harness.application, 0);
     const startPromise = server.start();
-    await reconciliationStartedPromise;
+    await reconciliationStarted.promise;
 
     await expect(server.start()).rejects.toThrow('Server startup has already been initiated');
     expect(harness.lifecycle.interceptors.stop).not.toHaveBeenCalled();
@@ -505,7 +499,7 @@ describe('server websocket upgrade routing', () => {
     if (stopDuringStartup) {
       await server.stop();
       expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
-      continueReconciliation();
+      continueReconciliation.resolve();
       await expect(startPromise).rejects.toThrow('Server startup interrupted by shutdown');
       expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
       expect(harness.lifecycle.recoverStaleArchivingWorkspaces).not.toHaveBeenCalled();
@@ -514,7 +508,7 @@ describe('server websocket upgrade routing', () => {
       expect(server.getHttpServer().listening).toBe(false);
       return;
     }
-    continueReconciliation();
+    continueReconciliation.resolve();
     await expect(startPromise).resolves.toBe('http://localhost:0');
     expect(server.getHttpServer().listening).toBe(true);
   });
@@ -595,10 +589,7 @@ describe('server websocket upgrade routing', () => {
 
   it('serves requests and signals readiness while archive recovery is pending', async () => {
     const harness = createTestHarness({ isRunScriptProxyEnabled: true });
-    let finishRecovery!: () => void;
-    const recovery = new Promise<void>((resolve) => {
-      finishRecovery = resolve;
-    });
+    const { promise: recovery, resolve: finishRecovery } = Promise.withResolvers<void>();
     harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
       await recovery;
       return { archived: [], failed: [] };
@@ -630,10 +621,7 @@ describe('server websocket upgrade routing', () => {
 
   it('drains archive recovery before shutting down its dependencies', async () => {
     const harness = createTestHarness();
-    let finishRecovery!: () => void;
-    const recovery = new Promise<void>((resolve) => {
-      finishRecovery = resolve;
-    });
+    const { promise: recovery, resolve: finishRecovery } = Promise.withResolvers<void>();
     harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
       await recovery;
       return { archived: [], failed: [] };
@@ -663,24 +651,18 @@ describe('server websocket upgrade routing', () => {
 
   it('gates HTTP requests and websocket upgrades while startup reconciliation is pending', async () => {
     const harness = createTestHarness();
-    let reconciliationStarted!: () => void;
-    let continueReconciliation!: () => void;
-    const reconciliationStartedPromise = new Promise<void>((resolve) => {
-      reconciliationStarted = resolve;
-    });
-    const continueReconciliationPromise = new Promise<void>((resolve) => {
-      continueReconciliation = resolve;
-    });
+    const reconciliationStarted = Promise.withResolvers<void>();
+    const continueReconciliation = Promise.withResolvers<void>();
     vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
       async () => {
-        reconciliationStarted();
-        await continueReconciliationPromise;
+        reconciliationStarted.resolve();
+        await continueReconciliation.promise;
       }
     );
 
     const server = createTestServer(harness.application, 0);
     const startPromise = server.start();
-    await reconciliationStartedPromise;
+    await reconciliationStarted.promise;
     await waitForHttpServerToListen(server);
 
     const response = await request(server.getHttpServer()).get('/health');
@@ -700,7 +682,7 @@ describe('server websocket upgrade routing', () => {
     expect(socket.destroy).toHaveBeenCalledOnce();
     expect(handlers.chat).not.toHaveBeenCalled();
 
-    continueReconciliation();
+    continueReconciliation.resolve();
     await expect(startPromise).resolves.toBe('http://localhost:0');
 
     const readyResponse = await request(server.getHttpServer()).get('/health');
@@ -898,6 +880,24 @@ describe('server websocket upgrade routing', () => {
     await stopPromise;
 
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('stops reconciliation when shutdown begins but drains it before disconnecting', async () => {
+    const { application, lifecycle, services } = createTestHarness();
+    const { reconciliationService: reconciliation, sessionLifecycleService } = services;
+    const drained = Promise.withResolvers<undefined>();
+    vi.mocked(reconciliation.stopPeriodicCleanup).mockReturnValueOnce(drained.promise);
+    const server = createTestServer(application, 0);
+    vi.mocked(services.ratchetService.start).mockImplementationOnce(() => void server.stop());
+    await server.start();
+    expect(reconciliation.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
+    expect(reconciliation.startNewWorkspaceInitialization).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(services.periodicTaskService.stop).toHaveBeenCalled());
+    expect(lifecycle.database.$disconnect).not.toHaveBeenCalled();
+    drained.resolve(undefined);
+    await server.stop(); // Joins the cleanup started mid-startup.
+    expect(lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('closes active WebSocket clients before completing server cleanup', async () => {

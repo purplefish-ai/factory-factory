@@ -426,6 +426,13 @@ export function createServer(application: Application, requestedPort?: number): 
     }
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
+      // Stop admitting reconciliation work (including startup workspace
+      // initialization) now, but drain it only after sessions and processes
+      // are torn down: an in-flight startup script cannot be cancelled and may
+      // outlast the stop budget, and new agent sessions fail fast once clients
+      // are stopped.
+      const reconciliationStopped = reconciliationService.stopPeriodicCleanup();
+      reconciliationStopped.catch(() => undefined);
       await services.agentRuntime?.stop();
       // Archive recovery still uses sessions, run scripts, caches and the database.
       await archiveRecoveryPromise;
@@ -458,7 +465,7 @@ export function createServer(application: Application, requestedPort?: number): 
       workspaceGitStateService.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
-      await reconciliationService.stopPeriodicCleanup();
+      await reconciliationStopped;
       await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
@@ -555,7 +562,9 @@ export function createServer(application: Application, requestedPort?: number): 
         services.agentRuntime?.start();
         // Provisioning (git, startup script, agent session) can take minutes, so
         // it must not hold back readiness. `stopPeriodicCleanup` drains it.
-        reconciliationService.startNewWorkspaceInitialization();
+        if (!cleanupStarted) {
+          reconciliationService.startNewWorkspaceInitialization();
+        }
         startupComplete = true;
 
         logger.info('Server endpoints available', {
