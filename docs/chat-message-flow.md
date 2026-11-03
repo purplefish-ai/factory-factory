@@ -277,7 +277,12 @@ their existing local-storage persistence.
 Thinking-only assistant messages and thinking stream blocks are omitted from the
 grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the
-agent is running.
+agent is running. Thinking deltas accumulate only within the current sequence:
+new thinking blocks, assistant text, and tool starts clear the previous preview.
+Tool results and duplicate deliveries of existing text or tool starts do not
+clear newer reasoning. The fixed-height footer shows the latest paragraph as
+plain text; its popup preserves the current sequence's paragraphs with the same
+Markdown cleanup.
 
 ## Transcript scrolling
 

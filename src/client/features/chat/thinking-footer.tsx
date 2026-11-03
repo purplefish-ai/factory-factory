@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { LoadingIndicator } from './agent-activity';
+import { formatThinkingText } from './thinking-preview';
 
 /** Always occupies one line; activity changes cannot resize the transcript viewport. */
 export function ThinkingFooter({
@@ -50,7 +51,7 @@ export function ThinkingFooter({
             aria-label="Thinking preview"
             className="max-h-60 max-w-[calc(100vw-2rem)] overflow-y-auto whitespace-pre-wrap break-words text-sm motion-reduce:animate-none"
           >
-            {latestThinking?.trim() || 'Agent is working...'}
+            {formatThinkingText(latestThinking) || 'Agent is working...'}
           </PopoverContent>
         </Popover>
       </div>

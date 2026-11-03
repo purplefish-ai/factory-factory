@@ -5,6 +5,31 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it('shows the latest paragraph inline and readable full reasoning in the popup', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter active latestThinking={'**Preparing PR body**\n\n**Checking** `CI`'} />
+        )
+      );
+      expect(host.textContent).toContain('Checking CI');
+      expect(host.textContent).not.toContain('Preparing PR body');
+      flushSync(() => host.querySelector('button')?.click());
+      const popup = document.querySelector('[data-slot="popover-content"]');
+      expect(popup?.textContent).toBe('Preparing PR body\n\nChecking CI');
+      expect(popup?.textContent).not.toContain('**');
+      flushSync(() => root.render(<ThinkingFooter active latestThinking="**Current step**" />));
+      expect(popup?.textContent).toBe('Current step');
+      expect(host.textContent).not.toContain('Preparing PR body');
+    } finally {
+      flushSync(() => root.unmount());
+      host.remove();
+    }
+  });
+
   it('shows fallback activity and makes the full long preview available outside layout', () => {
     const host = document.createElement('div');
     document.body.append(host);

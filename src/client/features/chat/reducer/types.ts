@@ -177,7 +177,7 @@ export interface ChatState {
   toolUseIdToIndex: Map<string, number>;
   /** Agent transcript order to message index map for O(1) live updates. */
   agentMessageOrderToIndex: Map<number, number>;
-  /** Latest accumulated thinking content from extended thinking mode */
+  /** Accumulated thinking for the current sequence; text/tool starts clear it. */
   latestThinking: string | null;
   /**
    * Pending messages awaiting backend confirmation (shown with "sending..." indicator).

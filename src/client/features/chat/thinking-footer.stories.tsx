@@ -30,6 +30,28 @@ export const LongPreview: Story = {
 export const Idle: Story = { args: { active: false, latestThinking: null } };
 export const Dark: Story = { globals: { theme: 'dark' } };
 
+export const MultipleParagraphs: Story = {
+  args: {
+    latestThinking: '**Preparing PR body**\n\n**Waiting 60 seconds**\n\n**Checking** `CI`',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const preview = canvas.getByRole('button', { name: 'Show thinking preview' });
+    await expect(preview).toHaveTextContent('Checking CI');
+    await expect(preview).not.toHaveTextContent('Preparing PR body');
+    await userEvent.click(preview);
+    const popup = within(canvasElement.ownerDocument.body).getByLabelText('Thinking preview');
+    await expect(popup).toHaveTextContent('Preparing PR body');
+    await expect(popup).toHaveTextContent('Waiting 60 seconds');
+    await expect(popup).toHaveTextContent('Checking CI');
+    await expect(popup).not.toHaveTextContent('**');
+  },
+};
+
+export const PartialMarkdown: Story = {
+  args: { latestThinking: '**Previous step**\n\n**Checking the latest' },
+};
+
 export const ActivityChanges: Story = {
   render: (args) => {
     const [active, setActive] = useState(true);

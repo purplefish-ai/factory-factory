@@ -7,7 +7,6 @@ import type {
 import {
   compareTranscriptMessageOrder,
   DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
-  isReasoningToolCall,
   isStreamEventMessage,
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
@@ -209,19 +208,45 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
   return block.id === toolUseId;
 }
 
-function isReasoningToolStartMessage(claudeMsg: AgentMessage): boolean {
+/** ACP thought chunks lack message_start; visible text and tool starts also end a sequence. */
+function startsThinkingBoundary(claudeMsg: AgentMessage): boolean {
+  if (claudeMsg.type === 'assistant') {
+    const content = claudeMsg.message?.content;
+    return (
+      typeof content === 'string' ||
+      (Array.isArray(content) &&
+        content.some((block) => block.type === 'text' || block.type === 'tool_use'))
+    );
+  }
   if (!isStreamEventMessage(claudeMsg)) {
     return false;
   }
   const event = claudeMsg.event;
-  if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
-    return false;
-  }
-  return isReasoningToolCall(event.content_block.name, event.content_block.input);
+  return (
+    event.type === 'message_start' ||
+    (event.type === 'content_block_start' &&
+      ['thinking', 'tool_use'].includes(event.content_block.type))
+  );
 }
 
 function hasExistingAgentMessageAtOrder(state: ChatState, order: number): boolean {
   return state.messages.some((msg) => msg.source === 'agent' && msg.order === order);
+}
+
+function resetThinkingAtBoundary(
+  state: ChatState,
+  message: AgentMessage,
+  order: number
+): ChatState {
+  if (!startsThinkingBoundary(message) || hasExistingAgentMessageAtOrder(state, order)) {
+    return state;
+  }
+  const event = isStreamEventMessage(message) ? message.event : undefined;
+  const thinking =
+    event?.type === 'content_block_start' && event.content_block.type === 'thinking'
+      ? event.content_block.thinking
+      : null;
+  return { ...state, latestThinking: thinking || null };
 }
 
 /**
@@ -282,13 +307,7 @@ export function handleClaudeMessage(
     }
   }
 
-  if (isStreamEventMessage(claudeMsg) && claudeMsg.event.type === 'message_start') {
-    baseState = { ...baseState, latestThinking: null };
-  }
-
-  if (isReasoningToolStartMessage(claudeMsg) && !hasExistingAgentMessageAtOrder(baseState, order)) {
-    baseState = { ...baseState, latestThinking: null };
-  }
+  baseState = resetThinkingAtBoundary(baseState, claudeMsg, order);
 
   // Append thinking deltas to the most recent thinking content block
   if (
@@ -371,7 +390,7 @@ export function handleAssistantTextDelta(
       return state;
     }
     return applyRendererMessages(
-      state,
+      { ...state, latestThinking: null },
       insertMessageByOrder(state.messages, createAssistantTextMessage(payload))
     );
   }

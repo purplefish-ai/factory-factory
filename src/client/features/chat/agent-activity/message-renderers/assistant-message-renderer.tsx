@@ -9,6 +9,7 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { formatThinkingText } from '../../thinking-preview';
 import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
 import {
   ErrorRenderer,
@@ -181,19 +182,6 @@ const LOADING_TEXT_MAX_LENGTH = 200;
 const LOADING_TEXT_ELLIPSIS = '...';
 const LOADING_TEXT_BODY_MAX_LENGTH = LOADING_TEXT_MAX_LENGTH - LOADING_TEXT_ELLIPSIS.length;
 
-function stripMarkdownSyntax(input: string): string {
-  return input
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/[`*~_]/g, '');
-}
-
 function truncateLoadingText(input: string): string {
   if (input.length <= LOADING_TEXT_MAX_LENGTH) {
     return input;
@@ -204,17 +192,15 @@ function truncateLoadingText(input: string): string {
 }
 
 function getLoadingText(latestReasoning: string | null | undefined): string {
-  const normalized = latestReasoning?.replace(/\s+/g, ' ').trim();
+  const latestParagraph = formatThinkingText(latestReasoning)
+    .split(/\n\s*\n/)
+    .at(-1);
+  const normalized = latestParagraph?.replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }
 
-  const stripped = stripMarkdownSyntax(normalized).trim();
-  if (!stripped) {
-    return 'Agent is working...';
-  }
-
-  return truncateLoadingText(stripped);
+  return truncateLoadingText(normalized);
 }
 
 /**
