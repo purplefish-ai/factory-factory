@@ -384,25 +384,37 @@ export interface ToolResultInfo {
   toolUseId: string;
   content: ToolResultContentValue;
   isError: boolean;
+  /** Only retained when grouping observation requests exact occurrence identity. */
+  selectedBlock?: ToolResultContent;
 }
 
 /**
  * Converts a ToolResultContent block to ToolResultInfo.
  */
-function toolResultContentToInfo(block: ToolResultContent): ToolResultInfo {
-  return {
+function toolResultContentToInfo(
+  block: ToolResultContent,
+  retainSelection: boolean
+): ToolResultInfo {
+  const info: ToolResultInfo = {
     toolUseId: block.tool_use_id,
     content: block.content,
     isError: block.is_error ?? false,
   };
+  if (retainSelection) {
+    info.selectedBlock = block;
+  }
+  return info;
 }
 
 /**
  * Extracts tool result info from a stream event.
  */
-function extractToolResultFromStreamEvent(event: AgentStreamEvent): ToolResultInfo | null {
+function extractToolResultFromStreamEvent(
+  event: AgentStreamEvent,
+  retainSelection: boolean
+): ToolResultInfo | null {
   if (event.type === 'content_block_start' && isToolResultContent(event.content_block)) {
-    return toolResultContentToInfo(event.content_block);
+    return toolResultContentToInfo(event.content_block, retainSelection);
   }
   return null;
 }
@@ -410,10 +422,13 @@ function extractToolResultFromStreamEvent(event: AgentStreamEvent): ToolResultIn
 /**
  * Extracts tool result info from message content.
  */
-function extractToolResultFromContent(content: AgentContentItem[]): ToolResultInfo | null {
+function extractToolResultFromContent(
+  content: AgentContentItem[],
+  retainSelection: boolean
+): ToolResultInfo | null {
   const toolResult = content.find((item) => isToolResultContent(item));
   if (toolResult && isToolResultContent(toolResult)) {
-    return toolResultContentToInfo(toolResult);
+    return toolResultContentToInfo(toolResult, retainSelection);
   }
   return null;
 }
@@ -422,15 +437,18 @@ function extractToolResultFromContent(content: AgentContentItem[]): ToolResultIn
  * Extracts tool result information from a AgentMessage.
  * Returns null if the message is not a tool result message.
  */
-export function extractToolResultInfo(msg: AgentMessage): ToolResultInfo | null {
+export function extractToolResultInfo(
+  msg: AgentMessage,
+  retainSelection = false
+): ToolResultInfo | null {
   // Check stream events for tool result
   if (msg.type === 'stream_event' && msg.event) {
-    return extractToolResultFromStreamEvent(msg.event);
+    return extractToolResultFromStreamEvent(msg.event, retainSelection);
   }
 
   // Check message content for tool result
   if (msg.message && Array.isArray(msg.message.content)) {
-    return extractToolResultFromContent(msg.message.content);
+    return extractToolResultFromContent(msg.message.content, retainSelection);
   }
 
   return null;
@@ -468,6 +486,17 @@ export interface ToolSequence {
  * Union type for items in a grouped message list.
  */
 export type GroupedMessageItem = ChatMessage | ToolSequence;
+
+/** Observation only: matching and result selection stay owned by this grouper. */
+export interface ToolGroupingTrace {
+  onToolCall?: (message: ChatMessage, call: PairedToolCall) => void;
+  onToolResult?: (
+    message: ChatMessage,
+    selectedBlock: ToolResultContent,
+    call: PairedToolCall
+  ) => void;
+  onToolSequence?: (sequence: ToolSequence, rows: readonly ChatMessage[]) => void;
+}
 
 /**
  * Checks if a grouped item is a ToolSequence.
@@ -527,12 +556,13 @@ export function isReasoningToolCall(name: unknown, input: unknown): boolean {
 function applyToolResultToCall(
   msg: ChatMessage,
   pairedCalls: PairedToolCall[],
-  toolUseIdToIndexes: Map<string, number[]>
+  toolUseIdToIndexes: Map<string, number[]>,
+  trace?: ToolGroupingTrace
 ): void {
   if (!(msg.message && isToolResultMessage(msg.message))) {
     return;
   }
-  const resultInfo = extractToolResultInfo(msg.message);
+  const resultInfo = extractToolResultInfo(msg.message, trace !== undefined);
   if (!resultInfo) {
     return;
   }
@@ -552,6 +582,9 @@ function applyToolResultToCall(
     return;
   }
   applyToolResultToPairedCall(call, resultInfo);
+  if (resultInfo.selectedBlock) {
+    trace?.onToolResult?.(msg, resultInfo.selectedBlock, call);
+  }
 }
 
 function applyToolResultToPairedCall(call: PairedToolCall, resultInfo: ToolResultInfo): void {
@@ -566,7 +599,10 @@ function applyToolResultToPairedCall(call: PairedToolCall, resultInfo: ToolResul
  * Processes a sequence of tool messages and extracts paired tool calls.
  * Each tool_use is paired with its corresponding tool_result.
  */
-function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
+function extractPairedToolCalls(
+  toolMessages: ChatMessage[],
+  trace?: ToolGroupingTrace
+): PairedToolCall[] {
   const pairedCalls: PairedToolCall[] = [];
   const toolUseIdToIndexes = new Map<string, number[]>();
 
@@ -578,12 +614,13 @@ function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
       callIndexes.push(pairedCalls.length);
       toolUseIdToIndexes.set(pairedCall.id, callIndexes);
       pairedCalls.push(pairedCall);
+      trace?.onToolCall?.(msg, pairedCall);
     }
   }
 
   // Second pass: match tool_result messages to their tool_use
   for (const msg of toolMessages) {
-    applyToolResultToCall(msg, pairedCalls, toolUseIdToIndexes);
+    applyToolResultToCall(msg, pairedCalls, toolUseIdToIndexes, trace);
   }
 
   return pairedCalls;
@@ -678,7 +715,9 @@ function trackOpenPairedCalls(
 
 function applyLateToolResult(
   resultInfo: ToolResultInfo,
-  openPairedCallsById: Map<string, PairedToolCall[]>
+  openPairedCallsById: Map<string, PairedToolCall[]>,
+  message: ChatMessage,
+  trace?: ToolGroupingTrace
 ): boolean {
   const pendingCalls = openPairedCallsById.get(resultInfo.toolUseId);
   if (!pendingCalls) {
@@ -690,6 +729,9 @@ function applyLateToolResult(
   }
 
   applyToolResultToPairedCall(pendingCall, resultInfo);
+  if (resultInfo.selectedBlock) {
+    trace?.onToolResult?.(message, resultInfo.selectedBlock, pendingCall);
+  }
   if (pendingCalls.length === 0) {
     openPairedCallsById.delete(resultInfo.toolUseId);
   }
@@ -701,7 +743,10 @@ function applyLateToolResult(
  * Returns a mixed array of regular messages and tool sequences.
  * Each tool_use is paired with its corresponding tool_result for unified rendering.
  */
-export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[] {
+export function groupAdjacentToolCalls(
+  messages: ChatMessage[],
+  trace?: ToolGroupingTrace
+): GroupedMessageItem[] {
   const result: GroupedMessageItem[] = [];
   let currentToolSequence: ChatMessage[] = [];
   const openPairedCallsById = new Map<string, PairedToolCall[]>();
@@ -715,7 +760,7 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
       return;
     }
 
-    const pairedCalls = extractPairedToolCalls(currentToolSequence);
+    const pairedCalls = extractPairedToolCalls(currentToolSequence, trace);
 
     // Always create a sequence, even for single tools (so they're paired with results)
     const sequence: ToolSequence = {
@@ -726,6 +771,7 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     if (sequence.pairedCalls.length > 0) {
       result.push(sequence);
       trackOpenPairedCalls(sequence.pairedCalls, openPairedCallsById);
+      trace?.onToolSequence?.(sequence, currentToolSequence);
     }
     currentToolSequence = [];
   };
@@ -733,9 +779,12 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
   for (const message of messages.filter(isRenderableGroupedMessage)) {
     const lateToolResultInfo =
       message.message && isToolResultMessage(message.message)
-        ? extractToolResultInfo(message.message)
+        ? extractToolResultInfo(message.message, trace !== undefined)
         : null;
-    if (lateToolResultInfo && applyLateToolResult(lateToolResultInfo, openPairedCallsById)) {
+    if (
+      lateToolResultInfo &&
+      applyLateToolResult(lateToolResultInfo, openPairedCallsById, message, trace)
+    ) {
       continue;
     }
 
