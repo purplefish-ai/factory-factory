@@ -1,9 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Button } from '@/components/ui/button';
+import { createRecoveryImportReport } from '@/shared/recovery-import-report';
+import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 type ImportResult = Parameters<ReturnType<typeof useDataImportResults>['publishImportResult']>[0];
 const created: ImportResult = {
+  recovery: createRecoveryImportReport(undefined),
   projects: { imported: 2, skipped: 0 },
   workspaces: { imported: 4, skipped: 0 },
   agentSessions: { imported: 6, skipped: 0 },
@@ -23,6 +27,7 @@ const created: ImportResult = {
   },
 };
 const mixed: ImportResult = {
+  recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(fixed.meta.recovery)),
   projects: { imported: 1, skipped: 2 },
   workspaces: { imported: 4, skipped: 3 },
   agentSessions: { imported: 5, skipped: 6 },
@@ -83,3 +88,6 @@ export const LongResults: Story = {
     },
   },
 };
+
+export const PartialCoverage: Story = { args: { result: mixed } };
+export const LegacyNoDeclaration: Story = { args: { result: created } };

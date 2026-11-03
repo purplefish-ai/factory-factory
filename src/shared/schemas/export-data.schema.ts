@@ -52,6 +52,7 @@ import {
   prEventBackupSchema,
   prMonitoringBackupSchema,
 } from './pr-monitoring-backup.schema';
+import { recoveryMetadataSchema, recoverySectionsSchema } from './recovery-envelope.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
@@ -446,7 +447,7 @@ function safelyNormalize<T, R>(
   }
 }
 function validateAccountReferences(
-  backup: z.infer<typeof legacyAndCurrentSchema>,
+  backup: Pick<z.infer<typeof legacyAndCurrentSchema>, 'data'>,
   ctx: z.RefinementCtx
 ) {
   const ids = new Set(backup.data.codexAccounts.map((account) => account.id));
@@ -460,6 +461,13 @@ function validateAccountReferences(
     }
   });
 }
+const version8Schema = z.strictObject({
+  meta: legacyAndCurrentSchema.shape.meta.extend({
+    schemaVersion: z.literal(8),
+    recovery: recoveryMetadataSchema,
+  }),
+  data: legacyAndCurrentSchema.shape.data.extend({ recovery: recoverySectionsSchema }),
+});
 export const exportDataSchema = z
   .union([
     publishedVersion5Schema.transform((input, ctx) =>
@@ -468,6 +476,7 @@ export const exportDataSchema = z
     legacyAndCurrentSchema.transform((input, ctx) =>
       safelyNormalize(input, ctx, normalizeLegacyAndCurrent)
     ),
+    version8Schema,
   ])
   .superRefine(validateBackupPRs)
   .superRefine(validateAccountReferences);

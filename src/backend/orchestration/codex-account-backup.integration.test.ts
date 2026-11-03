@@ -55,7 +55,7 @@ beforeEach(async () => {
 });
 it('roundtrips managed bindings into a fresh database and isolates imported native homes', async () => {
   const exported = exportDataSchema.parse(await dataBackupService.exportData('test'));
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.codexAccounts).toHaveLength(2);
   await clearIntegrationDatabase(db.prisma);
   await dataBackupService.importData(exported);

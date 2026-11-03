@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
+
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRecoveryImportReport } from '@/shared/recovery-import-report';
+import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { DataImportButton } from './features/data-import/data-import-button';
 import { Root } from './root';
 
@@ -61,6 +65,7 @@ vi.mock('@/hooks/use-visual-viewport-height', () => ({
 const download = vi.hoisted(() => vi.fn());
 vi.mock('@/client/lib/download-file', () => ({ downloadFile: download }));
 const result = {
+  recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(fixed.meta.recovery)),
   projects: { imported: 1, skipped: 2 },
   workspaces: { imported: 3, skipped: 4 },
   agentSessions: { imported: 5, skipped: 6 },

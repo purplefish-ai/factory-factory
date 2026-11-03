@@ -98,7 +98,7 @@ it('publicly round trips complete contradictory legacy proof as BLOCKED through 
     await workspacePRMonitoringService.recoverClaim('legacy-inconsistent', true)
   ).toMatchObject({ count: 0, status: 'identity_mismatch' });
   const source = await dataBackupService.exportData('legacy-proof');
-  expect(source.meta.schemaVersion).toBe(7);
+  expect(source.meta.schemaVersion).toBe(8);
   expect(exportDataSchema.safeParse(source).success).toBe(true);
   const raw = source.data.workspaces.find((w) => w.id === 'w')!.prEvents;
   expect(raw.map((e) => e.id).sort()).toEqual([...facts.eventIds].sort());

@@ -480,7 +480,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(7);
+      expect(result.meta.schemaVersion).toBe(8);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({

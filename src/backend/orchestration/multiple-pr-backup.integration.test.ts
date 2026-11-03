@@ -127,7 +127,7 @@ beforeEach(async () => {
 });
 it('normalizes published version 5 PRs, tombstones, discovery, and legacy fixer identity', async () => {
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
   await clearIntegrationDatabase(db.prisma);
   const normalized = exportDataSchema.parse(publishedVersion5(exported));
@@ -419,7 +419,7 @@ it('roundtrips dedicated mode and PR-session bindings in additive version 6 back
     },
   });
   const exported = await dataBackupService.exportData('test');
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.workspaces[0]?.prMonitoring).toMatchObject({ deliveryMode: 'DEDICATED' });
   expect(exported.data.workspaces[0]?.prs.find((pr) => pr.id === 'a')).toMatchObject({
     dedicatedSession: { sessionId: 'dedicated' },
@@ -592,9 +592,9 @@ it('rejects and rolls back imported dispatching events without a delivery identi
   };
   expect(exportDataSchema.safeParse(invalid).success).toBe(false);
   await clearIntegrationDatabase(db.prisma);
-  await expect(dataBackupService.importData(invalid)).rejects.toThrow(
-    'complete frozen delivery metadata'
-  );
+  await expect(
+    Reflect.apply(dataBackupService.importData, dataBackupService, [invalid])
+  ).rejects.toThrow('complete frozen delivery metadata');
   expect(await db.prisma.workspacePREvent.count()).toBe(0);
   expect(await db.prisma.workspace.count()).toBe(0);
   expect(await db.prisma.project.count()).toBe(0);
@@ -638,9 +638,9 @@ it.each(['deliveryProvider', 'deliveryProviderSessionId'] as const)(
     };
     expect(exportDataSchema.safeParse(invalid).success).toBe(false);
     await clearIntegrationDatabase(db.prisma);
-    await expect(dataBackupService.importData(invalid)).rejects.toThrow(
-      'complete frozen delivery metadata'
-    );
+    await expect(
+      Reflect.apply(dataBackupService.importData, dataBackupService, [invalid])
+    ).rejects.toThrow('complete frozen delivery metadata');
     expect(await db.prisma.workspacePREvent.count()).toBe(0);
     expect(await db.prisma.workspace.count()).toBe(0);
     expect(await db.prisma.project.count()).toBe(0);

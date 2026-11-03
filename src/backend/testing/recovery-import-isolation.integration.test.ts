@@ -5,6 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
+import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -163,10 +164,16 @@ async function expectRolledBack() {
   expect(await db.prisma.userSettings.count()).toBe(0);
 }
 
-it('commits the existing v7 graph and account mapping through the private transaction', async () => {
+it('commits the existing base graph and account mapping through the private transaction', async () => {
   await seedSkippedWorkspace();
   const result = await dataBackupService.importData(backup);
   expect(result).toEqual({
+    recovery: expect.objectContaining({
+      status: 'PARTIAL',
+      manifest: fixed.meta.recovery,
+      unreportedTotals: 'EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS',
+      warnings: expect.any(Array),
+    }),
     inertTransforms: {
       workspaceWorkflows: 2,
       workspaceInitializations: 2,
@@ -266,27 +273,22 @@ it('bounds held-writer contention, returns whole-import CONFLICT and permits a f
 it('rejects invalid input before discovering or opening a private writer', async () => {
   const discovery = vi.spyOn(db.prisma, '$queryRaw');
   try {
-    const imported = dataBackupService.importData({
-      ...backup,
-      data: {
-        ...backup.data,
-        projects: backup.data.projects.map((row) => ({ ...row, slug: '' })),
+    const imported = Reflect.apply(dataBackupService.importData, dataBackupService, [
+      {
+        ...backup,
+        data: {
+          ...backup.data,
+          projects: backup.data.projects.map((row) => ({ ...row, slug: '' })),
+        },
       },
-    });
+    ]);
     await expect(imported).rejects.toBeInstanceOf(ZodError);
     await expect(imported).rejects.toMatchObject({
       issues: [
         expect.objectContaining({
-          code: 'invalid_union',
-          errors: expect.arrayContaining([
-            [
-              expect.objectContaining({
-                code: 'too_small',
-                minimum: 1,
-                path: ['data', 'projects', 0, 'slug'],
-              }),
-            ],
-          ]),
+          code: 'too_small',
+          minimum: 1,
+          path: ['data', 'projects', 0, 'slug'],
         }),
       ],
     });
