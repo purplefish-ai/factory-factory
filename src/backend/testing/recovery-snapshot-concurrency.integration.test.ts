@@ -31,6 +31,14 @@ vi.mock('@/backend/services/codex-accounts', async (importOriginal) => {
 });
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 let db: IntegrationDatabase;
 beforeAll(async () => {
   db = await createIntegrationDatabase();
@@ -56,8 +64,8 @@ beforeAll(async () => {
 afterAll(async () => destroyIntegrationDatabase(db));
 
 it('exports account metadata and session bindings from one snapshot while the application writer commits', async () => {
-  const reachedAccounts = Promise.withResolvers<void>();
-  const writerCommitted = Promise.withResolvers<void>();
+  const reachedAccounts = deferred();
+  const writerCommitted = deferred();
   state.beforeAccounts = async () => {
     reachedAccounts.resolve();
     await writerCommitted.promise;
