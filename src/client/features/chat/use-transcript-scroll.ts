@@ -2,6 +2,7 @@ import {
   defaultRangeExtractor,
   elementScroll,
   measureElement,
+  type Range,
   useVirtualizer,
   type Virtualizer,
 } from '@tanstack/react-virtual';
@@ -21,6 +22,19 @@ import type {
 interface Measurement {
   width: number;
   height: number;
+}
+
+function sameKeys(left: string[], right: string[]) {
+  return left.length === right.length && left.every((key, index) => right[index] === key);
+}
+
+/** Returns the previous array while the row key values are unchanged. */
+function useSameKeys(keys: string[]) {
+  const previous = useRef(keys);
+  if (previous.current !== keys && !sameKeys(previous.current, keys)) {
+    previous.current = keys;
+  }
+  return previous.current;
 }
 
 export function useTranscriptScroll(
@@ -121,21 +135,35 @@ export function useTranscriptScroll(
     };
   }, [viewport]);
 
+  // The virtualizer rebuilds every row measurement whenever `getItemKey` or
+  // `rangeExtractor` change identity. Tie them to the row key values so
+  // unrelated renders and streamed content edits keep the cache, while a new
+  // row structure still invalidates it.
+  const rowKeys = useSameKeys(keys);
+  const getItemKey = useCallback(
+    (index: number) => rowKeys[index] ?? `missing-${index}`,
+    [rowKeys]
+  );
+  const leadingHeader = rowKeys[0] === 'transcript:header';
+  // A banner/image can resize while scrolled out of view. Keep this one
+  // leading row measured so its size and native compensation stay current.
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      return leadingHeader && indexes[0] !== 0 ? [0, ...indexes] : indexes;
+    },
+    [leadingHeader]
+  );
   const engine = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: keys.length,
+    count: rowKeys.length,
     getScrollElement: () => viewport,
-    getItemKey: (index) => keys[index] ?? `missing-${index}`,
+    getItemKey,
     estimateSize: () => 80,
     overscan: 5,
     paddingStart: 16,
     paddingEnd: 16,
     gap: 8,
-    // A banner/image can resize while scrolled out of view. Keep this one
-    // leading row measured so its size and native compensation stay current.
-    rangeExtractor: (range) => {
-      const indexes = defaultRangeExtractor(range);
-      return keys[0] === 'transcript:header' && indexes[0] !== 0 ? [0, ...indexes] : indexes;
-    },
+    rangeExtractor,
     anchorTo: 'start',
     followOnAppend: false,
     // Native compensation can synchronously render more measured rows. Deliver

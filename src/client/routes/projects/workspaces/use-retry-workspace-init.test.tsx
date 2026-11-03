@@ -46,3 +46,15 @@ it('the real retry callback requires current AVAILABLE projection before mutatio
     await act(async () => root.unmount());
   }
 });
+it('keeps the retry callback stable while the mutation result object changes', async () => {
+  const root = createRoot(document.createElement('div'));
+  const availability = { status: 'AVAILABLE' } as const;
+  try {
+    await act(async () => root.render(createElement(Probe, { availability })));
+    const initial = retry;
+    await act(async () => root.render(createElement(Probe, { availability })));
+    expect(retry).toBe(initial);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

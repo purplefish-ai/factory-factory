@@ -27,15 +27,18 @@ export function useRetryWorkspaceInit(
     },
   });
 
+  // The mutation result is a new object every render; depend on its stable
+  // `mutate` so the retry handler keeps its identity for memoized banners.
+  const { mutate, isPending } = retryInit;
   const retry = useCallback(() => {
-    if (availability?.status !== 'AVAILABLE' || retryInit.isPending) {
+    if (availability?.status !== 'AVAILABLE' || isPending) {
       return;
     }
-    retryInit.mutate({
+    mutate({
       id: workspaceId,
       useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
     });
-  }, [retryInit, workspaceId, availability]);
+  }, [mutate, isPending, workspaceId, availability]);
 
   return { retry, retryInit };
 }
