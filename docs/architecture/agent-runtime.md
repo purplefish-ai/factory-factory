@@ -1095,7 +1095,7 @@ renders standalone mail signals as compact, collapsed envelope rows, hiding
 agent instructions and receipt markers. Expanding a row loads the current inbox
 and lets users open message bodies; the revision labels the notification rather
 than a historical inbox snapshot. Reading and acknowledgement keep the same
-explicit inbox behavior. Parent/child inbox notifications in older transcripts
+explicit inbox behavior. Live and historical parent/child inbox notifications
 also collapse to envelope rows with expandable message text. Combined user
 prompts retain their full text so user instructions remain visible.
 

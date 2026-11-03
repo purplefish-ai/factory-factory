@@ -67,6 +67,7 @@ it.each(['attachments', 'mismatched revision', 'assistant quote'])(
       message.message = { type: 'assistant', message: { role: 'assistant', content: signal } };
     }
     const html = renderToStaticMarkup(<MessageItem message={message} />);
+    expect(html).toContain('You have workspace mail');
     expect(html).not.toContain('<summary');
   }
 );
@@ -85,6 +86,8 @@ it.each(['child_workspace_update', 'parent_workspace_update'] as const)(
             type,
             childWorkspaceName: 'Review',
             parentWorkspaceName: 'Coordinator',
+            childProjectName: 'Review project',
+            parentProjectName: 'Coordinator project',
             text: 'Ready for review',
           },
         }}
@@ -93,6 +96,9 @@ it.each(['child_workspace_update', 'parent_workspace_update'] as const)(
     expect(html).toContain('<summary');
     expect(html).toContain('Ready for review');
     expect(html).toContain(type === 'child_workspace_update' ? 'Review' : 'Coordinator');
+    expect(html).toContain(
+      type === 'child_workspace_update' ? 'Review project' : 'Coordinator project'
+    );
   }
 );
 

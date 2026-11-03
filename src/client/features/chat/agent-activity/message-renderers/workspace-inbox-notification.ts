@@ -10,9 +10,13 @@ function getEventNotification(event: AgentMessage | undefined): InboxNotificatio
     const child = event.type === 'child_workspace_update';
     return {
       kind: 'message',
-      title: `${child ? 'Child' : 'Parent'} workspace · ${
-        (child ? event.childWorkspaceName : event.parentWorkspaceName) ?? 'Workspace message'
-      }`,
+      title: [
+        `${child ? 'Child' : 'Parent'} workspace`,
+        (child ? event.childWorkspaceName : event.parentWorkspaceName) ?? 'Workspace message',
+        child ? event.childProjectName : event.parentProjectName,
+      ]
+        .filter(Boolean)
+        .join(' · '),
       body: event.text ?? '',
     };
   }
