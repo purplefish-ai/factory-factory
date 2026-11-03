@@ -315,6 +315,16 @@ Provider-default updates return `NOT_FOUND` when their workspace was deleted,
 including deletion racing the database update, without exposing Prisma error
 messages. Other database errors keep their existing handling.
 
+## Backup export
+
+Schema-7 exports read relational data and saved account metadata through one
+private, physically readonly SQLite transaction. The source connection
+identifies its actual main database file; missing or in-memory databases fail
+closed. Ordinary WAL writers can commit while export reads its consistent
+snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
+wait. Account exports include identity metadata only, excluding credentials and
+homes.
+
 ## Backup import
 
 Backup imports require the same trusted local client boundary as project

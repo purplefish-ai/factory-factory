@@ -6,6 +6,7 @@ import type {
   TerminalSession,
   UserSettings,
 } from '@prisma-gen/client';
+import { withBackupSnapshot } from './backup-snapshot';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 
@@ -34,10 +35,14 @@ export interface DataBackupSnapshot {
 }
 
 class DataBackupAccessor {
-  getSnapshotForExport(): Promise<DataBackupSnapshot> {
+  withExportSnapshot<T>(callback: (tx: DataBackupTransactionClient) => Promise<T>): Promise<T> {
+    return withBackupSnapshot(prisma, callback);
+  }
+
+  getSnapshotForExport(tx: DataBackupTransactionClient): Promise<DataBackupSnapshot> {
     return Promise.all([
-      prisma.project.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.workspace.findMany({
+      tx.project.findMany({ orderBy: { createdAt: 'asc' } }),
+      tx.workspace.findMany({
         orderBy: { createdAt: 'asc' },
         include: {
           conversationMetadata: true,
@@ -49,9 +54,9 @@ class DataBackupAccessor {
           runScript: true,
         },
       }),
-      prisma.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.userSettings.findFirst({ where: { userId: 'default' } }),
+      tx.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
+      tx.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
+      tx.userSettings.findFirst({ where: { userId: 'default' } }),
     ]).then(([projects, workspaces, agentSessions, terminalSessions, userSettings]) => ({
       projects,
       workspaces,

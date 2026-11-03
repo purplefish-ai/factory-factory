@@ -1,7 +1,8 @@
 import { codexAccountBackupAccessor } from '@/backend/services/codex-accounts/resources/codex-account-backup.accessor';
 import type { CodexAccountMetadata } from '@/shared/codex-account-backup';
 import type { Prisma } from '@prisma-gen/client';
-export const exportCodexAccountMetadata = () => codexAccountBackupAccessor.exportMetadata();
+export const exportCodexAccountMetadata = (tx?: Prisma.TransactionClient) =>
+  codexAccountBackupAccessor.exportMetadata(tx);
 export const restoreCodexAccountMetadata = (
   tx: Prisma.TransactionClient,
   rows: CodexAccountMetadata[]

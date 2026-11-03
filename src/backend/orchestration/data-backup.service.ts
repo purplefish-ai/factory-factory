@@ -512,14 +512,16 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports the version 6 PR event ledger format.
+   * Exports the version 7 account and PR event ledger format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
 
-    // Fetch all data
-    const { projects, workspaces, agentSessions, terminalSessions, userSettings } =
-      await dataBackupAccessor.getSnapshotForExport();
+    const { projects, workspaces, agentSessions, terminalSessions, userSettings, codexAccounts } =
+      await dataBackupAccessor.withExportSnapshot(async (tx) => ({
+        ...(await dataBackupAccessor.getSnapshotForExport(tx)),
+        codexAccounts: await exportCodexAccountMetadata(tx),
+      }));
 
     const exportData: ExportData = {
       meta: {
@@ -589,7 +591,7 @@ class DataBackupService {
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
         })),
-        codexAccounts: await exportCodexAccountMetadata(),
+        codexAccounts,
         agentSessions: agentSessions.map((s) => ({
           id: s.id,
           workspaceId: s.workspaceId,

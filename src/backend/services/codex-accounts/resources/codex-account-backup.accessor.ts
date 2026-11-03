@@ -55,10 +55,13 @@ async function restoreAccount(
   return id;
 }
 export const codexAccountBackupAccessor = {
-  async exportMetadata(): Promise<CodexAccountMetadata[]> {
-    return codexAccountMetadataSchema
-      .array()
-      .parse(await prisma.codexAccount.findMany({ orderBy: { createdAt: 'asc' } }));
+  async exportMetadata(tx: Prisma.TransactionClient = prisma): Promise<CodexAccountMetadata[]> {
+    return codexAccountMetadataSchema.array().parse(
+      await tx.codexAccount.findMany({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, label: true, kind: true, enabled: true, identityKey: true },
+      })
+    );
   },
   async restoreMetadata(tx: Prisma.TransactionClient, input: CodexAccountMetadata[]) {
     const ids = new Map<string, string>();
