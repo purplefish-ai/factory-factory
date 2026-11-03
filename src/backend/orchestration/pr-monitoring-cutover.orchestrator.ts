@@ -15,7 +15,7 @@ export async function retireLegacyRatchetSessions(
   const { sessionDataService, workspacePRMonitoringService } = services;
   let retired = 0;
   const blockedWorkspaceIds: string[] = [];
-  for (const config of await workspacePRMonitoringService.listConfigs()) {
+  for (const config of await workspacePRMonitoringService.listLegacyRetirementCandidates()) {
     const sessions = (
       await sessionDataService.findAgentSessionsByWorkspaceId(config.workspaceId)
     ).filter((s) => s.workflow === 'ratchet');
@@ -58,7 +58,7 @@ export async function retireLegacyRatchetSessions(
 }
 
 type MonitoringConfig = Awaited<
-  ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listConfigs']>
+  ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listLegacyRetirementCandidates']>
 >[number];
 async function missingLegacyTranscripts(
   workspaceId: string,
@@ -117,7 +117,9 @@ async function completeRetirement(
 }
 async function retainedLegacyIds(
   config: Awaited<
-    ReturnType<PRMonitoringServices['workspacePRMonitoringService']['listConfigs']>
+    ReturnType<
+      PRMonitoringServices['workspacePRMonitoringService']['listLegacyRetirementCandidates']
+    >
   >[number],
   services: PRMonitoringServices
 ) {

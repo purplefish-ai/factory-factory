@@ -248,8 +248,23 @@ class WorkspacePrMonitoringAccessor {
       data: { lastCheckedAt: new Date() },
     });
   }
-  listConfigs() {
-    return prisma.workspacePRMonitoring.findMany().then((rows) => rows.map(normalizeConfig));
+  /**
+   * Rows legacy fixer retirement can change: retained (or corrupt) legacy IDs,
+   * a LEGACY_FIXER fence to clear, or live `ratchet` sessions to retire. Every
+   * other row is a no-op for the cutover, so startup skips it in SQL.
+   */
+  listLegacyRetirementCandidates() {
+    return prisma.workspacePRMonitoring
+      .findMany({
+        where: {
+          OR: [
+            { NOT: { legacySessionIds: { equals: [] } } },
+            { deliveryPauseReason: { startsWith: 'LEGACY_FIXER' } },
+            { workspace: { agentSessions: { some: { workflow: 'ratchet' } } } },
+          ],
+        },
+      })
+      .then((rows) => rows.map(normalizeConfig));
   }
   listEnabled() {
     return prisma.workspacePRMonitoring
