@@ -1,6 +1,6 @@
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
-import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
+import type { ChatMessage, SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';
 import { normalizeTranscript } from './session-transcript';
@@ -51,6 +51,31 @@ export class SessionPublisher {
     }
 
     sessionEventBus.publishToSession(store.sessionId, payload);
+  }
+
+  /**
+   * Publish the authoritative queue. Queue-only changes use this small delta
+   * instead of a snapshot, which would rebuild and resend the transcript window.
+   */
+  forwardQueue(store: SessionStore): void {
+    this.emitDelta(store.sessionId, { type: 'queue_updated', queuedMessages: [...store.queue] });
+  }
+
+  /** Publish one committed transcript entry and the queue that remains after it. */
+  forwardCommittedMessage(store: SessionStore, chatMessage: ChatMessage): void {
+    this.emitDelta(store.sessionId, {
+      type: 'transcript_message_committed',
+      chatMessage,
+      queuedMessages: [...store.queue],
+    });
+  }
+
+  /** Publish the authoritative pending interactive request (or its absence). */
+  forwardPendingRequest(store: SessionStore): void {
+    this.emitDelta(store.sessionId, {
+      type: 'pending_request_updated',
+      pendingInteractiveRequest: store.pendingInteractiveRequest,
+    });
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {

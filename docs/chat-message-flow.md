@@ -230,6 +230,36 @@ In-memory pending requests can survive a viewer reconnect while the session
 exists; they are not a durable permission request that can be resumed after a
 server restart.
 
+## Targeted state deltas
+
+Queue, commit, and interactive-request changes publish small `session_delta`
+events instead of a full `session_snapshot`, which would rebuild, serialize, and
+resend the whole transcript window (up to 1,000 messages) to every viewer:
+
+- `queue_updated` carries the complete queue after an enqueue, removal, dequeue,
+  or requeue.
+- `transcript_message_committed` carries one committed transcript entry and the
+  queue that remains after it. Batched dispatch and steering publish one per
+  committed message.
+- `pending_request_updated` carries the current pending interactive request, or
+  `null` once it is resolved or cleared. The `permission_request` and
+  `user_question` deltas still announce the prompt itself.
+
+Each carries the authoritative value for the state it changes, so the client
+replaces that state rather than patching it, and applying the delta matches what
+a snapshot would show for those fields. Ordering relies on the same per-viewer
+FIFO delivery as every other delta: the domain mutates the store and publishes
+synchronously, and a viewer that is loading receives these deltas after its
+replay. `src/shared/acp-protocol/protocol/session-state-delta-schema.ts`
+validates them at the client transport boundary; the committed entry uses
+`ArchivedChatMessageSchema`.
+
+Full snapshots remain for explicit `emitSessionSnapshot` calls, process exit,
+clearing queued work, provider-history reset, transcript removal, injected
+replay messages, and PR-delivery queue changes that also rewrite the transcript
+(enqueueing over a previous outcome or cancelling a queued update). Snapshots
+for a session nobody is viewing are still skipped.
+
 ## Frontend updates
 
 `useChatTransport` unwraps `session_delta` before passing its inner event to
@@ -245,6 +275,9 @@ batches as well as live events; replay uses the same event-to-action mapping.
 | `message_state_changed`                                | `MESSAGE_STATE_CHANGED`                                |
 | `session_runtime_snapshot` / `session_runtime_updated` | `SESSION_RUNTIME_SNAPSHOT` / `SESSION_RUNTIME_UPDATED` |
 | `user_question` / `permission_request`                 | Interactive request state                              |
+| `queue_updated`                                        | `QUEUE_UPDATED`                                        |
+| `transcript_message_committed`                         | `TRANSCRIPT_MESSAGE_COMMITTED`                         |
+| `pending_request_updated`                              | `PENDING_REQUEST_UPDATED`                              |
 
 Questions and permissions are stored in `SessionStore.pendingInteractiveRequest`
 and included in replay. The permission service resolves responses and clears the
@@ -369,11 +402,12 @@ does not substitute for checking momentum behavior on an actual iOS device.
 
 The archive-focused `ArchivedChatMessageSchema` and `ArchivedAgentMessageSchema`
 in `src/shared/acp-protocol/protocol/archived-message-schema.ts` validate the
-complete current serialized message structure. They are a passive dependency for
-the compatible archive reader; no reader or live WebSocket path uses them yet.
-Unknown message/content/stream tags and malformed current fields reject.
-Preserving opaque legacy rows and rendering their fallback belongs to the
-archive reader adapter.
+complete current serialized message structure. The compatible archive reader is
+not built yet; the live `transcript_message_committed` delta uses
+`ArchivedChatMessageSchema` to validate its committed entry. Unknown
+message/content/stream tags and malformed current fields reject. Preserving
+opaque legacy rows and rendering their fallback belongs to the archive reader
+adapter.
 
 Tool inputs, tool schemas and result values use JSON-valued records/values:
 functions, errors, cycles and nested `undefined` are outside the serialized

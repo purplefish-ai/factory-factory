@@ -417,7 +417,7 @@ export function commitSentUserMessageWithOrder(
   store: SessionStore,
   message: QueuedMessage,
   order: number
-): void {
+): ChatMessage {
   const transcriptMessage: ChatMessage = {
     id: message.id,
     source: 'user',
@@ -435,6 +435,7 @@ export function commitSentUserMessageWithOrder(
   if (store.nextOrder <= order) {
     store.nextOrder = order + 1;
   }
+  return transcriptMessage;
 }
 
 export function injectCommittedUserMessage(
