@@ -440,6 +440,23 @@ export function createServer(application: Application, requestedPort?: number): 
     reconciliationService.startNewWorkspaceInitialization();
   };
 
+  const assertStartupNotInterrupted = (): void => {
+    if (cleanupStarted) {
+      throw new Error('Server startup interrupted by shutdown');
+    }
+  };
+
+  /** Readiness work that must not run once shutdown has begun. */
+  const startRuntimeWork = async (): Promise<void> => {
+    // Before readiness, so a crashed backend's leftover Serve listener cannot
+    // make the first share of that port fail as already configured.
+    await portShareService.stopStaleShares();
+    assertStartupNotInterrupted();
+    await interceptors.start();
+    await startBackgroundWork();
+    assertStartupNotInterrupted();
+  };
+
   /**
    * Signal one background job to stop now and return its drain. The drain
    * never rejects: a failed stop is logged so it cannot keep the other jobs,
@@ -613,14 +630,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
-        // Before readiness, so a crashed backend's leftover Serve listener cannot
-        // make the first share of that port fail as already configured.
-        await portShareService.stopStaleShares();
-        await interceptors.start();
-        await startBackgroundWork();
-        if (cleanupStarted) {
-          throw new Error('Server startup interrupted by shutdown');
-        }
+        await startRuntimeWork();
         startupComplete = true;
 
         logger.info('Server endpoints available', {

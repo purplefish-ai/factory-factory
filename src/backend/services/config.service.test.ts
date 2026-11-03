@@ -60,6 +60,7 @@ describe('configService environment accessors', () => {
   });
 
   it('canonicalizes equivalent spellings of the ff tailscale origin', () => {
+    delete process.env.FF_TAILSCALE_HTTPS_PORT;
     process.env.FF_TAILSCALE_ORIGIN = 'https://Mac.Tail123.TS.net:443/';
     configService.reload();
     expect(configService.getTailscaleConfig()).toEqual({

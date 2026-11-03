@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MarkdownRenderer } from './markdown';
 
-const portSharing = vi.hoisted(() => vi.fn(() => true));
+const portSharing = vi.hoisted(() => vi.fn<() => boolean | undefined>(() => true));
 vi.mock('@/client/hooks/use-port-sharing', () => ({ usePortSharing: portSharing }));
 vi.mock('@/client/lib/trpc', () => ({ trpc: {} }));
 vi.mock('./github-pr-link', () => ({
@@ -53,6 +53,14 @@ it('keeps loopback links unchanged when port sharing is unavailable', async () =
   portSharing.mockReturnValue(false);
   const anchor = await renderLink('[storybook](http://localhost:6006/)');
   expect(anchor.getAttribute('href')).toBe('http://localhost:6006/');
+});
+
+it('withholds loopback links until port sharing status loads', async () => {
+  portSharing.mockReturnValue(undefined);
+  const anchor = await renderLink('[storybook](http://localhost:6006/)');
+  expect(anchor.hasAttribute('href')).toBe(false);
+  expect(anchor.getAttribute('aria-disabled')).toBe('true');
+  expect(anchor.textContent).toContain('storybook');
 });
 
 it('does not rewrite other external links', async () => {

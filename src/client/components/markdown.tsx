@@ -20,6 +20,11 @@ function renderImage(props: { src?: string; alt?: string; title?: string }) {
 /** Under `ff tailscale`, host loopback links open through a shared Tailscale port. */
 function LoopbackAwareLink({ link }: { link: MarkdownLink }) {
   const portSharing = usePortSharing();
+  if (portSharing === undefined) {
+    // Until the server answers, the original href would open the viewing
+    // device's own localhost.
+    return cloneElement(link, { href: undefined, 'aria-disabled': true });
+  }
   const shared = portSharing === true && link.props.href ? toPortShareLink(link.props.href) : null;
   if (!shared) {
     return link;

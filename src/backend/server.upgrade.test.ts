@@ -760,6 +760,18 @@ describe('server websocket upgrade routing', () => {
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
+  it('does not start interceptors when shutdown begins during stale share recovery', async () => {
+    const { application, lifecycle, services } = createTestHarness();
+    const server = createTestServer(application, 0);
+    vi.mocked(services.portShareService.stopStaleShares).mockImplementationOnce(async () => {
+      await server.stop();
+    });
+
+    await expect(server.start()).rejects.toThrow('Server startup interrupted by shutdown');
+    expect(lifecycle.interceptors.start).not.toHaveBeenCalled();
+    expect(services.ratchetService.start).not.toHaveBeenCalled();
+  });
+
   it('stops reconciliation when shutdown begins but drains it before disconnecting', async () => {
     const { application, lifecycle, services } = createTestHarness();
     const { promise: drained, resolve: drain } = deferred<undefined>();
