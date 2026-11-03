@@ -25,6 +25,20 @@ behavior:
   animation. Completion renders the exact source with incomplete-Markdown
   repairs disabled and removes the animation spans. History renders immediately.
 
+The chosen foreground timing budget is up to 100 ms from client receipt to the
+next text snapshot, followed by a 120 ms fade to full opacity. New words begin
+fading as soon as that snapshot commits; there is no stagger or word queue. Thus
+the nominal budget to full opacity is 220 ms after client receipt, or about 245
+ms including the backend's 25 ms batching window. Network transit, Markdown
+rendering, a paint frame and main-thread scheduling add to that budget; it is
+not a hard wall-clock maximum, particularly for a busy or hidden tab.
+
+Issue #2880 originally proposed an 80–120 ms total visual-delay target for a
+queued character-reveal experiment. After trying the comparison, the user chose
+these 120 ms word fades with the existing 100 ms parse throttle. That accepted
+tradeoff allows a longer time to full opacity while avoiding accumulated reveal
+debt. Completed messages flush immediately without waiting for the fade.
+
 The animation stylesheet and Tailwind sources live in `src/client/globals.css`,
 so the application and Storybook use the same styling. File navigation, GitHub
 previews and image validation remain owned by the application wrapper. Literal
@@ -102,8 +116,10 @@ comparison reuse our existing file links, GitHub previews, image validation,
 Mermaid renderer, and typography. The adapter explicitly replaces Streamdown's
 raw-HTML and URL-rewriting defaults with our existing literal HTML and URL
 handling. Its semantic element overrides retain native headings, strong text,
-and tables. Changing application render options remounts the Streamdown renderer
-because Streamdown's root memo does not observe those options.
+and tables. Workspace-navigation callbacks use a committed ref, so opening a
+file tab updates the handler without remounting or replaying the text fades.
+Other rendering configuration changes remount Streamdown because its root memo
+does not observe those options.
 
 Run the comparison benchmark with:
 
@@ -114,16 +130,17 @@ pnpm exec vitest bench --run --reporter=verbose streamdown-markdown
 It measures per-update parsing, React, and jsdom DOM work for an approximately
 20 KB completed prefix with a growing paragraph and for a growing fenced code
 block. Each sample appends a bounded tail and resets every 32 updates, allowing
-append-only block reuse without an ever-growing benchmark input. Streamdown's
-word-span creation is included; browser animation, layout, paint, scrolling, and
-visual latency are not. These measurements cannot establish perceived smoothness
-or justify removing the existing throttle by themselves.
+append-only block reuse without an ever-growing benchmark input. Repeated prose
+sections are separated by blank lines; the code case appends complete new lines
+inside the open fence. Streamdown's word-span creation is included; browser
+animation, layout, paint, scrolling, and visual latency are not. These
+measurements cannot establish perceived smoothness or justify removing the
+existing throttle by themselves.
 
 On macOS arm64 with Node 26.12.1, a local run on 2026-11-03 reported mean
-per-update costs of 0.38–0.40 ms for the React Markdown baseline versus
-1.19–1.21 ms for Streamdown with word fades on the completed-prefix fixture. For
-the open code fence, the means were 0.54–0.69 ms versus 0.64–1.25 ms. These
+per-update costs of about 0.48 ms for the React Markdown baseline versus
+1.38–1.45 ms for Streamdown with word fades on the completed-prefix fixture. For
+the open code fence, the means were 0.59–0.62 ms versus about 0.71 ms. These
 ranges are the two Vitest project results from one run, not confidence
-intervals; the code-fence results had visibly more timing noise. This trial
-demonstrates a visual option, not a parsing speedup over our existing block
-memoization.
+intervals. This trial demonstrates a visual option, not a parsing speedup over
+our existing block memoization.

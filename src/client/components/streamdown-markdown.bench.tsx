@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function compare(base: string) {
+function compare(base: string, chunk = ' growing') {
   return async ({ bench }: TestContext) => {
     const roots = variants.map(() => createRoot(document.createElement('div')));
     try {
@@ -35,7 +35,7 @@ function compare(base: string) {
           return bench(variant.name, () => {
             // Append a bounded tail, then restart. Avoid an ever-growing sample
             // and exercise append-only block reuse on 31 out of 32 updates.
-            const content = base + ' growing'.repeat(++step % 32);
+            const content = base + chunk.repeat(++step % 32);
             flushSync(() =>
               roots[index]?.render(
                 <MarkdownRenderer
@@ -58,11 +58,13 @@ function compare(base: string) {
 
 test(
   '20 KB completed prefix with a growing paragraph',
-  compare(`${STREAMING_PROSE.repeat(Math.ceil(20_000 / STREAMING_PROSE.length))}\n\nTail`),
+  compare(
+    `${Array.from({ length: Math.ceil(20_000 / STREAMING_PROSE.length) }, () => STREAMING_PROSE).join('\n\n')}\n\nTail`
+  ),
   180_000
 );
 test(
   'growing fenced code block',
-  compare(STREAMING_CODE.slice(0, STREAMING_CODE.lastIndexOf('```'))),
+  compare(STREAMING_CODE.slice(0, STREAMING_CODE.lastIndexOf('```')), 'const streamed = 1;\n'),
   180_000
 );

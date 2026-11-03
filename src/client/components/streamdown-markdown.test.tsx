@@ -95,6 +95,33 @@ describe('Streamdown Markdown adapter', () => {
     expect(container.querySelector('a')?.getAttribute('href')).toBe('C:/repo/src/file.ts:12');
   });
 
+  it('updates the file-tab callback without remounting the streaming reply', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const resolveWorkspaceFileLink = () => 'src/file.ts';
+    const content = '**Live reply** with a [file](C:/repo/src/file.ts).';
+    await render({
+      content,
+      streaming: true,
+      resolveWorkspaceFileLink,
+      onWorkspaceFileLink: first,
+    });
+    const paragraph = container.querySelector('p');
+    const word = container.querySelector('[data-sd-animate]');
+
+    await render({
+      content,
+      streaming: true,
+      resolveWorkspaceFileLink,
+      onWorkspaceFileLink: second,
+    });
+    expect(container.querySelector('p')).toBe(paragraph);
+    expect(container.querySelector('[data-sd-animate]')).toBe(word);
+    await act(() => container.querySelector('a')?.click());
+    expect(second).toHaveBeenCalledWith('src/file.ts');
+    expect(first).not.toHaveBeenCalled();
+  });
+
   it('preserves local image sources, literal HTML and the existing unsafe-link policy', async () => {
     const sources: (string | undefined)[] = [];
     await render({

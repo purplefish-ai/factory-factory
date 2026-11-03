@@ -8,7 +8,9 @@ import {
   memo,
   Suspense,
   useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -82,6 +84,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   renderImage,
   renderContent,
 }: MarkdownRendererProps) {
+  // Tab changes can replace the navigation callback. Keep renderer identities
+  // stable so updating that callback does not remount/reanimate the reply.
+  const workspaceFileHandler = useRef(onWorkspaceFileLink);
+  useLayoutEffect(() => {
+    workspaceFileHandler.current = onWorkspaceFileLink;
+  }, [onWorkspaceFileLink]);
+  const hasWorkspaceFileHandler = Boolean(onWorkspaceFileLink);
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo<MarkdownComponents>(
     () => ({
@@ -142,14 +151,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // Override link rendering
       a: ({ href, children }: ComponentPropsWithoutRef<'a'>) => {
         const workspacePath = href ? resolveWorkspaceFileLink?.(href) : null;
-        if (workspacePath && onWorkspaceFileLink) {
+        if (workspacePath && hasWorkspaceFileHandler) {
           return (
             <MarkdownLinkContext value={true}>
               <a
                 href={href}
                 onClick={(event) => {
                   event.preventDefault();
-                  onWorkspaceFileLink(workspacePath);
+                  workspaceFileHandler.current?.(workspacePath);
                 }}
                 onAuxClick={(event) => {
                   if (event.button !== 1) {
@@ -157,7 +166,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
                   }
 
                   event.preventDefault();
-                  onWorkspaceFileLink(workspacePath);
+                  workspaceFileHandler.current?.(workspacePath);
                 }}
                 className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
               >
@@ -190,7 +199,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <p className="mb-4 last:mb-0">{children}</p>
       ),
     }),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink, renderImage]
+    [hasWorkspaceFileHandler, resolveWorkspaceFileLink, renderExternalLink, renderImage]
   );
 
   // Custom image renderers own source validation and local-path resolution.
@@ -200,10 +209,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const urlTransform = useCallback(
     (url: string, key: string) =>
       (key === 'src' && renderImage) ||
-      (onWorkspaceFileLink && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
+      (hasWorkspaceFileHandler && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
         ? url
         : defaultUrlTransform(url),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderImage]
+    [hasWorkspaceFileHandler, resolveWorkspaceFileLink, renderImage]
   );
 
   const blocks = useMemo(() => {

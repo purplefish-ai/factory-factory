@@ -29,6 +29,10 @@ streaming fixtures.
 - Disable reveal animation for reduced-motion preferences and settled messages.
 - Treat Streamdown's backlog budget as soft; use zero stagger to avoid queued
   reveal.
+- The approved fade configuration supersedes #2880's initial 80–120 ms total
+  character-reveal target: budget 100 ms to a client snapshot and 120 ms to full
+  opacity (220 ms total, approximately 245 ms with backend batching). Rendering,
+  network and scheduling add to this nominal budget; it is not a wall-clock cap.
 - Use the existing linked worktree, Node 26.12.1 and pnpm 12.15.0.
 
 ## Review Focus
