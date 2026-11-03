@@ -519,9 +519,10 @@ class WorkspacePrEventAccessor {
    * Reducer history for one PR's current observation epoch: projected PENDING,
    * DISPATCHING and DELIVERED facts. This runs inside the serialized acceptance
    * transaction, so SQL excludes old-epoch rows and unbound inactive rows (for
-   * example large SUPERSEDED review payloads). Rows bound to a delivery are
-   * always read because the delivery's state replaces theirs in the projection;
-   * the in-memory filters below define the result.
+   * example large SUPERSEDED review payloads). Current-epoch rows bound to a
+   * delivery are read regardless of their own state because the delivery's
+   * state replaces theirs in the projection; the in-memory filters below
+   * define the result.
    */
   async listForPR(tx: Prisma.TransactionClient, prId: string, eventEpoch: number) {
     const prefix = `${prId}:epoch:${eventEpoch}:`;
