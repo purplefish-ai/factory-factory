@@ -101,6 +101,37 @@ it('accepts core CI facts with unknown GitHub identity and retries enrichment ne
   expect(lookup).toHaveBeenCalledTimes(2);
 });
 
+it('reads only core PR facts when review data is not requested', async () => {
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
+    fullDetails({ reviewDecision: 'CHANGES_REQUESTED' })
+  );
+  await expect(
+    prObservationService.fetch(target, undefined, { includeReviews: false })
+  ).resolves.toMatchObject({
+    ciStatus: 'FAILURE',
+    hasMergeConflict: true,
+    prState: 'CHANGES_REQUESTED',
+    reviewState: 'CHANGES_REQUESTED',
+    reviewsComplete: false,
+    actionableReviews: [],
+    resolvedReviewIds: [],
+  });
+  expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledOnce();
+  expect(readPolicy).not.toHaveBeenCalled();
+  expect(githubCLIService.getAuthenticatedUsername).not.toHaveBeenCalled();
+  expect(githubCLIService.getPRReviewDetails).not.toHaveBeenCalled();
+  expect(githubCLIService.getReviewComments).not.toHaveBeenCalled();
+  expect(githubCLIService.getResolvedReviewCommentIds).not.toHaveBeenCalled();
+});
+
+it('reads review data by default and when requested', async () => {
+  await prObservationService.fetch(target);
+  await prObservationService.fetch(target, undefined, { includeReviews: true });
+  expect(githubCLIService.getPRReviewDetails).toHaveBeenCalledTimes(2);
+  expect(githubCLIService.getReviewComments).toHaveBeenCalledTimes(2);
+  expect(githubCLIService.getResolvedReviewCommentIds).toHaveBeenCalledTimes(2);
+});
+
 it('fetches the explicit association and rejects missing head metadata', async () => {
   vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
     fullDetails({ headRefOid: undefined })

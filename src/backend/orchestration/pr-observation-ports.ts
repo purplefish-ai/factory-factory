@@ -23,8 +23,13 @@ export interface PRObservationPorts {
     observationEpoch: number;
     syncedAt: Date | null;
   } | null>;
-  getMonitoring(workspaceId: string): Promise<{ eventEpoch: number } | null>;
-  fetchObservation(target: PRTarget, signal?: AbortSignal): Promise<PRObservation>;
+  getMonitoring(workspaceId: string): Promise<{ eventEpoch: number; enabled: boolean } | null>;
+  /** `includeReviews: false` fetches core facts only and reports reviews as incomplete. */
+  fetchObservation(
+    target: PRTarget,
+    signal?: AbortSignal,
+    options?: { includeReviews: boolean }
+  ): Promise<PRObservation>;
   acceptObservation(input: {
     target: PRTarget;
     expectedPrRevision: number;

@@ -104,7 +104,8 @@ export function createPRObservationPorts(
     cacheScope,
     findPR: (target) => services.workspacePrSnapshotService.find(target),
     getMonitoring: (workspaceId) => services.workspacePRMonitoringService.get(workspaceId),
-    fetchObservation: (target, signal) => services.prObservationService.fetch(target, signal),
+    fetchObservation: (target, signal, options) =>
+      services.prObservationService.fetch(target, signal, options),
     acceptObservation: (input) =>
       services.workspacePrSnapshotService.acceptMonitoredObservation(input),
     publishAcceptedObservation: (event) => {

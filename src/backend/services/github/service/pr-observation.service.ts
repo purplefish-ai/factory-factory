@@ -9,13 +9,29 @@ interface ObservationPorts {
   findPR(target: PRTarget): Promise<{ url: string; hasMergeConflict?: boolean } | null>;
   readPolicy(): Promise<{ reviewTriggerMode: RatchetReviewTriggerMode }>;
 }
+// Like a failed enrichment: claims no feedback and no resolutions.
+const SKIPPED_REVIEW_FACTS = {
+  actionableReviews: [],
+  reviewsComplete: false,
+  resolvedReviewIds: [],
+} satisfies Pick<PRObservation, 'actionableReviews' | 'reviewsComplete' | 'resolvedReviewIds'>;
+
 class PRObservationService {
   private ports: ObservationPorts | null = null;
   private username: { value: string; expiresAt: number } | null = null;
   configure(ports: ObservationPorts) {
     this.ports = ports;
   }
-  async fetch(target: PRTarget, signal?: AbortSignal): Promise<PRObservation> {
+  /**
+   * `includeReviews: false` reads only core PR, head and check facts. Review data
+   * feeds only the event reducer, so callers skip it while monitoring is off; the
+   * observation then reports reviews as incomplete rather than resolved.
+   */
+  async fetch(
+    target: PRTarget,
+    signal?: AbortSignal,
+    options?: { includeReviews?: boolean }
+  ): Promise<PRObservation> {
     if (!this.ports) {
       throw new Error('PR observation service is not configured');
     }
@@ -34,19 +50,21 @@ class PRObservationService {
     const number = Number(match[3]);
     const [details, reviewFacts] = await Promise.all([
       githubCLIService.getPRStatusDetails(repository, number, signal),
-      fetchPRReviewFacts(
-        {
-          readPolicy: () => ports.readPolicy(),
-          readUsername: (abortSignal) => this.readUsername(abortSignal),
-          readDetails: (...args) => githubCLIService.getPRReviewDetails(...args),
-          readComments: (...args) => githubCLIService.getReviewComments(...args),
-          readResolvedIds: (...args) => githubCLIService.getResolvedReviewCommentIds(...args),
-        },
-        repository,
-        number,
-        association.url,
-        signal
-      ),
+      options?.includeReviews === false
+        ? SKIPPED_REVIEW_FACTS
+        : fetchPRReviewFacts(
+            {
+              readPolicy: () => ports.readPolicy(),
+              readUsername: (abortSignal) => this.readUsername(abortSignal),
+              readDetails: (...args) => githubCLIService.getPRReviewDetails(...args),
+              readComments: (...args) => githubCLIService.getReviewComments(...args),
+              readResolvedIds: (...args) => githubCLIService.getResolvedReviewCommentIds(...args),
+            },
+            repository,
+            number,
+            association.url,
+            signal
+          ),
     ]);
     signal?.throwIfAborted();
     if (!details.headRefOid) {
