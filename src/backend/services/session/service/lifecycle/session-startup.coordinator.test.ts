@@ -649,6 +649,7 @@ describe('SessionStartupCoordinator', () => {
       sessionDomainService: promptDomainService,
       acpEventProcessor: {
         getWorkspaceId: vi.fn(() => undefined),
+        getProvider: vi.fn(() => 'CODEX'),
         beginPromptTurn: vi.fn(() => 'attempt-1'),
         finishPromptTurn: vi.fn(),
         finalizeOrphanedToolCalls: vi.fn(),

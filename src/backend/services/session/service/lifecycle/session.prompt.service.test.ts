@@ -3,6 +3,8 @@ import { interceptorRegistry } from '@/backend/interceptors/registry';
 import { SessionDomainService } from '@/backend/services/session';
 import { PromptTimeoutError } from '@/backend/services/session/service/acp';
 import { AcpNativeSessionTracker } from '@/backend/services/session/service/acp/acp-native-session-tracker';
+import { AcpPromptController } from '@/backend/services/session/service/acp/acp-prompt-controller';
+import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { AcpEventProcessor } from './acp-event-processor';
 import type { EventSessionAuthority } from './event-session-authority';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
@@ -352,7 +354,7 @@ describe('SessionService prompt coordination', () => {
         { type: 'text', text: 'tool output' },
         { type: 'text', text: '{"ok":true}' },
       ],
-      14_400_000
+      undefined
     );
   });
 
@@ -368,12 +370,16 @@ describe('SessionService prompt coordination', () => {
     expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
       'session-1',
       [{ type: 'text', text: '[Image: not supported by this provider]' }],
-      14_400_000
+      undefined
     );
   });
 
-  it('uses the four-hour deadline for normal user messages', async () => {
-    const { service, runtimeManager } = createPromptService();
+  it.each([
+    ['CODEX', undefined],
+    ['CLAUDE', 14_400_000],
+  ] as const)('uses the turn timeout policy for %s messages', async (provider, timeoutMs) => {
+    const { service, runtimeManager, acpEventProcessor } = createPromptService();
+    acpEventProcessor.getProvider.mockReturnValue(provider);
     runtimeManager.getClient.mockReturnValue({ supportsImages: () => true });
     runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
 
@@ -382,8 +388,46 @@ describe('SessionService prompt coordination', () => {
     expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
       'session-1',
       [{ type: 'text', text: 'continue' }],
-      14_400_000
+      timeoutMs
     );
+  });
+
+  it('allows a Codex turn to finish after more than four hours', async () => {
+    vi.useFakeTimers();
+    const response = createDeferred<{ stopReason: 'end_turn' }>();
+    const { service, runtimeManager, lifecycleEventService, sessionDomainService } =
+      createPromptService();
+    const handle = createTestProcessHandle({
+      provider: 'CODEX',
+      connection: { prompt: vi.fn(() => response.promise), cancel: vi.fn() },
+    });
+    const controller = new AcpPromptController({
+      isCurrentHandle: () => true,
+      stopClient: vi.fn(),
+    });
+    runtimeManager.sendPrompt.mockImplementation((sessionId, prompt, timeoutMs) =>
+      controller.sendPrompt(sessionId, handle, prompt, timeoutMs)
+    );
+    const sending = service.sendSessionMessage('session-1', 'continue');
+    const completed = sending.then(
+      () => ({ error: undefined }),
+      (error: unknown) => ({ error })
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 60 * 1000);
+      expect(handle.isPromptInFlight).toBe(true);
+      expect(lifecycleEventService.record).not.toHaveBeenCalled();
+      response.resolve({ stopReason: 'end_turn' });
+      expect(await completed).toEqual({ error: undefined });
+      expect(sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+        'session-1',
+        expect.objectContaining({ phase: 'idle' })
+      );
+    } finally {
+      response.resolve({ stopReason: 'end_turn' });
+      await completed;
+      vi.useRealTimers();
+    }
   });
 
   it('records one durable timeout event for the active attempt', async () => {
@@ -569,7 +613,7 @@ describe('SessionService prompt coordination', () => {
     ).toBe(true);
   });
 
-  it('serializes concurrent ACP prompts with the four-hour deadline for the queued turn', async () => {
+  it('serializes concurrent Codex prompts without a deadline for the queued turn', async () => {
     const { service, runtimeManager } = createPromptService();
     const firstPrompt = createDeferred<{ stopReason: string }>();
     const secondPrompt = createDeferred<{ stopReason: string }>();
@@ -594,7 +638,7 @@ describe('SessionService prompt coordination', () => {
       2,
       'session-1',
       [{ type: 'text', text: 'second' }],
-      14_400_000
+      undefined
     );
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
