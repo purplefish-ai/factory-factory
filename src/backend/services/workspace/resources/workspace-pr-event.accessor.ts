@@ -85,7 +85,7 @@ const clearedDeliveryFields = {
 };
 
 /** Also used for old-format restores. Invalid evidence stays verbatim on events. */
-async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string) {
+async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string, inert = false) {
   const existing = await tx.workspacePRDelivery.findUnique({ where: { id } });
   if (existing) {
     return existing;
@@ -108,7 +108,9 @@ async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string)
     first.deliveryBindingRevision !== null &&
     first.deliveryBindingRevision >= 0 &&
     first.attempts >= 0 &&
-    ['PENDING', 'DISPATCHING', 'DELIVERED', 'CANCELLED'].includes(first.state) &&
+    ['PENDING', 'DISPATCHING', 'DELIVERED', 'CANCELLED', ...(inert ? ['SUPERSEDED'] : [])].includes(
+      first.state
+    ) &&
     rows.every((row) =>
       legacyFields.every((field) => {
         const a = row[field],
@@ -117,12 +119,15 @@ async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string)
       })
     )
   );
+  // Imported unfinished receipts are historical evidence, never retry authority.
+  // Retain raw fields before the normalizer clears them, including mixed groups.
+  const held = inert && rows.some((row) => ['PENDING', 'DISPATCHING'].includes(row.state));
   const delivery = await tx.workspacePRDelivery.create({
     data: {
       id,
       workspaceId: first.workspaceId,
       eventIds: rows.map((row) => row.id),
-      state: valid ? first.state : 'BLOCKED',
+      state: valid && !held ? first.state : 'BLOCKED',
       ...(valid
         ? {
             sessionId: first.deliverySessionId,
@@ -139,7 +144,7 @@ async function normalizeLegacyDelivery(tx: Prisma.TransactionClient, id: string)
   });
   await tx.workspacePREvent.updateMany({
     where: { deliveryId: id },
-    data: { batchId: id, ...(valid ? clearedDeliveryFields : {}) },
+    data: { batchId: id, ...(valid && !held ? clearedDeliveryFields : {}) },
   });
   return delivery;
 }
@@ -396,8 +401,10 @@ class WorkspacePrEventAccessor {
   async restoreBackup(
     tx: Prisma.TransactionClient,
     workspaceId: string,
-    rawEvents: z.infer<typeof prEventBackupSchema>[]
+    rawEvents: z.infer<typeof prEventBackupSchema>[],
+    options: { inert?: boolean } = {}
   ) {
+    let heldReceipts = 0;
     for (const raw of rawEvents) {
       const event = prEventBackupSchema.parse(raw);
       if (
@@ -423,8 +430,20 @@ class WorkspacePrEventAccessor {
       if (await tx.workspacePRDelivery.findUnique({ where: { id } })) {
         throw new Error('Imported PR delivery identity already exists');
       }
-      await normalizeLegacyDelivery(tx, id);
+      const delivery = await normalizeLegacyDelivery(tx, id, options.inert);
+      heldReceipts += Number(
+        options.inert &&
+          delivery?.state === 'BLOCKED' &&
+          rawEvents.some(
+            (event) => event.deliveryId === id && ['PENDING', 'DISPATCHING'].includes(event.state)
+          )
+      );
     }
+    // Positive NULL evidence is required: incomplete frozen facts stay held.
+    const cancelled = options.inert
+      ? await this.cancelInTransaction(tx, workspaceId)
+      : { count: 0 };
+    return { heldReceipts, cancelledFacts: cancelled.count };
   }
   projectEvents = projectDeliveryEvents;
   exportEvents = exportDeliveryEvents;

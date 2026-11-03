@@ -31,6 +31,7 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  workspacePREvent: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
@@ -748,10 +749,10 @@ describe('DataBackupService', () => {
             create: {
               command: 'npm run dev',
               cleanupCommand: 'npm run cleanup',
-              pid: 12_345,
-              port: 3000,
-              startedAt: new Date('2025-01-01T00:10:00.000Z'),
-              status: RunScriptStatus.RUNNING,
+              pid: null,
+              port: null,
+              startedAt: null,
+              status: RunScriptStatus.IDLE,
             },
           },
           // The v4 format's flat ratchet fields land in the nested row, and
