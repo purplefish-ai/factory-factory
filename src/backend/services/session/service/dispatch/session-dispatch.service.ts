@@ -744,13 +744,11 @@ export class SessionDispatchService {
           ),
       });
       // Persist immediately after dispatch so refresh/replay keeps this user message
-      // visible while the provider is still working on the turn.
+      // visible while the provider is still working on the turn. Each commit
+      // publishes only its entry and the remaining queue.
       for (const { message, order } of dispatched) {
-        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order, {
-          emitSnapshot: false,
-        });
+        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
       }
-      sessionDomainService.emitSessionSnapshot(dbSessionId);
       await sendPromise;
       for (const { message, userMessage } of dispatched) {
         sessionDomainService.emitDelta(dbSessionId, {
@@ -877,7 +875,8 @@ export class SessionDispatchService {
 
   private failStoppedUserMessage(dbSessionId: string, msg: QueuedMessage): void {
     if (this.lifecycle.notificationDelivery.isNotificationMessage(msg.id)) {
-      sessionDomainService.emitSessionSnapshot(dbSessionId);
+      // The notification was taken from the queue without publication.
+      sessionDomainService.publishQueue(dbSessionId);
       return;
     }
     sessionDomainService.failMessage(
@@ -923,9 +922,7 @@ export class SessionDispatchService {
       return;
     }
 
-    const blockedMessage = sessionDomainService.dequeueNext(dbSessionId, {
-      emitSnapshot: false,
-    });
+    const blockedMessage = sessionDomainService.dequeueNext(dbSessionId, { publish: false });
     if (!blockedMessage) {
       return;
     }

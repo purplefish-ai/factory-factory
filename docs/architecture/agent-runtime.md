@@ -543,10 +543,11 @@ prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
 input is removed from the queue even if stopping advances the generation while
 the request settles, preventing a delivered steer from being replayed on resume.
 Queue-to-transcript handoffs publish the consumed input together with its
-committed transcript entries; steering and batched sends never publish a partial
-snapshot between removal and commit. The chat keeps each message row mounted and
-briefly collapses its queued controls when dispatched, respecting reduced-motion
-preferences.
+committed transcript entries: each `transcript_message_committed` delta carries
+the entry and the remaining queue, so steering and batched sends never expose a
+partial state between removal and commit. The chat keeps each message row
+mounted and briefly collapses its queued controls when dispatched, respecting
+reduced-motion preferences.
 
 Codex uses native `turn/steer` without cancelling the current turn. Claude's
 native steering may pre-empt generation or background a foreground tool; neither
@@ -989,9 +990,9 @@ and saved selections of that tab migrate to Changes. The session store retains
 the latest validated ACP task snapshot for reconnect replay, including empty
 lists. Plan snapshots emitted during provider history attachment pass replay
 suppression so restored conversations can recover tasks. Authoritative session
-snapshots include the current task list, so queue updates preserve valid tasks
-and hydration clears stale client state when no list exists. Replacing a
-provider's archived history also clears its task snapshot.
+snapshots include the current task list, so hydration clears stale client state
+when no list exists; queue deltas leave the client's task list untouched.
+Replacing a provider's archived history also clears its task snapshot.
 
 ## Provider sub-agents
 

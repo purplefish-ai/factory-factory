@@ -87,7 +87,7 @@ function takeDispatchBatch(sessionId: string, messages: QueuedMessage[]): boolea
   if (sessionDomainService.peekNextMessage(sessionId) !== messages[0]) {
     return false;
   }
-  const message = sessionDomainService.dequeueNext(sessionId, { emitSnapshot: false });
+  const message = sessionDomainService.dequeueNext(sessionId, { publish: false });
   if (!message) {
     return false;
   }
