@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 
 export function imageDataUrl(mediaType: string, data: string): string | null {
@@ -40,14 +41,34 @@ export function ChatImage({
 }: ChatImageProps) {
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
+  const embedded = source ? /^data:/i.test(source) : false;
   if (!src || failed) {
     return (
-      <span className="inline-flex max-w-full flex-col rounded border p-2 text-xs text-muted-foreground">
+      <span
+        className={cn(
+          'inline-flex max-w-full min-w-0 flex-col rounded border p-2 text-xs text-muted-foreground',
+          embedded && 'w-80'
+        )}
+      >
         <span>
           {loading ? 'Loading image…' : 'Image unavailable'}
           {alt ? `: ${alt}` : ''}
         </span>
-        {source && <code className="select-text whitespace-pre-wrap break-all">{source}</code>}
+        {source &&
+          (embedded && interactive ? (
+            <textarea
+              aria-label="Image source"
+              readOnly
+              rows={2}
+              wrap="off"
+              value={source}
+              className="w-full min-w-0 max-w-full resize-none rounded border bg-muted p-1 font-mono text-xs"
+            />
+          ) : (
+            <code className="max-h-24 overflow-auto select-text whitespace-pre-wrap break-all">
+              {source}
+            </code>
+          ))}
       </span>
     );
   }
@@ -83,7 +104,7 @@ export function ChatImage({
           <DialogHeader>
             <DialogTitle>{alt}</DialogTitle>
             <DialogDescription className="break-all">
-              {source ?? 'Full-size image preview'}
+              {source && !embedded ? source : 'Full-size image preview'}
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto">

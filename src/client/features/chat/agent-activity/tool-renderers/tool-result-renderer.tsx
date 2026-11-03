@@ -72,10 +72,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
         <div className="space-y-1 w-0 min-w-full">
           {withOccurrenceKeys(groupResultContent(content), (group) =>
             group.type === 'text'
-              ? group.items
-                  .map((item) => item.text)
-                  .join('\n')
-                  .slice(0, 64)
+              ? (group.items[0]?.text.slice(0, 64) ?? '')
               : `${group.item.source.media_type}:${group.item.source.data.length}:${group.item.source.data.slice(0, 64)}:${group.item.source.data.slice(-64)}`
           ).map(({ item: group, key }) =>
             group.type === 'text' ? (
@@ -92,7 +89,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
                   imageDataUrl(group.item.source.media_type, group.item.source.data) ?? undefined
                 }
                 alt="tool result image"
-                source={`Tool image (${group.item.source.media_type})`}
+                source={`data:${group.item.source.media_type};base64,${group.item.source.data}`}
               />
             )
           )}

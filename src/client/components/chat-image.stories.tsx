@@ -8,7 +8,7 @@ const meta = {
   args: { alt: 'Generated mockup', source: '/private/tmp/mockup.png', src: demo },
   decorators: [
     (Story) => (
-      <div className="max-w-md p-4">
+      <div className="w-[calc(100vw-2rem)] max-w-md p-4">
         <Story />
       </div>
     ),
@@ -28,4 +28,7 @@ export const Linked: Story = {
 export const Loading: Story = { args: { src: undefined, loading: true } };
 export const Missing: Story = { args: { src: undefined } };
 export const Unsupported: Story = { args: { src: undefined, source: '/private/tmp/mockup.svg' } };
+export const EmbeddedFallback: Story = {
+  args: { src: undefined, source: 'data:image/svg+xml;base64,PHN2Zy8+' },
+};
 export const Broken: Story = { args: { src: 'data:image/png;base64,AAAA' } };

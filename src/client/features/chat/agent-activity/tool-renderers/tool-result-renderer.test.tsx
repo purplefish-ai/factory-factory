@@ -28,6 +28,20 @@ function renderToolResult(props: Parameters<typeof ToolResultContentRenderer>[0]
 }
 
 describe('ToolResultContentRenderer', () => {
+  it('retains the data URI of an unsupported image in a copyable fallback', () => {
+    const container = renderToolResult({
+      isError: false,
+      content: [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/svg+xml', data: 'PHN2Zy8+' },
+        },
+      ],
+    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('textarea')?.value).toBe('data:image/svg+xml;base64,PHN2Zy8+');
+    expect(container.querySelector('textarea')?.readOnly).toBe(true);
+  });
   it('renders image results alongside text with a full-size control', () => {
     const container = renderToolResult({
       isError: false,
