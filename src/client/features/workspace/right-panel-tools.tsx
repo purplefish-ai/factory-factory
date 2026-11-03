@@ -1,4 +1,5 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimple';
 import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
@@ -13,6 +14,7 @@ import { FileBrowserPanel } from './file-browser-panel';
 import { PeriodicTaskPanel } from './periodic-task-panel';
 import type { TopPanelTab } from './right-panel-state';
 import { ScreenshotsPanel } from './screenshots-panel';
+import { WorkspaceInboxPanel } from './workspace-inbox-panel';
 
 interface TopPanelAreaProps {
   compact?: boolean;
@@ -53,6 +55,7 @@ export function TopPanelArea({
   const showFiles = activeTopTab === 'files';
   const showScreenshots = activeTopTab === 'screenshots';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
+  const showInbox = activeTopTab === 'inbox';
   const showAgents = activeTopTab === 'agents';
 
   const screenshotsButtonClassName = cn(
@@ -67,7 +70,10 @@ export function TopPanelArea({
       {/* Tab bar */}
       <div
         hidden={compact}
-        className={cn('flex items-center gap-0.5 p-1 bg-muted/50 border-b', compact && 'hidden')}
+        className={cn(
+          'flex items-center gap-0.5 p-1 bg-muted/50 border-b overflow-x-auto shrink-0 [&>button]:shrink-0',
+          compact && 'hidden'
+        )}
         data-testid="workspace-tools-toolbar"
       >
         <TabButton
@@ -97,6 +103,12 @@ export function TopPanelArea({
           onSelect={() => onTopTabChange('agents')}
         />
 
+        <TabButton
+          label="Inbox"
+          icon={<EnvelopeSimpleIcon className="h-3.5 w-3.5" />}
+          isActive={showInbox}
+          onSelect={() => onTopTabChange('inbox')}
+        />
         <div className="flex-1" />
 
         <TooltipProvider>
@@ -120,6 +132,7 @@ export function TopPanelArea({
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
+        {showInbox && <WorkspaceInboxPanel workspaceId={workspaceId} />}
         {showChanges && <CombinedChangesPanel workspaceId={workspaceId} />}
         {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
         {showScreenshots && (

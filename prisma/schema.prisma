@@ -305,6 +305,7 @@ model Workspace {
   parentWorkspace     Workspace?        @relation("WorkspaceChildren", fields: [parentWorkspaceId], references: [id])
   childWorkspaces     Workspace[]       @relation("WorkspaceChildren")
   notifications       WorkspaceNotification[]
+  mailState           WorkspaceMailState?
   prMonitoring        WorkspacePRMonitoring?
   prEvents            WorkspacePREvent[]
   prDeliveries        WorkspacePRDelivery[]
@@ -1017,7 +1018,7 @@ model PeriodicTaskExecution {
   @@index([status])
 }
 
-// Queued notifications from child workspaces, delivered when parent's next session starts
+// Retained workspace correspondence; provider delivery and acknowledgement are independent.
 model WorkspaceNotification {
   id                  String    @id @default(cuid())
   workspaceId         String    @map("workspace_id")
@@ -1029,13 +1030,40 @@ model WorkspaceNotification {
   message             String
   direction           NotificationDirection @default(CHILD_TO_PARENT)
 
-  deliveredAt         DateTime? @map("delivered_at") // null = pending delivery
+  // Provider delivery is separate from inbox acknowledgement.
+  deliveredAt         DateTime? @map("delivered_at")
+  revision            Int       @default(0)
+  subject             String?
+  preview             String    @default("")
+  kind                String    @default("MESSAGE")
+  taskKey             String?   @map("task_key")
+  taskRevision        Int?      @map("task_revision")
+  readAt              DateTime? @map("read_at")
+  acknowledgedAt      DateTime? @map("acknowledged_at")
+  supersededAt        DateTime? @map("superseded_at")
 
   createdAt           DateTime  @default(now()) @map("created_at")
 
   @@map("workspace_notifications")
   @@index([workspaceId])
   @@index([workspaceId, deliveredAt])
+  @@unique([workspaceId, revision])
+  @@index([workspaceId, acknowledgedAt, supersededAt, kind])
+}
+
+// Durable coalesced mail wake, independently fenced from acknowledgement.
+model WorkspaceMailState {
+  workspaceId      String    @id @map("workspace_id")
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  revision         Int       @default(0)
+  notifiedRevision Int       @default(0) @map("notified_revision")
+  wakeAcknowledgedRevision Int @default(0) @map("wake_acknowledged_revision")
+  claimId          String?   @map("claim_id")
+  claimRevision    Int?      @map("claim_revision")
+  wakeAmbiguousAt  DateTime? @map("wake_ambiguous_at")
+  claimedAt        DateTime? @map("claimed_at")
+
+  @@map("workspace_mail_state")
 }
 
 /// Retained creation evidence; intentionally no cascading entity relations.

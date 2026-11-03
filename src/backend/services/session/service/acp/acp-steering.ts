@@ -1,9 +1,14 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { withTimeout } from './acp-runtime-spawn';
 
 const STEERING_TIMEOUT_MS = 10_000;
+const logger = createLogger('acp-steering');
+
+/** The adapter did not receive input, so an exact armed wake may safely fall back. */
+export class AcpSteeringNotSentError extends Error {}
 
 export class AcpSteeringTimeoutError extends Error {
   constructor() {
@@ -26,21 +31,52 @@ export function supportsAcpSteering(initializeMeta: unknown): boolean {
 
 export async function steerAcpPrompt(
   handle: AcpProcessHandle,
-  prompt: ContentBlock[]
+  prompt: ContentBlock[],
+  options?: { onLateInjected?: () => Promise<void>; onLateNotInjected?: () => Promise<void> }
 ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
   if (!handle.supportsSteering) {
-    throw new Error('The agent adapter does not support steering. The message remains queued.');
+    throw new AcpSteeringNotSentError(
+      'The agent adapter does not support steering. The message remains queued.'
+    );
   }
-  const response = await withTimeout({
-    promise: handle.connection.extMethod('_session/steering', {
-      sessionId: handle.acpSessionId,
-      prompt,
-      _meta: { steering: { idleBehavior: 'promptRequired' } },
-    }),
-    timeoutMs: STEERING_TIMEOUT_MS,
-    description: 'steering request',
-    timeoutError: new AcpSteeringTimeoutError(),
+  const operation = handle.connection.extMethod('_session/steering', {
+    sessionId: handle.acpSessionId,
+    prompt,
+    _meta: { steering: { idleBehavior: 'promptRequired' } },
   });
+  let response: unknown;
+  try {
+    response = await withTimeout({
+      promise: operation,
+      timeoutMs: STEERING_TIMEOUT_MS,
+      description: 'steering request',
+      timeoutError: new AcpSteeringTimeoutError(),
+    });
+  } catch (error) {
+    if (
+      error instanceof AcpSteeringTimeoutError &&
+      (options?.onLateInjected || options?.onLateNotInjected)
+    ) {
+      void operation
+        .then(async (late) => {
+          const parsed = steeringResponseSchema.safeParse(late);
+          if (parsed.success) {
+            if (parsed.data.outcome === 'injected') {
+              await options.onLateInjected?.();
+            } else {
+              await options.onLateNotInjected?.();
+            }
+          }
+        })
+        .catch((error) => {
+          logger.warn('Failed to recover late steering receipt', {
+            sessionId: handle.acpSessionId,
+            error,
+          });
+        });
+    }
+    throw error;
+  }
   const parsed = steeringResponseSchema.safeParse(response);
   if (!parsed.success) {
     throw new Error('The agent adapter returned an invalid steering response.');

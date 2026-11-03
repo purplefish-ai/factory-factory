@@ -186,7 +186,7 @@ export async function acknowledgeSentBatch(input: {
     try {
       if (message.source) {
         await input.backgroundDelivery.complete(message);
-      } else {
+      } else if (!message.id.startsWith('workspace-mail-wake-')) {
         await input.notifications.acknowledgeSuccessfulDispatch(message.id);
       }
     } catch (error) {
@@ -236,7 +236,11 @@ export async function collectDispatchBatch(input: {
   const snapshot = sessionDomainService.getQueueSnapshot(input.sessionId);
   try {
     for (const message of snapshot.slice(1)) {
-      if (!input.isCurrent() || isCommand(message)) {
+      if (
+        !input.isCurrent() ||
+        isCommand(message) ||
+        input.notifications.isMailSignalQuarantined(message.id)
+      ) {
         break;
       }
       // One PR claim already covers all pending facts for this conversation.

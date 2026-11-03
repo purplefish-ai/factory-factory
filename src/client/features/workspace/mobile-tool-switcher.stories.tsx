@@ -67,6 +67,7 @@ export const Changes: Story = {};
 export const Files: Story = { args: { initialTool: 'files' } };
 export const Terminal: Story = { args: { initialTool: 'terminal' } };
 export const Screenshots: Story = { args: { initialTool: 'screenshots' } };
+export const Inbox: Story = { args: { initialTool: 'inbox' } };
 export const Agent: Story = { args: { initialTool: 'periodic-task' } };
 export const Logs: Story = { args: { initialTool: 'logs' } };
 export const Wide: Story = { args: { initialTool: 'agents', width: 640 } };

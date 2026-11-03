@@ -101,6 +101,10 @@ vi.mock('./agents-panel', () => ({
   },
 }));
 
+vi.mock('./workspace-inbox-panel', () => ({
+  WorkspaceInboxPanel: () => createElement('section', { 'data-testid': 'inbox-panel' }),
+}));
+
 vi.mock('./combined-changes-panel', () => ({
   CombinedChangesPanel: () => createElement('div', { 'data-testid': 'changes-panel' }),
 }));
@@ -186,6 +190,17 @@ describe('RightPanel Agents tab', () => {
       )
     );
   }
+
+  it('opens Inbox from the toolbar and remembers the selection', () => {
+    render();
+    const inbox = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Inbox'
+    );
+    expect(inbox).toBeDefined();
+    act(() => inbox?.click());
+    expect(container.querySelector('[data-testid="inbox-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('inbox');
+  });
 
   it('shows only the selected tool on mobile and remembers it across closing the panel', () => {
     mocks.mobile = true;

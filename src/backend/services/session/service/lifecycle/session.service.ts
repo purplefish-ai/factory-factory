@@ -17,12 +17,15 @@ import type { SessionLifecycleEventService } from './session-lifecycle-event.ser
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import { schedulePRDiscovery } from './session-pr-discovery.service';
 import { getAcpWorkState } from './session-work-state';
-import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
+import {
+  isTurnAlreadyInProgressError,
+  toErrorMessage,
+  toProviderFailureChatMessage,
+} from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 
 const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
-const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 export type SessionServiceDependencies = {
   eventAuthority?: EventSessionAuthority;
   ownedWork?: EventOwnedWork;
@@ -73,7 +76,12 @@ export class SessionService {
 
   async steerSessionMessage(
     sessionId: string,
-    content: string | AgentContentItem[]
+    content: string | AgentContentItem[],
+    options?: {
+      preserveRuntimeOnTimeout?: boolean;
+      onLateInjected?: () => Promise<void>;
+      onLateNotInjected?: () => Promise<void>;
+    }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
     const generation = this.lifecycleGate.getGeneration(sessionId);
     if (this.eventAuthority) {
@@ -85,7 +93,7 @@ export class SessionService {
       typeof content === 'string'
         ? [{ type: 'text' as const, text: content }]
         : this.toContentBlocks(content, client?.supportsImages() ?? false);
-    return this.runtimeManager.steerSession(sessionId, prompt);
+    return this.runtimeManager.steerSession(sessionId, prompt, ...(options ? [options] : []));
   }
 
   async sendSessionMessage(
@@ -108,7 +116,7 @@ export class SessionService {
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
-          if (this.isTurnAlreadyInProgressError(error)) {
+          if (isTurnAlreadyInProgressError(error)) {
             logger.debug('ACP prompt deferred because a turn is already in progress', {
               sessionId,
               error: errorMessage,
@@ -321,7 +329,7 @@ export class SessionService {
     } finally {
       this.finishWorkspaceActivity(workspaceId, sessionId, workspaceActivityGeneration);
       if (
-        (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
+        (promptCompleted || (promptErrorSet && !isTurnAlreadyInProgressError(promptError))) &&
         !this.lifecycleGate.isSessionStopping(sessionId) &&
         this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)
       ) {
@@ -475,7 +483,7 @@ export class SessionService {
       ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
       updatedAt: new Date().toISOString(),
     };
-    if (!this.isTurnAlreadyInProgressError(error)) {
+    if (!isTurnAlreadyInProgressError(error)) {
       this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', runtime);
       return;
     }
@@ -528,10 +536,7 @@ export class SessionService {
     stopGeneration: number,
     error: unknown
   ): boolean {
-    if (
-      this.isTurnAlreadyInProgressError(error) ||
-      this.lifecycleGate.isSessionStopping(sessionId)
-    ) {
+    if (isTurnAlreadyInProgressError(error) || this.lifecycleGate.isSessionStopping(sessionId)) {
       return false;
     }
     return this.lifecycleGate.getGeneration(sessionId) === stopGeneration;
@@ -549,9 +554,5 @@ export class SessionService {
     this.acpEventProcessor.finishPromptTurn(sessionId);
     this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, orphanedToolCallReason);
     this.sessionDomainService.setRuntimeSnapshot(sessionId, runtime);
-  }
-
-  private isTurnAlreadyInProgressError(error: unknown): boolean {
-    return toErrorMessage(error).includes(TURN_ALREADY_IN_PROGRESS_REASON);
   }
 }

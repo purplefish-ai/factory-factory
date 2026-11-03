@@ -84,6 +84,7 @@ export const ModelName = {
   PeriodicTask: 'PeriodicTask',
   PeriodicTaskExecution: 'PeriodicTaskExecution',
   WorkspaceNotification: 'WorkspaceNotification',
+  WorkspaceMailState: 'WorkspaceMailState',
   WorkspaceLaunchOrigin: 'WorkspaceLaunchOrigin',
   AgentSessionLaunchOrigin: 'AgentSessionLaunchOrigin',
   WorkspaceChildOrigin: 'WorkspaceChildOrigin'
@@ -700,10 +701,33 @@ export const WorkspaceNotificationScalarFieldEnum = {
   message: 'message',
   direction: 'direction',
   deliveredAt: 'deliveredAt',
+  revision: 'revision',
+  subject: 'subject',
+  preview: 'preview',
+  kind: 'kind',
+  taskKey: 'taskKey',
+  taskRevision: 'taskRevision',
+  readAt: 'readAt',
+  acknowledgedAt: 'acknowledgedAt',
+  supersededAt: 'supersededAt',
   createdAt: 'createdAt'
 } as const
 
 export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
+
+
+export const WorkspaceMailStateScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  revision: 'revision',
+  notifiedRevision: 'notifiedRevision',
+  wakeAcknowledgedRevision: 'wakeAcknowledgedRevision',
+  claimId: 'claimId',
+  claimRevision: 'claimRevision',
+  wakeAmbiguousAt: 'wakeAmbiguousAt',
+  claimedAt: 'claimedAt'
+} as const
+
+export type WorkspaceMailStateScalarFieldEnum = (typeof WorkspaceMailStateScalarFieldEnum)[keyof typeof WorkspaceMailStateScalarFieldEnum]
 
 
 export const WorkspaceLaunchOriginScalarFieldEnum = {

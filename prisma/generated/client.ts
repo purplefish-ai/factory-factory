@@ -249,6 +249,11 @@ export type PeriodicTaskExecution = Prisma.PeriodicTaskExecutionModel
  */
 export type WorkspaceNotification = Prisma.WorkspaceNotificationModel
 /**
+ * Model WorkspaceMailState
+ * 
+ */
+export type WorkspaceMailState = Prisma.WorkspaceMailStateModel
+/**
  * Model WorkspaceLaunchOrigin
  * Retained creation evidence; intentionally no cascading entity relations.
  */

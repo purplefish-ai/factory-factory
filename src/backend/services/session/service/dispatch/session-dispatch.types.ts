@@ -1,9 +1,13 @@
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
-import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import type {
+  MailRecoveryRetry,
+  MailSignalReceipt,
+  NotificationDispatchClaim,
+} from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
-import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 
 export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };
 
@@ -36,7 +40,18 @@ export interface SessionDispatchNotificationDeliveryService {
     sessionId: string;
     workspaceId: string;
     assertAllowed(): void;
+    assertAllowedSync?(): void;
+    preferSession?: boolean;
   }): Promise<{ dispatchableCount: number }>;
+  configureRetry(retry: (input: MailRecoveryRetry) => void): void;
+  recoverSession(sessionId: string, assertAllowed: () => void | Promise<void>): Promise<void>;
+  captureMailSignalReceipt(
+    sessionId: string,
+    messageId: string,
+    expectedMessage?: QueuedMessage
+  ): MailSignalReceipt | null;
+  isMailSignalQuarantined(messageId: string): boolean;
+  isOwnedMailSignal(sessionId: string, messageId: string, text: string): boolean;
   claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
   isAlreadyDelivered(notificationId: string): Promise<boolean>;
   acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;
@@ -62,7 +77,12 @@ export interface SessionDispatchDependencies {
   promptService: {
     steerSessionMessage(
       sessionId: string,
-      content: string | AgentContentItem[]
+      content: string | AgentContentItem[],
+      options?: {
+        preserveRuntimeOnTimeout?: boolean;
+        onLateInjected?: () => Promise<void>;
+        onLateNotInjected?: () => Promise<void>;
+      }
     ): Promise<{ outcome: 'injected' | 'promptRequired' }>;
     sendSessionMessage(
       sessionId: string,

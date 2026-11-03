@@ -73,6 +73,7 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
 }));
 vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
   deliverWorkspaceNotification: vi.fn(),
+  recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
 }));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
@@ -313,7 +314,10 @@ import {
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
-import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
+import {
+  deliverWorkspaceNotification,
+  recoverWorkspaceMail,
+} from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { agentProposalService, slackConnectionService } from '@/backend/services/agent-definition';
 import { codexAccountService } from '@/backend/services/codex-accounts';
@@ -488,6 +492,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     triggerAdversarialReview,
     createChildWorkspace: vi.fn<ApplicationServices['createChildWorkspace']>(),
     deliverWorkspaceNotification,
+    recoverWorkspaceMail,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     launchWorkspace: vi.fn(),

@@ -1,6 +1,11 @@
 const MAX_ERROR_MESSAGE_LENGTH = 4000;
 const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
 const MODEL_CAPACITY_ERROR_MESSAGE = 'Selected model is at capacity. Please try a different model.';
+const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
+
+export function isTurnAlreadyInProgressError(error: unknown): boolean {
+  return toErrorMessage(error).includes(TURN_ALREADY_IN_PROGRESS_REASON);
+}
 
 function truncate(value: string): string {
   if (value.length <= MAX_ERROR_MESSAGE_LENGTH) {

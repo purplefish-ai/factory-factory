@@ -20,8 +20,20 @@ export type WorkspaceNotificationModel = runtime.Types.Result.DefaultSelection<P
 
 export type AggregateWorkspaceNotification = {
   _count: WorkspaceNotificationCountAggregateOutputType | null
+  _avg: WorkspaceNotificationAvgAggregateOutputType | null
+  _sum: WorkspaceNotificationSumAggregateOutputType | null
   _min: WorkspaceNotificationMinAggregateOutputType | null
   _max: WorkspaceNotificationMaxAggregateOutputType | null
+}
+
+export type WorkspaceNotificationAvgAggregateOutputType = {
+  revision: number | null
+  taskRevision: number | null
+}
+
+export type WorkspaceNotificationSumAggregateOutputType = {
+  revision: number | null
+  taskRevision: number | null
 }
 
 export type WorkspaceNotificationMinAggregateOutputType = {
@@ -33,6 +45,15 @@ export type WorkspaceNotificationMinAggregateOutputType = {
   message: string | null
   direction: $Enums.NotificationDirection | null
   deliveredAt: Date | null
+  revision: number | null
+  subject: string | null
+  preview: string | null
+  kind: string | null
+  taskKey: string | null
+  taskRevision: number | null
+  readAt: Date | null
+  acknowledgedAt: Date | null
+  supersededAt: Date | null
   createdAt: Date | null
 }
 
@@ -45,6 +66,15 @@ export type WorkspaceNotificationMaxAggregateOutputType = {
   message: string | null
   direction: $Enums.NotificationDirection | null
   deliveredAt: Date | null
+  revision: number | null
+  subject: string | null
+  preview: string | null
+  kind: string | null
+  taskKey: string | null
+  taskRevision: number | null
+  readAt: Date | null
+  acknowledgedAt: Date | null
+  supersededAt: Date | null
   createdAt: Date | null
 }
 
@@ -57,10 +87,29 @@ export type WorkspaceNotificationCountAggregateOutputType = {
   message: number
   direction: number
   deliveredAt: number
+  revision: number
+  subject: number
+  preview: number
+  kind: number
+  taskKey: number
+  taskRevision: number
+  readAt: number
+  acknowledgedAt: number
+  supersededAt: number
   createdAt: number
   _all: number
 }
 
+
+export type WorkspaceNotificationAvgAggregateInputType = {
+  revision?: true
+  taskRevision?: true
+}
+
+export type WorkspaceNotificationSumAggregateInputType = {
+  revision?: true
+  taskRevision?: true
+}
 
 export type WorkspaceNotificationMinAggregateInputType = {
   id?: true
@@ -71,6 +120,15 @@ export type WorkspaceNotificationMinAggregateInputType = {
   message?: true
   direction?: true
   deliveredAt?: true
+  revision?: true
+  subject?: true
+  preview?: true
+  kind?: true
+  taskKey?: true
+  taskRevision?: true
+  readAt?: true
+  acknowledgedAt?: true
+  supersededAt?: true
   createdAt?: true
 }
 
@@ -83,6 +141,15 @@ export type WorkspaceNotificationMaxAggregateInputType = {
   message?: true
   direction?: true
   deliveredAt?: true
+  revision?: true
+  subject?: true
+  preview?: true
+  kind?: true
+  taskKey?: true
+  taskRevision?: true
+  readAt?: true
+  acknowledgedAt?: true
+  supersededAt?: true
   createdAt?: true
 }
 
@@ -95,6 +162,15 @@ export type WorkspaceNotificationCountAggregateInputType = {
   message?: true
   direction?: true
   deliveredAt?: true
+  revision?: true
+  subject?: true
+  preview?: true
+  kind?: true
+  taskKey?: true
+  taskRevision?: true
+  readAt?: true
+  acknowledgedAt?: true
+  supersededAt?: true
   createdAt?: true
   _all?: true
 }
@@ -137,6 +213,18 @@ export type WorkspaceNotificationAggregateArgs<ExtArgs extends runtime.Types.Ext
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: WorkspaceNotificationAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: WorkspaceNotificationSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: WorkspaceNotificationMinAggregateInputType
@@ -167,6 +255,8 @@ export type WorkspaceNotificationGroupByArgs<ExtArgs extends runtime.Types.Exten
   take?: number
   skip?: number
   _count?: WorkspaceNotificationCountAggregateInputType | true
+  _avg?: WorkspaceNotificationAvgAggregateInputType
+  _sum?: WorkspaceNotificationSumAggregateInputType
   _min?: WorkspaceNotificationMinAggregateInputType
   _max?: WorkspaceNotificationMaxAggregateInputType
 }
@@ -180,8 +270,19 @@ export type WorkspaceNotificationGroupByOutputType = {
   message: string
   direction: $Enums.NotificationDirection
   deliveredAt: Date | null
+  revision: number
+  subject: string | null
+  preview: string
+  kind: string
+  taskKey: string | null
+  taskRevision: number | null
+  readAt: Date | null
+  acknowledgedAt: Date | null
+  supersededAt: Date | null
   createdAt: Date
   _count: WorkspaceNotificationCountAggregateOutputType | null
+  _avg: WorkspaceNotificationAvgAggregateOutputType | null
+  _sum: WorkspaceNotificationSumAggregateOutputType | null
   _min: WorkspaceNotificationMinAggregateOutputType | null
   _max: WorkspaceNotificationMaxAggregateOutputType | null
 }
@@ -213,6 +314,15 @@ export type WorkspaceNotificationWhereInput = {
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
   direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspaceNotification"> | number
+  subject?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  preview?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  kind?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  taskKey?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  taskRevision?: Prisma.IntNullableFilter<"WorkspaceNotification"> | number | null
+  readAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  acknowledgedAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  supersededAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
 }
@@ -226,12 +336,22 @@ export type WorkspaceNotificationOrderByWithRelationInput = {
   message?: Prisma.SortOrder
   direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  subject?: Prisma.SortOrderInput | Prisma.SortOrder
+  preview?: Prisma.SortOrder
+  kind?: Prisma.SortOrder
+  taskKey?: Prisma.SortOrderInput | Prisma.SortOrder
+  taskRevision?: Prisma.SortOrderInput | Prisma.SortOrder
+  readAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  acknowledgedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  supersededAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
 }
 
 export type WorkspaceNotificationWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  workspaceId_revision?: Prisma.WorkspaceNotificationWorkspaceIdRevisionCompoundUniqueInput
   AND?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
   OR?: Prisma.WorkspaceNotificationWhereInput[]
   NOT?: Prisma.WorkspaceNotificationWhereInput | Prisma.WorkspaceNotificationWhereInput[]
@@ -242,9 +362,18 @@ export type WorkspaceNotificationWhereUniqueInput = Prisma.AtLeast<{
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
   direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspaceNotification"> | number
+  subject?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  preview?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  kind?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  taskKey?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  taskRevision?: Prisma.IntNullableFilter<"WorkspaceNotification"> | number | null
+  readAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  acknowledgedAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  supersededAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
-}, "id">
+}, "id" | "workspaceId_revision">
 
 export type WorkspaceNotificationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -255,10 +384,21 @@ export type WorkspaceNotificationOrderByWithAggregationInput = {
   message?: Prisma.SortOrder
   direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  subject?: Prisma.SortOrderInput | Prisma.SortOrder
+  preview?: Prisma.SortOrder
+  kind?: Prisma.SortOrder
+  taskKey?: Prisma.SortOrderInput | Prisma.SortOrder
+  taskRevision?: Prisma.SortOrderInput | Prisma.SortOrder
+  readAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  acknowledgedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  supersededAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.WorkspaceNotificationCountOrderByAggregateInput
+  _avg?: Prisma.WorkspaceNotificationAvgOrderByAggregateInput
   _max?: Prisma.WorkspaceNotificationMaxOrderByAggregateInput
   _min?: Prisma.WorkspaceNotificationMinOrderByAggregateInput
+  _sum?: Prisma.WorkspaceNotificationSumOrderByAggregateInput
 }
 
 export type WorkspaceNotificationScalarWhereWithAggregatesInput = {
@@ -273,6 +413,15 @@ export type WorkspaceNotificationScalarWhereWithAggregatesInput = {
   message?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
   direction?: Prisma.EnumNotificationDirectionWithAggregatesFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceNotification"> | Date | string | null
+  revision?: Prisma.IntWithAggregatesFilter<"WorkspaceNotification"> | number
+  subject?: Prisma.StringNullableWithAggregatesFilter<"WorkspaceNotification"> | string | null
+  preview?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
+  kind?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
+  taskKey?: Prisma.StringNullableWithAggregatesFilter<"WorkspaceNotification"> | string | null
+  taskRevision?: Prisma.IntNullableWithAggregatesFilter<"WorkspaceNotification"> | number | null
+  readAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceNotification"> | Date | string | null
+  acknowledgedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceNotification"> | Date | string | null
+  supersededAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"WorkspaceNotification"> | Date | string
 }
 
@@ -284,6 +433,15 @@ export type WorkspaceNotificationCreateInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
   workspace: Prisma.WorkspaceCreateNestedOneWithoutNotificationsInput
 }
@@ -297,6 +455,15 @@ export type WorkspaceNotificationUncheckedCreateInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -308,6 +475,15 @@ export type WorkspaceNotificationUpdateInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutNotificationsNestedInput
 }
@@ -321,6 +497,15 @@ export type WorkspaceNotificationUncheckedUpdateInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -333,6 +518,15 @@ export type WorkspaceNotificationCreateManyInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -344,6 +538,15 @@ export type WorkspaceNotificationUpdateManyMutationInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -356,6 +559,15 @@ export type WorkspaceNotificationUncheckedUpdateManyInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -369,6 +581,11 @@ export type WorkspaceNotificationOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
 }
 
+export type WorkspaceNotificationWorkspaceIdRevisionCompoundUniqueInput = {
+  workspaceId: string
+  revision: number
+}
+
 export type WorkspaceNotificationCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   workspaceId?: Prisma.SortOrder
@@ -378,7 +595,21 @@ export type WorkspaceNotificationCountOrderByAggregateInput = {
   message?: Prisma.SortOrder
   direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  subject?: Prisma.SortOrder
+  preview?: Prisma.SortOrder
+  kind?: Prisma.SortOrder
+  taskKey?: Prisma.SortOrder
+  taskRevision?: Prisma.SortOrder
+  readAt?: Prisma.SortOrder
+  acknowledgedAt?: Prisma.SortOrder
+  supersededAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+}
+
+export type WorkspaceNotificationAvgOrderByAggregateInput = {
+  revision?: Prisma.SortOrder
+  taskRevision?: Prisma.SortOrder
 }
 
 export type WorkspaceNotificationMaxOrderByAggregateInput = {
@@ -390,6 +621,15 @@ export type WorkspaceNotificationMaxOrderByAggregateInput = {
   message?: Prisma.SortOrder
   direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  subject?: Prisma.SortOrder
+  preview?: Prisma.SortOrder
+  kind?: Prisma.SortOrder
+  taskKey?: Prisma.SortOrder
+  taskRevision?: Prisma.SortOrder
+  readAt?: Prisma.SortOrder
+  acknowledgedAt?: Prisma.SortOrder
+  supersededAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -402,7 +642,21 @@ export type WorkspaceNotificationMinOrderByAggregateInput = {
   message?: Prisma.SortOrder
   direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
+  revision?: Prisma.SortOrder
+  subject?: Prisma.SortOrder
+  preview?: Prisma.SortOrder
+  kind?: Prisma.SortOrder
+  taskKey?: Prisma.SortOrder
+  taskRevision?: Prisma.SortOrder
+  readAt?: Prisma.SortOrder
+  acknowledgedAt?: Prisma.SortOrder
+  supersededAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
+}
+
+export type WorkspaceNotificationSumOrderByAggregateInput = {
+  revision?: Prisma.SortOrder
+  taskRevision?: Prisma.SortOrder
 }
 
 export type WorkspaceNotificationCreateNestedManyWithoutWorkspaceInput = {
@@ -459,6 +713,15 @@ export type WorkspaceNotificationCreateWithoutWorkspaceInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -470,6 +733,15 @@ export type WorkspaceNotificationUncheckedCreateWithoutWorkspaceInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -510,6 +782,15 @@ export type WorkspaceNotificationScalarWhereInput = {
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
   direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  revision?: Prisma.IntFilter<"WorkspaceNotification"> | number
+  subject?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  preview?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  kind?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  taskKey?: Prisma.StringNullableFilter<"WorkspaceNotification"> | string | null
+  taskRevision?: Prisma.IntNullableFilter<"WorkspaceNotification"> | number | null
+  readAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  acknowledgedAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
+  supersededAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
 }
 
@@ -521,6 +802,15 @@ export type WorkspaceNotificationCreateManyWorkspaceInput = {
   message: string
   direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
+  revision?: number
+  subject?: string | null
+  preview?: string
+  kind?: string
+  taskKey?: string | null
+  taskRevision?: number | null
+  readAt?: Date | string | null
+  acknowledgedAt?: Date | string | null
+  supersededAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -532,6 +822,15 @@ export type WorkspaceNotificationUpdateWithoutWorkspaceInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -543,6 +842,15 @@ export type WorkspaceNotificationUncheckedUpdateWithoutWorkspaceInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -554,6 +862,15 @@ export type WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceInput = {
   message?: Prisma.StringFieldUpdateOperationsInput | string
   direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  revision?: Prisma.IntFieldUpdateOperationsInput | number
+  subject?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  preview?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.StringFieldUpdateOperationsInput | string
+  taskKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taskRevision?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  readAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  acknowledgedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  supersededAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -568,6 +885,15 @@ export type WorkspaceNotificationSelect<ExtArgs extends runtime.Types.Extensions
   message?: boolean
   direction?: boolean
   deliveredAt?: boolean
+  revision?: boolean
+  subject?: boolean
+  preview?: boolean
+  kind?: boolean
+  taskKey?: boolean
+  taskRevision?: boolean
+  readAt?: boolean
+  acknowledgedAt?: boolean
+  supersededAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceNotification"]>
@@ -581,6 +907,15 @@ export type WorkspaceNotificationSelectCreateManyAndReturn<ExtArgs extends runti
   message?: boolean
   direction?: boolean
   deliveredAt?: boolean
+  revision?: boolean
+  subject?: boolean
+  preview?: boolean
+  kind?: boolean
+  taskKey?: boolean
+  taskRevision?: boolean
+  readAt?: boolean
+  acknowledgedAt?: boolean
+  supersededAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceNotification"]>
@@ -594,6 +929,15 @@ export type WorkspaceNotificationSelectUpdateManyAndReturn<ExtArgs extends runti
   message?: boolean
   direction?: boolean
   deliveredAt?: boolean
+  revision?: boolean
+  subject?: boolean
+  preview?: boolean
+  kind?: boolean
+  taskKey?: boolean
+  taskRevision?: boolean
+  readAt?: boolean
+  acknowledgedAt?: boolean
+  supersededAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceNotification"]>
@@ -607,10 +951,19 @@ export type WorkspaceNotificationSelectScalar = {
   message?: boolean
   direction?: boolean
   deliveredAt?: boolean
+  revision?: boolean
+  subject?: boolean
+  preview?: boolean
+  kind?: boolean
+  taskKey?: boolean
+  taskRevision?: boolean
+  readAt?: boolean
+  acknowledgedAt?: boolean
+  supersededAt?: boolean
   createdAt?: boolean
 }
 
-export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "direction" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
+export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "direction" | "deliveredAt" | "revision" | "subject" | "preview" | "kind" | "taskKey" | "taskRevision" | "readAt" | "acknowledgedAt" | "supersededAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
 export type WorkspaceNotificationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -635,6 +988,15 @@ export type $WorkspaceNotificationPayload<ExtArgs extends runtime.Types.Extensio
     message: string
     direction: $Enums.NotificationDirection
     deliveredAt: Date | null
+    revision: number
+    subject: string | null
+    preview: string
+    kind: string
+    taskKey: string | null
+    taskRevision: number | null
+    readAt: Date | null
+    acknowledgedAt: Date | null
+    supersededAt: Date | null
     createdAt: Date
   }, ExtArgs["result"]["workspaceNotification"]>
   composites: {}
@@ -1068,6 +1430,15 @@ export interface WorkspaceNotificationFieldRefs {
   readonly message: Prisma.FieldRef<"WorkspaceNotification", 'String'>
   readonly direction: Prisma.FieldRef<"WorkspaceNotification", 'NotificationDirection'>
   readonly deliveredAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
+  readonly revision: Prisma.FieldRef<"WorkspaceNotification", 'Int'>
+  readonly subject: Prisma.FieldRef<"WorkspaceNotification", 'String'>
+  readonly preview: Prisma.FieldRef<"WorkspaceNotification", 'String'>
+  readonly kind: Prisma.FieldRef<"WorkspaceNotification", 'String'>
+  readonly taskKey: Prisma.FieldRef<"WorkspaceNotification", 'String'>
+  readonly taskRevision: Prisma.FieldRef<"WorkspaceNotification", 'Int'>
+  readonly readAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
+  readonly acknowledgedAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
+  readonly supersededAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
 }
     

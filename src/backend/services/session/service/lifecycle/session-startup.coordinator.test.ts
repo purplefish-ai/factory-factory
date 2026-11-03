@@ -7,7 +7,6 @@ import { SessionStatus } from '@/shared/core';
 import {
   createDeferred,
   createLifecycleHarness,
-  createPendingWorkspaceNotification,
   type LifecycleHarness,
 } from './session-lifecycle.test-helpers';
 import {
@@ -30,6 +29,9 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },
   workspaceNotificationService: {
     listPendingForDelivery: vi.fn(),
+    claimWake: vi.fn(),
+    settleWake: vi.fn(),
+    releaseWake: vi.fn(),
     markDelivered: vi.fn(),
   },
 }));
@@ -72,7 +74,7 @@ function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescen
 describe('SessionStartupCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([]);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue(null);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
 
@@ -252,9 +254,11 @@ describe('SessionStartupCoordinator', () => {
         provider: 'CODEX',
         providerSessionId: 'provider-session-existing',
       });
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification(),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 1,
+      claimId: 'claim-1',
+    });
     runtimeManager.getOrCreateClient.mockImplementationOnce((_id, options) => {
       expect(options).toMatchObject({
         purpose: 'browse',
@@ -276,7 +280,7 @@ describe('SessionStartupCoordinator', () => {
       'session-1',
       expect.objectContaining({ status: SessionStatus.RUNNING })
     );
-    expect(workspaceNotificationService.listPendingForDelivery).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.claimWake).not.toHaveBeenCalled();
     expect(sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalled();
   });
 
@@ -501,9 +505,11 @@ describe('SessionStartupCoordinator', () => {
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification(),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 1,
+      claimId: 'claim-1',
+    });
     runtimeManager.getOrCreateClient.mockImplementation((_id, options) => {
       if (options.purpose !== 'browse') {
         runtimeManager.getClient.mockReturnValue(handle);
@@ -531,7 +537,7 @@ describe('SessionStartupCoordinator', () => {
       status: SessionStatus.RUNNING,
     });
     expect(sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalledTimes(1);
-    expect(workspaceNotificationService.listPendingForDelivery).toHaveBeenCalledTimes(1);
+    expect(workspaceNotificationService.claimWake).toHaveBeenCalledTimes(1);
     expect(sessionDomainService.enqueue).toHaveBeenCalledTimes(1);
   });
 
@@ -681,10 +687,11 @@ describe('SessionStartupCoordinator', () => {
   it('dispatches queued notifications after startup presets and skips the default continue prompt', async () => {
     const { service, sendSessionMessage, tryDispatchNextMessage, sessionConfigService } =
       createLifecycleHarness();
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification({ id: 'notif-1' }),
-      createPendingWorkspaceNotification({ id: 'notif-2' }),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 2,
+      claimId: 'claim-1',
+    });
 
     await service.startSession('session-1');
 
@@ -702,11 +709,13 @@ describe('SessionStartupCoordinator', () => {
     expect(permissionPresetOrder!).toBeLessThan(dispatchOrder!);
   });
 
-  it('still sends an explicit initial prompt after queued notification dispatch starts', async () => {
+  it('installs the explicit assignment before dispatching recovered mail', async () => {
     const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness();
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification(),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 1,
+      claimId: 'claim-1',
+    });
 
     await service.startSession('session-1', { initialPrompt: 'Follow up' });
 
@@ -716,7 +725,7 @@ describe('SessionStartupCoordinator', () => {
     const sendOrder = sendSessionMessage.mock.invocationCallOrder[0];
     expect(dispatchOrder).toBeDefined();
     expect(sendOrder).toBeDefined();
-    expect(dispatchOrder!).toBeLessThan(sendOrder!);
+    expect(sendOrder!).toBeLessThan(dispatchOrder!);
   });
 
   it('does not complete startup when stop finishes during the initial prompt', async () => {
@@ -857,9 +866,11 @@ describe('SessionStartupCoordinator', () => {
     const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness({
       tryDispatchNextMessage: () => Promise.reject(new Error('dispatch failed')),
     });
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
-      createPendingWorkspaceNotification(),
-    ] as never);
+    vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue({
+      workspaceId: 'workspace-1',
+      revision: 1,
+      claimId: 'claim-1',
+    });
 
     await expect(service.startSession('session-1')).resolves.toBeUndefined();
 
@@ -904,13 +915,11 @@ describe('SessionStartupCoordinator', () => {
       boundaryReached = () =>
         harness.sessionConfigService.applyConfiguredPermissionPreset.mock.calls.length > 0;
     } else if (boundary === 'notification recovery') {
-      const deferred = createDeferred<never[]>();
-      vi.mocked(workspaceNotificationService.listPendingForDelivery).mockReturnValueOnce(
-        deferred.promise
-      );
-      releaseBoundary = () => deferred.resolve([]);
+      const deferred = createDeferred<null>();
+      vi.mocked(workspaceNotificationService.claimWake).mockReturnValueOnce(deferred.promise);
+      releaseBoundary = () => deferred.resolve(null);
       boundaryReached = () =>
-        vi.mocked(workspaceNotificationService.listPendingForDelivery).mock.calls.length > 0;
+        vi.mocked(workspaceNotificationService.claimWake).mock.calls.length > 0;
     } else {
       const deferred = createDeferred<void>();
       harness.sendSessionMessage.mockReturnValueOnce(deferred.promise);

@@ -263,14 +263,12 @@ it.each([
         status: 'IDLE',
       },
     });
-    const notification = await db.prisma.workspaceNotification.create({
-      data: {
-        workspaceId: h.claim.reservedWorkspaceId,
-        sourceWorkspaceId: 'source',
-        sourceWorkspaceName: 'Source',
-        sourceProjectName: 'Fixture',
-        message: 'Recovered update',
-      },
+    const notification = await h.workspace.workspaceNotificationService.notifyParent({
+      workspaceId: h.claim.reservedWorkspaceId,
+      sourceWorkspaceId: 'source',
+      sourceWorkspaceName: 'Source',
+      sourceProjectName: 'Fixture',
+      message: 'Recovered update',
     });
     const { captureWorkspaceRetryGuard } = await vi.importActual<
       typeof import('@/backend/orchestration/workspace-retry-authority')
@@ -407,7 +405,11 @@ it.each([
       expect(h.session.sessionDomainService.peekNextMessage(other.id)?.id).toBe('ordinary-input');
       expect(
         h.session.sessionDomainService.getQueueSnapshot(other.id).map((message) => message.id)
-      ).toEqual(['ordinary-input', `workspace-notification-${notification.id}`, 'new-human-input']);
+      ).toEqual([
+        'ordinary-input',
+        `workspace-mail-wake-${workspace.id}:${notification.revision}`,
+        'new-human-input',
+      ]);
       if (entry === 'start') {
         expect(result).toBeInstanceOf(Error);
       }
@@ -418,6 +420,13 @@ it.each([
         beforeConfig
       );
       expect(provider.connection.prompt.mock.calls.length).toBe(beforePrompt + 1);
+      const sent = JSON.stringify(provider.connection.prompt.mock.calls.at(-1));
+      expect(sent).toContain('You have workspace mail');
+      expect(sent).not.toContain('Recovered update');
+      expect(
+        await db.prisma.workspaceNotification.findUnique({ where: { id: notification.id } })
+      ).toMatchObject({ acknowledgedAt: null, deliveredAt: null });
+
       expect(queuedAfterDispatch).toBeUndefined();
       h.session.sessionDomainService.enqueue(other.id, {
         id: 'explicit-stop-input',

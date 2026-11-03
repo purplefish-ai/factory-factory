@@ -1,15 +1,16 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
-import {
-  type projectManagementService,
-  workspaceDataService,
-  workspaceNotificationService,
-} from '@/backend/services/workspace';
-import type { UserSettings, WorkspaceNotification } from '@prisma-gen/client';
+import { type projectManagementService, workspaceDataService } from '@/backend/services/workspace';
+import type { UserSettings } from '@prisma-gen/client';
 import type {
   ChildWorkspaceLaunchSource,
   WorkspaceLauncher,
 } from './workspace-launch.orchestrator';
+import { deliverWorkspaceNotification } from './workspace-notification-delivery.orchestrator';
+export {
+  persistChildNotification,
+  persistParentNotification,
+} from './workspace-notification-persistence.orchestrator';
 
 const logger = createLogger('workspace-children-orchestrator');
 
@@ -75,72 +76,6 @@ export async function createChildWorkspace(
 }
 
 /**
- * Persist a notification from a child workspace to the parent.
- *
- * Always writes a WorkspaceNotification row so the message survives even if a
- * live delivery attempt races a dying session. Callers that deliver live mark
- * the row delivered after a successful dispatch; otherwise it is delivered when
- * the parent's next session starts. Returns the created row, or null if either
- * workspace no longer exists.
- */
-export async function persistChildNotification(input: {
-  parentWorkspaceId: string;
-  sourceWorkspaceId: string;
-  message: string;
-}): Promise<WorkspaceNotification | null> {
-  const [sourceWorkspace, parentWorkspace] = await Promise.all([
-    workspaceDataService.findByIdWithProject(input.sourceWorkspaceId),
-    workspaceDataService.exists(input.parentWorkspaceId),
-  ]);
-
-  if (!(sourceWorkspace && parentWorkspace)) {
-    logger.warn('persistChildNotification: workspace not found', input);
-    return null;
-  }
-
-  return workspaceNotificationService.notifyParent({
-    workspaceId: input.parentWorkspaceId,
-    sourceWorkspaceId: input.sourceWorkspaceId,
-    sourceWorkspaceName: sourceWorkspace.name,
-    sourceProjectName: sourceWorkspace.project.name,
-    message: input.message,
-  });
-}
-
-/**
- * Persist a notification from a parent workspace to a specific child.
- *
- * Always writes a WorkspaceNotification row so the message survives even if a
- * live delivery attempt races a dying session. Callers that deliver live mark
- * the row delivered after a successful dispatch; otherwise it is delivered when
- * the child's next session starts. Returns the created row, or null if either
- * workspace no longer exists.
- */
-export async function persistParentNotification(input: {
-  parentWorkspaceId: string;
-  targetChildWorkspaceId: string;
-  message: string;
-}): Promise<WorkspaceNotification | null> {
-  const [parentWorkspace, childWorkspace] = await Promise.all([
-    workspaceDataService.findByIdWithProject(input.parentWorkspaceId),
-    workspaceDataService.exists(input.targetChildWorkspaceId),
-  ]);
-
-  if (!(parentWorkspace && childWorkspace)) {
-    logger.warn('persistParentNotification: workspace not found', input);
-    return null;
-  }
-
-  return workspaceNotificationService.notifyChild({
-    workspaceId: input.targetChildWorkspaceId,
-    sourceWorkspaceId: input.parentWorkspaceId,
-    sourceWorkspaceName: parentWorkspace.name,
-    sourceProjectName: parentWorkspace.project.name,
-    message: input.message,
-  });
-}
-
-/**
  * Fire a lifecycle notification from a child workspace to its parent.
  * Used by orchestration layer for automatic events (PR opened/merged, archived).
  * No-op if the child has no parent.
@@ -154,9 +89,20 @@ export async function fireLifecycleNotification(
     return;
   }
 
-  await persistChildNotification({
-    parentWorkspaceId: child.parentWorkspaceId,
-    sourceWorkspaceId: childWorkspaceId,
+  await deliverWorkspaceNotification({
+    direction: 'CHILD_TO_PARENT',
+    targetWorkspaceId: child.parentWorkspaceId,
+    sourceWorkspace: { id: child.id, name: child.name, projectName: child.project.name },
     message,
+    kind: 'COMPLETION',
+    subject: 'Workspace lifecycle update',
+    buildUiEvent: ({ timestamp }) => ({
+      type: 'child_workspace_update',
+      childWorkspaceId: child.id,
+      childWorkspaceName: child.name,
+      childProjectName: child.project.name,
+      text: message,
+      timestamp,
+    }),
   });
 }

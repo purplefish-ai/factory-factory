@@ -5,7 +5,13 @@ import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orches
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-const { mockCreateWorkspace } = vi.hoisted(() => ({ mockCreateWorkspace: vi.fn() }));
+const { mockCreateWorkspace, mockDeliverLifecycleMail } = vi.hoisted(() => ({
+  mockCreateWorkspace: vi.fn(),
+  mockDeliverLifecycleMail: vi.fn(),
+}));
+vi.mock('./workspace-notification-delivery.orchestrator', () => ({
+  deliverWorkspaceNotification: mockDeliverLifecycleMail,
+}));
 
 // --- Module mocks (before imports) ---
 
@@ -46,6 +52,7 @@ import {
 } from '@/backend/services/workspace';
 import {
   createChildWorkspace,
+  fireLifecycleNotification,
   persistChildNotification,
   persistParentNotification,
 } from './workspace-children.orchestrator';
@@ -294,4 +301,26 @@ describe('persistParentNotification', () => {
     expect(mockNotifyChild).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
+});
+
+it('delegates lifecycle completion to workspace notification delivery', async () => {
+  mockFindByIdWithProject.mockResolvedValue(
+    unsafeCoerce({
+      id: 'child-1',
+      name: 'Child WS',
+      parentWorkspaceId: 'parent-1',
+      project: { name: 'Project' },
+    })
+  );
+  mockDeliverLifecycleMail.mockResolvedValue({ persisted: true });
+  await fireLifecycleNotification('child-1', 'PR merged');
+  expect(mockDeliverLifecycleMail).toHaveBeenCalledWith(
+    expect.objectContaining({
+      direction: 'CHILD_TO_PARENT',
+      targetWorkspaceId: 'parent-1',
+      sourceWorkspace: { id: 'child-1', name: 'Child WS', projectName: 'Project' },
+      message: 'PR merged',
+      kind: 'COMPLETION',
+    })
+  );
 });

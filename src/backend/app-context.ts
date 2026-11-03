@@ -42,7 +42,10 @@ import {
 } from './orchestration/workspace-init.orchestrator';
 import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
 import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadata.orchestrator';
-import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
+import {
+  deliverWorkspaceNotification,
+  recoverWorkspaceMail,
+} from './orchestration/workspace-notification-delivery.orchestrator';
 import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
 import {
   captureWorkspaceRetryGuard,
@@ -150,6 +153,7 @@ export type ApplicationServices = BridgeServices & {
     | 'setManualDispatchResume'
     | 'resetDispatchState'
     | 'steerQueuedMessage'
+    | 'steerWorkspaceMailSignal'
   >;
   acpRuntimeManager: typeof acpRuntimeManager;
   acpTraceLogger: AcpTraceLogger;
@@ -223,6 +227,7 @@ export type ApplicationServices = BridgeServices & {
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
+  recoverWorkspaceMail: (workspaceId: string) => ReturnType<typeof recoverWorkspaceMail>;
   workspaceCreationService: WorkspaceCreationService;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
@@ -457,6 +462,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         findProject: (projectId) => services.projectManagementService.findById(projectId),
         launchWorkspace: (source) => services.launchWorkspace(source),
       }),
+    recoverWorkspaceMail: (workspaceId) =>
+      recoverWorkspaceMail(workspaceId, { sessionDispatch: services.sessionDispatchService }),
     deliverWorkspaceNotification: (input) =>
       deliverWorkspaceNotification(input, {
         sessionDispatch: services.sessionDispatchService,
