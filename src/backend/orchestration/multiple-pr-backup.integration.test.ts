@@ -352,7 +352,7 @@ it('backfills only the matching legacy fixer session PR target', async () => {
 });
 
 it.each(['missing', 'foreign', 'matching'] as const)(
-  'validates %s local PR association when skipping an existing workspace',
+  'an existing workspace skips sessions regardless of its %s local PR association',
   async (association) => {
     const exported = await dataBackupService.exportData('test');
     await clearIntegrationDatabase(db.prisma);
@@ -369,12 +369,18 @@ it.each(['missing', 'foreign', 'matching'] as const)(
         data: { id: 'a', workspaceId, url: 'https://github.com/o/r/pull/42' },
       });
     }
+    const retained = () =>
+      Promise.all([
+        db.prisma.workspacePR.findMany({ orderBy: { id: 'asc' } }),
+        db.prisma.agentSession.findMany({ orderBy: { id: 'asc' } }),
+        db.prisma.workspacePRDedicatedSession.findMany({ orderBy: { prId: 'asc' } }),
+      ]);
+    const before = await retained();
     const result = await dataBackupService.importData(exportDataSchema.parse(exported));
     expect(result.workspaces).toEqual({ imported: 0, skipped: 1 });
-    expect(result.agentSessions).toEqual(
-      association === 'matching' ? { imported: 1, skipped: 0 } : { imported: 0, skipped: 1 }
-    );
-    expect(await db.prisma.agentSession.count()).toBe(association === 'matching' ? 1 : 0);
+    expect(result.agentSessions).toEqual({ imported: 0, skipped: 1 });
+    expect(await db.prisma.agentSession.count()).toBe(0);
+    expect(await retained()).toEqual(before);
   }
 );
 

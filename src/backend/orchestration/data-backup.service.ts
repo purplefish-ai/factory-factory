@@ -31,6 +31,7 @@ import type {
   exportedWorkspaceSchema,
 } from '@/shared/schemas/export-data.schema';
 import type { Prisma } from '@prisma-gen/client';
+import { planLegacyImport } from './data-backup-legacy-collisions';
 import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
 import {
   createInertImportReport,
@@ -142,20 +143,13 @@ function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
 
 async function importProjects(
   projects: ExportedProject[],
-  tx: TransactionClient
+  tx: TransactionClient,
+  createProjectIds: ReadonlySet<string>
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const p of projects) {
-    const existing = await tx.project.findUnique({ where: { id: p.id } });
-    if (existing) {
-      counter.skipped++;
-      continue;
-    }
-
-    const slugConflict = await tx.project.findUnique({ where: { slug: p.slug } });
-    if (slugConflict) {
-      logger.warn('Skipping project due to slug conflict', { id: p.id, slug: p.slug });
+    if (!createProjectIds.has(p.id)) {
       counter.skipped++;
       continue;
     }
@@ -221,27 +215,12 @@ function importedPRs(workspace: ExportedWorkspace) {
       : [];
 }
 
-async function parentWorkspaceExists(workspace: ExportedWorkspace, tx: TransactionClient) {
-  if (workspace.parentWorkspaceId !== null) {
-    const parentWorkspace = await tx.workspace.findUnique({
-      where: { id: workspace.parentWorkspaceId },
-    });
-    if (!parentWorkspace) {
-      logger.warn('Skipping workspace due to missing parent workspace', {
-        workspaceId: workspace.id,
-        parentWorkspaceId: workspace.parentWorkspaceId,
-      });
-      return false;
-    }
-  }
-  return true;
-}
-
 async function importWorkspaces(
   workspaces: ExportedWorkspace[],
   tx: TransactionClient,
   importedWorkspaceIds: string[],
-  report: InertImportReport
+  report: InertImportReport,
+  eligibleWorkspaceIds: ReadonlySet<string>
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
   const orderedWorkspaces = [...workspaces].sort(
@@ -249,24 +228,11 @@ async function importWorkspaces(
   );
 
   for (const workspace of orderedWorkspaces) {
-    await workspaceChildHistoryService.invalidateImportedWorkspace(tx, workspace.id);
-    const existing = await tx.workspace.findUnique({ where: { id: workspace.id } });
-    if (existing) {
-      counter.skipped++;
-      continue;
-    }
-
-    const project = await tx.project.findUnique({ where: { id: workspace.projectId } });
-    if (!project) {
-      logger.warn('Skipping workspace due to missing project', {
-        workspaceId: workspace.id,
-        projectId: workspace.projectId,
-      });
-      counter.skipped++;
-      continue;
-    }
-
-    if (!(await parentWorkspaceExists(workspace, tx))) {
+    if (
+      !eligibleWorkspaceIds.has(workspace.id) ||
+      (workspace.parentWorkspaceId !== null &&
+        !importedWorkspaceIds.includes(workspace.parentWorkspaceId))
+    ) {
       counter.skipped++;
       continue;
     }
@@ -327,6 +293,7 @@ async function importWorkspaces(
         updatedAt: new Date(workspace.updatedAt),
       },
     });
+    await workspaceChildHistoryService.invalidateImportedWorkspace(tx, workspace.id);
     await workspaceChildHistoryService.recordImportedChild(tx, workspace);
     importedWorkspaceIds.push(workspace.id);
     counter.imported++;
@@ -339,23 +306,13 @@ async function importAgentSessions(
   sessions: ExportedAgentSession[],
   tx: TransactionClient,
   report: InertImportReport,
+  importedWorkspaceIds: ReadonlySet<string>,
   accountIds: ReadonlyMap<string, string> = new Map()
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const s of sessions) {
-    const existing = await tx.agentSession.findUnique({ where: { id: s.id } });
-    if (existing) {
-      counter.skipped++;
-      continue;
-    }
-
-    const workspace = await tx.workspace.findUnique({ where: { id: s.workspaceId } });
-    if (!workspace) {
-      logger.warn('Skipping agent session due to missing workspace', {
-        sessionId: s.id,
-        workspaceId: s.workspaceId,
-      });
+    if (!importedWorkspaceIds.has(s.workspaceId)) {
       counter.skipped++;
       continue;
     }
@@ -403,23 +360,19 @@ async function importAgentSessions(
 async function importTerminalSessions(
   sessions: ExportedTerminalSession[],
   tx: TransactionClient,
-  report: InertImportReport
+  report: InertImportReport,
+  importedWorkspaceIds: ReadonlySet<string>
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const s of sessions) {
-    const existing = await tx.terminalSession.findUnique({ where: { id: s.id } });
-    if (existing) {
+    if (!importedWorkspaceIds.has(s.workspaceId)) {
       counter.skipped++;
       continue;
     }
 
-    const workspace = await tx.workspace.findUnique({ where: { id: s.workspaceId } });
-    if (!workspace) {
-      logger.warn('Skipping terminal session due to missing workspace', {
-        sessionId: s.id,
-        workspaceId: s.workspaceId,
-      });
+    const existing = await tx.terminalSession.findUnique({ where: { id: s.id } });
+    if (existing) {
       counter.skipped++;
       continue;
     }
@@ -682,27 +635,32 @@ class DataBackupService {
 
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
+      const admission = await planLegacyImport(tx, input.data);
       const inertTransforms = createInertImportReport();
-      const projects = await importProjects(input.data.projects, tx);
+      const projects = await importProjects(input.data.projects, tx, admission.createProjectIds);
       const importedWorkspaceIds: string[] = [];
       const workspaces = await importWorkspaces(
         input.data.workspaces,
         tx,
         importedWorkspaceIds,
-        inertTransforms
+        inertTransforms,
+        admission.eligibleWorkspaceIds
       );
+      const createdWorkspaceIds = new Set(importedWorkspaceIds);
       const accountIds = await restoreCodexAccountMetadata(tx, input.data.codexAccounts);
       const agentSessions = await importAgentSessions(
         input.data.agentSessions,
         tx,
         inertTransforms,
+        createdWorkspaceIds,
         accountIds
       );
       await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx, inertTransforms);
       const terminalSessions = await importTerminalSessions(
         input.data.terminalSessions,
         tx,
-        inertTransforms
+        inertTransforms,
+        createdWorkspaceIds
       );
       const userSettings = await importUserSettings(input.data.userSettings, tx);
 

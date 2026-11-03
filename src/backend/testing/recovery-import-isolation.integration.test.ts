@@ -205,7 +205,7 @@ it('commits the existing v7 graph and account mapping through the private transa
   expect(await db.prisma.workspaceChildOrigin.count()).toBe(1);
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: 'local-run' } })
-  ).toMatchObject({ childHistoryVersion: null });
+  ).toMatchObject({ childHistoryVersion: 1 });
   expect(await db.prisma.workspace.findUnique({ where: { id: 'skipped' } })).toMatchObject({
     name: 'Local skipped',
     projectId: 'local-project',
