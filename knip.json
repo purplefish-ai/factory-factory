@@ -3,14 +3,18 @@
   "workspaces": {
     ".": {
       "entry": [
-        "src/backend/server.ts",
-        "src/backend/migrate.ts",
-        "src/backend/electron-utility-entry.ts",
-        "src/backend/mcp/workspace-mcp-server.ts",
-        "electron/main/index.ts",
-        "electron/preload/index.cts"
+        "src/backend/index.ts!",
+        "src/backend/server.ts!",
+        "src/backend/migrate.ts!",
+        "src/backend/electron-utility-entry.ts!",
+        "src/backend/mcp/workspace-mcp-server.ts!",
+        "src/cli/index.ts!",
+        "electron/main/index.ts!",
+        "electron/preload/index.cts!",
+        "src/client/main.tsx!",
+        "src/client/features/workspace/diff-highlight.worker.ts!"
       ],
-      "project": ["src/**/*.{ts,tsx,css,mdx}", "electron/**/*.{ts,cts}", "prisma/**/*.prisma"]
+      "project": ["src/**/*.{ts,tsx,css,mdx}!", "electron/**/*.{ts,cts}!", "prisma/**/*.prisma!"]
     }
   },
   "paths": {
@@ -23,5 +27,6 @@
   },
   "storybook": {
     "entry": ["src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"]
-  }
+  },
+  "ignoreExportsUsedInFile": true
 }

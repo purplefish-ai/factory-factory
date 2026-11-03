@@ -48,7 +48,7 @@ jobs:
             --to-migrations prisma/migrations \
             --exit-code
 
-      - name: Run verification checks
+      - name: Run verification and staged unused-code checks
         run: pnpm check
 
       - name: Check ambiguous relative imports
