@@ -44,7 +44,7 @@
   ],
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
-    "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && cp -r prompts dist/ && vite build && pnpm check:client-chunks",
+    "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && node scripts/copy-prompts.mjs && vite build && pnpm check:client-chunks",
     "build:storybook": "storybook build",
     "brand:generate": "node scripts/generate-brand-assets.mjs",
     "brand:generate:social-preview": "node scripts/generate-social-preview.mjs",
