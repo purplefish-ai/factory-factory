@@ -53,6 +53,19 @@ in rejected timestamp groups and unhydrated defaults do not count. Git stats
 continue streaming while the job remains in flight, so `stop()` still waits for
 every Git task to settle.
 
+Server cleanup calls every `server.ts`-owned job's `stop()` (reconciliation
+cleanup, PR sync, snapshot reconciliation, ratchet and PR event retention,
+periodic tasks) as soon as it begins, so no job starts new work during teardown
+and their in-flight runs drain concurrently with session/process teardown and
+with each other: shutdown waits for the slowest drain, not the sum. The drains
+are awaited only after sessions, run scripts and the rate limiter have stopped,
+and all of them before the database disconnects. Two edges are kept by awaiting
+in order: the event collector stops after the PR sync drains, and the Git state
+service stops after snapshot reconciliation drains. A failed `stop()` is logged
+with its job name and does not block the other drains or the disconnect. Startup
+re-checks for cleanup after each await before starting more jobs, since a start
+issued after its stop would revive the job.
+
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
 interruptibility is a shutdown concern rather than a scheduling feature.
