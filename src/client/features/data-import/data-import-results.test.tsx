@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
-import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
+import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 const download = vi.hoisted(() => vi.fn());
@@ -198,6 +198,12 @@ it.each([
 it('discloses the exact partial manifest with an expandable model list and exclusions', async () => {
   await mount();
   expect(document.body.textContent).toContain('Partial backup coverage');
+  for (const warning of result.recovery.warnings) {
+    expect(document.body.textContent).toContain(warning);
+  }
+  expect(document.body.textContent).toContain(
+    'Workspace.creationMetadata preserves SQL NULL versus top-level JSON null'
+  );
   for (const label of [
     'secrets and encryption keys',
     'native account homes',

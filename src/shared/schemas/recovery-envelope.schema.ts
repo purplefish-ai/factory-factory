@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { baseJsonSectionSchema } from './recovery-json-storage.schema';
 
 const coverageEntrySchema = z.strictObject({
   model: z.string(),
@@ -82,6 +83,12 @@ export const r4aModelCoverage = {
   AgentInitialDelivery: excluded('initial automation effect evidence absent.'),
 } as const;
 
+export const workspaceJsonModelCoverage = {
+  ...r4aModelCoverage,
+  Workspace: partial(
+    'base metadata; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded; WorkspacePR.observation and AgentSession.providerMetadata physical nullable-JSON fidelity unproven.'
+  ),
+};
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -90,18 +97,29 @@ const exclusions = [
   'LIVE_PROCESS_IDS_AND_RUNTIME_LEASES',
   'PHYSICAL_NULLABLE_JSON_FIDELITY',
 ] as const;
-export const recoverySectionsSchema = z.strictObject({});
+export const recoverySectionsSchema = z.strictObject({
+  baseJson: baseJsonSectionSchema.optional(),
+});
 export const recoveryMetadataSchema = z
   .strictObject({
     version: z.literal(1),
-    profile: z.literal('base-1'),
+    profile: z.enum(['base-1', 'base-json-workspace-1']),
     status: z.literal('PARTIAL'),
-    capabilities: recoverySectionsSchema,
+    capabilities: z.strictObject({ baseJson: z.literal(1).optional() }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
   })
   .superRefine((metadata, ctx) => {
-    const expected = new Map<string, Coverage>(Object.entries(r4aModelCoverage));
+    const workspaceJson = metadata.profile === 'base-json-workspace-1';
+    if (
+      workspaceJson !== Object.hasOwn(metadata.capabilities, 'baseJson') ||
+      (workspaceJson && metadata.capabilities.baseJson !== 1)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Profile capabilities do not match' });
+    }
+    const expected = new Map<string, Coverage>(
+      Object.entries(workspaceJson ? workspaceJsonModelCoverage : r4aModelCoverage)
+    );
     for (const entry of metadata.coverage) {
       const canonical = expected.get(entry.model);
       if (

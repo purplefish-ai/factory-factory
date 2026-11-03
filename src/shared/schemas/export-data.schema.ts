@@ -53,6 +53,7 @@ import {
   prMonitoringBackupSchema,
 } from './pr-monitoring-backup.schema';
 import { recoveryMetadataSchema, recoverySectionsSchema } from './recovery-envelope.schema';
+import { validateBaseJsonTargets } from './recovery-json-storage.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
@@ -461,17 +462,28 @@ function validateAccountReferences(
     }
   });
 }
-const version8Schema = z.strictObject({
-  meta: z.strictObject({
-    ...legacyAndCurrentSchema.shape.meta.shape,
-    schemaVersion: z.literal(8),
-    recovery: recoveryMetadataSchema,
-  }),
-  data: z.strictObject({
-    ...legacyAndCurrentSchema.shape.data.shape,
-    recovery: recoverySectionsSchema,
-  }),
-});
+const version8Schema = z
+  .strictObject({
+    meta: z.strictObject({
+      ...legacyAndCurrentSchema.shape.meta.shape,
+      schemaVersion: z.literal(8),
+      recovery: recoveryMetadataSchema,
+    }),
+    data: z.strictObject({
+      ...legacyAndCurrentSchema.shape.data.shape,
+      recovery: recoverySectionsSchema,
+    }),
+  })
+  .superRefine((backup, ctx) => {
+    const covered = backup.meta.recovery.profile === 'base-json-workspace-1';
+    const section = backup.data.recovery.baseJson;
+    if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
+      ctx.addIssue({ code: 'custom', message: 'Profile sections do not match' });
+    }
+    if (covered && section) {
+      validateBaseJsonTargets(backup.data.workspaces, section, ctx);
+    }
+  });
 export const exportDataSchema = z
   .union([
     publishedVersion5Schema.transform((input, ctx) =>
