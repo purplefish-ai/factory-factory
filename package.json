@@ -60,7 +60,7 @@
     "test:e2e:scroll": "playwright test --config=playwright.scroll.config.ts",
     "test:integration": "node scripts/ensure-native-modules.mjs node && vitest run --config vitest.integration.config.ts",
     "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
-    "check": "pnpm lint && pnpm check:format && pnpm check:file-length && pnpm check:env && pnpm check:ownership && pnpm check:fk-indexes && pnpm deps:check",
+    "check": "pnpm lint && pnpm check:format && pnpm check:file-length && pnpm check:env && pnpm check:ownership && pnpm check:fk-indexes && pnpm deps:check && pnpm check:unused-code",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
     "check:env": "node scripts/check-no-direct-process-env.mjs",
     "check:biome-ignores": "pnpm check:lint-suppressions",
@@ -96,7 +96,10 @@
     "check:lint-suppressions": "node scripts/check-lint-suppressions.mjs",
     "check:client-chunks": "node scripts/check-client-chunk-budget.mjs",
     "test:acp:manual": "node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 vitest run src/backend/services/session/service/acp/acp-runtime-manager.manual.integration.test.ts",
-    "test:acp:manual:prompt": "RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 pnpm test:acp:manual"
+    "test:acp:manual:prompt": "RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 pnpm test:acp:manual",
+    "check:unused-code": "node --import tsx scripts/check-unused-code.ts",
+    "check:unused-code:report": "node --import tsx scripts/check-unused-code.ts --report",
+    "check:unused-code:update": "node --import tsx scripts/check-unused-code.ts --update"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.99.1",
