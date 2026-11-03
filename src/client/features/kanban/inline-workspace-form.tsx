@@ -100,7 +100,10 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
   if (!files || files.length === 0) {
     return null;
   }
-  const { attachments: newAttachments, errors } = await collectAttachments(files);
+  const { attachments: newAttachments, errors } = await collectAttachments({
+    mode: 'images-and-text',
+    files,
+  });
   if (errors.length > 0) {
     const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
     toast.error(`Could not add ${errors.length} file(s): ${formattedErrors.join('; ')}`);

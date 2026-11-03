@@ -206,6 +206,8 @@ export const InteractivePasteDrop: Story = {
             <li>Paste large text (20+ lines or 2000+ characters)</li>
             <li>Drag and drop an image file</li>
             <li>Drag and drop a text file (.txt, .md, .js, etc.)</li>
+            <li>Drop images and text together; valid files stay attached if another file fails</li>
+            <li>The file picker accepts images only</li>
           </ul>
         </div>
         <ChatInput
@@ -215,6 +217,10 @@ export const InteractivePasteDrop: Story = {
           inputRef={inputRef}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
+          capabilities={{
+            ...EMPTY_CHAT_BAR_CAPABILITIES,
+            attachments: { enabled: true, kinds: ['image', 'text'] },
+          }}
           placeholder="Try pasting or dropping files here..."
         />
         {attachments.length > 0 && (

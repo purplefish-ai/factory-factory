@@ -1,6 +1,4 @@
-import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import type { MessageAttachment } from './chat-protocol';
-import { formatBytes } from './formatters';
 
 export { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 
@@ -89,34 +87,6 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Convert a File to a MessageAttachment.
- *
- * @throws Error if file type is not supported or file exceeds MAX_IMAGE_SIZE
- */
-export async function fileToAttachment(file: File): Promise<MessageAttachment> {
-  if (!isSupportedImageType(file.type)) {
-    throw new Error(`Unsupported file type: ${file.type}`);
-  }
-
-  if (file.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatBytes(file.size, { precision: 1 });
-    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
-    throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
-  }
-
-  const base64 = await fileToBase64(file);
-
-  return {
-    id: generateAttachmentId(),
-    name: file.name,
-    type: file.type,
-    size: file.size,
-    data: base64,
-    contentType: 'image',
-  };
-}
-
-/**
  * Read a text file and return its content.
  */
 export function readTextFile(file: File): Promise<string> {
@@ -129,40 +99,6 @@ export function readTextFile(file: File): Promise<string> {
     };
     reader.readAsText(file);
   });
-}
-
-/**
- * Convert a text File to a MessageAttachment.
- *
- * @throws Error if file extension is not supported or file exceeds MAX_TEXT_FILE_SIZE
- */
-export async function textFileToAttachment(file: File): Promise<MessageAttachment> {
-  if (!isSupportedTextFile(file.name)) {
-    throw new Error(`Unsupported text file type: ${file.name}`);
-  }
-
-  if (file.size > MAX_TEXT_FILE_SIZE) {
-    const actualSize = formatBytes(file.size, { precision: 1 });
-    const maxSize = formatBytes(MAX_TEXT_FILE_SIZE, { precision: 1 });
-    throw new Error(`File too large: ${actualSize} (max ${maxSize})`);
-  }
-
-  let content: string;
-  try {
-    content = await readTextFile(file);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to read ${file.name}: ${message}`);
-  }
-
-  return {
-    id: generateAttachmentId(),
-    name: file.name,
-    type: file.type || 'text/plain',
-    size: file.size,
-    data: content,
-    contentType: 'text',
-  };
 }
 
 /**

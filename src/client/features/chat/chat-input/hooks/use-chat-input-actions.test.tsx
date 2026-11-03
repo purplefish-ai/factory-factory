@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement, useState } from 'react';
+import { act, createElement, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,9 @@ import {
 } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { useChatInputActions } from './use-chat-input-actions';
+
+const uploadErrors = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: { error: uploadErrors } }));
 
 interface ShortcutHarnessProps {
   capabilities: ChatBarCapabilities;
@@ -66,7 +69,14 @@ function ShortcutHarness({
   return (
     <>
       <textarea onKeyDown={actions.handleKeyDown} data-testid="shortcut-input" />
-      <input type="file" ref={actions.fileInputRef} />
+      <input
+        type="file"
+        ref={actions.fileInputRef}
+        onChange={(event) => {
+          void actions.handleFileSelect(event);
+        }}
+      />
+      <output>{attachments.map(({ name }) => name).join(', ')}</output>
     </>
   );
 }
@@ -368,4 +378,32 @@ describe('useChatInputActions keyboard shortcuts', () => {
     root.unmount();
     container.remove();
   });
+});
+
+it('selects only images, preserves successful files and presents per-file errors', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  uploadErrors.mockClear();
+  const { root, container } = renderHarness({
+    capabilities: claudeChatBarCapabilities(),
+    onSettingsChange: vi.fn(),
+  });
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(input, 'files', {
+    value: [
+      new File(['image'], 'selected.png', { type: 'image/png' }),
+      new File(['text'], 'notes.md', { type: 'text/plain' }),
+    ],
+  });
+  await act(async () => {
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(uploadErrors).toHaveBeenCalled());
+  });
+  expect(uploadErrors).toHaveBeenCalledWith(
+    'Failed to upload notes.md: Unsupported file type: text/plain'
+  );
+  expect(container.querySelector('output')?.textContent).toBe('selected.png');
+  expect(input.value).toBe('');
+  act(() => root.unmount());
+  vi.unstubAllGlobals();
+  container.remove();
 });

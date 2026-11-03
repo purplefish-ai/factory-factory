@@ -88,7 +88,7 @@ export function ImageDropZone({
     }
     const token = lifetime.current;
     onDropAccepted?.();
-    void collectAttachments(files).then(({ attachments, errors }) => {
+    void collectAttachments({ mode: 'images-and-text', files }).then(({ attachments, errors }) => {
       if (lifetime.current !== token) {
         return;
       }
