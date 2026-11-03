@@ -58,15 +58,15 @@ it.each([
 
 describe('capability-driven image upload controls', () => {
   it.each([
-    { mobile: false, acp: true, attachments: true },
+    { mobile: false, acp: true, attachments: true, running: false },
     { mobile: false, acp: true, attachments: true, running: true },
     { mobile: true, acp: true, attachments: true, running: true },
-    { mobile: true, acp: true, attachments: true },
-    { mobile: false, acp: false, attachments: true },
-    { mobile: false, acp: true, attachments: false },
+    { mobile: true, acp: true, attachments: true, running: false },
+    { mobile: false, acp: false, attachments: true, running: false },
+    { mobile: false, acp: true, attachments: false, running: false },
   ])(
-    'honors upload capability (mobile=$mobile, ACP=$acp, attachments=$attachments)',
-    ({ mobile, acp, attachments, running = false }) => {
+    'honors upload capability (mobile=$mobile, ACP=$acp, attachments=$attachments, running=$running)',
+    ({ mobile, acp, attachments, running }) => {
       mocks.mobile = mobile;
       const fileInputRef = createRef<HTMLInputElement>();
       const container = document.createElement('div');
