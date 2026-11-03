@@ -158,7 +158,7 @@ reads, before mutations and at the final transaction boundary. Cursors publish
 only after commit, including progress past retained candidates; aborted batches
 roll back. A retention failure rolls back its current batch and logs a sanitized
 reason; evaluation and claims continue unless the live job signal is aborted.
-There is no additional retention job or timer. See
+There is no additional agent-ledger retention job or timer. See
 [integrations](./integrations.md) for the 30/90-day boundaries and retained
 source-proof/history lifetimes.
 

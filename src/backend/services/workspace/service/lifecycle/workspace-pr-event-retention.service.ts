@@ -17,7 +17,10 @@ export const PR_EVENT_RETENTION = Object.freeze({
 export interface PrunePREventsResult {
   deleted: number;
   batches: number;
-  /** False when the run stopped at its batch cap or on abort. */
+  /**
+   * True when a short batch showed that no eligible row remains. False when the
+   * run stopped at its batch cap or on abort before the backlog was drained.
+   */
   complete: boolean;
 }
 

@@ -83,10 +83,24 @@ type Row = {
   state: string;
   createdAt?: Date;
   batchId?: string;
-  deliveryId?: string;
-  deliverySessionId?: string;
-  claimedAt?: Date;
+  legacy?: Partial<typeof legacyEvidence>;
 };
+// One value per legacy receipt/frozen column; any one of them blocks pruning.
+const legacyEvidence = {
+  deliveryId: 'legacy',
+  deliverySessionId: 'session',
+  deliveryProvider: 'CLAUDE',
+  deliveryProviderSessionId: 'provider-session',
+  deliveryBindingRevision: 1,
+  deliveryText: 'frozen text',
+  claimedAt: OLD,
+  deliveredAt: OLD,
+};
+const legacyRows = Object.entries(legacyEvidence).map(([field, value], index) => ({
+  id: `legacy-${field}`,
+  state: index % 2 ? 'CANCELLED' : 'SUPERSEDED',
+  legacy: { [field]: value },
+}));
 async function createEvents(rows: Row[]) {
   for (const row of rows) {
     const workspaceId = row.workspaceId ?? 'w';
@@ -102,9 +116,7 @@ async function createEvents(rows: Row[]) {
         state: row.state,
         createdAt: row.createdAt ?? OLD,
         batchId: row.batchId ?? null,
-        deliveryId: row.deliveryId ?? null,
-        deliverySessionId: row.deliverySessionId ?? null,
-        claimedAt: row.claimedAt ?? null,
+        ...row.legacy,
       },
     });
   }
@@ -146,10 +158,8 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
     { id: 'cancelled-batch-member', state: 'CANCELLED', batchId: 'cancelled-batch' },
     { id: 'blocked-batch-member', state: 'SUPERSEDED', batchId: 'blocked-batch' },
     // Legacy receipt evidence, including incomplete metadata.
-    { id: 'legacy-receipt', state: 'SUPERSEDED', deliveryId: 'legacy' },
-    { id: 'empty-receipt', state: 'CANCELLED', deliveryId: '' },
-    { id: 'legacy-session', state: 'SUPERSEDED', deliverySessionId: 'session' },
-    { id: 'legacy-claim', state: 'CANCELLED', claimedAt: OLD },
+    ...legacyRows,
+    { id: 'empty-receipt', state: 'CANCELLED', legacy: { deliveryId: '' } },
   ]);
 
   expect(await workspacePrEventAccessor.pruneTerminalEvents({ before: CUTOFF, limit: 100 })).toBe(
@@ -167,9 +177,7 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
       'delivered-batch-member',
       'dispatching',
       'empty-receipt',
-      'legacy-claim',
-      'legacy-receipt',
-      'legacy-session',
+      ...legacyRows.map((row) => row.id),
       'pending',
       'recent-superseded',
       'recovered-superseded',
