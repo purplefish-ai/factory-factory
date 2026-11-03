@@ -110,7 +110,8 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionDomainService.getQueueSnapshot.mockImplementation(() => {
-      const head = mockSessionDomainService.peekNextMessage();
+      // Snapshot reads must not advance scripted peek results.
+      const head = mockSessionDomainService.peekNextMessage.mock.results.at(-1)?.value;
       return head ? [head] : [];
     });
     sessionDispatchService.resetDispatchState('s1');

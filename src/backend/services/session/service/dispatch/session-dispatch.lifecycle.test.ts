@@ -122,7 +122,11 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSessionDomainService.getQueueSnapshot.mockReturnValue([]);
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() => {
+      // Snapshot reads must not advance scripted peek results.
+      const head = mockSessionDomainService.peekNextMessage.mock.results.at(-1)?.value;
+      return head ? [head] : [];
+    });
     sessionDispatchService.resetDispatchState('s1');
     sessionDispatchService.configure({
       initPolicy: {
@@ -895,12 +899,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     };
     const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockSessionDomainService.peekNextMessage
-      .mockReturnValueOnce(queuedMessage)
-      .mockReturnValueOnce(secondQueuedMessage);
-    mockSessionDomainService.dequeueNext
-      .mockReturnValueOnce(queuedMessage)
-      .mockReturnValueOnce(secondQueuedMessage);
+    const queue = [queuedMessage];
+    mockSessionDomainService.peekNextMessage.mockImplementation(() => queue[0]);
+    mockSessionDomainService.getQueueSnapshot.mockImplementation(() => [...queue]);
+    mockSessionDomainService.dequeueNext.mockImplementation(() => queue.shift());
     mockSessionDomainService.allocateOrder.mockReturnValueOnce(0).mockReturnValueOnce(1);
 
     let resolveFirstSend: (() => void) | undefined;
@@ -916,6 +918,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     });
 
+    queue.push(secondQueuedMessage);
     sessionDispatchService.resetDispatchState('s1');
     await sessionDispatchService.tryDispatchNextMessage('s1');
 
