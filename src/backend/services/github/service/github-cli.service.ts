@@ -1,6 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentIssueEventRequest } from '@/shared/agent-source';
-import type { CIStatus, PRState } from '@/shared/core';
 import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
@@ -10,13 +9,11 @@ import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import {
   classifyError,
   getGitHubCLIDiagnostic,
-  logGitHubCLIError,
   throwIfGitHubConnectivityError,
   wrapGitHubCLIError,
 } from './github-cli/errors';
 import { GitHubCLIExecutor } from './github-cli/executor';
 import { searchIssues } from './github-cli/issue-search';
-import { computeCIStatus, computePRState } from './github-cli/mappers';
 import {
   getPRDiff,
   getPRFullDetails,
@@ -31,7 +28,6 @@ import { listReviewRequests } from './github-cli/review-requests';
 import {
   issueSchema,
   openPullRequestsGraphQLSchema,
-  prStatusSchema,
   type ResolvedReviewThreadsPage,
   type ReviewThreadCommentsConnection,
   resolvedReviewThreadsGraphQLSchema,
@@ -44,7 +40,6 @@ import type {
   GitHubIssue,
   OpenPullRequest,
   PRInfo,
-  PRStatusFromGitHub,
   PRStatusDetails,
   PRReviewDetails,
   ReviewRequestedPR,
@@ -199,82 +194,6 @@ class GitHubCLIService {
       owner: match[1] as string,
       repo: match[2] as string,
       number: Number.parseInt(match[3] as string, 10),
-    };
-  }
-
-  /**
-   * Get PR status from GitHub using the gh CLI.
-   */
-  async getPRStatus(prUrl: string): Promise<PRStatusFromGitHub | null> {
-    const prInfo = this.extractPRInfo(prUrl);
-    if (!prInfo) {
-      logger.warn('Could not parse PR URL', { prUrl });
-      return null;
-    }
-
-    try {
-      const { stdout } = await this.exec(
-        [
-          'pr',
-          'view',
-          String(prInfo.number),
-          '--repo',
-          `${prInfo.owner}/${prInfo.repo}`,
-          '--json',
-          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName,title,baseRefName,mergeStateStatus',
-        ],
-        { timeout: GH_TIMEOUT_MS.default }
-      );
-
-      return parseGhJson(prStatusSchema, stdout, 'getPRStatus');
-    } catch (error) {
-      const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      logGitHubCLIError(errorType, errorMessage, { prUrl });
-      if (errorType === 'rate_limit') {
-        throw error;
-      }
-      return null;
-    }
-  }
-
-  computeCIStatus(statusCheckRollup: PRStatusFromGitHub['statusCheckRollup']) {
-    return computeCIStatus(statusCheckRollup);
-  }
-
-  computePRState(status: { state: string; isDraft: boolean; reviewDecision: string | null }) {
-    return computePRState(status);
-  }
-
-  /**
-   * Fetch PR status and convert to our PRState.
-   * Returns null if PR cannot be fetched.
-   */
-  async fetchAndComputePRState(prUrl: string): Promise<{
-    prState: PRState;
-    prNumber: number;
-    prReviewState: string | null;
-    prCiStatus: CIStatus;
-    headRefName: string | null;
-    title?: string | null;
-    baseRefName?: string | null;
-    prHasMergeConflict?: boolean;
-  } | null> {
-    const status = await this.getPRStatus(prUrl);
-    if (!status) {
-      return null;
-    }
-
-    return {
-      prState: this.computePRState(status),
-      prNumber: status.number,
-      prReviewState: status.reviewDecision,
-      prCiStatus: this.computeCIStatus(status.statusCheckRollup),
-      headRefName: status.headRefName ?? null,
-      title: status.title ?? null,
-      baseRefName: status.baseRefName ?? null,
-      prHasMergeConflict: status.mergeStateStatus === 'DIRTY',
     };
   }
 
@@ -953,7 +872,6 @@ export type {
   GitHubIssue,
   OpenPullRequest,
   PRInfo,
-  PRStatusFromGitHub,
   ReviewRequestedPR,
 };
 

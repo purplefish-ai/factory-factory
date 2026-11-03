@@ -279,9 +279,9 @@ That used not to matter — the check wrote its conclusion straight into a `stat
 column, so a merge or a new changes-requested review reached the app even while
 the cache lagged the PR-sync poller. `recordPrObservation` now writes `prState`,
 `prReviewState`, `prCiStatus` and `hasMergeConflict` together, mapping the raw
-observation through the github capsule's own `computePRState` so both writers of
-`WorkspacePR.state` agree on what `DRAFT` and `APPROVED` mean. The write is
-guarded on the PR identity the observation was fetched for: the aggregate
+observation through the github capsule's PR observation service, which folds
+draft status and review decisions into `WorkspacePR.state`. The write is guarded
+on the PR identity the observation was fetched for: the aggregate
 compare-and-swap reads its guard inside the write transaction, so it catches a
 racing write but not a workspace re-pointed at a new PR while the check was off
 fetching — and a stale `MERGED` stamped onto a fresh PR would drop it out of the

@@ -282,3 +282,29 @@ it('keeps a known merge conflict while GitHub is still computing mergeability', 
   );
   expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: false });
 });
+
+it.each([
+  { state: 'MERGED', isDraft: true, reviewDecision: 'APPROVED', expected: 'MERGED' },
+  { state: 'CLOSED', isDraft: true, reviewDecision: 'CHANGES_REQUESTED', expected: 'CLOSED' },
+  { state: 'OPEN', isDraft: true, reviewDecision: 'APPROVED', expected: 'DRAFT' },
+  { state: 'OPEN', isDraft: true, reviewDecision: 'CHANGES_REQUESTED', expected: 'DRAFT' },
+  { state: 'OPEN', isDraft: false, reviewDecision: 'APPROVED', expected: 'APPROVED' },
+  {
+    state: 'OPEN',
+    isDraft: false,
+    reviewDecision: 'CHANGES_REQUESTED',
+    expected: 'CHANGES_REQUESTED',
+  },
+  { state: 'OPEN', isDraft: false, reviewDecision: 'REVIEW_REQUIRED', expected: 'OPEN' },
+  { state: 'OPEN', isDraft: false, reviewDecision: null, expected: 'OPEN' },
+] as const)(
+  'maps $state / draft=$isDraft / review=$reviewDecision to $expected',
+  async ({ state, isDraft, reviewDecision, expected }) => {
+    vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
+      fullDetails({ state, isDraft, reviewDecision })
+    );
+    await expect(
+      prObservationService.fetch(target, undefined, { includeReviews: false })
+    ).resolves.toMatchObject({ prState: expected, reviewState: reviewDecision });
+  }
+);

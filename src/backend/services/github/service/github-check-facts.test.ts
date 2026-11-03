@@ -16,6 +16,25 @@ const failedCheck: GitHubStatusCheck = {
 
 describe('normalizeGitHubCheckFacts', () => {
   it.each([
+    { checks: [{ name: 'ci', status: 'completed', conclusion: 'failure' }], expected: 'FAILURE' },
+    {
+      checks: [{ name: 'ci', status: 'COMPLETED', conclusion: 'ACTION_REQUIRED' }],
+      expected: 'FAILURE',
+    },
+    { checks: [{ name: 'ci', status: 'COMPLETED', conclusion: 'CANCELLED' }], expected: 'FAILURE' },
+    { checks: [{ name: 'ci', status: 'COMPLETED', conclusion: 'NEUTRAL' }], expected: 'SUCCESS' },
+    { checks: [{ name: 'ci', status: 'COMPLETED', conclusion: 'SKIPPED' }], expected: 'SUCCESS' },
+    { checks: [{ name: 'ci', status: 'in_progress' }], expected: 'PENDING' },
+    { checks: [{ name: 'ci', status: 'QUEUED', conclusion: 'SUCCESS' }], expected: 'PENDING' },
+    { checks: [{ name: 'ci', status: 'COMPLETED', conclusion: 'STALE' }], expected: 'UNKNOWN' },
+    { checks: [{ context: 'legacy', state: 'ERROR' }], expected: 'FAILURE' },
+    { checks: [{ context: 'legacy', state: 'EXPECTED' }], expected: 'PENDING' },
+    { checks: [{ context: 'legacy', state: 'SUCCESS' }], expected: 'SUCCESS' },
+  ])('classifies mapped observation checks as $expected: $checks', ({ checks, expected }) => {
+    expect(normalizeGitHubCheckFacts(mapStatusChecks(checks)).ciStatus).toBe(expected);
+  });
+
+  it.each([
     { rollup: null, ciStatus: 'UNKNOWN' },
     { rollup: [], ciStatus: 'SUCCESS' },
   ])('distinguishes missing and empty rollups: $ciStatus', ({ rollup, ciStatus }) => {

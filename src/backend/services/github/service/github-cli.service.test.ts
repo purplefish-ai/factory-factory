@@ -32,7 +32,6 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { execFile } from 'node:child_process';
-import { deriveCiStatusFromCheckRollup } from '@/shared/core';
 import { githubCLIService } from './github-cli.service';
 import { classifyError } from './github-cli/errors';
 
@@ -67,118 +66,19 @@ function mockFullDetails(data: {
   );
 }
 
+const coreMetadata = {
+  title: 'PR',
+  url: 'https://github.com/owner/repo/pull/42',
+  updatedAt: '2026-01-01T00:00:00Z',
+  headRefName: 'feature',
+  baseRefName: 'main',
+  mergeStateStatus: 'CLEAN',
+};
+
 describe('GitHubCLIService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     githubCLIService.clearCaches();
-  });
-
-  describe('getPRStatus', () => {
-    it('should return PR status when gh CLI succeeds', async () => {
-      const mockPRData = {
-        number: 123,
-        state: 'OPEN',
-        isDraft: false,
-        reviewDecision: 'APPROVED',
-        statusCheckRollup: [],
-      };
-
-      mockExecFile.mockResolvedValue({
-        stdout: JSON.stringify(mockPRData),
-        stderr: '',
-      });
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toEqual({
-        number: 123,
-        state: 'OPEN',
-        isDraft: false,
-        reviewDecision: 'APPROVED',
-        statusCheckRollup: [],
-      });
-    });
-
-    it('should return null and log error when CLI is not installed', async () => {
-      mockExecFile.mockRejectedValue(new Error('spawn gh ENOENT'));
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toBeNull();
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        'GitHub CLI configuration issue',
-        expect.objectContaining({
-          errorType: 'cli_not_installed',
-          hint: 'Install gh CLI from https://cli.github.com/',
-        })
-      );
-    });
-
-    it('should return null and log error when authentication is required', async () => {
-      mockExecFile.mockRejectedValue(new Error('gh auth login required'));
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toBeNull();
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        'GitHub CLI configuration issue',
-        expect.objectContaining({
-          errorType: 'auth_required',
-          hint: 'Run `gh auth login` to authenticate',
-        })
-      );
-    });
-
-    it('should return null and log warning when PR is not found', async () => {
-      mockExecFile.mockRejectedValue(new Error('could not resolve to a PullRequest'));
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toBeNull();
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        'PR not found',
-        expect.objectContaining({
-          errorType: 'pr_not_found',
-        })
-      );
-    });
-
-    it('should return null and log a warning for network issues', async () => {
-      mockExecFile.mockRejectedValue(new Error('network timeout'));
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toBeNull();
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        'GitHub temporarily unreachable; will retry',
-        expect.objectContaining({
-          errorType: 'network_error',
-        })
-      );
-    });
-
-    it('should return null and log error for unknown errors', async () => {
-      mockExecFile.mockRejectedValue(new Error('some unexpected error'));
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-      expect(result).toBeNull();
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        'Failed to fetch PR status via gh CLI',
-        expect.objectContaining({
-          errorType: 'unknown',
-        })
-      );
-    });
-
-    it('should return null and log warning when PR URL is invalid', async () => {
-      const result = await githubCLIService.getPRStatus('https://example.com/invalid');
-
-      expect(result).toBeNull();
-      expect(mockLoggerWarn).toHaveBeenCalledWith('Could not parse PR URL', {
-        prUrl: 'https://example.com/invalid',
-      });
-    });
   });
 
   describe('extractPRInfo', () => {
@@ -206,152 +106,6 @@ describe('GitHubCLIService', () => {
       const result = githubCLIService.extractPRInfo('https://example.com/invalid');
 
       expect(result).toBeNull();
-    });
-  });
-
-  describe('computePRState', () => {
-    it('should return MERGED when PR is merged', () => {
-      const status = {
-        number: 123,
-        state: 'MERGED' as const,
-        isDraft: false,
-        reviewDecision: null,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('MERGED');
-    });
-
-    it('should return CLOSED when PR is closed but not merged', () => {
-      const status = {
-        number: 123,
-        state: 'CLOSED' as const,
-        isDraft: false,
-        reviewDecision: null,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('CLOSED');
-    });
-
-    it('should return DRAFT when PR is a draft', () => {
-      const status = {
-        number: 123,
-        state: 'OPEN' as const,
-        isDraft: true,
-        reviewDecision: null,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('DRAFT');
-    });
-
-    it('should return APPROVED when PR is approved', () => {
-      const status = {
-        number: 123,
-        state: 'OPEN' as const,
-        isDraft: false,
-        reviewDecision: 'APPROVED' as const,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('APPROVED');
-    });
-
-    it('should return CHANGES_REQUESTED when changes are requested', () => {
-      const status = {
-        number: 123,
-        state: 'OPEN' as const,
-        isDraft: false,
-        reviewDecision: 'CHANGES_REQUESTED' as const,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('CHANGES_REQUESTED');
-    });
-
-    it('should return OPEN for open PR without special review state', () => {
-      const status = {
-        number: 123,
-        state: 'OPEN' as const,
-        isDraft: false,
-        reviewDecision: null,
-        statusCheckRollup: null,
-      };
-
-      const result = githubCLIService.computePRState(status);
-
-      expect(result).toBe('OPEN');
-    });
-  });
-
-  describe('computeCIStatus', () => {
-    it('should return UNKNOWN when statusCheckRollup is null', () => {
-      const result = githubCLIService.computeCIStatus(null);
-
-      expect(result).toBe('UNKNOWN');
-    });
-
-    it('should return SUCCESS when statusCheckRollup is empty', () => {
-      const result = githubCLIService.computeCIStatus([]);
-
-      expect(result).toBe('SUCCESS');
-    });
-
-    it('should return FAILURE when any check fails', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'FAILURE' },
-      ]);
-
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return PENDING when any check is pending', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'QUEUED' },
-      ]);
-
-      expect(result).toBe('PENDING');
-    });
-
-    it('should return SUCCESS when all checks pass', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-      ]);
-
-      expect(result).toBe('SUCCESS');
-    });
-
-    it('should treat SKIPPED as success when paired with successful checks', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'SKIPPED' },
-      ]);
-
-      expect(result).toBe('SUCCESS');
-    });
-
-    it('should treat CANCELLED as failure even when passing checks exist', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
-        { status: 'COMPLETED', conclusion: 'CANCELLED' },
-      ]);
-
-      expect(result).toBe('FAILURE');
     });
   });
 
@@ -422,74 +176,6 @@ describe('GitHubCLIService', () => {
   });
 
   describe('schema validation', () => {
-    describe('getPRStatus with malformed data', () => {
-      it('should return null and log error when response is missing required fields', async () => {
-        const malformedData = {
-          number: 123,
-        };
-
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(malformedData),
-          stderr: '',
-        });
-
-        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-        expect(result).toBeNull();
-        expect(mockLoggerError).toHaveBeenCalledWith(
-          'Invalid gh CLI JSON response',
-          expect.objectContaining({
-            context: 'getPRStatus',
-            validationErrors: expect.any(Array),
-          })
-        );
-      });
-
-      it('should return null and log error when response has wrong field types', async () => {
-        const malformedData = {
-          number: '123', // should be number
-          state: 'OPEN',
-          isDraft: 'false', // should be boolean
-          reviewDecision: null,
-          mergedAt: null,
-          updatedAt: '2024-01-01T00:00:00Z',
-          statusCheckRollup: null,
-        };
-
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(malformedData),
-          stderr: '',
-        });
-
-        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-        expect(result).toBeNull();
-        expect(mockLoggerError).toHaveBeenCalledWith(
-          'Invalid gh CLI JSON response',
-          expect.objectContaining({
-            context: 'getPRStatus',
-          })
-        );
-      });
-
-      it('should return null and log error when JSON is invalid', async () => {
-        mockExecFile.mockResolvedValue({
-          stdout: 'not valid json{',
-          stderr: '',
-        });
-
-        const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123');
-
-        expect(result).toBeNull();
-        expect(mockLoggerError).toHaveBeenCalledWith(
-          'Failed to parse gh CLI JSON',
-          expect.objectContaining({
-            context: 'getPRStatus',
-          })
-        );
-      });
-    });
-
     describe('listIssues with malformed data', () => {
       it('should throw error when array items are missing required fields', async () => {
         const malformedData = [
@@ -713,205 +399,6 @@ describe('GitHubCLIService', () => {
           'Invalid gh CLI response for getPRFullDetails'
         );
       });
-    });
-  });
-
-  describe('computeCIStatus edge cases', () => {
-    it('should return FAILURE for ERROR state in legacy format', () => {
-      const result = githubCLIService.computeCIStatus([{ state: 'ERROR' }]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return FAILURE for ACTION_REQUIRED conclusion', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'ACTION_REQUIRED' },
-      ]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return PENDING for IN_PROGRESS status', () => {
-      const result = githubCLIService.computeCIStatus([{ status: 'IN_PROGRESS' }]);
-      expect(result).toBe('PENDING');
-    });
-
-    it('should return PENDING for lowercase in_progress status', () => {
-      const result = githubCLIService.computeCIStatus([{ status: 'in_progress' }]);
-      expect(result).toBe('PENDING');
-    });
-
-    it('should return PENDING for EXPECTED legacy state', () => {
-      const result = githubCLIService.computeCIStatus([{ state: 'EXPECTED' }]);
-      expect(result).toBe('PENDING');
-    });
-
-    it('should prioritize FAILURE over PENDING when both exist', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'FAILURE' },
-        { status: 'IN_PROGRESS' },
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-      ]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return FAILURE when all checks are CANCELLED', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'CANCELLED' },
-        { status: 'COMPLETED', conclusion: 'CANCELLED' },
-      ]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return FAILURE for mixed SUCCESS/SKIPPED/NEUTRAL/CANCELLED checks', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'SKIPPED' },
-        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
-        { status: 'COMPLETED', conclusion: 'CANCELLED' },
-      ]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should prefer the latest run attempt for the same check identity', () => {
-      const result = githubCLIService.computeCIStatus([
-        {
-          name: 'ci',
-          workflowName: 'CI',
-          status: 'COMPLETED',
-          conclusion: 'FAILURE',
-          detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
-        },
-        {
-          name: 'ci',
-          workflowName: 'CI',
-          status: 'COMPLETED',
-          conclusion: 'SUCCESS',
-          detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/1',
-        },
-      ]);
-      expect(result).toBe('SUCCESS');
-    });
-
-    it('should return FAILURE for lowercase completed + failure values', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'completed', conclusion: 'failure' },
-      ]);
-      expect(result).toBe('FAILURE');
-    });
-
-    it('should return PENDING when status is QUEUED even if conclusion is set', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'QUEUED', conclusion: 'SUCCESS' },
-      ]);
-      expect(result).toBe('PENDING');
-    });
-
-    it('should use legacy state field when status is missing', () => {
-      const result = githubCLIService.computeCIStatus([{ state: 'SUCCESS' }]);
-      expect(result).toBe('SUCCESS');
-    });
-
-    it('should default to PENDING when no status or state fields are present', () => {
-      const result = githubCLIService.computeCIStatus([{}]);
-      expect(result).toBe('PENDING');
-    });
-
-    it('should return UNKNOWN for unrecognized non-pending non-failure states', () => {
-      const result = githubCLIService.computeCIStatus([
-        { status: 'COMPLETED', conclusion: 'STALE' },
-      ]);
-      // STALE is not SUCCESS/SKIPPED, nor FAILURE/ERROR/ACTION_REQUIRED
-      // So allSuccess check will fail, returning UNKNOWN
-      expect(result).toBe('UNKNOWN');
-    });
-
-    it('matches shared core classification for mixed check-rollup payloads', () => {
-      const cases = [
-        [{ status: 'COMPLETED', conclusion: 'FAILURE' }],
-        [{ state: 'ERROR' }],
-        [{ status: 'COMPLETED', conclusion: 'ACTION_REQUIRED' }],
-        [{ status: 'IN_PROGRESS' }],
-        [{ state: 'EXPECTED' }],
-        [{ status: 'COMPLETED', conclusion: 'NEUTRAL' }],
-        [{ status: 'COMPLETED', conclusion: 'CANCELLED' }],
-        [
-          { status: 'COMPLETED', conclusion: 'SUCCESS' },
-          { status: 'COMPLETED', conclusion: 'FAILURE' },
-          { status: 'IN_PROGRESS' },
-        ],
-      ];
-
-      for (const checks of cases) {
-        expect(githubCLIService.computeCIStatus(checks)).toBe(
-          deriveCiStatusFromCheckRollup(checks)
-        );
-      }
-    });
-  });
-
-  describe('computePRState edge cases', () => {
-    it('should return MERGED when state is MERGED', () => {
-      const status = {
-        number: 1,
-        state: 'MERGED' as const,
-        isDraft: false,
-        reviewDecision: null,
-        statusCheckRollup: null,
-      };
-      expect(githubCLIService.computePRState(status)).toBe('MERGED');
-    });
-
-    it('should return OPEN when reviewDecision is REVIEW_REQUIRED', () => {
-      const status = {
-        number: 1,
-        state: 'OPEN' as const,
-        isDraft: false,
-        reviewDecision: 'REVIEW_REQUIRED' as const,
-        statusCheckRollup: null,
-      };
-      expect(githubCLIService.computePRState(status)).toBe('OPEN');
-    });
-
-    it('should return DRAFT even when reviewDecision is APPROVED', () => {
-      const status = {
-        number: 1,
-        state: 'OPEN' as const,
-        isDraft: true,
-        reviewDecision: 'APPROVED' as const,
-        statusCheckRollup: null,
-      };
-      // Draft takes priority over review decision
-      expect(githubCLIService.computePRState(status)).toBe('DRAFT');
-    });
-  });
-
-  describe('getPRStatus rate limit handling', () => {
-    it('should re-throw rate limit errors for caller backoff', async () => {
-      const rateLimitError = new Error('HTTP 429 rate limit exceeded');
-      mockExecFile.mockRejectedValue(rateLimitError);
-
-      await expect(
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/123')
-      ).rejects.toThrow('HTTP 429 rate limit exceeded');
-    });
-  });
-
-  describe('reviewDecision schema edge cases', () => {
-    it('should normalize empty string reviewDecision to null', async () => {
-      const prData = {
-        number: 42,
-        state: 'OPEN',
-        isDraft: false,
-        reviewDecision: '',
-        statusCheckRollup: null,
-      };
-
-      mockExecFile.mockResolvedValue({
-        stdout: JSON.stringify(prData),
-        stderr: '',
-      });
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42');
-      expect(result?.reviewDecision).toBeNull();
     });
   });
 
@@ -1263,41 +750,6 @@ describe('GitHubCLIService', () => {
   });
 
   describe('higher-level service methods', () => {
-    it('fetches and computes PR state summary', async () => {
-      const getStatusSpy = vi.spyOn(githubCLIService, 'getPRStatus').mockResolvedValue({
-        number: 77,
-        state: 'OPEN',
-        isDraft: false,
-        reviewDecision: 'REVIEW_REQUIRED',
-        statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'SUCCESS' }],
-      });
-
-      const result = await githubCLIService.fetchAndComputePRState(
-        'https://github.com/o/r/pull/77'
-      );
-
-      expect(result).toEqual({
-        prState: 'OPEN',
-        prNumber: 77,
-        title: null,
-        baseRefName: null,
-        prHasMergeConflict: false,
-        prReviewState: 'REVIEW_REQUIRED',
-        prCiStatus: 'SUCCESS',
-        headRefName: null,
-      });
-
-      getStatusSpy.mockRestore();
-    });
-
-    it('returns null from fetchAndComputePRState when PR cannot be fetched', async () => {
-      const getStatusSpy = vi.spyOn(githubCLIService, 'getPRStatus').mockResolvedValue(null);
-      await expect(
-        githubCLIService.fetchAndComputePRState('https://github.com/o/r/pull/99')
-      ).resolves.toBeNull();
-      getStatusSpy.mockRestore();
-    });
-
     it('lists review requests via single GraphQL call', async () => {
       mockExecFile.mockResolvedValueOnce({
         stdout: JSON.stringify({
@@ -1687,6 +1139,7 @@ describe('GitHubCLIService', () => {
 
     it('deduplicates identical concurrent read calls', async () => {
       const mockPRData = {
+        ...coreMetadata,
         number: 42,
         state: 'OPEN',
         isDraft: false,
@@ -1701,8 +1154,8 @@ describe('GitHubCLIService', () => {
 
       // Fire two identical calls concurrently
       const [result1, result2] = await Promise.all([
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42'),
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42'),
+        githubCLIService.getPRStatusDetails('owner/repo', 42),
+        githubCLIService.getPRStatusDetails('owner/repo', 42),
       ]);
 
       // Both should succeed with same data
@@ -1715,6 +1168,7 @@ describe('GitHubCLIService', () => {
 
     it('does not deduplicate calls with different args', async () => {
       const makePRData = (num: number) => ({
+        ...coreMetadata,
         number: num,
         state: 'OPEN',
         isDraft: false,
@@ -1727,8 +1181,8 @@ describe('GitHubCLIService', () => {
         .mockResolvedValueOnce({ stdout: JSON.stringify(makePRData(2)), stderr: '' });
 
       const [result1, result2] = await Promise.all([
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/1'),
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/2'),
+        githubCLIService.getPRStatusDetails('owner/repo', 1),
+        githubCLIService.getPRStatusDetails('owner/repo', 2),
       ]);
 
       expect(result1?.number).toBe(1);
@@ -1738,6 +1192,7 @@ describe('GitHubCLIService', () => {
 
     it('removes inflight entry after resolution so subsequent calls spawn new process', async () => {
       const mockPRData = {
+        ...coreMetadata,
         number: 10,
         state: 'OPEN',
         isDraft: false,
@@ -1748,25 +1203,26 @@ describe('GitHubCLIService', () => {
       mockExecFile.mockResolvedValue({ stdout: JSON.stringify(mockPRData), stderr: '' });
 
       // First call
-      await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/10');
+      await githubCLIService.getPRStatusDetails('owner/repo', 10);
       // Second call (sequential, not concurrent)
-      await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/10');
+      await githubCLIService.getPRStatusDetails('owner/repo', 10);
 
       // Each sequential call should spawn its own process
       expect(mockExecFile).toHaveBeenCalledTimes(2);
     });
 
     it('shares rejection across deduplicated callers', async () => {
-      mockExecFile.mockRejectedValue(new Error('some unexpected error'));
-
-      const [result1, result2] = await Promise.all([
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/99'),
-        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/99'),
+      const error = new Error('some unexpected error');
+      mockExecFile.mockRejectedValue(error);
+      const results = await Promise.allSettled([
+        githubCLIService.getPRStatusDetails('owner/repo', 99),
+        githubCLIService.getPRStatusDetails('owner/repo', 99),
       ]);
 
-      // Both should get null (getPRStatus catches and returns null)
-      expect(result1).toBeNull();
-      expect(result2).toBeNull();
+      expect(results).toEqual([
+        { status: 'rejected', reason: error },
+        { status: 'rejected', reason: error },
+      ]);
 
       // Only one process should have been spawned
       expect(mockExecFile).toHaveBeenCalledTimes(1);
@@ -1784,26 +1240,6 @@ describe('GitHubCLIService', () => {
 
       // Both calls should spawn separate processes (no dedup for writes)
       expect(mockExecFile).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('error classification - unexpected EOF', () => {
-    it('classifies unexpected EOF as network_error, not unknown', async () => {
-      mockExecFile.mockRejectedValue(
-        new Error(
-          'Command failed: gh pr view 1364 --repo owner/repo\nPost "https://api.github.com/graphql": unexpected EOF\n'
-        )
-      );
-
-      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/1364');
-
-      expect(result).toBeNull();
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        'GitHub temporarily unreachable; will retry',
-        expect.objectContaining({
-          errorType: 'network_error',
-        })
-      );
     });
   });
 });

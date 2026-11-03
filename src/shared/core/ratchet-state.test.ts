@@ -93,7 +93,7 @@ describe('deriveRatchetState', () => {
   });
 
   it('reads the review decision, not PRState, so a draft cannot mask it', () => {
-    // `computePRState` returns DRAFT for a draft PR even when changes were
+    // PR observation returns DRAFT for a draft PR even when changes were
     // requested, which is why the raw `reviewDecision` is the input here.
     expect(
       deriveRatchetState(input({ prState: PRState.DRAFT, prReviewState: 'CHANGES_REQUESTED' }))
