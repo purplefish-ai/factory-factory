@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
-import type { Prisma, PrismaClient } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
+import type { PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -61,6 +62,14 @@ beforeAll(async () => {
     },
   });
   await db.prisma.workspace.update({ where: { id: 'w' }, data: { periodicTaskId: 'periodic' } });
+  await db.prisma.periodicTaskExecution.create({
+    data: {
+      id: 'history',
+      periodicTaskId: 'periodic',
+      status: 'RUNNING',
+      launchSnapshot: Prisma.DbNull,
+    },
+  });
   await db.prisma.codexAccount.create({
     data: { id: 'before-account', label: 'Before account', kind: 'MANAGED' },
   });
@@ -88,6 +97,15 @@ it('exports account metadata and session bindings from one snapshot while the ap
   try {
     await reachedAccounts.promise;
     await db.prisma.$transaction(async (tx) => {
+      await tx.periodicTaskExecution.update({
+        where: { id: 'history' },
+        data: {
+          status: 'COMPLETED',
+          launchSnapshot: Prisma.JsonNull,
+          errorMessage: 'Writer committed',
+          completedAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      });
       await tx.codexAccount.create({
         data: { id: 'after-account', label: 'After', kind: 'MANAGED' },
       });
@@ -115,6 +133,23 @@ it('exports account metadata and session bindings from one snapshot while the ap
   }
   const exported = exportDataSchema.parse(await pendingExport);
   expect(exported.meta.schemaVersion).toBe(8);
+  expect(exported.data).toHaveProperty('recovery.periodicHistory.executions', [
+    expect.objectContaining({
+      id: 'history',
+      status: 'RUNNING',
+      launchSnapshot: null,
+      errorMessage: null,
+      completedAt: null,
+    }),
+  ]);
+  expect(exported.data).toHaveProperty('recovery.periodicHistory.jsonStorage', []);
+  expect(
+    await db.prisma.periodicTaskExecution.findUniqueOrThrow({ where: { id: 'history' } })
+  ).toMatchObject({ status: 'COMPLETED', errorMessage: 'Writer committed' });
+  expect(
+    await db.prisma
+      .$queryRaw`SELECT json_type(launchSnapshot) AS kind FROM PeriodicTaskExecution WHERE id = 'history'`
+  ).toEqual([{ kind: 'null' }]);
   expect(exported.data.projects[0]?.name).toBe('Before');
   expect(exported.data.workspaces[0]).toHaveProperty('periodicTaskId', 'periodic');
   expect(await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'w' } })).toHaveProperty(

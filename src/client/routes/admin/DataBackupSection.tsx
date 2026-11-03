@@ -59,12 +59,13 @@ export function DataBackupSection() {
         </div>
         <p className="text-sm text-muted-foreground">
           Partial export includes projects, workspaces, session metadata, preferences and periodic
-          configuration and workspace links to newly imported disabled tasks. Periodic execution
-          history, repository and worktree files, provider history bytes, archives, mail,
-          automation, secrets, native account homes and live runtime authority are excluded.
-          Provider-session identities may remain metadata. Workspace.creationMetadata,
-          WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata
-          preserve SQL NULL versus top-level JSON null.
+          configuration, workspace links to newly imported disabled tasks and retained execution
+          history. RUNNING executions restore FAILED as historical only, with unknown provider
+          outcome and no resume authority. Repository and worktree files, provider history bytes,
+          archives, mail, automation, secrets, native account homes and live runtime authority are
+          excluded. Provider-session identities may remain metadata. Workspace.creationMetadata,
+          WorkspacePR.observation on actual included PR rows, AgentSession.providerMetadata and
+          PeriodicTaskExecution.launchSnapshot preserve SQL NULL versus top-level JSON null.
         </p>
       </CardContent>
     </Card>

@@ -482,7 +482,8 @@ const version8Schema = z
     }
     const periodic =
       backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
-      backup.meta.recovery.profile === 'base-json-periodic-links-1';
+      backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
+      backup.meta.recovery.profile === 'base-json-periodic-history-1';
     const config = backup.data.recovery.periodicConfig;
     if (
       periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
@@ -490,6 +491,40 @@ const version8Schema = z
     ) {
       ctx.addIssue({ code: 'custom', message: 'Periodic profile sections do not match' });
     }
+  })
+  .superRefine((backup, ctx) => {
+    const config = backup.data.recovery.periodicConfig;
+    const covered = backup.meta.recovery.profile !== 'base-1';
+    const section = backup.data.recovery.baseJson;
+    const history = backup.data.recovery.periodicHistory;
+    const hasHistory = backup.meta.recovery.profile === 'base-json-periodic-history-1';
+    if (
+      hasHistory !== Object.hasOwn(backup.data.recovery, 'periodicHistory') ||
+      (hasHistory && !history)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'History profile sections do not match' });
+    }
+    const tasks = new Map(config?.tasks.map((task) => [task.id, task]));
+    const workspaces = new Set(backup.data.workspaces.map((row) => row.id));
+    history?.executions.forEach((row, index) => {
+      const task = tasks.get(row.periodicTaskId);
+      for (const [field, valid] of [
+        ['periodicTaskId', !!task],
+        ['workspaceId', row.workspaceId === null || workspaces.has(row.workspaceId)],
+        [
+          'launchSnapshot',
+          row.launchSnapshot === null || row.launchSnapshot.projectId === task?.projectId,
+        ],
+      ] as const) {
+        if (!valid) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Execution source dependency does not match backup',
+            path: ['data', 'recovery', 'periodicHistory', 'executions', index, field],
+          });
+        }
+      }
+    });
     const projects = new Set(backup.data.projects.map((project) => project.id));
     for (const [index, task] of (config?.tasks ?? []).entries()) {
       if (!projects.has(task.projectId)) {
@@ -506,7 +541,8 @@ const version8Schema = z
         section,
         backup.meta.recovery.profile === 'base-json-1' ||
           backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-links-1',
+          backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
+          backup.meta.recovery.profile === 'base-json-periodic-history-1',
         ctx
       );
     }
@@ -536,7 +572,7 @@ const periodicLinksVersion8Schema = version8Schema
   .safeExtend({
     meta: version8Schema.shape.meta.extend({
       recovery: recoveryMetadataSchema.safeExtend({
-        profile: z.literal('base-json-periodic-links-1'),
+        profile: z.enum(['base-json-periodic-links-1', 'base-json-periodic-history-1']),
       }),
     }),
     data: fullVersion8Schema.shape.data.extend({

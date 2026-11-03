@@ -12,6 +12,14 @@ import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
+vi.mock('@/backend/services/periodic-task', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/periodic-task')>()),
+  exportPeriodicHistoryRecovery: vi.fn(async () => ({
+    version: 1,
+    executions: [],
+    jsonStorage: [],
+  })),
+}));
 vi.mock('@/backend/services/codex-accounts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/backend/services/codex-accounts')>()),
   exportCodexAccountMetadata: vi.fn(async () => [
@@ -31,6 +39,8 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  periodicTaskExecution: { findMany: vi.fn().mockResolvedValue([]) },
+  $queryRaw: vi.fn().mockResolvedValue([]),
   periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
   workspacePREvent: {
     updateMany: vi.fn().mockResolvedValue({ count: 0 }),

@@ -1,5 +1,8 @@
 import * as recovery from '@/backend/services/periodic-task/resources/periodic-recovery';
-import type { PeriodicConfigRecovery } from '@/shared/schemas/periodic-recovery.schema';
+import type {
+  PeriodicConfigRecovery,
+  PeriodicHistoryRecovery,
+} from '@/shared/schemas/periodic-recovery.schema';
 import type { Prisma } from '@prisma-gen/client';
 
 export function exportPeriodicConfigRecovery(tx: Prisma.TransactionClient) {
@@ -17,4 +20,24 @@ export function restorePeriodicConfigRecovery(
   occupiedIds: ReadonlySet<string>
 ) {
   return recovery.restorePeriodicConfigRecovery(tx, section, acceptedProjectIds, occupiedIds);
+}
+
+export function exportPeriodicHistoryRecovery(tx: Prisma.TransactionClient) {
+  return recovery.exportPeriodicHistoryRecovery(tx);
+}
+export function planPeriodicHistoryRecovery(
+  tx: Prisma.TransactionClient,
+  section: PeriodicHistoryRecovery,
+  plannedTaskIds: ReadonlySet<string>,
+  plannedWorkspaceIds: ReadonlySet<string>
+) {
+  return recovery.planPeriodicHistoryRecovery(tx, section, plannedTaskIds, plannedWorkspaceIds);
+}
+export function restorePeriodicHistoryRecovery(
+  tx: Prisma.TransactionClient,
+  plan: Awaited<ReturnType<typeof recovery.planPeriodicHistoryRecovery>>,
+  createdTaskIds: ReadonlySet<string>,
+  createdWorkspaceIds: ReadonlySet<string>
+) {
+  return recovery.restorePeriodicHistoryRecovery(tx, plan, createdTaskIds, createdWorkspaceIds);
 }

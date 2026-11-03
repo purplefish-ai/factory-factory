@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
@@ -11,12 +12,15 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { exportDataSchema, exportedProjectSchema } from '@/shared/schemas/export-data.schema';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import type { Prisma, PrismaClient } from '@prisma-gen/client';
 import { WorkspaceCreationService } from './creation.service';
 
 const state = vi.hoisted(() => ({
   prisma: undefined as PrismaClient | undefined,
+  historyPlanned: false,
+  removeActualHistoryWorkspace: false,
   occupiedIds: undefined as ReadonlySet<string> | undefined,
   firstWrite: undefined as
     | ((ids: ReadonlySet<string>, occupied: ReadonlySet<string> | undefined) => void)
@@ -45,6 +49,21 @@ vi.mock('@/backend/services/periodic-task', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/backend/services/periodic-task')>();
   return {
     ...original,
+    planPeriodicHistoryRecovery: async (
+      ...args: Parameters<typeof original.planPeriodicHistoryRecovery>
+    ) => {
+      const plan = await original.planPeriodicHistoryRecovery(...args);
+      state.historyPlanned = true;
+      return plan;
+    },
+    restorePeriodicHistoryRecovery: async (
+      ...args: Parameters<typeof original.restorePeriodicHistoryRecovery>
+    ) => {
+      if (state.removeActualHistoryWorkspace) {
+        args[3] = new Set();
+      }
+      return await original.restorePeriodicHistoryRecovery(...args);
+    },
     readPeriodicConfigRecoveryIds: async (
       ...args: Parameters<typeof original.readPeriodicConfigRecoveryIds>
     ) => {
@@ -91,11 +110,16 @@ beforeEach(async () => {
   await clearIntegrationDatabase(source.prisma);
   await clearIntegrationDatabase(target.prisma);
   state.prisma = source.prisma;
+  state.historyPlanned = false;
+  state.removeActualHistoryWorkspace = false;
   state.occupiedIds = undefined;
   state.firstWrite = undefined;
   state.afterRestore = undefined;
 });
-afterEach(() => vi.useRealTimers());
+afterEach(async () => {
+  await periodicTaskService.stop();
+  vi.useRealTimers();
+});
 afterAll(async () => {
   await destroyIntegrationDatabase(source);
   await destroyIntegrationDatabase(target);
@@ -607,3 +631,241 @@ it.each(['section', 'capability'] as const)(
     });
   }
 );
+
+it('roundtrips a configured canonical dispatch to an independently owner-created workspace project and current task', async () => {
+  for (const id of ['a', 'b']) {
+    await source.prisma.project.create({
+      data: { id, name: id, slug: id, repoPath: `/${id}`, worktreeBasePath: `/w/${id}` },
+    });
+  }
+  const a = await periodicTaskService.create({
+    projectId: 'a',
+    name: 'A',
+    prompt: 'A',
+    cadence: 'DAILY',
+  });
+  const c = await periodicTaskService.create({
+    projectId: 'a',
+    name: 'C',
+    prompt: 'C',
+    cadence: 'DAILY',
+  });
+  await periodicTaskService.toggleEnabled(c.id, false);
+  periodicTaskService.configure({
+    timerDispatch: {
+      dispatchTimerEvent: async () => {
+        const workspace = await service.create({
+          type: 'PERIODIC_TASK',
+          projectId: 'b',
+          periodicTaskId: c.id,
+          name: 'Independent',
+          initialPrompt: 'Historical A, current C',
+          ratchetEnabled: false,
+        });
+        return { workspaceId: workspace.id };
+      },
+    },
+    status: { getWorkspaceStatus: async () => null },
+  });
+  periodicTaskService.start();
+  await jobRunner.waitForCurrentRun('periodic-task-poll');
+  await periodicTaskService.stop();
+  const execution = await source.prisma.periodicTaskExecution.findFirstOrThrow({
+    where: { periodicTaskId: a.id },
+  });
+  expect(execution.workspaceId).not.toBeNull();
+  const workspace = await source.prisma.workspace.findUniqueOrThrow({
+    where: { id: execution.workspaceId! },
+  });
+  expect(workspace).toMatchObject({ projectId: 'b', periodicTaskId: c.id });
+  const backup = await dataBackupService.exportData('independent-history');
+  state.prisma = target.prisma;
+  const result = await dataBackupService.importData(backup);
+  expect(result.recovery.periodicHistory).toMatchObject({ imported: 1, skipped: 0 });
+  expect(
+    await target.prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } })
+  ).toMatchObject({ projectId: 'b', periodicTaskId: c.id });
+  expect(
+    await target.prisma.periodicTaskExecution.findUniqueOrThrow({ where: { id: execution.id } })
+  ).toMatchObject({
+    periodicTaskId: a.id,
+    workspaceId: workspace.id,
+    launchSnapshot: execution.launchSnapshot,
+    status: 'FAILED',
+  });
+});
+
+it.each([
+  'periodicTaskId',
+  'workspaceId',
+  'launchSnapshot',
+  'canonical-project',
+  'undefined',
+  'unknown',
+  'duplicate',
+  'marker',
+] as const)('rejects raw history %s before private writer discovery', async (kind) => {
+  const file = structuredClone(history);
+  const row = file.data.recovery.periodicHistory.executions[0]!;
+  if (kind === 'periodicTaskId' || kind === 'workspaceId') {
+    Object.assign(row, { [kind]: 'absent' });
+  }
+  if (kind === 'launchSnapshot') {
+    Object.assign(row, { launchSnapshot: {} });
+  }
+  if (kind === 'canonical-project') {
+    Object.assign(row, {
+      launchSnapshot: {
+        version: 1,
+        projectId: 'wrong-project',
+        name: 'Historical name',
+        prompt: 'Historical prompt',
+        cadence: 'DAILY',
+        scheduledTime: null,
+        timezone: null,
+        scheduledDayOfMonth: null,
+        dueAt: row.startedAt,
+      },
+    });
+  }
+  if (kind === 'undefined') {
+    Object.assign(row, { startedAt: undefined });
+  }
+  if (kind === 'unknown') {
+    Object.assign(row, { future: undefined });
+  }
+  if (kind === 'duplicate') {
+    file.data.recovery.periodicHistory.executions.push({ ...row });
+  }
+  if (kind === 'marker') {
+    Object.assign(file.data.recovery.periodicHistory, {
+      jsonStorage: [
+        { model: 'PeriodicTaskExecution', identity: ['absent'], field: 'launchSnapshot' },
+      ],
+    });
+  }
+  await expectBackupWriterUnopened(async () => {
+    await expect(
+      Reflect.apply(dataBackupService.importData, dataBackupService, [file])
+    ).rejects.toSatisfy((error: unknown) => {
+      if (!(error instanceof z.ZodError)) {
+        return false;
+      }
+      const issues = error.issues.flatMap((issue) =>
+        issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+      );
+      if (kind === 'canonical-project') {
+        expect(issues).toContainEqual({
+          code: 'custom',
+          message: 'Execution source dependency does not match backup',
+          path: ['data', 'recovery', 'periodicHistory', 'executions', 0, 'launchSnapshot'],
+        });
+      }
+      expect(
+        issues.some((issue) => issue.path.slice(0, 3).join('.') === 'data.recovery.periodicHistory')
+      ).toBe(true);
+      return true;
+    });
+  });
+});
+
+it('imports mixed history against more than 1000 occupied identities with exclusive reasons and preserves local bytes', async () => {
+  const file = structuredClone(history);
+  const row = file.data.recovery.periodicHistory.executions[0]!;
+  const workspace = file.data.workspaces[0]!;
+  const localProject = await target.prisma.project.create({
+    data: {
+      id: 'local',
+      name: 'Local',
+      slug: 'local',
+      repoPath: '/local',
+      worktreeBasePath: '/local/w',
+    },
+  });
+  await target.prisma.periodicTask.create({
+    data: {
+      id: 'local-task',
+      projectId: localProject.id,
+      name: 'Local',
+      prompt: 'Local',
+      cadence: 'DAILY',
+      nextRunAt: new Date(),
+    },
+  });
+  await target.prisma.workspace.create({
+    data: { id: workspace.id, name: 'Local slot', projectId: 'local' },
+  });
+  await target.prisma.periodicTaskExecution.createMany({
+    data: Array.from({ length: 1002 }, (_, i) => ({
+      id: `occupied-${i}`,
+      periodicTaskId: 'local-task',
+      status: 'COMPLETED',
+      workspaceId: i === 0 ? workspace.id : null,
+    })),
+  });
+  const before = await target.prisma.periodicTaskExecution.findMany({ orderBy: { id: 'asc' } });
+  Object.assign(file.data.recovery.periodicHistory, {
+    executions: [
+      { ...row, id: 'occupied-1001', workspaceId: workspace.id },
+      { ...row, id: 'conflict', workspaceId: workspace.id },
+      ...Array.from({ length: 1002 }, (_, i) => ({ ...row, id: `new-${i}` })),
+    ],
+  });
+  // Duplicate source slots are forbidden independently; the existing-ID row has no slot.
+  file.data.recovery.periodicHistory.executions[0]!.workspaceId = null;
+  file.data.projects.push({ ...file.data.projects[0]!, id: 'local', slug: 'local' });
+  file.data.recovery.periodicConfig.tasks.push({
+    ...file.data.recovery.periodicConfig.tasks[0]!,
+    id: 'unavailable-task',
+    projectId: 'local',
+  });
+  file.data.recovery.periodicHistory.executions.push({
+    ...row,
+    id: 'missing-dependency',
+    periodicTaskId: 'unavailable-task',
+  });
+  state.firstWrite = () => expect(state.historyPlanned).toBe(true);
+  state.prisma = target.prisma;
+  const result = await dataBackupService.importData(exportDataSchema.parse(file));
+  expect(result.recovery.periodicHistory).toMatchObject({
+    imported: 1002,
+    skipped: 3,
+    sourceRunning: 1005,
+    restoredHistoricalFailed: 1002,
+    restoredSettled: 0,
+    reasons: { EXISTING_IDENTITY: 1, CONFLICTING_IDENTITY_OR_PARENT: 1, INCOMPLETE_DEPENDENCY: 1 },
+  });
+  expect(
+    await target.prisma.periodicTaskExecution.findMany({
+      where: { periodicTaskId: 'local-task' },
+      orderBy: { id: 'asc' },
+    })
+  ).toEqual(before);
+  const repeat = await dataBackupService.importData(exportDataSchema.parse(file));
+  expect(repeat.recovery.periodicHistory).toMatchObject({
+    imported: 0,
+    skipped: 1005,
+    restoredHistoricalFailed: 0,
+    reasons: {
+      EXISTING_IDENTITY: 1003,
+      CONFLICTING_IDENTITY_OR_PARENT: 1,
+      INCOMPLETE_DEPENDENCY: 1,
+    },
+  });
+});
+
+it('aborts the entire public import when actual created history owners disagree with the prewrite plan', async () => {
+  const file = structuredClone(history);
+  Object.assign(file.data.recovery.periodicHistory.executions[0]!, {
+    workspaceId: file.data.workspaces[0]!.id,
+  });
+  state.prisma = target.prisma;
+  state.removeActualHistoryWorkspace = true;
+  await expect(dataBackupService.importData(exportDataSchema.parse(file))).rejects.toThrow(
+    'Periodic history dependencies disagree with admission'
+  );
+  expect(await target.prisma.project.count()).toBe(0);
+  expect(await target.prisma.periodicTask.count()).toBe(0);
+  expect(await target.prisma.workspace.count()).toBe(0);
+  expect(await target.prisma.periodicTaskExecution.count()).toBe(0);
+});

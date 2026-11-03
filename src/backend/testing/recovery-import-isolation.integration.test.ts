@@ -5,7 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
-import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -170,7 +170,20 @@ it('commits the existing base graph and account mapping through the private tran
   expect(result).toEqual({
     recovery: {
       status: 'PARTIAL',
-      manifest: links.meta.recovery,
+      manifest: history.meta.recovery,
+      periodicHistory: {
+        model: 'PeriodicTaskExecution',
+        imported: 0,
+        skipped: 0,
+        sourceRunning: 0,
+        restoredHistoricalFailed: 0,
+        restoredSettled: 0,
+        reasons: {
+          EXISTING_IDENTITY: 0,
+          CONFLICTING_IDENTITY_OR_PARENT: 0,
+          INCOMPLETE_DEPENDENCY: 0,
+        },
+      },
       periodicConfig: {
         model: 'PeriodicTask',
         imported: 0,

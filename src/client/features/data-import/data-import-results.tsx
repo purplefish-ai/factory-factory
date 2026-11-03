@@ -37,6 +37,7 @@ export function DataImportResultsProvider({
   const active = pending[0];
   const runtime = active?.inertTransforms;
   const periodic = active?.recovery.periodicConfig;
+  const history = active?.recovery.periodicHistory;
   const links = active?.recovery.periodicWorkspaceLinks;
   return (
     <ImportResultsContext.Provider
@@ -81,6 +82,29 @@ export function DataImportResultsProvider({
                       : 'none'}
                 </p>
               </div>
+              {history && (
+                <section aria-label="Periodic execution history recovery">
+                  <p>
+                    Periodic executions: {history.imported} imported, {history.skipped} skipped
+                  </p>
+                  <p>
+                    RUNNING in entire source section: {history.sourceRunning}; restored FAILED as
+                    historical only: {history.restoredHistoricalFailed}; restored settled:{' '}
+                    {history.restoredSettled}
+                  </p>
+                  <p>
+                    Provider outcome is unknown for historical RUNNING executions. Imported
+                    executions will not be resumed.
+                  </p>
+                  <p>
+                    Skips by reason: existing execution ID: {history.reasons.EXISTING_IDENTITY}
+                    {'; '}
+                    occupied workspace: {history.reasons.CONFLICTING_IDENTITY_OR_PARENT}
+                    {'; '} dependency not created by this import:{' '}
+                    {history.reasons.INCOMPLETE_DEPENDENCY}
+                  </p>
+                </section>
+              )}
               {periodic && (
                 <section aria-label="Periodic configuration recovery">
                   <p>

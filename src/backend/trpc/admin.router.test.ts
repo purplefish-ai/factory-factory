@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 
 const mockExportData = vi.hoisted(() => vi.fn());
 const mockImportData = vi.hoisted(() => vi.fn());
@@ -569,3 +570,37 @@ describe('orphaned worktree removal trust boundary', () => {
     });
   });
 });
+
+it.each(['periodicTaskId', 'workspaceId', 'launchSnapshot', 'undefined', 'marker'] as const)(
+  'rejects raw periodic history %s at the router before import service discovery',
+  async (kind) => {
+    const file = structuredClone(history);
+    const row = file.data.recovery.periodicHistory.executions[0]!;
+    if (kind === 'periodicTaskId' || kind === 'workspaceId') {
+      Object.assign(row, { [kind]: 'absent' });
+    }
+    if (kind === 'launchSnapshot') {
+      Object.assign(row, { launchSnapshot: {} });
+    }
+    if (kind === 'undefined') {
+      Object.assign(row, { startedAt: undefined });
+    }
+    if (kind === 'marker') {
+      Object.assign(file.data.recovery.periodicHistory, {
+        jsonStorage: [
+          { model: 'PeriodicTaskExecution', identity: ['absent'], field: 'launchSnapshot' },
+        ],
+      });
+    }
+    const { caller } = createCaller({
+      remoteAddress: '127.0.0.1',
+      isLocal: true,
+      origin: 'http://localhost:3000',
+    });
+    mockImportData.mockClear();
+    await expect(Reflect.apply(caller.importData, caller, [file])).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(mockImportData).not.toHaveBeenCalled();
+  }
+);

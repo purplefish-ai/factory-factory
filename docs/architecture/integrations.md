@@ -135,6 +135,19 @@ from rows actually restored disabled. Periodic execution history is excluded.
 Import and startup do not reserve or dispatch these tasks; enabling one later
 uses the ordinary periodic task scheduling policy.
 
+Current schema-8 `base-json-periodic-history-1` backups additionally retain all
+execution scalar fields and canonical launch snapshots. Section-local markers
+preserve SQL NULL versus stored JSON null for `launchSnapshot`. Restore accepts
+only file-owned tasks and workspaces newly created by that import; conflicting
+execution IDs, occupied workspace slots and unavailable dependencies are counted
+separately. Historical workspace links can differ from current task
+associations. RUNNING source rows become FAILED with an explicit historical-only
+explanation and unknown provider outcome; completion timestamps are never
+invented. Imported history grants no resume, retry, monitoring or scheduling
+authority. Terminal rows remain unchanged; later explicit enable uses ordinary
+scheduling to create new executions. Five earlier schema-8 profiles retain their
+original contracts.
+
 <a id="periodic-tasks"></a>
 
 Agents are recurring instructions that create a fresh workspace on a configured
