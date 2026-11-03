@@ -3,7 +3,7 @@ import {
   deriveCiStatusFromCheckRollup,
   deriveCiVisualStateFromChecks,
   deriveCiVisualStateFromPrCiStatus,
-} from './ci-status';
+} from '@/shared/core';
 
 describe('ci-status', () => {
   it('derives from workspace pr ci status enum', () => {

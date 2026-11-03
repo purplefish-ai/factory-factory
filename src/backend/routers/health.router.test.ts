@@ -20,7 +20,7 @@ describe('healthRouter', () => {
     app = express();
     const appContext = unsafeCoerce<AppContext>({
       services: {
-        healthService: {
+        settingsHealthService: {
           checkDatabaseConnection: () => mockQueryRaw(),
         },
         configService: {

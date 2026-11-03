@@ -11,11 +11,10 @@ import {
   toWorkspaceDerivedStateInput,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
-import { KanbanColumn } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus, KanbanColumn } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { AttachmentSchema } from '@/shared/websocket';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { toTRPCError } from './application-error-mapper';
 import { type Context, mergeRouters, publicProcedure, router, trustedLocalProcedure } from './trpc';

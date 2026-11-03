@@ -6,7 +6,7 @@ import {
   deriveCiVisualStateFromChecks,
   getCiVisualLabel,
   reduceCheckRollupToLatestRunAttempts,
-} from '@/shared/ci-status';
+} from '@/shared/core';
 import type { GitHubStatusCheck, ReviewDecision } from '@/shared/github-types';
 
 export type CIStatus = CiVisualState;

@@ -15,7 +15,6 @@ import {
   type EventCollectorOrchestrator,
 } from './orchestration/event-collector.orchestrator';
 import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
-import { healthService } from './orchestration/health.service';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
 import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { reconciliationService } from './orchestration/reconciliation.service';
@@ -115,7 +114,7 @@ import {
   generateWorkspaceMetadata,
   sessionInterceptorBridge,
 } from './services/session';
-import { userSettingsService } from './services/settings';
+import { settingsHealthService, userSettingsService } from './services/settings';
 import { terminalService, terminalSessionService } from './services/terminal';
 import {
   computePendingRequestType,
@@ -186,7 +185,7 @@ export type ApplicationServices = BridgeServices & {
   getLogFilePath: typeof getLogFilePath;
   getQuickAction: typeof getQuickAction;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
-  healthService: typeof healthService;
+  settingsHealthService: typeof settingsHealthService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   enqueueWorkspaceInitializationTask: typeof enqueueWorkspaceInitializationTask;
   captureWorkspaceRetryGuard: typeof captureWorkspaceRetryGuard;
@@ -359,7 +358,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     getLogFilePath,
     getQuickAction,
     getWorkspaceLinearContext,
-    healthService,
+    settingsHealthService,
     enqueueWorkspaceInitializationTask,
     captureWorkspaceRetryGuard,
     readWorkspaceRetryAvailability,

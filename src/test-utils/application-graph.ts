@@ -45,7 +45,6 @@ vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
     removeWorkspace: vi.fn(),
   })),
 }));
-vi.mock('@/backend/orchestration/health.service', () => ({ healthService: {} }));
 vi.mock('@/backend/orchestration/linear-config.helper', () => ({
   getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
 }));
@@ -243,7 +242,10 @@ vi.mock('@/backend/services/session', async () => {
     voiceNarrationService: {},
   };
 });
-vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
+vi.mock('@/backend/services/settings', () => ({
+  settingsHealthService: {},
+  userSettingsService: {},
+}));
 vi.mock('@/backend/services/terminal', () => ({
   terminalService: {},
   terminalSessionService: {},
@@ -292,7 +294,6 @@ import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
 } from '@/backend/orchestration/event-collector.orchestrator';
-import { healthService } from '@/backend/orchestration/health.service';
 import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
 import { schedulerService } from '@/backend/orchestration/scheduler.service';
@@ -370,7 +371,7 @@ import {
   sessionService,
   voiceNarrationService,
 } from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
+import { settingsHealthService, userSettingsService } from '@/backend/services/settings';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
@@ -527,7 +528,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     gitCloneService,
     gitOpsService,
     githubCLIService,
-    healthService,
+    settingsHealthService,
     initializeWorkspaceWorktree,
     enqueueWorkspaceInitializationTask,
     captureWorkspaceRetryGuard,

@@ -41,7 +41,7 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';

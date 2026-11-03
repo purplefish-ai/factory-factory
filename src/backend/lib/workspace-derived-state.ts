@@ -1,9 +1,15 @@
-import type { CIStatus, KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import type {
+  CIStatus,
+  KanbanColumn,
+  PRState,
+  RatchetState,
+  WorkspaceStatus,
+  WorkspaceSidebarStatus,
+} from '@/shared/core';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import type { PRMonitoringProjection } from '@/shared/pr-monitoring';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspacePRSummary } from '@/shared/workspace-pr-summary';
-import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
   deriveWorkspaceStatusReason,
   type WorkspacePendingRequestType,

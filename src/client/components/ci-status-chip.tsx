@@ -5,12 +5,12 @@ import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { PRState } from '@/shared/core';
 import {
+  type PRState,
   getWorkspaceCiLabel,
   getWorkspaceCiTooltip,
   type WorkspaceSidebarCiState,
-} from '@/shared/workspace-sidebar-status';
+} from '@/shared/core';
 
 interface CiStatusChipProps {
   ciState: WorkspaceSidebarCiState;

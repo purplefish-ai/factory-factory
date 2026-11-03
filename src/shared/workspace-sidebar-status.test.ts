@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveWorkspaceSidebarStatus, getWorkspaceCiTooltip } from './workspace-sidebar-status';
+import { deriveWorkspaceSidebarStatus, getWorkspaceCiTooltip } from '@/shared/core';
 
 describe('workspace-sidebar-status', () => {
   it('retains a legacy PR when its collection summary has not caught up', () => {

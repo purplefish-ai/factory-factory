@@ -1,5 +1,11 @@
 # Workspace State
 
+CI and sidebar status helpers and types have one internal import surface:
+`@/shared/core`. Their dependency-free implementations live in
+`src/shared/core/`; sibling core modules may import those files directly. These
+source paths are internal application code, not supported package imports. The
+published package exposes the `ff` CLI, not a shared-status SDK.
+
 ## Conversation names and summaries
 
 New prompt-created workspaces mark their initial name as generated. A disposable
