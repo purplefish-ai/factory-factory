@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PairedToolCall } from '@/lib/chat-protocol';
-import { getToolGroupLabel } from './tool-activity-summary';
+import { getToolActivityLabel, getToolGroupLabel } from './tool-activity-summary';
 
 function call(name: string, input: Record<string, unknown>): PairedToolCall {
   return { id: 'tool', name, input, status: 'success' };
@@ -101,5 +101,30 @@ describe('compact activity summaries', () => {
     expect(getToolGroupLabel([command, { ...command, status: 'pending' }])).toBe(
       'Running commands'
     );
+  });
+});
+
+describe('MCP and file listing summaries', () => {
+  it('counts calls by service across provider formats', () => {
+    expect(
+      getToolGroupLabel([
+        call('Bash', { command: 'git status' }),
+        call('mcp.codex_apps.github.fetch_pr_comments', {}),
+        call('mcp__github__list_pull_request_review_threads', {}),
+        call('mcp__my_server__fetch_status', {}),
+        call('webSearch', {}),
+      ])
+    ).toBe('Ran git status, GitHub ×2, My server, searched');
+  });
+
+  it('does not mistake MCP command parameters for a local shell command', () => {
+    expect(getToolGroupLabel([call('mcp__remote__run_command', { command: 'ls' })])).toBe('Remote');
+  });
+
+  it('keeps file listing targets inside details', () => {
+    const listing = call('List files in task workspace/src', {});
+    expect(getToolActivityLabel(listing)).toBe('List files');
+    expect(getToolGroupLabel([listing])).toBe('Listed files');
+    expect(getToolGroupLabel([{ ...listing, status: 'pending' }])).toBe('Listing files');
   });
 });

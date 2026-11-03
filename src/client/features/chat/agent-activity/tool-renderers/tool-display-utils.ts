@@ -1,4 +1,5 @@
 import { isCodexFileChangeToolName } from './file-change-parser';
+import { getMcpToolDisplay, isListFilesToolName } from './mcp-tool-display';
 import { isWebSearchToolName, parseWebSearchToolInput } from './web-search-parser';
 
 const SUMMARY_TOOL_NAME_MAX = 24;
@@ -68,7 +69,7 @@ export function extractCommandPreviewFromInput(input: Record<string, unknown>): 
   return null;
 }
 
-export function getDisplayToolName(
+function getBuiltinDisplayToolName(
   name: string,
   input: Record<string, unknown>,
   options: { summary?: boolean } = {}
@@ -113,4 +114,19 @@ export function getDisplayToolName(
     normalizedName,
     options.summary ? SUMMARY_TOOL_NAME_MAX : DETAIL_TOOL_NAME_MAX
   );
+}
+
+export function getDisplayToolName(
+  name: string,
+  input: Record<string, unknown>,
+  options: { summary?: boolean } = {}
+): string {
+  const mcp = getMcpToolDisplay(name);
+  if (mcp) {
+    return options.summary ? mcp.service : `${mcp.action} · ${mcp.service}`;
+  }
+  if (isListFilesToolName(name)) {
+    return 'List files';
+  }
+  return getBuiltinDisplayToolName(name, input, options);
 }
