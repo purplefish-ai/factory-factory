@@ -108,7 +108,7 @@ it('round trips every PR, pause and frozen delivery without treating legacy hash
     },
   });
   const backup = exportDataSchema.parse(await dataBackupService.exportData('test'));
-  expect(backup.meta.schemaVersion).toBe(7);
+  expect(backup.meta.schemaVersion).toBe(8);
   await db.prisma.workspace.delete({ where: { id: 'w' } });
   await dataBackupService.importData(backup);
   expect(await db.prisma.workspacePR.findMany({ where: { workspaceId: 'w' } })).toHaveLength(2);

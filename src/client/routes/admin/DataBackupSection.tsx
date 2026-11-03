@@ -39,7 +39,7 @@ export function DataBackupSection() {
           Data Backup
         </CardTitle>
         <CardDescription>
-          Export and import database data for backup or migration purposes
+          Export and import partial logical metadata for backup or migration
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -58,8 +58,10 @@ export function DataBackupSection() {
           <DataImportButton variant="outline" className="w-full sm:w-auto" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Export includes projects, workspaces, session metadata, and user preferences. Caches will
-          be rebuilt automatically after import.
+          Partial export includes projects, workspaces, session metadata and preferences. Repository
+          and worktree files, provider history bytes, archives, mail, automation, secrets, native
+          account homes and live runtime authority are excluded. Provider-session identities may
+          remain metadata. Physical nullable-JSON fidelity is unproven.
         </p>
       </CardContent>
     </Card>

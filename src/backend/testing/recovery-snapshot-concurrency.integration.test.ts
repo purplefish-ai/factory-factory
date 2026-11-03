@@ -89,7 +89,7 @@ it('exports account metadata and session bindings from one snapshot while the ap
     state.beforeAccounts = undefined;
   }
   const exported = exportDataSchema.parse(await pendingExport);
-  expect(exported.meta.schemaVersion).toBe(7);
+  expect(exported.meta.schemaVersion).toBe(8);
   expect(exported.data.projects[0]?.name).toBe('Before');
   expect(exported.data.agentSessions[0]?.codexAccountId).toBe('before-account');
   expect(exported.data.codexAccounts).toEqual([

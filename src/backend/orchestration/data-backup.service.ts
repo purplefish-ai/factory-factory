@@ -22,6 +22,10 @@ import {
 } from '@/backend/services/workspace';
 import { normalizeColorScheme } from '@/shared/appearance';
 import { backupPRIdentities } from '@/shared/backup-pr-identities';
+import {
+  createRecoveryImportReport,
+  type RecoveryImportReport,
+} from '@/shared/recovery-import-report';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type {
   ExportData,
@@ -33,6 +37,7 @@ import type {
 } from '@/shared/schemas/export-data.schema';
 import type { Prisma } from '@prisma-gen/client';
 import { planLegacyImport } from './data-backup-legacy-collisions';
+import { createBaseRecoveryManifest } from './data-backup-manifest';
 import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
 import {
   createInertImportReport,
@@ -55,6 +60,7 @@ export interface ImportCounter {
 }
 
 export interface ImportResults {
+  recovery: RecoveryImportReport;
   inertTransforms: InertImportReport;
   projects: ImportCounter;
   workspaces: ImportCounter;
@@ -479,9 +485,10 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports the version 7 account and PR event ledger format.
+   * Exports partial logical metadata with the version 8 coverage envelope.
    */
   async exportData(appVersion: string): Promise<ExportData> {
+    const recovery = createBaseRecoveryManifest();
     logger.info('Exporting database data');
 
     const { projects, workspaces, agentSessions, terminalSessions, userSettings, codexAccounts } =
@@ -494,9 +501,11 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 7,
+        schemaVersion: 8,
+        recovery,
       },
       data: {
+        recovery: {},
         projects: projects.map((p) => ({
           id: p.id,
           name: p.name,
@@ -684,6 +693,9 @@ class DataBackupService {
       const userSettings = await importUserSettings(input.data.userSettings, tx);
 
       return {
+        recovery: createRecoveryImportReport(
+          input.meta.schemaVersion === 8 ? input.meta.recovery : undefined
+        ),
         inertTransforms,
         projects,
         workspaces,

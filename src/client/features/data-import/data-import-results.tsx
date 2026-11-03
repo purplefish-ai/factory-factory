@@ -89,6 +89,34 @@ export function DataImportResultsProvider({
               </p>
               <p className="whitespace-pre-line">{runtime.explanations.join('\n\n')}</p>
               <p>Runtime changes can overlap the record counts above.</p>
+              <section aria-label="Partial backup coverage" className="space-y-2">
+                <h2 className="font-semibold">Partial backup coverage</h2>
+                {active.recovery.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+                {active.recovery.manifest && (
+                  <>
+                    <p className="break-words">
+                      Global exclusions:{' '}
+                      {active.recovery.manifest.exclusions
+                        .map((exclusion) => exclusion.replaceAll('_', ' ').toLowerCase())
+                        .join(', ')}
+                    </p>
+                    <details>
+                      <summary>
+                        {active.recovery.manifest.coverage.length} model classifications
+                      </summary>
+                      <ul className="space-y-2">
+                        {active.recovery.manifest.coverage.map((entry) => (
+                          <li key={entry.model}>
+                            {entry.model}: {entry.status} — {entry.limitation}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </>
+                )}
+              </section>
               <p>Embedded row totals and account remapping totals: not reported.</p>
             </div>
             <AlertDialogFooter>

@@ -129,7 +129,7 @@ beforeEach(async () => {
   });
 });
 
-it.each([4, 5, 6, 7])(
+it.each([4, 5, 6, 7, 8])(
   'imports version %s runtime authority inertly and reports only created changes',
   async (schemaVersion) => {
     const exported = await dataBackupService.exportData('test');
@@ -138,10 +138,10 @@ it.each([4, 5, 6, 7])(
       meta: { ...exported.meta, schemaVersion },
       data: {
         ...exported.data,
-        codexAccounts: schemaVersion === 7 ? exported.data.codexAccounts : undefined,
+        codexAccounts: schemaVersion >= 7 ? exported.data.codexAccounts : undefined,
         agentSessions: exported.data.agentSessions.map((session) => ({
           ...session,
-          codexAccountId: schemaVersion === 7 ? session.codexAccountId : undefined,
+          codexAccountId: schemaVersion >= 7 ? session.codexAccountId : undefined,
         })),
         workspaces: exported.data.workspaces.map((workspace) => ({
           ...workspace,

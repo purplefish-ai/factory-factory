@@ -39,7 +39,22 @@ a reload does not flash the defaults before the saved settings load.
 
 ## Backup imports
 
-Before opening the restore transaction, versions 4–7 validate the complete
+New exports use schema version 8 with the frozen `base-1` partial coverage
+manifest. Only existing logical metadata is included; repository/worktree files,
+provider history bytes, archives, mail, automation, secrets, native account
+homes and live runtime authority are excluded. Paths and provider-session IDs
+may remain metadata. Physical nullable-JSON fidelity is unproven. Import
+requires all 37 canonical model classifications and all six global exclusions,
+and rejects unknown capabilities or sections before opening the writer. Versions
+4–7 remain accepted without inventing a versioned coverage declaration.
+
+The current-session result and its exact JSON download include partial-coverage
+warnings and, for v8, the file's manifest. Four numeric primary counters and the
+user-settings booleans remain measured import outcomes. Embedded row totals and
+account remapping totals are explicitly unreported, not zero; inert changes may
+overlap those primary counts.
+
+Before opening the restore transaction, versions 4–8 validate the complete
 source graph after legacy normalization. Duplicate project identities or slugs,
 workspace/session/terminal/PR/event IDs, event deduplication keys, contradictory
 declared ownership and invalid parent links reject the whole file. A declared
@@ -51,7 +66,7 @@ within that workspace remains quarantined historical evidence: every raw member
 survives export, inert import and re-export, with no implied delivery success.
 These formats cannot prove membership omitted from the original file.
 
-Imports of backup versions 4–7 restore runtime metadata with processes stopped.
+Imports of backup versions 4–8 restore runtime metadata with processes stopped.
 Run-script commands, cleanup commands, terminal labels and provider history
 identities remain available, but process IDs, run-script ports and start times
 are cleared. Previously completed or failed process statuses remain historical;

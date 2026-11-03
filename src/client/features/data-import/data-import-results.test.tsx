@@ -2,11 +2,15 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createRecoveryImportReport } from '@/shared/recovery-import-report';
+import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock('@/client/lib/download-file', () => ({ downloadFile: download }));
 const result = {
+  recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(fixed.meta.recovery)),
   projects: { imported: 1, skipped: 2 },
   workspaces: { imported: 3, skipped: 4 },
   agentSessions: { imported: 5, skipped: 6 },
@@ -189,4 +193,34 @@ it.each([
   );
   await act(() => publish({ ...result, userSettings }));
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(label);
+});
+
+it('discloses the exact partial manifest with an expandable model list and exclusions', async () => {
+  await mount();
+  expect(document.body.textContent).toContain('Partial backup coverage');
+  for (const label of [
+    'secrets and encryption keys',
+    'native account homes',
+    'worktree and repository contents',
+    'provider owned history',
+    'live process ids and runtime leases',
+    'physical nullable json fidelity',
+  ]) {
+    expect(document.body.textContent).toContain(label);
+  }
+  expect(document.body.textContent).not.toContain('PHYSICAL_NULLABLE_JSON_FIDELITY');
+  const details = document.querySelector('details');
+  expect(details?.querySelector('summary')?.textContent).toContain('37 model classifications');
+  expect(details?.querySelectorAll('li')).toHaveLength(37);
+  expect(details?.textContent).toContain('WorkspaceMailState: EXCLUDED');
+  await click('Download JSON');
+  expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(result);
+  expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+});
+it('shows legacy uncertainty without inventing model coverage', async () => {
+  await mount();
+  await click('Dismiss');
+  await act(() => publish({ ...result, recovery: createRecoveryImportReport(undefined) }));
+  expect(document.body.textContent).toContain('no versioned coverage declaration');
+  expect(document.querySelector('details')).toBeNull();
 });
