@@ -15,7 +15,13 @@ function observationPorts() {
   return {
     cacheScope: {},
     getMonitoring: vi.fn().mockResolvedValue({ eventEpoch: 3 }),
-    findPR: vi.fn().mockResolvedValue({ revision: 7, state: 'NONE' }),
+    findPR: vi.fn().mockResolvedValue({
+      revision: 7,
+      state: 'NONE',
+      observation: null,
+      observationEpoch: 0,
+      syncedAt: null,
+    }),
     acceptObservation: vi.fn().mockResolvedValue({ applied: true, eventIds: [] }),
     fetchObservation: vi.fn().mockResolvedValue(redObservation),
     publishAcceptedObservation: vi.fn(),
@@ -139,4 +145,53 @@ it('releases in-flight work after acceptance fails', async () => {
   expect(ports.publishAcceptedObservation).not.toHaveBeenCalled();
   expect(await observeMonitoredPR({ ...ports }, target)).toBe(true);
   expect(ports.acceptObservation).toHaveBeenCalledTimes(2);
+});
+
+function storedPR(state: string, overrides: { observationEpoch?: number; syncedAt?: Date } = {}) {
+  return {
+    revision: 7,
+    state,
+    observation: redObservation,
+    observationEpoch: 3,
+    syncedAt: new Date(),
+    ...overrides,
+  };
+}
+
+it('skips GitHub for a committed MERGED PR unless the observation is forced', async () => {
+  const ports = observationPorts();
+  const target = { workspaceId: 'w', prId: 'p' };
+  ports.findPR.mockResolvedValue(storedPR('MERGED'));
+  expect(await observeMonitoredPR(ports, target)).toBe(true);
+  expect(ports.fetchObservation).not.toHaveBeenCalled();
+  expect(ports.acceptObservation).not.toHaveBeenCalled();
+
+  expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+  expect(ports.fetchObservation).toHaveBeenCalledOnce();
+});
+
+it('still observes a merge that has not been committed for the current epoch', async () => {
+  const ports = observationPorts();
+  const target = { workspaceId: 'w', prId: 'p' };
+  // GitHub may already report MERGED while the stored facts are still OPEN.
+  ports.findPR.mockResolvedValueOnce(storedPR('OPEN'));
+  await observeMonitoredPR({ ...ports, cacheScope: {} }, target);
+  expect(ports.fetchObservation).toHaveBeenCalledTimes(1);
+  // A merge observed under an earlier monitoring epoch is re-initialized.
+  ports.findPR.mockResolvedValueOnce(storedPR('MERGED', { observationEpoch: 2 }));
+  await observeMonitoredPR({ ...ports, cacheScope: {} }, target);
+  expect(ports.fetchObservation).toHaveBeenCalledTimes(2);
+});
+
+it('paces unforced CLOSED PR observations with the background reopen interval', async () => {
+  const ports = observationPorts();
+  const target = { workspaceId: 'w', prId: 'p' };
+  ports.findPR.mockResolvedValue(storedPR('CLOSED'));
+  await observeMonitoredPR(ports, target);
+  expect(ports.fetchObservation).not.toHaveBeenCalled();
+  ports.findPR.mockResolvedValue(
+    storedPR('CLOSED', { syncedAt: new Date(Date.now() - 31 * 60_000) })
+  );
+  await observeMonitoredPR(ports, target);
+  expect(ports.fetchObservation).toHaveBeenCalledOnce();
 });

@@ -345,3 +345,53 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
     collector.stop();
   }
 });
+
+describe('automatic PR refresh throttling', () => {
+  it('observes a merge once, then skips the merged PR until an explicit refresh', async () => {
+    const workspaceId = 'pr-automatic-refresh';
+    const prUrl = 'https://github.com/org/repo/pull/7';
+    await db.prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        name: workspaceId,
+        projectId: 'pr-project',
+        status: 'READY',
+        branchName: 'automatic-refresh',
+        prMonitoring: { create: { enabled: true } },
+      },
+    });
+    fetchObservation.mockResolvedValueOnce(facts(prUrl));
+    expect(await prSnapshotService.attachAndRefreshPR(workspaceId, prUrl)).toMatchObject({
+      success: true,
+      snapshot: { prState: 'OPEN' },
+    });
+    expect(fetchObservation).toHaveBeenCalledTimes(1);
+
+    // An automatic refresh right after an accepted observation reuses it.
+    await prSnapshotService.refreshWorkspace(workspaceId, { force: false });
+    expect(fetchObservation).toHaveBeenCalledTimes(1);
+
+    const realNow = Date.now();
+    const now = vi.spyOn(Date, 'now');
+    try {
+      // GitHub reports the merge before the app has committed it: the automatic
+      // idle/page-load path must still observe it once.
+      now.mockReturnValue(realNow + 2 * 60_000);
+      fetchObservation.mockResolvedValue(facts(prUrl, { prState: 'MERGED', checks: [] }));
+      expect(await prSnapshotService.refreshWorkspace(workspaceId, { force: false })).toMatchObject(
+        { success: true, snapshot: { prState: 'MERGED' } }
+      );
+      expect(fetchObservation).toHaveBeenCalledTimes(2);
+
+      // Past every cooldown, the committed merge keeps automatic refreshes off GitHub.
+      now.mockReturnValue(realNow + 10 * 60_000);
+      await prSnapshotService.refreshWorkspace(workspaceId, { force: false });
+      expect(fetchObservation).toHaveBeenCalledTimes(2);
+
+      await prSnapshotService.refreshWorkspace(workspaceId, { force: true });
+      expect(fetchObservation).toHaveBeenCalledTimes(3);
+    } finally {
+      now.mockRestore();
+    }
+  });
+});

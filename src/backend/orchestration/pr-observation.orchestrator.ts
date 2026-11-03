@@ -1,11 +1,10 @@
 import type { PRTarget } from '@/shared/pr-monitoring';
+import { shouldPollPR } from '@/shared/pr-polling';
 import type { PRObservationPorts } from './pr-observation-ports';
+type RecentObservations = Map<string, { revision: number; epoch: number; checkedAt: number }>;
 const states = new WeakMap<
   object,
-  {
-    recent: Map<string, { revision: number; epoch: number; checkedAt: number }>;
-    observing: Map<string, Promise<boolean>>;
-  }
+  { recent: RecentObservations; observing: Map<string, Promise<boolean>> }
 >();
 function observationState(ports: PRObservationPorts) {
   let state = states.get(ports.cacheScope);
@@ -15,6 +14,30 @@ function observationState(ports: PRObservationPorts) {
   }
   return state;
 }
+/** Whether an unforced observation can keep the committed facts without a GitHub read. */
+function committedFactsAreCurrent(
+  recent: RecentObservations,
+  key: string,
+  row: NonNullable<Awaited<ReturnType<PRObservationPorts['findPR']>>>,
+  eventEpoch: number
+): boolean {
+  const cached = recent.get(key);
+  if (
+    cached?.revision === row.revision &&
+    cached.epoch === eventEpoch &&
+    Date.now() - cached.checkedAt < 90_000
+  ) {
+    return true;
+  }
+  return !shouldPollPR(row, eventEpoch);
+}
+/**
+ * Observe one attached PR. Unforced (automatic) observations are throttled: they
+ * reuse an observation accepted in the last 90 seconds and apply the background
+ * terminal-PR policy, so a committed MERGED (or recently checked CLOSED) PR is
+ * not fetched again. `force` is reserved for explicit refreshes and delivery
+ * freshness checks, which must always read GitHub.
+ */
 export async function observeMonitoredPR(
   ports: PRObservationPorts,
   target: PRTarget,
@@ -35,13 +58,7 @@ export async function observeMonitoredPR(
     if (!(row && config)) {
       return false;
     }
-    const cached = recent.get(key);
-    if (
-      !options?.force &&
-      cached?.revision === row.revision &&
-      cached.epoch === config.eventEpoch &&
-      Date.now() - cached.checkedAt < 90_000
-    ) {
+    if (!options?.force && committedFactsAreCurrent(recent, key, row, config.eventEpoch)) {
       return true;
     }
     const observation = await ports.fetchObservation(target, signal);

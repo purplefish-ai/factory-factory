@@ -59,12 +59,13 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     },
   });
 
-  // Sync PR status once when workspace loads with a PR URL
+  // Sync PR status once when workspace loads with a PR URL. Page loads are
+  // automatic, so the refresh is unforced and respects the server throttles.
   const hasSyncedRef = useRef(false);
   useEffect(() => {
     if (workspace?.prs.length && !hasSyncedRef.current && !syncPRStatus.isPending) {
       hasSyncedRef.current = true;
-      syncPRStatus.mutate({ workspaceId });
+      syncPRStatus.mutate({ workspaceId, force: false });
     }
   }, [workspace?.prs.length, workspaceId, syncPRStatus]);
 

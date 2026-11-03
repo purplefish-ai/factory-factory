@@ -1305,7 +1305,7 @@ describe('configureEventCollector', () => {
       'event:workspace_idle',
       expect.any(Number)
     );
-    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1', { force: false });
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
