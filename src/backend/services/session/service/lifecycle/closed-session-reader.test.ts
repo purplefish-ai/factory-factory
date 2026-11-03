@@ -201,16 +201,16 @@ describe('readClosedSessionTranscript', () => {
   it.each(['compact', 'reordered'] as const)(
     'reads complete %s bodies with opaque metadata',
     async (format) => {
-      const value = {
-        messages: [null, 1, ['legacy']],
-        metadata: null,
-        version: ['future'],
-        sessionSummary: { x: 1 },
-      };
-      writeFileSync(
-        join(root, 'transcripts/main.json'),
-        JSON.stringify(value, null, format === 'compact' ? 0 : 2)
+      const messages = [null, 1, ['legacy']];
+      const value =
+        format === 'compact'
+          ? { messages, metadata: null, version: ['future'], sessionSummary: { x: 1 } }
+          : { sessionSummary: { x: 1 }, version: ['future'], metadata: null, messages };
+      const content = JSON.stringify(value, null, format === 'compact' ? 0 : 2);
+      expect(content.indexOf('"messages"') > content.indexOf('"metadata"')).toBe(
+        format === 'reordered'
       );
+      writeFileSync(join(root, 'transcripts/main.json'), content);
       await expect(readClosedSessionTranscript('closed-1')).resolves.toEqual(value);
     }
   );

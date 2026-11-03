@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { z } from 'zod';
+import type { ArchivedJsonValueSchema } from './archived-content-schema';
 import {
   ClosedSessionReadTranscriptSchema,
   parseClosedSessionReadTranscript,
@@ -10,7 +12,9 @@ describe('compatible closed-session envelope', () => {
       messages: [{ role: 'user', content: 'hello' }],
       sessionSummary: 'Test summary',
     };
-    expect(ClosedSessionReadTranscriptSchema.parse(legacy)).toEqual(legacy);
+    const parsed = ClosedSessionReadTranscriptSchema.parse(legacy);
+    expectTypeOf(parsed.messages).toEqualTypeOf<z.infer<typeof ArchivedJsonValueSchema>[]>();
+    expect(parsed).toEqual(legacy);
   });
 
   it('preserves synthetic opaque extras and own reserved keys at every JSON depth', () => {
@@ -51,6 +55,19 @@ describe('compatible closed-session envelope', () => {
     expect(ClosedSessionReadTranscriptSchema.parse(value)).toEqual(value);
   });
 
+  it('keeps the messages issue path for absent and JSON-valued nonarray fields', () => {
+    for (const value of [{}, { messages: null }, { messages: {} }, { messages: 1 }]) {
+      expect(ClosedSessionReadTranscriptSchema.safeParse(value)).toMatchObject({
+        success: false,
+        error: {
+          issues: [
+            { code: 'custom', path: ['messages'], message: 'Expected a messages JSON array' },
+          ],
+        },
+      });
+    }
+  });
+
   it.each([
     null,
     1,
@@ -61,6 +78,9 @@ describe('compatible closed-session envelope', () => {
     { messages: {} },
     { messages: 'x' },
     { messages: [undefined] },
+    { messages: [{ nested: [undefined] }] },
+    { messages: [{ nested: { invalid: Infinity } }] },
+    { messages: [], extension: { invalid: undefined } },
   ])('rejects non-JSON or nonarray envelopes %#', (value) => {
     expect(ClosedSessionReadTranscriptSchema.safeParse(value).success).toBe(false);
   });
