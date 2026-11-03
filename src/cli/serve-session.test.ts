@@ -66,10 +66,18 @@ it.each([0, 2])(
 
 it('handles a spawn error before readiness and cancels readiness polling', async () => {
   Object.defineProperty(backend, 'pid', { value: undefined, configurable: true });
+  let readinessCancelled = false;
   vi.mocked(waitForPort).mockImplementation(
-    () =>
-      new Promise(() => {
-        /* Intentionally pending readiness/browser work. */
+    (_port, _host, _timeout, _interval, signal) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            readinessCancelled = true;
+            reject(signal.reason);
+          },
+          { once: true }
+        );
       })
   );
   const session = runServeSession({ ...options, signal: new AbortController().signal });
@@ -78,7 +86,7 @@ it('handles a spawn error before readiness and cancels readiness polling', async
   await failed;
   expect(onReady).not.toHaveBeenCalled();
   expect(spawn).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(waitForPort).mock.calls[0]?.[4]?.aborted).toBe(true);
+  expect(readinessCancelled).toBe(true);
 });
 
 it('never starts the frontend after an early backend exit, even if readiness resolves later', async () => {

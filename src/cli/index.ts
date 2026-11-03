@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -17,6 +17,7 @@ import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { runServeSession } from './serve-session';
+import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
 import { registerTailscaleCommand } from './tailscale';
 
@@ -204,16 +205,7 @@ program
     const controller = new AbortController();
     const portFilePath = join(process.cwd(), '.factory-factory-port');
 
-    const shutdown = (signal: string) => {
-      if (!controller.signal.aborted) {
-        console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-        controller.abort();
-      }
-    };
-    const onInterrupt = () => shutdown('SIGINT');
-    const onTerminate = () => shutdown('SIGTERM');
-    process.on('SIGINT', onInterrupt);
-    process.on('SIGTERM', onTerminate);
+    const unregisterShutdownHandlers = registerServeShutdownHandlers(controller, portFilePath);
 
     const createOnReady = (actualBackendPort: number) => async () => {
       const url = buildHttpOrigin(options.host, options.dev ? frontendPort : actualBackendPort);
@@ -256,13 +248,8 @@ program
       console.error(chalk.red(`\n  ✗ ${(error as Error).message}`));
       process.exitCode = 1;
     } finally {
-      process.off('SIGINT', onInterrupt);
-      process.off('SIGTERM', onTerminate);
-      try {
-        unlinkSync(portFilePath);
-      } catch {
-        // Startup may fail before creating the port file.
-      }
+      unregisterShutdownHandlers();
+      removeServePortFile(portFilePath);
     }
   });
 
