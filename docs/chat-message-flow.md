@@ -292,6 +292,15 @@ duplicate-result filtering creates a new grouper. Message edits must replace the
 array and changed message objects; in-place appends and truncation are detected
 by length, but same-length in-place edits are unsupported.
 
+The renderer keeps a recent transcript window of
+`DEFAULT_RENDERER_TRANSCRIPT_LIMIT` messages. Snapshots and replay arrive
+trimmed to the limit; live appends then grow the window by up to a tenth of the
+limit before it is trimmed back to the limit at a render-safe start. Between
+trims the window start stays fixed, so lookups, grouping and the scroll
+controller treat each update as an append instead of rebuilding for a moved
+front. Messages that sort before the window start are dropped once the window
+exceeds the limit, as with a strict trim.
+
 Tool activity starts collapsed behind a category summary such as “Read files,
 ran commands”. A single read shows “Read file Button.tsx”; a single command
 shows its executable and, for recognized command-line tools, its first
