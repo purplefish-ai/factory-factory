@@ -91,6 +91,8 @@ vi.mock('@/backend/db', () => ({
 
 import { prisma } from '@/backend/db';
 vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
+  withBackupImport: (_source: unknown, write: (tx: typeof mockTx) => Promise<unknown>) =>
+    write(mockTx),
   withBackupSnapshot: (_source: unknown, read: (tx: typeof prisma) => Promise<unknown>) =>
     read(prisma),
 }));

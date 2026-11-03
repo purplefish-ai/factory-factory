@@ -6,7 +6,7 @@ import type {
   TerminalSession,
   UserSettings,
 } from '@prisma-gen/client';
-import { withBackupSnapshot } from './backup-snapshot';
+import { withBackupImport, withBackupSnapshot } from './backup-snapshot';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 
@@ -67,7 +67,7 @@ class DataBackupAccessor {
   }
 
   runInTransaction<T>(callback: (tx: DataBackupTransactionClient) => Promise<T>): Promise<T> {
-    return prisma.$transaction(callback);
+    return withBackupImport(prisma, callback);
   }
 }
 

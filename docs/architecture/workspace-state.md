@@ -332,6 +332,15 @@ creation. Project slugs and worktree base paths must be nonempty; legacy backups
 with empty values are rejected before any records are imported. Valid backup
 paths are preserved rather than recomputed for the current machine.
 
+All import owners write through one private tuned SQLite transaction on the
+source connection's actual main file, with a 120-second transaction budget and
+5-second busy wait. A failed import rolls back its own rows without absorbing
+ordinary application writes into that rollback. SQLite still permits only one
+writer at a time. Contention or transaction expiry returns a CONFLICT asking the
+operator to retry the whole import; no statements or rows retry automatically.
+Validation and other database failures retain their original errors. A
+disconnect failure after commit is a cleanup error, never a retry instruction.
+
 ## Retired auto-iteration
 
 Auto-iteration is removed. Workspaces, conversations, worktrees, branches, and
