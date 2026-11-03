@@ -10,7 +10,7 @@ import { eventLoopMonitor } from '@/backend/lib/event-loop-monitor';
 
 export function createHealthRouter(appContext: AppContext): Router {
   const router = Router();
-  const { configService, createLogger, healthService, rateLimiter } = appContext.services;
+  const { configService, createLogger, settingsHealthService, rateLimiter } = appContext.services;
   const logger = createLogger('health-route');
 
   /**
@@ -33,7 +33,7 @@ export function createHealthRouter(appContext: AppContext): Router {
    */
   router.get('/database', async (_req, res) => {
     try {
-      await healthService.checkDatabaseConnection();
+      await settingsHealthService.checkDatabaseConnection();
       res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -59,7 +59,7 @@ export function createHealthRouter(appContext: AppContext): Router {
     const checks: Record<string, { status: string; details?: unknown }> = {};
 
     try {
-      await healthService.checkDatabaseConnection();
+      await settingsHealthService.checkDatabaseConnection();
       checks.database = { status: 'ok' };
     } catch (error) {
       checks.database = {

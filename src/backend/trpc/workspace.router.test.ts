@@ -58,10 +58,10 @@ vi.mock('@/backend/lib/session-summaries', () => ({
   hasWorkingSessionSummary: (...args: unknown[]) => mockHasWorkingSessionSummary(...args),
 }));
 
-vi.mock('@/shared/workspace-sidebar-status', () => ({
+vi.mock('@/shared/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/core')>()),
   deriveWorkspaceSidebarStatus: (...args: unknown[]) => mockDeriveWorkspaceSidebarStatus(...args),
 }));
-
 vi.mock('./workspace/workspace-helpers', () => ({
   getWorkspaceWithProjectOrThrow: vi.fn(async (_service: unknown, id: string) => ({
     id,

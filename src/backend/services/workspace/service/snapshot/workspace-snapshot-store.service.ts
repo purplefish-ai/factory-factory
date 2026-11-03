@@ -25,6 +25,7 @@ import type {
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
+  WorkspaceSidebarStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
@@ -36,7 +37,6 @@ import {
   type SnapshotUpdateInput,
   type SnapshotField,
 } from '@/shared/workspace-projection-fields';
-import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
   WorkspaceSnapshotEntrySchema,
   type SnapshotFieldGroup,

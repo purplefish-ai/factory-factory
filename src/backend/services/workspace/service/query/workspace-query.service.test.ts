@@ -14,8 +14,8 @@ import {
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
+  deriveWorkspaceSidebarStatus,
 } from '@/shared/core';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceQueryService } from './workspace-query.service';
 
 const mockFindByProjectIdWithSessions = vi.fn();

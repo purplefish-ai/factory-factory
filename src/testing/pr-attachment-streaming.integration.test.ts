@@ -14,7 +14,7 @@ import {
 } from '@/backend/services/workspace';
 import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
 

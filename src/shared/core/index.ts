@@ -32,7 +32,6 @@ export { deriveRatchetState, type RatchetStateInput } from './ratchet-state.js';
 
 export {
   deriveWorkspaceSidebarStatus,
-  getWorkspaceActivityTooltip,
   getWorkspaceCiLabel,
   getWorkspaceCiTooltip,
   WORKSPACE_SIDEBAR_ACTIVITY_STATES,

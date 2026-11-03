@@ -68,10 +68,6 @@ export function deriveWorkspaceSidebarStatus(
   return { activityState, ciState: ciStateFromSnapshot };
 }
 
-export function getWorkspaceActivityTooltip(state: WorkspaceSidebarActivityState): string {
-  return state === 'WORKING' ? 'Claude is working' : 'Claude is idle';
-}
-
 export function getWorkspaceCiLabel(state: WorkspaceSidebarCiState): string {
   switch (state) {
     case 'NONE':

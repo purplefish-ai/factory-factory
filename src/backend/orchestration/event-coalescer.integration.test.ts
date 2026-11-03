@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { EventCoalescer } from './event-collector.orchestrator';
 
 describe('authoritative Ratchet projection integration', () => {

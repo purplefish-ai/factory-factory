@@ -1,7 +1,4 @@
-import {
-  deriveCiStatusFromCheckRollup,
-  reduceCheckRollupToLatestRunAttempts,
-} from '@/shared/core/ci-status';
+import { deriveCiStatusFromCheckRollup, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { GitHubStatusCheck } from '@/shared/github-types';
 
 function timestamp(value: string | null | undefined): string | null {

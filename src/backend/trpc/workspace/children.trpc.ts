@@ -11,13 +11,13 @@ import {
   toWorkspaceDerivedStateInput,
 } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import {
   ackMailInputSchema,
   listMailInputSchema,
   readMailInputSchema,
   workspaceMailSendMetadataSchema,
 } from '@/shared/workspace-mail';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export const workspaceChildrenRouter = router({
   createChild: trustedLocalProcedure

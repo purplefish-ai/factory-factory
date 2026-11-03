@@ -19,9 +19,8 @@ import {
 } from '@/backend/services/workspace/service/state/workspace-read-state';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
-import { type KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus, type KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { hasWorkingSessionSummary } from '@/shared/session-runtime';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
 

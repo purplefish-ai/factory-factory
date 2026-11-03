@@ -2,7 +2,7 @@ import {
   deriveWorkspaceSidebarStatus,
   type WorkspaceSidebarStatus,
   type WorkspaceSidebarStatusInput,
-} from '@/shared/workspace-sidebar-status';
+} from '@/shared/core';
 
 type RatchetSidebarCacheFields = {
   sidebarStatus?: WorkspaceSidebarStatus;

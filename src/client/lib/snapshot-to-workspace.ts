@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import {
   findWorkspaceSessionRuntimeError,
@@ -8,7 +9,6 @@ import {
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import { deriveWorkspacePRSelection, type WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
   projectWorkspaceSnapshotMetadata,
   WorkspaceSnapshotEntrySchema,
