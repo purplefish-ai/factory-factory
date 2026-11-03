@@ -1,7 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import {
+  allowedPhosphorWeights,
+  type PhosphorWeight,
+  phosphorWeightAllowlist,
+  phosphorWeights,
+} from '../../scripts/phosphor-icon-weights';
 
 const repositoryRoot = process.cwd();
 const thisFile = 'src/lib/icon-library.test.ts';
@@ -22,6 +29,86 @@ function sourceFiles(directory: string): string[] {
     }
     return ['.ts', '.tsx'].includes(extname(entry.name)) ? [path] : [];
   });
+}
+
+function literalWeights(node: ts.Node | undefined): string[] | undefined {
+  if (node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))) {
+    return [node.text];
+  }
+  if (node && (ts.isJsxExpression(node) || ts.isParenthesizedExpression(node))) {
+    return literalWeights(node.expression);
+  }
+  if (node && ts.isConditionalExpression(node)) {
+    const whenTrue = literalWeights(node.whenTrue);
+    const whenFalse = literalWeights(node.whenFalse);
+    return whenTrue && whenFalse ? [...whenTrue, ...whenFalse] : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Statically resolve which Phosphor icon renders which weight. A weight on a
+ * non-icon tag (such as a dynamic `<Icon />`) applies to every icon the file imports.
+ */
+function phosphorWeightUsage(source: string, file: string) {
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const icons = new Map<string, string>();
+  const uses: string[] = [];
+  const violations: string[] = [];
+  const at = (node: ts.Node) =>
+    `${file}:${sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+
+  for (const statement of sourceFile.statements) {
+    if (!(ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier))) {
+      continue;
+    }
+    const specifier = statement.moduleSpecifier.text;
+    if (!specifier.startsWith('@phosphor-icons/react')) {
+      continue;
+    }
+    const icon = /^@phosphor-icons\/react\/dist\/csr\/([A-Za-z0-9]+)$/.exec(specifier)?.[1];
+    const bindings = statement.importClause?.namedBindings;
+    if (icon && bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        icons.set(element.name.text, icon);
+      }
+    } else if (specifier !== '@phosphor-icons/react/dist/lib/types') {
+      violations.push(`${at(statement)}: import Phosphor icons from dist/csr/<Name> only`);
+    }
+  }
+
+  const recordWeightAttribute = (node: ts.JsxAttribute) => {
+    const tag = node.parent.parent.tagName.getText(sourceFile);
+    const weights = literalWeights(node.initializer);
+    const tagIcon = icons.get(tag);
+    const targets = tagIcon ? [tagIcon] : [...new Set(icons.values())];
+    if (!weights) {
+      violations.push(`${at(node)}: weight must be a string literal or literal conditional`);
+    } else if (targets.length === 0) {
+      violations.push(`${at(node)}: weight on <${tag}> is not a Phosphor icon in this file`);
+    } else {
+      uses.push(...targets.flatMap((icon) => weights.map((weight) => `${icon}:${weight}`)));
+    }
+  };
+
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxAttribute(node) && node.name.getText(sourceFile) === 'weight') {
+      recordWeightAttribute(node);
+    } else if (
+      icons.size > 0 &&
+      (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
+      node.name.getText(sourceFile) === 'weight'
+    ) {
+      violations.push(`${at(node)}: pass Phosphor weights as JSX attributes`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return { uses, violations };
+}
+
+function isPhosphorWeight(weight: string): weight is PhosphorWeight {
+  return phosphorWeights.some((known) => known === weight);
 }
 
 function hasFillWeight(icon: string): boolean {
@@ -65,6 +152,57 @@ describe('icon library', () => {
     expect(hasFillWeight("<CircleIcon weight={'fill'} />")).toBe(true);
     expect(hasFillWeight('<CircleIcon weight={"fill"} />')).toBe(true);
     expect(hasFillWeight('<CircleIcon weight="regular" />')).toBe(false);
+  });
+
+  it('resolves Phosphor weights per icon and rejects unverifiable weights', () => {
+    const source = [
+      "import { CheckIcon as DoneIcon } from '@phosphor-icons/react/dist/csr/Check';",
+      "import { LeafIcon } from '@phosphor-icons/react/dist/csr/Leaf';",
+      'const a = <DoneIcon weight="fill" />;',
+      "const b = <LeafIcon weight={on ? 'bold' : `thin`} />;",
+      'const c = <Icon weight="duotone" />;',
+      'const d = <DoneIcon weight={weight} />;',
+      "const e = createElement(DoneIcon, { weight: 'fill' });",
+    ].join('\n');
+    expect(phosphorWeightUsage(source, 'sample.tsx')).toEqual({
+      uses: ['Check:fill', 'Leaf:bold', 'Leaf:thin', 'Check:duotone', 'Leaf:duotone'],
+      violations: [
+        'sample.tsx:6: weight must be a string literal or literal conditional',
+        'sample.tsx:7: pass Phosphor weights as JSX attributes',
+      ],
+    });
+    expect(
+      phosphorWeightUsage(
+        'import { CircleIcon } from \'@phosphor-icons/react/dist/ssr/Circle\';\n<Box weight="fill" />',
+        'other.tsx'
+      ).violations
+    ).toEqual([
+      'other.tsx:1: import Phosphor icons from dist/csr/<Name> only',
+      'other.tsx:2: weight on <Box> is not a Phosphor icon in this file',
+    ]);
+  });
+
+  it('renders only Phosphor weights that the build keeps', () => {
+    const files = sourceFiles(join(repositoryRoot, 'src')).filter(
+      (path) => relative(repositoryRoot, path) !== thisFile
+    );
+    const usage = files.map((path) =>
+      phosphorWeightUsage(readFileSync(path, 'utf8'), relative(repositoryRoot, path))
+    );
+    expect(usage.flatMap(({ violations }) => violations)).toEqual([]);
+
+    const uses = new Set(usage.flatMap(({ uses }) => uses));
+    const disallowed = [...uses].filter((use) => {
+      const [icon = '', weight = ''] = use.split(':');
+      return !(isPhosphorWeight(weight) && allowedPhosphorWeights(icon).has(weight));
+    });
+    // Add the icon to phosphorWeightAllowlist in scripts/phosphor-icon-weights.ts.
+    expect(disallowed).toEqual([]);
+
+    const unused = Object.entries(phosphorWeightAllowlist).flatMap(([weight, icons = []]) =>
+      icons.filter((icon) => !uses.has(`${icon}:${weight}`)).map((icon) => `${icon}:${weight}`)
+    );
+    expect(unused).toEqual([]);
   });
 
   it('uses Phosphor without active Lucide references', () => {
