@@ -37,6 +37,12 @@ the browser and does not sync across devices. Each change saves immediately.
 it does not change Mode. The last applied appearance is cached in the browser so
 a reload does not flash the defaults before the saved settings load.
 
+In the installed desktop PWA, the browser-owned corner backgrounds follow the
+page color and dim with search and other dialog backdrops. Closing a dialog
+restores the current page color; the browser still draws the window buttons. The
+saved Mode is also applied before React starts, so a refresh initializes the
+corner backgrounds with the selected light or dark mode.
+
 ## Backup imports
 
 New exports use schema version 8 with the frozen `base-1` partial coverage
