@@ -621,6 +621,68 @@ describe('SessionDomainService additional behavior', () => {
     expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
   });
 
+  it.each(['duplicate', 'reordered', 'removed', 'replaced', 'middle insertion'])(
+    'rejects a %s dispatch prefix without consuming any queued message',
+    (change) => {
+      const first = queuedMessage('first', 'first');
+      const second = queuedMessage('second', 'second');
+      sessionDomainService.enqueue('s1', first);
+      sessionDomainService.enqueue('s1', second);
+      let selected = [first, second];
+      switch (change) {
+        case 'duplicate':
+          sessionDomainService.requeueFront('s1', first);
+          selected = [first, first];
+          break;
+        case 'reordered':
+          selected = [second, first];
+          break;
+        case 'removed':
+          sessionDomainService.removeQueuedMessage('s1', second.id);
+          break;
+        case 'replaced':
+          sessionDomainService.removeQueuedMessage('s1', second.id);
+          sessionDomainService.enqueue('s1', { ...second });
+          break;
+        case 'middle insertion':
+          sessionDomainService.removeQueuedMessage('s1', second.id);
+          sessionDomainService.enqueue('s1', queuedMessage('middle', 'middle'));
+          sessionDomainService.enqueue('s1', second);
+          break;
+      }
+      const before = sessionDomainService.getQueueSnapshot('s1');
+      expect(sessionDomainService.takeQueuedPrefix('s1', selected)).toBe(false);
+      const after = sessionDomainService.getQueueSnapshot('s1');
+      expect(after).toHaveLength(before.length);
+      after.forEach((message, index) => expect(message).toBe(before[index]));
+    }
+  );
+
+  it('consumes an exact dispatch prefix while preserving a later append', () => {
+    const first = queuedMessage('first', 'first');
+    const second = queuedMessage('second', 'second');
+    sessionDomainService.enqueue('s1', first);
+    sessionDomainService.enqueue('s1', second);
+    const selected = sessionDomainService.getQueueSnapshot('s1');
+    const late = queuedMessage('late', 'late');
+    sessionDomainService.enqueue('s1', late);
+
+    expect(sessionDomainService.takeQueuedPrefix('s1', selected)).toBe(true);
+    expect(sessionDomainService.getQueueSnapshot('s1')).toEqual([late]);
+    expect(sessionDomainService.peekNextMessage('s1')).toBe(late);
+  });
+
+  it('retains nonhead membership consumption for confirmed steering', () => {
+    const first = queuedMessage('first', 'first');
+    const selected = queuedMessage('selected', 'selected');
+    sessionDomainService.enqueue('s1', first);
+    sessionDomainService.enqueue('s1', selected);
+
+    expect(sessionDomainService.takeQueuedMessages('s1', [selected])).toBe(true);
+    expect(sessionDomainService.peekNextMessage('s1')).toBe(first);
+    expect(sessionDomainService.getQueueLength('s1')).toBe(1);
+  });
+
   it('tracks and clears pending interactive requests with event emission', () => {
     const listener = vi.fn();
     sessionDomainService.on('pending_request_changed', listener);

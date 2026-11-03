@@ -653,6 +653,21 @@ export class SessionDomainService extends EventEmitter {
     return true;
   }
 
+  /** Dispatch consumes only a unique, contiguous prefix; steering may select nonhead messages. */
+  takeQueuedPrefix(sessionId: string, messages: readonly QueuedMessage[]): boolean {
+    const store = this.registry.getExisting(sessionId);
+    if (
+      !store ||
+      messages.length === 0 ||
+      new Set(messages).size !== messages.length ||
+      messages.some((message, index) => store.queue[index] !== message)
+    ) {
+      return false;
+    }
+    store.queue.splice(0, messages.length);
+    return true;
+  }
+
   hasQueuedMessage(sessionId: string, messageId: string): boolean {
     return this.registry.getQueueSnapshot(sessionId).some((message) => message.id === messageId);
   }

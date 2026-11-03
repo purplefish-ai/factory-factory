@@ -186,6 +186,59 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     expect(sessionDomainService.getQueueLength('session')).toBe(0);
   });
 
+  it('retries a batch displaced by a human during the final awaited guard', async () => {
+    const h = harness();
+    const first = enqueue('first');
+    const pr: QueuedMessage = {
+      ...first,
+      id: 'pr',
+      text: 'PR facts',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    sessionDomainService.enqueue('session', pr);
+    const reached = deferred();
+    const release = deferred();
+    let checksAfterPrepare = 0;
+    h.backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    const dispatch = h.dispatcher.tryDispatchNextMessage('session', {
+      guard: {
+        check: async () => {
+          if (h.backgroundDelivery.prepare.mock.calls.length && ++checksAfterPrepare === 2) {
+            reached.resolve();
+            await release.promise;
+          }
+        },
+        assertCurrent: () => undefined,
+      },
+    });
+    await reached.promise;
+    const late = enqueue('late');
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([first, late, pr]);
+    const rejectedState: unknown[] = [];
+    h.backgroundDelivery.fail.mockImplementationOnce(() => {
+      rejectedState.push(
+        sessionDomainService.getQueueSnapshot('session'),
+        sessionDomainService.getTranscriptSnapshot('session'),
+        h.sendSessionMessage.mock.calls.length,
+        h.backgroundDelivery.complete.mock.calls.length
+      );
+      return Promise.resolve();
+    });
+    release.resolve();
+    await dispatch;
+    expect(rejectedState).toEqual([[first, late, pr], [], 0, 0]);
+    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
+      'session',
+      'first\n\nlate\n\nPR facts',
+      expect.any(Object)
+    );
+    expect(h.backgroundDelivery.fail).toHaveBeenCalledOnce();
+    expect(h.backgroundDelivery.complete).toHaveBeenCalledExactlyOnceWith(pr);
+    expect(sessionDomainService.getQueueSnapshot('session')).toEqual([]);
+    const transcriptIds = sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id);
+    expect(transcriptIds).toEqual([first.id, late.id, pr.id]);
+  });
+
   it('requeues every message in its original order when the provider is busy', async () => {
     vi.useFakeTimers();
     const { dispatcher, sendSessionMessage } = harness();
