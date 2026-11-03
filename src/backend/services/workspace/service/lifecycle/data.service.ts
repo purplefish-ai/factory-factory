@@ -1,15 +1,28 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { backupCollisionsAccessor } from '@/backend/services/workspace/resources/backup-collisions.accessor';
 import { workspaceLaunchOriginAccessor } from '@/backend/services/workspace/resources/workspace-launch-origin.accessor';
 import { workspaceMetadataAccessor } from '@/backend/services/workspace/resources/workspace-metadata.accessor';
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceDeletionCapture } from '@/backend/services/workspace/types';
-import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
+import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { AcceptedBranchPublisher, type AcceptedWorkspaceBranch } from './accepted-branch';
 
 class WorkspaceDataService {
+  readBackupIdentities(
+    tx: Prisma.TransactionClient,
+    input: Parameters<typeof backupCollisionsAccessor.readIdentities>[1]
+  ) {
+    return backupCollisionsAccessor.readIdentities(tx, input);
+  }
+  findBackupEventConflicts(
+    tx: Prisma.TransactionClient,
+    events: Parameters<typeof backupCollisionsAccessor.findEventConflicts>[1]
+  ) {
+    return backupCollisionsAccessor.findEventConflicts(tx, events);
+  }
   private deletionCapture: WorkspaceDeletionCapture | null = null;
 
   configureDeletionCapture(capture: WorkspaceDeletionCapture) {
