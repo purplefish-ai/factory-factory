@@ -212,7 +212,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!(running || disabled) && imageAttachmentsEnabled) {
+          if (!disabled && imageAttachmentsEnabled) {
             fileInputRef.current?.click();
           }
         },

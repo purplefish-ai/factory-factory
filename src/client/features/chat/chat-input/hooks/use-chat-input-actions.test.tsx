@@ -63,10 +63,12 @@ function ShortcutHarness({
     delegateToFileMentionMenu: () => 'passthrough',
   });
 
-  return createElement('textarea', {
-    onKeyDown: actions.handleKeyDown,
-    'data-testid': 'shortcut-input',
-  });
+  return (
+    <>
+      <textarea onKeyDown={actions.handleKeyDown} data-testid="shortcut-input" />
+      <input type="file" ref={actions.fileInputRef} />
+    </>
+  );
 }
 
 function renderHarness(props: ShortcutHarnessProps): {
@@ -170,6 +172,23 @@ afterEach(() => {
 });
 
 describe('useChatInputActions keyboard shortcuts', () => {
+  it.each([false, true])('opens image upload while running unless disabled=%s', (disabled) => {
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      running: true,
+      disabled,
+      onSettingsChange: () => undefined,
+    });
+    try {
+      const picker = vi.spyOn(container.querySelector('input')!, 'click');
+      dispatchModShiftShortcut(textarea, 'u');
+      expect(picker).toHaveBeenCalledTimes(disabled ? 0 : 1);
+    } finally {
+      flushSync(() => root.unmount());
+      container.remove();
+    }
+  });
+
   it('does not send when Enter confirms an IME composition', () => {
     const onSend = vi.fn();
     const capabilities = claudeChatBarCapabilities();

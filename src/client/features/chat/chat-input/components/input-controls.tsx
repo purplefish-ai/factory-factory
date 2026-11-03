@@ -56,7 +56,6 @@ const FileUploadButton = memo(function FileUploadButton({
   fileInputRef,
   onFileSelect,
   supportedImageTypes,
-  running,
   disabled,
   modLabel,
   modifierHeld,
@@ -64,7 +63,6 @@ const FileUploadButton = memo(function FileUploadButton({
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   supportedImageTypes: readonly string[];
-  running: boolean;
   disabled: boolean;
   modLabel: string;
   modifierHeld: boolean;
@@ -78,7 +76,7 @@ const FileUploadButton = memo(function FileUploadButton({
               variant="ghost"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={running || disabled}
+              disabled={disabled}
               className="h-6 w-6 p-0"
               aria-label="Upload image"
             >
@@ -310,7 +308,6 @@ function getModelDisabledReason(props: LeftControlsProps, controls: RuntimeContr
 export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const isMobile = useIsMobile();
   const controls = getRuntimeControls(props);
-  const busy = props.running || props.stopping;
   const disabledReason = getModelDisabledReason(props, controls);
   const showAttachments =
     props.capabilities?.attachments.enabled === true &&
@@ -340,7 +337,6 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
           fileInputRef={props.fileInputRef}
           onFileSelect={props.onFileSelect}
           supportedImageTypes={props.supportedImageTypes}
-          running={Boolean(busy)}
           disabled={props.disabled}
           modLabel={props.modLabel}
           modifierHeld={props.modifierHeld}

@@ -67,6 +67,28 @@ describe('SessionConfigService', () => {
     });
   });
 
+  it.each(['CLAUDE', 'CODEX'] as const)(
+    'advertises image and text attachments for an active %s session',
+    async (provider) => {
+      runtimeManager.getClient.mockReturnValue({
+        provider,
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            currentValue: 'native',
+            options: [{ value: 'native', name: 'Native' }],
+          },
+        ],
+      });
+      expect((await service.getChatBarCapabilities('session-1')).attachments).toEqual({
+        enabled: true,
+        kinds: ['image', 'text'],
+      });
+    }
+  );
+
   it('normalizes Claude model labels in asynchronous config option updates', () => {
     const handle = unsafeCoerce<AcpProcessHandle>({
       provider: 'CLAUDE',

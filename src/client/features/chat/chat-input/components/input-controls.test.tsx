@@ -59,12 +59,14 @@ it.each([
 describe('capability-driven image upload controls', () => {
   it.each([
     { mobile: false, acp: true, attachments: true },
+    { mobile: false, acp: true, attachments: true, running: true },
+    { mobile: true, acp: true, attachments: true, running: true },
     { mobile: true, acp: true, attachments: true },
     { mobile: false, acp: false, attachments: true },
     { mobile: false, acp: true, attachments: false },
   ])(
     'honors upload capability (mobile=$mobile, ACP=$acp, attachments=$attachments)',
-    ({ mobile, acp, attachments }) => {
+    ({ mobile, acp, attachments, running = false }) => {
       mocks.mobile = mobile;
       const fileInputRef = createRef<HTMLInputElement>();
       const container = document.createElement('div');
@@ -94,7 +96,7 @@ describe('capability-driven image upload controls', () => {
               onReasoningChange: vi.fn(),
               onThinkingChange: vi.fn(),
               onPlanModeChange: vi.fn(),
-              running: false,
+              running,
               disabled: false,
               modLabel: '⌘',
               modifierHeld: false,

@@ -66,6 +66,10 @@ batches above 128 MiB explicitly. Framing bounds each message, rather than
 reducing total replay bytes or adding pagination; the existing renderer
 transcript window and full backend transcript retention still apply.
 
+Both managed providers accept image and text attachments. Connected conversation
+composers accept image drops, uploads, and the upload shortcut while an agent is
+working, so follow-up messages can be queued with attachments.
+
 Upload validation checks the complete JPEG codestream through its end-of-image
 marker and permits trailing metadata, including Samsung screenshot capture
 information. Truncated image segments and scans remain invalid.

@@ -279,9 +279,7 @@ export function buildCapabilitiesFromConfigOptions(
       enabled: !isCodexProvider && !!thoughtOption,
     },
     planMode: { enabled: planModeEnabled },
-    attachments: isCodexProvider
-      ? { enabled: false, kinds: [] }
-      : { enabled: true, kinds: ['image', 'text'] },
+    attachments: { enabled: true, kinds: ['image', 'text'] },
     slashCommands: { enabled: !isCodexProvider },
     usageStats: { enabled: true, contextWindow: true },
     rewind: { enabled: false },
