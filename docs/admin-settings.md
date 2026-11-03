@@ -49,14 +49,15 @@ Workspaces restored from NEW, PROVISIONING or ARCHIVING become FAILED and show
 their original status with manual recovery guidance. Import and startup do not
 resume initialization or archive cleanup. Review the workspace before retrying.
 
-PR monitoring restores disabled for both destinations. Unfinished imported
-receipt groups remain blocked even after monitoring is enabled again, its
-recipient changes or the server restarts. Their raw frozen text, identities,
-states and timestamps remain historical evidence; unclaimed pending facts are
-cancelled without claiming delivery. Settled receipt evidence is retained.
-Versions 4–7 flatten receipt members and do not encode their original frozen
-ordering; import retains the existing creation-time/ID membership interpretation
-and never uses unfinished imported receipts to authorize another send.
+PR monitoring restores disabled for MAIN and DEDICATED delivery modes.
+Unfinished imported receipt groups remain blocked even after monitoring is
+enabled again, its recipient changes or the server restarts. Their raw frozen
+text, identities, states and timestamps remain historical evidence; unclaimed
+pending facts are cancelled without claiming delivery. Settled receipt evidence
+is retained. Versions 4–7 flatten receipt members and do not encode their
+original frozen ordering; import retains the existing creation-time/ID
+membership interpretation and never uses unfinished imported receipts to
+authorize another send.
 
 The import result lists counts of runtime changes for newly created rows.
 Already inert values and skipped existing runtime rows do not count as changes.

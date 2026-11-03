@@ -742,7 +742,8 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          // The v4 format's flat run-script fields land in the nested row too.
+          // Preserve authored run-script and cleanup commands in the nested row;
+          // clear process identity, port, start time and running authority.
           // `postRunCommand` is absent because the format never carried it, so it
           // restores as null and the next reconcile reads it back off disk.
           runScript: {

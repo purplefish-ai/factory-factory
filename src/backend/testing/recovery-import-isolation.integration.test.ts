@@ -167,6 +167,22 @@ it('commits the existing v7 graph and account mapping through the private transa
   await seedSkippedWorkspace();
   const result = await dataBackupService.importData(backup);
   expect(result).toEqual({
+    inertTransforms: {
+      workspaceWorkflows: 2,
+      workspaceInitializations: 2,
+      workspaceArchives: 0,
+      runScripts: 0,
+      terminalSessions: 0,
+      agentSessions: 0,
+      monitors: 1,
+      heldReceipts: 1,
+      cancelledFacts: 0,
+      explanations: [
+        'Restored processes remain stopped. Start them manually when ready.',
+        'Unfinished workspace initialization and archiving require manual recovery; original status is retained in the workspace error.',
+        'PR monitoring is disabled. Unsettled imported receipts remain blocked even after reenable; unclaimed pending facts are cancelled without claiming delivery.',
+      ],
+    },
     projects: { imported: 1, skipped: 0 },
     workspaces: { imported: 2, skipped: 1 },
     agentSessions: { imported: 1, skipped: 0 },

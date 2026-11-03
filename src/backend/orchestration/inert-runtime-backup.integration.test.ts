@@ -639,14 +639,22 @@ it('retains incomplete unbound frozen evidence without making it claimable or re
     claimedAt: old,
     deliveredAt: null,
   });
-  await workspacePRMonitoringService.setBinding({
+  const binding = await workspacePRMonitoringService.setBinding({
     workspaceId: 'READY',
     enabled: true,
     expectedBindingRevision: 1,
   });
+  expect(binding).toEqual({ applied: true, bindingRevision: 2 });
+  expect(await workspacePRMonitoringService.get('READY')).toMatchObject({
+    enabled: true,
+    bindingRevision: 2,
+    deliveryMode: 'MAIN',
+    recipientSessionId: 'main',
+    deliveryPauseReason: null,
+  });
   expect(
     await workspacePRMonitoringService.claimDelivery(
-      { workspaceId: 'READY', prId: null, bindingRevision: 2 },
+      { workspaceId: 'READY', prId: null, bindingRevision: binding.bindingRevision },
       { deliveryId: 'new', sessionId: 'main', eventIds: ids, text: 'replacement text' }
     )
   ).toBeNull();
