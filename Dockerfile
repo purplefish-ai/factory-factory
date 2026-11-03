@@ -34,9 +34,9 @@ RUN apk add --no-cache python3 make g++ git libc6-compat
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./
 COPY patches/ ./patches/
 
-# Copy files needed by postinstall script (runs prisma generate + node-pty fixup)
+# Dependency-stage postinstall only prepares node-pty helper permissions.
+# Prisma generation belongs to the builder, after the source/config are copied.
 COPY scripts/postinstall.mjs scripts/
-COPY prisma/schema.prisma prisma/
 
 # Install all dependencies (dev deps needed for build stage)
 RUN pnpm install --frozen-lockfile
@@ -51,12 +51,11 @@ RUN apk add --no-cache git libc6-compat
 
 # Copy dependencies from stage 1
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma/generated ./prisma/generated
 
 # Copy source
 COPY . .
 
-# Build everything: backend TS, frontend Vite SPA, prompts
+# Generate Prisma and build everything: backend TS, frontend Vite SPA, prompts
 ENV NODE_ENV=production
 # Use relative asset paths so the app works behind a reverse proxy with a path prefix.
 # Relative paths (./assets/...) resolve correctly regardless of the proxy mount point,
