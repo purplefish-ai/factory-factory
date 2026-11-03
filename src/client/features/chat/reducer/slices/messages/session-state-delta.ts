@@ -20,11 +20,14 @@ import { QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
 export function reduceSessionStateDeltaSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'QUEUE_UPDATED':
-      return applyQueue(state, action.payload.queuedMessages);
+      return withMessages(state, applyQueue(state, action.payload.queuedMessages));
     case 'TRANSCRIPT_MESSAGE_COMMITTED':
-      return applyCommittedMessage(
-        applyQueue(state, action.payload.queuedMessages),
-        action.payload.message
+      return withMessages(
+        state,
+        applyCommittedMessage(
+          applyQueue(state, action.payload.queuedMessages),
+          action.payload.message
+        )
       );
     case 'PENDING_REQUEST_UPDATED': {
       const pendingRequest = convertPendingRequest(action.payload.pendingInteractiveRequest);
@@ -57,8 +60,11 @@ function sameAttachments(
     return (
       other !== undefined &&
       attachment.id === other.id &&
+      attachment.name === other.name &&
+      attachment.type === other.type &&
       attachment.size === other.size &&
-      attachment.data === other.data
+      attachment.data === other.data &&
+      attachment.contentType === other.contentType
     );
   });
 }
@@ -99,8 +105,21 @@ function sameMessageList(left: ChatMessage[], right: ChatMessage[]): boolean {
   return left.length === right.length && left.every((message, index) => message === right[index]);
 }
 
+/** Non-message state plus the transcript list it should render. */
+interface DeltaResult {
+  state: ChatState;
+  messages: ChatMessage[];
+}
+
+/** Applies the renderer window once, and only when the transcript list changed. */
+function withMessages(previous: ChatState, result: DeltaResult): ChatState {
+  return sameMessageList(previous.messages, result.messages)
+    ? result.state
+    : applyRendererMessages(result.state, result.messages);
+}
+
 /** Replace the queue and its transcript placeholders, as a snapshot would. */
-function applyQueue(state: ChatState, queue: QueuedMessage[]): ChatState {
+function applyQueue(state: ChatState, queue: QueuedMessage[]): DeltaResult {
   const queuedIds = new Set(queue.map((queued) => queued.id));
   const queuedMessages = new Map<string, RecoverableQueuedMessage>();
   for (const queued of queue) {
@@ -133,30 +152,32 @@ function applyQueue(state: ChatState, queue: QueuedMessage[]): ChatState {
     );
   });
 
-  const nextState: ChatState = {
-    ...state,
-    queuedMessages,
-    pendingMessages: withoutPendingIds(state.pendingMessages, queuedIds),
+  return {
+    state: {
+      ...state,
+      queuedMessages,
+      pendingMessages: withoutPendingIds(state.pendingMessages, queuedIds),
+    },
+    messages,
   };
-  return sameMessageList(state.messages, messages)
-    ? nextState
-    : applyRendererMessages(nextState, messages);
 }
 
 /** Upsert one committed transcript entry by id, as a snapshot would. */
-function applyCommittedMessage(state: ChatState, message: ChatMessage): ChatState {
-  const pendingMessages = withoutPendingIds(state.pendingMessages, [message.id]);
+function applyCommittedMessage(
+  { state, messages }: DeltaResult,
+  message: ChatMessage
+): DeltaResult {
   const nextState: ChatState = {
     ...state,
-    pendingMessages,
+    pendingMessages: withoutPendingIds(state.pendingMessages, [message.id]),
     // A committed user message starts a new turn; drop the previous turn's preview.
     ...(message.source === 'user' ? { latestThinking: null, latestThinkingDeltaOrder: null } : {}),
   };
-  const existingIndex = state.messages.findIndex((entry) => entry.id === message.id);
-  if (existingIndex >= 0 && isSameUserMessage(state.messages[existingIndex], message)) {
-    return nextState;
+  const existingIndex = messages.findIndex((entry) => entry.id === message.id);
+  if (existingIndex >= 0 && isSameUserMessage(messages[existingIndex], message)) {
+    return { state: nextState, messages };
   }
   const withoutExisting =
-    existingIndex >= 0 ? state.messages.filter((entry) => entry.id !== message.id) : state.messages;
-  return applyRendererMessages(nextState, insertMessageByOrder(withoutExisting, message));
+    existingIndex >= 0 ? messages.filter((entry) => entry.id !== message.id) : messages;
+  return { state: nextState, messages: insertMessageByOrder(withoutExisting, message) };
 }

@@ -94,8 +94,10 @@ function snapshotOf(backend: BackendState): WebSocketMessage {
 /** Feed a wire frame through the same validation and action mapping the transport uses. */
 function receive(state: ChatState, frame: WebSocketMessage): ChatState {
   const wire: unknown = JSON.parse(JSON.stringify({ type: 'session_delta', data: frame }));
-  expect(isWebSocketMessage(wire)).toBe(true);
-  const action = createActionFromWebSocketMessage(frame);
+  if (!isWebSocketMessage(wire) || wire.type !== 'session_delta') {
+    throw new Error('Delta frame failed transport validation');
+  }
+  const action = createActionFromWebSocketMessage(wire.data);
   expect(action).not.toBeNull();
   return action ? chatReducer(state, action) : state;
 }
@@ -300,6 +302,18 @@ describe('targeted session-state deltas', () => {
     expect(
       receive(unchanged, { type: 'pending_request_updated', pendingInteractiveRequest: null })
     ).toBe(unchanged);
+  });
+
+  it('replaces a queued row when only attachment metadata changes', () => {
+    const attachment = { id: 'a1', name: 'old.png', type: 'image/png', size: 3, data: 'abc' };
+    const withAttachment = (name: string): QueuedMessage => ({
+      ...queued('q1'),
+      attachments: [{ ...attachment, name }],
+    });
+    let state = hydrated({ transcript: [], queue: [], pendingInteractiveRequest: null });
+    state = receive(state, { type: 'queue_updated', queuedMessages: [withAttachment('old.png')] });
+    state = receive(state, { type: 'queue_updated', queuedMessages: [withAttachment('new.png')] });
+    expect(state.messages[0]?.attachments?.[0]?.name).toBe('new.png');
   });
 
   it('keeps local recovery metadata a snapshot would discard', () => {
