@@ -39,6 +39,18 @@ a reload does not flash the defaults before the saved settings load.
 
 ## Backup imports
 
+Before opening the restore transaction, versions 4–7 validate the complete
+source graph after legacy normalization. Duplicate project identities or slugs,
+workspace/session/terminal/PR/event IDs, event deduplication keys, contradictory
+declared ownership and invalid parent links reject the whole file. A declared
+parent must be a different root in the same file and project; children may
+appear before their parents. Missing projects remain scoped skips.
+
+Receipt members must belong to one workspace. Contradictory frozen metadata
+within that workspace remains quarantined historical evidence: every raw member
+survives export, inert import and re-export, with no implied delivery success.
+These formats cannot prove membership omitted from the original file.
+
 Imports of backup versions 4–7 restore runtime metadata with processes stopped.
 Run-script commands, cleanup commands, terminal labels and provider history
 identities remain available, but process IDs, run-script ports and start times
