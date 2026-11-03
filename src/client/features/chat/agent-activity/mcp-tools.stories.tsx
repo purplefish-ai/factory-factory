@@ -11,7 +11,7 @@ const calls: PairedToolCall[] = [
   },
   {
     id: 'list',
-    name: 'List files in task workspace/src',
+    name: 'List files in /project/tasks',
     input: { path: '/project/tasks' },
     status: 'success',
   },

@@ -9,7 +9,7 @@ import { ToolSequenceGroup } from './tool-info-renderer';
 it.each([
   ['mcp.codex_apps.github.fetch_pr_comments', 'Fetch PR comments · GitHub', 'GitHub'],
   ['mcp__my_server__fetchBuildStatus', 'Fetch build status · My server', 'My server'],
-  ['List files in task workspace/src', 'List files', 'Listed files'],
+  ['List files in /project/tasks', 'List files', 'Listed files'],
 ])(
   'keeps %s readable and preserves its identifier and input on expansion',
   (name, label, summary) => {
@@ -43,7 +43,7 @@ it.each([
       flushSync(() => row?.click());
       expect(container.textContent).toContain(name);
       expect(container.textContent).toContain('/project/tasks');
-      expect(container.textContent).toContain('123');
+      expect(container.textContent).toContain('"pr": 123');
     } finally {
       root.unmount();
     }

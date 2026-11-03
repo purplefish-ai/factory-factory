@@ -9,16 +9,25 @@ const WORD_LABELS: Record<string, string> = {
 };
 
 function humanize(value: string): string {
-  const words = value
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim()
-    .toLowerCase()
-    .replace(/\bpull request\b/g, 'PR')
-    .split(/\s+/)
-    .map((word) => (Object.hasOwn(WORD_LABELS, word) ? WORD_LABELS[word] : word))
-    .join(' ');
+  const canonical = value.toLowerCase();
+  if (Object.hasOwn(WORD_LABELS, canonical)) {
+    return WORD_LABELS[canonical] ?? value;
+  }
+  // Match acronym plurals before the ordinary camel-case word boundary.
+  const tokens =
+    value.match(
+      /[A-Z]{2,}s(?=[A-Z_-]|$)|[A-Z]+(?=[A-Z][a-z]|[^a-zA-Z]|$)|[A-Z]?[a-z]+|[0-9]+|[^a-zA-Z0-9_-]+/g
+    ) ?? [];
+  const words = tokens
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (Object.hasOwn(WORD_LABELS, lower)) {
+        return WORD_LABELS[lower];
+      }
+      return /^[A-Z]{2,}s?$/.test(word) ? word : lower;
+    })
+    .join(' ')
+    .replace(/\bpull request\b/g, 'PR');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
