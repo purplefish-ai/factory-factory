@@ -59,6 +59,10 @@ it('reports a failed drain chunk and retries it on the next drop', async () => {
     );
     expect(getPendingWorkspaceCreationDropProjectIds()).not.toContain(projectId);
     expect(uncaught).not.toHaveBeenCalled();
+    expect(globalThis.reportError).toHaveBeenCalledWith(
+      // Vitest wraps the factory error; the boundary must add the component trace.
+      expect.objectContaining({ stack: expect.stringContaining('DropDrainBoundary') })
+    );
     expect(container.textContent).toBe('Sidebar');
 
     chunk.fail = false;

@@ -1,5 +1,6 @@
 import {
   Component,
+  type ErrorInfo,
   lazy,
   type ReactNode,
   Suspense,
@@ -8,6 +9,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { ImageDropZone } from '@/client/components/image-drop-zone';
+import { reportBoundaryError } from '@/client/error-boundary';
 import {
   getPendingWorkspaceCreationDropProjectIds,
   getWorkspaceCreationDropGeneration,
@@ -36,7 +38,7 @@ class DropDrainBoundary extends Component<{ children: ReactNode }, { failed: boo
     return { failed: true };
   }
 
-  override componentDidCatch(error: Error) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // React.lazy caches a rejected import for the lifetime of the component.
     WorkspaceCreationDropDrain = lazyDropDrain();
     // Discarding the queue unmounts this boundary, so the next drop starts clean.
@@ -44,7 +46,7 @@ class DropDrainBoundary extends Component<{ children: ReactNode }, { failed: boo
       takeWorkspaceCreationAttachments(projectId);
     }
     toast.error('Dropped images could not be attached. Try dropping them again.');
-    globalThis.reportError?.(error);
+    reportBoundaryError(error, errorInfo);
   }
 
   override render() {
