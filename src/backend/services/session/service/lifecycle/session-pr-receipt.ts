@@ -1,11 +1,9 @@
-import { join } from 'node:path';
 import { z } from 'zod';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { prEventMarker } from '@/shared/pr-monitoring';
-import { readClosedSessionTranscriptHeader } from './closed-session-transcript-header';
 
 export async function findPRDeliveryReceipt(
   sessionId: string,
@@ -21,7 +19,7 @@ export async function findPRDeliveryReceipt(
     if (rollovers === 'delivered') {
       return rollovers;
     }
-    const archived = await findArchivedReceipt(sessionId, deliveryId, !session);
+    const archived = await findArchivedReceipt(sessionId, deliveryId, session);
     if (archived === 'delivered') {
       return archived;
     }
@@ -85,37 +83,27 @@ async function findRolloverReceipt(
 async function findArchivedReceipt(
   sessionId: string,
   deliveryId: string,
-  unavailableWhenEmpty = true
+  session: ReceiptSession | null
 ): Promise<'delivered' | 'absent' | 'unavailable'> {
   const archives = await closedSessionAccessor.findBySessionIdWithWorkspace(sessionId);
-  let unavailable = unavailableWhenEmpty && archives.length === 0;
+  let unavailable = !session && archives.length === 0;
   for (const archive of archives) {
     try {
-      if (!archive.workspace.worktreePath) {
-        unavailable = true;
-        continue;
-      }
-      const metadata = await readClosedSessionTranscriptHeader(
-        join(archive.workspace.worktreePath, archive.transcriptPath),
-        z.object({
-          sessionId: z.literal(sessionId),
-          metadata: z.object({
-            provider: z.enum(['CLAUDE', 'CODEX']),
-            providerSessionId: z.string().min(1),
-            codexAccountId: z.string().nullish(),
-          }),
-        })
-      );
-      if (metadata.metadata.provider !== archive.provider) {
+      const identity = await sessionDataService.readClosedSessionProviderIdentity(archive.id);
+      if (
+        identity.provider === 'CODEX' &&
+        session?.provider === 'CODEX' &&
+        identity.codexAccountId !== session.codexAccountId
+      ) {
         unavailable = true;
         continue;
       }
       const receipt = await loadReceipt(
-        metadata.metadata.provider,
-        metadata.metadata.providerSessionId,
-        archive.workspace.worktreePath,
+        identity.provider,
+        identity.providerSessionId,
+        identity.workingDir,
         deliveryId,
-        metadata.metadata.codexAccountId
+        identity.codexAccountId
       );
       if (receipt === 'delivered') {
         return receipt;
