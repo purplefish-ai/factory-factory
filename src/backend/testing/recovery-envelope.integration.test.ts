@@ -19,7 +19,7 @@ import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
-import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -144,28 +144,38 @@ it.each([
     expect(await destination.prisma.codexAccount.count()).toBe(3);
   }
 });
-it('exports only the existing serialized base data plus v8 coverage, then restores into another SQLite database', async () => {
+it('exports the current profile with explicit null links for published v7 rows, then restores into another SQLite database', async () => {
   database.prisma = source.prisma;
   await Reflect.apply(dataBackupService.importData, dataBackupService, [v7]);
   const exported = await dataBackupService.exportData('test');
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', periodic.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery', links.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', {
     baseJson: { version: 1, jsonStorage: [] },
     periodicConfig: { version: 1, tasks: [] },
   });
-  const legacy = exportDataSchema.parse({
-    ...exported,
-    meta: { ...exported.meta, schemaVersion: 7 },
-  });
-  const { recovery: _sections, ...base } = exported.data as typeof exported.data & {
-    recovery: unknown;
-  };
-  expect(base).toEqual(legacy.data);
+  expect(exportDataSchema.parse(exported)).toEqual(exported);
+  const expectedLinks = v7.data.workspaces
+    .map(({ id }) => ({ id, periodicTaskId: null }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  expect(
+    exported.data.workspaces
+      .map((workspace) => ({
+        id: workspace.id,
+        periodicTaskId: 'periodicTaskId' in workspace ? workspace.periodicTaskId : undefined,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  ).toEqual(expectedLinks);
   database.prisma = destination.prisma;
   const result = await dataBackupService.importData(exported);
   expect(result.workspaces.imported).toBe(3);
   expect(await destination.prisma.workspace.count()).toBe(3);
+  expect(
+    await destination.prisma.workspace.findMany({
+      select: { id: true, periodicTaskId: true },
+      orderBy: { id: 'asc' },
+    })
+  ).toEqual(expectedLinks);
 });
 it.each(malformedRecoveryCases)(
   'rejects %s before service or router opens the writer',
