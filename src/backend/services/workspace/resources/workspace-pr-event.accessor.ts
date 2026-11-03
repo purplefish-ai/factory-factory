@@ -59,6 +59,36 @@ const unclaimedDeliveryWhere = {
   deliveredAt: null,
 } satisfies Prisma.WorkspacePREventWhereInput;
 
+/**
+ * Fact kinds whose deduplication identity embeds the PR's transition sequence.
+ * That sequence is persisted with each accepted observation and only grows, so
+ * the reducer can never regenerate one of these keys. `CI_RECOVERED` (keyed by
+ * head and failure) and legacy `MONITORING_ENABLED` controls are never pruned.
+ */
+const PRUNABLE_FACT_KINDS = [
+  'REVIEW_FEEDBACK',
+  'CI_FAILED',
+  'CONFLICT_DETECTED',
+  'CONFLICT_CLEARED',
+  'PR_MERGED',
+  'PR_CLOSED',
+];
+
+/**
+ * Terminal facts that were never claimed: the reducer, pending counts and
+ * delivery never read them. Delivery members and any legacy receipt evidence
+ * are retained, because frozen batches must keep their complete membership.
+ */
+function prunableTerminalEventWhere(before: Date) {
+  return {
+    state: { in: ['SUPERSEDED', 'CANCELLED'] },
+    kind: { in: PRUNABLE_FACT_KINDS },
+    prId: { not: null },
+    createdAt: { lt: before },
+    ...unclaimedDeliveryWhere,
+  } satisfies Prisma.WorkspacePREventWhereInput;
+}
+
 const legacyFields = [
   'workspaceId',
   'state',
@@ -539,6 +569,27 @@ class WorkspacePrEventAccessor {
         OR: [{ state: { in: states } }, { batchId: { not: null } }, { deliveryId: { not: null } }],
       })
     ).filter((event) => states.includes(event.state) && event.deduplicationKey.startsWith(prefix));
+  }
+  /**
+   * Delete one bounded batch of unclaimed SUPERSEDED/CANCELLED facts created
+   * before `before`, oldest first. The delete re-applies the predicate, so a
+   * row claimed or changed after selection is kept. Returns the deleted count.
+   */
+  async pruneTerminalEvents(input: { before: Date; limit: number }) {
+    const where = prunableTerminalEventWhere(input.before);
+    const rows = await prisma.workspacePREvent.findMany({
+      where,
+      select: { id: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: input.limit,
+    });
+    if (!rows.length) {
+      return 0;
+    }
+    const deleted = await prisma.workspacePREvent.deleteMany({
+      where: { ...where, id: { in: rows.map((row) => row.id) } },
+    });
+    return deleted.count;
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
     return tx.workspacePREvent.updateMany({
