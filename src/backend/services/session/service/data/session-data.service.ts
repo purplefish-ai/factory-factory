@@ -246,7 +246,7 @@ class SessionDataImplementation {
     return session ? toAgentSessionRecord(session) : null;
   }
   findExistingBackupSessionIds(tx: Prisma.TransactionClient, ids: readonly string[]) {
-    return prDedicatedSessionAccessor.findExistingBackupSessionIds(tx, ids);
+    return agentSessionAccessor.findExistingBackupSessionIds(tx, ids);
   }
   restorePRDedicatedSession(
     tx: Prisma.TransactionClient,

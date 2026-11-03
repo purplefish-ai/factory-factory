@@ -20,20 +20,6 @@ export type PRDedicatedSessionAcquisition =
 class AcquisitionCancelled extends Error {}
 
 class PRDedicatedSessionAccessor {
-  async findExistingBackupSessionIds(tx: Prisma.TransactionClient, ids: readonly string[]) {
-    const existing = new Set<string>();
-    const unique = [...new Set(ids)];
-    for (let index = 0; index < unique.length; index += 100) {
-      const rows = await tx.agentSession.findMany({
-        where: { id: { in: unique.slice(index, index + 100) } },
-        select: { id: true },
-      });
-      for (const row of rows) {
-        existing.add(row.id);
-      }
-    }
-    return existing;
-  }
   acquire(input: AcquirePRDedicatedSessionInput): Promise<PRDedicatedSessionAcquisition> {
     return agentSessionAccessor
       .runWorkspaceAcquisition(input.workspaceId, () =>
