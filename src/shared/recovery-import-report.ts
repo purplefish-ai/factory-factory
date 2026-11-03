@@ -34,7 +34,7 @@ export function createRecoveryImportReport(
       'Paths and provider-session IDs may be metadata; repository/worktree files, provider history bytes, secrets, native account homes and live runtime authority are excluded.',
       ...(periodicConfig
         ? [
-            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips: ${periodicConfig.reasons.EXISTING_IDENTITY} existing identities, ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY} unavailable imported parents. Periodic execution history excluded.`,
+            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}. Periodic execution history excluded.`,
           ]
         : []),
     ],

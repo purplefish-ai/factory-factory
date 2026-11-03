@@ -91,8 +91,8 @@ export function DataImportResultsProvider({
                     {periodic.restoredDisabled}
                   </p>
                   <p>
-                    Periodic skips: {periodic.reasons.EXISTING_IDENTITY} existing identities;{' '}
-                    {periodic.reasons.INCOMPLETE_DEPENDENCY} unavailable imported parents
+                    Skips by reason: existing task ID: {periodic.reasons.EXISTING_IDENTITY}; project
+                    not created by this import: {periodic.reasons.INCOMPLETE_DEPENDENCY}.
                   </p>
                 </section>
               )}

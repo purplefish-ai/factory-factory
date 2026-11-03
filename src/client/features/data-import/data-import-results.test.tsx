@@ -272,7 +272,7 @@ it('renders exact periodic counters with entire-source enabled scope and downloa
   for (const text of [
     'Periodic configurations: 2 imported, 3 skipped',
     'Enabled in entire source section: 4; restored disabled: 2',
-    'Periodic skips: 1 existing identities; 2 unavailable imported parents',
+    'Skips by reason: existing task ID: 1; project not created by this import: 2.',
   ]) {
     expect(document.body.textContent).toContain(text);
   }

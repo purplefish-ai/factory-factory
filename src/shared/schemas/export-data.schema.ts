@@ -489,9 +489,13 @@ const version8Schema = z
       ctx.addIssue({ code: 'custom', message: 'Periodic profile sections do not match' });
     }
     const projects = new Set(backup.data.projects.map((project) => project.id));
-    for (const task of config?.tasks ?? []) {
+    for (const [index, task] of (config?.tasks ?? []).entries()) {
       if (!projects.has(task.projectId)) {
-        ctx.addIssue({ code: 'custom', message: 'Periodic task project is absent from backup' });
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Periodic task project is absent from backup',
+          path: ['data', 'recovery', 'periodicConfig', 'tasks', index, 'projectId'],
+        });
       }
     }
     if (covered && section) {

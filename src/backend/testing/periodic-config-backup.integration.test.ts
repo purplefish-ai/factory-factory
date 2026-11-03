@@ -372,3 +372,25 @@ it('keeps physical SQL NULL and JSON null distinct for all three full-base catal
   await dataBackupService.importData(backup);
   expect(await read(target.prisma)).toEqual({ workspaces: states, prs: states, sessions: states });
 });
+
+it('reports a missing second task project at its exact path before opening the private writer', async () => {
+  const file = structuredClone(fixed);
+  file.data.recovery.periodicConfig.tasks.push({
+    ...file.data.recovery.periodicConfig.tasks[0]!,
+    id: 'second-task',
+    projectId: 'absent-project',
+  });
+  await expectBackupWriterUnopened(async () => {
+    await expect(
+      Reflect.apply(dataBackupService.importData, dataBackupService, [file])
+    ).rejects.toMatchObject({
+      issues: expect.arrayContaining([
+        {
+          code: 'custom',
+          message: 'Periodic task project is absent from backup',
+          path: ['data', 'recovery', 'periodicConfig', 'tasks', 1, 'projectId'],
+        },
+      ]),
+    });
+  });
+});

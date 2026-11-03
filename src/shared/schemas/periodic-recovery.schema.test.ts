@@ -5,7 +5,7 @@ import base from '@/shared/testing/recovery-base-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import { exportDataSchema } from './export-data.schema';
 
-it('preserves the independent periodic literal through client, router and service parsing', () => {
+it('preserves the independent periodic literal through three repeated schema parses', () => {
   let parsed = exportDataSchema.parse(fixed);
   for (let i = 0; i < 2; i++) {
     parsed = exportDataSchema.parse(parsed);
@@ -140,4 +140,26 @@ it('requires the periodic section even for an empty task array', () => {
   expect(exportDataSchema.safeParse(file).success).toBe(true);
   Reflect.deleteProperty(file.data.recovery, 'periodicConfig');
   expect(exportDataSchema.safeParse(file).success).toBe(false);
+});
+
+it('locates a missing source project on the second periodic task', () => {
+  const file = structuredClone(fixed);
+  file.data.recovery.periodicConfig.tasks.push({
+    ...file.data.recovery.periodicConfig.tasks[0]!,
+    id: 'second-task',
+    projectId: 'absent-project',
+  });
+  const result = exportDataSchema.safeParse(file);
+  expect(result.success).toBe(false);
+  if (result.success) {
+    throw new Error('Expected a missing periodic project');
+  }
+  const issues = result.error.issues.flatMap((issue) =>
+    issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+  );
+  expect(issues).toContainEqual({
+    code: 'custom',
+    message: 'Periodic task project is absent from backup',
+    path: ['data', 'recovery', 'periodicConfig', 'tasks', 1, 'projectId'],
+  });
 });

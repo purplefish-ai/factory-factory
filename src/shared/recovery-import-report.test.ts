@@ -60,7 +60,7 @@ it('reports typed periodic totals separately while preserving historical result 
     createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)).warnings
   );
   expect(result.warnings[2]).toBe(
-    'Periodic configuration restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips: 1 existing identities, 2 unavailable imported parents. Periodic execution history excluded.'
+    'Periodic configuration restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing task ID: 1; project not created by this import: 2. Periodic execution history excluded.'
   );
   for (const original of [fixed, workspace, full]) {
     const old = createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery));
