@@ -42,9 +42,11 @@ function iconForKind(kind: ToolActivityKind) {
 
 /** One kind of activity shares its row icon; mixed groups use a neutral stack. */
 function groupIcon(calls: PairedToolCall[]) {
-  const icons = new Set([...getToolGroupKinds(calls)].map(iconForKind));
-  const [only] = icons;
-  return icons.size === 1 && only ? only : StackSimpleIcon;
+  const kinds = [...getToolGroupKinds(calls)];
+  const [only] = kinds;
+  // Reads and searches are both lookups, so they count as one kind here.
+  const lookupsOnly = kinds.every((kind) => kind === 'read' || kind === 'search');
+  return only && (kinds.length === 1 || lookupsOnly) ? iconForKind(only) : StackSimpleIcon;
 }
 
 function ActivityIcon({

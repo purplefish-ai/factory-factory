@@ -336,6 +336,7 @@ describe('tool group icon', () => {
     ['edits', [createCall('a', 'Edit'), createCall('b', 'Write')], PencilSimpleIcon],
     ['reads and searches', [createCall('a', 'Read'), createCall('b', 'Grep')], MagnifyingGlassIcon],
     ['mixed activity', [command('a'), createCall('b', 'Edit')], StackSimpleIcon],
+    ['commands with other tools', [command('a'), createCall('b', 'Task')], StackSimpleIcon],
   ] as const)('uses the matching icon for %s', (_label, calls, Icon) => {
     const expected = iconMarkup(Icon);
     expect(expected).not.toBe('');
