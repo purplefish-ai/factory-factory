@@ -14,8 +14,14 @@ export function formatThinkingText(input: string | null | undefined): string {
   // Protect complete or streaming fences before spans, including literal separators and emphasis.
   const protectedText = source
     .replace(
-      /^ {0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:^ {0,3}\1[ \t]*(?=\r?$)|(?![\s\S]))/gm,
-      (_match, _fence: string, text: string) => protectCode(text)
+      /^ {0,3}(`{3,})[^`\n]*\n([\s\S]*?)(?:^ {0,3}\1`*[ \t]*(?=\r?$)|(?![\s\S]))|^ {0,3}(~{3,})[^\n]*\n([\s\S]*?)(?:^ {0,3}\3~*[ \t]*(?=\r?$)|(?![\s\S]))/gm,
+      (
+        _match,
+        _backticks: string | undefined,
+        backtickText: string | undefined,
+        _tildes: string | undefined,
+        tildeText: string | undefined
+      ) => protectCode(backtickText ?? tildeText ?? '')
     )
     .replace(/`([^`\n]+)`/g, (_match, text: string) => protectCode(text));
   return stripThinkingMarkdown(protectedText)

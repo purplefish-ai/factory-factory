@@ -12,6 +12,10 @@ it.each([
   ['Inspect `user_id_`', 'Inspect user_id_'],
   ['```yaml\n---\nuser_id: value\n```', '---\nuser_id: value'],
   ['```text\n**literal**\n\n---\n```', '**literal**\n\n---'],
+  ['```npm i``` then\n**Continue**', 'npm i then\nContinue'],
+  ['```text\nuser_id\n````\n**Continue**', 'user_id\n\nContinue'],
+  ['~~~text\n---\n~~~~\n**Continue**', '---\n\nContinue'],
+  ['```npm i``` then\n```text\n---\n```\n**Continue**', 'npm i then\n---\n\nContinue'],
 ])('cleans surrounding Markdown while preserving literal code: %s', (input, expected) => {
   expect(formatThinkingText(input)).toBe(expected);
 });
