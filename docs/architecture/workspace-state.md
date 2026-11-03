@@ -42,10 +42,11 @@ queues another update.
 Helpers use the conversation's provider and account: Luna with low reasoning for
 Codex, Haiku for Claude. They use short custom instructions, no working-session
 context, no tools/MCP, and no persistent provider session. Calls time out after
-45 seconds. Workspace launch, chat dispatch, and publication never wait on them.
-The saved branch suggestion feeds the existing pre-push/pre-PR renamer while the
-branch is still marked auto-generated, with deterministic naming as fallback. A
-local naming collision adds a short workspace suffix.
+45 seconds. Claude's structured-output schema uses JSON Schema Draft 7 for
+runtime compatibility. Workspace launch, chat dispatch, and publication never
+wait on them. The saved branch suggestion feeds the existing pre-push/pre-PR
+renamer while the branch is still marked auto-generated, with deterministic
+naming as fallback. A local naming collision adds a short workspace suffix.
 
 Environment controls: `WORKSPACE_METADATA_ENABLED` (default `true`),
 `WORKSPACE_METADATA_CODEX_MODEL` (default `gpt-6-luna`), and

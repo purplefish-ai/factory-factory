@@ -87,7 +87,7 @@ describe('disposable metadata inference', () => {
     await expect(access(directory)).rejects.toThrow();
   });
 
-  it('uses Haiku with a custom system prompt, no tools, and no saved session', async () => {
+  it('uses Haiku with a compatible Draft 7 schema and no saved session', async () => {
     const close = vi.fn();
     mocks.query.mockReturnValue({
       async *[Symbol.asyncIterator]() {
@@ -112,6 +112,14 @@ describe('disposable metadata inference', () => {
           strictMcpConfig: true,
           systemPrompt: expect.stringContaining('what is happening in the work now'),
           settings: { disableAllHooks: true },
+          outputFormat: {
+            type: 'json_schema',
+            schema: expect.objectContaining({
+              $schema: 'http://json-schema.org/draft-07/schema#',
+              required: ['title', 'branch', 'summary', 'sidebarSummary'],
+              additionalProperties: false,
+            }),
+          },
         }),
       })
     );

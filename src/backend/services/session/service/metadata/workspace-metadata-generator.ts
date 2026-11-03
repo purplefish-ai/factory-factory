@@ -38,7 +38,10 @@ export async function generateWorkspaceMetadata(
   timeout.unref?.();
   try {
     controller.signal.throwIfAborted();
-    const schema = z.toJSONSchema(WorkspaceMetadataResultSchema);
+    // Claude's structured-output validator does not support Draft 2020-12.
+    const schema = z.toJSONSchema(WorkspaceMetadataResultSchema, {
+      target: input.provider === 'CLAUDE' ? 'draft-7' : 'draft-2020-12',
+    });
     const prompt = JSON.stringify(input.input);
     if (input.provider === 'CLAUDE') {
       const session = query({
