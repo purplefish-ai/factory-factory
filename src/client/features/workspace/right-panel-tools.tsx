@@ -4,6 +4,7 @@ import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
+import { WorkspaceInboxPanel } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,7 +15,6 @@ import { FileBrowserPanel } from './file-browser-panel';
 import { PeriodicTaskPanel } from './periodic-task-panel';
 import type { TopPanelTab } from './right-panel-state';
 import { ScreenshotsPanel } from './screenshots-panel';
-import { WorkspaceInboxPanel } from './workspace-inbox-panel';
 
 interface TopPanelAreaProps {
   compact?: boolean;

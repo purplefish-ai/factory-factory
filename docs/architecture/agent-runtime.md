@@ -1090,7 +1090,14 @@ Messages are persisted as workspace inbox mail. Their bodies are never injected
 automatically into an agent conversation. Agents receive a coalesced, body-free
 “you have workspace mail” signal, inspect summaries with `list_mail`, retrieve
 selected content with `read_mail`, and explicitly acknowledge IDs with
-`ack_mail`. The workspace right panel exposes the same inbox to users.
+`ack_mail`. The workspace right panel exposes the same inbox to users. Chat
+renders standalone mail signals as compact, collapsed envelope rows, hiding
+agent instructions and receipt markers. Expanding a row loads the current inbox
+and lets users open message bodies; the revision labels the notification rather
+than a historical inbox snapshot. Reading and acknowledgement keep the same
+explicit inbox behavior. Parent/child inbox notifications in older transcripts
+also collapse to envelope rows with expandable message text. Combined user
+prompts retain their full text so user instructions remain visible.
 
 `PROGRESS` mail is quiet and can supersede older progress for the same sender
 and task key; explicit task revisions prevent late progress from replacing a

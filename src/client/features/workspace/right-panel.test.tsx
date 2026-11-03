@@ -101,7 +101,7 @@ vi.mock('./agents-panel', () => ({
   },
 }));
 
-vi.mock('./workspace-inbox-panel', () => ({
+vi.mock('@/client/features/inbox', () => ({
   WorkspaceInboxPanel: () => createElement('section', { 'data-testid': 'inbox-panel' }),
 }));
 

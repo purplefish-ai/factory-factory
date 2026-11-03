@@ -4,6 +4,7 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { ChatTranscript } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import {
   ackMailInputSchema,
@@ -168,7 +169,15 @@ function createResponses(scenario: Scenario) {
 function storyClientError(error: unknown) {
   return new TRPCClientError(error instanceof Error ? error.message : 'Could not load messages');
 }
-function Fixture({ scenario }: { scenario: Scenario }) {
+function Fixture({
+  scenario,
+  notification = false,
+  queued = false,
+}: {
+  scenario: Scenario;
+  notification?: boolean;
+  queued?: boolean;
+}) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
   );
@@ -195,7 +204,32 @@ function Fixture({ scenario }: { scenario: Scenario }) {
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <WorkspaceInboxPanel workspaceId="inbox-story" />
+        {notification ? (
+          <ChatTranscript
+            scroll={{
+              identity: 'inbox-notification-story',
+              active: true,
+              ready: true,
+              initialIntent: 'following',
+              initialPosition: null,
+            }}
+            messages={[
+              {
+                id: 'workspace-mail-wake-inbox-story:4',
+                source: 'user',
+                timestamp: '2026-11-03T12:00:00Z',
+                order: 0,
+                text: 'You have workspace mail (revision 4). Use list_mail to inspect summaries, read_mail for selected bodies, and ack_mail with the observed revision after inspection. Mail acknowledgement is separate from task completion.\n\n<!-- workspace-mail-wake-inbox-story:4 -->',
+              },
+            ]}
+            queuedMessageIds={new Set(queued ? ['workspace-mail-wake-inbox-story:4'] : [])}
+            running={false}
+            startingSession={false}
+            loadingSession={false}
+          />
+        ) : (
+          <WorkspaceInboxPanel workspaceId="inbox-story" />
+        )}
       </QueryClientProvider>
     </trpc.Provider>
   );
@@ -203,13 +237,17 @@ function Fixture({ scenario }: { scenario: Scenario }) {
 function InboxStory({
   scenario = 'messages',
   width = 440,
+  notification = false,
+  queued = false,
 }: {
   scenario?: Scenario;
   width?: number;
+  notification?: boolean;
+  queued?: boolean;
 }) {
   return (
     <div className="h-[540px] border bg-background" style={{ width }}>
-      <Fixture key={scenario} scenario={scenario} />
+      <Fixture key={scenario} scenario={scenario} notification={notification} queued={queued} />
     </div>
   );
 }
@@ -223,6 +261,23 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const UnreadMessages: Story = {};
 export const NarrowInbox: Story = { args: { width: 320 } };
+export const MailNotification: Story = { args: { notification: true, width: 720 } };
+export const QueuedMailNotification: Story = {
+  args: { notification: true, queued: true, width: 720 },
+};
+export const ReadFromNotification: Story = {
+  args: { notification: true, width: 720 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('region', { name: 'Workspace inbox' })).toBeNull();
+    await userEvent.click(canvas.getByText('Workspace mail'));
+    await userEvent.click(
+      await canvas.findByRole('button', { name: /Authentication needs a decision/ })
+    );
+    await expect(await canvas.findByText(/The existing identity provider supports/)).toBeVisible();
+  },
+};
+export const NarrowMailNotification: Story = { args: { notification: true, width: 320 } };
 export const ReadAndAcknowledge: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
