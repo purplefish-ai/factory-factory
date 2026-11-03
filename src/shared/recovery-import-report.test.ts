@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
+import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import { createRecoveryImportReport } from './recovery-import-report';
 import { recoveryMetadataSchema } from './schemas/recovery-envelope.schema';
 import workspace from './testing/recovery-base-json-workspace-v8.fixture.json';
@@ -39,4 +40,31 @@ it('names the exact full-profile physical catalog and preserves other warnings',
     'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata. Omitted domains are not restored.',
     createRecoveryImportReport(recoveryMetadataSchema.parse(fixed.meta.recovery)).warnings[1],
   ]);
+});
+
+it('reports typed periodic totals separately while preserving historical result shapes and warning bytes', () => {
+  const totals = {
+    model: 'PeriodicTask' as const,
+    imported: 2,
+    skipped: 3,
+    sourceEnabled: 4,
+    restoredDisabled: 2,
+    reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+  };
+  const result = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(periodic.meta.recovery),
+    totals
+  );
+  expect(result.periodicConfig).toEqual(totals);
+  expect(result.warnings.slice(0, 2)).toEqual(
+    createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)).warnings
+  );
+  expect(result.warnings[2]).toBe(
+    'Periodic configuration restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips: 1 existing identities, 2 unavailable imported parents. Periodic execution history excluded.'
+  );
+  for (const original of [fixed, workspace, full]) {
+    const old = createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery));
+    expect(Object.keys(old)).toEqual(['status', 'manifest', 'warnings', 'unreportedTotals']);
+    expect(old).not.toHaveProperty('periodicConfig');
+  }
 });

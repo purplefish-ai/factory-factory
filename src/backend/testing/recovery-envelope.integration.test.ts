@@ -16,10 +16,10 @@ import {
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
-import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
+import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -149,8 +149,11 @@ it('exports only the existing serialized base data plus v8 coverage, then restor
   await Reflect.apply(dataBackupService.importData, dataBackupService, [v7]);
   const exported = await dataBackupService.exportData('test');
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', fullJson.meta.recovery);
-  expect(exported.data).toHaveProperty('recovery', { baseJson: { version: 1, jsonStorage: [] } });
+  expect(exported.meta).toHaveProperty('recovery', periodic.meta.recovery);
+  expect(exported.data).toHaveProperty('recovery', {
+    baseJson: { version: 1, jsonStorage: [] },
+    periodicConfig: { version: 1, tasks: [] },
+  });
   const legacy = exportDataSchema.parse({
     ...exported,
     meta: { ...exported.meta, schemaVersion: 7 },

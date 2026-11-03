@@ -167,7 +167,7 @@ it('declares an empty section for all SQL NULL rows and restores explicit SQL NU
     },
   });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery.capabilities', { baseJson: 1 });
+  expect(backup.meta).toHaveProperty('recovery.capabilities', { baseJson: 1, periodicConfig: 1 });
   expect(backup.data).toHaveProperty('recovery.baseJson', { version: 1, jsonStorage: [] });
   state.prisma = destination.prisma;
   await dataBackupService.importData(backup);
@@ -372,7 +372,7 @@ it('roundtrips PR and session SQL NULL versus JSON null at their existing insert
   ];
   expect(await read(source.prisma)).toEqual({ prs: expected, sessions: expected });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery.profile', 'base-json-1');
+  expect(backup.meta).toHaveProperty('recovery.profile', 'base-json-periodic-config-1');
   state.prisma = destination.prisma;
   const result = await dataBackupService.importData(backup);
   expect(result.agentSessions).toEqual({ imported: 3, skipped: 0 });

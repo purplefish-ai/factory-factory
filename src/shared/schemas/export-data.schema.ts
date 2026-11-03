@@ -480,18 +480,35 @@ const version8Schema = z
     if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
       ctx.addIssue({ code: 'custom', message: 'Profile sections do not match' });
     }
+    const periodic = backup.meta.recovery.profile === 'base-json-periodic-config-1';
+    const config = backup.data.recovery.periodicConfig;
+    if (
+      periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
+      (periodic && !config)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Periodic profile sections do not match' });
+    }
+    const projects = new Set(backup.data.projects.map((project) => project.id));
+    for (const task of config?.tasks ?? []) {
+      if (!projects.has(task.projectId)) {
+        ctx.addIssue({ code: 'custom', message: 'Periodic task project is absent from backup' });
+      }
+    }
     if (covered && section) {
       validateBaseJsonTargets(
         backup.data,
         section,
-        backup.meta.recovery.profile === 'base-json-1',
+        backup.meta.recovery.profile === 'base-json-1' ||
+          backup.meta.recovery.profile === 'base-json-periodic-config-1',
         ctx
       );
     }
   });
 const fullVersion8Schema = version8Schema.safeExtend({
   meta: version8Schema.shape.meta.extend({
-    recovery: recoveryMetadataSchema.safeExtend({ profile: z.literal('base-json-1') }),
+    recovery: recoveryMetadataSchema.safeExtend({
+      profile: z.enum(['base-json-1', 'base-json-periodic-config-1']),
+    }),
   }),
   data: version8Schema.shape.data.extend({
     workspaces: z.array(

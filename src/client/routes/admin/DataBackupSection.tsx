@@ -58,11 +58,12 @@ export function DataBackupSection() {
           <DataImportButton variant="outline" className="w-full sm:w-auto" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Partial export includes projects, workspaces, session metadata and preferences. Repository
-          and worktree files, provider history bytes, archives, mail, automation, secrets, native
-          account homes and live runtime authority are excluded. Provider-session identities may
-          remain metadata. Workspace.creationMetadata, WorkspacePR.observation on actual included PR
-          rows, and AgentSession.providerMetadata preserve SQL NULL versus top-level JSON null.
+          Partial export includes projects, workspaces, session metadata, preferences and periodic
+          configuration restored disabled. Periodic execution history, repository and worktree
+          files, provider history bytes, archives, mail, automation, secrets, native account homes
+          and live runtime authority are excluded. Provider-session identities may remain metadata.
+          Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and
+          AgentSession.providerMetadata preserve SQL NULL versus top-level JSON null.
         </p>
       </CardContent>
     </Card>

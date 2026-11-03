@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { periodicConfigRecoverySchema } from './periodic-recovery.schema';
 import { baseJsonSectionSchema } from './recovery-json-storage.schema';
 
 const coverageEntrySchema = z.strictObject({
@@ -101,6 +102,12 @@ export const baseJsonModelCoverage = {
     'base metadata/provider history identities; AgentSession.providerMetadata preserves SQL NULL versus top-level JSON null; provider history bytes/live process excluded.'
   ),
 };
+export const periodicConfigModelCoverage = {
+  ...baseJsonModelCoverage,
+  PeriodicTask: partial(
+    'complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority; periodic execution history excluded.'
+  ),
+};
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -111,19 +118,35 @@ const exclusions = [
 ] as const;
 export const recoverySectionsSchema = z.strictObject({
   baseJson: baseJsonSectionSchema.optional(),
+  periodicConfig: periodicConfigRecoverySchema.optional(),
 });
 export const recoveryMetadataSchema = z
   .strictObject({
     version: z.literal(1),
-    profile: z.enum(['base-1', 'base-json-workspace-1', 'base-json-1']),
+    profile: z.enum([
+      'base-1',
+      'base-json-workspace-1',
+      'base-json-1',
+      'base-json-periodic-config-1',
+    ]),
     status: z.literal('PARTIAL'),
-    capabilities: z.strictObject({ baseJson: z.literal(1).optional() }),
+    capabilities: z.strictObject({
+      baseJson: z.literal(1).optional(),
+      periodicConfig: z.literal(1).optional(),
+    }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
   })
   .superRefine((metadata, ctx) => {
     const workspaceJson = metadata.profile !== 'base-1';
-    const full = metadata.profile === 'base-json-1';
+    const periodic = metadata.profile === 'base-json-periodic-config-1';
+    const full = metadata.profile === 'base-json-1' || periodic;
+    if (
+      periodic !== Object.hasOwn(metadata.capabilities, 'periodicConfig') ||
+      (periodic && metadata.capabilities.periodicConfig !== 1)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Periodic profile capabilities do not match' });
+    }
     if (
       workspaceJson !== Object.hasOwn(metadata.capabilities, 'baseJson') ||
       (workspaceJson && metadata.capabilities.baseJson !== 1)
@@ -132,7 +155,12 @@ export const recoveryMetadataSchema = z
     }
     const expected = new Map<string, Coverage>(
       Object.entries(
-        full ? baseJsonModelCoverage : workspaceJson ? workspaceJsonModelCoverage : r4aModelCoverage
+        {
+          'base-1': r4aModelCoverage,
+          'base-json-workspace-1': workspaceJsonModelCoverage,
+          'base-json-1': baseJsonModelCoverage,
+          'base-json-periodic-config-1': periodicConfigModelCoverage,
+        }[metadata.profile]
       )
     );
     for (const entry of metadata.coverage) {

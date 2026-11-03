@@ -5,6 +5,7 @@ import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schem
 import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
+import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 type ImportResult = Parameters<ReturnType<typeof useDataImportResults>['publishImportResult']>[0];
@@ -110,6 +111,22 @@ export const BaseJsonFidelity: Story = {
     result: {
       ...mixed,
       recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(fullJson.meta.recovery)),
+    },
+  },
+};
+
+export const PeriodicConfigRecovery: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(recoveryMetadataSchema.parse(periodic.meta.recovery), {
+        model: 'PeriodicTask',
+        imported: 2,
+        skipped: 3,
+        sourceEnabled: 4,
+        restoredDisabled: 2,
+        reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+      }),
     },
   },
 };
