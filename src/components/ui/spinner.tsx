@@ -8,6 +8,7 @@ function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
       aria-label="Loading"
       className={cn('size-4 animate-spin text-brand', className)}
       {...props}
+      weight="regular"
     />
   );
 }
