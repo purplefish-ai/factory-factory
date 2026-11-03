@@ -19,7 +19,7 @@ const SCAN_ROOTS = [
   '.storybook',
   '.vscode',
 ];
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'dist-bundle', '.next', 'release']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', 'release']);
 const ALLOWED_SUPPRESSION_PREFIXES = ['prisma/generated/'];
 
 function toPosixPath(filePath) {
