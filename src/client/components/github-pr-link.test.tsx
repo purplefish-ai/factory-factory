@@ -58,13 +58,17 @@ it('loads PR metadata only when focused and keeps normal link navigation', async
   await act(() => link.focus());
   expect(document.body.textContent).toContain('Show PR previews');
   expect(document.body.textContent).toContain('Owner/Repo #42');
+  const description = document.getElementById(link.getAttribute('aria-describedby')!);
+  expect(description?.getAttribute('role')).toBe('tooltip');
+  expect(description?.textContent).toContain('Owner/Repo #42');
+  expect(document.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-28T12:00:00Z');
   expect(document.body.textContent).toContain('martin');
   expect(document.body.textContent).toContain('+24');
   expect(document.body.textContent).toContain('−3');
   expect(document.body.textContent).toContain('2 files');
   expect(useQuery).toHaveBeenCalledWith(
     { repo: 'owner/repo', number: 42 },
-    expect.objectContaining({ staleTime: 60_000, retry: false })
+    expect.objectContaining({ staleTime: 60_000, retry: false, refetchOnWindowFocus: false })
   );
   await act(() =>
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -96,8 +100,13 @@ it.each([
   expect(document.body.textContent).toContain(text);
 });
 
-it('leaves other links without previews', async () => {
-  const link = await render('[Other](https://example.com/o/r/issues/42)');
+it.each([
+  'https://example.com/o/r/issues/42',
+  'https://github.com/o/r/issues/0',
+  'https://github.com/o/r/pull/42oops',
+])('leaves unsupported links without previews: %s', async (href) => {
+  const link = await render(`[Other](${href})`);
+  expect(link.href).toBe(href);
   await act(() => link.focus());
   expect(useQuery).not.toHaveBeenCalled();
   expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();

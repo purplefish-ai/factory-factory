@@ -1,15 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useEffect } from 'react';
-import { trpc } from '@/client/lib/trpc';
+import { GitHubPreviewTooltip } from './github-link-preview';
 import { GitHubPRPreviewCard } from './github-pr-link';
-import { MarkdownRenderer } from './markdown';
 
 const data = {
   title: 'docs: record oval bubble detection in the grid lines design',
   state: 'OPEN' as const,
   isDraft: false,
   author: { login: 'martin-purplefish' },
-  createdAt: new Date(Date.now() - 52 * 60_000).toISOString(),
+  createdAt: '2026-10-28T12:00:00Z',
   additions: 4,
   deletions: 3,
   changedFiles: 1,
@@ -56,12 +54,20 @@ export const LongTitle: Story = {
 };
 
 function HoverExample() {
-  const utils = trpc.useUtils();
-  useEffect(() => {
-    utils.github.getPRPreview.setData({ repo: 'purplefish-ai/iron-fillet', number: 12_675 }, data);
-  }, [utils]);
   return (
-    <MarkdownRenderer content="[#12675](https://github.com/purplefish-ai/iron-fillet/pull/12675) is ready for review. Hover or focus the link to preview it." />
+    <GitHubPreviewTooltip
+      link={
+        <a
+          href="https://github.com/purplefish-ai/iron-fillet/pull/12675"
+          target="_blank"
+          rel="noreferrer"
+        >
+          #12675
+        </a>
+      }
+    >
+      <GitHubPRPreviewCard repo="purplefish-ai/iron-fillet" number={12_675} data={data} />
+    </GitHubPreviewTooltip>
   );
 }
 
@@ -72,4 +78,15 @@ export const HoverPreview: Story = {
       <HoverExample />
     </div>
   ),
+};
+
+export const Mobile: Story = {
+  ...LongTitle,
+  decorators: [
+    (Story) => (
+      <div className="w-80 max-w-[calc(100vw-2rem)] rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl">
+        <Story />
+      </div>
+    ),
+  ],
 };

@@ -54,6 +54,16 @@ author, and creation age, without fetching issue bodies or comments. Comment
 anchors retain their original destinations. Other hosts and workspace file links
 retain their existing behavior.
 
+Preview URL parsing accepts HTTPS URLs on `github.com` (including the default
+HTTPS port) without credentials. Host and `pull`/`issues` path keywords match
+case-insensitively. Repository names retain their display casing and must pass
+owner/repository validation; numbers must be positive safe integers (leading
+zeros are accepted). Trailing slashes and slash-delimited subpaths, queries and
+fragments are accepted. Other hosts, nondefault ports, malformed number
+segments, and unsupported links remain plain links. Issue and PR cards share
+their frame, time formatting, tooltip and query freshness policy; their typed
+queries and PR-only statistics remain separate.
+
 ## PR detail diffs
 
 The PR detail panel uses `parseFileDiff` in `src/lib/diff/parse.ts` to display

@@ -1,9 +1,7 @@
 import { z } from 'zod';
+import { githubRepoNumberSchema, parseGitHubRepoNumberLink } from './github-repo-number';
 
-export const githubPRPreviewInputSchema = z.object({
-  repo: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/),
-  number: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-});
+export const githubPRPreviewInputSchema = githubRepoNumberSchema;
 
 export const githubPRPreviewSchema = z.object({
   title: z.string(),
@@ -18,23 +16,7 @@ export const githubPRPreviewSchema = z.object({
 
 export type GitHubPRPreview = z.infer<typeof githubPRPreviewSchema>;
 
-/** Only public GitHub PR URLs qualify; the original URL remains the link target. */
+/** See parseGitHubRepoNumberLink for the shared URL policy. */
 export function parseGitHubPRLink(href: string) {
-  try {
-    const url = new URL(href);
-    if (url.protocol !== 'https:' || url.host !== 'github.com' || url.username || url.password) {
-      return null;
-    }
-    const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/i.exec(url.pathname);
-    if (!match) {
-      return null;
-    }
-    const result = githubPRPreviewInputSchema.safeParse({
-      repo: `${match[1]}/${match[2]}`,
-      number: Number(match[3]),
-    });
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
+  return parseGitHubRepoNumberLink(href, 'pull');
 }
