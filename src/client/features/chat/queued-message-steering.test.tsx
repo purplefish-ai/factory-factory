@@ -124,9 +124,11 @@ it.each([
     );
     expect(container.querySelector('button[aria-label="Steer queued message"]')).toBeNull();
     const actions = container.querySelector<HTMLElement>('[style*="grid-template-rows"]');
-    // PR updates render their own card; other ineligible messages collapse the empty controls row.
-    if (id !== 'pr-event-update') {
+    // Automatic notifications have dedicated rows without user-message controls.
+    if (id === 'command') {
       expect(actions?.style.gridTemplateRows).toBe('0fr');
+    } else {
+      expect(actions).toBeNull();
     }
   } finally {
     flushSync(() => root.unmount());

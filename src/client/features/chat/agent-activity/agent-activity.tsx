@@ -7,13 +7,13 @@ import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
-import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';
-import { ParentWorkspaceUpdateRenderer } from './message-renderers/parent-workspace-update-renderer';
+import { InboxNotificationRenderer } from './message-renderers/inbox-notification-renderer';
 import { PRUpdateRenderer } from './message-renderers/pr-update-renderer';
 import {
   isSubagentLifecycleMessage,
   SubagentLifecycleRenderer,
 } from './message-renderers/subagent-lifecycle-renderer';
+import { getInboxNotification } from './message-renderers/workspace-inbox-notification';
 import { ToolSequenceGroup } from './tool-renderers';
 import {
   createToolCallExpansionKey,
@@ -162,6 +162,14 @@ export const MessageItem = memo(function MessageItem({
   if (isPRUpdateMessage(message)) {
     return <PRUpdateMessageItem message={message} isQueued={isQueued} />;
   }
+  const inboxNotification = getInboxNotification(message);
+  if (inboxNotification) {
+    return (
+      <MessageWrapper>
+        <InboxNotificationRenderer notification={inboxNotification} queued={isQueued} />
+      </MessageWrapper>
+    );
+  }
   // User messages
   if (message.source === 'user') {
     const userText = getMessageText(message.text);
@@ -217,24 +225,6 @@ export const MessageItem = memo(function MessageItem({
             )}
           </div>
         </div>
-      </MessageWrapper>
-    );
-  }
-
-  // Child workspace update notifications
-  if (message.message?.type === 'child_workspace_update') {
-    return (
-      <MessageWrapper>
-        <ChildWorkspaceUpdateRenderer message={message.message} />
-      </MessageWrapper>
-    );
-  }
-
-  // Parent workspace update notifications
-  if (message.message?.type === 'parent_workspace_update') {
-    return (
-      <MessageWrapper>
-        <ParentWorkspaceUpdateRenderer message={message.message} />
       </MessageWrapper>
     );
   }
