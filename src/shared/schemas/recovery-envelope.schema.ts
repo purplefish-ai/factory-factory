@@ -123,7 +123,7 @@ export const periodicHistoryModelCoverage = {
     'complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority.'
   ),
   PeriodicTaskExecution: partial(
-    'complete retained scalar history and launchSnapshot physical nullable-JSON fidelity; RUNNING restored FAILED as historical only with unknown provider outcome; no resume or scheduling authority.'
+    'all supported retained execution scalars and canonical version-1 or legacy null launch snapshots with SQL NULL versus top-level JSON null fidelity; imported RUNNING rows become historical FAILED without asserting provider outcome; live execution and replay authority excluded.'
   ),
 };
 const exclusions = [
