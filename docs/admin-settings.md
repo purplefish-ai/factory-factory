@@ -39,11 +39,15 @@ a reload does not flash the defaults before the saved settings load.
 
 ## Backup imports
 
-New exports use schema version 8 with the frozen `base-1` partial coverage
-manifest. Only existing logical metadata is included; repository/worktree files,
-provider history bytes, archives, mail, automation, secrets, native account
-homes and live runtime authority are excluded. Paths and provider-session IDs
-may remain metadata. Physical nullable-JSON fidelity is unproven. Import
+New exports use schema version 8 with the frozen `base-json-workspace-1` partial
+coverage manifest. Only existing logical metadata is included;
+repository/worktree files, provider history bytes, archives, mail, automation,
+secrets, native account homes and live runtime authority are excluded. Paths and
+provider-session IDs may remain metadata. Workspace creation metadata preserves
+SQL NULL versus top-level JSON null; PR observation and session metadata
+fidelity remains unproven. The strict `baseJson` version 1 section records
+Workspace JSON-null identities, including when no markers are needed. Frozen
+`base-1` imports retain their historical null normalization and warnings. Import
 requires all 37 canonical model classifications and all six global exclusions,
 and rejects unknown capabilities or sections before opening the writer. Versions
 4–7 remain accepted without inventing a versioned coverage declaration.

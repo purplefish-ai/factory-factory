@@ -16,6 +16,7 @@ import {
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
 import type { PrismaClient } from '@prisma-gen/client';
@@ -63,6 +64,14 @@ it.each([
   expect(result.userSettings).toEqual({ imported: false, skipped: false });
   expect(await destination.prisma.project.count()).toBe(1);
   expect(await destination.prisma.workspace.count()).toBe(3);
+  expect(
+    await destination.prisma
+      .$queryRaw`SELECT id, typeof("creationMetadata") AS storage, json_type("creationMetadata") AS kind FROM "Workspace" ORDER BY id`
+  ).toEqual([
+    { id: 'child', storage: 'null', kind: null },
+    { id: 'healthy', storage: 'null', kind: null },
+    { id: 'root', storage: 'null', kind: null },
+  ]);
   expect(
     await destination.prisma.agentSession.findUniqueOrThrow({ where: { id: 'session' } })
   ).toMatchObject({ status: 'COMPLETED', providerProcessPid: null });
@@ -139,8 +148,8 @@ it('exports only the existing serialized base data plus v8 coverage, then restor
   await Reflect.apply(dataBackupService.importData, dataBackupService, [v7]);
   const exported = await dataBackupService.exportData('test');
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', fixed.meta.recovery);
-  expect(exported.data).toHaveProperty('recovery', {});
+  expect(exported.meta).toHaveProperty('recovery', workspaceJson.meta.recovery);
+  expect(exported.data).toHaveProperty('recovery', { baseJson: { version: 1, jsonStorage: [] } });
   const legacy = exportDataSchema.parse({
     ...exported,
     meta: { ...exported.meta, schemaVersion: 7 },

@@ -69,6 +69,7 @@ const mockTx = vi.hoisted(() => ({
 
 vi.mock('@/backend/db', () => ({
   prisma: {
+    $queryRaw: vi.fn().mockResolvedValue([]),
     project: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -432,19 +433,36 @@ function createImportData(
 describe('DataBackupService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
     mockTx.project.findMany.mockResolvedValue([]);
     mockTx.workspace.findMany.mockResolvedValue([]);
     mockTx.agentSession.findMany.mockResolvedValue([]);
   });
 
   describe('exportData', () => {
+    it('validates captured physical markers against exported source rows', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([mockTerminalSession]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: 'missing-workspace' }]);
+      await expect(dataBackupService.exportData('test')).rejects.toThrow();
+    });
+
     it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
       const pr = mockWorkspace.prs[0]!;
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       const workspace: WorkspaceForExport = {
         ...mockWorkspace,
         prs: [
-          { ...pr, id: 'detached', detachedAt: new Date(), state: PRState.MERGED },
+          {
+            ...pr,
+            id: 'detached',
+            url: 'https://github.com/test/repo/pull/3',
+            detachedAt: new Date(),
+            state: PRState.MERGED,
+          },
           { ...pr, id: 'merged', state: PRState.MERGED },
           {
             ...pr,
