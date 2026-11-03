@@ -278,19 +278,19 @@ anything a check saw and kept to itself is something no later read can derive.
 That used not to matter — the check wrote its conclusion straight into a `state`
 column, so a merge or a new changes-requested review reached the app even while
 the cache lagged the PR-sync poller. `recordPrObservation` now writes `prState`,
-`prReviewState`, `prCiStatus` and `hasMergeConflict` together, mapping the raw
-observation through the github capsule's PR observation service, which folds
-draft status and review decisions into `WorkspacePR.state`. The write is guarded
-on the PR identity the observation was fetched for: the aggregate
-compare-and-swap reads its guard inside the write transaction, so it catches a
-racing write but not a workspace re-pointed at a new PR while the check was off
-fetching — and a stale `MERGED` stamped onto a fresh PR would drop it out of the
-ratchet poll set. The guard keys on the PR URL, with the number checked only
-when the cache has populated one — so a re-point that swaps the URL is caught
-even if the new number is still unknown, and even if a failed re-point left the
-old number cached. A null cached number is still treated as "not known yet" for
-the number check, since discovery attaches a url without a number; the URL check
-still applies.
+`prReviewState`, `prCiStatus` and `hasMergeConflict` together. The github
+capsule's PR observation service folds draft status and review decisions into
+`observation.prState`, which `acceptMonitoredObservation` persists to
+`WorkspacePR.state`. The write is guarded on the PR identity the observation was
+fetched for: the aggregate compare-and-swap reads its guard inside the write
+transaction, so it catches a racing write but not a workspace re-pointed at a
+new PR while the check was off fetching — and a stale `MERGED` stamped onto a
+fresh PR would drop it out of the ratchet poll set. The guard keys on the PR
+URL, with the number checked only when the cache has populated one — so a
+re-point that swaps the URL is caught even if the new number is still unknown,
+and even if a failed re-point left the old number cached. A null cached number
+is still treated as "not known yet" for the number check, since discovery
+attaches a url without a number; the URL check still applies.
 
 `recordPrObservation` also publishes `PR_SNAPSHOT_UPDATED` for every applied
 write, the same event the PR-sync poller publishes — otherwise a merge the
