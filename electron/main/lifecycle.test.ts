@@ -4,6 +4,7 @@ import {
   type ElectronLifecycleBrowserWindow,
   type ElectronLifecycleDependencies,
 } from './lifecycle.js';
+import { LOADING_PAGE_URL } from './loading-page.js';
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -18,6 +19,8 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
   static windows: FakeBrowserWindow[] = [];
   static instances: FakeBrowserWindow[] = [];
   static loadUrlImpl: (url: string) => Promise<void> = () => Promise.resolve();
+  // Electron emits `window-all-closed` synchronously when the last window closes.
+  static onAllWindowsClosed: (() => void) | null = null;
 
   static getAllWindows(): FakeBrowserWindow[] {
     return [...FakeBrowserWindow.windows];
@@ -59,6 +62,9 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
     for (const listener of this.listeners.closed) {
       listener();
     }
+    if (FakeBrowserWindow.windows.length === 0) {
+      FakeBrowserWindow.onAllWindowsClosed?.();
+    }
   }
 }
 
@@ -74,6 +80,7 @@ function createTestLifecycle(
   FakeBrowserWindow.windows = [];
   FakeBrowserWindow.instances = [];
   FakeBrowserWindow.loadUrlImpl = () => Promise.resolve();
+  FakeBrowserWindow.onAllWindowsClosed = null;
 
   const app: ElectronLifecycleDependencies['app'] = {
     on: vi.fn(),
@@ -190,10 +197,14 @@ describe('electron lifecycle coordination', () => {
       stop: vi.fn().mockResolvedValue(undefined),
     };
     const { lifecycle, app, dialog } = createTestLifecycle({ serverManager });
-    FakeBrowserWindow.loadUrlImpl = vi
-      .fn()
-      .mockRejectedValueOnce(loadError)
-      .mockResolvedValueOnce(undefined);
+    let failAppLoad = true;
+    FakeBrowserWindow.loadUrlImpl = (url) => {
+      if (url !== LOADING_PAGE_URL && failAppLoad) {
+        failAppLoad = false;
+        return Promise.reject(loadError);
+      }
+      return Promise.resolve();
+    };
 
     const result = await lifecycle.createWindow();
 
@@ -210,6 +221,159 @@ describe('electron lifecycle coordination', () => {
     expect(retryWindow).toBe(FakeBrowserWindow.instances[1]);
     expect(serverManager.start).toHaveBeenCalledTimes(2);
     expect(FakeBrowserWindow.instances).toHaveLength(2);
+  });
+});
+
+describe('window shown while the backend starts', () => {
+  function gatedServerManager() {
+    let rejectStart!: (error: Error) => void;
+    let resolveStart!: (url: string) => void;
+    const serverManager = {
+      start: vi.fn(
+        () =>
+          new Promise<string>((resolve, reject) => {
+            resolveStart = resolve;
+            rejectStart = reject;
+          })
+      ),
+      // Like ServerManager, a stop cancels a start in flight.
+      stop: vi.fn(() => {
+        rejectStart(new Error('Backend startup was cancelled by a stop request'));
+        return Promise.resolve();
+      }),
+    };
+    return {
+      serverManager,
+      resolveStart: (url: string) => resolveStart(url),
+      rejectStart: (error: Error) => rejectStart(error),
+    };
+  }
+
+  it('creates the window with a loading page before the backend is ready', async () => {
+    const { serverManager, resolveStart } = gatedServerManager();
+    const { lifecycle } = createTestLifecycle({ serverManager });
+
+    const createPromise = lifecycle.createWindow();
+
+    expect(serverManager.start).toHaveBeenCalledTimes(1);
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
+    const window = FakeBrowserWindow.instances[0];
+    expect(window?.loadURL).toHaveBeenCalledTimes(1);
+    expect(window?.loadURL).toHaveBeenCalledWith(LOADING_PAGE_URL);
+
+    resolveStart('http://localhost:3001');
+
+    await expect(createPromise).resolves.toBe(window);
+    expect(window?.loadURL).toHaveBeenCalledTimes(2);
+    expect(window?.loadURL).toHaveBeenLastCalledWith('http://localhost:3001');
+  });
+
+  it('keeps the loading page self-contained', () => {
+    const html = decodeURIComponent(
+      LOADING_PAGE_URL.replace(/^data:text\/html;charset=utf-8,/, '')
+    );
+
+    expect(html).toContain("default-src 'none'");
+    expect(html).not.toMatch(/<script|https?:|src=|href=/i);
+  });
+
+  it('focuses the loading window instead of opening another on activate', async () => {
+    const { serverManager, resolveStart } = gatedServerManager();
+    const { lifecycle } = createTestLifecycle({ serverManager });
+
+    const createPromise = lifecycle.createWindow();
+    await lifecycle.handleActivate();
+    const secondCreate = lifecycle.createWindow();
+
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
+    expect(FakeBrowserWindow.instances[0]?.focus).toHaveBeenCalledTimes(1);
+    expect(serverManager.start).toHaveBeenCalledTimes(1);
+
+    resolveStart('http://localhost:3001');
+    const [first, second] = await Promise.all([createPromise, secondCreate]);
+    expect(second).toBe(first);
+    expect(first?.loadURL).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { platform: 'darwin', quitCalls: 0 },
+    { platform: 'linux', quitCalls: 1 },
+  ] as const)(
+    'destroys the loading window and reports a backend start failure ($platform)',
+    async ({ platform, quitCalls }) => {
+      const { serverManager, rejectStart } = gatedServerManager();
+      const { lifecycle, app, dialog } = createTestLifecycle({ serverManager, platform });
+      FakeBrowserWindow.onAllWindowsClosed = () => lifecycle.handleWindowAllClosed();
+
+      const createPromise = lifecycle.createWindow();
+      rejectStart(new Error('migration failed'));
+
+      await expect(createPromise).resolves.toBeNull();
+      const window = FakeBrowserWindow.instances[0];
+      expect(window?.destroy).toHaveBeenCalledTimes(1);
+      expect(window?.loadURL).not.toHaveBeenCalledWith('http://localhost:3001');
+      expect(FakeBrowserWindow.getAllWindows()).toHaveLength(0);
+      // Destroying the last window requests a stop; that must not hide the error.
+      expect(dialog.showErrorBox).toHaveBeenCalledWith(
+        'Startup Error',
+        expect.stringContaining('migration failed')
+      );
+      // The startup error quits everywhere; closing the window also quits off macOS.
+      await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1 + quitCalls));
+    }
+  );
+
+  it.each([
+    { platform: 'darwin', quitCalls: 0 },
+    { platform: 'linux', quitCalls: 1 },
+  ] as const)(
+    'stops the backend without an error when the loading window is closed ($platform)',
+    async ({ platform, quitCalls }) => {
+      const { serverManager } = gatedServerManager();
+      const { lifecycle, app, dialog } = createTestLifecycle({ serverManager, platform });
+      FakeBrowserWindow.onAllWindowsClosed = () => lifecycle.handleWindowAllClosed();
+
+      const createPromise = lifecycle.createWindow();
+      FakeBrowserWindow.instances[0]?.close();
+
+      await expect(createPromise).resolves.toBeNull();
+      expect(serverManager.stop).toHaveBeenCalledTimes(1);
+      expect(dialog.showErrorBox).not.toHaveBeenCalled();
+      expect(FakeBrowserWindow.instances[0]?.loadURL).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(quitCalls));
+    }
+  );
+
+  it('does not load the app into a window closed just as the backend became ready', async () => {
+    const startGate = deferred<string>();
+    const serverManager = {
+      start: vi.fn(() => startGate.promise),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const { lifecycle, dialog } = createTestLifecycle({ serverManager });
+
+    const createPromise = lifecycle.createWindow();
+    startGate.resolve('http://localhost:3001');
+    FakeBrowserWindow.instances[0]?.close();
+
+    await expect(createPromise).resolves.toBeNull();
+    expect(FakeBrowserWindow.instances[0]?.loadURL).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+
+    // macOS: activating afterwards opens a new window and starts again.
+    await lifecycle.handleActivate();
+    expect(FakeBrowserWindow.instances).toHaveLength(2);
+    expect(serverManager.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('still loads the app when the loading page fails to load', async () => {
+    const { lifecycle } = createTestLifecycle();
+    FakeBrowserWindow.loadUrlImpl = (url) =>
+      url === LOADING_PAGE_URL ? Promise.reject(new Error('ERR_ABORTED')) : Promise.resolve();
+
+    const window = await lifecycle.createWindow();
+
+    expect(window?.loadURL).toHaveBeenLastCalledWith('http://localhost:3001');
   });
 });
 
