@@ -1,11 +1,12 @@
 import { useContext } from 'react';
 import { trpc } from '@/client/lib/trpc';
-import { ChatImage, imageDataUrl } from './chat-image';
+import { MarkdownLinkContext } from '@/components/ui/markdown';
+import { ChatImage, imageDataUrl, type ChatImageProps } from './chat-image';
 import { ChatImageWorkspaceContext } from './chat-image-context';
 
 function localPath(src: string): string | null {
   try {
-    if (src.startsWith('file:')) {
+    if (/^file:/i.test(src)) {
       const url = new URL(src);
       if (url.hostname) {
         return null;
@@ -28,14 +29,13 @@ function localPath(src: string): string | null {
 function LocalImage({
   workspaceId,
   path,
-  alt,
   source,
+  ...imageProps
 }: {
   workspaceId: string;
   path: string;
-  alt: string;
   source: string;
-}) {
+} & Pick<ChatImageProps, 'alt' | 'title' | 'interactive'>) {
   const query = trpc.workspace.readChatImage.useQuery(
     { workspaceId, path },
     { retry: false, staleTime: 60_000, refetchOnWindowFocus: false }
@@ -45,25 +45,52 @@ function LocalImage({
     <ChatImage
       key={src || source}
       src={src || undefined}
-      alt={alt}
+      {...imageProps}
       source={source}
       loading={query.isPending}
     />
   );
 }
 
-export function MarkdownImage({ src, alt = 'Image' }: { src?: string; alt?: string }) {
+export function MarkdownImage({
+  src,
+  alt = 'Image',
+  title,
+}: {
+  src?: string;
+  alt?: string;
+  title?: string;
+}) {
   const workspaceId = useContext(ChatImageWorkspaceContext);
+  const linked = useContext(MarkdownLinkContext);
   const path = src ? localPath(src) : null;
   if (path && workspaceId && src) {
-    return <LocalImage workspaceId={workspaceId} path={path} alt={alt} source={src} />;
+    return (
+      <LocalImage
+        workspaceId={workspaceId}
+        path={path}
+        alt={alt}
+        source={src}
+        title={title}
+        interactive={!linked}
+      />
+    );
   }
   let imageSrc: string | undefined;
   if (src && /^(https?:\/\/|\/\/)/i.test(src)) {
     imageSrc = src;
-  } else if (src?.startsWith('data:')) {
-    const match = /^data:([^;,]+);base64,(.*)$/.exec(src);
+  } else if (src && /^data:/i.test(src)) {
+    const match = /^data:([^;,]+);base64,(.*)$/i.exec(src);
     imageSrc = match ? (imageDataUrl(match[1] ?? '', match[2] ?? '') ?? undefined) : undefined;
   }
-  return <ChatImage key={src} src={imageSrc} alt={alt} source={src} />;
+  return (
+    <ChatImage
+      key={src}
+      src={imageSrc}
+      alt={alt}
+      source={src}
+      title={title}
+      interactive={!linked}
+    />
+  );
 }

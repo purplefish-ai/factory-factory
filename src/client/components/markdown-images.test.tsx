@@ -10,10 +10,12 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: { workspace: { readChatImage: { useQuery: query } } },
 }));
 let root: Root;
+const png =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   query.mockReturnValue({
-    data: { data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+    data: { data: png, mimeType: 'image/png' },
     isPending: false,
     isError: false,
   });
@@ -46,6 +48,7 @@ it.each([
   'file:///private/tmp/mockup.png',
   'C:/temp/mockup.png',
   'file:///C:/temp/mockup.png',
+  'FILE:///private/tmp/mockup.png',
 ])('loads the local Markdown reference %s through the backend', async (source) => {
   const container = await render(`![Mockup](${source})`);
   expect(query).toHaveBeenCalledWith(
@@ -54,17 +57,38 @@ it.each([
       path:
         source === 'file:///C:/temp/mockup.png'
           ? 'C:/temp/mockup.png'
-          : source.replace('file://', ''),
+          : source.replace(/file:\/\//i, ''),
     },
     expect.objectContaining({ retry: false })
   );
-  expect(container.querySelector('img')?.getAttribute('src')).toBe(
-    'data:image/png;base64,iVBORw0KGgo='
-  );
+  expect(container.querySelector('img')?.getAttribute('src')).toBe(`data:image/png;base64,${png}`);
   await act(() => container.querySelector('button')!.click());
   expect(document.querySelector('[role="dialog"] img')?.getAttribute('src')).toBe(
-    'data:image/png;base64,iVBORw0KGgo='
+    `data:image/png;base64,${png}`
   );
+});
+
+it('loads data URLs with case-insensitive schemes and retains image titles', async () => {
+  const container = await render(`![Mockup](DATA:image/png;base64,${png} "Design preview")`);
+  expect(container.querySelector('img')?.getAttribute('src')).toBe(`data:image/png;base64,${png}`);
+  expect(container.querySelector('img')?.title).toBe('Design preview');
+  expect(query).not.toHaveBeenCalled();
+});
+
+it('preserves linked image navigation without nesting preview buttons', async () => {
+  const container = await render(
+    '[![Mockup](/private/tmp/mockup.png)](https://example.com/design)'
+  );
+  const link = container.querySelector('a')!;
+  expect(link.href).toBe('https://example.com/design');
+  expect(link.querySelector('button')).toBeNull();
+  let defaultPrevented: boolean | undefined;
+  link.addEventListener('click', (event) => {
+    defaultPrevented = event.defaultPrevented;
+    event.preventDefault();
+  });
+  await act(() => link.querySelector('img')!.click());
+  expect(defaultPrevented).toBe(false);
 });
 
 it('shows the selectable source when loading fails', async () => {

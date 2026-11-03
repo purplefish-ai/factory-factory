@@ -8,7 +8,7 @@ import { GitHubIssueLink } from './github-issue-link';
 import { GitHubPRLink } from './github-pr-link';
 import { MarkdownImage } from './markdown-image';
 
-function renderImage(props: { src?: string; alt?: string }) {
+function renderImage(props: { src?: string; alt?: string; title?: string }) {
   return <MarkdownImage {...props} />;
 }
 

@@ -12,7 +12,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 import { workspaceChatImagesRouter } from './chat-images.trpc';
 
 const png = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
   'base64'
 );
 const caller = workspaceChatImagesRouter.createCaller({ appContext: { services: {} } } as never);

@@ -25,10 +25,19 @@ export interface ChatImageProps {
   alt: string;
   source?: string;
   loading?: boolean;
+  title?: string;
+  interactive?: boolean;
 }
 
 /** Inline-safe markup: Markdown images may occur inside paragraphs and links. */
-export function ChatImage({ src, alt, source, loading }: ChatImageProps) {
+export function ChatImage({
+  src,
+  alt,
+  source,
+  loading,
+  title,
+  interactive = true,
+}: ChatImageProps) {
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   if (!src || failed) {
@@ -42,6 +51,19 @@ export function ChatImage({ src, alt, source, loading }: ChatImageProps) {
       </span>
     );
   }
+  const preview = (
+    <img
+      src={src}
+      alt={alt}
+      title={title}
+      loading="lazy"
+      className="my-0 max-h-80 max-w-full rounded object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+  if (!interactive) {
+    return preview;
+  }
   return (
     <span className="inline-flex max-w-full flex-col align-top">
       <button
@@ -54,13 +76,7 @@ export function ChatImage({ src, alt, source, loading }: ChatImageProps) {
           setOpen(true);
         }}
       >
-        <img
-          src={src}
-          alt={alt}
-          loading="lazy"
-          className="my-0 max-h-80 max-w-full rounded object-contain"
-          onError={() => setFailed(true)}
-        />
+        {preview}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[90vh] max-w-[95vw] flex-col sm:max-w-5xl">
@@ -71,7 +87,7 @@ export function ChatImage({ src, alt, source, loading }: ChatImageProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto">
-            <img src={src} alt={alt} className="mx-auto max-w-none" />
+            <img src={src} alt={alt} title={title} className="mx-auto max-w-none" />
           </div>
         </DialogContent>
       </Dialog>

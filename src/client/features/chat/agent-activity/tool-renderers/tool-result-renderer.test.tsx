@@ -2,11 +2,15 @@
 
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ToolResultContentRenderer } from './tool-result-renderer';
 
+const roots: Root[] = [];
+const png =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
 afterEach(() => {
+  flushSync(() => roots.splice(0).forEach((root) => root.unmount()));
   document.body.innerHTML = '';
 });
 
@@ -14,6 +18,7 @@ function renderToolResult(props: Parameters<typeof ToolResultContentRenderer>[0]
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  roots.push(root);
 
   flushSync(() => {
     root.render(createElement(ToolResultContentRenderer, props));
@@ -30,16 +35,20 @@ describe('ToolResultContentRenderer', () => {
         { type: 'text', text: 'Generated mockup' },
         {
           type: 'image',
-          source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+          source: { type: 'base64', media_type: 'image/png', data: png },
         },
       ],
     });
     expect(container.textContent).toContain('Generated mockup');
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
-      'data:image/png;base64,iVBORw0KGgo='
+      `data:image/png;base64,${png}`
     );
     expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(
       'Open tool result image at full size'
+    );
+    flushSync(() => container.querySelector('button')!.click());
+    expect(document.querySelector('[role="dialog"] img')?.getAttribute('src')).toBe(
+      `data:image/png;base64,${png}`
     );
   });
 
@@ -62,12 +71,24 @@ describe('ToolResultContentRenderer', () => {
         { type: 'text', text: fileChangeJson },
         {
           type: 'image',
-          source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+          source: { type: 'base64', media_type: 'image/png', data: png },
         },
       ],
     });
     expect(container.textContent).toContain('1 file change');
     expect(container.querySelector('img')).not.toBeNull();
+  });
+
+  it('keeps mixed image and text blocks in source order', () => {
+    const container = renderToolResult({
+      isError: false,
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } },
+        { type: 'text', text: 'Caption after image' },
+      ],
+    });
+    const blocks = container.querySelectorAll('img, pre');
+    expect(Array.from(blocks).map((block) => block.tagName)).toEqual(['IMG', 'PRE']);
   });
 
   it('renders fileChange payloads with the specialized renderer for non-error results', () => {

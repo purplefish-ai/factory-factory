@@ -37,7 +37,10 @@ function normalizeItem(value: unknown): { image: boolean; content: ImageItem | T
     image: true,
     content: image.success
       ? { type: 'image', source: { type: 'base64', ...image.data } }
-      : { type: 'text', text: 'Image unavailable: unsupported tool image' },
+      : {
+          type: 'text',
+          text: `Image unavailable: ${item.image_url ?? serialize(item.source ?? value)}`,
+        },
   };
 }
 

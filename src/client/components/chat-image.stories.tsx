@@ -17,6 +17,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Available: Story = {};
+export const Linked: Story = {
+  args: { interactive: false, title: 'Design preview' },
+  render: (args) => (
+    <a href="https://example.com/design">
+      <ChatImage {...args} />
+    </a>
+  ),
+};
 export const Loading: Story = { args: { src: undefined, loading: true } };
 export const Missing: Story = { args: { src: undefined } };
 export const Unsupported: Story = { args: { src: undefined, source: '/private/tmp/mockup.svg' } };

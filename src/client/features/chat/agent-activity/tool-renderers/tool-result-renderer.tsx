@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { ChatImage, imageDataUrl } from '@/client/components/chat-image';
 import { MarkdownRenderer } from '@/client/components/markdown';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
-import type { ToolResultContentValue } from '@/lib/chat-protocol';
+import type { ImageItem, TextItem, ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
   type CodexFileChangePayload,
@@ -42,32 +42,60 @@ export interface ToolResultContentRendererProps {
   toolName?: string;
 }
 
+type ResultGroup = { type: 'image'; item: ImageItem } | { type: 'text'; items: TextItem[] };
+
+function groupResultContent(content: Array<ImageItem | TextItem>): ResultGroup[] {
+  const groups: ResultGroup[] = [];
+  for (const item of content) {
+    if (item.type === 'image') {
+      groups.push({ type: 'image', item });
+      continue;
+    }
+    const previous = groups.at(-1);
+    if (previous?.type === 'text') {
+      previous.items.push(item);
+    } else {
+      groups.push({ type: 'text', items: [item] });
+    }
+  }
+  return groups;
+}
+
 export const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
   content,
   isError,
   toolName,
 }: ToolResultContentRendererProps) {
   if (Array.isArray(content)) {
-    const images = content.filter((item) => item.type === 'image');
-    if (images.length > 0) {
-      const text = content.filter((item) => item.type === 'text');
+    if (content.some((item) => item.type === 'image')) {
       return (
         <div className="space-y-1 w-0 min-w-full">
-          {text.length > 0 && (
-            <ToolResultContentRenderer content={text} isError={isError} toolName={toolName} />
+          {withOccurrenceKeys(groupResultContent(content), (group) =>
+            group.type === 'text'
+              ? group.items
+                  .map((item) => item.text)
+                  .join('\n')
+                  .slice(0, 64)
+              : `${group.item.source.media_type}:${group.item.source.data.length}:${group.item.source.data.slice(0, 64)}:${group.item.source.data.slice(-64)}`
+          ).map(({ item: group, key }) =>
+            group.type === 'text' ? (
+              <ToolResultContentRenderer
+                key={key}
+                content={group.items}
+                isError={isError}
+                toolName={toolName}
+              />
+            ) : (
+              <ChatImage
+                key={key}
+                src={
+                  imageDataUrl(group.item.source.media_type, group.item.source.data) ?? undefined
+                }
+                alt="tool result image"
+                source={`Tool image (${group.item.source.media_type})`}
+              />
+            )
           )}
-          {withOccurrenceKeys(
-            images,
-            (item) =>
-              `${item.source.media_type}:${item.source.data.length}:${item.source.data.slice(0, 64)}:${item.source.data.slice(-64)}`
-          ).map(({ item, key }) => (
-            <ChatImage
-              key={key}
-              src={imageDataUrl(item.source.media_type, item.source.data) ?? undefined}
-              alt="tool result image"
-              source={`Tool image (${item.source.media_type})`}
-            />
-          ))}
         </div>
       );
     }

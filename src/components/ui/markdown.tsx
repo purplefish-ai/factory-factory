@@ -2,6 +2,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import {
   type ComponentPropsWithoutRef,
+  createContext,
   isValidElement,
   lazy,
   memo,
@@ -22,6 +23,9 @@ const REMARK_PLUGINS = [remarkGfm];
 
 // react-markdown percent-encodes backslashes, so `C:\repo` arrives as `C:%5Crepo`.
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
+
+/** Custom media renderers preserve navigation when nested in Markdown links. */
+export const MarkdownLinkContext = createContext(false);
 
 export interface MarkdownRendererProps {
   content: string;
@@ -130,25 +134,27 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         const workspacePath = href ? resolveWorkspaceFileLink?.(href) : null;
         if (workspacePath && onWorkspaceFileLink) {
           return (
-            <a
-              href={href}
-              onClick={(event) => {
-                event.preventDefault();
-                onWorkspaceFileLink(workspacePath);
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) {
-                  return;
-                }
+            <MarkdownLinkContext value={true}>
+              <a
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onWorkspaceFileLink(workspacePath);
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) {
+                    return;
+                  }
 
-                event.preventDefault();
-                onWorkspaceFileLink(workspacePath);
-              }}
-              className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
-            >
-              {children}
-              <FileCodeIcon className="h-3 w-3 shrink-0" />
-            </a>
+                  event.preventDefault();
+                  onWorkspaceFileLink(workspacePath);
+                }}
+                className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
+              >
+                {children}
+                <FileCodeIcon className="h-3 w-3 shrink-0" />
+              </a>
+            </MarkdownLinkContext>
           );
         }
 
@@ -163,7 +169,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             <ArrowSquareOutIcon className="h-3 w-3 shrink-0" />
           </a>
         );
-        return renderExternalLink ? renderExternalLink(link) : link;
+        return (
+          <MarkdownLinkContext value={true}>
+            {renderExternalLink ? renderExternalLink(link) : link}
+          </MarkdownLinkContext>
+        );
       },
       // Override paragraph with comfortable spacing
       p: ({ children }: ComponentPropsWithoutRef<'p'>) => (

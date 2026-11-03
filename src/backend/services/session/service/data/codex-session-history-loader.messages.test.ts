@@ -98,7 +98,8 @@ describe('Codex response-item history messages', () => {
   });
 
   it('restores generated tool images as structured results after reload', async () => {
-    const png = 'iVBORw0KGgo=';
+    const png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
     const history = await load([
       {
         type: 'response_item',
@@ -126,6 +127,22 @@ describe('Codex response-item history messages', () => {
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } },
         ],
       },
+    ]);
+  });
+
+  it('retains a copyable URI for unsupported tool images', async () => {
+    const history = await load([
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'missing-image',
+          output: [{ type: 'input_image', image_url: 'file:///private/tmp/mockup.png' }],
+        },
+      },
+    ]);
+    expect(history[0]?.content).toEqual([
+      { type: 'text', text: 'Image unavailable: file:///private/tmp/mockup.png' },
     ]);
   });
 
