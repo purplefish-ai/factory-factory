@@ -309,6 +309,16 @@ export type ChatAction =
         pendingInteractiveRequest?: PendingInteractiveRequest | null;
       };
     }
+  // Targeted session-state deltas (replace snapshots for queue/commit/request changes)
+  | { type: 'QUEUE_UPDATED'; payload: { queuedMessages: QueuedMessage[] } }
+  | {
+      type: 'TRANSCRIPT_MESSAGE_COMMITTED';
+      payload: { message: ChatMessage; queuedMessages: QueuedMessage[] };
+    }
+  | {
+      type: 'PENDING_REQUEST_UPDATED';
+      payload: { pendingInteractiveRequest: PendingInteractiveRequest | null };
+    }
   | {
       type: 'SESSION_REPLAY_BATCH';
       payload: {

@@ -29,6 +29,7 @@ import {
   SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
   WEBSOCKET_MESSAGE_TYPES,
 } from '@/shared/acp-protocol';
+import { validateSessionStateDelta } from '@/shared/acp-protocol/protocol/session-state-delta-schema';
 import { subagentsChangedParamsSchema } from '@/shared/acp-protocol/subagents';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
@@ -153,6 +154,11 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 
   if (obj.type === 'subagents_changed') {
     return subagentsChangedParamsSchema.safeParse(data).success;
+  }
+
+  const stateDeltaValid = validateSessionStateDelta(obj.type, data);
+  if (stateDeltaValid !== null) {
+    return stateDeltaValid;
   }
 
   // agent_message must include a minimally shaped Claude payload to avoid runtime crashes.

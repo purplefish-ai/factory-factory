@@ -7,7 +7,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('includes current tasks in queue snapshots and clears tasks when provider history resets', () => {
+it('includes current tasks in snapshots and clears tasks when provider history resets', () => {
   const publish = vi.spyOn(sessionEventBus, 'publishToSession').mockImplementation(() => undefined);
   const taskPlan = {
     type: 'acp_plan',
@@ -28,6 +28,12 @@ it('includes current tasks in queue snapshots and clears tasks when provider his
       planModeEnabled: false,
     },
   });
+  // Queue changes publish a queue delta; the client keeps its task plan.
+  expect(publish).not.toHaveBeenCalledWith(
+    'codex',
+    expect.objectContaining({ type: 'session_snapshot' })
+  );
+  sessionDomainService.emitSessionSnapshot('codex');
   expect(publish).toHaveBeenCalledWith(
     'codex',
     expect.objectContaining({ type: 'session_snapshot', taskPlan })
