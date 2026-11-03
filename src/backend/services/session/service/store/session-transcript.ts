@@ -10,6 +10,14 @@ import {
 } from '@/shared/acp-protocol';
 import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
+import {
+  findPersistedToolUseStart,
+  recordTranscriptEntryAdded,
+  recordTranscriptEntryRemoved,
+  recordTranscriptEntryReplaced,
+  replaceTranscriptEntryMessage,
+  resetToolUseIndex,
+} from './session-tool-use-index';
 
 export function messageSort(a: ChatMessage, b: ChatMessage): number {
   return a.order - b.order;
@@ -244,6 +252,7 @@ export function rebuildTranscriptIndex(store: SessionStore): void {
   for (const [index, message] of store.transcript.entries()) {
     store.transcriptIdToIndex.set(message.id, index);
   }
+  resetToolUseIndex(store);
 }
 
 function reindexTranscriptFrom(store: SessionStore, startIndex: number): void {
@@ -275,12 +284,14 @@ function insertTranscriptMessage(store: SessionStore, message: ChatMessage): voi
   if (!lastMessage || lastMessage.order <= message.order) {
     store.transcriptIdToIndex.set(message.id, store.transcript.length);
     store.transcript.push(message);
+    recordTranscriptEntryAdded(store, message);
     return;
   }
 
   const insertionIndex = findTranscriptInsertionIndex(store.transcript, message.order);
   store.transcript.splice(insertionIndex, 0, message);
   reindexTranscriptFrom(store, insertionIndex);
+  recordTranscriptEntryAdded(store, message);
 }
 
 export function upsertTranscriptMessage(store: SessionStore, message: ChatMessage): void {
@@ -289,12 +300,14 @@ export function upsertTranscriptMessage(store: SessionStore, message: ChatMessag
   if (existingIndex !== undefined && existingMessage?.id === message.id) {
     if (existingMessage.order === message.order) {
       store.transcript[existingIndex] = message;
+      recordTranscriptEntryReplaced(store, existingMessage, message);
       return;
     }
 
     store.transcript.splice(existingIndex, 1);
     store.transcriptIdToIndex.delete(message.id);
     reindexTranscriptFrom(store, existingIndex);
+    recordTranscriptEntryRemoved(store, existingMessage);
   }
 
   insertTranscriptMessage(store, message);
@@ -317,6 +330,9 @@ export function removeTranscriptMessageById(
   store.transcript.splice(index, 1);
   store.transcriptIdToIndex.delete(messageId);
   reindexTranscriptFrom(store, index);
+  if (message) {
+    recordTranscriptEntryRemoved(store, message);
+  }
   return true;
 }
 
@@ -331,53 +347,6 @@ export function setNextOrderFromTranscript(store: SessionStore): void {
     }
   }
   store.nextOrder = nextOrder;
-}
-
-function hasMatchingToolResult(message: AgentMessage, toolUseId: string): boolean {
-  const content = message.message?.content;
-  if (
-    Array.isArray(content) &&
-    content.some((item) => item.type === 'tool_result' && item.tool_use_id === toolUseId)
-  ) {
-    return true;
-  }
-
-  return (
-    message.type === 'stream_event' &&
-    message.event?.type === 'content_block_start' &&
-    message.event.content_block.type === 'tool_result' &&
-    message.event.content_block.tool_use_id === toolUseId
-  );
-}
-
-function findPersistedToolUseStart(
-  store: SessionStore,
-  toolUseId: string
-): ChatMessage | undefined {
-  for (let index = store.transcript.length - 1; index >= 0; index -= 1) {
-    const entry = store.transcript[index];
-    if (entry?.source !== 'agent' || !entry.message) {
-      continue;
-    }
-
-    if (hasMatchingToolResult(entry.message, toolUseId)) {
-      return undefined;
-    }
-
-    if (entry.message.type !== 'stream_event') {
-      continue;
-    }
-
-    const event = entry.message.event;
-    if (event?.type !== 'content_block_start') {
-      continue;
-    }
-    if (event.content_block.type === 'tool_use' && event.content_block.id === toolUseId) {
-      return entry;
-    }
-  }
-
-  return undefined;
 }
 
 export function appendClaudeEvent(
@@ -397,7 +366,7 @@ export function appendClaudeEvent(
     if (event && event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
       const existing = findPersistedToolUseStart(store, event.content_block.id);
       if (existing) {
-        existing.message = claudeMessage;
+        replaceTranscriptEntryMessage(store, existing, claudeMessage);
         options.onParityTrace({
           path: 'live_stream_upserted',
           reason: 'duplicate_tool_use_start_enriched',
@@ -434,6 +403,7 @@ export function appendClaudeEvent(
 
   store.transcript.push(entry);
   store.transcriptIdToIndex.set(entry.id, store.transcript.length - 1);
+  recordTranscriptEntryAdded(store, entry);
   options.onParityTrace({
     path: 'live_stream_persisted',
     order,
