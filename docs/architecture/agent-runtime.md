@@ -785,14 +785,16 @@ messages:
 
 - Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
   preview. It asks the agent to fetch and address the linked GitHub or Linear
-  issue, then create a PR. Issue bodies and workflow instructions are not
-  embedded; repository guidance defines implementation and verification. Backend
-  fallback prompts use the stored issue URL (or derive a GitHub URL from
-  repository metadata), without fetching issue content. The read-only
-  `get_linear_issue` workspace MCP tool fetches the linked Linear issue on
-  demand through `workspace.get` and `linear.getIssue`, using backend-held
-  project credentials. It accepts no workspace/project/issue overrides and
-  returns only issue fields, treating provider text as untrusted data.
+  issue, then create a PR with a closing reference. The concise handoff quotes
+  the URL and marks fetched content as untrusted; issue bodies and detailed
+  workflow instructions are not embedded. Repository guidance defines
+  implementation and verification. Backend fallback prompts use the stored issue
+  URL (or derive a GitHub URL from repository metadata), without fetching issue
+  content. The read-only `get_linear_issue` workspace MCP tool fetches the
+  linked Linear issue on demand through `workspace.get` and `linear.getIssue`,
+  using backend-held project credentials. It accepts no workspace/project/issue
+  overrides and returns only issue fields, treating provider text as untrusted
+  data.
 - PR updates: `src/backend/prompts/pr-event.ts` renders bounded PR facts with
   maintenance instructions only when an attached PR has actionable events.
   Delivery uses the source-aware session queue and strict provider resume; see

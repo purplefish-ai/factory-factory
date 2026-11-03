@@ -152,7 +152,7 @@ describe('child workspace MCP tRPC errors', () => {
     expect(requestMethod).toBeUndefined();
   });
 
-  it('fetches linked Linear issue context independently of child workspace settings', async () => {
+  it('reports an unlinked Linear issue even when child workspaces are disabled', async () => {
     const { response, requestMethod } = await callToolWithHttpResponse({
       childWorkspacesEnabled: false,
       status: 200,
@@ -220,6 +220,30 @@ describe('child workspace MCP tRPC errors', () => {
       state: 'Todo',
     });
   });
+
+  it.each([
+    { issue: null, error: 'Provider failure details' },
+    { issue: null, error: null },
+  ])(
+    'reports a Linear integration failure without exposing provider details: %j',
+    async (result) => {
+      const { response } = await callToolWithHttpResponse({
+        childWorkspacesEnabled: false,
+        status: 200,
+        toolName: 'get_linear_issue',
+        linkedWorkspace: {
+          id: 'parent-workspace',
+          projectId: 'project-1',
+          linearIssueId: 'linear-42',
+        },
+        body: { result: { data: { json: result } } },
+      });
+      expect(response.result.isError).toBe(true);
+      expect(response.result.content[0]?.text).toBe(
+        'Could not fetch the linked Linear issue. Check the project’s Linear integration.'
+      );
+    }
+  );
 
   it('binds proposals to the current workspace and returns a renderable reference', async () => {
     const { requestBody, response } = await callToolWithHttpResponse({
