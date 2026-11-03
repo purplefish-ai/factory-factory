@@ -74,6 +74,16 @@ authorize another send.
 The import result lists counts of runtime changes for newly created rows.
 Already inert values and skipped existing runtime rows do not count as changes.
 
+Destination collisions skip the affected workspace and its child workspaces as a
+group, including their sessions, PR configuration, events and metadata. Existing
+workspace history and runtime owners stay unchanged. A project already present
+admits new workspaces only when its ID, slug, repository/worktree paths and
+GitHub owner/repository match exactly. Existing PR IDs, imported or historical
+session references, event IDs and receipt identities cannot lend ownership to an
+imported group. Even an inert historical session reference skips its group when
+that ID exists locally; an absent historical reference remains evidence.
+Unrelated eligible groups still restore, and receipts retain all their members.
+
 ## CLI notices
 
 Claude and Codex runtimes are bundled with Factory Factory and updated with app

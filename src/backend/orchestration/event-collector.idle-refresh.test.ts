@@ -55,7 +55,7 @@ describe('idle PR refresh cooldown under capacity pressure', () => {
     collector.start();
     activity.emit('workspace_idle', { workspaceId: 'ws-1' });
     activity.emit('workspace_idle', { workspaceId: 'ws-1' });
-    expect(refresh).toHaveBeenCalledExactlyOnceWith('ws-1');
+    expect(refresh).toHaveBeenCalledExactlyOnceWith('ws-1', { force: false });
     collector.stop();
   });
 
@@ -88,7 +88,7 @@ describe('idle PR refresh cooldown under capacity pressure', () => {
     vi.setSystemTime(160_000);
     handler({ workspaceId: 'overflow-again' });
     expect(refresh).toHaveBeenCalledTimes(callsAtCapacity + 1);
-    expect(refresh).toHaveBeenLastCalledWith('overflow-again');
+    expect(refresh).toHaveBeenLastCalledWith('overflow-again', { force: false });
     collector.stop();
   });
 });

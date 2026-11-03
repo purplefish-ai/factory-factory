@@ -165,6 +165,8 @@ describe('project route selection', () => {
         { projectId: 'new-id' },
         expect.objectContaining({ enabled: true })
       );
+      // The app-load sweep is automatic, so it must not force GitHub refreshes.
+      expect(mocks.mutate).toHaveBeenLastCalledWith({ projectId: 'new-id', force: false });
     } finally {
       flushSync(() => root.unmount());
       localStorage.clear();

@@ -146,7 +146,7 @@ describe('PRSnapshotService collection targets', () => {
   });
   it('refreshes every attached PR, including terminal siblings', async () => {
     bridge.listPRs.mockResolvedValue([makePR('a'), { ...makePR('b'), state: 'CLOSED' }]);
-    expect((await prSnapshotService.refreshWorkspace('w')).success).toBe(true);
+    expect((await prSnapshotService.refreshWorkspace('w', { force: true })).success).toBe(true);
     expect(observe.mock.calls).toEqual([
       [{ workspaceId: 'w', prId: 'a' }, { force: true }],
       [{ workspaceId: 'w', prId: 'b' }, { force: true }],
@@ -156,7 +156,7 @@ describe('PRSnapshotService collection targets', () => {
     'maps %s read failures to an error result',
     async (method) => {
       bridge[method].mockRejectedValue(new Error('database unavailable'));
-      await expect(prSnapshotService.refreshWorkspace('w')).resolves.toEqual({
+      await expect(prSnapshotService.refreshWorkspace('w', { force: true })).resolves.toEqual({
         success: false,
         reason: 'error',
       });
@@ -165,7 +165,7 @@ describe('PRSnapshotService collection targets', () => {
   );
   it('continues refreshing siblings after an observation failure', async () => {
     observe.mockResolvedValueOnce(false);
-    expect(await prSnapshotService.refreshWorkspace('w')).toEqual({
+    expect(await prSnapshotService.refreshWorkspace('w', { force: true })).toEqual({
       success: false,
       reason: 'stale_observation',
     });
@@ -173,12 +173,12 @@ describe('PRSnapshotService collection targets', () => {
   });
   it('reports an empty collection and a missing workspace separately', async () => {
     bridge.listPRs.mockResolvedValue([]);
-    expect(await prSnapshotService.refreshWorkspace('w')).toEqual({
+    expect(await prSnapshotService.refreshWorkspace('w', { force: true })).toEqual({
       success: false,
       reason: 'no_pr_url',
     });
     bridge.findPRContext.mockResolvedValue(null);
-    expect(await prSnapshotService.refreshWorkspace('w')).toEqual({
+    expect(await prSnapshotService.refreshWorkspace('w', { force: true })).toEqual({
       success: false,
       reason: 'workspace_not_found',
     });

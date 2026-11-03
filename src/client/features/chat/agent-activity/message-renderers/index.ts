@@ -15,5 +15,8 @@ export {
   SystemMessageRenderer,
 } from './stream-event-renderer';
 
+// Streaming text context
+export { StreamingTextProvider } from './streaming-text-context';
+
 // Thinking completion context
 export { ThinkingCompletionProvider, useIsThinkingInProgress } from './thinking-completion-context';

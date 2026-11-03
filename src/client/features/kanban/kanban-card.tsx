@@ -402,7 +402,7 @@ export const KanbanCard = memo(function KanbanCard({
   onOpenQuickChat,
   onRename,
 }: KanbanCardProps) {
-  const { highlighted, ...familyEvents } = useKanbanFamilyHighlight(workspace.id);
+  const { highlighted, ...familyEvents } = useKanbanFamilyHighlight(workspace);
   const {
     showPR,
     issue,

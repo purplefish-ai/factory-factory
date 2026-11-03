@@ -775,7 +775,7 @@ it('never upgrades unknown historical coverage when an event workspace is reused
   ).toMatchObject({ childHistoryVersion: null });
 });
 
-it('revokes complete child history when backup import skips an existing event workspace', async () => {
+it('preserves complete child history when backup import skips an existing event workspace', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
     typeof import('@/backend/orchestration/data-backup.service')
@@ -786,13 +786,13 @@ it('revokes complete child history when backup import skips an existing event wo
   ).toMatchObject({ childHistoryVersion: 1 });
   const imported = await dataBackupService.importData(backup);
   expect(imported.workspaces.skipped).toBe(1);
-  expect(await observe(h.claim)).toBe('HELD');
+  expect(await observe(h.claim)).toBe('SETTLED');
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
-  ).toMatchObject({ childHistoryVersion: null });
+  ).toMatchObject({ childHistoryVersion: 1 });
 });
 
-it('retains imported child ownership after later deletion', async () => {
+it('skips an existing parent and its file descendants without fabricating child ownership', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
     typeof import('@/backend/orchestration/data-backup.service')
@@ -816,30 +816,27 @@ it('retains imported child ownership after later deletion', async () => {
   backup.data.agentSessions = [];
   expect(exportDataSchema.safeParse(backup).success).toBe(true);
   expect((await dataBackupService.importData(backup)).workspaces).toEqual({
-    imported: 1,
-    skipped: 1,
+    imported: 0,
+    skipped: 2,
   });
   expect(
     await db.prisma.workspaceChildOrigin.findMany({
       where: { parentWorkspaceId: h.claim.reservedWorkspaceId },
     })
-  ).toEqual([expect.objectContaining({ childWorkspaceId: 'imported-child' })]);
+  ).toEqual([]);
   const origins = await db.prisma.workspaceChildOrigin.findMany({
     where: { parentWorkspaceId: h.claim.reservedWorkspaceId },
   });
-  // Skipped-parent import currently revokes coverage; HELD alone cannot isolate
-  // the child's hold. The direct origin assertion after deletion proves retention.
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
-  ).toMatchObject({ childHistoryVersion: null });
-  await h.workspace.workspaceDataService.delete('imported-child');
+  ).toMatchObject({ childHistoryVersion: 1 });
   expect(await db.prisma.workspace.findUnique({ where: { id: 'imported-child' } })).toBeNull();
   expect(
     await db.prisma.workspaceChildOrigin.findMany({
       where: { parentWorkspaceId: h.claim.reservedWorkspaceId },
     })
   ).toEqual(origins);
-  expect(await observe(h.claim)).toBe('HELD');
+  expect(await observe(h.claim)).toBe('SETTLED');
 });
 
 it('serializes child creation and its retained origin before parent settlement', async () => {

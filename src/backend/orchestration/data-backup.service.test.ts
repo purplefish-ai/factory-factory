@@ -31,15 +31,21 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
-  workspacePREvent: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+  workspacePREvent: {
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    findMany: vi.fn().mockResolvedValue([]),
+  },
+  workspacePR: { findMany: vi.fn().mockResolvedValue([]) },
   workspaceLaunchOrigin: { updateMany: vi.fn() },
   workspaceChildOrigin: { upsert: vi.fn() },
   workspacePRMonitoring: { upsert: vi.fn() },
   project: {
+    findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
     create: vi.fn(),
   },
   workspace: {
+    findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn<(args: { where: { id?: string } }) => Promise<unknown>>(),
     create:
       vi.fn<
@@ -47,6 +53,7 @@ const mockTx = vi.hoisted(() => ({
       >(),
   },
   agentSession: {
+    findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn(),
     create: vi.fn(),
   },
@@ -425,6 +432,9 @@ function createImportData(
 describe('DataBackupService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTx.project.findMany.mockResolvedValue([]);
+    mockTx.workspace.findMany.mockResolvedValue([]);
+    mockTx.agentSession.findMany.mockResolvedValue([]);
   });
 
   describe('exportData', () => {
@@ -846,7 +856,7 @@ describe('DataBackupService', () => {
         userSettings: null,
       });
 
-      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.findMany).mockResolvedValue([mockProject]);
 
       const result = await dataBackupService.importData(exportedData);
 

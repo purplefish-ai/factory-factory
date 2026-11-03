@@ -393,12 +393,15 @@ export const workspaceCoreRouter = router({
       ctx.appContext.services.runScriptConfigPersistenceService.getFactoryConfig(input.projectId)
     ),
 
-  // Sync PR status for a workspace (immediate refresh from GitHub)
+  // Sync PR status for a workspace. Automatic (throttled) unless `force` marks an
+  // explicit user request that must read GitHub immediately.
   syncPRStatus: publicProcedure
-    .input(z.object({ workspaceId: z.string() }))
+    .input(z.object({ workspaceId: z.string(), force: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       const { fireLifecycleNotification, workspaceQueryService } = ctx.appContext.services;
-      const result = await workspaceQueryService.syncPRStatus(input.workspaceId);
+      const result = await workspaceQueryService.syncPRStatus(input.workspaceId, {
+        force: input.force ?? false,
+      });
       if (result.success && result.prState && result.previousPrState !== result.prState) {
         const { prState } = result;
         if (prState === 'MERGED') {
@@ -410,11 +413,14 @@ export const workspaceCoreRouter = router({
       return result;
     }),
 
-  // Sync PR status for all workspaces in a project (immediate refresh from GitHub)
+  // Sync PR status for all workspaces in a project. Automatic (throttled) unless
+  // `force` marks an explicit user request that must read GitHub immediately.
   syncAllPRStatuses: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), force: z.boolean().optional() }))
     .mutation(({ ctx, input }) =>
-      ctx.appContext.services.workspaceQueryService.syncAllPRStatuses(input.projectId)
+      ctx.appContext.services.workspaceQueryService.syncAllPRStatuses(input.projectId, {
+        force: input.force ?? false,
+      })
     ),
 
   // Check if workspace branch has changes relative to the project's default branch

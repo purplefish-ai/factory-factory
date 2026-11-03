@@ -689,6 +689,18 @@ export const ToolSequenceGroupWithFileChange: StoryObj<typeof ToolSequenceGroup>
   ),
 };
 
+/** Groups of one activity kind reuse that kind's icon in the collapsed header. */
+export const ToolSequenceGroupCommands: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        { name: 'Bash', input: { command: 'pnpm test' }, result: 'Tests passed' },
+        { name: 'Bash', input: { command: 'pnpm typecheck' }, result: 'No errors' },
+      ])}
+    />
+  ),
+};
+
 /** Single calls identify the command without showing its arguments. */
 export const ToolSequenceSingleCommand: StoryObj<typeof ToolSequenceGroup> = {
   render: () => (

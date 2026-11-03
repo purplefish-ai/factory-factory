@@ -158,7 +158,8 @@ export function KanbanProvider({
   };
 
   const syncAndRefetch = () => {
-    syncMutation.mutate({ projectId });
+    // An explicit Sync click bypasses the automatic refresh throttles.
+    syncMutation.mutate({ projectId, force: true });
     runInBackground(refetchWorkspaces(), 'Could not refresh data');
     runInBackground(refetchIssues(), 'Could not refresh data');
   };

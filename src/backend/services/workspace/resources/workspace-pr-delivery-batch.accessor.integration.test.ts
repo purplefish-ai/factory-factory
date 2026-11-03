@@ -400,7 +400,7 @@ it('rolls back a restore that collides with an existing delivery identity', asyn
     );
   await expect(
     db.prisma.$transaction((tx) => workspacePrEventAccessor.restoreBackup(tx, 'w', events))
-  ).rejects.toThrow('Imported PR delivery identity already exists');
+  ).rejects.toThrow('Imported PR event or delivery identity already exists');
   expect(
     await db.prisma.workspacePREvent.findUnique({ where: { id: 'imported-event' } })
   ).toBeNull();
