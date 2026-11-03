@@ -21,6 +21,20 @@ it.each([
   [[pr({ state: 'CLOSED' }), pr({ ciStatus: 'PENDING' })], 'OPEN', 'PENDING', 'CI_RUNNING'],
   [[pr({ state: 'NONE' }), pr({ state: 'MERGED' })], 'OPEN', 'UNKNOWN', 'CI_RUNNING'],
   [[pr({ ciStatus: 'FAILURE' }), pr({ ciStatus: 'PENDING' })], 'OPEN', 'FAILURE', 'CI_FAILED'],
+  [[pr({ ciStatus: 'FAILURE' }), pr({ hasMergeConflict: true })], 'OPEN', 'FAILURE', 'CI_FAILED'],
+  [
+    [pr({ ciStatus: 'PENDING' }), pr({ reviewState: 'CHANGES_REQUESTED' })],
+    'OPEN',
+    'PENDING',
+    'CI_RUNNING',
+  ],
+  [
+    [pr({ state: 'CLOSED', ciStatus: 'FAILURE', hasMergeConflict: true }), pr({})],
+    'OPEN',
+    'SUCCESS',
+    'READY',
+  ],
+  [[pr({ state: 'NONE', ciStatus: 'SUCCESS' })], 'OPEN', 'UNKNOWN', 'CI_RUNNING'],
   [
     [pr({ hasMergeConflict: true }), pr({ ciStatus: 'PENDING' })],
     'OPEN',

@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { CIStatus, deriveRatchetState, PRState, RatchetState } from '@/shared/core';
+import {
+  CIStatus,
+  deriveRatchetState,
+  PRState,
+  RatchetState,
+  type RatchetStateInput,
+} from '@/shared/core';
 import type { WorkspacePullRequest } from './workspace-pr';
 export const WorkspacePRSummarySchema = z.object({
   totalCount: z.number(),
@@ -11,7 +17,27 @@ export const WorkspacePRSummarySchema = z.object({
   ratchetState: z.nativeEnum(RatchetState),
 });
 export type WorkspacePRSummary = z.infer<typeof WorkspacePRSummarySchema>;
-function summarizeCI(active: readonly WorkspacePullRequest[]): CIStatus {
+/** Facts shared by persisted associations and serialized workspace projections. */
+export type WorkspacePRSummaryInput = Pick<
+  WorkspacePullRequest,
+  'state' | 'ciStatus' | 'hasMergeConflict' | 'reviewState'
+>;
+
+/** An attached NONE association is still awaiting its first GitHub observation. */
+function toRatchetStateInput(
+  pr: WorkspacePRSummaryInput,
+  ratchetEnabled: boolean
+): RatchetStateInput {
+  return {
+    ratchetEnabled,
+    prState: pr.state === 'NONE' ? PRState.OPEN : pr.state,
+    prCiStatus: pr.state === 'NONE' ? CIStatus.UNKNOWN : pr.ciStatus,
+    prReviewState: pr.reviewState,
+    prHasMergeConflict: pr.hasMergeConflict,
+  };
+}
+
+function summarizeCI(active: readonly WorkspacePRSummaryInput[]): CIStatus {
   return active.some((pr) => pr.ciStatus === 'FAILURE')
     ? CIStatus.FAILURE
     : active.some(
@@ -22,8 +48,8 @@ function summarizeCI(active: readonly WorkspacePullRequest[]): CIStatus {
         ? CIStatus.SUCCESS
         : CIStatus.UNKNOWN;
 }
-export function deriveWorkspacePRSummary(
-  prs: readonly WorkspacePullRequest[],
+export function deriveWorkspacePRSummary<T extends WorkspacePRSummaryInput>(
+  prs: readonly T[],
   ratchetEnabled: boolean
 ): WorkspacePRSummary {
   const active = prs.filter((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED');
@@ -43,15 +69,7 @@ export function deriveWorkspacePRSummary(
     RatchetState.REVIEW_PENDING,
     RatchetState.READY,
   ];
-  const states = active.map((pr) =>
-    deriveRatchetState({
-      ratchetEnabled,
-      prState: pr.state === 'NONE' ? PRState.OPEN : pr.state,
-      prCiStatus: pr.state === 'NONE' ? CIStatus.UNKNOWN : pr.ciStatus,
-      prReviewState: pr.reviewState,
-      prHasMergeConflict: pr.hasMergeConflict,
-    })
-  );
+  const states = active.map((pr) => deriveRatchetState(toRatchetStateInput(pr, ratchetEnabled)));
   const ratchetState = ratchetEnabled
     ? (ranks.find((rank) => states.includes(rank)) ??
       (state === 'MERGED' ? RatchetState.MERGED : RatchetState.IDLE))

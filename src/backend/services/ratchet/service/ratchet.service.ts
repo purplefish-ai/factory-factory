@@ -8,9 +8,10 @@ import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
-import { type CIStatus, deriveRatchetState, RatchetState } from '@/shared/core';
+import { type CIStatus, RatchetState } from '@/shared/core';
 import type { PRTarget, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { shouldPollPR } from '@/shared/pr-polling';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 const logger = createLogger('ratchet');
 const POLL_JOB = 'pr-event-poll';
@@ -68,36 +69,6 @@ interface MonitoringBridge {
         candidates: { id: string; name: string | null; provider: string }[];
       }
   >;
-}
-function aggregateState(
-  rows: {
-    state: string;
-    ciStatus: CIStatus;
-    hasMergeConflict: boolean;
-    reviewState: string | null;
-  }[]
-): RatchetState {
-  const states = rows.map((pr) =>
-    deriveRatchetState({
-      ratchetEnabled: true,
-      prState: pr.state as Parameters<typeof deriveRatchetState>[0]['prState'],
-      prCiStatus: pr.ciStatus,
-      prHasMergeConflict: pr.hasMergeConflict,
-      prReviewState: pr.reviewState,
-    })
-  );
-  if (states.length && states.every((s) => s === RatchetState.MERGED)) {
-    return RatchetState.MERGED;
-  }
-  return (
-    [
-      RatchetState.MERGE_CONFLICT,
-      RatchetState.CI_FAILED,
-      RatchetState.REVIEW_PENDING,
-      RatchetState.CI_RUNNING,
-      RatchetState.READY,
-    ].find((s) => states.includes(s)) ?? RatchetState.IDLE
-  );
 }
 export class RatchetService extends EventEmitter {
   private bridge: MonitoringBridge | null = null;
@@ -208,7 +179,10 @@ export class RatchetService extends EventEmitter {
     config: Awaited<ReturnType<typeof workspacePRMonitoringService.listEnabled>>[number],
     parentSignal?: AbortSignal
   ): Promise<WorkspaceRatchetResult> {
-    const previousState = aggregateState(config.workspace.prs);
+    const previousState = deriveWorkspacePRSummary(
+      config.workspace.prs,
+      config.enabled
+    ).ratchetState;
     if (this.stopped || parentSignal?.aborted) {
       return Promise.resolve({
         workspaceId: config.workspaceId,
@@ -244,7 +218,10 @@ export class RatchetService extends EventEmitter {
         signal.throwIfAborted();
         this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: config.workspaceId });
         signal.throwIfAborted();
-        const newState = aggregateState(await workspacePrSnapshotService.list(config.workspaceId));
+        const newState = deriveWorkspacePRSummary(
+          await workspacePrSnapshotService.list(config.workspaceId),
+          config.enabled
+        ).ratchetState;
         signal.throwIfAborted();
         this.emitStateChange(config.workspaceId, previousState, newState);
         return {
