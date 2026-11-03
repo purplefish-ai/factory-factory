@@ -75,7 +75,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio",
+    "db:studio": "node --import tsx src/cli/index.ts db:studio",
     "storybook": "storybook dev -p 6006",
     "dev:electron": "node scripts/ensure-native-modules.mjs electron && tsc -p tsconfig.electron.json && concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "dev:backend": "BACKEND_PORT=3001 tsx watch src/backend/index.ts",

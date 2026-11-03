@@ -41,9 +41,11 @@ export function registerProviderCommand(
 export async function runProviderCommand(command: {
   command: string;
   args: string[];
+  cwd?: string;
 }): Promise<number> {
   const child = spawn(command.command, command.args, {
     stdio: 'inherit',
+    cwd: command.cwd,
     detached: process.platform !== 'win32',
     env: { ...getCurrentProcessEnv(), ELECTRON_RUN_AS_NODE: '1' },
   });

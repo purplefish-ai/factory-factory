@@ -131,6 +131,17 @@ Port selection checks listening processes with `lsof` on Unix. If that check
 fails, including when another user's listener is hidden, it verifies the port
 with a bind attempt before selecting it.
 
+### Inspect the database
+
+`ff db:studio` uses the bundled Prisma CLI in both installed packages and source
+checkouts (`pnpm db:studio`). It opens the database selected by
+`--database-path`, then `DATABASE_PATH`, then `BASE_DIR/data.db` (default
+`~/factory-factory/data.db`). Relative paths resolve from your current
+directory. Use `--port 5556` to request a specific Studio port; otherwise Prisma
+selects an available port. Set `BROWSER=none` to start Studio without opening a
+browser. Launch failures return a nonzero exit status. The command does not
+download Prisma or other packages.
+
 ### Access through Tailscale
 
 Connect the host and your other device to Tailscale, then run:
