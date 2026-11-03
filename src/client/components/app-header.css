@@ -1,16 +1,87 @@
 /* The installed desktop PWA shares its first row with native window controls.
- * Keep the full-width background, but inset content around controls on either
- * side. Browser tabs, fullscreen, and unsupported PWAs keep the normal header.
+ * The browser owns the native controls and reports the safe rectangle between
+ * them. Compact our controls within that height, with a subtly raised surface
+ * and tight S-curves at each end. Larger fonts can grow the row without clipping.
+ * Browser tabs, fullscreen, and unsupported PWAs keep the normal header.
  */
 @media (display-mode: window-controls-overlay) {
   .app-header {
-    min-height: max(3rem, env(titlebar-area-height, 0px));
+    --app-header-control-size: max(24px, 1.5rem);
+    --app-header-shoulder: 16px;
+    --app-header-surface: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
+
+    position: relative;
+    min-height: 0;
+    border-bottom: 0;
     padding-top: env(titlebar-area-y, 0px);
-    padding-left: calc(env(titlebar-area-x, 0px) + 0.5rem);
-    padding-right: calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%) + 0.5rem);
+    padding-left: env(titlebar-area-x, 0px);
+    padding-right: max(
+      0px,
+      calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%))
+    );
     -webkit-app-region: drag;
     app-region: drag;
     user-select: none;
+  }
+
+  .app-header-controls {
+    position: relative;
+    isolation: isolate;
+    min-height: max(env(titlebar-area-height, 0px), calc(var(--app-header-control-size) + 4px));
+    padding: 2px calc(var(--app-header-shoulder) + 4px);
+    gap: 4px;
+  }
+
+  .app-header-controls::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 2px 0 0;
+    background: var(--app-header-surface);
+    border-radius: var(--app-header-shoulder) var(--app-header-shoulder) 0 0;
+    pointer-events: none;
+  }
+
+  /* Clip only the decoration, leaving focus rings and menus unobstructed.
+   * Older overlay-capable browsers retain the rounded surface above.
+   */
+  @supports (clip-path: shape(from 0 0, line to 100% 100%, close)) {
+    .app-header-controls::before {
+      border-radius: 0;
+      clip-path: shape(
+        from 0 100%,
+        curve to var(--app-header-shoulder) 0 with calc(var(--app-header-shoulder) / 2) 100% /
+          calc(var(--app-header-shoulder) / 2) 0,
+        hline to calc(100% - var(--app-header-shoulder)),
+        curve to 100% 100% with calc(100% - var(--app-header-shoulder) / 2) 0 /
+          calc(100% - var(--app-header-shoulder) / 2) 100%,
+        close
+      );
+    }
+  }
+
+  .app-header::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0;
+    height: 1px;
+    background: var(--app-header-surface);
+    pointer-events: none;
+  }
+
+  .app-header :is(button, a, input, select, [role='button'], [role='combobox']) {
+    height: var(--app-header-control-size);
+    min-height: var(--app-header-control-size);
+    padding-block: 0;
+    /* Inline triggers inside context-menu/overflow wrappers must not reserve
+     * text descender space below the button and shift its center upward.
+     */
+    vertical-align: top;
+  }
+
+  .app-header :is(button, a)[data-size^='icon'] {
+    width: var(--app-header-control-size);
+    padding-inline: 0;
   }
 
   /* Portal slots contain dropdowns, links, and editable workspace names. */
