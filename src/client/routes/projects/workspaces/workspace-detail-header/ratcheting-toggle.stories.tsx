@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -21,12 +21,14 @@ function RatchetingDropdown({
   animated = false,
   archived = false,
   withPr = false,
+  withMultiplePrs = false,
 }: {
   deliveryMode?: PRDeliveryMode;
   enabled?: boolean;
   animated?: boolean;
   archived?: boolean;
   withPr?: boolean;
+  withMultiplePrs?: boolean;
 }) {
   const displayedWorkspace = {
     ...workspace,
@@ -35,23 +37,24 @@ function RatchetingDropdown({
     ratchetState: animated ? 'CI_RUNNING' : 'IDLE',
     ratchetEnabled: enabled,
     ratchetButtonAnimated: animated,
-    prs: withPr
-      ? [
-          {
-            id: 'pr-42',
-            url: 'https://github.com/team/repository/pull/42',
-            number: 42,
-            title: 'Simplify workspace PR controls',
-            headRefName: 'feature/pr-menu',
-            baseRefName: 'main',
-            state: 'OPEN',
-            reviewState: null,
-            ciStatus: 'SUCCESS',
-            hasMergeConflict: false,
-            syncedAt: null,
-          },
-        ]
-      : [],
+    prs:
+      withPr || withMultiplePrs
+        ? [
+            {
+              id: 'pr-42',
+              url: 'https://github.com/team/repository/pull/42',
+              number: 42,
+              title: 'Simplify workspace PR controls',
+              headRefName: 'feature/pr-menu',
+              baseRefName: 'main',
+              state: 'OPEN',
+              reviewState: null,
+              ciStatus: 'SUCCESS',
+              hasMergeConflict: false,
+              syncedAt: null,
+            },
+          ]
+        : [],
     prMonitoring: {
       deliveryMode,
       enabled,
@@ -61,6 +64,16 @@ function RatchetingDropdown({
       pendingEventCount: 0,
     },
   } as WorkspaceHeaderWorkspace;
+  if (withMultiplePrs) {
+    displayedWorkspace.prs.push({
+      ...displayedWorkspace.prs[0]!,
+      id: 'pr-43',
+      url: 'https://github.com/team/repository/pull/43',
+      number: 43,
+      title: 'Previous workspace change',
+      state: 'CLOSED',
+    });
+  }
   return <RatchetingToggle workspace={displayedWorkspace} workspaceId={workspace.id} />;
 }
 const meta = {
@@ -138,3 +151,21 @@ export const ActiveUpdates: Story = {
   },
 };
 export const Archived: Story = { args: { archived: true, withPr: true } };
+
+export const MultiplePullRequests: Story = {
+  args: { withMultiplePrs: true },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole('button', {
+        name: 'Pull requests and updates, updates off',
+      })
+    );
+    const menu = within(canvasElement.ownerDocument.body).getByRole('menu');
+    await waitFor(async () => {
+      await expect(within(menu).getByText('#42 · Simplify workspace PR controls')).toBeVisible();
+    });
+    await expect(within(menu).getByText('#43 · Previous workspace change')).toBeVisible();
+    await expect(within(menu).getByText('Closed')).toBeVisible();
+    await expect(within(menu).getByText('CI Passing')).toBeVisible();
+  },
+};

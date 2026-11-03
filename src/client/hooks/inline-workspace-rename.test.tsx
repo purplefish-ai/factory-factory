@@ -39,7 +39,6 @@ vi.mock('@/client/routes/projects/workspaces/workspace-detail-header/index', () 
   WorkspaceProviderSettings: () => null,
   WorkspacePrAction: () => null,
   WorkspaceIssueLink: () => null,
-  WorkspaceCiStatus: () => null,
   WorkspaceHeaderOverflowMenu: () => null,
   AdversarialReviewButton: () => null,
   ArchiveActionButton: () => null,

@@ -107,9 +107,9 @@ quick-actions menu (`main-view-tab-bar.tsx:391`). Reasoning:
   force an Admin-configured provider that overrides the user's current
   selection, and stretching that system to do so would blur its contract.
 - This feature is inherently PR-scoped, so it belongs with the other PR-scoped
-  controls (`WorkspacePrAction`, `WorkspaceCiStatus`, `RatchetingToggle`), gated
-  on the PR being open the same way that UI already is
-  (`hasVisiblePullRequest`-style check on `prUrl`/`prNumber`/`prState`).
+  controls (`WorkspacePrAction`, `RatchetingToggle`), gated on the PR being open
+  the same way that UI already is (`hasVisiblePullRequest`-style check on
+  `prUrl`/`prNumber`/`prState`).
 
 Button behavior:
 

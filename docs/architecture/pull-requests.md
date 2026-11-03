@@ -71,6 +71,10 @@ settings; it does not toggle monitoring. The wrench retains its enabled and
 activity states. Archived and archiving workspaces retain PR links but hide
 attachment, review, and monitoring controls.
 
+The workspace header and its narrow-screen overflow omit the standalone PR/CI
+status chip. Open the wrench menu to inspect each attached PR's state and CI;
+sidebar and Kanban status indicators remain available.
+
 ## PR event delivery destinations
 
 PR monitoring replaces the former Ratchet fixer workflow. The two-minute
