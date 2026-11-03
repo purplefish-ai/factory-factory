@@ -120,6 +120,16 @@ existing unchecked body-type assignment remains debt for the separate compatible
 body DTO and archive-view change. Archive storage performance and durability
 acceptance remain blocked; this reader change clears neither gate.
 
+The passive `projectClosedSessionTranscriptRows` helper validates each JSON row
+with the archive current-message codec before grouping. It preserves opaque
+barriers and uses optional observations from the existing grouping owner to
+identify exact consumed result blocks. A row with any unconsumed result retains
+one entire raw fallback, even if part of it is already represented richly;
+same-index rich content precedes that inspection row. Successful current rows
+with undeclared extras remain rich-only, while the original JSON stays intact.
+The current route and archive view do not use this helper yet; compatible body
+validation and view activation remain a separate atomic change.
+
 ## ACP runtime
 
 All agent sessions use Agent Client Protocol over stdio JSON-RPC through
