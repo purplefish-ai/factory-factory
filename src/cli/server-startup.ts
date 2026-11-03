@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
+import { getBuildRecoveryGuidance } from './build-command';
 import { stopChild } from './child-lifecycle';
 import { waitForPort } from './runtime-utils';
 
@@ -19,7 +20,9 @@ export async function startFactoryFactoryServer(params: {
   const backendDist = join(params.projectRoot, 'dist', 'src', 'backend', 'index.js');
 
   if (!(existsSync(frontendDist) && existsSync(backendDist))) {
-    throw new Error('Frontend or backend not built. Run `ff build` or `pnpm build` first.');
+    throw new Error(
+      `Frontend or backend not built. ${getBuildRecoveryGuidance(params.projectRoot)}`
+    );
   }
 
   const { tailscale } = params;

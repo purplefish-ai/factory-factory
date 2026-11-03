@@ -9,6 +9,7 @@ import { parseGitHubIssueLink } from '@/shared/github-issue-preview';
 import { GitHubIssueLink } from './github-issue-link';
 import { GitHubPRLink } from './github-pr-link';
 import { MarkdownImage } from './markdown-image';
+import { renderStreamdownContent } from './streamdown-markdown';
 
 type MarkdownLink = ReactElement<ComponentPropsWithoutRef<'a'>>;
 
@@ -40,12 +41,13 @@ function renderExternalLink(link: MarkdownLink) {
   return <GitHubPRLink link={link} />;
 }
 
-/** Application Markdown adds GitHub previews without coupling the UI primitive to tRPC. */
+/** Application Markdown uses Streamdown with our links, images and typography. */
 export const MarkdownRenderer = memo(function MarkdownRenderer(
   props: Omit<MarkdownRendererProps, 'renderExternalLink' | 'renderImage'>
 ) {
   return (
     <BaseMarkdownRenderer
+      renderContent={renderStreamdownContent}
       {...props}
       renderExternalLink={renderExternalLink}
       renderImage={renderImage}

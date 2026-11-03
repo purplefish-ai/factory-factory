@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { prisma } from '@/backend/db';
+import type { BaseJsonSection } from '@/shared/schemas/recovery-json-storage.schema';
 import type {
   AgentSession,
   Prisma,
@@ -37,6 +39,21 @@ export interface DataBackupSnapshot {
 class DataBackupAccessor {
   withExportSnapshot<T>(callback: (tx: DataBackupTransactionClient) => Promise<T>): Promise<T> {
     return withBackupSnapshot(prisma, callback);
+  }
+
+  async getBaseJsonStorageForExport(
+    tx: DataBackupTransactionClient
+  ): Promise<BaseJsonSection['jsonStorage']> {
+    const rows = z
+      .array(z.strictObject({ id: z.string() }))
+      .parse(
+        await tx.$queryRaw`SELECT id FROM "Workspace" WHERE json_type("creationMetadata") = 'null' ORDER BY id`
+      );
+    return rows.map(({ id }) => ({
+      model: 'Workspace',
+      identity: [id],
+      field: 'creationMetadata',
+    }));
   }
 
   getSnapshotForExport(tx: DataBackupTransactionClient): Promise<DataBackupSnapshot> {

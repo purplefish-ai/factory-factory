@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
-import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -10,6 +9,7 @@ import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
+import { registerBuildCommand } from './build-command';
 import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
@@ -290,75 +290,7 @@ registerStudioCommand(program, PROJECT_ROOT);
 // build command
 // ============================================================================
 
-program
-  .command('build')
-  .description('Build for production')
-  .action(async () => {
-    console.log(chalk.blue('Building backend...'));
-
-    // Compile TypeScript backend
-    const tsc = spawn('npx', ['tsc', '-p', 'tsconfig.backend.json'], {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-    });
-
-    let exitCode = await new Promise<number>((resolve) => {
-      tsc.on('exit', (code) => resolve(code ?? 1));
-    });
-
-    if (exitCode !== 0) {
-      console.error(chalk.red('Backend TypeScript compilation failed'));
-      process.exit(exitCode);
-    }
-
-    // Run tsc-alias to resolve path aliases and add .js extensions for ESM
-    const tscAlias = spawn(
-      'npx',
-      ['tsc-alias', '-p', 'tsconfig.backend.json', '--resolve-full-paths'],
-      {
-        cwd: PROJECT_ROOT,
-        stdio: 'inherit',
-      }
-    );
-
-    exitCode = await new Promise<number>((resolve) => {
-      tscAlias.on('exit', (code) => resolve(code ?? 1));
-    });
-
-    if (exitCode !== 0) {
-      console.error(chalk.red('Backend path alias resolution failed'));
-      process.exit(exitCode);
-    }
-
-    // Copy prompts directory to dist (markdown files referenced at runtime)
-    const promptsSrc = join(PROJECT_ROOT, 'prompts');
-    const promptsDest = join(PROJECT_ROOT, 'dist', 'prompts');
-    if (existsSync(promptsSrc)) {
-      cpSync(promptsSrc, promptsDest, { recursive: true });
-    }
-
-    console.log(chalk.green('  ✓ Backend built'));
-    console.log(chalk.blue('Building frontend...'));
-
-    // Build Vite/React Router frontend
-    const viteBuild = spawn('npx', ['vite', 'build'], {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'production' },
-    });
-
-    exitCode = await new Promise<number>((resolve) => {
-      viteBuild.on('exit', (code) => resolve(code ?? 1));
-    });
-
-    if (exitCode !== 0) {
-      console.error(chalk.red('Frontend build failed'));
-      process.exit(exitCode);
-    }
-
-    console.log(chalk.green('\n✅ Build completed successfully!'));
-    console.log(chalk.gray('Run `ff serve` to start the production server'));
-  });
+registerBuildCommand(program, PROJECT_ROOT);
 
 // ============================================================================
 // proxy command

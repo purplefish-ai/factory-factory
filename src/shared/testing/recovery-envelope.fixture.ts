@@ -9,6 +9,25 @@ function entry(file: Backup, model = 'Project') {
 }
 export const malformedRecoveryCases: [string, (file: Backup) => void][] = [
   [
+    'undefined forbidden declaration',
+    (f) => {
+      Object.assign(f.meta.recovery.capabilities, { baseJson: undefined });
+    },
+  ],
+  [
+    'undefined forbidden section',
+    (f) => {
+      Object.assign(f.data.recovery, { baseJson: undefined });
+    },
+  ],
+  [
+    'forbidden capability and section',
+    (f) => {
+      Object.assign(f.meta.recovery.capabilities, { baseJson: 1 });
+      Object.assign(f.data.recovery, { baseJson: { version: 1, jsonStorage: [] } });
+    },
+  ],
+  [
     'unknown meta field',
     (f) => {
       Object.assign(f.meta, { futureField: { version: 1 } });

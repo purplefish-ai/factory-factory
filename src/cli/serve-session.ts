@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
+import { getBuildRecoveryGuidance } from './build-command';
 import { stopChild, watchChild } from './child-lifecycle';
 import { waitForPort } from './runtime-utils';
 import { buildHttpOrigin } from './serve-env';
@@ -117,10 +118,14 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
       const frontendDist = join(projectRoot, 'dist', 'client');
       const backendDist = join(projectRoot, 'dist', 'src', 'backend', 'index.js');
       if (!existsSync(frontendDist)) {
-        throw new Error('Frontend not built. Run `ff build` or `pnpm build` first. Or use --dev.');
+        throw new Error(
+          `Frontend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+        );
       }
       if (!existsSync(backendDist)) {
-        throw new Error('Backend not built. Run `ff build` or `pnpm build` first. Or use --dev.');
+        throw new Error(
+          `Backend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+        );
       }
       console.log(chalk.blue('  🔧 Starting server (production mode)...'));
       track(
