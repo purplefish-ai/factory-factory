@@ -1,7 +1,16 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'streamdown/styles.css';
+@source '../../node_modules/streamdown/dist/*.js';
 @plugin '@tailwindcss/typography';
 @import './theme-presets.css';
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sd-animate],
+  [data-sd-animate-marker]::marker {
+    animation: none;
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 

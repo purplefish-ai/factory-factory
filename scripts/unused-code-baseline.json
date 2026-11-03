@@ -121,6 +121,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/client/components/streamdown-markdown.fixtures.ts": {
+      "disposition": "test-support",
+      "reason": "Streaming Markdown samples consumed only by streamdown-markdown.stories.tsx and streamdown-markdown.bench.tsx."
+    },
     "src/client/features/agents/event-dashboard-story.tsx": {
       "disposition": "test-support",
       "reason": "Storybook event-dashboard fixtures consume this shared scenario implementation."
@@ -171,7 +175,7 @@
     },
     "src/shared/testing/recovery-json-storage.fixture.ts": {
       "disposition": "test-support",
-      "reason": "Malformed workspace JSON fixtures used by shared schema and public import tests; no production runtime callers."
+      "reason": "Malformed JSON-storage cases shared by recovery-json-storage.schema.test.ts and base-json-backup.integration.test.ts; no runtime consumers."
     },
     "src/test-utils/agent-authoring-eval-fixture.ts": {
       "disposition": "test-support",

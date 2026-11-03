@@ -8,7 +8,9 @@ import {
   memo,
   Suspense,
   useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -27,6 +29,13 @@ const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
 /** Custom media renderers preserve navigation when nested in Markdown links. */
 export const MarkdownLinkContext = createContext(false);
 
+export interface MarkdownContentProps {
+  content: string;
+  streaming: boolean;
+  components: NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
+  urlTransform: NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['urlTransform']>;
+}
+
 export interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -39,6 +48,8 @@ export interface MarkdownRendererProps {
    */
   streaming?: boolean;
   renderImage?: (image: { src?: string; alt?: string; title?: string }) => ReactNode;
+  /** Alternate parser sharing the same application components and URL policy. */
+  renderContent?: (props: MarkdownContentProps) => ReactNode;
 }
 
 type MarkdownComponents = NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
@@ -71,7 +82,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   renderExternalLink,
   streaming = false,
   renderImage,
+  renderContent,
 }: MarkdownRendererProps) {
+  // Tab changes can replace the navigation callback. Keep renderer identities
+  // stable so updating that callback does not remount/reanimate the reply.
+  const workspaceFileHandler = useRef(onWorkspaceFileLink);
+  useLayoutEffect(() => {
+    workspaceFileHandler.current = onWorkspaceFileLink;
+  }, [onWorkspaceFileLink]);
+  const hasWorkspaceFileHandler = Boolean(onWorkspaceFileLink);
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo<MarkdownComponents>(
     () => ({
@@ -132,14 +151,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // Override link rendering
       a: ({ href, children }: ComponentPropsWithoutRef<'a'>) => {
         const workspacePath = href ? resolveWorkspaceFileLink?.(href) : null;
-        if (workspacePath && onWorkspaceFileLink) {
+        if (workspacePath && hasWorkspaceFileHandler) {
           return (
             <MarkdownLinkContext value={true}>
               <a
                 href={href}
                 onClick={(event) => {
                   event.preventDefault();
-                  onWorkspaceFileLink(workspacePath);
+                  workspaceFileHandler.current?.(workspacePath);
                 }}
                 onAuxClick={(event) => {
                   if (event.button !== 1) {
@@ -147,7 +166,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
                   }
 
                   event.preventDefault();
-                  onWorkspaceFileLink(workspacePath);
+                  workspaceFileHandler.current?.(workspacePath);
                 }}
                 className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
               >
@@ -180,7 +199,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <p className="mb-4 last:mb-0">{children}</p>
       ),
     }),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink, renderImage]
+    [hasWorkspaceFileHandler, resolveWorkspaceFileLink, renderExternalLink, renderImage]
   );
 
   // Custom image renderers own source validation and local-path resolution.
@@ -190,20 +209,23 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const urlTransform = useCallback(
     (url: string, key: string) =>
       (key === 'src' && renderImage) ||
-      (onWorkspaceFileLink && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
+      (hasWorkspaceFileHandler && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
         ? url
         : defaultUrlTransform(url),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderImage]
+    [hasWorkspaceFileHandler, resolveWorkspaceFileLink, renderImage]
   );
 
   const blocks = useMemo(() => {
+    if (renderContent) {
+      return [];
+    }
     let start = 0;
     return (streaming ? splitMarkdownBlocks(content) : [content]).map((text) => {
       const block = { start, text };
       start += text.length;
       return block;
     });
-  }, [content, streaming]);
+  }, [content, streaming, renderContent]);
 
   return (
     <div
@@ -212,15 +234,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         className
       )}
     >
-      {blocks.map(({ start, text }) => (
-        // Earlier blocks keep their start offsets as the tail grows, so they stay memoized.
-        <MarkdownBlock
-          key={start}
-          content={text}
-          components={components}
-          urlTransform={urlTransform}
-        />
-      ))}
+      {renderContent?.({ content, streaming, components, urlTransform }) ??
+        blocks.map(({ start, text }) => (
+          // Earlier blocks keep their start offsets as the tail grows, so they stay memoized.
+          <MarkdownBlock
+            key={start}
+            content={text}
+            components={components}
+            urlTransform={urlTransform}
+          />
+        ))}
     </div>
   );
 });

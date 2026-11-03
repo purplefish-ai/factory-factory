@@ -73,18 +73,22 @@ function analyze(root: string, mode: 'production' | 'exports' | 'full-files') {
   return parseKnipOutput(result, mode === 'exports' ? 'exports' : 'production');
 }
 
-it('detects a production module kept alive only by a test with the real analyzer', () => {
+it.each([
+  'src/test-only.ts',
+  'src/shared/testing/recovery-json-storage.fixture.ts',
+  'src/client/components/streamdown-markdown.fixtures.ts',
+])('detects test-only production candidates, including fixture support: %s', (file) => {
   const { root, write } = fixture();
-  write('src/test-only.ts', 'export const abandoned = 1;');
+  write(file, 'export const abandoned = 1;');
   write(
     'src/test-only.test.ts',
-    "import { abandoned } from './test-only'; console.log(abandoned);"
+    `import { abandoned } from './${file.slice(4, -3)}'; console.log(abandoned);`
   );
   expect(analyze(root, 'full-files')).toEqual([]);
   const production = analyze(root, 'production');
-  expect(production).toContain('src/test-only.ts');
+  expect(production).toContain(file);
   expect(production).not.toContain('src/test-only.test.ts');
-  expect(analyze(root, 'exports')).not.toContain('src/test-only.ts::exports::abandoned');
+  expect(analyze(root, 'exports')).not.toContain(`${file}::exports::abandoned`);
 });
 
 it('keeps each configured runtime and a lazy frontend dependency reachable', () => {
