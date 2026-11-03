@@ -467,16 +467,15 @@ History loading accepts both legacy event messages and current public response
 items, deduplicates copies per turn, and excludes injected context and internal
 reasoning; rollouts without content-kind metadata drop user messages before the
 first prompt that are only `<environment_context>` or `<user_instructions>`,
-while later tag-only messages are kept as typed. Active and browse resumes
-hydrate on-disk history before starting the ACP runtime, preserving original
-message timestamps and suppressing duplicate adapter replay. Concurrent startups
-share history preparation; joining a runtime already starting preserves its
-replay policy. Without on-disk history or a retained provider transcript, ACP
-replay remains the fallback; each replayed user message closes the open reply
-and gets its own transcript row. Terminal output deltas are negotiated
-explicitly, accumulated with per-tool and total pending-tool limits, and
-included in completed tool results. Buffers are isolated by session and cleared
-on teardown.
+while later tag-only messages are kept as typed. Active and browse resumes start
+on-disk history hydration before ACP startup, preserving original message
+timestamps and suppressing duplicate adapter replay. Concurrent startups share
+history preparation; joining a runtime already starting preserves its replay
+policy. Without on-disk history or a retained provider transcript, ACP replay
+remains the fallback; each replayed user message closes the open reply and gets
+its own transcript row. Terminal output deltas are negotiated explicitly,
+accumulated with per-tool and total pending-tool limits, and included in
+completed tool results. Buffers are isolated by session and cleared on teardown.
 
 For tracked tool calls, object-valued ACP `rawInput` refinements replace the
 existing card's input, preserving its original order and tool name through live
