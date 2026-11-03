@@ -2,9 +2,9 @@ import { ImageIcon } from '@phosphor-icons/react/dist/csr/Image';
 import { type DragEvent, type ReactNode, useInsertionEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
+import { collectAttachments } from '@/client/lib/attachment-file-conversion';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import { collectAttachments } from './hooks/attachment-file-conversion';
 
 interface ImageDropZoneProps {
   children: ReactNode;
