@@ -2,6 +2,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import {
   type ComponentPropsWithoutRef,
+  createContext,
   isValidElement,
   lazy,
   memo,
@@ -23,6 +24,9 @@ const REMARK_PLUGINS = [remarkGfm];
 // react-markdown percent-encodes backslashes, so `C:\repo` arrives as `C:%5Crepo`.
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
 
+/** Custom media renderers preserve navigation when nested in Markdown links. */
+export const MarkdownLinkContext = createContext(false);
+
 export interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -34,6 +38,7 @@ export interface MarkdownRendererProps {
    * changed tail block re-parses. Output matches the single-block render.
    */
   streaming?: boolean;
+  renderImage?: (image: { src?: string; alt?: string; title?: string }) => ReactNode;
 }
 
 type MarkdownComponents = NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
@@ -45,7 +50,7 @@ const MarkdownBlock = memo(function MarkdownBlock({
 }: {
   content: string;
   components: MarkdownComponents;
-  urlTransform: (url: string) => string;
+  urlTransform: NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['urlTransform']>;
 }) {
   return (
     <ReactMarkdown
@@ -65,10 +70,17 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   onWorkspaceFileLink,
   renderExternalLink,
   streaming = false,
+  renderImage,
 }: MarkdownRendererProps) {
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo<MarkdownComponents>(
     () => ({
+      ...(renderImage
+        ? {
+            img: ({ src, alt, title }: { src?: string; alt?: string; title?: string }) =>
+              renderImage({ src, alt, title }),
+          }
+        : {}),
       // Override code rendering - in react-markdown v10, inline code is not wrapped in <pre>
       code: ({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) => {
         // Check if this is a code block (has language class) or inline code
@@ -122,25 +134,27 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         const workspacePath = href ? resolveWorkspaceFileLink?.(href) : null;
         if (workspacePath && onWorkspaceFileLink) {
           return (
-            <a
-              href={href}
-              onClick={(event) => {
-                event.preventDefault();
-                onWorkspaceFileLink(workspacePath);
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) {
-                  return;
-                }
+            <MarkdownLinkContext value={true}>
+              <a
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onWorkspaceFileLink(workspacePath);
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) {
+                    return;
+                  }
 
-                event.preventDefault();
-                onWorkspaceFileLink(workspacePath);
-              }}
-              className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
-            >
-              {children}
-              <FileCodeIcon className="h-3 w-3 shrink-0" />
-            </a>
+                  event.preventDefault();
+                  onWorkspaceFileLink(workspacePath);
+                }}
+                className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
+              >
+                {children}
+                <FileCodeIcon className="h-3 w-3 shrink-0" />
+              </a>
+            </MarkdownLinkContext>
           );
         }
 
@@ -155,25 +169,31 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             <ArrowSquareOutIcon className="h-3 w-3 shrink-0" />
           </a>
         );
-        return renderExternalLink ? renderExternalLink(link) : link;
+        return (
+          <MarkdownLinkContext value={true}>
+            {renderExternalLink ? renderExternalLink(link) : link}
+          </MarkdownLinkContext>
+        );
       },
       // Override paragraph with comfortable spacing
       p: ({ children }: ComponentPropsWithoutRef<'p'>) => (
         <p className="mb-4 last:mb-0">{children}</p>
       ),
     }),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink]
+    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderExternalLink, renderImage]
   );
 
+  // Custom image renderers own source validation and local-path resolution.
   // `defaultUrlTransform` blanks `C:` as an unknown protocol. Keep drive paths
   // that resolve to a workspace file so the link handler can open them;
   // everything else, including `javascript:`, goes through the default.
   const urlTransform = useCallback(
-    (url: string) =>
-      onWorkspaceFileLink && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url)
+    (url: string, key: string) =>
+      (key === 'src' && renderImage) ||
+      (onWorkspaceFileLink && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
         ? url
         : defaultUrlTransform(url),
-    [onWorkspaceFileLink, resolveWorkspaceFileLink]
+    [onWorkspaceFileLink, resolveWorkspaceFileLink, renderImage]
   );
 
   const blocks = useMemo(() => {

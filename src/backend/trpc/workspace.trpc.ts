@@ -19,6 +19,7 @@ import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status'
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { toTRPCError } from './application-error-mapper';
 import { type Context, mergeRouters, publicProcedure, router, trustedLocalProcedure } from './trpc';
+import { workspaceChatImagesRouter } from './workspace/chat-images.trpc';
 import { workspaceChildrenRouter } from './workspace/children.trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -435,6 +436,7 @@ export const workspaceRouter = mergeRouters(
   workspaceCoreRouter,
   workspaceChildrenRouter,
   workspaceFilesRouter,
+  workspaceChatImagesRouter,
   workspaceGitRouter,
   workspaceIdeRouter,
   workspaceInitRouter,

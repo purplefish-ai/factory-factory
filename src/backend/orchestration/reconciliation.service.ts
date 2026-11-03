@@ -38,6 +38,12 @@ class ReconciliationService {
   private runSignal: AbortSignal | null = null;
   /** Whether the service itself has been stopped, independent of any run. */
   private stopped = false;
+  /**
+   * Startup initialization of NEW workspaces, running in the background so it
+   * cannot hold back backend readiness. Periodic runs wait for it before
+   * querying, and `stopPeriodicCleanup` drains it.
+   */
+  private startupInitialization: Promise<void> | null = null;
 
   constructor() {
     jobRunner.register({
@@ -106,16 +112,76 @@ class ReconciliationService {
   }
 
   /**
-   * Stop periodic reconciliation and wait for any in-flight run to complete
+   * Stop periodic reconciliation and wait for any in-flight run, including
+   * background startup initialization, to complete
    */
   async stopPeriodicCleanup(): Promise<void> {
     this.stopped = true;
     await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
+    await this.startupInitialization;
+  }
+
+  /**
+   * Startup repair that must precede readiness: mark stale PROVISIONING
+   * workspaces FAILED. NEW workspaces are left for
+   * `startNewWorkspaceInitialization`.
+   */
+  async recoverStaleProvisioningWorkspaces(): Promise<void> {
+    const workspaces = await this.workspace.findNeedingWorktree();
+    for (const workspace of workspaces) {
+      if (this.isShuttingDown) {
+        logger.debug('Stopping stale provisioning recovery - shutdown in progress');
+        return;
+      }
+      if (workspace.status === 'PROVISIONING') {
+        await this.recoverStaleProvisioningWorkspace(workspace);
+      }
+    }
+  }
+
+  /**
+   * Start initializing NEW workspaces left by a prior process (quit or crash
+   * before provisioning began, or a retry reset) without waiting for it.
+   * Provisioning runs git, the startup script (minutes) and the default agent
+   * session, so awaiting it would hold the backend unready. Workspaces are
+   * initialized one at a time, as reconciliation always has; failures are
+   * logged and leave the workspace in whatever state initialization settled.
+   */
+  startNewWorkspaceInitialization(): void {
+    if (this.isShuttingDown || this.startupInitialization !== null) {
+      return;
+    }
+    const initialization = this.initializeNewWorkspaces()
+      .catch((error: unknown) => {
+        logger.error('Failed to initialize NEW workspaces on startup', toError(error));
+      })
+      .finally(() => {
+        if (this.startupInitialization === initialization) {
+          this.startupInitialization = null;
+        }
+      });
+    this.startupInitialization = initialization;
+  }
+
+  private async initializeNewWorkspaces(): Promise<void> {
+    const workspaces = await this.workspace.findNeedingWorktree();
+    for (const workspace of workspaces) {
+      if (this.isShuttingDown) {
+        logger.debug('Stopping startup workspace initialization - shutdown in progress');
+        return;
+      }
+      if (workspace.status !== 'PROVISIONING') {
+        await this.initializeNewWorkspace(workspace);
+      }
+    }
   }
 
   private async runPeriodicReconciliation(): Promise<void> {
     let reconciliationError: unknown;
     let reconciliationFailed = false;
+
+    // Never initialize a workspace the startup pass still owns.
+    await this.startupInitialization;
 
     try {
       await this.reconcile();

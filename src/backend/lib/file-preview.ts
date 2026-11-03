@@ -9,15 +9,26 @@ function assertRegularFile(stats: Stats) {
 }
 
 /** Read at most one preview plus a byte of lookahead, even if the file grows. */
-export async function readFilePrefix(fullPath: string) {
+export async function readFilePrefix(
+  fullPath: string,
+  {
+    maxBytes = MAX_FILE_SIZE,
+    noFollow = false,
+    validateFile,
+  }: { maxBytes?: number; noFollow?: boolean; validateFile?: (stats: Stats) => Promise<void> } = {}
+) {
   assertRegularFile(await stat(fullPath));
   // A regular file can be replaced with a FIFO between stat and open.
-  const handle = await open(fullPath, constants.O_RDONLY | constants.O_NONBLOCK);
+  const handle = await open(
+    fullPath,
+    constants.O_RDONLY | constants.O_NONBLOCK | (noFollow ? constants.O_NOFOLLOW : 0)
+  );
   try {
     const stats = await handle.stat();
     assertRegularFile(stats);
+    await validateFile?.(stats);
 
-    const buffer = Buffer.allocUnsafe(MAX_FILE_SIZE + 1);
+    const buffer = Buffer.allocUnsafe(maxBytes + 1);
     let offset = 0;
     while (offset < buffer.length) {
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
@@ -27,10 +38,13 @@ export async function readFilePrefix(fullPath: string) {
       offset += bytesRead;
     }
 
+    // Recheck identity/containment before publishing bytes if a caller supplies
+    // a filesystem boundary, including mutations that happen during the read.
+    await validateFile?.(stats);
     return {
-      buffer: buffer.subarray(0, Math.min(offset, MAX_FILE_SIZE)),
+      buffer: buffer.subarray(0, Math.min(offset, maxBytes)),
       size: stats.size,
-      truncated: stats.size > MAX_FILE_SIZE || offset > MAX_FILE_SIZE,
+      truncated: stats.size > maxBytes || offset > maxBytes,
     };
   } finally {
     await handle.close();

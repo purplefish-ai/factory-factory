@@ -1,5 +1,6 @@
 import type { Virtualizer } from '@tanstack/react-virtual';
 import type { ReactNode } from 'react';
+import { ChatImageWorkspaceContext } from '@/client/components/chat-image-context';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
 import { GroupedMessageItemRenderer } from './agent-activity';
 import {
@@ -124,46 +125,48 @@ export function TranscriptRows({
   };
   const streamingMessageId = display.running ? latestUnqueuedId(layout.messages, display) : null;
   return (
-    <ThinkingCompletionProvider
-      lastThinkingMessageId={layout.lastThinkingMessageId}
-      running={display.running}
-    >
-      <StreamingTextProvider streamingMessageId={streamingMessageId}>
-        {display.loadingSession ? (
-          <div className="px-4 py-4">
-            {layout.keys.map((key, index) => (
-              <div key={key} className={contentClassName}>
-                {content(index)}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
-            {engine.getVirtualItems().map((row) => {
-              const item = layout.messages[row.index - layout.headerOffset];
-              return (
-                <div
-                  key={row.key}
-                  ref={engine.measureElement}
-                  data-index={row.index}
-                  data-transcript-key={row.key}
-                  data-tool-sequence={item && isToolSequence(item) ? 'true' : undefined}
-                  className="px-4 min-w-0"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${row.start}px)`,
-                  }}
-                >
-                  <div className={contentClassName}>{content(row.index)}</div>
+    <ChatImageWorkspaceContext value={display.workspaceId}>
+      <ThinkingCompletionProvider
+        lastThinkingMessageId={layout.lastThinkingMessageId}
+        running={display.running}
+      >
+        <StreamingTextProvider streamingMessageId={streamingMessageId}>
+          {display.loadingSession ? (
+            <div className="px-4 py-4">
+              {layout.keys.map((key, index) => (
+                <div key={key} className={contentClassName}>
+                  {content(index)}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </StreamingTextProvider>
-    </ThinkingCompletionProvider>
+              ))}
+            </div>
+          ) : (
+            <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
+              {engine.getVirtualItems().map((row) => {
+                const item = layout.messages[row.index - layout.headerOffset];
+                return (
+                  <div
+                    key={row.key}
+                    ref={engine.measureElement}
+                    data-index={row.index}
+                    data-transcript-key={row.key}
+                    data-tool-sequence={item && isToolSequence(item) ? 'true' : undefined}
+                    className="px-4 min-w-0"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${row.start}px)`,
+                    }}
+                  >
+                    <div className={contentClassName}>{content(row.index)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </StreamingTextProvider>
+      </ThinkingCompletionProvider>
+    </ChatImageWorkspaceContext>
   );
 }
