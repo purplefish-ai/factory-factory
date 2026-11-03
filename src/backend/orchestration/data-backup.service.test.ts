@@ -90,6 +90,10 @@ vi.mock('@/backend/db', () => ({
 }));
 
 import { prisma } from '@/backend/db';
+vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
+  withBackupSnapshot: (_source: unknown, read: (tx: typeof prisma) => Promise<unknown>) =>
+    read(prisma),
+}));
 import { dataBackupService } from './data-backup.service';
 
 const mockProject: Project = {
