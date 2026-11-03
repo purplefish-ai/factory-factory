@@ -26,14 +26,8 @@ export async function startFactoryFactoryServer(params: {
   }
 
   const { tailscale } = params;
-  // Only this launch decides whether the backend shares ports through Tailscale.
-  const {
-    FF_TAILSCALE_ORIGIN: _inheritedOrigin,
-    FF_TAILSCALE_HTTPS_PORT: _inheritedHttpsPort,
-    ...inheritedEnv
-  } = process.env;
   const env: NodeJS.ProcessEnv = {
-    ...inheritedEnv,
+    ...process.env,
     NODE_ENV: 'production',
     DATABASE_PATH: params.databasePath,
     BACKEND_PORT: params.requestedPort.toString(),
@@ -47,7 +41,9 @@ export async function startFactoryFactoryServer(params: {
           FF_TAILSCALE_ORIGIN: tailscale.origin,
           FF_TAILSCALE_HTTPS_PORT: tailscale.httpsPort.toString(),
         }
-      : {}),
+      : // Present but empty, so neither the parent environment nor a dotenv
+        // file can turn on port sharing for a non-Tailscale launch.
+        { FF_TAILSCALE_ORIGIN: '', FF_TAILSCALE_HTTPS_PORT: '' }),
     DOTENV_CONFIG_OVERRIDE: 'false',
     DOTENV_OVERRIDE: 'false',
     FF_EMIT_BACKEND_PORT: '1',

@@ -118,6 +118,12 @@ export function startPortForwarder(target: PortForwarderTarget): Promise<PortFor
     );
     upstreamRequest.once('error', () => writeUnavailable(res, target.upstreamPort));
     req.once('error', () => upstreamRequest.destroy());
+    // A viewer that disconnects must not keep holding an upstream connection.
+    res.once('close', () => {
+      if (!res.writableFinished) {
+        upstreamRequest.destroy();
+      }
+    });
     req.pipe(upstreamRequest);
   });
 

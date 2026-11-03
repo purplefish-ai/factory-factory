@@ -20,6 +20,11 @@ const SERVICE_PORTS: ReadonlySet<number> = new Set([
 const MIN_SHAREABLE_PORT = 1024;
 const MAX_PORT = 65_535;
 
+/** Run-script allocation skips these so a dev server never lands on one. */
+export function isReservedServicePort(port: number): boolean {
+  return SERVICE_PORTS.has(port);
+}
+
 export type PortRefusal = 'PRIVILEGED' | 'FACTORY_FACTORY' | 'SERVICE';
 
 /** Parses a canonical decimal port (no sign, leading zero, or whitespace). */
@@ -41,5 +46,5 @@ export function getPortRefusal(
   if (factoryFactoryPorts.includes(port)) {
     return 'FACTORY_FACTORY';
   }
-  return SERVICE_PORTS.has(port) ? 'SERVICE' : null;
+  return isReservedServicePort(port) ? 'SERVICE' : null;
 }

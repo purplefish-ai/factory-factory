@@ -2,7 +2,9 @@
  * Loopback links point at the host running Factory Factory. Under
  * `ff tailscale`, `/proxy/<port>` shares that port on the same machine name.
  */
-export function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(rawHostname: string): boolean {
+  // `localhost.` is the fully qualified spelling of the same name.
+  const hostname = rawHostname.toLowerCase().replace(/\.$/, '');
   return (
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||

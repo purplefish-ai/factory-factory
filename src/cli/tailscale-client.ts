@@ -31,7 +31,7 @@ export function getTailscaleOrigin(rawStatus: string, port: number): string {
       `Tailscale is not running (${status.BackendState}). Connect the machine with Tailscale or run "tailscale up" to login.`
     );
   }
-  const hostname = status.Self?.DNSName.replace(/\.$/, '');
+  const hostname = status.Self?.DNSName.replace(/\.$/, '').toLowerCase();
   if (!(hostname && /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9-]+$/i.test(hostname))) {
     throw new Error(
       'Tailscale did not return a valid machine DNS name. Enable MagicDNS in your tailnet.'

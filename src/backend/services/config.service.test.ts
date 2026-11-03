@@ -59,18 +59,33 @@ describe('configService environment accessors', () => {
     expect(configService.getTailscaleConfig()?.httpsPort).toBe(8443);
   });
 
-  it.each([undefined, '', 'http://mac.tail123.ts.net', 'https://mac.tail123.ts.net/path', 'nope'])(
-    'disables port sharing for the Tailscale origin %j',
-    (origin) => {
-      if (origin === undefined) {
-        delete process.env.FF_TAILSCALE_ORIGIN;
-      } else {
-        process.env.FF_TAILSCALE_ORIGIN = origin;
-      }
-      configService.reload();
-      expect(configService.getTailscaleConfig()).toBeNull();
+  it('canonicalizes equivalent spellings of the ff tailscale origin', () => {
+    process.env.FF_TAILSCALE_ORIGIN = 'https://Mac.Tail123.TS.net:443/';
+    configService.reload();
+    expect(configService.getTailscaleConfig()).toEqual({
+      origin: 'https://mac.tail123.ts.net',
+      hostname: 'mac.tail123.ts.net',
+      httpsPort: 443,
+    });
+  });
+
+  it.each([
+    undefined,
+    '',
+    'http://mac.tail123.ts.net',
+    'https://mac.tail123.ts.net/path',
+    'https://mac.tail123.ts.net/?x=1',
+    'https://user@mac.tail123.ts.net',
+    'nope',
+  ])('disables port sharing for the Tailscale origin %j', (origin) => {
+    if (origin === undefined) {
+      delete process.env.FF_TAILSCALE_ORIGIN;
+    } else {
+      process.env.FF_TAILSCALE_ORIGIN = origin;
     }
-  );
+    configService.reload();
+    expect(configService.getTailscaleConfig()).toBeNull();
+  });
 
   it('emits the startup port line when a launcher or the run-script proxy asks', () => {
     delete process.env.FF_EMIT_BACKEND_PORT;
@@ -79,6 +94,11 @@ describe('configService environment accessors', () => {
     expect(configService.shouldEmitBackendPort()).toBe(false);
 
     process.env.FF_EMIT_BACKEND_PORT = '1';
+    configService.reload();
+    expect(configService.shouldEmitBackendPort()).toBe(true);
+
+    delete process.env.FF_EMIT_BACKEND_PORT;
+    process.env.FF_RUN_SCRIPT_PROXY_ENABLED = '1';
     configService.reload();
     expect(configService.shouldEmitBackendPort()).toBe(true);
   });

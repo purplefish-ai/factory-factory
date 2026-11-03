@@ -18,7 +18,9 @@ export function useRunScriptLaunch(workspaceId: string): RunScriptLaunchInfo | n
     }
   );
 
-  if (!status?.port || status.status !== 'RUNNING') {
+  // Until port sharing is known, a fallback link could open the viewing
+  // device's own localhost instead of the host's dev server.
+  if (!status?.port || status.status !== 'RUNNING' || portSharing === undefined) {
     return null;
   }
 

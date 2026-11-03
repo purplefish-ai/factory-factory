@@ -62,6 +62,17 @@ async function readRecordFile(path: string): Promise<unknown> {
   }
 }
 
+/** Returns whether the group is gone or was signalled. */
+function signalGroup(dependencies: StaleShareDependencies, pgid: number): boolean {
+  try {
+    dependencies.killGroup(pgid);
+    return true;
+  } catch (error) {
+    // ESRCH: the group exited between listing and signalling.
+    return error instanceof Error && 'code' in error && error.code === 'ESRCH';
+  }
+}
+
 /** A recorded group is only signalled while it still runs this exact share. */
 function isRecordedServe(entry: ProcessEntry, share: ShareRecord): boolean {
   return (
@@ -88,6 +99,10 @@ export class ShareRecordStore {
   }
 
   async write(shares: readonly ShareRecord[]): Promise<void> {
+    // Crash recovery signals process groups, which Windows does not have.
+    if (process.platform === 'win32') {
+      return;
+    }
     if (shares.length === 0) {
       await rm(this.ownPath, { force: true });
       return;
@@ -95,20 +110,52 @@ export class ShareRecordStore {
     await writeFileAtomic(this.ownPath, JSON.stringify({ ownerPid: this.ownerPid, shares }));
   }
 
-  /** Stops Serve groups recorded by backends that are no longer running. */
+  /**
+   * Stops Serve groups recorded by backends that are no longer running. A
+   * record is removed only after its groups are gone, so a failed sweep is
+   * retried on the next start.
+   */
   async stopStaleShares(
     dependencies: StaleShareDependencies = defaultDependencies
   ): Promise<number> {
     if (process.platform === 'win32') {
       return 0;
     }
+    const staleFiles = await this.findStaleFiles(dependencies);
+    if (staleFiles.length === 0) {
+      return 0;
+    }
+    const processes = await dependencies.listProcesses();
+    let stopped = 0;
+    for (const { path, shares } of staleFiles) {
+      let allStopped = true;
+      for (const share of shares) {
+        if (!processes.some((entry) => isRecordedServe(entry, share))) {
+          continue;
+        }
+        if (signalGroup(dependencies, share.pgid)) {
+          stopped += 1;
+        } else {
+          allStopped = false;
+        }
+      }
+      if (allStopped) {
+        await rm(path, { force: true });
+      }
+    }
+    return stopped;
+  }
+
+  private async findStaleFiles(
+    dependencies: StaleShareDependencies
+  ): Promise<{ path: string; shares: ShareRecord[] }[]> {
     let names: string[];
     try {
       names = await readdir(this.directory);
     } catch {
-      return 0;
+      return [];
     }
-    const staleShares: ShareRecord[] = [];
+    const stale: { path: string; shares: ShareRecord[] }[] = [];
     for (const name of names.filter((file) => /^\d+\.json$/.test(file))) {
       const path = join(this.directory, name);
       const parsed = recordFileSchema.safeParse(await readRecordFile(path));
@@ -116,23 +163,8 @@ export class ShareRecordStore {
       if (owner === this.ownerPid || (owner && (await dependencies.isRunning(owner)))) {
         continue;
       }
-      staleShares.push(...(parsed.success ? parsed.data.shares : []));
-      await rm(path, { force: true });
+      stale.push({ path, shares: parsed.success ? parsed.data.shares : [] });
     }
-    if (staleShares.length === 0) {
-      return 0;
-    }
-    const processes = await dependencies.listProcesses();
-    const live = staleShares.filter((share) =>
-      processes.some((entry) => isRecordedServe(entry, share))
-    );
-    for (const share of live) {
-      try {
-        dependencies.killGroup(share.pgid);
-      } catch {
-        /* The group exited between listing and signalling. */
-      }
-    }
-    return live.length;
+    return stale;
   }
 }

@@ -9,6 +9,7 @@ describe('toPortShareLink', () => {
     ['http://0.0.0.0:8080/x?y=1', '/proxy/8080/x?y=1'],
     ['http://app.localhost:4000/', '/proxy/4000/'],
     ['http://127.0.1.1:4321/', '/proxy/4321/'],
+    ['http://localhost.:5173/a', '/proxy/5173/a'],
   ])('maps %s to %s', (href, expected) => {
     expect(toPortShareLink(href)?.href).toBe(expected);
   });
@@ -30,6 +31,7 @@ describe('isLoopbackHostname', () => {
     expect(isLoopbackHostname('localhost')).toBe(true);
     expect(isLoopbackHostname('127.0.0.1')).toBe(true);
     expect(isLoopbackHostname('[::1]')).toBe(true);
+    expect(isLoopbackHostname('localhost.')).toBe(true);
     expect(isLoopbackHostname('mac.tail123.ts.net')).toBe(false);
   });
 });

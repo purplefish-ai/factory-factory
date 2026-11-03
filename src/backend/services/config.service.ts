@@ -200,7 +200,9 @@ function buildTailscaleConfig(env: ConfigEnv): TailscaleConfig | null {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:' || url.origin !== rawOrigin.replace(/\/$/, '')) {
+  const isBareOrigin =
+    url.pathname === '/' && !url.search && !url.hash && !url.username && !url.password;
+  if (url.protocol !== 'https:' || !isBareOrigin) {
     return null;
   }
   return {

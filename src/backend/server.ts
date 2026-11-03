@@ -613,7 +613,9 @@ export function createServer(application: Application, requestedPort?: number): 
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
-        void portShareService.stopStaleShares();
+        // Before readiness, so a crashed backend's leftover Serve listener cannot
+        // make the first share of that port fail as already configured.
+        await portShareService.stopStaleShares();
         await interceptors.start();
         await startBackgroundWork();
         if (cleanupStarted) {

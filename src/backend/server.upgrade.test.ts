@@ -859,9 +859,11 @@ describe('server websocket upgrade routing', () => {
     const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
     const server = createTestServer(createTestApplication({ frontendStaticPath }));
 
-    const response = await request(server.getHttpServer())
-      .get('/proxy/6173/?path=/story/x')
-      .set({ 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate' });
+    const response = await request(server.getHttpServer()).get('/proxy/6173/?path=/story/x').set({
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Dest': 'document',
+    });
 
     expect(response.status).toBe(404);
     expect(response.text).toContain('Port sharing is off');

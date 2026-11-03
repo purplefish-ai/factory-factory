@@ -185,8 +185,8 @@ WebSockets work, and it cannot use Factory Factory's API as you.
   Redis, MongoDB, Elasticsearch, memcached, Prisma Studio) are never shared.
 - Shared ports reach everyone who can reach this machine on your tailnet,
   including node sharing. Tailnet policies that allow only port 443 block them.
-- Shares last until Factory Factory stops. If it crashes, the next start stops
-  leftover Serve listeners.
+- Shares last until Factory Factory stops. If it crashes on macOS or Linux, the
+  next start stops leftover Serve listeners.
 - Under `ff tailscale`, the Run button no longer starts a public cloudflared
   tunnel.
 

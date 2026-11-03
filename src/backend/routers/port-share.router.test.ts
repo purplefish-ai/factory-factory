@@ -31,7 +31,11 @@ function createApp() {
   return app;
 }
 
-const sameOriginNavigation = { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate' };
+const sameOriginNavigation = {
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Dest': 'document',
+};
 
 describe('port share router', () => {
   beforeEach(() => {
@@ -56,7 +60,7 @@ describe('port share router', () => {
   it('defaults to the root path and accepts typed or bookmarked visits', async () => {
     const response = await request(createApp())
       .get('/proxy/5173')
-      .set({ 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate' });
+      .set({ ...sameOriginNavigation, 'Sec-Fetch-Site': 'none' });
     expect(response.headers.location).toBe('https://mac.tail123.ts.net:5173/');
   });
 
@@ -69,6 +73,7 @@ describe('port share router', () => {
       name: 'subresource',
       headers: { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'no-cors' },
     },
+    { name: 'frame navigation', headers: { ...sameOriginNavigation, 'Sec-Fetch-Dest': 'iframe' } },
     { name: 'prefetch', headers: { ...sameOriginNavigation, 'Sec-Purpose': 'prefetch' } },
     { name: 'request without fetch metadata', headers: {} },
   ])('asks for confirmation instead of sharing on a $name', async ({ headers }) => {
@@ -128,9 +133,11 @@ describe('port share router', () => {
     expect(response.text).toContain('Nothing is listening on port 6173 on the host.');
   });
 
-  it('escapes paths shown on the confirmation page', async () => {
-    const response = await request(createApp()).get('/proxy/6173/%3Cscript%3E?q=%22%3E');
-    expect(response.text).not.toContain('<script>');
+  it('escapes the target shown on the confirmation page', async () => {
+    const response = await request(createApp()).get('/proxy/6173/a?x=1&y=2');
+    expect(response.status).toBe(200);
+    expect(response.text).toContain('6173/a?x=1&#38;y=2</code>');
+    expect(response.text).not.toContain('x=1&y=2');
   });
 });
 

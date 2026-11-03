@@ -9,9 +9,9 @@ import { isServePortConfigured, readTailscale } from '@/backend/lib/tailscale-cl
 import { configService, type TailscaleConfig } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { serverInstanceService } from '@/backend/services/server-instance.service';
+import { getPortRefusal, type PortRefusal } from '@/shared/port-share-policy';
 import { appendBoundedOutputBuffer } from '@/shared/proxy-utils';
 import { type PortForwarder, startPortForwarder } from './port-forwarder';
-import { getPortRefusal, type PortRefusal } from './port-policy';
 import { ShareRecordStore } from './share-records';
 
 const logger = createLogger('port-share-service');
@@ -78,9 +78,12 @@ function isFactoryFactoryBackend(host: string, port: number): Promise<boolean> {
         res.on('data', (chunk: string) => {
           body += chunk;
           if (body.length > 16_384) {
+            // A Factory Factory health response is tiny; destroying may emit only `close`.
+            resolve(false);
             res.destroy();
           }
         });
+        res.once('close', () => resolve(false));
         res.once('end', () => {
           try {
             resolve(healthSchema.safeParse(JSON.parse(body)).success);
@@ -208,10 +211,14 @@ export class PortShareService {
         // binary it launches together; stopping only the wrapper leaves the share.
         { detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }
       );
+      const share: ActiveShare = { port, url, forwarder, serve };
+      // Installed before readiness so an exit at any point is observed.
+      serve.once('exit', () => this.handleServeExit(share));
       await this.waitForServe(port, serve);
       if (this.stopping) {
         throw new PortShareError('DISABLED', 'Factory Factory is shutting down.');
       }
+      this.shares.set(port, share);
     } catch (error) {
       if (serve) {
         await this.stopServe(serve);
@@ -220,19 +227,19 @@ export class PortShareService {
       throw error;
     }
 
-    const share: ActiveShare = { port, url, forwarder, serve };
-    this.shares.set(port, share);
-    serve.once('exit', () => {
-      if (this.shares.get(port) === share) {
-        logger.warn('Tailscale Serve exited; closing port share', { port });
-        this.shares.delete(port);
-        void forwarder.close();
-        void this.persist();
-      }
-    });
     await this.persist();
     logger.info('Shared port through Tailscale', { port, url });
     return url;
+  }
+
+  private handleServeExit(share: ActiveShare): void {
+    if (this.shares.get(share.port) !== share) {
+      return;
+    }
+    logger.warn('Tailscale Serve exited; closing port share', { port: share.port });
+    this.shares.delete(share.port);
+    void share.forwarder.close();
+    void this.persist();
   }
 
   private async isServePortInUse(port: number): Promise<boolean> {
@@ -271,7 +278,8 @@ export class PortShareService {
         if (spawnError || serve.exitCode !== null || serve.signalCode !== null) {
           throw failed();
         }
-        if (await this.isServePortInUse(port)) {
+        // Serve can exit while status is read; never report a dead share as ready.
+        if ((await this.isServePortInUse(port)) && serve.exitCode === null && !serve.signalCode) {
           return;
         }
         await delay(SERVE_READY_POLL_MS);
@@ -285,25 +293,28 @@ export class PortShareService {
     }
   }
 
-  private async stopServe(serve: ChildProcess): Promise<void> {
+  /** Returns whether the Serve process group is gone. */
+  private async stopServe(serve: ChildProcess): Promise<boolean> {
     try {
       await terminateDisposableProcessTree(serve, { timeoutMs: SERVE_STOP_TIMEOUT_MS });
+      return true;
     } catch (error) {
       logger.warn('Failed to stop Tailscale Serve', {
         pid: serve.pid,
         error: error instanceof Error ? error.message : String(error),
       });
+      return false;
     }
   }
 
-  private async persist(): Promise<void> {
-    const shares = [...this.shares.values()].flatMap((share) =>
+  private async persist(shares: Iterable<ActiveShare> = this.shares.values()): Promise<void> {
+    const records = [...shares].flatMap((share) =>
       share.serve.pid
         ? [{ pgid: share.serve.pid, httpsPort: share.port, forwarderPort: share.forwarder.port }]
         : []
     );
     try {
-      await this.records.write(shares);
+      await this.records.write(records);
     } catch (error) {
       logger.warn('Failed to record port shares', {
         error: error instanceof Error ? error.message : String(error),
@@ -325,19 +336,25 @@ export class PortShareService {
     }
   }
 
-  /** Stops every share: Serve first, so no listener outlives its forwarder. */
+  /**
+   * Stops every share: Serve first, so no listener outlives its forwarder.
+   * Groups that refuse to stop stay recorded for the next start to recover.
+   */
   async cleanup(): Promise<void> {
     this.stopping = true;
     await Promise.allSettled(this.pending.values());
     const shares = [...this.shares.values()];
     this.shares.clear();
+    const survivors: ActiveShare[] = [];
     await Promise.all(
       shares.map(async (share) => {
-        await this.stopServe(share.serve);
+        if (!(await this.stopServe(share.serve))) {
+          survivors.push(share);
+        }
         await share.forwarder.close();
       })
     );
-    await this.persist();
+    await this.persist(survivors);
   }
 }
 

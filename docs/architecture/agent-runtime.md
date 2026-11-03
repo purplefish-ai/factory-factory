@@ -214,12 +214,13 @@ Electron utility-process supervision remains separate.
 
 Under `ff tailscale`, the backend owns loopback port shares (`port-share`
 capsule, `/proxy/<port>` route). Each share runs foreground
-`tailscale serve --https=<port>` as a detached process group, because on macOS
-the `tailscale` command is a wrapper that leaves the real CLI (and the share)
-running if only the wrapper is signalled. Backend cleanup stops each group and
-then closes its in-process forwarder. Groups are recorded under
+`tailscale serve --https=<port>`. On Unix it runs as a detached process group,
+because on macOS the `tailscale` command is a wrapper that leaves the real CLI
+(and the share) running if only the wrapper is signalled. Backend cleanup stops
+each group and then closes its in-process forwarder. Groups are recorded under
 `<base dir>/port-shares/<backend pid>.json`; the next start stops groups whose
-owning backend is gone. See
+owning backend is gone. Windows has no process groups: cleanup uses `taskkill`
+on the Serve process tree, and crash recovery is not available there. See
 [the design](../superpowers/specs/2026-11-03-tailscale-port-sharing-design.md).
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled

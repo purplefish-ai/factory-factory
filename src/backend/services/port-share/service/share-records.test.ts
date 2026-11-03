@@ -47,6 +47,7 @@ describe.skipIf(process.platform === 'win32')('ShareRecordStore', () => {
     const deps = dependencies();
     const stopped = await new ShareRecordStore(directory, 222).stopStaleShares(deps);
     expect(stopped).toBe(1);
+    expect(deps.killGroup).toHaveBeenCalledTimes(1);
     expect(deps.killGroup).toHaveBeenCalledWith(4242);
     expect(await readdir(directory)).toEqual([]);
   });
@@ -64,6 +65,27 @@ describe.skipIf(process.platform === 'win32')('ShareRecordStore', () => {
     });
     expect(await new ShareRecordStore(directory, 222).stopStaleShares(reused)).toBe(0);
     expect(reused.killGroup).not.toHaveBeenCalled();
+  });
+
+  it('keeps records when their Serve groups could not be listed or stopped', async () => {
+    await new ShareRecordStore(directory, 111).write([
+      { pgid: 4242, httpsPort: 6173, forwarderPort: 50_123 },
+    ]);
+    const unlisted = dependencies({
+      listProcesses: vi.fn(() => Promise.reject(new Error('ps failed'))),
+    });
+    await expect(new ShareRecordStore(directory, 222).stopStaleShares(unlisted)).rejects.toThrow(
+      'ps failed'
+    );
+    expect(await readdir(directory)).toEqual(['111.json']);
+
+    const denied = dependencies({
+      killGroup: vi.fn(() => {
+        throw Object.assign(new Error('denied'), { code: 'EPERM' });
+      }),
+    });
+    expect(await new ShareRecordStore(directory, 222).stopStaleShares(denied)).toBe(0);
+    expect(await readdir(directory)).toEqual(['111.json']);
   });
 
   it('discards unreadable record files', async () => {

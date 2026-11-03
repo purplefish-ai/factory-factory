@@ -100,6 +100,14 @@ describe('PortAllocationService', () => {
       expect(isPortInUse.mock.calls.map(([port]) => port)).toEqual([3000, 3001, 3002]);
     });
 
+    it('skips database and infrastructure ports that cannot be shared', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      const isPortInUse = vi.spyOn(PortAllocationService, 'isPortInUse').mockResolvedValue(false);
+
+      await expect(PortAllocationService.findFreePort(5432, 5433)).resolves.toBe(5433);
+      expect(isPortInUse.mock.calls.map(([port]) => port)).toEqual([5433]);
+    });
+
     it('throws only after exhausting the full range', async () => {
       vi.spyOn(Math, 'random').mockReturnValue(0.8);
       const isPortInUse = vi.spyOn(PortAllocationService, 'isPortInUse').mockResolvedValue(true);

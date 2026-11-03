@@ -1,4 +1,5 @@
 import { createServer } from 'node:net';
+import { isReservedServicePort } from '@/shared/port-share-policy';
 
 /**
  * Service for finding and allocating free network ports
@@ -87,6 +88,11 @@ export class PortAllocationService {
 
     for (let offset = 0; offset < range; offset++) {
       const port = startPort + ((startOffset + offset) % range);
+      // Databases often start after the dev server; their default ports also
+      // cannot be shared through `ff tailscale`.
+      if (isReservedServicePort(port)) {
+        continue;
+      }
 
       const inUse = await PortAllocationService.isPortInUse(port);
       if (!inUse) {

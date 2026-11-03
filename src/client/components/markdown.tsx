@@ -20,7 +20,7 @@ function renderImage(props: { src?: string; alt?: string; title?: string }) {
 /** Under `ff tailscale`, host loopback links open through a shared Tailscale port. */
 function LoopbackAwareLink({ link }: { link: MarkdownLink }) {
   const portSharing = usePortSharing();
-  const shared = portSharing && link.props.href ? toPortShareLink(link.props.href) : null;
+  const shared = portSharing === true && link.props.href ? toPortShareLink(link.props.href) : null;
   if (!shared) {
     return link;
   }

@@ -14,6 +14,7 @@ vi.mock('./github-pr-link', () => ({
 let root: Root | undefined;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  portSharing.mockReturnValue(true);
 });
 afterEach(async () => {
   if (root) {

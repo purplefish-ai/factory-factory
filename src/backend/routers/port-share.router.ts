@@ -88,6 +88,7 @@ export function canAutoShare(req: Request): boolean {
     site !== undefined &&
     AUTO_SHARE_FETCH_SITES.has(site) &&
     req.get('sec-fetch-mode') === 'navigate' &&
+    req.get('sec-fetch-dest') === 'document' &&
     req.get('sec-purpose') === undefined &&
     req.get('purpose') === undefined
   );

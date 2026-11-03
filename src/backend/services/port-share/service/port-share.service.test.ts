@@ -135,6 +135,11 @@ describe.skipIf(process.platform === 'win32')('PortShareService', () => {
     await expectFailure(service.ensure(backend), 'FACTORY_FACTORY');
   });
 
+  it('shares servers whose /health response is large', async () => {
+    const port = await listen((_req, res) => res.end('x'.repeat(64 * 1024)));
+    await expect(service.ensure(port)).resolves.toBe(`https://mac.tail123.ts.net:${port}`);
+  });
+
   it('reports a port with nothing listening', async () => {
     const port = await listen();
     await new Promise((resolve) => servers.pop()?.close(resolve));
