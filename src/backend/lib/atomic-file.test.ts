@@ -122,6 +122,9 @@ describe('writeFileAtomic', () => {
         fsControl.unlink.mockRejectedValueOnce(new Error('cleanup failed'));
 
         await expect(writeFileAtomic(targetPath, 'new')).rejects.toBe(error);
+        const tmpPath = fsControl.writeFile.mock.lastCall?.[0];
+        expect(tmpPath).toEqual(expect.stringContaining(path.join(baseDir, '.tmp-')));
+        expect(fsControl.unlink).toHaveBeenCalledExactlyOnceWith(tmpPath);
         expect(await fs.readFile(targetPath, 'utf-8')).toBe('old');
       } finally {
         // Reset any unused one-shot cleanup failure before removing the fixture.
