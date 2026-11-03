@@ -108,6 +108,8 @@ describe('Streamdown Markdown adapter', () => {
     });
     const paragraph = container.querySelector('p');
     const word = container.querySelector('[data-sd-animate]');
+    expect(paragraph).not.toBeNull();
+    expect(word).not.toBeNull();
 
     await render({
       content,

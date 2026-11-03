@@ -140,7 +140,7 @@ existing throttle by themselves.
 On macOS arm64 with Node 26.12.1, a local run on 2026-11-03 reported mean
 per-update costs of about 0.48 ms for the React Markdown baseline versus
 1.38–1.45 ms for Streamdown with word fades on the completed-prefix fixture. For
-the open code fence, the means were 0.59–0.62 ms versus about 0.71 ms. These
-ranges are the two Vitest project results from one run, not confidence
-intervals. This trial demonstrates a visual option, not a parsing speedup over
-our existing block memoization.
+the open code fence, the means were 0.59–0.62 ms versus about 0.71 ms. The
+figures summarize the two Vitest project results from one run, with rounding; no
+statistical confidence interval was calculated. This trial demonstrates a visual
+option, not a parsing speedup over our existing block memoization.
