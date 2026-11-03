@@ -55,8 +55,31 @@ const REPLY = [
   '',
   '---',
   '',
+  '1. Step with a nested fence',
+  '',
+  '   ```sh',
+  '   pnpm test',
+  '',
+  '   pnpm check',
+  '   ```',
+  '',
+  'Inline <pre> and <!-- x --> stay in their paragraph.',
+  '',
   'Final ~~struck~~ paragraph with https://autolink.example.',
 ].join('\n');
+
+function streamingPrefixEnds() {
+  const ends = new Set<number>([REPLY.length]);
+  for (let end = 0; end <= REPLY.length; end += 29) {
+    ends.add(end);
+  }
+  // Compare at every line boundary, where block edges appear.
+  for (let end = REPLY.indexOf('\n'); end !== -1; end = REPLY.indexOf('\n', end + 1)) {
+    ends.add(end);
+    ends.add(end + 1);
+  }
+  return [...ends];
+}
 
 function renderHtml(props: MarkdownRendererProps) {
   const container = document.createElement('div');
@@ -71,19 +94,19 @@ function renderHtml(props: MarkdownRendererProps) {
 }
 
 describe('MarkdownRenderer streaming blocks', () => {
-  it('renders every streaming prefix exactly like the whole document', () => {
-    for (let end = 0; end <= REPLY.length; end += 7) {
+  it('renders sampled and line-boundary prefixes exactly like the whole document', () => {
+    for (const end of streamingPrefixEnds()) {
       const content = REPLY.slice(0, end);
       expect(renderHtml({ content, streaming: true }), `prefix of ${end}`).toBe(
         renderHtml({ content })
       );
     }
-    expect(renderHtml({ content: REPLY, streaming: true })).toBe(renderHtml({ content: REPLY }));
-  });
+  }, 30_000);
 
   it.each([
     ['reference links', 'See [docs][ref].\n\nMore text.\n\n[ref]: https://example.com'],
     ['footnotes', 'A claim[^1].\n\nMore text.\n\n[^1]: The source.'],
+    ['list-item fences ended by unindented text', '- item\n  ```\n  code\nfoo\n\nbar\n```\n\nbaz'],
   ])('matches the whole-document render for %s', (_name, content) => {
     expect(renderHtml({ content, streaming: true })).toBe(renderHtml({ content }));
   });

@@ -71,6 +71,17 @@ function TranscriptMessage({
   );
 }
 
+/** Queued prompts render after the active response, which may still be streaming. */
+function latestUnqueuedId(messages: GroupedMessageItem[], display: TranscriptDisplayProps) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const id = messages[index]?.id;
+    if (id !== undefined && !display.queuedMessageIds?.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
 /** Rendering only. The measured row includes its tail, so there is one extent. */
 export function TranscriptRows({
   display,
@@ -111,7 +122,7 @@ export function TranscriptRows({
       </>
     );
   };
-  const streamingMessageId = display.running ? (layout.messages.at(-1)?.id ?? null) : null;
+  const streamingMessageId = display.running ? latestUnqueuedId(layout.messages, display) : null;
   return (
     <ThinkingCompletionProvider
       lastThinkingMessageId={layout.lastThinkingMessageId}

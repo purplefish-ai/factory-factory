@@ -78,8 +78,31 @@ describe('splitMarkdownBlocks', () => {
     expect(split('> quoted\n> more\n\n> another')).toEqual(['> quoted\n> more\n\n', '> another']);
   });
 
-  it('handles CRLF line endings', () => {
+  it('handles CRLF and bare CR line endings', () => {
     expect(split('one\r\n\r\ntwo')).toEqual(['one\r\n\r\n', 'two']);
+    expect(split('one\r\rtwo')).toEqual(['one\r\r', 'two']);
+    expect(split('```\rcode\r\rmore\n\nstill code')).toEqual(['```\rcode\r\rmore\n\nstill code']);
+  });
+
+  it('treats only spaces and tabs as blank', () => {
+    expect(split('one\n\u00a0\ntwo')).toEqual(['one\n\u00a0\ntwo']);
+    expect(split('one\n \t\ntwo')).toEqual(['one\n \t\n', 'two']);
+  });
+
+  it('keeps list-item fences whole when both fence readings agree', () => {
+    const markdown = '1. Step\n\n   ```sh\n   pnpm test\n\n   pnpm check\n   ```\n\nAfter';
+    expect(split(markdown)).toEqual([
+      '1. Step\n\n   ```sh\n   pnpm test\n\n   pnpm check\n   ```\n\n',
+      'After',
+    ]);
+  });
+
+  it('splits around inline HTML and definition-like text mid-line', () => {
+    expect(split('Use a <pre> tag or <!-- x -->.\n\nNext')).toEqual([
+      'Use a <pre> tag or <!-- x -->.\n\n',
+      'Next',
+    ]);
+    expect(split('Map key a[0]: b\n\nNext')).toEqual(['Map key a[0]: b\n\n', 'Next']);
   });
 
   it.each([
@@ -88,6 +111,10 @@ describe('splitMarkdownBlocks', () => {
     ['nested definitions', 'Text\n\n> [ref]: https://example.com\n\nAfter'],
     ['HTML comments', 'Before\n\n<!--\n\nhidden\n\n-->\n\nAfter'],
     ['pre blocks', 'Before\n\n<pre>\n\nraw\n\n</pre>\n\nAfter'],
+    ['HTML comments in lists', 'Before\n\n- <!--\n\n  hidden -->\n\nAfter'],
+    // Inside a list item, the unindented line ends the fence; at top level it is code.
+    ['indented fences with unindented content', '- item\n  ```\n  code\nfoo\n\nbar\n```\n\nbaz'],
+    ['indented fences with over-indented fence lines', '1. x\n   ```\n   a\n      ```\n\n   b'],
   ])('falls back to a single block for %s', (_name, markdown) => {
     expect(split(markdown)).toEqual([markdown]);
   });

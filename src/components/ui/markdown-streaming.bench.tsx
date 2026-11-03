@@ -29,15 +29,17 @@ const SECTION = [
   '| a.ts | Added  |',
   '| b.ts | Fixed  |',
   '',
+  '',
 ].join('\n');
 
+// Whole sections keep every fence closed, so the streaming tail is a paragraph.
 function reply(bytes: number) {
-  return SECTION.repeat(Math.ceil(bytes / SECTION.length)).slice(0, bytes);
+  return SECTION.repeat(Math.max(1, Math.round(bytes / SECTION.length)));
 }
 
 function benchStreamingStep(bytes: number) {
   return async ({ bench }: TestContext) => {
-    const base = `${reply(bytes)}\n\nThe streaming tail paragraph`;
+    const base = `${reply(bytes)}The streaming tail paragraph`;
     const tails = [' grows', ' grows again'];
     const container = document.createElement('div');
     const single = createRoot(container);

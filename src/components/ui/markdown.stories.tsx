@@ -42,7 +42,7 @@ const STREAMING_REPLY = [
 ].join('\n');
 
 function StreamingMarkdownDemo() {
-  const [length, setLength] = useState(STREAMING_REPLY.length);
+  const [length, setLength] = useState(STREAMING_REPLY.indexOf('| Column'));
   const streaming = length < STREAMING_REPLY.length;
   return (
     <div className="space-y-3">
