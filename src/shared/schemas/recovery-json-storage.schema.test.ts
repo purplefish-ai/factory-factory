@@ -33,3 +33,26 @@ it.each(malformedWorkspaceJsonCases)('rejects %s', (_name, mutate) => {
   mutate(file);
   expect(exportDataSchema.safeParse(file).success).toBe(false);
 });
+
+it('locates covered field and marker failures within the whole backup', () => {
+  const file = structuredClone(fixed);
+  Object.assign(file.data.workspaces[0]!, { creationMetadata: undefined });
+  file.data.recovery.baseJson.jsonStorage[0]!.identity = ['missing'];
+  const result = exportDataSchema.safeParse(file);
+  expect(result.success).toBe(false);
+  if (result.success) {
+    throw new Error('Expected invalid backup');
+  }
+  expect(result.error.issues).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        message: 'Covered creationMetadata must be present',
+        path: ['data', 'workspaces', 0, 'creationMetadata'],
+      }),
+      expect.objectContaining({
+        message: 'Invalid Workspace JSON-null target',
+        path: ['data', 'recovery', 'baseJson', 'jsonStorage', 0, 'identity'],
+      }),
+    ])
+  );
+});

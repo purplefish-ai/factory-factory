@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';
 import { adminRouter } from '@/backend/trpc/admin.trpc';
@@ -66,14 +67,14 @@ it('roundtrips physical SQL NULL, JSON null and structured values through the pu
   ];
   const ids = [
     'sql',
-    '',
+    'json|reserved',
     '__proto__',
     'a|b',
     'string',
     'number',
     'boolean',
     'constructor',
-    'json|reserved',
+    '',
   ];
   for (let i = 0; i < values.length; i++) {
     await source.prisma.workspace.create({
@@ -126,7 +127,7 @@ it.each(malformedWorkspaceJsonCases)(
     await expectBackupWriterUnopened(async () => {
       await expect(
         Reflect.apply(dataBackupService.importData, dataBackupService, [file])
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(ZodError);
       const caller = adminRouter.createCaller({
         appContext: { services: { dataBackupService } },
       } as unknown as Context);

@@ -47,7 +47,7 @@ class DataBackupAccessor {
     const rows = z
       .array(z.strictObject({ id: z.string() }))
       .parse(
-        await tx.$queryRaw`SELECT id FROM "Workspace" WHERE json_type("creationMetadata") = 'null'`
+        await tx.$queryRaw`SELECT id FROM "Workspace" WHERE json_type("creationMetadata") = 'null' ORDER BY id`
       );
     return rows.map(({ id }) => ({
       model: 'Workspace',

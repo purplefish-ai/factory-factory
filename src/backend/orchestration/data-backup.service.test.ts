@@ -447,7 +447,9 @@ describe('DataBackupService', () => {
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([mockTerminalSession]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
       vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: 'missing-workspace' }]);
-      await expect(dataBackupService.exportData('test')).rejects.toThrow();
+      await expect(dataBackupService.exportData('test')).rejects.toThrow(
+        'Invalid Workspace JSON-null target'
+      );
     });
 
     it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
