@@ -31,7 +31,7 @@ vi.mock('@/backend/services/session', () => ({
     findClosedSessionsByWorkspaceId: (workspaceId: string, take: number) =>
       prisma().closedSession.findMany({ where: { workspaceId }, take }),
   },
-  // Simulates the real retirement: the live fixer row becomes a closed transcript.
+  // Simulates the real retirement: the fixer row becomes a closed transcript.
   sessionLifecycleService: {
     stopSession: async (sessionId: string) => {
       const session = await prisma().agentSession.delete({ where: { id: sessionId } });

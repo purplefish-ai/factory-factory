@@ -488,14 +488,14 @@ updates, paused delivery, and idle red CI do not imply live agent work.
 The cutover retains exact legacy fixer IDs and all session/transcript rows,
 retires and archives each legacy fixer, and fences delivery until retention is
 confirmed. Startup retirement visits only monitoring rows with retained (or
-corrupt) legacy IDs, a `LEGACY_FIXER` fence, or a live `ratchet` session; other
-rows are no-ops and are filtered in SQL. Retained IDs are never cleared, so
-those rows are rechecked each startup. It drops old fixer dispatch tables and
-the Ratchet provider override. Existing enabled workspaces bind their sole
-ordinary conversation during migration. Ambiguous workspaces require an explicit
-recipient selection. Main conversation settings remain intact. The later
-auto-iteration removal drops its obsolete permission setting without changing PR
-recipient access.
+corrupt) legacy IDs, a `LEGACY_FIXER` fence, or any `ratchet` session row (any
+status); other rows are no-ops and are filtered in SQL. Retained IDs are never
+cleared, so those rows are rechecked each startup. It drops old fixer dispatch
+tables and the Ratchet provider override. Existing enabled workspaces bind their
+sole ordinary conversation during migration. Ambiguous workspaces require an
+explicit recipient selection. Main conversation settings remain intact. The
+later auto-iteration removal drops its obsolete permission setting without
+changing PR recipient access.
 
 Version-6 backups preserve every PR association, normalized observation,
 monitoring binding/pause, and event including frozen delivery metadata. Versions

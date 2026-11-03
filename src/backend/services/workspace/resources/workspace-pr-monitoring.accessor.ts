@@ -250,7 +250,7 @@ class WorkspacePrMonitoringAccessor {
   }
   /**
    * Rows legacy fixer retirement can change: retained (or corrupt) legacy IDs,
-   * a LEGACY_FIXER fence to clear, or live `ratchet` sessions to retire. Every
+   * a LEGACY_FIXER fence to clear, or `ratchet` session rows (any status) to retire. Every
    * other row is a no-op for the cutover, so startup skips it in SQL.
    */
   listLegacyRetirementCandidates() {
