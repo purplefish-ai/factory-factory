@@ -1,10 +1,6 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '@/backend/db';
-import type {
-  PRDiscoveryClaim,
-  PRSnapshotFields,
-  WorkspacePRIdentity,
-} from '@/backend/services/workspace/types';
+import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
 import type { CIStatus, PRState } from '@/shared/core';
 import { shouldPollPR } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
@@ -186,79 +182,7 @@ function findEquivalentPR(rows: PRUrlRow[], url: string): PRUrlRow | null {
   );
 }
 
-/** The subset of the PR cache a caller may write in one unconditional update. */
-export type WorkspacePRWriteFields = Partial<WorkspacePRFields>;
-
-/**
- * Translate caller-facing `pr*` names to column names, dropping keys the caller
- * left absent so a partial write stays partial. `undefined` means "not
- * supplied"; `null` is a value and is written.
- */
-function assignPRMetadata(columns: Prisma.WorkspacePRUpdateInput, fields: WorkspacePRWriteFields) {
-  if (fields.title !== undefined) {
-    columns.title = fields.title;
-  }
-  if (fields.headRefName !== undefined) {
-    columns.headRefName = fields.headRefName;
-  }
-  if (fields.baseRefName !== undefined) {
-    columns.baseRefName = fields.baseRefName;
-  }
-}
-function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInput {
-  const columns: Prisma.WorkspacePRUpdateInput = {};
-  assignPRMetadata(columns, fields);
-  if (fields.prUrl !== undefined) {
-    if (fields.prUrl !== null) {
-      columns.url = fields.prUrl;
-    }
-  }
-  if (fields.prNumber !== undefined) {
-    columns.number = fields.prNumber;
-  }
-  if (fields.prState !== undefined) {
-    columns.state = fields.prState;
-  }
-  if (fields.prReviewState !== undefined) {
-    columns.reviewState = fields.prReviewState;
-  }
-  if (fields.prCiStatus !== undefined) {
-    columns.ciStatus = fields.prCiStatus;
-  }
-  if (fields.prHasMergeConflict !== undefined) {
-    columns.hasMergeConflict = fields.prHasMergeConflict;
-  }
-  if (fields.prUpdatedAt !== undefined) {
-    columns.syncedAt = fields.prUpdatedAt;
-  }
-  if (fields.prCiFailedAt !== undefined) {
-    columns.ciFailedAt = fields.prCiFailedAt;
-  }
-  if (fields.prCiLastNotifiedAt !== undefined) {
-    columns.ciLastNotifiedAt = fields.prCiLastNotifiedAt;
-  }
-  if (fields.prReviewLastCheckedAt !== undefined) {
-    columns.reviewLastCheckedAt = fields.prReviewLastCheckedAt;
-  }
-  if (fields.prReviewLastCommentId !== undefined) {
-    columns.reviewLastCommentId = fields.prReviewLastCommentId;
-  }
-  return columns;
-}
-
 export type WorkspacePRRecord = WorkspacePR;
-export interface PRAggregateGuard {
-  prId: string;
-  revision: number;
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-  prHasMergeConflict: boolean;
-  prUpdatedAt: Date | null;
-}
-
 class WorkspacePRAccessor {
   /** Detached associations also retain results until the workspace cascade. */
   listForDeletion(tx: Prisma.TransactionClient, workspaceId: string) {
@@ -499,71 +423,6 @@ class WorkspacePRAccessor {
     _at: Date
   ) {
     return (await this.attachDiscoveredPRsIfClaimMatches(workspaceId, claim, [url])).length > 0;
-  }
-  async readAggregate(
-    tx: Prisma.TransactionClient,
-    workspaceId: string,
-    prId?: string
-  ): Promise<PRAggregateGuard | null> {
-    const rows = await tx.workspacePR.findMany({
-      where: { workspaceId, detachedAt: null, ...(prId ? { id: prId } : {}) },
-      take: 2,
-    });
-    if (rows.length !== 1 || !rows[0]) {
-      return null;
-    }
-    const row = rows[0];
-    return { prId: row.id, revision: row.revision, ...flattenWorkspacePR(row) };
-  }
-  async write(
-    workspaceId: string,
-    fields: WorkspacePRWriteFields,
-    prId?: string,
-    expectedRevision?: number
-  ): Promise<void> {
-    await prisma.$transaction((tx) =>
-      this.writeInTransaction(tx, workspaceId, fields, prId, expectedRevision)
-    );
-  }
-  async writeInTransaction(
-    tx: Prisma.TransactionClient,
-    workspaceId: string,
-    fields: WorkspacePRWriteFields,
-    prId?: string,
-    expectedRevision?: number
-  ) {
-    const row = await this.readAggregate(tx, workspaceId, prId);
-    if (!row) {
-      throw new Error(`Explicit PR identity required for workspace: ${workspaceId}`);
-    }
-    if (expectedRevision !== undefined && row.revision !== expectedRevision) {
-      return;
-    }
-    await this.applyAggregateIfUnchanged(tx, workspaceId, row, fields);
-  }
-  async applyAggregateIfUnchanged(
-    tx: Prisma.TransactionClient,
-    workspaceId: string,
-    guard: PRAggregateGuard,
-    fields: WorkspacePRWriteFields
-  ) {
-    const result = await tx.workspacePR.updateMany({
-      where: { id: guard.prId, workspaceId, detachedAt: null, revision: guard.revision },
-      data: { ...toColumns(fields), revision: { increment: 1 } },
-    });
-    return result.count > 0;
-  }
-  async updateSnapshotIfUrlMatches(
-    workspaceId: string,
-    url: string,
-    snapshot: PRSnapshotFields,
-    at: Date
-  ) {
-    const result = await prisma.workspacePR.updateMany({
-      where: { workspaceId, url, detachedAt: null },
-      data: { ...toColumns({ ...snapshot, prUpdatedAt: at }), revision: { increment: 1 } },
-    });
-    return result.count > 0;
   }
   async findPRState(workspaceId: string, prId?: string) {
     const rows = await prisma.workspacePR.findMany({

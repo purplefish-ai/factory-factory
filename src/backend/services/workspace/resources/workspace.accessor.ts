@@ -4,7 +4,6 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import {
   projectWorkspacePRCollection,
   type WorkspacePRRow,
-  type WorkspacePRWriteFields,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import {
@@ -48,17 +47,6 @@ import { withWorkspaceInitGuard } from './workspace-init-guard';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from './workspace-inputs';
 import { workspaceLaunchOriginAccessor } from './workspace-launch-origin.accessor';
 import { projectConversationSummary } from './workspace-metadata.accessor';
-import {
-  type PrAggregatePersistenceResult,
-  type PrObservationPersistenceInput,
-  type PrSnapshotPersistenceInput,
-  workspacePrAggregateAccessor,
-} from './workspace-pr-aggregate.accessor';
-export type {
-  PrAggregatePersistenceResult,
-  PrObservationPersistenceInput,
-  PrSnapshotPersistenceInput,
-} from './workspace-pr-aggregate.accessor';
 import { flattenPRDiscovery } from './workspace-pr-discovery.accessor';
 
 /** Run-script process fields projected under their existing flat names. */
@@ -786,53 +774,6 @@ class WorkspaceAccessor {
     await prisma.workspace.updateMany({
       where: { id, hasHadSessions: false },
       data: { hasHadSessions: true },
-    });
-  }
-
-  /**
-   * Persist a PR aggregate and clear ownership from a settled dispatch when the
-   * newly fetched aggregate changed.
-   *
-   * Both writes happen in one transaction, each guarded by the state it was
-   * decided from: the aggregate against the aggregate the caller read, the
-   * reset against the dispatch metadata read alongside it. If a newer dispatch
-   * wins that race the aggregate is still written and the dispatch keeps its
-   * claim. Identical periodic refreshes leave settled metadata untouched, and a
-   * RUNNING dispatch is never eligible for the reset.
-   */
-  applyPrSnapshotWithDispatchReset(
-    workspaceId: string,
-    observation: PrSnapshotPersistenceInput
-  ): Promise<PrAggregatePersistenceResult> {
-    return workspacePrAggregateAccessor.apply(workspaceId, observation);
-  }
-
-  applyPrObservationWithDispatchReset(
-    workspaceId: string,
-    observation: PrObservationPersistenceInput
-  ): Promise<PrAggregatePersistenceResult> {
-    const { expectedPrUrl, expectedPrNumber, ...fields } = observation;
-    return workspacePrAggregateAccessor.apply(workspaceId, fields, {
-      prUrl: expectedPrUrl,
-      prNumber: expectedPrNumber,
-    });
-  }
-
-  /**
-   * Write a PR observation together with a corrected branch name.
-   *
-   * A refresh discovers the two at once — the PR's head branch can differ from
-   * what the workspace recorded — and they now live in different tables, so this
-   * is the transaction that keeps them from being observable apart.
-   */
-  async recordPrSnapshotWithBranchName(
-    workspaceId: string,
-    branchName: string | null,
-    prFields: WorkspacePRWriteFields
-  ): Promise<void> {
-    await prisma.$transaction(async (transaction) => {
-      await workspacePrAccessor.writeInTransaction(transaction, workspaceId, prFields);
-      await transaction.workspace.update({ where: { id: workspaceId }, data: { branchName } });
     });
   }
 
