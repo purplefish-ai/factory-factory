@@ -4,7 +4,7 @@
  * Postinstall script for factory-factory
  *
  * Handles:
- * 1. Prisma client generation (with explicit schema path for npm installs)
+ * 1. Prisma client generation in source checkouts only
  * 2. node-pty spawn-helper permissions
  */
 
@@ -18,9 +18,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
 const require = createRequire(import.meta.url);
 
-// Generate Prisma client if schema exists
+// Source archives and worktrees need generated TypeScript; published installs
+// consume the compiled client shipped in dist/prisma/generated instead.
 const schemaPath = join(projectRoot, 'prisma', 'schema.prisma');
-if (existsSync(schemaPath)) {
+const isSourceCheckout = existsSync(join(projectRoot, 'src', 'cli', 'index.ts'));
+if (isSourceCheckout && existsSync(schemaPath)) {
   try {
     console.log('Generating Prisma client...');
     // Nested npx can wait on the installation lock held by the outer npm exec.
@@ -31,8 +33,8 @@ if (existsSync(schemaPath)) {
     });
   } catch (error) {
     console.error('Failed to generate Prisma client:', error.message);
-    console.error('You may need to run "npx prisma generate" manually after installation.');
-    // Don't fail the install - the CLI will show a better error at runtime
+    console.error('Run "pnpm db:generate" in the source checkout before developing or building.');
+    // Keep dependency installation usable; development and builds require generation.
   }
 }
 

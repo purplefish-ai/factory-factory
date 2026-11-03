@@ -1,5 +1,15 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +24,7 @@ afterEach(() => {
   }
 });
 
-function createInstalledPackage(prismaCli: string) {
+function createInstalledPackage(prismaCli: string, sourceCheckout = true) {
   const directory = mkdtempSync(join(tmpdir(), 'postinstall with spaces '));
   temporaryDirectories.push(directory);
   const packageRoot = join(directory, 'node_modules', 'factory-factory');
@@ -24,6 +34,13 @@ function createInstalledPackage(prismaCli: string) {
   mkdirSync(join(prismaRoot, 'build'), { recursive: true });
   copyFileSync(postinstallPath, join(packageRoot, 'scripts', 'postinstall.mjs'));
   writeFileSync(join(packageRoot, 'prisma', 'schema.prisma'), '// fixture schema');
+  if (sourceCheckout) {
+    mkdirSync(join(packageRoot, 'src', 'cli'), { recursive: true });
+    writeFileSync(join(packageRoot, 'src', 'cli', 'index.ts'), '// checkout entrypoint');
+  } else {
+    mkdirSync(join(packageRoot, 'dist', 'prisma', 'generated'), { recursive: true });
+    writeFileSync(join(packageRoot, 'dist', 'prisma', 'generated', 'client.js'), '// built client');
+  }
   // Match Prisma's CLI export: its root export is not the CLI entry point.
   writeFileSync(
     join(prismaRoot, 'package.json'),
@@ -49,7 +66,7 @@ function runPostinstall(packageRoot: string) {
 }
 
 describe('postinstall Prisma generation', () => {
-  it('runs the installed Prisma CLI without npm or npx on PATH', () => {
+  it('generates in a source checkout without npm or npx on PATH', () => {
     const packageRoot = createInstalledPackage(`
 import { strict as assert } from 'node:assert';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -79,5 +96,63 @@ process.exitCode = 1;
     expect(result.status).toBe(0);
     expect(result.stderr).toContain('fixture Prisma generation failed');
     expect(result.stderr).toContain('Failed to generate Prisma client:');
+    expect(result.stderr).toContain('pnpm db:generate');
   });
+});
+
+describe('packaged installation', () => {
+  it('uses the shipped runtime client without running the Prisma CLI', () => {
+    const packageRoot = createInstalledPackage(
+      `
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+writeFileSync(join(process.cwd(), 'prisma', 'generated.txt'), 'unexpected generation');
+`,
+      false
+    );
+
+    const result = runPostinstall(packageRoot);
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(existsSync(join(packageRoot, 'prisma', 'generated.txt'))).toBe(false);
+    expect(
+      readFileSync(join(packageRoot, 'dist', 'prisma', 'generated', 'client.js'), 'utf8')
+    ).toBe('// built client');
+  });
+
+  it.skipIf(process.platform === 'win32').each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])(
+    'repairs native helpers (source checkout: %s, local dependency: %s)',
+    (sourceCheckout, localDependency) => {
+      const packageRoot = createInstalledPackage('', sourceCheckout);
+      const helpers = [
+        join(
+          packageRoot,
+          localDependency ? 'node_modules' : '..',
+          'node-pty',
+          'prebuilds',
+          'darwin-arm64',
+          'spawn-helper'
+        ),
+      ];
+      for (const helper of helpers) {
+        mkdirSync(join(helper, '..'), { recursive: true });
+        writeFileSync(helper, 'fixture helper');
+        chmodSync(helper, 0o644);
+      }
+
+      const result = runPostinstall(packageRoot);
+
+      expect(result.status).toBe(0);
+      for (const helper of helpers) {
+        expect(statSync(helper).mode & 0o777).toBe(0o755);
+      }
+    }
+  );
 });
