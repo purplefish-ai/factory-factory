@@ -6,7 +6,9 @@ import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundar
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { useIsTextStreaming } from './streaming-text-context';
 import { useIsThinkingInProgress } from './thinking-completion-context';
+import { useStreamingTextSnapshot } from './use-streaming-text-snapshot';
 
 // =============================================================================
 // Stream Event Renderer
@@ -39,6 +41,7 @@ export const StreamEventRenderer = memo(function StreamEventRenderer({
           <div className={cn('prose prose-sm dark:prose-invert max-w-none text-sm', className)}>
             <TextRenderer
               text={block.text}
+              messageId={messageId}
               resolveWorkspaceFileLink={resolveWorkspaceFileLink}
               onWorkspaceFileLink={onWorkspaceFileLink}
             />
@@ -108,21 +111,28 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
 
 export interface TextRendererProps {
   text: string;
+  /** The ID of the ChatMessage containing this text (for streaming throttling) */
+  messageId?: string;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
- * Renders text content with full markdown support.
+ * Renders text content with full markdown support. While the message is
+ * streaming, Markdown renders from a throttled snapshot split into blocks.
  */
 export const TextRenderer = memo(function TextRenderer({
   text,
+  messageId,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
 }: TextRendererProps) {
+  const streaming = useIsTextStreaming(messageId);
+  const content = useStreamingTextSnapshot(text, streaming);
   return (
     <MarkdownRenderer
-      content={text}
+      content={content}
+      streaming={streaming}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}
     />

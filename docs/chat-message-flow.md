@@ -63,6 +63,9 @@ orchestrator calls retain an explicit default dispatcher binding.
 stores transcript changes, and emits session deltas. Streaming text accumulates
 under a stable message order so the client updates the existing message. Runtime
 and permission events update session state through their respective handlers.
+The client renders the streaming message's Markdown from a throttled snapshot.
+When the text splits safely into top-level blocks, only the growing tail block
+re-parses; see [streaming Markdown](performance/streaming-markdown.md).
 
 `SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
 wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
@@ -277,7 +280,20 @@ their existing local-storage persistence.
 Thinking-only assistant messages and thinking stream blocks are omitted from the
 grouped transcript, including loaded session history. They do not create empty
 rows. The live activity indicator still shows the latest reasoning while the
-agent is running.
+agent is running. Thinking deltas accumulate only within the current sequence:
+legacy message starts (`message_start`), new thinking blocks, assistant text,
+and tool starts clear the previous preview. Tool results and duplicate
+deliveries of text or tool starts do not clear newer reasoning, even after those
+messages leave the renderer window. A thinking-order watermark survives trimming
+and user turns, and resets with session replay or switching. Snapshots seed it
+from agent orders, excluding queued user orders. The fixed-height footer shows
+the latest paragraph as plain text; its popup preserves the current sequence's
+paragraphs with the same Markdown cleanup, retaining identifiers, bullet
+markers, and literal code. Stale or repeated thinking deltas are ignored before
+updating either transcript blocks or previews. A block start and its first delta
+may share an order; later deltas must advance it. Partial Markdown markers do
+not hide the latest readable paragraph. Inline activity indicators retain all
+paragraphs.
 
 ## Transcript scrolling
 

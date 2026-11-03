@@ -13,9 +13,12 @@ import {
 } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { splitMarkdownBlocks } from '@/lib/markdown-blocks';
 import { cn } from '@/lib/utils';
 
 const MermaidDiagram = lazy(() => import('./mermaid-diagram'));
+
+const REMARK_PLUGINS = [remarkGfm];
 
 // react-markdown percent-encodes backslashes, so `C:\repo` arrives as `C:%5Crepo`.
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
@@ -26,7 +29,34 @@ export interface MarkdownRendererProps {
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   renderExternalLink?: (link: ReactElement<ComponentPropsWithoutRef<'a'>>) => ReactNode;
+  /**
+   * Content is still growing. Top-level blocks parse independently, so only the
+   * changed tail block re-parses. Output matches the single-block render.
+   */
+  streaming?: boolean;
 }
+
+type MarkdownComponents = NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
+
+const MarkdownBlock = memo(function MarkdownBlock({
+  content,
+  components,
+  urlTransform,
+}: {
+  content: string;
+  components: MarkdownComponents;
+  urlTransform: (url: string) => string;
+}) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={REMARK_PLUGINS}
+      components={components}
+      urlTransform={urlTransform}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+});
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
@@ -34,9 +64,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   renderExternalLink,
+  streaming = false,
 }: MarkdownRendererProps) {
   // Memoize the markdown components to prevent recreating on every render
-  const components = useMemo(
+  const components = useMemo<MarkdownComponents>(
     () => ({
       // Override code rendering - in react-markdown v10, inline code is not wrapped in <pre>
       code: ({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) => {
@@ -145,6 +176,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     [onWorkspaceFileLink, resolveWorkspaceFileLink]
   );
 
+  const blocks = useMemo(() => {
+    let start = 0;
+    return (streaming ? splitMarkdownBlocks(content) : [content]).map((text) => {
+      const block = { start, text };
+      start += text.length;
+      return block;
+    });
+  }, [content, streaming]);
+
   return (
     <div
       className={cn(
@@ -152,13 +192,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         className
       )}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-        urlTransform={urlTransform}
-      >
-        {content}
-      </ReactMarkdown>
+      {blocks.map(({ start, text }) => (
+        // Earlier blocks keep their start offsets as the tail grows, so they stay memoized.
+        <MarkdownBlock
+          key={start}
+          content={text}
+          components={components}
+          urlTransform={urlTransform}
+        />
+      ))}
     </div>
   );
 });
