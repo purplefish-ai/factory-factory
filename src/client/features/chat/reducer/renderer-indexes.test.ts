@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage, ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
-import { getToolUseIdFromEvent, isStreamEventMessage } from '@/lib/chat-protocol';
+import {
+  getToolUseIdFromEvent,
+  isStreamEventMessage,
+  trimTranscriptForRenderer,
+} from '@/lib/chat-protocol';
 import { chatReducer, createInitialChatState } from './index';
 import {
   getRendererTranscriptIds,
+  getRendererTrimSlack,
   resolveRendererTranscript,
   runRendererTranscriptBatch,
 } from './renderer-indexes';
@@ -29,6 +34,24 @@ function assistant(order: number, text = `text-${order}`): ChatMessage {
     message: {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text }] },
+    },
+    timestamp,
+    order,
+  };
+}
+
+function toolResult(order: number): ChatMessage {
+  return {
+    id: `result-${order}`,
+    source: 'agent',
+    message: {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: `call-${order - 1}`, content: 'ok', is_error: false },
+        ],
+      },
     },
     timestamp,
     order,
@@ -132,6 +155,92 @@ describe('resolveRendererTranscript', () => {
   });
 });
 
+describe('renderer window hysteresis', () => {
+  const limit = 100;
+  const capacity = limit + getRendererTrimSlack(limit);
+
+  /** user, tool use, tool result, assistant: tool results are unsafe window starts. */
+  function conversationMessage(order: number): ChatMessage {
+    switch (order % 4) {
+      case 0:
+        return user(order);
+      case 1:
+        return toolUse(order);
+      case 2:
+        return toolResult(order);
+      default:
+        return assistant(order);
+    }
+  }
+
+  it('grows to the limit plus slack, then trims back to a render-safe start', () => {
+    expect(capacity).toBe(110);
+    const history: ChatMessage[] = [];
+    let current: ChatMessage[] = [];
+    let trims = 0;
+    for (let order = 0; order < 400; order += 1) {
+      const message = conversationMessage(order);
+      history.push(message);
+      const next = [...current, message];
+      const resolved = resolveRendererTranscript(current, next, limit);
+      expectMatchesRescan(resolved);
+      expect(resolved.retained.length).toBeLessThanOrEqual(capacity);
+
+      if (next.length <= capacity) {
+        // Between trims the append is kept as is and the window start never moves.
+        expect(resolved.retained).toBe(next);
+        expect(resolved.retained[0]).toBe(current[0] ?? message);
+      } else {
+        trims += 1;
+        expect(resolved.retained).toEqual(trimTranscriptForRenderer(history, limit));
+        expect(resolved.retained.length).toBeLessThanOrEqual(limit);
+        expect(resolved.retained[0]?.id).not.toMatch(/^result-/);
+      }
+      current = resolved.retained;
+    }
+    // A trim every `slack`-ish appends, not one per append past the limit.
+    expect(trims).toBeGreaterThan(1);
+    expect(trims).toBeLessThan((400 - limit) / 5);
+  });
+
+  it('moves a trim that would start at a tool result to the next safe message', () => {
+    // Orders 3 to 113; a strict 100-message trim of all 111 would start at a tool result.
+    const window = Array.from({ length: capacity }, (_, index) => conversationMessage(index + 3));
+    const current = resolveRendererTranscript([], window, null).retained;
+    const next = [...current, conversationMessage(capacity + 3)];
+    expect(next[next.length - limit]?.id).toBe('result-14');
+
+    const resolved = resolveRendererTranscript(current, next, limit);
+    expect(resolved.retained).toHaveLength(limit - 1);
+    expect(resolved.retained[0]?.id).toBe('assistant-15');
+    expectMatchesRescan(resolved);
+  });
+
+  it('trims an unsafe window start once the window exceeds the limit', () => {
+    // An untrimmed history may start at a tool result; a cut past the limit may not.
+    const window = Array.from({ length: limit }, (_, index) => conversationMessage(index + 2));
+    const current = resolveRendererTranscript([], window, limit).retained;
+    expect(current).toBe(window);
+    expect(current[0]?.id).toBe('result-2');
+
+    const resolved = resolveRendererTranscript(current, [...current, assistant(102)], limit);
+    expect(resolved.retained.length).toBeLessThanOrEqual(limit);
+    expect(resolved.retained[0]?.id).toBe('assistant-3');
+    expectMatchesRescan(resolved);
+  });
+
+  it('drops messages older than the window start while over the limit', () => {
+    const window = Array.from({ length: limit + 5 }, (_, index) => assistant(index + 50));
+    const current = resolveRendererTranscript([], window, limit + 5).retained;
+
+    const withOld = [assistant(1), ...current];
+    const resolved = resolveRendererTranscript(current, withOld, limit);
+    expect(resolved.retained).toHaveLength(limit + 5);
+    expect(resolved.retained[0]).toBe(current[0]);
+    expectMatchesRescan(resolved);
+  });
+});
+
 describe('session replay lookups', () => {
   function replayEvents(groups: number): WebSocketMessage[] {
     return Array.from({ length: groups }, (_, group): WebSocketMessage[] => {
@@ -167,7 +276,9 @@ describe('session replay lookups', () => {
         type: 'SESSION_REPLAY_BATCH',
         payload: { replayEvents: replayEvents(40) },
       });
-      expect(state.messages.length).toBeLessThanOrEqual(rendererTranscriptLimit);
+      expect(state.messages.length).toBeLessThanOrEqual(
+        rendererTranscriptLimit + getRendererTrimSlack(rendererTranscriptLimit)
+      );
       const expected = expectedIndexes(state.messages);
       expect(state.toolUseIdToIndex).toEqual(expected.toolUseIdToIndex);
       expect(state.agentMessageOrderToIndex).toEqual(expected.agentMessageOrderToIndex);

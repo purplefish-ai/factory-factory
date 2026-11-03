@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
   getToolUseIdFromEvent,
+  isSafeRendererWindowStart,
   isStreamEventMessage,
   trimTranscriptForRenderer,
 } from '@/lib/chat-protocol';
@@ -117,13 +118,73 @@ function isOrderedAround(messages: ChatMessage[], index: number): boolean {
   );
 }
 
+/**
+ * Extra messages a full renderer window may hold before it is trimmed back to
+ * the limit. Trimming the front changes every index and grouping position, so
+ * trimming on each append at the limit made every later message pay for full
+ * rebuilds; with slack, that cost is paid once per `slack` appends.
+ */
+export function getRendererTrimSlack(limit: number): number {
+  return Math.floor(limit / 10);
+}
+
+/**
+ * The renderer trim with hysteresis. Within the limit it matches
+ * `trimTranscriptForRenderer`. Above the limit but within the slack it keeps
+ * the previous window start if that start is render-safe, so appends leave the
+ * front untouched while messages that sort before the start are still dropped,
+ * as a strict trim would. Otherwise it trims back to the limit at a render-safe
+ * start.
+ */
+function trimRendererWindow(
+  previous: ChatMessage[],
+  messages: ChatMessage[],
+  limit: number
+): ChatMessage[] {
+  if (messages.length > limit + getRendererTrimSlack(limit)) {
+    return trimTranscriptForRenderer(messages, limit);
+  }
+  // A limit of at least the length only sorts.
+  const sorted = trimTranscriptForRenderer(messages, messages.length);
+  if (sorted.length <= limit) {
+    return sorted;
+  }
+  const startId = previous[0]?.id;
+  const startIndex = sorted.findIndex((message) => message.id === startId);
+  const start = sorted[startIndex];
+  if (!start || sorted.length - startIndex < limit || !isSafeRendererWindowStart(start)) {
+    return trimTranscriptForRenderer(sorted, limit);
+  }
+  return startIndex === 0 ? sorted : sorted.slice(startIndex);
+}
+
+/**
+ * Whether `trimRendererWindow` returns `messages` unchanged after an append or
+ * same-id replacement at `changedIndex`, which keeps the first message: the
+ * window is within the slack, still sorted, and render-safe once over the limit.
+ */
+function keepsRendererWindow(
+  messages: ChatMessage[],
+  changedIndex: number,
+  limit: number
+): boolean {
+  if (messages.length > limit + getRendererTrimSlack(limit)) {
+    return false;
+  }
+  if (!isOrderedAround(messages, changedIndex)) {
+    return false;
+  }
+  const start = messages[0];
+  return messages.length <= limit || (start !== undefined && isSafeRendererWindowStart(start));
+}
+
 function deriveFromPrevious(
   previous: ChatMessage[],
   messages: ChatMessage[],
   limit: number | null
 ): { retained: ChatMessage[]; indexes: RendererIndexes } | null {
   const cached = transcriptCache.get(previous);
-  if (!cached || (limit !== null && (!cached.ordered || messages.length > limit))) {
+  if (!cached || (limit !== null && !cached.ordered)) {
     return null;
   }
   const change = findSingleChange(previous, messages);
@@ -131,8 +192,7 @@ function deriveFromPrevious(
     return null;
   }
   const changedIndex = change.type === 'append' ? messages.length - 1 : change.index;
-  // Within the limit and still sorted, the renderer trim returns the input unchanged.
-  if (limit !== null && !isOrderedAround(messages, changedIndex)) {
+  if (limit !== null && !keepsRendererWindow(messages, changedIndex, limit)) {
     return null;
   }
   const { indexes } = cached;
@@ -170,7 +230,8 @@ function deriveFromPrevious(
 }
 
 /**
- * Applies the renderer trim to `messages` and returns lookups for the result.
+ * Applies the renderer trim (with hysteresis relative to `previous`) to
+ * `messages` and returns lookups for the result.
  * Equivalent to trimming and rescanning, but O(1) lookup work (plus identity
  * checks) when one message was appended to or replaced in `previous`.
  */
@@ -181,7 +242,8 @@ export function resolveRendererTranscript(
 ): { retained: ChatMessage[]; indexes: RendererIndexes } {
   const derived = deriveFromPrevious(previous, messages, limit);
   const retained =
-    derived?.retained ?? (limit === null ? messages : trimTranscriptForRenderer(messages, limit));
+    derived?.retained ??
+    (limit === null ? messages : trimRendererWindow(previous, messages, limit));
   let indexes = derived?.indexes ?? transcriptCache.get(retained)?.indexes;
   if (!indexes) {
     indexes = buildIndexes(retained);
