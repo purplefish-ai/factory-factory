@@ -14,6 +14,7 @@ function harness(supportsImages = true, eventAuthority?: EventSessionAuthority) 
   };
   const processor = {
     getWorkspaceId: () => undefined,
+    getProvider: () => 'CODEX',
     beginPromptTurn: vi.fn(() => 'original-attempt'),
     finishPromptTurn: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),

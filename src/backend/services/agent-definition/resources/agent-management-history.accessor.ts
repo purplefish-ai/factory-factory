@@ -21,6 +21,7 @@ const runSelect = {
   nextAttemptAt: true,
   expiresAt: true,
   launchPreparation: true,
+  effectiveExecution: true,
   result: true,
   reservedWorkspaceId: true,
   reservedSessionId: true,

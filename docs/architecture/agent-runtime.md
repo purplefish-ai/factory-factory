@@ -582,9 +582,9 @@ Factory Factory versions; native configuration for other servers is retained.
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, and rendered as structured chat rows after
 reconnect or restart. Provider history keeps its transcript order; each card
-follows the last provider message timestamped at or before it. Normal user turns
-have a four-hour deadline. Startup/stop incarnation fences protect runtime
-replacement and shutdown.
+follows the last provider message timestamped at or before it. Codex turns have
+no elapsed-time deadline; normal Claude turns retain a four-hour deadline.
+Startup/stop incarnation fences protect runtime replacement and shutdown.
 
 Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session
@@ -1327,8 +1327,10 @@ unknown; importing a matching workspace revokes that coverage even when the
 workspace already exists. Backfilling surviving children retains holds but does
 not certify an empty history. A terminal failure/cancellation, unexpected exit,
 timeout or workspace removal also needs correlated strict runtime-stop evidence.
-The original four-hour turn deadline uses the durable send timestamp. SHUTDOWN
-uncertainty remains reserved for recovery and does not fall through to timeout.
+Claude event runs use the durable send timestamp for their four-hour turn
+deadline. Codex event runs have no turn deadline, including in run history.
+SHUTDOWN uncertainty remains reserved for recovery and does not fall through to
+timeout.
 
 The owner transaction persists the work proof and terminal result together,
 checking worker, send attempt and current source. Settlement linearizes at its

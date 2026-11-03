@@ -4,6 +4,7 @@ import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { agentRunHistorySchema } from '@/shared/agent-history';
 import { agentRunResultSchema } from '@/shared/agent-runtime';
 import { initialDeliveryEvidenceSchema } from '@/shared/event-agent-delivery';
+import { eventAgentExecutionSchema } from '@/shared/event-agent-launch';
 import { eventLaunchPreparationSchema } from '@/shared/event-agent-preparation';
 
 export function publicReason(reason: string | null) {
@@ -24,6 +25,7 @@ export function runHistoryProjection(
   const preparation = eventLaunchPreparationSchema.safeParse(row.launchPreparation);
   const evidence = initialDeliveryEvidenceSchema.safeParse(row.initialDelivery?.evidence);
   const result = agentRunResultSchema.safeParse(row.result);
+  const execution = eventAgentExecutionSchema.safeParse(row.effectiveExecution);
   const outcome = evidence.success ? evidence.data.outcome : undefined;
   return agentRunHistorySchema.parse({
     context:
@@ -50,9 +52,10 @@ export function runHistoryProjection(
             Date.parse(preparation.data.setupStartedAt) + SERVICE_TIMEOUT_MS.eventWorkspaceSetup
           ).toISOString()
         : null,
-    turnDeadlineAt: row.initialDelivery?.sendingAt
-      ? new Date(row.initialDelivery.sendingAt.getTime() + 4 * 60 * 60 * 1000).toISOString()
-      : null,
+    turnDeadlineAt:
+      row.initialDelivery?.sendingAt && !(execution.success && execution.data.provider === 'CODEX')
+        ? new Date(row.initialDelivery.sendingAt.getTime() + 4 * 60 * 60 * 1000).toISOString()
+        : null,
     preparation: preparation.success ? preparation.data : null,
     delivery: row.initialDelivery
       ? {

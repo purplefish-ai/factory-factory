@@ -25,7 +25,7 @@ import {
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 
 const logger = createLogger('session');
-const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+const CLAUDE_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 export type SessionServiceDependencies = {
   eventAuthority?: EventSessionAuthority;
   ownedWork?: EventOwnedWork;
@@ -377,18 +377,16 @@ export class SessionService {
     observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt,
     guard?: SessionCallerGuard
   ) {
+    const timeoutMs =
+      this.acpEventProcessor.getProvider(sessionId) === 'CODEX'
+        ? undefined
+        : CLAUDE_USER_PROMPT_TIMEOUT_MS;
     if (guard) {
-      return this.runtimeManager.sendPrompt(
-        sessionId,
-        prompt,
-        DEFAULT_USER_PROMPT_TIMEOUT_MS,
-        observed,
-        guard
-      );
+      return this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs, observed, guard);
     }
     return observed
-      ? this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS, observed)
-      : this.runtimeManager.sendPrompt(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS);
+      ? this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs, observed)
+      : this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
   }
 
   private initialObservation(

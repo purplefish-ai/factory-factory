@@ -113,6 +113,7 @@ function interruptionCause(
     return evidence.stop.cause;
   }
   if (
+    run.effectiveExecution?.provider !== 'CODEX' &&
     run.delivery.sendingAt &&
     Date.now() >= run.delivery.sendingAt.getTime() + 4 * 60 * 60 * 1000
   ) {

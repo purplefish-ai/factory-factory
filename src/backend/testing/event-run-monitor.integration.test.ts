@@ -390,6 +390,55 @@ it('settles the original four-hour send timeout only after strict owned stop', a
   });
 });
 
+it('keeps a Codex event turn running past four hours without advertising a deadline', async () => {
+  await finish();
+  h = await createEventDeliveryFixture(db, 'CODEX', false, true);
+  const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
+    '@/backend/services/codex-accounts'
+  );
+  vi.spyOn(accounts.codexAccountService, 'getEnabledAccountIds').mockResolvedValue([
+    'event-test-account',
+  ]);
+  vi.spyOn(accounts.codexAccountService, 'getRuntimeContext').mockResolvedValue({
+    accountId: 'event-test-account',
+    homeDir: db.tempDir,
+    sessionsDir: db.tempDir,
+    env: {},
+  });
+  vi.spyOn(accounts.codexAccountService, 'withAccountReservation').mockImplementation(
+    async (_options, create) => create('event-test-account')
+  );
+  const launcher = await vi.importActual<
+    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
+  >('@/backend/orchestration/event-run-launch.orchestrator');
+  launch = launcher.launchEventRun(h.claim, new AbortController().signal);
+  await vi.waitFor(() => expect(provider.handle.provider).toBe('CODEX'));
+  await provider.called;
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: h.claim.runId },
+    data: { sendingAt: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+  });
+  const stop = vi.spyOn(h.session.acpRuntimeManager, 'stopAndQuiesceObserved');
+  expect(await observe(h.claim)).toBe('HELD');
+  expect(stop).not.toHaveBeenCalled();
+  expect((await h.read()).evidence?.stop).toBeUndefined();
+  expect(await row()).toMatchObject({ status: 'RUNNING' });
+  const management = new h.owner.AgentManagementService();
+  const definition = await db.prisma.agentDefinition.findUniqueOrThrow({
+    where: { id: (await row()).agentDefinitionId },
+  });
+  const history = await management.runs({
+    projectId: definition.projectId,
+    agentId: definition.id,
+  });
+  expect(history.items.find((run) => run.id === h.claim.runId)).toMatchObject({
+    turnDeadlineAt: null,
+  });
+  await finish();
+  expect(await observe(h.claim)).toBe('SETTLED');
+  expect(await row()).toMatchObject({ status: 'COMPLETED' });
+});
+
 it('requires strict runtime stop for a cancelled terminal response', async () => {
   provider.response.resolve({ stopReason: 'cancelled' });
   await launch;

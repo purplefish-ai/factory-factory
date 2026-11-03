@@ -157,11 +157,12 @@ A run's outcome depends on its PR, workspace setup and Claude/Codex session:
   example after finding nothing to do. Monitoring waits five minutes after
   workspace setup before deciding, so a queued prompt or late PR discovery is
   not missed.
-- **Failed** when a session records a provider error, the 4-hour turn timeout,
-  or an unexpected process exit. The run uses that session message as its error
-  and does not wait for the five-minute window. Deliberate stops are not
-  failures. A run also fails when workspace setup or launch fails, or when no
-  agent session ever started its provider, because the agent never ran.
+- **Failed** when a session records a provider error, the Claude 4-hour turn
+  timeout, or an unexpected process exit. Codex turns have no elapsed-time
+  deadline. The run uses that session message as its error and does not wait for
+  the five-minute window. Deliberate stops are not failures. A run also fails
+  when workspace setup or launch fails, or when no agent session ever started
+  its provider, because the agent never ran.
 
 Runs never archive or clean up their workspace; a human reviews and archives it.
 Archiving it before the run finishes records Completed unless a session failure
