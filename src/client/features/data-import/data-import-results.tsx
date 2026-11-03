@@ -96,7 +96,12 @@ export function DataImportResultsProvider({
                 ))}
                 {active.recovery.manifest && (
                   <>
-                    <p>Global exclusions: {active.recovery.manifest.exclusions.join(', ')}</p>
+                    <p className="break-words">
+                      Global exclusions:{' '}
+                      {active.recovery.manifest.exclusions
+                        .map((exclusion) => exclusion.replaceAll('_', ' ').toLowerCase())
+                        .join(', ')}
+                    </p>
                     <details>
                       <summary>
                         {active.recovery.manifest.coverage.length} model classifications

@@ -198,7 +198,17 @@ it.each([
 it('discloses the exact partial manifest with an expandable model list and exclusions', async () => {
   await mount();
   expect(document.body.textContent).toContain('Partial backup coverage');
-  expect(document.body.textContent).toContain('PHYSICAL_NULLABLE_JSON_FIDELITY');
+  for (const label of [
+    'secrets and encryption keys',
+    'native account homes',
+    'worktree and repository contents',
+    'provider owned history',
+    'live process ids and runtime leases',
+    'physical nullable json fidelity',
+  ]) {
+    expect(document.body.textContent).toContain(label);
+  }
+  expect(document.body.textContent).not.toContain('PHYSICAL_NULLABLE_JSON_FIDELITY');
   const details = document.querySelector('details');
   expect(details?.querySelector('summary')?.textContent).toContain('37 model classifications');
   expect(details?.querySelectorAll('li')).toHaveLength(37);
