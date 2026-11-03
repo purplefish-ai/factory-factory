@@ -108,6 +108,24 @@ describe('TextRenderer streaming', () => {
       )
     );
 
+  it('uses Streamdown word fades for the live reply and settles immediately', async () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    try {
+      await render('**Live reply', 'message-1');
+      expect(container.querySelector('strong')?.textContent).toBe('Live reply');
+      expect(container.querySelector('[data-sd-animate]')).not.toBeNull();
+      await render('**Live reply**', null);
+      expect(container.querySelector('strong')?.textContent).toBe('Live reply');
+      expect(container.querySelector('[data-sd-animate]')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('converges to the final Markdown for the streaming message', async () => {
     await render('# Title\n\nFirst', 'message-1');
     await render('# Title\n\nFirst paragraph', 'message-1');

@@ -2,9 +2,9 @@
 
 The backend flushes assistant text deltas about every 25 ms. The client appends
 each delta's chunk to the accumulated message text, producing a new string.
-Previously, the transcript row re-parsed the whole reply with react-markdown and
-remark-gfm on every delta. Per-reply work grew quadratically with its length,
-and long replies saturated the main thread.
+Application Markdown uses Streamdown 2.7.1 with our existing typography, links,
+images and Mermaid renderer. The React Markdown primitive remains available as
+the comparison baseline.
 
 ## Approach
 
@@ -17,6 +17,24 @@ behavior:
   times per second rather than forty. When the message stops streaming (the
   agent stops, or another message follows it), the exact text renders in the
   same commit.
+- **Streamdown blocks.** Streamdown memoizes completed blocks and reuses stable
+  block boundaries for append-only updates. The growing tail still re-parses;
+  large code fences, reference definitions and footnotes can require more work.
+- **Word fades.** Live replies use 120 ms opacity fades with zero stagger, so
+  there is no queued word-reveal delay. Reduced-motion preferences disable
+  animation. Completion renders the exact source with incomplete-Markdown
+  repairs disabled and removes the animation spans. History renders immediately.
+
+The animation stylesheet and Tailwind sources live in `src/client/globals.css`,
+so the application and Storybook use the same styling. File navigation, GitHub
+previews and image validation remain owned by the application wrapper. Literal
+HTML and the existing URL policy are preserved instead of using Streamdown's
+default HTML and URL rewriting pipeline.
+
+## React Markdown baseline
+
+The comparison's React Markdown primitive retains its earlier optimization:
+
 - **Block-wise parsing.** `MarkdownRenderer` with `streaming` splits content via
   `splitMarkdownBlocks` (`src/lib/markdown-blocks.ts`) and renders each block as
   a memoized react-markdown tree inside the usual wrapper. Completed blocks skip
@@ -62,3 +80,50 @@ The ranges are the two Vitest projects in one run, not statistical claims. Block
 parsing remains proportional to the tail block's size; a single huge fenced
 block, or text that falls back to one block, still re-parses fully but at most
 ten times per second.
+
+## Streamdown comparison
+
+Storybook's **Chat / Streaming Markdown comparison** runs the React Markdown
+baseline and the application's Streamdown adapter from identical snapshots.
+Start Storybook with `pnpm storybook`; the stories cover prose, bursty delivery,
+a long code fence, tables/diagrams, and application links/images. The snapshot
+control offers 25, 50, and 100 ms intervals; the simulated source delivers
+chunks every 25 ms. Pause preserves the chunk position, Restart resets the
+delivery pattern and snapshot clock, and Finish now settles both panes.
+
+The adapter uses 120 ms word fades with zero stagger. Streamdown's backlog
+budget is soft: a nonzero stagger can still schedule seconds of animation for a
+large burst. Zero stagger avoids that queue. Reduced-motion preferences disable
+the animation, and completed messages remove the animation spans. The production
+transcript uses this adapter with the existing snapshot interval.
+
+The optional `renderContent` boundary on the Markdown primitive lets the
+comparison reuse our existing file links, GitHub previews, image validation,
+Mermaid renderer, and typography. The adapter explicitly replaces Streamdown's
+raw-HTML and URL-rewriting defaults with our existing literal HTML and URL
+handling. Its semantic element overrides retain native headings, strong text,
+and tables. Changing application render options remounts the Streamdown renderer
+because Streamdown's root memo does not observe those options.
+
+Run the comparison benchmark with:
+
+```sh
+pnpm exec vitest bench --run --reporter=verbose streamdown-markdown
+```
+
+It measures per-update parsing, React, and jsdom DOM work for an approximately
+20 KB completed prefix with a growing paragraph and for a growing fenced code
+block. Each sample appends a bounded tail and resets every 32 updates, allowing
+append-only block reuse without an ever-growing benchmark input. Streamdown's
+word-span creation is included; browser animation, layout, paint, scrolling, and
+visual latency are not. These measurements cannot establish perceived smoothness
+or justify removing the existing throttle by themselves.
+
+On macOS arm64 with Node 26.12.1, a local run on 2026-11-03 reported mean
+per-update costs of 0.38–0.40 ms for the React Markdown baseline versus
+1.19–1.21 ms for Streamdown with word fades on the completed-prefix fixture. For
+the open code fence, the means were 0.54–0.69 ms versus 0.64–1.25 ms. These
+ranges are the two Vitest project results from one run, not confidence
+intervals; the code-fence results had visibly more timing noise. This trial
+demonstrates a visual option, not a parsing speedup over our existing block
+memoization.

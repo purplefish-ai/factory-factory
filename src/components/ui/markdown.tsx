@@ -27,6 +27,13 @@ const WINDOWS_DRIVE_PATH = /^[A-Za-z]:(?:[\\/]|%5C)/i;
 /** Custom media renderers preserve navigation when nested in Markdown links. */
 export const MarkdownLinkContext = createContext(false);
 
+export interface MarkdownContentProps {
+  content: string;
+  streaming: boolean;
+  components: NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
+  urlTransform: NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['urlTransform']>;
+}
+
 export interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -39,6 +46,8 @@ export interface MarkdownRendererProps {
    */
   streaming?: boolean;
   renderImage?: (image: { src?: string; alt?: string; title?: string }) => ReactNode;
+  /** Alternate parser sharing the same application components and URL policy. */
+  renderContent?: (props: MarkdownContentProps) => ReactNode;
 }
 
 type MarkdownComponents = NonNullable<ComponentPropsWithoutRef<typeof ReactMarkdown>['components']>;
@@ -71,6 +80,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   renderExternalLink,
   streaming = false,
   renderImage,
+  renderContent,
 }: MarkdownRendererProps) {
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo<MarkdownComponents>(
@@ -197,13 +207,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   );
 
   const blocks = useMemo(() => {
+    if (renderContent) {
+      return [];
+    }
     let start = 0;
     return (streaming ? splitMarkdownBlocks(content) : [content]).map((text) => {
       const block = { start, text };
       start += text.length;
       return block;
     });
-  }, [content, streaming]);
+  }, [content, streaming, renderContent]);
 
   return (
     <div
@@ -212,15 +225,16 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         className
       )}
     >
-      {blocks.map(({ start, text }) => (
-        // Earlier blocks keep their start offsets as the tail grows, so they stay memoized.
-        <MarkdownBlock
-          key={start}
-          content={text}
-          components={components}
-          urlTransform={urlTransform}
-        />
-      ))}
+      {renderContent?.({ content, streaming, components, urlTransform }) ??
+        blocks.map(({ start, text }) => (
+          // Earlier blocks keep their start offsets as the tail grows, so they stay memoized.
+          <MarkdownBlock
+            key={start}
+            content={text}
+            components={components}
+            urlTransform={urlTransform}
+          />
+        ))}
     </div>
   );
 });

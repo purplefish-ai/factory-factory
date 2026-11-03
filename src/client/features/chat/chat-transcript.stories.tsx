@@ -12,6 +12,7 @@ import { useGroupedChatMessages } from './use-grouped-chat-messages';
 const meta: Meta<typeof ChatTranscript> = {
   title: 'Chat/ChatTranscript',
   component: ChatTranscript,
+  parameters: { layout: 'padded' },
   decorators: [
     (Story) => (
       <div className="h-96 bg-background text-foreground">
