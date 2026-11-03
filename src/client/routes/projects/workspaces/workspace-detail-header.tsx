@@ -29,7 +29,6 @@ import {
   RatchetingToggle,
   ToggleRightPanelButton,
   WorkspaceBranchLink,
-  WorkspaceCiStatus,
   WorkspaceHeaderOverflowMenu,
   type WorkspaceHeaderProps,
   WorkspaceIssueLink,
@@ -204,7 +203,6 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
             <WorkspaceIssueLink workspace={workspace} />
             <RunScriptPortBadge workspaceId={workspaceId} />
           </div>
-          <WorkspaceCiStatus workspace={workspace} />
         </div>
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
@@ -253,9 +251,6 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                       );
                     }}
                   />
-                  <div className="px-2 py-1">
-                    <WorkspaceCiStatus workspace={workspace} />
-                  </div>
                   <WorkspaceIssueLink workspace={workspace} renderAsMenuItem />
                 </>
               }
