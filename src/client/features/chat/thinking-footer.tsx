@@ -38,7 +38,7 @@ export function ThinkingFooter({
               aria-label="Show thinking preview"
               className="block w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <LoadingIndicator latestReasoning={latestParagraph} singleLine />
+              <LoadingIndicator latestReasoning={latestParagraph} singleLine plainText />
             </button>
           </PopoverTrigger>
           <PopoverContent

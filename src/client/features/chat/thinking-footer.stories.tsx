@@ -56,6 +56,10 @@ export const TrailingMarkers: Story = {
   args: { latestThinking: '**Checking CI**\n\n**' },
 };
 
+export const FencedCode: Story = {
+  args: { latestThinking: '**Inspecting output**\n\n```text\nuser_id\n\n---\n```' },
+};
+
 export const IdentifiersAndBullets: Story = {
   args: {
     latestThinking:

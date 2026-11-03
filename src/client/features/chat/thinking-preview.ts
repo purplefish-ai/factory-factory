@@ -7,11 +7,17 @@ export function formatThinkingText(input: string | null | undefined): string {
   while (source.includes(marker)) {
     marker = `\u0000${marker}`;
   }
-  // Protect code while cleaning the whole string, including emphasis and links around spans.
-  const protectedText = source.replace(/`([^`\n]+)`/g, (_match, text: string) => {
+  const protectCode = (text: string): string => {
     const index = code.push(text) - 1;
     return `${marker}${index}\u0000`;
-  });
+  };
+  // Protect complete or streaming fences before spans, including literal separators and emphasis.
+  const protectedText = source
+    .replace(
+      /^ {0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:^ {0,3}\1[ \t]*(?=\r?$)|(?![\s\S]))/gm,
+      (_match, _fence: string, text: string) => protectCode(text)
+    )
+    .replace(/`([^`\n]+)`/g, (_match, text: string) => protectCode(text));
   return stripThinkingMarkdown(protectedText)
     .replace(
       new RegExp(`${marker}(\\d+)\u0000`, 'g'),
@@ -43,8 +49,8 @@ function stripThinkingMarkdown(input: string): string {
 
 /** Ignore marker-only paragraphs when choosing the current work to show inline. */
 export function getLatestThinkingParagraph(input: string | null | undefined): string | undefined {
-  return input
-    ?.split(/\n\s*\n/)
+  return formatThinkingText(input)
+    .split(/\n\s*\n/)
     .reverse()
-    .find((paragraph) => formatThinkingText(paragraph).length > 0);
+    .find((paragraph) => paragraph.trim().length > 0);
 }

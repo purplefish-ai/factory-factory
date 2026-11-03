@@ -10,6 +10,8 @@ it.each([
   ['Checking results**', 'Checking results'],
   ['Checking results_', 'Checking results'],
   ['Inspect `user_id_`', 'Inspect user_id_'],
+  ['```yaml\n---\nuser_id: value\n```', '---\nuser_id: value'],
+  ['```text\n**literal**\n\n---\n```', '**literal**\n\n---'],
 ])('cleans surrounding Markdown while preserving literal code: %s', (input, expected) => {
   expect(formatThinkingText(input)).toBe(expected);
 });

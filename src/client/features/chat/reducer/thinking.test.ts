@@ -57,6 +57,20 @@ describe('live thinking sequences', () => {
     expect(state.latestThinking).toBeNull();
     state = chatReducer(state, {
       type: 'WS_AGENT_MESSAGE',
+      payload: {
+        order: 3,
+        message: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: '' },
+          },
+        },
+      },
+    });
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: thought('New thinking'), order: 4 },
     });
     state = chatReducer(state, {
@@ -69,6 +83,13 @@ describe('live thinking sequences', () => {
       payload: { message: thought(' continued'), order: 5 },
     });
     expect(state.latestThinking).toBe('New thinking continued');
+    const storedThinking = state.messages.flatMap((message) => {
+      const event = message.message?.event;
+      return event?.type === 'content_block_start' && event.content_block.type === 'thinking'
+        ? [event.content_block.thinking]
+        : [];
+    });
+    expect(storedThinking).toEqual(['Current block', 'New thinking continued']);
   });
 
   it('keeps replay protection across accepted user turns, then resets on a session switch', () => {

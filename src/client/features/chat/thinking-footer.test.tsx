@@ -5,6 +5,21 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it('shows literal separators from the latest paragraph of fenced code', () => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter active latestThinking={'**Step**\n\n```text\n\n__init__\n\n---\n```'} />
+        )
+      );
+      expect(host.querySelector('button')?.textContent).toBe('---');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it.each(['**', '---'])('keeps the latest readable paragraph before a trailing %s', (marker) => {
     const host = document.createElement('div');
     const root = createRoot(host);

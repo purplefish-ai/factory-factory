@@ -174,6 +174,8 @@ export const MessageWrapper = memo(function MessageWrapper({
 
 interface LoadingIndicatorProps {
   singleLine?: boolean;
+  /** The footer has already cleaned its paragraph in the context of the full sequence. */
+  plainText?: boolean;
   latestReasoning?: string | null;
   className?: string;
 }
@@ -191,8 +193,9 @@ function truncateLoadingText(input: string): string {
   return `${truncated}${LOADING_TEXT_ELLIPSIS}`;
 }
 
-function getLoadingText(latestReasoning: string | null | undefined): string {
-  const normalized = formatThinkingText(latestReasoning).replace(/\s+/g, ' ').trim();
+function getLoadingText(latestReasoning: string | null | undefined, plainText: boolean): string {
+  const text = plainText ? (latestReasoning ?? '') : formatThinkingText(latestReasoning);
+  const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }
@@ -206,9 +209,10 @@ function getLoadingText(latestReasoning: string | null | undefined): string {
 export const LoadingIndicator = memo(function LoadingIndicator({
   latestReasoning = null,
   singleLine = false,
+  plainText = false,
   className,
 }: LoadingIndicatorProps) {
-  const loadingText = getLoadingText(latestReasoning);
+  const loadingText = getLoadingText(latestReasoning, plainText);
   return (
     <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
       <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin shrink-0 mt-0.5" />
