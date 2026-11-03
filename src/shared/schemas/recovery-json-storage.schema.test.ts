@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
@@ -178,3 +179,40 @@ it.each([
   mutate(file);
   expect(exportDataSchema.safeParse(file).success).toBe(false);
 });
+
+it.each(['WorkspacePR', 'AgentSession'] as const)(
+  'rejects a %s JSON-null marker only because its otherwise-valid target is non-null',
+  (model) => {
+    const file = structuredClone(full);
+    const pr = file.data.workspaces[0]!.prs[0]!;
+    const session = file.data.agentSessions[0]!;
+    if (model === 'WorkspacePR') {
+      Object.assign(pr, { observation: redObservation });
+    } else {
+      Object.assign(session, { providerMetadata: { nested: null } });
+    }
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    const otherMarkers = structuredClone(file.data.recovery.baseJson.jsonStorage);
+    const marker =
+      model === 'WorkspacePR'
+        ? { model, identity: [pr.id], field: 'observation' }
+        : { model, identity: [session.id], field: 'providerMetadata' };
+    Object.assign(file.data.recovery.baseJson, { jsonStorage: [...otherMarkers, marker] });
+    const result = exportDataSchema.safeParse(file);
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error('Expected invalid JSON-null marker');
+    }
+    const issues = result.error.issues.flatMap((issue) =>
+      issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+    );
+    expect(issues).toContainEqual({
+      code: 'custom',
+      message: `Invalid ${model} JSON-null target`,
+      path: ['data', 'recovery', 'baseJson', 'jsonStorage', otherMarkers.length, 'identity'],
+    });
+    file.data.recovery.baseJson.jsonStorage.pop();
+    expect(file.data.recovery.baseJson.jsonStorage).toEqual(otherMarkers);
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+  }
+);

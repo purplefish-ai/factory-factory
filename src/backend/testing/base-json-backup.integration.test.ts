@@ -5,6 +5,7 @@ import { expectBackupWriterUnopened } from '@/backend/services/settings/resource
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
@@ -546,3 +547,127 @@ it('keeps all three local physical states on collisions and imports an unrelated
   expect(repeated.agentSessions).toEqual({ imported: 0, skipped: 2 });
   expect(await read()).toEqual(expected);
 });
+
+it.each(['WorkspacePR', 'AgentSession'] as const)(
+  'rejects a non-null %s marker target at service and router before opening the writer',
+  async (model) => {
+    const file = structuredClone(full);
+    const pr = file.data.workspaces[0]!.prs[0]!;
+    const session = file.data.agentSessions[0]!;
+    if (model === 'WorkspacePR') {
+      Object.assign(pr, { observation: redObservation });
+    } else {
+      Object.assign(session, { providerMetadata: { nested: null } });
+    }
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    const otherMarkers = structuredClone(file.data.recovery.baseJson.jsonStorage);
+    const marker =
+      model === 'WorkspacePR'
+        ? { model, identity: [pr.id], field: 'observation' }
+        : { model, identity: [session.id], field: 'providerMetadata' };
+    Object.assign(file.data.recovery.baseJson, { jsonStorage: [...otherMarkers, marker] });
+    await expectBackupWriterUnopened(async () => {
+      await expect(
+        Reflect.apply(dataBackupService.importData, dataBackupService, [file])
+      ).rejects.toThrow(`Invalid ${model} JSON-null target`);
+      const caller = adminRouter.createCaller({
+        appContext: { services: { dataBackupService } },
+      } as unknown as Context);
+      await expect(Reflect.apply(caller.importData, caller, [file])).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+    });
+    file.data.recovery.baseJson.jsonStorage.pop();
+    expect(file.data.recovery.baseJson.jsonStorage).toEqual(otherMarkers);
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    expect(await destination.prisma.workspace.count()).toBe(0);
+  }
+);
+
+it.each(['absent', 'empty'])(
+  'accepts incoming full-profile flat PR aliases with %s prs but forbids borrowing a synthetic observation marker',
+  async (prsShape) => {
+    const file = structuredClone(full);
+    const workspace = file.data.workspaces[2]!;
+    const originalPR = workspace.prs[0]!;
+    const otherMarkers = [
+      ...file.data.recovery.baseJson.jsonStorage,
+      { model: 'WorkspacePR', identity: ['pr-root'], field: 'observation' },
+      { model: 'AgentSession', identity: ['session'], field: 'providerMetadata' },
+    ];
+    Object.assign(file.data.recovery.baseJson, {
+      jsonStorage: [
+        ...otherMarkers,
+        { model: 'WorkspacePR', identity: [originalPR.id], field: 'observation' },
+      ],
+    });
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    // This is an incoming compatibility contract; the current producer emits actual nested PRs.
+    Object.assign(workspace, {
+      prs: [],
+      prUrl: originalPR.url,
+      prNumber: originalPR.number,
+      prState: originalPR.state,
+    });
+    if (prsShape === 'absent') {
+      Reflect.deleteProperty(workspace, 'prs');
+    }
+    file.data.recovery.baseJson.jsonStorage.pop();
+    expect(file.data.recovery.baseJson.jsonStorage).toEqual(otherMarkers);
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+
+    Object.assign(file.data.recovery.baseJson, {
+      jsonStorage: [
+        ...otherMarkers,
+        { model: 'WorkspacePR', identity: ['legacy-pr-healthy'], field: 'observation' },
+      ],
+    });
+    const invalid = exportDataSchema.safeParse(file);
+    expect(invalid.success).toBe(false);
+    if (invalid.success) {
+      throw new Error('Expected invalid synthetic JSON-null marker');
+    }
+    const issues = invalid.error.issues.flatMap((issue) =>
+      issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+    );
+    expect(issues).toContainEqual({
+      code: 'custom',
+      message: 'Invalid WorkspacePR JSON-null target',
+      path: ['data', 'recovery', 'baseJson', 'jsonStorage', otherMarkers.length, 'identity'],
+    });
+    await expectBackupWriterUnopened(async () => {
+      await expect(
+        Reflect.apply(dataBackupService.importData, dataBackupService, [file])
+      ).rejects.toThrow('Invalid WorkspacePR JSON-null target');
+      const caller = adminRouter.createCaller({
+        appContext: { services: { dataBackupService } },
+      } as unknown as Context);
+      await expect(Reflect.apply(caller.importData, caller, [file])).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+    });
+    expect(await destination.prisma.workspace.count()).toBe(0);
+    file.data.recovery.baseJson.jsonStorage.pop();
+    expect(file.data.recovery.baseJson.jsonStorage).toEqual(otherMarkers);
+    expect(exportDataSchema.safeParse(file).success).toBe(true);
+    const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [file]);
+    expect(result.workspaces).toEqual({ imported: 3, skipped: 0 });
+    expect(result.agentSessions).toEqual({ imported: 1, skipped: 0 });
+    expect(result.recovery.manifest).toEqual(full.meta.recovery);
+    expect(
+      await destination.prisma.workspacePR.findUniqueOrThrow({ where: { id: 'legacy-pr-healthy' } })
+    ).toMatchObject({
+      workspaceId: 'healthy',
+      url: originalPR.url,
+      number: originalPR.number,
+      state: originalPR.state,
+    });
+    expect(
+      await destination.prisma.workspacePR.findUnique({ where: { id: originalPR.id } })
+    ).toBeNull();
+    expect(
+      await destination.prisma
+        .$queryRaw`SELECT typeof("observation") AS storage, json_type("observation") AS kind FROM "WorkspacePR" WHERE id = 'legacy-pr-healthy'`
+    ).toEqual([{ storage: 'null', kind: null }]);
+  }
+);
