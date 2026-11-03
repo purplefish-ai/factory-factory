@@ -16,7 +16,22 @@ export interface PeriodicWorkspaceLinksImportReport {
   reasons: { INCOMPLETE_DEPENDENCY: number };
 }
 
+export interface PeriodicHistoryImportReport {
+  model: 'PeriodicTaskExecution';
+  imported: number;
+  skipped: number;
+  sourceRunning: number;
+  restoredHistoricalFailed: number;
+  restoredSettled: number;
+  reasons: {
+    EXISTING_IDENTITY: number;
+    CONFLICTING_IDENTITY_OR_PARENT: number;
+    INCOMPLETE_DEPENDENCY: number;
+  };
+}
+
 export interface RecoveryImportReport {
+  periodicHistory?: PeriodicHistoryImportReport;
   periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport;
   periodicConfig?: PeriodicConfigImportReport;
   status: 'PARTIAL';
@@ -24,34 +39,47 @@ export interface RecoveryImportReport {
   warnings: string[];
   unreportedTotals: 'EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS';
 }
+function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string {
+  return metadata?.profile === 'base-json-periodic-history-1'
+    ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, AgentSession.providerMetadata, and PeriodicTaskExecution.launchSnapshot. Omitted domains are not restored.'
+    : metadata?.profile === 'base-json-1' ||
+        metadata?.profile === 'base-json-periodic-config-1' ||
+        metadata?.profile === 'base-json-periodic-links-1'
+      ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata. Omitted domains are not restored.'
+      : metadata?.profile === 'base-json-workspace-1'
+        ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata only. WorkspacePR.observation and AgentSession.providerMetadata physical nullable-JSON fidelity is unproven. Omitted domains are not restored.'
+        : 'Partial logical metadata only; physical nullable-JSON fidelity is unproven. Omitted domains are not restored.';
+}
+
 export function createRecoveryImportReport(
   metadata: RecoveryMetadata | undefined,
   periodicConfig?: PeriodicConfigImportReport,
-  periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport
+  periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport,
+  periodicHistory?: PeriodicHistoryImportReport
 ): RecoveryImportReport {
   return {
+    ...(periodicHistory ? { periodicHistory } : {}),
     ...(periodicConfig ? { periodicConfig } : {}),
     ...(periodicWorkspaceLinks ? { periodicWorkspaceLinks } : {}),
     status: 'PARTIAL',
     manifest: metadata ?? null,
     warnings: [
       ...(!metadata ? ['This legacy backup has no versioned coverage declaration.'] : []),
-      metadata?.profile === 'base-json-1' ||
-      metadata?.profile === 'base-json-periodic-config-1' ||
-      metadata?.profile === 'base-json-periodic-links-1'
-        ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, and AgentSession.providerMetadata. Omitted domains are not restored.'
-        : metadata?.profile === 'base-json-workspace-1'
-          ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata only. WorkspacePR.observation and AgentSession.providerMetadata physical nullable-JSON fidelity is unproven. Omitted domains are not restored.'
-          : 'Partial logical metadata only; physical nullable-JSON fidelity is unproven. Omitted domains are not restored.',
+      physicalFidelityWarning(metadata),
       'Paths and provider-session IDs may be metadata; repository/worktree files, provider history bytes, secrets, native account homes and live runtime authority are excluded.',
       ...(periodicConfig
         ? [
-            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}. Periodic execution history excluded.`,
+            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}.${metadata?.profile === 'base-json-periodic-history-1' ? '' : ' Periodic execution history excluded.'}`,
           ]
         : []),
       ...(periodicWorkspaceLinks
         ? [
-            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled; periodic execution history is excluded.`,
+            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled${metadata?.profile === 'base-json-periodic-history-1' ? '.' : '; periodic execution history is excluded.'}`,
+          ]
+        : []),
+      ...(periodicHistory
+        ? [
+            `Periodic execution history: ${periodicHistory.imported} imported, ${periodicHistory.skipped} skipped; ${periodicHistory.sourceRunning} RUNNING in the entire source section; ${periodicHistory.restoredHistoricalFailed} restored FAILED as historical only, provider outcome unknown; ${periodicHistory.restoredSettled} restored settled. Skips by reason: existing execution ID: ${periodicHistory.reasons.EXISTING_IDENTITY}; occupied workspace: ${periodicHistory.reasons.CONFLICTING_IDENTITY_OR_PARENT}; dependency not created by this import: ${periodicHistory.reasons.INCOMPLETE_DEPENDENCY}. Imported executions will not be resumed.`,
           ]
         : []),
     ],

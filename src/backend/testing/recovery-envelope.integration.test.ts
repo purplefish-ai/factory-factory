@@ -19,7 +19,7 @@ import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
-import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -179,10 +179,11 @@ it('roundtrips the complete base graph with explicit null task links from publis
       .sort((a, b) => a.id.localeCompare(b.id));
   expect(associations(exported.data.workspaces)).toEqual(associations(v7.data.workspaces));
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', links.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery', history.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', {
     baseJson: { version: 1, jsonStorage: [] },
     periodicConfig: { version: 1, tasks: [] },
+    periodicHistory: { version: 1, executions: [], jsonStorage: [] },
   });
   expect(exportDataSchema.parse(exported)).toEqual(exported);
   const expectedLinks = v7.data.workspaces

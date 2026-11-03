@@ -9,7 +9,7 @@ import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
-import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -168,7 +168,11 @@ it('declares an empty section for all SQL NULL rows and restores explicit SQL NU
     },
   });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery.capabilities', { baseJson: 1, periodicConfig: 1 });
+  expect(backup.meta).toHaveProperty('recovery.capabilities', {
+    baseJson: 1,
+    periodicConfig: 1,
+    periodicHistory: 1,
+  });
   expect(backup.data).toHaveProperty('recovery.baseJson', { version: 1, jsonStorage: [] });
   state.prisma = destination.prisma;
   await dataBackupService.importData(backup);
@@ -373,7 +377,7 @@ it('roundtrips PR and session SQL NULL versus JSON null at their existing insert
   ];
   expect(await read(source.prisma)).toEqual({ prs: expected, sessions: expected });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery', links.meta.recovery);
+  expect(backup.meta).toHaveProperty('recovery', history.meta.recovery);
   state.prisma = destination.prisma;
   const result = await dataBackupService.importData(backup);
   expect(result.agentSessions).toEqual({ imported: 3, skipped: 0 });

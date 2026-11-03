@@ -7,6 +7,7 @@ import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schem
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
@@ -310,4 +311,43 @@ it('shows only source-link units, unavailable imported dependencies and overlapp
   await click('Dismiss');
   await act(() => publish(result));
   expect(document.querySelector('[aria-label="Periodic workspace link recovery"]')).toBeNull();
+});
+
+it('renders source history versus actual transforms and downloads the exact typed report', async () => {
+  await mount();
+  await click('Dismiss');
+  const historyResult = {
+    ...result,
+    recovery: createRecoveryImportReport(
+      recoveryMetadataSchema.parse(history.meta.recovery),
+      undefined,
+      undefined,
+      {
+        model: 'PeriodicTaskExecution',
+        imported: 3,
+        skipped: 6,
+        sourceRunning: 5,
+        restoredHistoricalFailed: 2,
+        restoredSettled: 1,
+        reasons: {
+          EXISTING_IDENTITY: 1,
+          CONFLICTING_IDENTITY_OR_PARENT: 2,
+          INCOMPLETE_DEPENDENCY: 3,
+        },
+      }
+    ),
+  };
+  await act(() => publish(historyResult));
+  const section = document.querySelector('[aria-label="Periodic execution history recovery"]');
+  expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
+    'Periodic executions: 3 imported, 6 skipped'
+  );
+  expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
+    'RUNNING in entire source section: 5; restored FAILED as historical only: 2; restored settled: 1'
+  );
+  expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
+    'existing execution ID: 1; occupied workspace: 2; dependency not created by this import: 3'
+  );
+  await click('Download JSON');
+  expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(historyResult);
 });

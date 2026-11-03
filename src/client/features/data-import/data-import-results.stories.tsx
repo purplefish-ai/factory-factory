@@ -6,6 +6,7 @@ import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
@@ -147,6 +148,64 @@ export const PeriodicWorkspaceLinksRecovery: Story = {
           reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
         },
         { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } }
+      ),
+    },
+  },
+};
+
+export const PeriodicHistoryRecovery: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(
+        recoveryMetadataSchema.parse(history.meta.recovery),
+        {
+          model: 'PeriodicTask',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        },
+        { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } },
+        {
+          model: 'PeriodicTaskExecution',
+          imported: 3,
+          skipped: 6,
+          sourceRunning: 5,
+          restoredHistoricalFailed: 2,
+          restoredSettled: 1,
+          reasons: {
+            EXISTING_IDENTITY: 1,
+            CONFLICTING_IDENTITY_OR_PARENT: 2,
+            INCOMPLETE_DEPENDENCY: 3,
+          },
+        }
+      ),
+    },
+  },
+};
+export const PeriodicHistoryAllSkipped: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(
+        recoveryMetadataSchema.parse(history.meta.recovery),
+        undefined,
+        undefined,
+        {
+          model: 'PeriodicTaskExecution',
+          imported: 0,
+          skipped: 3,
+          sourceRunning: 2,
+          restoredHistoricalFailed: 0,
+          restoredSettled: 0,
+          reasons: {
+            EXISTING_IDENTITY: 1,
+            CONFLICTING_IDENTITY_OR_PARENT: 1,
+            INCOMPLETE_DEPENDENCY: 1,
+          },
+        }
       ),
     },
   },

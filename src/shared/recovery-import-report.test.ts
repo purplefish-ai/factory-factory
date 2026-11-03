@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import { createRecoveryImportReport } from './recovery-import-report';
 import { recoveryMetadataSchema } from './schemas/recovery-envelope.schema';
@@ -96,4 +97,35 @@ it.each([
       createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery))
     ).not.toHaveProperty('periodicWorkspaceLinks');
   }
+});
+
+it('reports history source scope separately from actual transforms without old history exclusions', () => {
+  const counts = {
+    model: 'PeriodicTaskExecution' as const,
+    imported: 3,
+    skipped: 6,
+    sourceRunning: 5,
+    restoredHistoricalFailed: 2,
+    restoredSettled: 1,
+    reasons: { EXISTING_IDENTITY: 1, CONFLICTING_IDENTITY_OR_PARENT: 2, INCOMPLETE_DEPENDENCY: 3 },
+  };
+  const report = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(history.meta.recovery),
+    {
+      model: 'PeriodicTask',
+      imported: 2,
+      skipped: 3,
+      sourceEnabled: 4,
+      restoredDisabled: 2,
+      reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+    },
+    { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } },
+    counts
+  );
+  expect(report.periodicHistory).toEqual(counts);
+  expect(report.warnings.join(' ')).not.toMatch(/periodic execution history (?:is )?excluded/i);
+  expect(report.warnings[0]).toContain('PeriodicTaskExecution.launchSnapshot');
+  expect(report.warnings.at(-1)).toBe(
+    'Periodic execution history: 3 imported, 6 skipped; 5 RUNNING in the entire source section; 2 restored FAILED as historical only, provider outcome unknown; 1 restored settled. Skips by reason: existing execution ID: 1; occupied workspace: 2; dependency not created by this import: 3. Imported executions will not be resumed.'
+  );
 });

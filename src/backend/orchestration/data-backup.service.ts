@@ -13,6 +13,9 @@ import {
 import { createLogger } from '@/backend/services/logger.service';
 import {
   exportPeriodicConfigRecovery,
+  exportPeriodicHistoryRecovery,
+  planPeriodicHistoryRecovery,
+  restorePeriodicHistoryRecovery,
   readPeriodicConfigRecoveryIds,
   restorePeriodicConfigRecovery,
 } from '@/backend/services/periodic-task';
@@ -563,11 +566,13 @@ class DataBackupService {
       codexAccounts,
       jsonStorage,
       periodicConfig,
+      periodicHistory,
     } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
       ...(await dataBackupAccessor.getSnapshotForExport(tx)),
       codexAccounts: await exportCodexAccountMetadata(tx),
       jsonStorage: await dataBackupAccessor.getBaseJsonStorageForExport(tx),
       periodicConfig: await exportPeriodicConfigRecovery(tx),
+      periodicHistory: await exportPeriodicHistoryRecovery(tx),
     }));
 
     const exportData: ExportData = {
@@ -578,7 +583,7 @@ class DataBackupService {
         recovery,
       },
       data: {
-        recovery: { baseJson: { version: 1, jsonStorage }, periodicConfig },
+        recovery: { baseJson: { version: 1, jsonStorage }, periodicConfig, periodicHistory },
         projects: projects.map((p) => ({
           id: p.id,
           name: p.name,
@@ -749,7 +754,8 @@ class DataBackupService {
           model === 'Workspace' ||
           input.meta.recovery.profile === 'base-json-1' ||
           input.meta.recovery.profile === 'base-json-periodic-config-1' ||
-          input.meta.recovery.profile === 'base-json-periodic-links-1'
+          input.meta.recovery.profile === 'base-json-periodic-links-1' ||
+          input.meta.recovery.profile === 'base-json-periodic-history-1'
         ) {
           jsonNullIds.set(
             model,
@@ -763,11 +769,25 @@ class DataBackupService {
       }
     }
 
+    const historySection =
+      'recovery' in input.data ? input.data.recovery.periodicHistory : undefined;
+    const recoveryMetadata = input.meta.schemaVersion === 8 ? input.meta.recovery : undefined;
+    const restoresPeriodicLinks =
+      recoveryMetadata?.profile === 'base-json-periodic-links-1' ||
+      recoveryMetadata?.profile === 'base-json-periodic-history-1';
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const admission = await planLegacyImport(tx, input.data);
       const { section, occupiedTaskIds, plannedTaskIds, sourceLinks } =
         await planPeriodicWorkspaceImport(tx, input.data, admission);
+      const historyPlan = historySection
+        ? await planPeriodicHistoryRecovery(
+            tx,
+            historySection,
+            plannedTaskIds,
+            admission.eligibleWorkspaceIds
+          )
+        : undefined;
       const inertTransforms = createInertImportReport();
       const createdProjectIds = new Set<string>();
       const projects = await importProjects(
@@ -796,16 +816,14 @@ class DataBackupService {
         jsonNullIds
       );
       const createdWorkspaceIds = new Set(importedWorkspaceIds);
-      const periodicWorkspaceLinks =
-        input.meta.schemaVersion === 8 &&
-        input.meta.recovery.profile === 'base-json-periodic-links-1'
-          ? await workspaceDataService.restorePeriodicTaskLinks(
-              tx,
-              sourceLinks,
-              createdWorkspaceIds,
-              createdTaskIds
-            )
-          : undefined;
+      const periodicWorkspaceLinks = restoresPeriodicLinks
+        ? await workspaceDataService.restorePeriodicTaskLinks(
+            tx,
+            sourceLinks,
+            createdWorkspaceIds,
+            createdTaskIds
+          )
+        : undefined;
       const accountIds = await restoreCodexAccountMetadata(tx, input.data.codexAccounts);
       const agentSessions = await importAgentSessions(
         input.data.agentSessions,
@@ -822,13 +840,17 @@ class DataBackupService {
         inertTransforms,
         createdWorkspaceIds
       );
+      const periodicHistory = historyPlan
+        ? await restorePeriodicHistoryRecovery(tx, historyPlan, createdTaskIds, createdWorkspaceIds)
+        : undefined;
       const userSettings = await importUserSettings(input.data.userSettings, tx);
 
       return {
         recovery: createRecoveryImportReport(
-          input.meta.schemaVersion === 8 ? input.meta.recovery : undefined,
+          recoveryMetadata,
           periodicConfig?.report,
-          periodicWorkspaceLinks
+          periodicWorkspaceLinks,
+          periodicHistory
         ),
         inertTransforms,
         projects,
