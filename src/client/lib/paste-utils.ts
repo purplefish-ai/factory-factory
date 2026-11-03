@@ -1,7 +1,7 @@
 import type { MessageAttachment } from '@/lib/chat-protocol';
+import { formatBytes } from '@/lib/formatters';
 import {
   fileToBase64,
-  formatFileSize,
   generateAttachmentId,
   isSupportedImageType,
   MAX_IMAGE_SIZE,
@@ -127,8 +127,8 @@ async function processClipboardImage(
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatFileSize(file.size);
-    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    const actualSize = formatBytes(file.size, { precision: 1 });
+    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
     return { error: `Image too large: ${actualSize} (max ${maxSize})` };
   }
 
@@ -152,8 +152,8 @@ async function processClipboardImage(
 
 async function processClipboardImageBlob(blob: Blob): Promise<ClipboardImageProcessingResult> {
   if (blob.size > MAX_IMAGE_SIZE) {
-    const actualSize = formatFileSize(blob.size);
-    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    const actualSize = formatBytes(blob.size, { precision: 1 });
+    const maxSize = formatBytes(MAX_IMAGE_SIZE, { precision: 1 });
     return { error: `Image too large: ${actualSize} (max ${maxSize})` };
   }
 

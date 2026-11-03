@@ -13,6 +13,28 @@ describe('formatBytes', () => {
     expect(formatBytes(1_500_000)).toBe('1.4 MB');
     expect(formatBytes(1_500_000_000)).toBe('1.40 GB');
   });
+
+  it.each([
+    [0, '0 B'],
+    [1023, '1023 B'],
+    [1024, '1.0 KB'],
+    [1024 ** 2 - 1, '1024.0 KB'],
+    [1024 ** 2, '1.0 MB'],
+    [1024 ** 3 - 1, '1024.0 MB'],
+    [1024 ** 3, '1.00 GB'],
+    [1024 ** 4, '1024.00 GB'],
+  ])('formats %s bytes at binary unit boundaries as %s', (bytes, expected) => {
+    expect(formatBytes(bytes)).toBe(expected);
+  });
+
+  it('allows file surfaces to use one decimal across scaled units', () => {
+    expect(formatBytes(1024 ** 3, { precision: 1 })).toBe('1.0 GB');
+    expect(formatBytes(1_500_000_000, { precision: 1 })).toBe('1.4 GB');
+    expect(formatBytes(1024 ** 4, { precision: 1 })).toBe('1024.0 GB');
+    expect(formatBytes(1024, { precision: 0 })).toBe('1 KB');
+    expect(formatBytes(12, { precision: 2 })).toBe('12 B');
+    expect(formatBytes(null, { precision: 1 })).toBe('-');
+  });
 });
 
 describe('formatCpu', () => {

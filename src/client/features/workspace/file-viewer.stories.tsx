@@ -13,7 +13,7 @@ const fontStyle: CSSProperties & { '--font-mono': string } = {
   '--font-mono': '"Atkinson Hyperlegible Mono", monospace',
 };
 
-function FileViewerStoryProvider({ children }: { children: ReactNode }) {
+function FileViewerStoryProvider({ children, size = 73 }: { children: ReactNode; size?: number }) {
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
@@ -25,9 +25,9 @@ function FileViewerStoryProvider({ children }: { children: ReactNode }) {
                 data: {
                   content: 'export const greeting = "Hello, world!";\nconsole.log(greeting);',
                   language: 'typescript',
-                  size: 73,
+                  size,
                   isBinary: false,
-                  truncated: false,
+                  truncated: size > 1024 ** 2,
                 },
               },
             });
@@ -113,4 +113,19 @@ export const MinifiedSourceFile: Story = {
       <FileCode content={`[${'{"x":1},'.repeat(124_998)}{"x":1}]`} language="json" theme="dark" />
     </div>
   ),
+};
+
+export const GigabyteFile: Story = {
+  decorators: [
+    (Story) => (
+      <FileViewerStoryProvider size={1024 ** 3}>
+        <Story />
+      </FileViewerStoryProvider>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('1.0 GB')).toBeVisible();
+    await expect(canvas.getByText('File truncated to 1MB. Actual size: 1.0 GB')).toBeVisible();
+  },
 };

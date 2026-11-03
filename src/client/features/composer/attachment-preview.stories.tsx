@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { AttachmentPreview } from './attachment-preview';
 
@@ -227,4 +227,15 @@ export const AllVariants: Story = {
       </div>
     </div>
   ),
+};
+
+// Synthetic metadata checks display only; uploads still enforce their size limit.
+export const GigabyteImage: Story = {
+  args: {
+    attachments: [{ ...imageAttachment, size: 1024 ** 3 }],
+    readOnly: true,
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText('1.0 GB')).toBeVisible();
+  },
 };
