@@ -1,5 +1,7 @@
 import { memo } from 'react';
+import { ChatImage, imageDataUrl } from '@/client/components/chat-image';
 import { MarkdownRenderer } from '@/client/components/markdown';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
@@ -45,6 +47,31 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
   isError,
   toolName,
 }: ToolResultContentRendererProps) {
+  if (Array.isArray(content)) {
+    const images = content.filter((item) => item.type === 'image');
+    if (images.length > 0) {
+      const text = content.filter((item) => item.type === 'text');
+      return (
+        <div className="space-y-1 w-0 min-w-full">
+          {text.length > 0 && (
+            <ToolResultContentRenderer content={text} isError={isError} toolName={toolName} />
+          )}
+          {withOccurrenceKeys(
+            images,
+            (item) =>
+              `${item.source.media_type}:${item.source.data.length}:${item.source.data.slice(0, 64)}:${item.source.data.slice(-64)}`
+          ).map(({ item, key }) => (
+            <ChatImage
+              key={key}
+              src={imageDataUrl(item.source.media_type, item.source.data) ?? undefined}
+              alt="tool result image"
+              source={`Tool image (${item.source.media_type})`}
+            />
+          ))}
+        </div>
+      );
+    }
+  }
   const fileChangeResult = isError ? null : parseCodexFileChangeToolResult(content);
   const shouldRenderFileChange =
     fileChangeResult !== null &&
@@ -115,12 +142,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
             </pre>
           );
         }
-        // Image items could be rendered here if needed
-        return (
-          <div key={key} className="text-xs text-muted-foreground">
-            [Image content]
-          </div>
-        );
+        return null;
       })}
     </div>
   );

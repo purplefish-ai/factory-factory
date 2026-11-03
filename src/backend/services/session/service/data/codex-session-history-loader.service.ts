@@ -9,6 +9,7 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
+import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
@@ -383,20 +384,6 @@ function normalizeCodexFunctionArgs(argumentsValue: unknown): Record<string, unk
       argumentsPreview: truncateForLog(argumentsValue),
     });
     return { rawArguments: argumentsValue };
-  }
-}
-
-function normalizeCodexFunctionOutput(output: unknown): string {
-  if (typeof output === 'string') {
-    return output;
-  }
-  if (output === undefined || output === null) {
-    return '';
-  }
-  try {
-    return JSON.stringify(output);
-  } catch {
-    return String(output);
   }
 }
 

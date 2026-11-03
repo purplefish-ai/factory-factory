@@ -23,6 +23,26 @@ function renderToolResult(props: Parameters<typeof ToolResultContentRenderer>[0]
 }
 
 describe('ToolResultContentRenderer', () => {
+  it('renders image results alongside text with a full-size control', () => {
+    const container = renderToolResult({
+      isError: false,
+      content: [
+        { type: 'text', text: 'Generated mockup' },
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+        },
+      ],
+    });
+    expect(container.textContent).toContain('Generated mockup');
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'data:image/png;base64,iVBORw0KGgo='
+    );
+    expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Open tool result image at full size'
+    );
+  });
+
   const fileChangeJson = JSON.stringify({
     type: 'fileChange',
     changes: [{ path: '/repo/src/app.ts', kind: { type: 'update', move_path: null } }],
@@ -32,6 +52,22 @@ describe('ToolResultContentRenderer', () => {
     id: 'call_123',
     status: 'completed',
     changes: [{ path: '/repo/src/app.ts', kind: { type: 'update', move_path: null } }],
+  });
+
+  it('preserves specialized text rendering alongside image results', () => {
+    const container = renderToolResult({
+      isError: false,
+      toolName: 'fileChange',
+      content: [
+        { type: 'text', text: fileChangeJson },
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+        },
+      ],
+    });
+    expect(container.textContent).toContain('1 file change');
+    expect(container.querySelector('img')).not.toBeNull();
   });
 
   it('renders fileChange payloads with the specialized renderer for non-error results', () => {

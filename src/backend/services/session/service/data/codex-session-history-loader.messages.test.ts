@@ -97,6 +97,38 @@ describe('Codex response-item history messages', () => {
     expect(history[3]).toMatchObject({ content: 'second' });
   });
 
+  it('restores generated tool images as structured results after reload', async () => {
+    const png = 'iVBORw0KGgo=';
+    const history = await load([
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'image-call',
+          output: [
+            { type: 'input_text', text: 'Generated mockup' },
+            { type: 'resource_link', uri: 'file:///tmp/mockup.png', name: 'mockup' },
+            { type: 'input_image', image_url: `data:image/png;base64,${png}` },
+          ],
+        },
+      },
+    ]);
+    expect(history).toMatchObject([
+      {
+        type: 'tool_result',
+        toolId: 'image-call',
+        content: [
+          { type: 'text', text: 'Generated mockup' },
+          {
+            type: 'text',
+            text: '{"type":"resource_link","uri":"file:///tmp/mockup.png","name":"mockup"}',
+          },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } },
+        ],
+      },
+    ]);
+  });
+
   it('restores native response-only turns and hides injected instructions', async () => {
     const history = await load([
       event('task_started', undefined, 'turn-1'),

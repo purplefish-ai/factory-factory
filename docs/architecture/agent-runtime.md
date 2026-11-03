@@ -18,6 +18,17 @@ likewise restores user `input_image` data URLs, and images on legacy
 are skipped. Restoration rejects malformed base64 and images above the shared 10
 MiB decoded size limit used for uploads.
 
+Chat Markdown and structured tool-result images share an inline preview with a
+full-size dialog. Local Markdown paths load through `workspace.readChatImage`,
+which requires an existing workspace and restricts reads to that worktree or
+absolute OS temporary-file paths (including `/tmp` on macOS). Relative paths
+cannot escape the worktree; resolved symlinks must stay within the selected
+root. Only PNG, JPEG, GIF and WebP files with matching image signatures are
+returned, with bounded reads and a 10 MiB limit. Missing, unsupported or failed
+images show a selectable source path. Temporary previews require the original
+file to remain available after reload. Codex image-bearing tool outputs retain
+structured image items on replay rather than serializing their base64 as text.
+
 Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
 and transcript projection use a 16 ms cooperative target. Projection uses the
 same per-entry builder as synchronous callers and yields between small batches,
