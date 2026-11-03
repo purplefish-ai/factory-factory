@@ -1,6 +1,8 @@
 import { memo } from 'react';
+import { ChatImage, imageDataUrl } from '@/client/components/chat-image';
 import { MarkdownRenderer } from '@/client/components/markdown';
-import type { ToolResultContentValue } from '@/lib/chat-protocol';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
+import type { ImageItem, TextItem, ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
   type CodexFileChangePayload,
@@ -40,11 +42,61 @@ export interface ToolResultContentRendererProps {
   toolName?: string;
 }
 
+type ResultGroup = { type: 'image'; item: ImageItem } | { type: 'text'; items: TextItem[] };
+
+function groupResultContent(content: Array<ImageItem | TextItem>): ResultGroup[] {
+  const groups: ResultGroup[] = [];
+  for (const item of content) {
+    if (item.type === 'image') {
+      groups.push({ type: 'image', item });
+      continue;
+    }
+    const previous = groups.at(-1);
+    if (previous?.type === 'text') {
+      previous.items.push(item);
+    } else {
+      groups.push({ type: 'text', items: [item] });
+    }
+  }
+  return groups;
+}
+
 export const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
   content,
   isError,
   toolName,
 }: ToolResultContentRendererProps) {
+  if (Array.isArray(content)) {
+    if (content.some((item) => item.type === 'image')) {
+      return (
+        <div className="space-y-1 w-0 min-w-full">
+          {withOccurrenceKeys(groupResultContent(content), (group) =>
+            group.type === 'text'
+              ? (group.items[0]?.text.slice(0, 64) ?? '')
+              : `${group.item.source.media_type}:${group.item.source.data.length}:${group.item.source.data.slice(0, 64)}:${group.item.source.data.slice(-64)}`
+          ).map(({ item: group, key }) =>
+            group.type === 'text' ? (
+              <ToolResultContentRenderer
+                key={key}
+                content={group.items}
+                isError={isError}
+                toolName={toolName}
+              />
+            ) : (
+              <ChatImage
+                key={key}
+                src={
+                  imageDataUrl(group.item.source.media_type, group.item.source.data) ?? undefined
+                }
+                alt="tool result image"
+                source={`data:${group.item.source.media_type};base64,${group.item.source.data}`}
+              />
+            )
+          )}
+        </div>
+      );
+    }
+  }
   const fileChangeResult = isError ? null : parseCodexFileChangeToolResult(content);
   const shouldRenderFileChange =
     fileChangeResult !== null &&
@@ -115,12 +167,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
             </pre>
           );
         }
-        // Image items could be rendered here if needed
-        return (
-          <div key={key} className="text-xs text-muted-foreground">
-            [Image content]
-          </div>
-        );
+        return null;
       })}
     </div>
   );

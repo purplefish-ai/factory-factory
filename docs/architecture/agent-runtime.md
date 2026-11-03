@@ -18,6 +18,18 @@ likewise restores user `input_image` data URLs, and images on legacy
 are skipped. Restoration rejects malformed base64 and images above the shared 10
 MiB decoded size limit used for uploads.
 
+Chat Markdown and structured tool-result images share an inline preview with a
+full-size dialog. Local Markdown paths load through `workspace.readChatImage`,
+which requires an existing workspace and restricts reads to that worktree or
+absolute OS temporary-file paths (including `/tmp` on macOS). Relative paths
+cannot escape the worktree; resolved symlinks must stay within the selected
+root. Only PNG, JPEG, GIF and WebP files with matching image signatures are
+returned, with bounded reads and a 10 MiB limit. Missing, unsupported or failed
+images show a selectable source path or URI. Temporary previews require the
+original file to remain available after reload. Codex image-bearing tool outputs
+retain structured image items on replay rather than serializing their base64 as
+text.
+
 Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
 and transcript projection use a 16 ms cooperative target. Projection uses the
 same per-entry builder as synchronous callers and yields between small batches,
@@ -543,10 +555,11 @@ prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
 input is removed from the queue even if stopping advances the generation while
 the request settles, preventing a delivered steer from being replayed on resume.
 Queue-to-transcript handoffs publish the consumed input together with its
-committed transcript entries; steering and batched sends never publish a partial
-snapshot between removal and commit. The chat keeps each message row mounted and
-briefly collapses its queued controls when dispatched, respecting reduced-motion
-preferences.
+committed transcript entries: each `transcript_message_committed` delta carries
+the entry and the remaining queue, so steering and batched sends never expose a
+partial state between removal and commit. The chat keeps each message row
+mounted and briefly collapses its queued controls when dispatched, respecting
+reduced-motion preferences.
 
 Codex uses native `turn/steer` without cancelling the current turn. Claude's
 native steering may pre-empt generation or background a foreground tool; neither
@@ -989,9 +1002,9 @@ and saved selections of that tab migrate to Changes. The session store retains
 the latest validated ACP task snapshot for reconnect replay, including empty
 lists. Plan snapshots emitted during provider history attachment pass replay
 suppression so restored conversations can recover tasks. Authoritative session
-snapshots include the current task list, so queue updates preserve valid tasks
-and hydration clears stale client state when no list exists. Replacing a
-provider's archived history also clears its task snapshot.
+snapshots include the current task list, so hydration clears stale client state
+when no list exists; queue deltas leave the client's task list untouched.
+Replacing a provider's archived history also clears its task snapshot.
 
 ## Provider sub-agents
 
