@@ -64,7 +64,7 @@ const mockPendingChecks: GitHubStatusCheck[] = [
 
 // CIStatusDot Stories
 const metaDot = {
-  title: 'PR Review/CIStatusDot',
+  title: 'Reviews/CIStatusDot',
   component: CIStatusDot,
   parameters: {
     layout: 'centered',

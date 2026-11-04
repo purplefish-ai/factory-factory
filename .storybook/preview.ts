@@ -1,6 +1,7 @@
 import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
+import { MINIMAL_VIEWPORTS } from 'storybook/viewport';
 import { COLOR_SCHEME_ATTRIBUTE } from '@/client/lib/appearance';
 import { TRPCProvider } from '@/client/lib/providers';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -41,6 +42,39 @@ const preview: Preview = {
       },
     },
     layout: 'centered',
+    viewport: {
+      options: {
+        ...MINIMAL_VIEWPORTS,
+        // A modern phone width; layout-heavy stories should cover it.
+        phone: {
+          name: 'Phone (390px)',
+          styles: { width: '390px', height: '844px' },
+          type: 'mobile',
+        },
+      },
+    },
+    options: {
+      // Group order follows docs/storybook.md. Storybook reads this statically,
+      // so keep it an inline literal. Titles sort alphabetically within each
+      // group; stories keep their export order.
+      storySort: {
+        method: 'alphabetical',
+        order: [
+          'Foundations',
+          'UI',
+          'Shared',
+          'Navigation',
+          'Board',
+          'Workspace',
+          'Chat',
+          'Agents',
+          'Reviews',
+          'Projects',
+          'Settings',
+          '*',
+        ],
+      },
+    },
   },
   decorators: [
     (Story, context) => {

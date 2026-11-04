@@ -21,7 +21,7 @@ const pr = (
   syncedAt: null,
 });
 const meta = {
-  title: 'Workspace/Pull requests',
+  title: 'Workspace/WorkspacePRMenu',
   component: WorkspacePrMenu,
   args: { prs: [], onAdd: () => undefined, onRemove: () => undefined, onReview: () => undefined },
   parameters: { layout: 'centered' },

@@ -74,7 +74,7 @@ function InteractiveSearch(props: SearchDialogProps) {
 }
 
 const meta = {
-  title: 'Features/Search',
+  title: 'Navigation/SearchDialog',
   component: SearchDialog,
   render: InteractiveSearch,
   parameters: { layout: 'fullscreen' },

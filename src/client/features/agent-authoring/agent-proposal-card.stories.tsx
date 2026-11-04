@@ -42,7 +42,7 @@ function proposalArgs(fixture: AgentProposal) {
 }
 
 const meta = {
-  title: 'Chat/Agent proposal',
+  title: 'Chat/Prompts/AgentProposalCard',
   component: AgentProposalEditor,
   parameters: { layout: 'padded' },
   args: proposalArgs(proposal),

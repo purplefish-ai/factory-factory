@@ -19,7 +19,7 @@ const pr: WorkspacePullRequest = {
 };
 
 const meta = {
-  title: 'Workspaces/WorkspaceItemContent',
+  title: 'Navigation/WorkspaceItemContent',
   component: WorkspaceItemContent,
   args: {
     workspace: {

@@ -4,7 +4,7 @@ import { fn } from 'storybook/test';
 import { type ScriptType, StartupScriptForm } from './startup-script-form';
 
 const meta = {
-  title: 'Project/StartupScriptForm',
+  title: 'Projects/StartupScriptForm',
   component: StartupScriptForm,
   parameters: {
     layout: 'centered',

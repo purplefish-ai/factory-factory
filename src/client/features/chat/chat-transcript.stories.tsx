@@ -10,7 +10,7 @@ import { ChatTranscript } from './chat-transcript';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
 
 const meta: Meta<typeof ChatTranscript> = {
-  title: 'Chat/ChatTranscript',
+  title: 'Chat/Transcript/ChatTranscript',
   component: ChatTranscript,
   parameters: { layout: 'padded' },
   decorators: [

@@ -18,7 +18,7 @@ function BackgroundRefreshExample() {
 }
 
 const meta = {
-  title: 'Components/Background errors',
+  title: 'Shared/BackgroundTask',
   component: BackgroundRefreshExample,
 } satisfies Meta<typeof BackgroundRefreshExample>;
 export default meta;

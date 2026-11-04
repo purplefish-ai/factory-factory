@@ -37,7 +37,7 @@ function noop(_text: string): void {
 }
 
 const meta: Meta<typeof ChatInput> = {
-  title: 'Chat/ChatInput',
+  title: 'Chat/Input/ChatInput',
   component: ChatInput,
   parameters: {
     layout: 'padded',

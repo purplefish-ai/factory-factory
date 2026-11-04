@@ -4,7 +4,7 @@ import type { PRWithFullDetails } from '@/shared/github-types';
 import { PRInboxItem } from './pr-inbox-item';
 
 const meta = {
-  title: 'PR Review/PRInboxItem',
+  title: 'Reviews/PRInboxItem',
   component: PRInboxItem,
   parameters: {
     layout: 'centered',

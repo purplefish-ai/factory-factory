@@ -102,7 +102,7 @@ function MatchingTrees({
 }
 
 const meta = {
-  title: 'Workspace/FileTrees',
+  title: 'Workspace/FileTree',
   component: MatchingTrees,
   beforeEach: () => {
     localStorage.setItem(

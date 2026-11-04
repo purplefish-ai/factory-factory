@@ -76,7 +76,7 @@ function StoryProvider({
 }
 
 const meta = {
-  title: 'Workspace/Family Navigation',
+  title: 'Workspace/WorkspaceFamilyNavigation',
   component: WorkspaceFamilyMenu,
   args: { workspace: child, projectSlug: 'web' },
   decorators: [

@@ -97,7 +97,7 @@ ten times per second.
 
 ## Streamdown comparison
 
-Storybook's **Chat / Streaming Markdown comparison** runs the React Markdown
+Storybook's **Chat / Transcript / StreamdownMarkdown** runs the React Markdown
 baseline and the application's Streamdown adapter from identical snapshots.
 Start Storybook with `pnpm storybook`; the stories cover prose, bursty delivery,
 a long code fence, tables/diagrams, and application links/images. The snapshot

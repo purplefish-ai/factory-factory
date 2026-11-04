@@ -98,7 +98,7 @@ function Preview({
   );
 }
 const meta = {
-  title: 'Settings/Codex Accounts',
+  title: 'Settings/CodexAccountsSettings',
   component: Preview,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof Preview>;

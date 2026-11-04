@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { InitStatusBanner } from './workspace-init-status-banner';
 
 const meta = {
-  title: 'Workspaces/Setup Recovery',
+  title: 'Workspace/InitStatusBanner',
   component: InitStatusBanner,
   args: {
     banner: {

@@ -205,7 +205,7 @@ function DashboardStory({
   );
 }
 const meta = {
-  title: 'Agents/Focused Dashboard',
+  title: 'Agents/AgentsDashboard',
   component: DashboardStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof DashboardStory>;

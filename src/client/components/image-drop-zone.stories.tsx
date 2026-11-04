@@ -59,7 +59,7 @@ function DropExample({
 }
 
 const meta = {
-  title: 'Composer/ImageDropZone',
+  title: 'Chat/Input/ImageDropZone',
   component: DropExample,
   parameters: { layout: 'fullscreen' },
   args: { destination: 'message' },

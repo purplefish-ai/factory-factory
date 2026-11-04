@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { CodexFileChangeRenderer } from './file-change-renderer';
 
 const meta = {
-  title: 'Chat/Tools/File Changes',
+  title: 'Chat/Tools/FileChangeRenderer',
   component: CodexFileChangeRenderer,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof CodexFileChangeRenderer>;

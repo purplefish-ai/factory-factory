@@ -10,7 +10,7 @@ import {
 import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
 const meta = {
-  title: 'Chat/PermissionPrompt',
+  title: 'Chat/Prompts/PermissionPrompt',
   component: PermissionPrompt,
   parameters: {
     layout: 'padded',
@@ -227,7 +227,7 @@ export const FocusesAllowWhenNothingFocused: Story = {
 
 // Expanded variant stories
 const expandedMeta = {
-  title: 'Chat/PermissionPromptExpanded',
+  title: 'Chat/Prompts/PermissionPromptExpanded',
   component: PermissionPromptExpanded,
   parameters: {
     layout: 'padded',

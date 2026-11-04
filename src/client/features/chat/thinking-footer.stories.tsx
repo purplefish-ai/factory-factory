@@ -4,7 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { ThinkingFooter } from './thinking-footer';
 
 const meta = {
-  title: 'Chat/ThinkingFooter',
+  title: 'Chat/Transcript/ThinkingFooter',
   component: ThinkingFooter,
   args: { active: true, latestThinking: 'Inspecting the implementation' },
   decorators: [

@@ -61,7 +61,7 @@ const textAttachmentLong: MessageAttachment = {
 const onRemoveAction = fn();
 
 const meta: Meta<typeof AttachmentPreview> = {
-  title: 'Chat/AttachmentPreview',
+  title: 'Chat/Input/AttachmentPreview',
   component: AttachmentPreview,
   parameters: {
     layout: 'padded',

@@ -4,7 +4,7 @@ import type { QueuedMessage } from '@/lib/chat-protocol';
 import { QueuedMessages } from './queued-messages';
 
 const meta = {
-  title: 'Chat/QueuedMessages',
+  title: 'Chat/Input/QueuedMessages',
   component: QueuedMessages,
   parameters: {
     layout: 'padded',

@@ -187,7 +187,7 @@ function SettingsStoryProvider({
 }
 
 const meta = {
-  title: 'Pages/Admin/SettingsSections',
+  title: 'Settings/SettingsSections',
   parameters: { layout: 'padded' },
   tags: ['autodocs'],
   beforeEach: () => {

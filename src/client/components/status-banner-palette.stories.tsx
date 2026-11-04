@@ -36,7 +36,7 @@ function StatusBannerPalette() {
 }
 
 const meta = {
-  title: 'Components/StatusBannerPalette',
+  title: 'Shared/StatusBannerPalette',
   component: StatusBannerPalette,
   parameters: {
     layout: 'centered',

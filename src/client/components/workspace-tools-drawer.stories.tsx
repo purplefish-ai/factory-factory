@@ -3,7 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { WorkspaceToolsFixture } from '@/client/routes/workspace-tools-fixture';
 
 const meta = {
-  title: 'Workspace/MobileToolsDrawer',
+  title: 'Workspace/WorkspaceToolsDrawer',
   component: WorkspaceToolsFixture,
   parameters: {
     layout: 'fullscreen',

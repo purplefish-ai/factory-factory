@@ -3,9 +3,10 @@ import { ChatTranscript } from '@/client/features/chat';
 import { MessageItem } from '@/client/features/chat/agent-activity/agent-activity';
 import { PRUpdateRenderer } from './pr-update-renderer';
 
-const meta = { title: 'Chat/PR update', component: PRUpdateRenderer } satisfies Meta<
-  typeof PRUpdateRenderer
->;
+const meta = {
+  title: 'Chat/Transcript/PRUpdateRenderer',
+  component: PRUpdateRenderer,
+} satisfies Meta<typeof PRUpdateRenderer>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Delivered: Story = {

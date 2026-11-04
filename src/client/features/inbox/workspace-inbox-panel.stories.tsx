@@ -252,7 +252,7 @@ function InboxStory({
   );
 }
 const meta = {
-  title: 'Workspace/Inbox',
+  title: 'Workspace/WorkspaceInboxPanel',
   component: InboxStory,
   parameters: { layout: 'padded' },
   args: { scenario: 'messages', width: 440 },

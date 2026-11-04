@@ -48,11 +48,11 @@ describe('port share router', () => {
 
   it('shares on navigations from Factory Factory and keeps the path and query', async () => {
     const response = await request(createApp())
-      .get('/proxy/6173/?path=/story/chat-streaming-markdown-comparison--prose')
+      .get('/proxy/6173/?path=/story/chat-transcript-streamdownmarkdown--prose')
       .set(sameOriginNavigation);
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe(
-      'https://mac.tail123.ts.net:6173/?path=/story/chat-streaming-markdown-comparison--prose'
+      'https://mac.tail123.ts.net:6173/?path=/story/chat-transcript-streamdownmarkdown--prose'
     );
     expect(ensure).toHaveBeenCalledWith(6173);
   });

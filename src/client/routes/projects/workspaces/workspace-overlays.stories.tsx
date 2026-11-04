@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
-  title: 'Workspaces/Overlays',
+  title: 'Workspace/Overlays',
   component: ArchivingOverlay,
   parameters: {
     layout: 'fullscreen',

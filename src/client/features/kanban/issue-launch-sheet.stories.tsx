@@ -34,7 +34,7 @@ function PreviewSession({ children }: { children: ReactNode }) {
 }
 
 const meta = {
-  title: 'Kanban/IssueLaunchSheet',
+  title: 'Board/IssueLaunchSheet',
   component: IssueLaunchSheet,
   decorators: [
     (Story) => (

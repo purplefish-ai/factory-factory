@@ -3,7 +3,7 @@ import { expect, type Locator, test } from '@playwright/test';
 test('subagent reading restoration preserves the constrained message width', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(
-    '/iframe.html?id=subagents-subagenttranscriptview--restored-reading-wide&viewMode=story'
+    '/iframe.html?id=chat-subagents-subagenttranscriptview--restored-reading-wide&viewMode=story'
   );
   const viewport = page.getByTestId('transcript-viewport');
   await expect(viewport).toBeVisible();
@@ -38,7 +38,7 @@ test.beforeAll(async ({ browser, baseURL }, testInfo) => {
     })
   );
   await page.goto(
-    `${baseURL}/iframe.html?id=workspaces-chatcontent--composer-height-changes&viewMode=story`,
+    `${baseURL}/iframe.html?id=workspace-chatcontent--composer-height-changes&viewMode=story`,
     { waitUntil: 'domcontentloaded' }
   );
   await expect(
@@ -91,7 +91,7 @@ for (const viewport of [
       })
     );
     await page.goto(
-      '/iframe.html?id=workspaces-chatcontent--composer-height-changes&viewMode=story'
+      '/iframe.html?id=workspace-chatcontent--composer-height-changes&viewMode=story'
     );
     const chat = page.getByTestId('mock-conversation');
     const input = chat.getByPlaceholder('Type a message...');

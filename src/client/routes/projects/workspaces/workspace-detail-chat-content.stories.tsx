@@ -162,7 +162,7 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
 }
 
 const meta = {
-  title: 'Workspaces/ChatContent',
+  title: 'Workspace/ChatContent',
   component: MockConversation,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof MockConversation>;

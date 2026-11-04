@@ -6,7 +6,7 @@ import { baseWorkspace } from './kanban-card.stories';
 import { getKanbanColumns, KanbanColumn } from './kanban-column';
 
 const meta = {
-  title: 'Kanban/KanbanColumn',
+  title: 'Board/KanbanColumn',
   component: KanbanColumn,
   parameters: {
     layout: 'centered',

@@ -3,7 +3,7 @@ import { ChatImage } from './chat-image';
 
 const demo = '/social-preview.png';
 const meta = {
-  title: 'Chat/Inline images',
+  title: 'Chat/Transcript/ChatImage',
   component: ChatImage,
   args: { alt: 'Generated mockup', source: '/private/tmp/mockup.png', src: demo },
   decorators: [

@@ -77,7 +77,7 @@ function FailedProviderSave({ initial }: { initial: IssueProvider }) {
 }
 
 const meta = {
-  title: 'Pages/Admin/IssueProvider',
+  title: 'Settings/IssueProviderCard',
   parameters: { layout: 'padded' },
   beforeEach: () => {
     onSave.mockClear();

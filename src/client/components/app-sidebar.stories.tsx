@@ -90,7 +90,7 @@ function SidebarStory({
   );
 }
 const meta = {
-  title: 'Navigation/Agents badge',
+  title: 'Navigation/AppSidebar',
   component: SidebarStory,
   render: (args) => <SidebarStory key={`${args.state}:${args.path ?? '/'}`} {...args} />,
   args: { state: 'healthy' },

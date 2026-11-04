@@ -115,7 +115,7 @@ function ReviewsHeader() {
   );
 }
 const meta = {
-  title: 'Pages/Reviews',
+  title: 'Reviews/ReviewsPage',
   component: ReviewsStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ReviewsStory>;

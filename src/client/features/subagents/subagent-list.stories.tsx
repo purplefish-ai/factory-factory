@@ -76,7 +76,7 @@ function StopStoryProvider({ children }: { children: ReactNode }) {
 }
 
 const meta = {
-  title: 'Subagents/SubagentList',
+  title: 'Chat/Subagents/SubagentList',
   component: SubagentList,
   decorators: [
     (Story) => (

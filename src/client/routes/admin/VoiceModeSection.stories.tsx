@@ -53,7 +53,7 @@ function StaleVoiceSettings() {
   );
 }
 const meta = {
-  title: 'Pages/Admin/VoiceModeSection',
+  title: 'Settings/VoiceModeSection',
   component: StaleVoiceSettings,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof StaleVoiceSettings>;

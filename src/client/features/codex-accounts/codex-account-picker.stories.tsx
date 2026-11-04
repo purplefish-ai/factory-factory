@@ -24,7 +24,7 @@ function Preview() {
 }
 
 const meta = {
-  title: 'Settings/Codex Account Picker',
+  title: 'Chat/Input/CodexAccountPicker',
   component: Preview,
   parameters: { layout: 'centered' },
 } satisfies Meta<typeof Preview>;

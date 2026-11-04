@@ -7,7 +7,7 @@ import { WorkspaceHeaderFixture } from './workspace-header-fixture';
 import { WorkspaceHeaderPwaPreview } from './workspace-header-pwa-preview';
 
 const meta = {
-  title: 'Navigation/Responsive App Header',
+  title: 'Navigation/AppHeader',
   component: WorkspaceHeaderFixture,
   parameters: {
     layout: 'fullscreen',

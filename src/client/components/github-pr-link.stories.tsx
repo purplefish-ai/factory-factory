@@ -16,7 +16,7 @@ const data = {
 };
 
 const meta = {
-  title: 'Chat/GitHub PR preview',
+  title: 'Chat/Transcript/GitHubPRLink',
   component: GitHubPRPreviewCard,
   args: { repo: 'purplefish-ai/iron-fillet', number: 12_675, data },
   decorators: [

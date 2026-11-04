@@ -3,7 +3,7 @@ import { ThemeProvider } from 'next-themes';
 import { ThemeToggle } from './theme-toggle';
 
 const meta = {
-  title: 'Common/ThemeToggle',
+  title: 'Shared/ThemeToggle',
   component: ThemeToggle,
   parameters: {
     layout: 'centered',

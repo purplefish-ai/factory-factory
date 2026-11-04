@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { ModelCatalogWarningContent } from './model-catalog-warning';
 
 const meta = {
-  title: 'Components/ModelCatalogWarning',
+  title: 'Shared/ModelCatalogWarning',
   component: ModelCatalogWarningContent,
   parameters: { layout: 'fullscreen' },
   args: { models: [{ provider: 'CLAUDE', model: 'claude-fable-5[1m]' }] },

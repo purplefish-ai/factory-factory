@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { SlackConnectionsView } from './slack-settings';
 
 const meta = {
-  title: 'Settings/Slack',
+  title: 'Settings/SlackSettings',
   component: SlackConnectionsView,
   parameters: { layout: 'padded' },
   args: {

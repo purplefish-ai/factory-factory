@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { TerminalInstance } from './terminal-instance';
 
 const meta = {
-  title: 'Workspace/Terminal Output',
+  title: 'Workspace/TerminalInstance',
   component: TerminalInstance,
   parameters: { layout: 'centered' },
   args: { onData: () => undefined, onResize: () => undefined },

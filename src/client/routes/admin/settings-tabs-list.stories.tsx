@@ -3,7 +3,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { SettingsTabsList } from './settings-tabs-list';
 
 const meta = {
-  title: 'Settings/TabsList',
+  title: 'Settings/SettingsTabsList',
   component: SettingsTabsList,
   parameters: { layout: 'fullscreen' },
   render: () => (

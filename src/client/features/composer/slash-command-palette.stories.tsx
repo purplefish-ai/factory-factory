@@ -9,7 +9,7 @@ const onCloseAction = fn();
 const onSelectAction = fn();
 
 const meta: Meta<typeof SlashCommandPalette> = {
-  title: 'Chat/SlashCommandPalette',
+  title: 'Chat/Input/SlashCommandPalette',
   component: SlashCommandPalette,
   parameters: {
     layout: 'centered',

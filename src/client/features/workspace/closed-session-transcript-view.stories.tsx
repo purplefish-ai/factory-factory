@@ -98,7 +98,7 @@ function ArchiveFixture({ wire, failRefetch = false }: { wire: string; failRefet
 }
 
 const meta = {
-  title: 'Workspaces/Closed Session Transcript',
+  title: 'Chat/Transcript/ClosedSessionTranscriptView',
   component: ClosedSessionTranscriptView,
   args: { sessionId: 'closed-story' },
   parameters: { layout: 'padded' },
