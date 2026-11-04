@@ -22,7 +22,7 @@ it('resets the visual session and form when Storybook Controls change the state 
     );
   try {
     render('create');
-    expect(container.querySelector('h2')?.textContent).toBe('Create agent');
+    expect(container.querySelector('main h2')?.textContent).toBe('Create agent');
     expect(container.querySelector('main')?.textContent).not.toContain('Factory Factory');
     const draftName = container.querySelector<HTMLInputElement>('input[name="name"]');
     const draftInstructions = container.querySelector<HTMLTextAreaElement>('textarea');
@@ -44,7 +44,7 @@ it('resets the visual session and form when Storybook Controls change the state 
     expect(draftName.value).toBe('Unsaved creation name');
     expect(draftInstructions.value).toBe('Unsaved creation instructions');
     render('edit');
-    expect(container.querySelector('h2')?.textContent).toBe('Edit agent');
+    expect(container.querySelector('main h2')?.textContent).toBe('Edit agent');
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Review recent changes'
     );
@@ -58,7 +58,7 @@ it('resets the visual session and form when Storybook Controls change the state 
     expect(container.textContent).toContain('Loading agent');
     expect(container.querySelector('form')).toBeNull();
     render('populated');
-    expect(container.querySelector('h2')?.textContent).toBe('Review recent changes');
+    expect(container.querySelector('main h2')?.textContent).toBe('Review recent changes');
     expect(container.querySelector('main')?.textContent).not.toContain('Factory Factory');
   } finally {
     actFlushSync(() => root.unmount());

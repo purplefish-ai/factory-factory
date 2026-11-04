@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { ProjectHeader } from '@/client/components/project-header';
 import { AgentsPage } from '@/client/features/agents/agents-page';
 import { trpc } from '@/client/lib/trpc';
+import { EventAgentWorkspaceForm } from './event-agent-workspace-form';
 
 export default function AgentsRoute() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -12,7 +13,17 @@ export default function AgentsRoute() {
   return (
     <>
       <ProjectHeader project={project.data} />
-      <AgentsPage key={project.data.id} project={project.data} />
+      <AgentsPage
+        key={project.data.id}
+        project={project.data}
+        renderEventCreation={(onCancel) => (
+          <EventAgentWorkspaceForm
+            projectId={project.data.id}
+            projectSlug={project.data.slug}
+            onCancel={onCancel}
+          />
+        )}
+      />
     </>
   );
 }

@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { chooseAgentCreation } from '@/client/features/agents/agent-menu.test-support';
 import { actFlushSync } from '@/test-utils/react-act';
 import { MobileAgentsFixture } from './mobile-agents-fixture';
 
@@ -60,11 +61,11 @@ it('creates distinct fresh agents without inheriting the selected agent history 
     throw new Error('Missing Dependencies agent rail link');
   }
   actFlushSync(() => dependenciesLink.click());
-  expect(container.querySelector('h2')?.textContent).toBe('Keep dependencies current');
+  expect(container.querySelector('main h2')?.textContent).toBe('Keep dependencies current');
   expect(container.querySelector('main')?.textContent).toContain('Paused');
   const createdIds: string[] = [];
   for (const name of ['First new agent', 'Second new agent']) {
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     fill('input[name="name"]', name);
     fill('textarea', 'Review changes');
     await act(() =>
@@ -74,7 +75,7 @@ it('creates distinct fresh agents without inheriting the selected agent history 
     );
     const link = container.querySelector('nav a[aria-current="page"]');
     createdIds.push(link?.getAttribute('href') ?? '');
-    expect(container.querySelector('h2')?.textContent).toBe(name);
+    expect(container.querySelector('main h2')?.textContent).toBe(name);
     expect(container.querySelector('main')?.textContent).toContain('Last run: No runs yet');
     expect(container.querySelector('main')?.textContent).toContain('Active');
     expect(container.querySelector('main')?.textContent).toContain(
@@ -111,7 +112,7 @@ it.each([
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...modifiers }))
   );
   expect(prevented).toBe(false);
-  expect(container.querySelector('h2')?.textContent).toBe('Review recent changes');
+  expect(container.querySelector('main h2')?.textContent).toBe('Review recent changes');
 });
 
 it('keeps the project selector in the navbar and section links in the real mobile sidebar', () => {
@@ -143,7 +144,7 @@ it('uses actual saved detail, editor and blank replacement with explicit fixture
       )
       ?.click()
   );
-  expect(container.querySelector('h2')?.textContent).toBe('Investigate labeled issues');
+  expect(container.querySelector('main h2')?.textContent).toBe('Investigate labeled issues');
   expect(container.querySelector('main')?.textContent).not.toContain('Run history');
   actFlushSync(() => button('Edit agent').click());
   expect(container.querySelector('textarea[aria-label="Instructions"]')).not.toBeNull();

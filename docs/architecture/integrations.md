@@ -250,9 +250,9 @@ does not re-emit reserved runs. The launch/link crash gap remains; there is no
 replay or exactly-once guarantee. Timer events use no second run store, PR
 ledger entry, session queue delivery or receipt protocol.
 
-The mixed Agents page at `/projects/:slug/agents` lists scheduled definitions,
-then saved event definitions with paginated continuation. Scheduled details use
-`/projects/:slug/agents/:id`; saved events use
+The mixed Agents page at `/projects/:slug/agents` groups definitions under
+**Scheduled** and **Event** headings. Event pagination stays in its group.
+Scheduled details use `/projects/:slug/agents/:id`; saved events use
 `/projects/:slug/agents/:id?kind=event`. Both path segments are encoded. Missing
 kind selects scheduled; invalid or duplicate explicit kinds show a bounded link
 error. Owner-less legacy links remain scheduled-only; event links require a
@@ -289,6 +289,15 @@ project.
 Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.
+
+**Create agent** opens the same explicit **Scheduled agent** / **Event agent**
+menu in the header and empty state. Scheduled opens the existing schedule form.
+Event opens a normal workspace composer with instructions to discover sources
+and propose an event configuration for review. Its draft is separate from the
+project's normal/scheduled workspace draft, and its launch mode stays standard.
+The proposal card still requires explicit creation of a paused definition;
+listening and automatic event runs remain unavailable. Archived and unresolved
+selected definitions retain their existing creation restrictions.
 
 Scheduled create/edit use Name, Instructions and Schedule. Creation makes the
 first run due immediately; the existing periodic-task poll admits it, then

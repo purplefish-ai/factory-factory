@@ -15,6 +15,7 @@ import {
   getWorkspaceCreationDraftSnapshot,
   createWorkspaceCreationDraft,
   saveWorkspaceCreationDraft,
+  loadWorkspaceCreationDraft,
 } from './workspace-creation-draft-storage';
 
 describe('InlineWorkspaceForm', () => {
@@ -557,3 +558,50 @@ it('restores periodic schedules and explicit ratchet settings without applying l
   );
   actFlushSync(() => mounted.root.unmount());
 });
+
+it.each(['STANDARD', 'PERIODIC_TASK'] as const)(
+  'isolates seeded event authoring from a saved %s draft and keeps user edits',
+  async (mode) => {
+    const projectId = getTestProjectId();
+    const normal = {
+      ...createWorkspaceCreationDraft(),
+      prompt: 'Keep scheduled instructions',
+      ratchetInitialized: true,
+      mode,
+    };
+    await act(() => saveWorkspaceCreationDraft(projectId, normal).catch(() => undefined));
+    await act(() => loadWorkspaceCreationDraft(`event-agent:${projectId}`).catch(() => undefined));
+    const { container, root, onCancel, onCreated } = renderForm(projectId);
+    const props = {
+      key: 'event-authoring',
+      projectId,
+      existingNames: [],
+      onCancel,
+      onCreated,
+      purpose: 'event-agent' as const,
+    };
+    actFlushSync(() => root.render(createFormElement(props)));
+    const textarea = container.querySelector('textarea')!;
+    expect(textarea.value).toContain('propose_agent');
+    expect(container.querySelector('[aria-label="Choose launch mode"]')).toBeNull();
+    expect(getWorkspaceCreationDraftSnapshot(projectId).draft).toEqual(normal);
+    actFlushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+        textarea,
+        'Propose my edited event'
+      );
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    actFlushSync(() => root.render(createFormElement(props)));
+    expect(textarea.value).toBe('Propose my edited event');
+    const launch = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    actFlushSync(() => launch?.click());
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId, initialPrompt: 'Propose my edited event' })
+    );
+    expect(mocks.createPeriodicTaskMutateMock).not.toHaveBeenCalled();
+    expect(getWorkspaceCreationDraftSnapshot(projectId).draft).toEqual(normal);
+  }
+);

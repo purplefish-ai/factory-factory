@@ -11,8 +11,11 @@ import {
 } from './workspace-creation-draft-storage';
 
 type DraftPatch = Partial<Omit<WorkspaceCreationDraft, 'schemaVersion' | 'revision'>>;
-export function useWorkspaceCreationDraft(projectId: string, enabled = true) {
-  const [emptyDraft] = useState(createWorkspaceCreationDraft);
+export function useWorkspaceCreationDraft(projectId: string, enabled = true, initialPrompt = '') {
+  const [emptyDraft] = useState(() => ({
+    ...createWorkspaceCreationDraft(),
+    prompt: initialPrompt,
+  }));
   const subscribe = useCallback(
     (listener: () => void) =>
       enabled ? subscribeWorkspaceCreationDraft(projectId, listener) : () => undefined,

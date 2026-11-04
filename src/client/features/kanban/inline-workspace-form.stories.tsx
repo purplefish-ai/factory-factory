@@ -184,6 +184,7 @@ function WorkspaceCreationPreviewSession({
   creationError,
   creationPending = false,
   imageDrop = false,
+  purpose,
 }: {
   provider?: ChatProvider;
   loading?: boolean;
@@ -194,6 +195,7 @@ function WorkspaceCreationPreviewSession({
   creationError?: string;
   creationPending?: boolean;
   imageDrop?: boolean;
+  purpose?: 'event-agent';
 }) {
   const [open, setOpen] = useState(!startCollapsed);
   const [queryClient] = useState(
@@ -216,6 +218,7 @@ function WorkspaceCreationPreviewSession({
           {creationPending && <h3 className="font-semibold text-sm mb-3">To Do</h3>}
           {open ? (
             <InlineWorkspaceForm
+              purpose={purpose}
               projectId={projectId}
               existingNames={[]}
               onCreated={() => {
@@ -262,6 +265,7 @@ function WorkspaceCreationPreview(props: {
   creationError?: string;
   creationPending?: boolean;
   imageDrop?: boolean;
+  purpose?: 'event-agent';
 }) {
   const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}:${Boolean(props.imageDrop)}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
@@ -561,5 +565,21 @@ export const CancelRestoredDraft: Story = {
       expect(within(settings).getByRole('button', { name: 'Planning: Off' })).toBeVisible()
     );
     await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
+  },
+};
+
+export const EventAuthoring: Story = {
+  args: { purpose: 'event-agent', projectId: 'preview-event-authoring' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const instructions = await canvas.findByRole('textbox');
+    await expect(instructions).toHaveProperty('value', expect.stringContaining('propose_agent'));
+    await waitFor(() => expect(instructions).toBeEnabled());
+    await expect(
+      canvas.queryByRole('button', { name: 'Choose launch mode' })
+    ).not.toBeInTheDocument();
+    await userEvent.clear(instructions);
+    await userEvent.type(instructions, 'Propose an event agent to review labeled issues.');
+    await expect(instructions).toHaveValue('Propose an event agent to review labeled issues.');
   },
 };

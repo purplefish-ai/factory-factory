@@ -133,6 +133,10 @@
       "disposition": "test-support",
       "reason": "Streaming Markdown samples consumed only by streamdown-markdown.stories.tsx and streamdown-markdown.bench.tsx."
     },
+    "src/client/features/agents/agent-menu.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "Shared Agents creation-menu interactions and injected cancel control used only by regression tests."
+    },
     "src/client/features/agents/event-dashboard-story.tsx": {
       "disposition": "test-support",
       "reason": "Storybook event-dashboard fixtures consume this shared scenario implementation."

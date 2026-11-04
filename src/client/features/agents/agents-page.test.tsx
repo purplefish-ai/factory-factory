@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
+import { chooseAgentCreation, renderEventCreationCancel } from './agent-menu.test-support';
 import { AgentsPage } from './agents-page';
 import type { Agent } from './types';
 
@@ -45,7 +46,6 @@ vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
     };
   },
 }));
-
 const task: Agent = {
   id: 'agent',
   projectId: 'owner',
@@ -223,7 +223,11 @@ function ScopedPage() {
   return (
     <>
       <ProjectHeaderNavigation project={project} />
-      <AgentsPage key={project.id} project={project} />
+      <AgentsPage
+        key={project.id}
+        project={project}
+        renderEventCreation={renderEventCreationCancel}
+      />
     </>
   );
 }
@@ -367,13 +371,13 @@ describe('AgentsPage coordination', () => {
     failQuery = null;
     actFlushSync(() => button('Retry agent').click());
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
   });
   it('retains cached detail and history after a network poll failure and retries the task', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     await waitForReact(() =>
       expect(
@@ -385,7 +389,7 @@ describe('AgentsPage coordination', () => {
       await queryClient.invalidateQueries();
     });
     await waitForReact(() => expect(container.textContent).toContain('Connection unavailable'));
-    expect(container.querySelector('h2')?.textContent).toBe('Review changes');
+    expect(container.querySelector('main h2')?.textContent).toBe('Review changes');
     expect(container.querySelector('main')?.textContent).toContain('Find bugs');
     expect(
       container.querySelector('a[href="/projects/owner-slug/workspaces/archived-workspace"]')
@@ -401,7 +405,7 @@ describe('AgentsPage coordination', () => {
   it('shows NOT_FOUND instead of stale cached detail when the definition no longer exists', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     missing = true;
     await act(async () => {
@@ -414,7 +418,7 @@ describe('AgentsPage coordination', () => {
   it('preserves exact unsaved instructions through cached NOT_FOUND, retry, and a failed save', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     actFlushSync(() => button('Edit agent').click());
     const form = container.querySelector('form');
@@ -454,7 +458,7 @@ describe('AgentsPage coordination', () => {
   it('retains edit drafts after failure and polling, then invalidates list and task on success', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     actFlushSync(() => button('Edit agent').click());
     const name = container.querySelector<HTMLInputElement>('input[name="name"]');
@@ -510,7 +514,7 @@ describe('AgentsPage coordination', () => {
   it('shows pause and delete failures while preserving the agent and confirmation', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     failMutation = 'periodicTask.toggleEnabled';
     actFlushSync(() => button('Pause').click());
@@ -540,7 +544,7 @@ describe('AgentsPage coordination', () => {
   it('preserves an edit draft when the background project request fails', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     actFlushSync(() => button('Edit agent').click());
     const originalForm = container.querySelector('form');
@@ -586,9 +590,9 @@ describe('AgentsPage coordination', () => {
     navigation.slug = 'owner-slug';
     render('/projects/owner-slug/agents');
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     actFlushSync(() => {
       const name = container.querySelector('input[name="name"]');
       const instructions = container.querySelector('textarea');
@@ -634,7 +638,7 @@ describe('AgentsPage coordination', () => {
   it('prevents repeated pause requests while pending and refreshes both task and rail afterward', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     let finishMutation: () => void = vi.fn();
     mutationWait = new Promise<void>((resolve) => {
@@ -667,7 +671,7 @@ describe('AgentsPage coordination', () => {
   it('removes a deleted agent from the cached rail without reopening its stale ID', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     let finishList: () => void = vi.fn();
     listWait = new Promise<void>((resolve) => {
@@ -685,16 +689,16 @@ describe('AgentsPage coordination', () => {
   it('leaves Create mode when selecting the current agent in the actual rail', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     const railLink = container.querySelector<HTMLAnchorElement>(
       'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
     );
     actFlushSync(() => railLink?.click());
     expect(container.querySelector('form')).toBeNull();
-    expect(container.querySelector('h2')?.textContent).toBe('Review changes');
+    expect(container.querySelector('main h2')?.textContent).toBe('Review changes');
     expect(railLink?.getAttribute('aria-current')).toBe('page');
     expect(container.querySelector('output')?.textContent).toBe(
       '/projects/owner-slug/agents/agent'
@@ -703,9 +707,9 @@ describe('AgentsPage coordination', () => {
   it('keeps the explicitly reselected agent after an in-flight creation succeeds', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     actFlushSync(() => {
       const name = container.querySelector('input[name="name"]');
       const instructions = container.querySelector('textarea');
@@ -760,9 +764,9 @@ describe('AgentsPage coordination', () => {
     async (modifiers) => {
       render();
       await waitForReact(() =>
-        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+        expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
-      actFlushSync(() => button('Create agent').click());
+      chooseAgentCreation(container);
       const railLink = container.querySelector<HTMLAnchorElement>(
         'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
       );
@@ -789,9 +793,9 @@ describe('AgentsPage coordination', () => {
     navigation.slug = 'owner-slug';
     render('/projects/owner-slug/agents');
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     expect(container.textContent).toContain('first run starts shortly after creation');
     const setters = [
       ['input[name="name"]', 'Daily agent'],
@@ -856,10 +860,10 @@ describe('AgentsPage coordination', () => {
     async (kind) => {
       render();
       await waitForReact(() =>
-        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+        expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
       if (kind === 'create') {
-        actFlushSync(() => button('Create agent').click());
+        chooseAgentCreation(container);
         actFlushSync(() => {
           for (const [selector, value, prototype] of [
             ['input[name="name"]', 'Old lifetime', HTMLInputElement.prototype],
@@ -900,9 +904,9 @@ describe('AgentsPage coordination', () => {
         )
       );
       await waitForReact(() =>
-        expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+        expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
-      actFlushSync(() => button('Create agent').click());
+      chooseAgentCreation(container);
       const form = container.querySelector('form');
       const input = container.querySelector<HTMLInputElement>('input[name="name"]');
       actFlushSync(() => {
@@ -936,7 +940,7 @@ describe('AgentsPage coordination', () => {
   it('keeps B selected after a pending delete from A completes', async () => {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Review changes')
+      expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     let finishMutation: () => void = vi.fn();
     mutationWait = new Promise<void>((resolve) => {
@@ -961,7 +965,7 @@ describe('AgentsPage coordination', () => {
   it('exits Create when explicitly reopening the same idless project index', async () => {
     render('/projects/stale/agents');
     await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     actFlushSync(() => button('Open current index').click());
     await waitForReact(() => expect(container.querySelector('form')).toBeNull());
@@ -970,7 +974,7 @@ describe('AgentsPage coordination', () => {
   it('preserves Create and its draft when polling discovers the first agent in an empty project', async () => {
     render('/projects/stale/agents');
     await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
-    actFlushSync(() => button('Create agent').click());
+    chooseAgentCreation(container);
     const form = container.querySelector('form');
     const input = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {

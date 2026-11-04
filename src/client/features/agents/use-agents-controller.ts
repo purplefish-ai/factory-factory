@@ -26,7 +26,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   }, []);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'detail' | 'create' | 'edit'>(
+  const [mode, setMode] = useState<'detail' | 'create' | 'create-event' | 'edit'>(
     location.state?.createAgent === true ? 'create' : 'detail'
   );
   const currentMode = useRef(mode);
@@ -258,8 +258,14 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       setDeleteOpen(false);
       setActionError(null);
     },
-    startCreate: () => {
+    startCreate: (createKind: AgentKind) => {
       if (createDisabled) {
+        return;
+      }
+      if (createKind === 'event') {
+        setMode('create-event');
+        setDeleteOpen(false);
+        setActionError(null);
         return;
       }
       if (kind === 'event') {

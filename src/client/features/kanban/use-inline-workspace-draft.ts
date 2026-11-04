@@ -7,11 +7,13 @@ import type { WorkspaceCreationDraft } from './workspace-creation-draft-storage'
 /** Bind editor setters to a project, including asynchronous attachment work. */
 export function useInlineWorkspaceDraft(
   projectId: string,
-  defaultRatchetEnabled: boolean | undefined
+  defaultRatchetEnabled: boolean | undefined,
+  draftId = projectId,
+  initialPrompt = ''
 ) {
-  const recovery = useWorkspaceCreationDraft(projectId);
+  const recovery = useWorkspaceCreationDraft(draftId, true, initialPrompt);
   const { draft, updateDraft, hasDraft } = recovery;
-  const { isPending } = useWorkspaceCreationSubmission(projectId);
+  const { isPending } = useWorkspaceCreationSubmission(draftId);
   const ratchetEnabled = draft.ratchetInitialized
     ? draft.ratchetEnabled
     : (defaultRatchetEnabled ?? false);

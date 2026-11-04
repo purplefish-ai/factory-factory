@@ -89,6 +89,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await assertEditorBounds(page);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
     await assertEditorBounds(page);
     const name = page.getByRole('textbox', { name: 'Name', exact: true });
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
@@ -159,5 +160,36 @@ for (const width of [768, 810, 1024, 1280]) {
     await expect(replacement).toHaveValue('{"name":"Keep entire replacement draft"}');
     await assertEditorBounds(page);
     await page.screenshot({ path: test.info().outputPath(`event-replacement-${width}.png`) });
+  });
+}
+
+for (const width of [320, 390, 1280]) {
+  test(`Agents creation menu makes kind explicit at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/__mobile-baseline?surface=agents');
+    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+    await expect(
+      page.getByRole('menuitem', { name: 'Scheduled agent', exact: true })
+    ).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Event agent', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Create event agent', exact: true })
+    ).toBeVisible();
+    await expect(page.locator('main')).toContainText('paused');
+    await expect(page.locator('main')).toContainText('not yet available');
+    const prompt = page.locator('main textarea');
+    await expect(prompt).toHaveValue(/propose_agent/);
+    await prompt.fill('Propose my event agent');
+    await page.setViewportSize({ width: 1700, height: 900 });
+    await page.setViewportSize({ width, height: 900 });
+    await expect(prompt).toHaveValue('Propose my event agent');
+    await expect(page.getByRole('button', { name: 'Choose launch mode' })).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+    ).toBeLessThanOrEqual(1);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Review recent changes', exact: true })
+    ).toBeVisible();
   });
 }
