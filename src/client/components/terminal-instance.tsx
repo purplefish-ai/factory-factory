@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useAppearance } from '@/client/components/appearance-provider';
 import { WORKSPACE_DRAWER_BREAKPOINT } from '@/client/hooks/use-workspace-drawer';
 import { scaledTerminalFontSize } from '@/shared/appearance';
+import { readTerminalTheme } from './terminal-theme';
 
 const MANUAL_FOCUS_MEDIA_QUERY = `(max-width: ${WORKSPACE_DRAWER_BREAKPOINT - 1}px), (any-pointer: coarse)`;
 
@@ -71,29 +72,8 @@ export function TerminalInstance({
       cursorBlink: true,
       fontSize: initialFontOptionsRef.current.fontSize,
       fontFamily: initialFontOptionsRef.current.fontFamily,
-      theme: {
-        background: '#18181b', // zinc-900
-        foreground: '#fafafa', // zinc-50
-        cursor: '#fafafa',
-        cursorAccent: '#18181b',
-        selectionBackground: '#3f3f46', // zinc-700
-        black: '#18181b',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#fafafa',
-        brightBlack: '#71717a',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#facc15',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#c084fc',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff',
-      },
+      theme: readTerminalTheme(),
+      minimumContrastRatio: 4.5,
     });
 
     const fitAddon = new FitAddon();
@@ -107,6 +87,19 @@ export function TerminalInstance({
 
     // Store refs
     terminalRef.current = terminal;
+    // Appearance preferences and next-themes update these root attributes.
+    // Updating xterm options preserves the buffer, selection and PTY session.
+    const updateTheme = () => {
+      terminal.options.theme = readTerminalTheme();
+      terminal.options.minimumContrastRatio =
+        document.documentElement.getAttribute('data-color-scheme') === 'high-contrast' ? 7 : 4.5;
+    };
+    const themeObserver = new MutationObserver(updateTheme);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-color-scheme'],
+    });
+    updateTheme();
     fitAddonRef.current = fitAddon;
 
     // Report initial size via ref to get latest callback
@@ -136,6 +129,7 @@ export function TerminalInstance({
 
     // Cleanup on unmount
     return () => {
+      themeObserver.disconnect();
       resizeObserver.disconnect();
       resizeObserverRef.current = null;
       terminal.dispose();

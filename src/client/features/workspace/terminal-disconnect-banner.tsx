@@ -1,5 +1,5 @@
 interface TerminalDisconnectBannerProps {
-  /** The transport stopped retrying; offer a manual reconnect. */
+  /** Announces dropped input while disconnected, using the active theme's warning colors. */
   gaveUp: boolean;
   onReconnect: () => void;
 }
@@ -15,7 +15,7 @@ interface TerminalDisconnectBannerProps {
  */
 export function TerminalDisconnectBanner({ gaveUp, onReconnect }: TerminalDisconnectBannerProps) {
   return (
-    <div className="dark border-b border-warning/30 bg-background">
+    <div className="border-b border-warning/30 bg-background">
       <div className="flex items-center justify-between gap-2 bg-warning/10 px-3 py-1.5">
         {/* <output> is a polite status region, so the gap is announced. */}
         <output className="text-xs text-warning">

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
@@ -118,3 +118,18 @@ export const UnknownRetryAuthority: Story = {
 };
 
 export const ArchivingDark: Story = { ...Archiving, globals: { theme: 'dark' } };
+
+export const ScriptOutputLight: Story = {
+  ...ScriptFailedLongMessage,
+  globals: { theme: 'light' },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show output' }));
+    await expect(within(canvasElement).getByText(/Installing dependencies/)).toBeVisible();
+  },
+};
+
+export const ScriptOutputDark: Story = { ...ScriptOutputLight, globals: { theme: 'dark' } };
+export const ScriptOutputHighContrast: Story = {
+  ...ScriptOutputLight,
+  globals: { theme: 'dark', colorScheme: 'high-contrast' },
+};
