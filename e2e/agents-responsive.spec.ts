@@ -14,6 +14,9 @@ async function assertEditorBounds(page: Page) {
     throw new Error('Missing Agents panels');
   }
   expect(editor.y).toBeGreaterThanOrEqual(rail.y + rail.height - 1);
+  expect(rail.width).toBeGreaterThan(0);
+  expect(rail.height).toBeGreaterThan(0);
+  expect(editor.height).toBeGreaterThan(0);
   expect(editor.width).toBeGreaterThanOrEqual(400);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)

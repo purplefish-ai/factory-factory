@@ -65,7 +65,7 @@ it('creates distinct fresh agents without inheriting the selected agent history 
   expect(container.querySelector('main')?.textContent).toContain('Paused');
   const createdIds: string[] = [];
   for (const name of ['First new agent', 'Second new agent']) {
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     fill('input[name="name"]', name);
     fill('textarea', 'Review changes');
     await act(() =>

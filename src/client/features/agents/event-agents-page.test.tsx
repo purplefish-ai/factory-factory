@@ -901,7 +901,7 @@ it('consumes event-to-scheduled create intent after success so Back does not reo
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  chooseAgentCreation(container);
+  await chooseAgentCreation(container);
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe('Create agent')
   );
@@ -926,7 +926,7 @@ it('opens conversational event creation explicitly and cancels back to the selec
   await waitForReact(() =>
     expect(container.querySelector('main')?.textContent).toContain(saved.name)
   );
-  chooseAgentCreation(container, 'event');
+  await chooseAgentCreation(container, 'event');
   expect(container.querySelector('main')?.textContent).toContain('Create event agent');
   expect(container.querySelector('main')?.textContent).toContain('paused');
   expect(container.querySelector('main')?.textContent).toContain('not yet available');
@@ -939,4 +939,43 @@ it('opens conversational event creation explicitly and cancels back to the selec
       '?kind=event'
     )
   );
+});
+
+it('reveals the phone creation form after an event-to-scheduled keyed remount', async () => {
+  const originalStyle = window.getComputedStyle.bind(window);
+  const style = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+    const result = originalStyle(element, pseudo);
+    if (element.parentElement?.classList.contains('@container/agents')) {
+      result.flexDirection = 'column';
+    }
+    return result;
+  });
+  const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scroll,
+  });
+  try {
+    await render();
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+    );
+    const before = container.querySelector('main');
+    await chooseAgentCreation(container);
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe('Create agent')
+    );
+    const editor = container.querySelector('main');
+    expect(editor).not.toBe(before);
+    await waitForReact(() => expect(scroll.mock.contexts).toContain(editor));
+    expect(document.activeElement).toBe(container.querySelector('input[name="name"]'));
+  } finally {
+    style.mockRestore();
+    if (originalScroll) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  }
 });

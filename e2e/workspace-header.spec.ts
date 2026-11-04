@@ -231,7 +231,12 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     await page.getByRole('button', { name: /Pull requests and updates/ }).click();
     await expect(page.getByRole('menuitem', { name: /Compact workspace header/ })).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { includeHidden: true })).toHaveCount(0);
     if (width < 1152) {
+      const createPrIsInline = await page
+        .locator('header')
+        .getByRole('button', { name: 'Create PR', exact: true })
+        .isVisible();
       await page.getByRole('button', { name: 'More actions' }).click();
       for (const name of [
         'View details',
@@ -240,11 +245,15 @@ for (const width of [375, 768, 810, 1024, 1280]) {
         'Open in VS Code',
         'Open dev app',
         'Open branch on GitHub',
-        'Create PR',
         '#3456',
         'Archive workspace',
       ]) {
         await expect(page.getByRole('menuitem', { name, exact: true })).toBeVisible();
+      }
+      const createPrInMenu = page.getByRole('menuitem', { name: 'Create PR', exact: true });
+      await expect(createPrInMenu).toHaveCount(createPrIsInline ? 0 : 1);
+      if (!createPrIsInline) {
+        await expect(createPrInMenu).toBeVisible();
       }
       await page.getByRole('menuitem', { name: 'View details', exact: true }).click();
       await expect(
@@ -272,7 +281,7 @@ for (const width of [375, 768, 810, 1024, 1280]) {
       await expect(page.getByRole('menu')).toBeHidden();
       await page.getByRole('button', { name: 'More actions' }).click();
       await page.getByRole('menuitem', { name: 'Provider settings', exact: true }).click();
-      const settings = page.getByRole('dialog', { name: 'Session Provider Defaults', exact: true });
+      const settings = page.getByRole('dialog', { name: 'Session provider defaults', exact: true });
       await expect(settings).toBeVisible();
       await settings.getByRole('button', { name: 'Close', exact: true }).click();
       await expect(settings).toBeHidden();

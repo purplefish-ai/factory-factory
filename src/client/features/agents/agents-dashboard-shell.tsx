@@ -33,6 +33,7 @@ export interface AgentsDashboardShellProps {
   projectSlug: string;
   agents?: RailAgent[];
   selectedAgentId?: string;
+  revealEditorOnMount?: boolean;
   selectedKind?: 'scheduled' | 'event';
   continuation?: ReactNode;
   isLoading?: boolean;
@@ -125,6 +126,7 @@ function AgentRailItem({
   return (
     <Link
       to={getProjectAgentPath(projectSlug, agent.id, agent.kind)}
+      state={{ revealAgentEditor: true }}
       onClick={(event) => selectFromLink(event, agent.id, onAgentSelect)}
       aria-current={selected ? 'page' : undefined}
       className={cn(
@@ -164,6 +166,7 @@ export function AgentsDashboardShell({
   agents,
   selectedAgentId,
   selectedKind = 'scheduled',
+  revealEditorOnMount = false,
   continuation,
   isLoading,
   error,
@@ -175,14 +178,23 @@ export function AgentsDashboardShell({
 }: AgentsDashboardShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLElement>(null);
-  const [revealRequest, setRevealRequest] = useState(0);
+  const [revealRequest, setRevealRequest] = useState(revealEditorOnMount ? 1 : 0);
+  const handledReveal = useRef(0);
   const previousSelection = useRef(selectedAgentId);
   useLayoutEffect(() => {
     const changed = previousSelection.current !== selectedAgentId;
     previousSelection.current = selectedAgentId;
-    if (!((revealRequest || changed) && contentRef.current && editorRef.current)) {
+    if (
+      !(
+        (revealRequest > handledReveal.current || changed) &&
+        !isLoading &&
+        contentRef.current &&
+        editorRef.current
+      )
+    ) {
       return;
     }
+    handledReveal.current = revealRequest;
     if (getComputedStyle(contentRef.current).flexDirection !== 'column') {
       return;
     }
@@ -190,7 +202,7 @@ export function AgentsDashboardShell({
       editorRef.current.focus({ preventScroll: true });
     }
     editorRef.current.scrollIntoView({ block: 'start', behavior: 'auto' });
-  }, [revealRequest, selectedAgentId]);
+  }, [revealRequest, selectedAgentId, isLoading]);
   const selectAgent = (id: string) => {
     onAgentSelect?.(id);
     setRevealRequest((request) => request + 1);

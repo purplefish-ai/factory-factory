@@ -592,7 +592,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     actFlushSync(() => {
       const name = container.querySelector('input[name="name"]');
       const instructions = container.querySelector('textarea');
@@ -691,7 +691,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     const railLink = container.querySelector<HTMLAnchorElement>(
       'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
@@ -709,7 +709,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     actFlushSync(() => {
       const name = container.querySelector('input[name="name"]');
       const instructions = container.querySelector('textarea');
@@ -766,7 +766,7 @@ describe('AgentsPage coordination', () => {
       await waitForReact(() =>
         expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
-      chooseAgentCreation(container);
+      await chooseAgentCreation(container);
       const railLink = container.querySelector<HTMLAnchorElement>(
         'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
       );
@@ -795,7 +795,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     expect(container.textContent).toContain('first run starts shortly after creation');
     const setters = [
       ['input[name="name"]', 'Daily agent'],
@@ -863,7 +863,7 @@ describe('AgentsPage coordination', () => {
         expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
       if (kind === 'create') {
-        chooseAgentCreation(container);
+        await chooseAgentCreation(container);
         actFlushSync(() => {
           for (const [selector, value, prototype] of [
             ['input[name="name"]', 'Old lifetime', HTMLInputElement.prototype],
@@ -906,7 +906,7 @@ describe('AgentsPage coordination', () => {
       await waitForReact(() =>
         expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
       );
-      chooseAgentCreation(container);
+      await chooseAgentCreation(container);
       const form = container.querySelector('form');
       const input = container.querySelector<HTMLInputElement>('input[name="name"]');
       actFlushSync(() => {
@@ -965,7 +965,7 @@ describe('AgentsPage coordination', () => {
   it('exits Create when explicitly reopening the same idless project index', async () => {
     render('/projects/stale/agents');
     await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     actFlushSync(() => button('Open current index').click());
     await waitForReact(() => expect(container.querySelector('form')).toBeNull());
@@ -974,7 +974,7 @@ describe('AgentsPage coordination', () => {
   it('preserves Create and its draft when polling discovers the first agent in an empty project', async () => {
     render('/projects/stale/agents');
     await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
-    chooseAgentCreation(container);
+    await chooseAgentCreation(container);
     const form = container.querySelector('form');
     const input = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {
@@ -997,4 +997,30 @@ describe('AgentsPage coordination', () => {
     );
     expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents');
   });
+});
+
+it('retains phone editor reveal across the production keyed route navigation', async () => {
+  const originalStyle = window.getComputedStyle.bind(window);
+  const style = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+    const result = originalStyle(element, pseudo);
+    if (element.parentElement?.classList.contains('@container/agents')) {
+      result.flexDirection = 'column';
+    }
+    return result;
+  });
+  try {
+    render();
+    await waitForReact(() =>
+      expect(container.querySelector('nav[aria-label="Agents"] a')).not.toBeNull()
+    );
+    const before = container.querySelector('main');
+    actFlushSync(() =>
+      container.querySelector<HTMLAnchorElement>('nav[aria-label="Agents"] a')!.click()
+    );
+    await waitForReact(() => expect(container.querySelector('main')).not.toBe(before));
+    await waitForReact(() => expect(document.activeElement).toBe(container.querySelector('main')));
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+  } finally {
+    style.mockRestore();
+  }
 });
