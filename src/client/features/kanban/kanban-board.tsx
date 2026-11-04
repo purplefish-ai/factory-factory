@@ -37,6 +37,23 @@ export function KanbanBoard() {
 }
 
 /**
+ * The first mobile tab once data loads. A New Workspace request made while the
+ * board was still loading keeps the form's Todo tab instead of being replaced.
+ */
+function pickInitialMobileColumn(
+  workspacesByColumn: WorkspacesByColumn,
+  showInlineForm: boolean
+): string {
+  if (showInlineForm) {
+    return 'ISSUES';
+  }
+  if (workspacesByColumn.WAITING.length > 0) {
+    return 'WAITING';
+  }
+  return workspacesByColumn.WORKING.length > 0 ? 'WORKING' : 'ISSUES';
+}
+
+/**
  * On mobile the inline form lives in the Todo tab. Switch to it when the form
  * opens, and again on every header "New Workspace" request: the button can be
  * pressed while the form is already open behind another tab.
@@ -168,15 +185,8 @@ function KanbanBoardContent() {
       return;
     }
     hasPickedInitialTab.current = true;
-
-    if (workspacesByColumn.WAITING.length > 0) {
-      setActiveColumnId('WAITING');
-    } else if (workspacesByColumn.WORKING.length > 0) {
-      setActiveColumnId('WORKING');
-    } else {
-      setActiveColumnId('ISSUES');
-    }
-  }, [workspaces, workspacesByColumn]);
+    setActiveColumnId(pickInitialMobileColumn(workspacesByColumn, showInlineForm));
+  }, [workspaces, workspacesByColumn, showInlineForm]);
 
   const getColumnCount = (columnId: string) => {
     if (columnId === 'ISSUES') {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import WorkspacesListPage from './list';
 import NewWorkspaceRedirectPage from './new';
@@ -54,6 +54,15 @@ function Location() {
   );
 }
 
+function BackButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => void navigate(-1)}>
+      Back
+    </button>
+  );
+}
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -71,11 +80,16 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+// The retired URL is opened from another page so Back shows whether the
+// redirect and the request cleanup replaced history entries or pushed them.
+const PREVIOUS_PAGE = '/projects/alpha/agents';
+
 async function renderAt(path: string, withBoard: boolean) {
   await act(() =>
     root.render(
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[PREVIOUS_PAGE, path]} initialIndex={1}>
         <Location />
+        <BackButton />
         <Routes>
           <Route path="/projects/:slug/workspaces">
             <Route index element={withBoard ? <WorkspacesListPage /> : null} />
@@ -102,3 +116,16 @@ it('opens the board form for an old link and then drops the one-shot request', a
   expect(mocks.boardProps).toContainEqual({ slug: 'alpha', openNewWorkspaceForm: true });
   expect(mocks.boardProps.at(-1)).toEqual({ slug: 'alpha', openNewWorkspaceForm: false });
 });
+
+async function goBack() {
+  await act(() => container.querySelector<HTMLButtonElement>('button')?.click());
+  return container.querySelector('output')?.textContent;
+}
+
+it.each([false, true])(
+  'replaces the retired URL so Back returns to the previous page (board=%s)',
+  async (withBoard) => {
+    await renderAt('/projects/alpha/workspaces/new', withBoard);
+    await expect(goBack()).resolves.toBe(PREVIOUS_PAGE);
+  }
+);

@@ -45,7 +45,7 @@ export const Mobile: Story = {
   globals: { viewport: { value: 'mobile1', isRotated: false } },
   play: async ({ canvasElement, args }) => {
     const button = within(canvasElement).getByRole('button', { name: 'New Workspace' });
-    await expect(button).toHaveTextContent('');
+    await expect(button).toHaveTextContent(/^\s*$/);
     await userEvent.click(button);
     await expect(args.onNewWorkspace).toHaveBeenCalledOnce();
   },

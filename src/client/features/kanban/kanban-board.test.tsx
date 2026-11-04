@@ -349,6 +349,19 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('input')).not.toBeNull();
   });
 
+  it('keeps a mobile New Workspace request made before workspaces load', () => {
+    const loaded = mocks.workspaces;
+    mocks.workspaces = undefined as unknown as WorkspaceWithKanban[];
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
+    expect(container.querySelector('input')).not.toBeNull();
+    // Loaded data includes a Waiting workspace, which would normally be the first tab.
+    mocks.workspaces = loaded;
+    act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('[data-column="WAITING"]')).toBeNull();
+  });
+
   it('renders Git index-lock recovery on mobile', () => {
     void act(() => {
       root.render(createElement(BoardWithHeader));
