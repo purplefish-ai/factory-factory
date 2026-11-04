@@ -176,20 +176,18 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
 
 function LogsResults({
   hasData,
-  isLoading,
   error,
   onRetry,
   isRetrying,
   children,
 }: {
   hasData: boolean;
-  isLoading: boolean;
   error: { message: string } | null;
   onRetry: () => void;
   isRetrying: boolean;
   children: ReactNode;
 }) {
-  if (!hasData && isLoading) {
+  if (!(hasData || error)) {
     return <Loading size="compact" message="Loading logs…" />;
   }
   if (!hasData && error) {
@@ -273,7 +271,7 @@ export default function LogsPage() {
 
   const { since, until } = computeTimeRange(timeRange, sinceDate, untilDate, relativeMinute);
 
-  const { data, isLoading, error, refetch, isFetching } = trpc.admin.getLogs.useQuery(
+  const { data, error, refetch, isFetching } = trpc.admin.getLogs.useQuery(
     {
       search: debouncedSearch || undefined,
       level: level === 'all' ? undefined : level,
@@ -407,7 +405,6 @@ export default function LogsPage() {
 
           <LogsResults
             hasData={Boolean(data)}
-            isLoading={isLoading}
             error={error}
             onRetry={() => void refetch()}
             isRetrying={isFetching}

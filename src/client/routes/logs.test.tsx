@@ -149,3 +149,17 @@ it.each([false, true])('keeps settings navigation available while loading=%s', (
   expect(navigation?.querySelector('a[aria-current="page"]')?.textContent).toBe('Server logs');
   expect(navigation?.querySelector('a[href="/admin/appearance"]')).not.toBeNull();
 });
+
+it.each([false, true])('shows loading for unresolved logs when isLoading=%s', (isLoading) => {
+  mocks.query.mockReturnValue({ data: undefined, isLoading, error: null });
+  void act(() =>
+    root.render(
+      <MemoryRouter initialEntries={['/admin/logs']}>
+        <LogsPage />
+      </MemoryRouter>
+    )
+  );
+  expect(container.textContent).toContain('Loading logs…');
+  expect(container.textContent).not.toContain('0 entries');
+  expect(container.querySelector('table')).toBeNull();
+});
