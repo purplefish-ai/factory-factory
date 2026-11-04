@@ -8,19 +8,76 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-04
+
 ### Added
 
 - Open agent localhost links and the Run button from other devices under
-  `ff tailscale` by sharing the port through Tailscale Serve
+  `ff tailscale` by sharing the port through Tailscale Serve (#2924)
+- Show dismissible release notices with supervised CLI updates, restart, and
+  recovery controls (#2972, #2976)
+- Guide `ff serve` users through missing prerequisites and offer fixes that
+  require explicit acceptance (#2973, #2975)
+- Add native desktop menus and restore window preferences (#2987)
+- Add searchable commands, centralized keyboard shortcuts, accessible tab
+  navigation, and a keyboard toggle for native planning modes (#2964, #2989)
+- Add opt-in workspace completion notifications, per-session needs-input
+  indicators, and workspace unread inbox counts across navigation (#2965, #2967,
+  #2990)
+- Rename chats inline, improve composer and setup access, and load older chat
+  history when scrolling up (#2988, #2992)
+- Recover periodic task configuration, workspace links, execution history, and
+  automation definition bodies while keeping recovered scheduling and
+  definitions disabled and historical runs inert (#2929, #2931, #2932, #2933)
+- Make the ticket dispatch prompt configurable in Settings (#2974)
 
 ### Changed
 
 - `ff tailscale` no longer starts public cloudflared tunnels for run scripts
+  (#2924)
+- Smooth streamed Markdown with Streamdown and animate workspace tools and side
+  panels (#2909, #2921)
+- Unify sidebar and Board navigation, simplify workspace headers and quick
+  actions, keep the IDE action in the overflow menu, and remove board sort and
+  workspace selection controls (#2948, #2977, #2982, #2985, #2995, #2998)
+- Group Settings into URL-addressable sections, scope project configuration,
+  improve first-run setup and project navigation recovery, and group scheduled
+  and event agent navigation (#2981, #2983, #2984)
+- Apply shared appearance and status tokens across PR, CI, review, Markdown,
+  Mermaid, terminal, and setup-log surfaces; improve touch targets, accessible
+  status indicators, and offline fonts (#2947, #2949, #2951, #2977, #2978,
+  #2979, #2980, #2986)
+- Standardize loading, empty, error, pending-action, and date displays, surface
+  failed queries and mutations, and clarify autosave and destructive-action
+  feedback (#2946, #2966, #2968, #2969, #2970)
+- Align server logs with Settings and hide the sidebar Todo section when no
+  assigned issues are available (#2996, #2999)
+- Unify PR polling policy and CLI child supervision with bounded shutdown; make
+  `ff build` use the canonical production pipeline and separate checkout Prisma
+  generation from packaged installation (#2902, #2911, #2912, #2917)
+- Add staged unused-code and production reachability checks, organize Storybook
+  titles, and render every Storybook story in CI (#2922, #2925, #2944, #2950)
 
 ### Fixed
 
 - Withhold remote localhost links when port-sharing status fails, including
-  failed refreshes with cached status (#2955)
+  failed refreshes with cached status (#2955, #2961)
+- Fix image attachments while agents are working, composer scroll jumps, and
+  scrolling to the latest message after sending (#2903, #2956, #2971)
+- Pin agent errors above the composer with recovery actions and guard
+  one-keystroke approvals and running-session closes (#2945, #2957)
+- Fix phone workspace context and scrolling on Agents pages (#2991)
+- Open external Electron links in the system browser, keep PWA overlays below
+  native window controls, and restore themes correctly after refresh (#2915,
+  #2930, #2942)
+- Fix primary button hover contrast in chat and calendars (#2997)
+- Preserve SQL and JSON nulls in workspace, PR, and session metadata, and accept
+  compatible Claude workspace metadata schemas (#2900, #2923, #2926)
+- Fix Prisma Studio database selection and launch failures (#2904)
+- Recover disconnected Slack connection metadata and wrap long workspace
+  identities (#2943, #2960)
+- Honor workspace permissions for event agents and fix GitHub event intake after
+  resumed capture overlap shifts (#2962, #2963)
 
 ## [0.5.3] - 2026-11-03
 
