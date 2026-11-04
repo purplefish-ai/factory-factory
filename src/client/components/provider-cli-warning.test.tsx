@@ -12,7 +12,12 @@ const state = vi.hoisted(() => ({
   accountQuery: vi.fn(),
   health: {
     claude: { isInstalled: true, isAuthenticated: true, isOutdated: false },
-    codex: { isInstalled: true, isAuthenticated: true, isOutdated: true },
+    codex: {
+      isInstalled: true,
+      isAuthenticated: true,
+      isOutdated: true,
+      error: undefined as string | undefined,
+    },
   },
 }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -36,7 +41,12 @@ vi.mock('@/client/lib/trpc', () => ({
 beforeEach(() => {
   state.accounts = [];
   state.health.claude = { isInstalled: true, isAuthenticated: true, isOutdated: false };
-  state.health.codex = { isInstalled: true, isAuthenticated: true, isOutdated: true };
+  state.health.codex = {
+    isInstalled: true,
+    isAuthenticated: true,
+    isOutdated: true,
+    error: undefined,
+  };
 });
 
 describe('ProviderCliWarning', () => {
@@ -128,4 +138,13 @@ it('warns for a signed-out managed selection even when the native profile is aut
   );
   expect(state.accountQuery).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true }));
   expect(markup).toContain('Sign in to this account from Settings');
+});
+
+it('shows server retry guidance instead of repair advice when a runtime check fails', () => {
+  state.health.codex.isInstalled = false;
+  state.health.codex.error =
+    'Please try again in a few moments. If this continues, try restarting Factory Factory.';
+  const markup = renderToStaticMarkup(<ProviderCliWarning provider="CODEX" />);
+  expect(markup).toContain('Please try again in a few moments');
+  expect(markup).not.toContain('reinstall');
 });

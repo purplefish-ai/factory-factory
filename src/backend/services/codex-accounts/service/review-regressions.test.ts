@@ -446,3 +446,33 @@ it('reports unavailable capacity after removing overlapping native quota when an
     'Codex provider is unavailable. Please try again in a few moments.'
   );
 });
+
+it('ignores a failed overlapping native probe when managed quota is confirmed exhausted', async () => {
+  const { service, probe, makeObservation, native } = await setup();
+  await service.createAccount('Bound');
+  probe.mockImplementation((context) =>
+    Promise.resolve({
+      ...makeObservation(context.accountId),
+      email: 'same@example.com',
+      scopeVerified: context.homeDir !== native,
+      usage: {
+        ...makeObservation(context.accountId).usage,
+        windows: [{ id: 'codex:primary', label: 'Global', usedPercent: 100, resetsAt: null }],
+      },
+    })
+  );
+  await service.getAccounts();
+  const read = probe.getMockImplementation()!;
+  probe.mockImplementation((context) =>
+    context.homeDir === native ? Promise.reject(new Error('native probe failed')) : read(context)
+  );
+  const now = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 31_000);
+  try {
+    await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(
+      'remaining capacity'
+    );
+  } finally {
+    clock.mockRestore();
+  }
+});

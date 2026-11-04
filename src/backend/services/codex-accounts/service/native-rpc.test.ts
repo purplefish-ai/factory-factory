@@ -57,9 +57,7 @@ it('sanitizes native process errors and cleans up cancellation', async () => {
   const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), {
     signal: controller.signal,
   });
-  const rejected = expect(result).rejects.toThrow(
-    'Codex provider is unavailable. Please try again in a few moments.'
-  );
+  const rejected = expect(result).rejects.toThrow('Codex native account operation cancelled');
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
   expect(child.stderr.listenerCount('error')).toBeGreaterThan(0);
   child.stderr.write('private credential');

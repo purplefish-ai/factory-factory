@@ -29,6 +29,8 @@ import type {
   NativeLogin,
 } from './types';
 
+class CodexAccountIdentityError extends Error {}
+
 const logger = createLogger('codex-accounts');
 const labelSchema = z.string().trim().min(1).max(100);
 const updateSchema = z.object({ label: labelSchema.optional(), enabled: z.boolean().optional() });
@@ -201,7 +203,9 @@ export class CodexAccountService {
     // Callers may hold a row object that is updated in place; pin the key read now.
     const pinned = row.identityKey;
     if (row.kind === 'MANAGED' && observation.authenticated && !hasVerifiedScope(observation)) {
-      throw new Error('Codex managed account identity could not be verified');
+      throw new CodexAccountIdentityError(
+        'Codex managed account identity could not be verified; sign in to this account from Settings'
+      );
     }
     const upgrading = this.upgradesNativeEmailFallback(row.kind, pinned, observation, staged);
     if (pinned && observation.identityKey !== pinned && !upgrading) {
@@ -215,7 +219,9 @@ export class CodexAccountService {
         (other) => other.id !== row.id && other.identityKey === observation.identityKey
       );
       if (duplicate) {
-        throw new Error('This Codex account is already connected');
+        throw new CodexAccountIdentityError(
+          'This Codex account is already connected; remove the duplicate account from Settings'
+        );
       }
       if ((!pinned || upgrading) && persist) {
         await this.persistIdentity(row.id, pinned, observation.identityKey, revision);
@@ -254,7 +260,7 @@ export class CodexAccountService {
     );
   }
   private identityChangedError(row: AccountRow): Error {
-    return new Error(
+    return new CodexAccountIdentityError(
       row.kind === 'NATIVE_DEFAULT'
         ? 'Codex native account identity changed; run ff codex login and sign in to the original account to restore existing conversations'
         : 'Codex account identity changed; sign in to the original account'
@@ -371,7 +377,7 @@ export class CodexAccountService {
     model?: string,
     includeExhausted = false,
     reasoningEffort?: string | null
-  ): Promise<AccountCandidate | 'unavailable' | null> {
+  ): Promise<AccountCandidate | CodexAccountIdentityError | 'unavailable' | null> {
     if (!row.enabled || this.logins.isPending(row.id)) {
       return null;
     }
@@ -384,7 +390,7 @@ export class CodexAccountService {
         accountId: row.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      return 'unavailable';
+      return error instanceof CodexAccountIdentityError ? error : 'unavailable';
     }
     if (!observation.authenticated) {
       logger.info('Skipping Codex account: not signed in', { accountId: row.id });
@@ -411,12 +417,11 @@ export class CodexAccountService {
     reasoningEffort?: string | null
   ): Promise<AccountCandidate[]> {
     const rows = await this.dependencies.store.list();
-    const readings = await Promise.all(
-      rows.map((row) => this.candidate(row, model, includeExhausted, reasoningEffort))
-    );
-    let candidates = readings.filter(
-      (candidate): candidate is AccountCandidate =>
-        candidate !== null && candidate !== 'unavailable'
+    let readings = await Promise.all(
+      rows.map(async (row) => ({
+        accountId: row.id,
+        result: await this.candidate(row, model, includeExhausted, reasoningEffort),
+      }))
     );
     const native = this.identityCache.get(NATIVE_DEFAULT_CODEX_ACCOUNT_ID)?.identity;
     if (
@@ -432,12 +437,28 @@ export class CodexAccountService {
         );
       })
     ) {
-      candidates = candidates.filter(
-        (candidate) => candidate.id !== NATIVE_DEFAULT_CODEX_ACCOUNT_ID
+      readings = readings.filter(
+        (reading) => reading.accountId !== NATIVE_DEFAULT_CODEX_ACCOUNT_ID
       );
     }
-    if (!candidates.length && readings.includes('unavailable')) {
-      throw new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE);
+    const candidates = readings
+      .map((reading) => reading.result)
+      .filter(
+        (result): result is AccountCandidate =>
+          result !== null &&
+          result !== 'unavailable' &&
+          !(result instanceof CodexAccountIdentityError)
+      );
+    if (!candidates.length) {
+      const identityFailure = readings.find(
+        (reading) => reading.result instanceof CodexAccountIdentityError
+      )?.result;
+      if (identityFailure instanceof CodexAccountIdentityError) {
+        throw identityFailure;
+      }
+      if (readings.some((reading) => reading.result === 'unavailable')) {
+        throw new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE);
+      }
     }
     return candidates;
   }

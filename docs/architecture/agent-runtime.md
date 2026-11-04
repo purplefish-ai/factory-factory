@@ -746,9 +746,12 @@ Failed Codex runtime and account probes show retry/restart guidance rather than
 raw command paths or quota-exhaustion advice. Runtime resolution failures retain
 update/reinstall guidance. Auto selection still uses healthy candidates when
 another probe fails; if no candidate remains and any probe failed, capacity is
-unknown and the error asks the user to retry. Confirmed exhausted accounts
-retain the capacity error. These messages do not change probe deadlines or add
-retries.
+unknown and the error asks the user to retry. Identity-binding failures retain
+sign-in or duplicate-account cleanup guidance; caller cancellation remains
+distinct from provider unavailability. Excluded overlapping native readings do
+not affect the remaining accounts' error. Provider warnings and onboarding show
+the server's recovery guidance. Confirmed exhausted accounts retain the capacity
+error. These messages do not change probe deadlines or add retries.
 
 The composer previews only the model name; provider groups remain in the
 selection menu. Account labels are omitted from composer controls.

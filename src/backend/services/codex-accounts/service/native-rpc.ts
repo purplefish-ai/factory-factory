@@ -60,7 +60,11 @@ async function runNativeRpc<T>(
     rejectOperation = reject;
   });
   const fail = () => {
-    failure = new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE);
+    failure = new Error(
+      options.signal?.aborted
+        ? 'Codex native account operation cancelled'
+        : CODEX_PROVIDER_UNAVAILABLE_MESSAGE
+    );
     for (const request of pending.values()) {
       request.reject(failure);
     }

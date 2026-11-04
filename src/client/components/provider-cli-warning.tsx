@@ -17,6 +17,7 @@ function getWarning(
       isOutdated?: boolean;
     };
     codex: {
+      error?: string;
       isInstalled: boolean;
       isAuthenticated?: boolean;
       version?: string;
@@ -49,7 +50,9 @@ function getWarning(
   if (!health.codex.isInstalled) {
     return {
       title: 'Codex runtime is unavailable',
-      description: 'Update or reinstall Factory Factory to restore its bundled Codex runtime.',
+      description:
+        health.codex.error ??
+        'Update or reinstall Factory Factory to restore its bundled Codex runtime.',
     };
   }
   if (health.codex.isAuthenticated === false && !hasUsableCodexAccount) {

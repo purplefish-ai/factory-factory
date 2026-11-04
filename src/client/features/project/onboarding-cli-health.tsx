@@ -32,7 +32,7 @@ function StatusIcon({ status }: { status: ItemStatus }) {
 
 function buildItems(health: {
   claude: { isInstalled: boolean; isAuthenticated?: boolean };
-  codex: { isInstalled: boolean; isAuthenticated?: boolean };
+  codex: { isInstalled: boolean; isAuthenticated?: boolean; error?: string };
   github: { isInstalled: boolean; isAuthenticated: boolean };
 }): StatusItem[] {
   const items: StatusItem[] = [];
@@ -59,7 +59,7 @@ function buildItems(health: {
     items.push({
       label: 'Codex',
       status: 'missing',
-      detail: 'Bundled runtime unavailable — update Factory Factory',
+      detail: health.codex.error ?? 'Bundled runtime unavailable — update Factory Factory',
     });
   } else if (health.codex.isAuthenticated !== true) {
     items.push({

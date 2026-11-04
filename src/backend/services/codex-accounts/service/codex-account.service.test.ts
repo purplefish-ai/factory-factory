@@ -582,3 +582,27 @@ it('does not overwrite an identity pinned by another writer during verification'
   await expect(usage).rejects.toThrow('changed during identity verification');
   expect(setup.rows[0]?.identityKey).toBe('other-writer');
 });
+
+it.each(['changed', 'unverified', 'duplicate'])(
+  'keeps %s identity failures actionable during Auto selection',
+  async (failure) => {
+    const { service, rows, observations, observation, unverified } = await fixture();
+    const account = await service.createAccount('Work');
+    rows[0]!.enabled = false;
+    let expected: string;
+    if (failure === 'changed') {
+      rows[1]!.identityKey = 'original';
+      observations.set(account.id, { ...observation(), identityKey: 'replacement' });
+      expected = 'sign in to the original account';
+    } else if (failure === 'unverified') {
+      unverified.add(account.id);
+      expected = 'identity could not be verified';
+    } else {
+      rows[0]!.identityKey = 'duplicate';
+      observations.set(account.id, { ...observation(), identityKey: 'duplicate' });
+      expected = 'already connected';
+    }
+    await expect(service.getPreviewRuntimeContext()).rejects.toThrow(expected);
+    await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(expected);
+  }
+);
