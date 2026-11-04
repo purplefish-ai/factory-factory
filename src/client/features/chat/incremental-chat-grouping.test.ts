@@ -14,9 +14,10 @@ vi.mock('@/lib/chat-protocol', async () => {
   const actual = await vi.importActual<typeof import('@/lib/chat-protocol')>('@/lib/chat-protocol');
   return {
     ...actual,
-    groupAdjacentToolCalls: (messages: ChatMessage[]) => {
+    groupAdjacentToolCalls: (...args: Parameters<typeof actual.groupAdjacentToolCalls>) => {
+      const [messages] = args;
       groupedInputLengths.push(messages.length);
-      return actual.groupAdjacentToolCalls(messages);
+      return actual.groupAdjacentToolCalls(...args);
     },
   };
 });
@@ -341,4 +342,77 @@ describe('createIncrementalChatGrouper', () => {
     expect(fullRegroups).toBeGreaterThan(1);
     expect(fullRegroups).toBeLessThan(40);
   });
+});
+
+describe('history page boundaries', () => {
+  it('keeps the existing tool group key when a page adds adjacent older tools', () => {
+    const current = toolUse('current', 'tool-current', 2);
+    const earlier = toolUse('earlier', 'tool-earlier', 0);
+    const grouper = createIncrementalChatGrouper({ groupBoundaries: new Set(['current']) });
+    const before = grouper.group([current]);
+    const next = grouper.group([earlier, toolResult('older-result', 'tool-earlier', 1), current]);
+    expect(next.map((item) => item.id)).toEqual(['tool-seq-earlier', before[0]?.id]);
+    expect(toolSequences(next)[1]?.pairedCalls[0]?.id).toBe('tool-current');
+  });
+
+  it('pairs late results across a page boundary while keeping separate groups', () => {
+    const grouper = createIncrementalChatGrouper({ groupBoundaries: new Set(['current']) });
+    const next = grouper.group([
+      toolUse('earlier', 'tool-earlier', 0),
+      toolUse('current', 'tool-current', 1),
+      toolResult('late', 'tool-earlier', 2),
+    ]);
+    expect(next.map((item) => item.id)).toEqual(['tool-seq-earlier', 'tool-seq-current']);
+    expect(toolSequences(next)[0]?.pairedCalls[0]?.status).toBe('success');
+  });
+});
+
+it('carries page boundaries through hidden thinking rows', () => {
+  const thinking: ChatMessage = {
+    id: 'thinking',
+    source: 'agent',
+    order: 1,
+    timestamp,
+    message: {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Hidden reasoning' }] },
+    },
+  };
+  const grouper = createIncrementalChatGrouper({ groupBoundaries: new Set(['thinking']) });
+  const current = toolUse('current', 'tool-current', 2);
+  expect(grouper.group([thinking, current]).map((item) => item.id)).toEqual(['tool-seq-current']);
+  expect(
+    grouper.group([toolUse('older', 'tool-older', 0), thinking, current]).map((item) => item.id)
+  ).toEqual(['tool-seq-older', 'tool-seq-current']);
+});
+
+it('keeps a page boundary at a result separating tool runs', () => {
+  const grouper = createIncrementalChatGrouper({
+    filterDuplicateResults: true,
+    groupBoundaries: new Set(['duplicate']),
+  });
+  const messages = [
+    assistant('response', 'Done', 0),
+    toolUse('older', 'tool-older', 1),
+    result('duplicate', 'Done', 2),
+    toolUse('current', 'tool-current', 3),
+  ];
+  expect(grouper.group(messages).map((item) => item.id)).toEqual([
+    'response',
+    'tool-seq-older',
+    'duplicate',
+    'tool-seq-current',
+  ]);
+});
+
+it('keeps a previously visible result at a page boundary when older text duplicates it', () => {
+  const current = result('current-result', 'Done', 2);
+  const grouper = createIncrementalChatGrouper({
+    filterDuplicateResults: true,
+    groupBoundaries: new Set(['current-result']),
+  });
+  expect(grouper.group([current]).map((item) => item.id)).toEqual(['current-result']);
+  expect(
+    grouper.group([assistant('older-response', 'Done', 1), current]).map((item) => item.id)
+  ).toEqual(['older-response', 'current-result']);
 });

@@ -118,6 +118,30 @@ function setup() {
 }
 
 describe('SessionLoadService', () => {
+  it('browses older history without configuration, runtime publication, or initial dispatch', async () => {
+    const test = setup();
+    test.setInitial('Must stay unsent');
+    test.setTranscript([
+      { id: 'first', source: 'user', text: 'Hello', order: 0, timestamp: stopped.updatedAt },
+      { id: 'next', source: 'user', text: 'Next', order: 1, timestamp: stopped.updatedAt },
+    ]);
+    expect(
+      await test.service.readTranscriptPage({ sessionId: 's', beforeMessageId: 'next' })
+    ).toEqual({ messages: [test.getTranscript()[0]], hasMore: false });
+    expect(test.calls).toEqual([]);
+    expect(test.queue).toEqual([]);
+    expect(test.deltas).toEqual([]);
+  });
+
+  it('rejects a missing history session before creating an empty store', async () => {
+    const test = setup();
+    test.removeSession();
+    await expect(
+      test.service.readTranscriptPage({ sessionId: 'missing', beforeMessageId: 'cursor' })
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(test.calls).toEqual([]);
+  });
+
   it('returns a typed missing-session error without hydration or activation', async () => {
     const test = setup();
     test.removeSession();

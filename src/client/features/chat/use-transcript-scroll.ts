@@ -40,7 +40,8 @@ function useSameKeys(keys: string[]) {
 export function useTranscriptScroll(
   viewport: HTMLDivElement | null,
   keys: string[],
-  options: TranscriptScrollOptions
+  options: TranscriptScrollOptions,
+  anchorHeaderToContent = false
 ) {
   const latest = useRef(options);
   latest.current = options;
@@ -83,7 +84,12 @@ export function useTranscriptScroll(
         Math.abs(entry.height - node.getBoundingClientRect().height) <= 1
       );
     };
-    const positioner = createTranscriptPositioner(viewport, engine, measured);
+    const positioner = createTranscriptPositioner(
+      viewport,
+      engine,
+      measured,
+      anchorHeaderToContent
+    );
     const current = createTranscriptScrollController({
       initialIntent: latest.current.initialIntent,
       port: {
@@ -133,7 +139,7 @@ export function useTranscriptScroll(
       observer.current = null;
       measurements.current = new WeakMap();
     };
-  }, [viewport]);
+  }, [viewport, anchorHeaderToContent]);
 
   // The virtualizer rebuilds every row measurement whenever `getItemKey` or
   // `rangeExtractor` change identity. Tie them to the row key values so

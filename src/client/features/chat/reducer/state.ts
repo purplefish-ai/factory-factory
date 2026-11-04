@@ -6,6 +6,8 @@ import type { ChatState } from './types';
 function createBaseResetState(): Pick<
   ChatState,
   | 'messages'
+  | 'transcriptHistory'
+  | 'transcriptPageBoundaries'
   | 'gitBranch'
   | 'pendingRequest'
   | 'toolUseIdToIndex'
@@ -37,6 +39,8 @@ function createBaseResetState(): Pick<
   //   and the backend will replay the stored slash_commands event for the new session.
   return {
     messages: [],
+    transcriptHistory: { status: 'idle' },
+    transcriptPageBoundaries: new Set(),
     gitBranch: null,
     pendingRequest: { type: 'none' },
     toolUseIdToIndex: new Map(),
@@ -73,6 +77,9 @@ function createBaseResetState(): Pick<
 function createSessionSwitchResetState(): Pick<
   ChatState,
   | 'messages'
+  | 'transcriptHistory'
+  | 'transcriptPageBoundaries'
+  | 'rendererTranscriptLimit'
   | 'gitBranch'
   | 'pendingRequest'
   | 'toolUseIdToIndex'
@@ -111,6 +118,7 @@ function createSessionSwitchResetState(): Pick<
 > {
   return {
     ...createBaseResetState(),
+    rendererTranscriptLimit: undefined,
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
@@ -132,6 +140,9 @@ function createSessionSwitchResetState(): Pick<
 export function createInitialChatState(overrides?: Partial<ChatState>): ChatState {
   return {
     messages: [],
+    transcriptHistory: { status: 'idle' },
+    transcriptPageBoundaries: new Set(),
+    rendererTranscriptLimit: undefined,
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
     sessionRuntime: createInitialSessionRuntimeState(),

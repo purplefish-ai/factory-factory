@@ -29,6 +29,10 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         {
           ...state,
           messages: [],
+          transcriptHistory: { status: 'idle' },
+          rendererTranscriptLimit:
+            state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
+          transcriptPageBoundaries: new Set(),
           latestThinking: null,
           latestThinkingDeltaOrder: null,
           latestThinkingOrder: snapshotMessages.reduce<number | null>(

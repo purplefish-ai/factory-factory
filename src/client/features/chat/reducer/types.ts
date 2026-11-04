@@ -134,9 +134,16 @@ export interface RewindPreviewState {
   error?: string;
 }
 
+export type TranscriptHistoryState =
+  | { status: 'idle' | 'complete' }
+  | { status: 'loading'; requestId: string }
+  | { status: 'error'; error: string };
+
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
+  transcriptHistory: TranscriptHistoryState;
+  transcriptPageBoundaries: ReadonlySet<string>;
   /** Override the live renderer window; null keeps provider history uncapped. */
   rendererTranscriptLimit?: number | null;
   /**
@@ -246,6 +253,14 @@ export interface ChatState {
 // =============================================================================
 
 export type ChatAction =
+  | { type: 'TRANSCRIPT_HISTORY_START'; requestId: string; beforeMessageId: string }
+  | {
+      type: 'TRANSCRIPT_HISTORY_LOADED';
+      requestId: string;
+      messages: ChatMessage[];
+      hasMore: boolean;
+    }
+  | { type: 'TRANSCRIPT_HISTORY_FAILED'; requestId: string; error: string }
   // WebSocket message actions
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }

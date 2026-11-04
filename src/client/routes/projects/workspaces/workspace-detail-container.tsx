@@ -103,6 +103,8 @@ export function WorkspaceDetailContainer() {
 
   const {
     messages,
+    transcriptHistory,
+    transcriptPageBoundaries,
     connected,
     sessionStatus,
     processStatus,
@@ -342,6 +344,8 @@ export function WorkspaceDetailContainer() {
     onOpenSubagent: openSubagentTab,
     parentSessionName: sessions?.find((session) => session.id === selectedDbSessionId)?.name,
     messages,
+    history: transcriptHistory,
+    transcriptPageBoundaries,
     sessionStatus,
     sessionRuntime,
     transcriptScroll,

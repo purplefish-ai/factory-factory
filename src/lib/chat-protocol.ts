@@ -751,7 +751,8 @@ function applyLateToolResult(
  */
 export function groupAdjacentToolCalls(
   messages: ChatMessage[],
-  trace?: ToolGroupingTrace
+  trace?: ToolGroupingTrace,
+  breakBeforeIds?: ReadonlySet<string>
 ): GroupedMessageItem[] {
   const result: GroupedMessageItem[] = [];
   let currentToolSequence: ChatMessage[] = [];
@@ -783,6 +784,9 @@ export function groupAdjacentToolCalls(
   };
 
   for (const message of messages.filter(isRenderableGroupedMessage)) {
+    if (breakBeforeIds?.has(message.id)) {
+      flushToolSequence();
+    }
     const lateToolResultInfo =
       message.message && isToolResultMessage(message.message)
         ? extractToolResultInfo(message.message, trace !== undefined)

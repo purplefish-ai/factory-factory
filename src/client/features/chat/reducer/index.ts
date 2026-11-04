@@ -32,6 +32,7 @@ import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
+import { reduceTranscriptHistory } from './slices/transcript-history';
 import { createBaseResetState, createInitialChatState } from './state';
 import type { AcpToolLocation, ChatAction, ChatState } from './types';
 
@@ -67,6 +68,7 @@ type ReducerSlice = (state: ChatState, action: ChatAction) => ChatState;
 
 const chatReducerSlices: ReducerSlice[] = [
   reduceSessionSlice,
+  reduceTranscriptHistory,
   reduceRequestSlice,
   reduceSettingsSlice,
   reduceMessageTransportSlice,
@@ -98,6 +100,8 @@ function createReplayBaseState(state: ChatState): ChatState {
   return {
     ...state,
     ...createBaseResetState(),
+    rendererTranscriptLimit:
+      state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
     // Preserve optimistic pending sends that are not yet reflected in replayed events.
     pendingMessages: state.pendingMessages,
     // Preserve queued messages - they will be reconstructed from replay events,
