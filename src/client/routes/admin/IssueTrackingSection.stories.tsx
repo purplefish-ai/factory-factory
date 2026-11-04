@@ -92,6 +92,16 @@ function LinearSettingsStory({
   );
 }
 
+// SelectValue's text ignores pointer events and the trigger has no accessible
+// name, so find the trigger through its placeholder.
+function teamTrigger(canvasElement: HTMLElement) {
+  const trigger = within(canvasElement).getByText('Select a team').closest('[role="combobox"]');
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error('Team select trigger not found');
+  }
+  return trigger;
+}
+
 const meta = {
   title: 'Settings/IssueTrackingSection',
   parameters: { layout: 'padded' },
@@ -108,7 +118,7 @@ export const RevalidateEditedKey: Story = {
     await userEvent.type(key, 'mock-key-a');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await canvas.findByText('Connected as Mock Viewer A');
-    await userEvent.click(canvas.getByText('Select a team'));
+    await userEvent.click(teamTrigger(canvasElement));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Team A (A)' }));
     await userEvent.clear(key);
     await userEvent.type(key, 'mock-key-b');
@@ -117,7 +127,7 @@ export const RevalidateEditedKey: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await canvas.findByText('Connected as Mock Viewer B');
     await expect(canvas.getByRole('button', { name: 'Save' })).toBeDisabled();
-    await userEvent.click(canvas.getByText('Select a team'));
+    await userEvent.click(teamTrigger(canvasElement));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Team B (B)' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
@@ -163,7 +173,7 @@ export const RetryFailedSave: Story = {
     await userEvent.type(key, 'mock-key-a');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await canvas.findByText('Connected as Mock Viewer A');
-    await userEvent.click(canvas.getByText('Select a team'));
+    await userEvent.click(teamTrigger(canvasElement));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Team A (A)' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled());

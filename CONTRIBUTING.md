@@ -64,7 +64,7 @@ Markdown; inspect its diff and keep unrelated changes out of the PR.
 | Change             | Additional verification                                                                                                                                                                                                                                                                             |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Application code   | Add focused, co-located Vitest tests for changed behavior, including a regression for bugs. Run `pnpm test` before handoff. While iterating, use `pnpm test path/to/file.test.ts`, `pnpm test -t "name"`, or `pnpm test:watch`. Explain corrections to existing assertions.                         |
-| UI                 | Follow the application-code row, update `*.stories.tsx` following the [Storybook conventions](docs/storybook.md), and check changed states in Storybook (`pnpm storybook`). Use `pnpm test:e2e:mobile` when mobile behavior changes.                                                                |
+| UI                 | Follow the application-code row, update `*.stories.tsx` following the [Storybook conventions](docs/storybook.md), check changed states in Storybook (`pnpm storybook`), and run `pnpm test:storybook`. Use `pnpm test:e2e:mobile` when mobile behavior changes.                                     |
 | Prisma schema      | Follow the application-code row. Run `pnpm check:prisma-schema` to regenerate the client, validate ownership and typecheck. Include any required migration (`pnpm db:migrate`) and commit the regenerated `prisma/generated/` output. Generate before checking code that depends on the new schema. |
 | Documentation only | Run the shared checks above, validate changed links and anchors, verify documented commands against package scripts, and check `CLAUDE.md` imports when changing agent guides. Application tests are not needed solely for prose changes.                                                           |
 
@@ -100,9 +100,9 @@ never restored from CI cache.
 
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
 migration drift, dependencies, and unused code. CI also runs coverage,
-production and Storybook builds, and generated Prisma drift checks. Hooks and CI
-supplement the verification above; report any local skips rather than assuming
-CI ran.
+production and Storybook builds, story tests, and generated Prisma drift checks.
+Hooks and CI supplement the verification above; report any local skips rather
+than assuming CI ran.
 
 CI runs the full Vitest suite across two parallel shards. Each shard collects
 coverage and uploads a blob report without checking partial coverage against

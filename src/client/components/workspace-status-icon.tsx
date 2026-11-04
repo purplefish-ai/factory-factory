@@ -27,7 +27,11 @@ export function WorkspaceStatusIcon({
   sessionRuntimeErrorMessage,
 }: WorkspaceStatusIconProps) {
   if (pendingRequestType) {
-    const { icon, name } = PENDING_REQUEST_ICONS[pendingRequestType];
+    // Server data: fall back to a generic "needs you" icon for unknown types.
+    const { icon, name } = PENDING_REQUEST_ICONS[pendingRequestType] ?? {
+      icon: WarningIcon,
+      name: 'pending-request',
+    };
     return (
       <span data-icon={name} className="inline-flex shrink-0">
         <StatusIcon tone="attention" icon={icon} />

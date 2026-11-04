@@ -315,7 +315,7 @@ export const ImageDropToCreate: Story = {
 };
 export const Narrow: Story = {
   args: { compact: true },
-  parameters: { viewport: { value: 'mobile1' } },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
 };
 export const NarrowDark: Story = { ...Narrow, globals: { theme: 'dark' } };
 export const Sidebar: Story = {
@@ -372,7 +372,8 @@ export const RestoredDraft: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const prompt = await canvas.findByRole('textbox');
-    await waitFor(() => expect(prompt).toHaveValue(expect.stringContaining('Investigate')));
+    // toHaveValue compares with lodash and ignores asymmetric matchers.
+    await waitFor(() => expect(prompt).toHaveDisplayValue(/Investigate/));
     await expect(canvas.queryByRole('button', { name: 'Discard draft' })).not.toBeInTheDocument();
     await userEvent.clear(prompt);
     await expect(prompt).toHaveValue('');
