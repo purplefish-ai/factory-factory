@@ -30,6 +30,7 @@ export const GeneralWhileDiagnosticsPending: Story = {
   parameters: {
     trpc: {
       handlers: {
+        'userSettings.get': () => ({ preferredIde: 'cursor' }),
         'admin.getSystemStats': () => STORY_TRPC_PENDING,
         'admin.getActiveProcesses': () => STORY_TRPC_PENDING,
       },
@@ -40,7 +41,7 @@ export const GeneralWhileDiagnosticsPending: Story = {
     await expect(
       await canvas.findByRole('navigation', { name: 'Settings sections' })
     ).toBeVisible();
-    await expect(canvas.queryByText('Loading settings…')).not.toBeInTheDocument();
+    await expect(await canvas.findByText('Preferred IDE')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'System' })).toHaveAttribute(
       'href',
       '/admin/system'

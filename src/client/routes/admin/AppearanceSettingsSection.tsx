@@ -402,7 +402,7 @@ function FontFamilyField({
             aria-label={`Save ${label.toLowerCase()}`}
             disabled={disabled || !customDraft.trim()}
           >
-            {disabled ? 'Saving…' : 'Save'}
+            Save
           </Button>
           {customError && (
             <p className="text-xs text-destructive" role="alert">

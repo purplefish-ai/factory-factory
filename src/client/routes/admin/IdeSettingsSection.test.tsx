@@ -110,6 +110,40 @@ describe('IdeSettingsSection', () => {
     root.unmount();
   });
 
+  it('autosaves Custom mode with the saved command while preserving an unsaved draft', () => {
+    mocks.userSettings.preferredIde = 'custom';
+    mocks.userSettings.customIdeCommand = 'saved {workspace}';
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(IdeSettingsSection)));
+    const input = container.querySelector<HTMLInputElement>('#custom-command');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    flushSync(() => {
+      setValue?.call(input, 'draft {workspace}');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    function choose(label: string) {
+      flushSync(() => container.querySelector<HTMLElement>('#ide-select')?.click());
+      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+        (element) => element.textContent === label
+      );
+      flushSync(() => option?.click());
+    }
+    choose('Cursor');
+    mocks.userSettings.preferredIde = 'cursor';
+    flushSync(() => root.render(createElement(IdeSettingsSection)));
+    choose('Custom');
+    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith({
+      preferredIde: 'custom',
+      customIdeCommand: 'saved {workspace}',
+    });
+    expect(container.querySelector<HTMLInputElement>('#custom-command')?.value).toBe(
+      'draft {workspace}'
+    );
+    root.unmount();
+  });
+
   it('tests the current custom command before it has been saved', () => {
     mocks.userSettings.preferredIde = 'custom';
     mocks.userSettings.customIdeCommand = null;

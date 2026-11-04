@@ -10,6 +10,7 @@ import AdminDashboardPage from './admin-page';
 
 const mocks = vi.hoisted(() => ({
   statsError: null as Error | null,
+  unresolvedDiagnostics: false,
   statsQuery: vi.fn(),
   processesQuery: vi.fn(),
   processesError: null as Error | null,
@@ -72,7 +73,10 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => {
           mocks.statsQuery();
           return {
-            data: mocks.statsError ? undefined : { apiUsage: [], environment: 'test' },
+            data:
+              mocks.statsError || mocks.unresolvedDiagnostics
+                ? undefined
+                : { apiUsage: [], environment: 'test' },
             error: mocks.statsError,
             isLoading: false,
             isFetching: false,
@@ -84,7 +88,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => {
           mocks.processesQuery();
           return {
-            data: mocks.processesError ? undefined : [],
+            data: mocks.processesError || mocks.unresolvedDiagnostics ? undefined : [],
             error: mocks.processesError,
             isLoading: false,
             isFetching: false,
@@ -165,6 +169,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   localStorage.clear();
   mocks.statsError = null;
+  mocks.unresolvedDiagnostics = false;
   mocks.processesError = null;
   mocks.projectsError = null;
   mocks.resetMutationOptions = undefined;
@@ -241,6 +246,26 @@ describe('settings URL sections', () => {
     expect(container.querySelector('a[href="/projects/beta/settings"]')).not.toBeNull();
     expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('beta');
     expect(container.textContent).not.toContain('Factory Configuration');
+    root.unmount();
+  });
+
+  it('keeps unresolved offline diagnostics loading without showing empty data', () => {
+    mocks.unresolvedDiagnostics = true;
+    const { container, root } = renderAdmin('/admin/system');
+    expect(container.textContent).toContain('Loading API usage…');
+    expect(container.textContent).toContain('Processes Loading');
+    expect(container.textContent).not.toContain('Environment:');
+    expect(container.textContent).not.toContain('unknown');
+    expect(
+      [...container.querySelectorAll('section')].some(
+        (section) => section.textContent === 'API usage'
+      )
+    ).toBe(false);
+    expect(
+      [...container.querySelectorAll('section')].some(
+        (section) => section.textContent === 'Processes'
+      )
+    ).toBe(false);
     root.unmount();
   });
 

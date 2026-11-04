@@ -98,7 +98,11 @@ function useProjectSlugSync(
   }, [pathname, selectProjectSlug]);
 
   useEffect(() => {
-    if (!projects || projects.length === 0 || getProjectSlugFromPath(pathname)) {
+    if (
+      !projects ||
+      projects.length === 0 ||
+      (!isProjectSettingsPath(pathname) && getProjectSlugFromPath(pathname))
+    ) {
       return;
     }
 

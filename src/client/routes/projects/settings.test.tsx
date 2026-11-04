@@ -29,7 +29,7 @@ vi.mock('@/client/lib/trpc', () => ({
     },
   },
 }));
-vi.mock('../admin/ProjectSettingsSection', () => ({
+vi.mock('@/client/routes/admin/ProjectSettingsSection', () => ({
   ProjectSettingsSection: ({ project }: { project: { id: string; name: string } }) =>
     createElement('section', { 'data-project': project.id }, `${project.name} configuration`),
 }));
@@ -92,4 +92,12 @@ it('shows recoverable failures without mounting project editors', async () => {
   expect(container.querySelector('[data-project]')).toBeNull();
   await act(async () => container.querySelector<HTMLButtonElement>('button')?.click());
   expect(mocks.refetch).toHaveBeenCalledOnce();
+});
+
+it('keeps unresolved project settings loading without mounting editors', async () => {
+  mocks.data = undefined;
+  mocks.error = null;
+  const container = await render('beta');
+  expect(container.textContent).toContain('Loading project settings…');
+  expect(container.querySelector('[data-project]')).toBeNull();
 });

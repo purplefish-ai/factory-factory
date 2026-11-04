@@ -34,7 +34,9 @@ for schedule and run behavior.
 
 Color scheme, color overrides, font size, and fonts are saved with the other
 user settings and apply on every device that opens this server. Mode is saved in
-the browser and does not sync across devices. Each change saves immediately.
+the browser and does not sync across devices. Presets save immediately; custom
+font-family text requires **Save** or Enter. Color pickers and sliders save when
+you finish the interaction.
 
 - **Color scheme** picks a palette. Factory is the default; GitHub, One,
   Solarized, and High contrast are inspired by the corresponding editor themes.

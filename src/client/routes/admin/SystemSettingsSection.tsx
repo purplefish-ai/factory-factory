@@ -29,12 +29,12 @@ export function SystemSettingsSection() {
   const statsQuery = trpc.admin.getSystemStats.useQuery(undefined, {
     refetchInterval: 5000,
   });
-  const { data: stats, isLoading: isLoadingStats, refetch } = statsQuery;
+  const { data: stats, refetch } = statsQuery;
 
   const processesQuery = trpc.admin.getActiveProcesses.useQuery(undefined, {
     refetchInterval: 5000,
   });
-  const { data: processes, isLoading: isLoadingProcesses } = processesQuery;
+  const { data: processes } = processesQuery;
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
@@ -47,7 +47,7 @@ export function SystemSettingsSection() {
 
   return (
     <>
-      {isLoadingStats ? (
+      {!(stats || statsQuery.error) ? (
         <Loading size="compact" message="Loading API usage…" />
       ) : statsQuery.error && !stats ? (
         <SectionQueryError
@@ -64,7 +64,7 @@ export function SystemSettingsSection() {
         />
       )}
 
-      {isLoadingProcesses ? (
+      {!(processes || processesQuery.error) ? (
         <ProcessesSectionSkeleton />
       ) : processesQuery.error && !processes ? (
         <SectionQueryError
@@ -77,15 +77,16 @@ export function SystemSettingsSection() {
         <ProcessesSection processes={processes} />
       )}
 
-      {/* Environment Info */}
-      <Card className="bg-muted/50">
-        <CardContent className="py-4">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <span className="font-medium">Environment:</span>
-            <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-          </div>
-        </CardContent>
-      </Card>
+      {stats && (
+        <Card className="bg-muted/50">
+          <CardContent className="py-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span className="font-medium">Environment:</span>
+              <Badge variant="outline">{stats.environment}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <AppInfoSection />
       <DataBackupSection />

@@ -900,6 +900,14 @@ export const CustomFontSaveFailure: Story = {
     );
     await userEvent.click(canvas.getByRole('button', { name: 'Save interface font' }));
     await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        appearanceFontSans: 'OpenDyslexic, sans-serif',
+      })
+    );
+    await expect(
+      await within(document.body).findByText(/Couldn't update appearance/)
+    ).toBeVisible();
+    await waitFor(() =>
       expect(canvas.getByRole('button', { name: 'Save interface font' })).toBeEnabled()
     );
     await expect(canvas.getByRole('textbox', { name: 'Interface font family' })).toHaveValue(

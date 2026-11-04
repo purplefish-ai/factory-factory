@@ -31,6 +31,7 @@ export const NarrowMobile: Story = {
       '/admin/logs'
     );
     await expect(canvas.getByRole('link', { name: 'Project settings' })).toBeVisible();
-    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+    const navigation = canvas.getByRole('navigation', { name: 'Settings sections' });
+    await expect(navigation.scrollWidth).toBeLessThanOrEqual(navigation.clientWidth);
   },
 };

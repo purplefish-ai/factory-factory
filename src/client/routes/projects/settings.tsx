@@ -4,7 +4,7 @@ import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { WorkspacesBackLink } from '@/client/features/workspace/workspaces-back-link';
 import { trpc } from '@/client/lib/trpc';
-import { ProjectSettingsSection } from '../admin/ProjectSettingsSection';
+import { ProjectSettingsSection } from '@/client/routes/admin/ProjectSettingsSection';
 
 export default function ProjectSettingsPage() {
   const { slug } = useParams<{ slug: string }>();

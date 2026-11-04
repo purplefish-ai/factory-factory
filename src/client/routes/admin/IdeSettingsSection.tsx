@@ -61,8 +61,11 @@ export function IdeSettingsSection() {
   const handleIdeChange = (value: string) => {
     if (value === 'custom') {
       setIsConfiguringCustomIde(true);
-      if (localCustomCommand.trim() === settings?.customIdeCommand) {
-        saveCustomCommand(localCustomCommand);
+      if (settings?.customIdeCommand?.trim()) {
+        updateSettings.mutate({
+          preferredIde: 'custom',
+          customIdeCommand: settings.customIdeCommand,
+        });
       }
     } else if (value === 'cursor' || value === 'vscode') {
       setIsConfiguringCustomIde(false);

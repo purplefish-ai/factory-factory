@@ -170,6 +170,37 @@ describe('project route selection', () => {
     }
   );
 
+  it.each(['', 'missing', 'alpha'])(
+    'resolves the global fallback independently of scoped settings with stored=%s',
+    async (stored) => {
+      localStorage.clear();
+      if (stored) {
+        localStorage.setItem(SELECTED_PROJECT_KEY, stored);
+      }
+      window.history.replaceState({}, '', '/projects/new/settings');
+      const root = createRoot(document.createElement('div'));
+      const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
+      try {
+        await act(async () =>
+          root.render(
+            createElement(
+              MemoryRouter,
+              { initialEntries: ['/projects/new/settings'] },
+              createElement(NavigationHarness, { selected })
+            )
+          )
+        );
+        expect(selected.selectedProjectSlug).toBe('alpha');
+        expect(selected.selectedProjectId).toBe('alpha-id');
+        expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('alpha');
+      } finally {
+        flushSync(() => root.unmount());
+        localStorage.clear();
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  );
+
   it('selects and persists the URL project instead of the stored or first project', () => {
     localStorage.setItem(SELECTED_PROJECT_KEY, 'alpha');
     window.history.replaceState({}, '', '/projects/new/workspaces');
