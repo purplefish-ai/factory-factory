@@ -16,6 +16,7 @@ import {
 import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
 import { trpc } from '@/client/lib/trpc';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
+import { DEFAULT_TICKET_DISPATCH_PROMPT } from '@/shared/issue-start-prompt';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
@@ -29,12 +30,14 @@ import { ProjectFactoryConfigCard } from './ProjectFactoryConfigCard';
 import { ProjectSettingsSection } from './ProjectSettingsSection';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 import { ServerLogsSection } from './ServerLogsSection';
+import { TicketDispatchSettingsSection } from './TicketDispatchSettingsSection';
 import { WorktreeCleanupSection } from './WorktreeCleanupSection';
 
 const onRequest = fn<(path: string, input: unknown) => void>();
 const defaultSettings = {
   playSoundOnComplete: true,
   childWorkspacesEnabled: true,
+  ticketDispatchPrompt: null as string | null,
   preferredIde: 'cursor',
   customIdeCommand: null as string | null,
   defaultSessionProvider: 'CLAUDE',
@@ -816,4 +819,56 @@ export const FailedChildWorkspaceSettings: Story = {
     );
     await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
   },
+};
+
+export const TicketDispatchPrompt: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <TicketDispatchSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = await canvas.findByLabelText('Prompt');
+    await waitFor(() => expect(input).toBeEnabled());
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Handle carefully.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Save prompt' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        ticketDispatchPrompt: 'Handle carefully.',
+      })
+    );
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: 'Reset to default' })).toBeEnabled()
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Reset to default' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', { ticketDispatchPrompt: null })
+    );
+    await waitFor(() => expect(input).toHaveValue(DEFAULT_TICKET_DISPATCH_PROMPT));
+  },
+};
+export const CustomTicketDispatchPrompt: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{ ticketDispatchPrompt: 'Implement the ticket and run tests.' }}
+    >
+      <TicketDispatchSettingsSection />
+    </SettingsStoryProvider>
+  ),
+};
+export const LoadingTicketDispatchPrompt: Story = {
+  render: () => (
+    <SettingsStoryProvider loading>
+      <TicketDispatchSettingsSection />
+    </SettingsStoryProvider>
+  ),
+};
+export const FailedTicketDispatchPrompt: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <TicketDispatchSettingsSection />
+    </SettingsStoryProvider>
+  ),
 };

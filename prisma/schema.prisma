@@ -630,6 +630,7 @@ model UserSettings {
 
   // Workspace features
   childWorkspacesEnabled Boolean @default(true)
+  ticketDispatchPrompt String?
 
   // Sidebar Settings
   workspaceOrder      Json?    // { [projectId]: string[] } - ordered workspace IDs per project

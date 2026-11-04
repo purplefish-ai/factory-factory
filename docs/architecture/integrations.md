@@ -69,6 +69,15 @@ check through both the aggregate CLI cache and GitHub's own cache. Forced checks
 wait for older refreshes before rechecking so pre-login results cannot overwrite
 the new status displayed in the UI.
 
+## Ticket dispatch prompt
+
+Settings > General settings > Ticket dispatch prompt configures the instructions
+used when starting GitHub and Linear tickets. The default retains the existing
+instructions to fetch and address the issue, follow repository instructions, and
+create a PR with a closing reference. The quoted ticket URL is appended after
+the instructions; no template variables are substituted. Reset to default
+restores these instructions. The launch sheet still allows edits for one launch.
+
 ## Issue provider settings
 
 The admin provider selector rolls back failed saves to the latest project query

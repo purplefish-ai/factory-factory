@@ -15,6 +15,7 @@ interface UpdateUserSettingsInput {
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
   childWorkspacesEnabled?: boolean;
+  ticketDispatchPrompt?: string | null;
   notificationSoundPath?: string | null;
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
@@ -133,12 +134,14 @@ function buildGeneralPreferenceDefaults(
   | 'playSoundOnComplete'
   | 'cachedSlashCommands'
   | 'childWorkspacesEnabled'
+  | 'ticketDispatchPrompt'
 > {
   return {
     preferredIde: data.preferredIde ?? 'cursor',
     customIdeCommand: data.customIdeCommand ?? null,
     playSoundOnComplete: data.playSoundOnComplete ?? true,
     childWorkspacesEnabled: data.childWorkspacesEnabled ?? true,
+    ticketDispatchPrompt: data.ticketDispatchPrompt ?? null,
     cachedSlashCommands: data.cachedSlashCommands ?? undefined,
   };
 }

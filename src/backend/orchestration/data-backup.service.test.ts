@@ -34,7 +34,6 @@ import {
   type Project,
   SessionProvider,
   type TerminalSession,
-  type UserSettings,
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 
@@ -122,6 +121,7 @@ vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
     read(prisma),
 }));
 import { dataBackupService } from './data-backup.service';
+import { mockUserSettings } from './data-backup.settings.test-support';
 
 const mockProject: Project = {
   id: 'proj-1',
@@ -257,49 +257,6 @@ const mockTerminalSession: TerminalSession = {
   pid: 1234,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:05:00.000Z'),
-};
-
-const mockUserSettings: UserSettings = {
-  id: 'settings-1',
-  userId: 'default',
-  preferredIde: 'cursor',
-  customIdeCommand: null,
-  playSoundOnComplete: true,
-  childWorkspacesEnabled: false,
-  notificationSoundPath: '/path/to/sound.mp3',
-  workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
-  cachedSlashCommands: { commands: [] },
-  ratchetEnabled: true,
-  ratchetReplyToPrComments: true,
-  ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-  defaultSessionProvider: SessionProvider.CLAUDE,
-  defaultClaudeModel: 'sonnet',
-  defaultCodexModel: 'gpt-5-codex',
-  defaultClaudeReasoningEffort: null,
-  defaultCodexReasoningEffort: 'high',
-  defaultWorkspacePermissions: 'STRICT',
-  // Non-default values — an export/import test that only ever exercises
-  // defaults can't tell a real persisted preference from a value the
-  // schema's default happened to backfill (see the voiceModeEnabled et al.
-  // assertions below).
-  reviewerSessionProvider: SessionProvider.CLAUDE,
-  reviewerClaudeModel: 'opus',
-  reviewerCodexModel: 'gpt-5-codex-high',
-  postReviewToGitHub: false,
-  voiceModeEnabled: true,
-  deepgramApiKeyEncrypted: null,
-  voiceTtsModel: 'flux-cliff-en',
-  voiceTtsSpeed: 1.3,
-  voiceUtteranceEndMs: 2500,
-  voiceBargeInSustainedMs: 24,
-  appearanceColorScheme: 'solarized',
-  appearanceBackgroundColor: '#002b36',
-  appearanceForegroundColor: '#93a1a1',
-  appearanceFontScale: 125,
-  appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
-  appearanceFontMono: 'Fira Code',
-  createdAt: new Date('2025-01-01T00:00:00.000Z'),
-  updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
 function createImportData(
@@ -537,6 +494,7 @@ describe('DataBackupService', () => {
       ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
+          ticketDispatchPrompt: 'Implement the ticket and run tests.',
           childWorkspacesEnabled: false,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
@@ -744,6 +702,24 @@ describe('DataBackupService', () => {
   });
 
   describe('importData', () => {
+    it('round-trips a custom ticket prompt through the current backup format', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+      const exported = await dataBackupService.exportData('test');
+      expect(exported.meta.schemaVersion).toBe(8);
+      await dataBackupService.importData(exported);
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ticketDispatchPrompt: mockUserSettings.ticketDispatchPrompt,
+        }),
+      });
+    });
+
     it('imports strict v4 data', async () => {
       const exportedData = createImportData();
 
@@ -818,6 +794,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
@@ -858,6 +835,7 @@ describe('DataBackupService', () => {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           notificationSoundPath: null,
           ratchetEnabled: true,

@@ -191,6 +191,7 @@ export const userSettingsRouter = router({
           .optional(),
         playSoundOnComplete: z.boolean().optional(),
         childWorkspacesEnabled: z.boolean().optional(),
+        ticketDispatchPrompt: z.string().trim().min(1).max(20_000).nullable().optional(),
         notificationSoundPath: z.string().nullable().optional(),
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),

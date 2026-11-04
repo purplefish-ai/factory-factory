@@ -386,6 +386,7 @@ export const UserSettingsScalarFieldEnum = {
   playSoundOnComplete: 'playSoundOnComplete',
   notificationSoundPath: 'notificationSoundPath',
   childWorkspacesEnabled: 'childWorkspacesEnabled',
+  ticketDispatchPrompt: 'ticketDispatchPrompt',
   workspaceOrder: 'workspaceOrder',
   cachedSlashCommands: 'cachedSlashCommands',
   ratchetEnabled: 'ratchetEnabled',

@@ -21,3 +21,5 @@ export { StatCard, type StatCardProps } from './StatCard';
 export { VoiceModeSection } from './VoiceModeSection';
 export { WorktreeCleanupSection } from './WorktreeCleanupSection';
 export { ChildWorkspaceSettingsSection } from './ChildWorkspaceSettingsSection';
+
+export { TicketDispatchSettingsSection } from './TicketDispatchSettingsSection';
