@@ -45,7 +45,7 @@ export function ArchiveActionButton({
   }
 
   // Inline, the header only shows this for a finished workspace, as its next step.
-  const label = archivePending ? 'Archiving...' : 'Archive workspace';
+  const label = archivePending ? 'Archiving workspace…' : 'Archive workspace';
   return (
     <Tooltip>
       <TooltipTrigger asChild>

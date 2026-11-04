@@ -130,7 +130,7 @@ export function QuickActionsDropdownView({
   const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
 
   const run = (action: QuickActionOption) => {
-    if (!action.content || !targetAvailable) {
+    if (!(action.content && targetAvailable)) {
       return;
     }
     if (target === 'new-chat') {

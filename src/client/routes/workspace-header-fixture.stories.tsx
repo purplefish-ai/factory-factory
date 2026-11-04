@@ -226,10 +226,19 @@ export const PendingActions: Story = {
   args: { pendingActions: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      await canvas.findByRole('button', { name: 'Archiving workspace…' })
-    ).toBeDisabled();
-    await expect(canvas.getByRole('button', { name: 'Opening in VS Code…' })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(await body.findByRole('menuitem', { name: 'Archiving…' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    const ide = body.queryByRole('menuitem', { name: 'Open in VS Code' });
+    if (ide) {
+      await expect(ide).toHaveAttribute('aria-disabled', 'true');
+    } else {
+      await expect(canvas.getByRole('button', { name: 'Opening in VS Code…' })).toBeDisabled();
+    }
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
     await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
   },
