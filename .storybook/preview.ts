@@ -107,8 +107,11 @@ const preview: Preview = {
             StoryTrpcProvider,
             { key: context.id, handlers: storyTrpcHandlersFrom(context.parameters) },
             React.createElement(TooltipProvider, null, React.createElement(Story)),
-            // The app's toaster, following the toolbar theme.
-            React.createElement(Toaster, { theme: theme === 'dark' ? 'dark' : 'light' })
+            // The app's toaster, following the toolbar theme. Stories that
+            // render their own Toaster opt out with `parameters.toaster: false`.
+            context.parameters.toaster === false
+              ? null
+              : React.createElement(Toaster, { theme: theme === 'dark' ? 'dark' : 'light' })
           )
         )
       );

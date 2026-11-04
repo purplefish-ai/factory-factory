@@ -117,6 +117,11 @@ app's providers rather than raw library equivalents (for example the app
 `Toaster`, not `sonner` directly) so stories match production styling in both
 themes.
 
+A story that renders its own `Toaster` sets `parameters: { toaster: false }` so
+toasts don't appear twice. The story query client is the app's
+(`createAppQueryClient`) without retries, so a failing mutation without its own
+error handling shows the app's fallback error toast.
+
 ## Play functions
 
 Use `storybook/test` (`expect`, `within`, `userEvent`, `fn`, `waitFor`). Await

@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { type ReactNode, useState } from 'react';
+import { createAppQueryClient } from './query-client';
 import { trpc } from './trpc';
 
 /**
@@ -72,21 +73,28 @@ export function createStoryTrpcClient({ handlers = {}, onRequest }: StoryTrpcOpt
   });
 }
 
+/**
+ * The app's QueryClient (including its fallback mutation error toast) without
+ * retries, so failing handlers show their error state immediately.
+ */
+function createStoryQueryClient() {
+  const queryClient = createAppQueryClient();
+  const defaults = queryClient.getDefaultOptions();
+  queryClient.setDefaultOptions({
+    ...defaults,
+    queries: { ...defaults.queries, retry: false },
+    mutations: { ...defaults.mutations, retry: false },
+  });
+  return queryClient;
+}
+
 /** Story-scoped tRPC and React Query providers backed by {@link createStoryTrpcClient}. */
 export function StoryTrpcProvider({
   children,
   handlers,
   onRequest,
 }: StoryTrpcOptions & { children: ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, refetchOnWindowFocus: false },
-          mutations: { retry: false },
-        },
-      })
-  );
+  const [queryClient] = useState(createStoryQueryClient);
   const [client] = useState(() => createStoryTrpcClient({ handlers, onRequest }));
   return (
     <trpc.Provider client={client} queryClient={queryClient}>

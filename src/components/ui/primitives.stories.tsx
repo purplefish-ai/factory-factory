@@ -325,6 +325,8 @@ export const SidebarLayout: Story = {
 };
 
 export const Notifications: Story = {
+  // Renders its own Toaster; skip the preview's global one.
+  parameters: { toaster: false },
   render: (_, context) => (
     <div className="flex gap-3 p-4">
       <Toaster theme={context.globals.theme === 'dark' ? 'dark' : 'light'} />
