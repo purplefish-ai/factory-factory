@@ -9,6 +9,7 @@ import { IdeSettingsSection } from './IdeSettingsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  onSaveError: vi.fn() as (error: Error) => void,
   onSaved: (() => Promise.resolve()) as () => Promise<void>,
   onTested: (() => undefined) as () => void,
   testCustomCommandMutate: vi.fn(),
@@ -28,7 +29,11 @@ vi.mock('@/client/lib/trpc', () => ({
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
       update: {
-        useMutation: (options: { onSuccess: (...args: unknown[]) => unknown }) => {
+        useMutation: (options: {
+          onSuccess: (...args: unknown[]) => unknown;
+          onError: (error: Error) => void;
+        }) => {
+          mocks.onSaveError = options.onError;
           mocks.onSaved = () =>
             Promise.resolve(options.onSuccess({}, { customIdeCommand: 'code {workspace}' })).then(
               () => undefined
@@ -56,7 +61,7 @@ afterEach(() => {
 });
 
 describe('IdeSettingsSection', () => {
-  it('keeps custom-command autosaves quiet and confirms only an explicit command test', async () => {
+  it('keeps IDE changes quiet and confirms only an explicit command test', async () => {
     const root = createRoot(document.createElement('div'));
     try {
       flushSync(() => root.render(createElement(IdeSettingsSection)));
@@ -144,6 +149,32 @@ describe('IdeSettingsSection', () => {
 
     root.unmount();
   });
+  it('retains custom command text on failed Save and submits from the form', () => {
+    mocks.userSettings.preferredIde = 'custom';
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(IdeSettingsSection)));
+    const input = container.querySelector<HTMLInputElement>('#custom-command');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    flushSync(() => {
+      setValue?.call(input, 'code-insiders {workspace}');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    flushSync(() =>
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      preferredIde: 'custom',
+      customIdeCommand: 'code-insiders {workspace}',
+    });
+    flushSync(() => mocks.onSaveError(new Error('offline')));
+    expect(input?.value).toBe('code-insiders {workspace}');
+    expect(toast.error).toHaveBeenCalledWith("Couldn't update settings. offline");
+    root.unmount();
+  });
+
   it.each(['cursor', 'vscode'] as const)(
     'enters Custom from %s before saving a nonempty command',
     (preferredIde) => {
@@ -175,6 +206,11 @@ describe('IdeSettingsSection', () => {
         input?.dispatchEvent(new Event('input', { bubbles: true }));
       });
       flushSync(() => input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+      const save = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Save'
+      );
+      flushSync(() => save?.click());
       expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
         preferredIde: 'custom',
         customIdeCommand: 'code-insiders {workspace}',

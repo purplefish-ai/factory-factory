@@ -14,12 +14,11 @@ export {
   type ProcessesSectionProps,
   ProcessesSectionSkeleton,
 } from './ProcessesSection';
-export { ProjectSettingsSection } from './ProjectSettingsSection';
 export { RatchetSettingsSection } from './RatchetSettingsSection';
-export { ServerLogsSection } from './ServerLogsSection';
 export { StatCard, type StatCardProps } from './StatCard';
 export { VoiceModeSection } from './VoiceModeSection';
 export { WorktreeCleanupSection } from './WorktreeCleanupSection';
 export { ChildWorkspaceSettingsSection } from './ChildWorkspaceSettingsSection';
 
 export { TicketDispatchSettingsSection } from './TicketDispatchSettingsSection';
+export { ServerLogsSection } from './ServerLogsSection';

@@ -1,22 +1,35 @@
-import { TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { NavLink } from 'react-router';
+import { cn } from '@/lib/utils';
+
+export const SETTINGS_SECTIONS = [
+  { path: '/admin', label: 'General' },
+  { path: '/admin/workspace', label: 'Workspace' },
+  { path: '/admin/integrations', label: 'Integrations' },
+  { path: '/admin/appearance', label: 'Appearance' },
+  { path: '/admin/voice', label: 'Voice' },
+  { path: '/admin/system', label: 'System' },
+  { path: '/admin/logs', label: 'Server logs' },
+  { path: '/admin/project', label: 'Project settings' },
+];
 
 export function SettingsTabsList() {
   return (
-    <div className="min-w-0 overflow-x-auto">
-      <TabsList aria-label="Settings" className="w-max min-w-full sm:min-w-0">
-        <TabsTrigger value="general" className="flex-1 shrink-0 sm:flex-initial">
-          General settings
-        </TabsTrigger>
-        <TabsTrigger value="appearance" className="flex-1 shrink-0 sm:flex-initial">
-          Appearance
-        </TabsTrigger>
-        <TabsTrigger value="project" className="flex-1 shrink-0 sm:flex-initial">
-          Project settings
-        </TabsTrigger>
-        <TabsTrigger value="voice" className="flex-1 shrink-0 sm:flex-initial">
-          Voice mode
-        </TabsTrigger>
-      </TabsList>
-    </div>
+    <nav aria-label="Settings sections" className="flex flex-wrap gap-1 border-b pb-3">
+      {SETTINGS_SECTIONS.map(({ path, label }) => (
+        <NavLink
+          key={path}
+          to={path}
+          end
+          className={({ isActive }) =>
+            cn(
+              'rounded-md px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-ring',
+              isActive ? 'bg-muted text-foreground' : 'text-muted-foreground'
+            )
+          }
+        >
+          {label}
+        </NavLink>
+      ))}
+    </nav>
   );
 }

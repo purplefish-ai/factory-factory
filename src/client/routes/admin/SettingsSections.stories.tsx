@@ -516,29 +516,16 @@ export const ProjectSettings: Story = {
   render: () => (
     <SettingsStoryProvider>
       <ProjectSettingsSection
-        projects={[
-          {
-            id: 'project-1',
-            slug: 'alpha',
-            name: 'Alpha',
-            issueProvider: 'GITHUB',
-            issueTrackerConfig: null,
-          },
-          {
-            id: 'project-2',
-            slug: 'beta',
-            name: 'Beta',
-            issueProvider: 'GITHUB',
-            issueTrackerConfig: null,
-          },
-        ]}
+        project={{
+          id: 'project-1',
+          slug: 'alpha',
+          name: 'Alpha',
+          issueProvider: 'GITHUB',
+          issueTrackerConfig: null,
+        }}
       />
     </SettingsStoryProvider>
   ),
-};
-
-export const NoProjects: Story = {
-  render: () => <ProjectSettingsSection projects={[]} />,
 };
 
 export const Backup: Story = {
@@ -593,6 +580,8 @@ export const CustomIdeFirstSetup: Story = {
     await expect(onRequest).not.toHaveBeenCalledWith('userSettings.update', expect.anything());
     await userEvent.type(command, 'code-insiders {{workspace}');
     await userEvent.tab();
+    await expect(onRequest).not.toHaveBeenCalledWith('userSettings.update', expect.anything());
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
         preferredIde: 'custom',
@@ -698,7 +687,7 @@ export const ServerLogs: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const link = canvas.getByRole('link', { name: /^view logs$/i });
-    await expect(link).toHaveAttribute('href', '/logs');
+    await expect(link).toHaveAttribute('href', '/admin/logs');
     await expect(within(link).queryByRole('button')).not.toBeInTheDocument();
     link.focus();
     await userEvent.tab();
@@ -871,4 +860,50 @@ export const FailedTicketDispatchPrompt: Story = {
       <TicketDispatchSettingsSection />
     </SettingsStoryProvider>
   ),
+};
+
+export const CustomFontExplicitSave: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <AppearanceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByLabelText('Interface font'));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Custom…' }));
+    const font = canvas.getByRole('textbox', { name: 'Interface font family' });
+    await userEvent.type(font, 'OpenDyslexic, sans-serif');
+    await userEvent.tab();
+    await expect(onRequest).not.toHaveBeenCalledWith('userSettings.update', expect.anything());
+    await userEvent.click(canvas.getByRole('button', { name: 'Save interface font' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        appearanceFontSans: 'OpenDyslexic, sans-serif',
+      })
+    );
+  },
+};
+export const CustomFontSaveFailure: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.update']}>
+      <AppearanceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByLabelText('Interface font'));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Custom…' }));
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: 'Interface font family' }),
+      'OpenDyslexic, sans-serif'
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Save interface font' }));
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: 'Save interface font' })).toBeEnabled()
+    );
+    await expect(canvas.getByRole('textbox', { name: 'Interface font family' })).toHaveValue(
+      'OpenDyslexic, sans-serif'
+    );
+  },
 };

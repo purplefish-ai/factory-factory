@@ -247,14 +247,41 @@ describe('AppearanceSettingsSection', () => {
     expect(input).not.toBeNull();
 
     typeInto(input, 'OpenDyslexic, sans-serif');
+    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
     expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
       appearanceFontSans: 'OpenDyslexic, sans-serif',
     });
 
     mocks.updateSettingsMutate.mockClear();
     typeInto(input, 'Inter; background: url(x)');
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
     expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Font family');
+  });
+
+  it('retains a custom-font draft after a save failure for retry', () => {
+    const container = render();
+    selectOption(container, 'appearance-font-sans', 'Custom…');
+    const input = container.querySelector<HTMLInputElement>('#appearance-font-sans-custom');
+    typeInto(input, 'OpenDyslexic, sans-serif');
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
+    flushSync(() => mocks.mutationOptions?.onError?.(new Error('offline')));
+    expect(container.querySelector<HTMLInputElement>('#appearance-font-sans-custom')?.value).toBe(
+      'OpenDyslexic, sans-serif'
+    );
   });
 
   it('returns the font selector to the saved font when the save fails', () => {

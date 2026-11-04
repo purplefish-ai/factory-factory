@@ -35,12 +35,21 @@ export function getProjectSlugFromPath(pathname: string): string | null {
   }
 }
 
+function isProjectSettingsPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+\/settings\/?$/i.test(pathname);
+}
+
 function persistSelectedProjectSlug(slug: string) {
   writeSelectedProjectSlug(slug);
 }
 
 function getInitialProjectSlug(): string {
-  return getProjectSlugFromPath(window.location.pathname) ?? readSelectedProjectSlug() ?? '';
+  const pathname = window.location.pathname;
+  return (
+    (isProjectSettingsPath(pathname) ? null : getProjectSlugFromPath(pathname)) ??
+    readSelectedProjectSlug() ??
+    ''
+  );
 }
 
 /**
@@ -73,6 +82,10 @@ function useProjectSlugSync(
   selectProjectSlug: (slug: string) => void
 ) {
   useEffect(() => {
+    // Project settings have their own URL owner without changing the global Board selection.
+    if (isProjectSettingsPath(pathname)) {
+      return;
+    }
     const slugFromPath = getProjectSlugFromPath(pathname);
     if (slugFromPath) {
       selectProjectSlug(slugFromPath);
