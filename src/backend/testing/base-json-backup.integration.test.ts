@@ -6,10 +6,10 @@ import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import history from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
-import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -172,6 +172,7 @@ it('declares an empty section for all SQL NULL rows and restores explicit SQL NU
     baseJson: 1,
     periodicConfig: 1,
     periodicHistory: 1,
+    automationDefinitions: 1,
   });
   expect(backup.data).toHaveProperty('recovery.baseJson', { version: 1, jsonStorage: [] });
   state.prisma = destination.prisma;
@@ -674,5 +675,137 @@ it.each(['absent', 'empty'])(
       await destination.prisma
         .$queryRaw`SELECT typeof("observation") AS storage, json_type("observation") AS kind FROM "WorkspacePR" WHERE id = 'legacy-pr-healthy'`
     ).toEqual([{ storage: 'null', kind: null }]);
+  }
+);
+
+const invalidRawInputs: [string, (input: typeof history) => void][] = [
+  [
+    'undefined declaration',
+    (input) => {
+      Object.assign(input.meta.recovery.capabilities, { automationDefinitions: undefined });
+    },
+  ],
+  [
+    'unknown declaration',
+    (input) => {
+      Object.assign(input.meta.recovery, { future: undefined });
+    },
+  ],
+  [
+    'undefined section',
+    (input) => {
+      Object.assign(input.data.recovery, { automationDefinitions: undefined });
+    },
+  ],
+  [
+    'unknown section',
+    (input) => {
+      Object.assign(input.data.recovery.automationDefinitions, { future: undefined });
+    },
+  ],
+  [
+    'unknown row',
+    (input) => {
+      Object.assign(input.data.recovery.automationDefinitions.definitions[0]!, {
+        future: undefined,
+      });
+    },
+  ],
+  [
+    'date',
+    (input) => {
+      input.data.recovery.automationDefinitions.definitions[0]!.createdAt = 'bad';
+    },
+  ],
+  [
+    'revision',
+    (input) => {
+      input.data.recovery.automationDefinitions.definitions[0]!.managementRevision = 2_147_483_648;
+    },
+  ],
+  [
+    'duplicate ID',
+    (input) => {
+      input.data.recovery.automationDefinitions.definitions.push({
+        ...input.data.recovery.automationDefinitions.definitions[0]!,
+      });
+    },
+  ],
+  [
+    'missing file Project',
+    (input) => {
+      input.data.projects = [];
+    },
+  ],
+  ...['token', 'env', 'accountId'].map((key): [string, (input: typeof history) => void] => [
+    key,
+    (input) => {
+      Object.assign(input.data.recovery.automationDefinitions.definitions[0]!.executionConfig, {
+        [key]: undefined,
+      });
+    },
+  ]),
+  ...(
+    [
+      ['null configuration', null],
+      ['array configuration', []],
+      ['unsupported configuration version', { version: 2 }],
+      ['incompatible provider/model', { version: 1, provider: 'CLAUDE', model: 'gpt-5' }],
+      ['padded model', { version: 1, provider: 'CODEX', model: ' custom-model' }],
+      ['own undefined provider', { version: 1, provider: undefined }],
+      ['own undefined model', { version: 1, model: undefined }],
+      ['own undefined reasoning effort', { version: 1, reasoningEffort: undefined }],
+    ] satisfies [string, unknown][]
+  ).map(([caseName, executionConfig]): [string, (input: typeof history) => void] => [
+    caseName,
+    (input) => {
+      Object.assign(input.data.recovery.automationDefinitions.definitions[0]!, { executionConfig });
+    },
+  ]),
+  ...(['name', 'instructions'] as const).flatMap((field) =>
+    [
+      ['empty', ''],
+      ['spaces', '  '],
+      ['line whitespace', '\n\t'],
+    ].map(([label, value]): [string, (input: typeof history) => void] => [
+      `${field} ${label}`,
+      (input) => {
+        Object.assign(input.data.recovery.automationDefinitions.definitions[0]!, {
+          [field]: value,
+        });
+      },
+    ])
+  ),
+  ...Object.keys(history.data.recovery.automationDefinitions.definitions[0]!).map(
+    (key): [string, (input: typeof history) => void] => [
+      `missing ${key}`,
+      (input) => {
+        Reflect.deleteProperty(input.data.recovery.automationDefinitions.definitions[0]!, key);
+      },
+    ]
+  ),
+];
+it.each(invalidRawInputs)(
+  'rejects raw service/router %s before writer discovery',
+  async (_name, mutate) => {
+    const input = structuredClone(history);
+    expect(input.data.recovery.automationDefinitions.definitions).toHaveLength(1);
+    expect(exportDataSchema.parse(input)).toEqual(input);
+    mutate(input);
+    const discovery = vi.spyOn(destination.prisma, '$queryRaw');
+    const caller = adminRouter.createCaller({
+      appContext: { services: { dataBackupService } },
+    } as unknown as Context);
+    try {
+      await expect(
+        Reflect.apply(dataBackupService.importData, dataBackupService, [input])
+      ).rejects.toMatchObject({ name: 'ZodError' });
+      await expect(Reflect.apply(caller.importData, caller, [input])).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+      expect(discovery).not.toHaveBeenCalled();
+    } finally {
+      discovery.mockRestore();
+    }
   }
 );

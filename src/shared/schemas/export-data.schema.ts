@@ -483,7 +483,8 @@ const version8Schema = z
     const periodic =
       backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
       backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
-      backup.meta.recovery.profile === 'base-json-periodic-history-1';
+      backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
+      backup.meta.recovery.profile === 'base-json-automation-definitions-1';
     const config = backup.data.recovery.periodicConfig;
     if (
       periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
@@ -493,11 +494,31 @@ const version8Schema = z
     }
   })
   .superRefine((backup, ctx) => {
+    const automation = backup.data.recovery.automationDefinitions;
+    const hasAutomation = backup.meta.recovery.profile === 'base-json-automation-definitions-1';
+    if (
+      hasAutomation !== Object.hasOwn(backup.data.recovery, 'automationDefinitions') ||
+      (hasAutomation && !automation)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Automation profile sections do not match' });
+    }
+    const projectIds = new Set(backup.data.projects.map((row) => row.id));
+    automation?.definitions.forEach((row, index) => {
+      if (!projectIds.has(row.projectId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['data', 'recovery', 'automationDefinitions', 'definitions', index, 'projectId'],
+          message: 'Automation definition project is absent from backup',
+        });
+      }
+    });
     const config = backup.data.recovery.periodicConfig;
     const covered = backup.meta.recovery.profile !== 'base-1';
     const section = backup.data.recovery.baseJson;
     const history = backup.data.recovery.periodicHistory;
-    const hasHistory = backup.meta.recovery.profile === 'base-json-periodic-history-1';
+    const hasHistory =
+      backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
+      backup.meta.recovery.profile === 'base-json-automation-definitions-1';
     if (
       hasHistory !== Object.hasOwn(backup.data.recovery, 'periodicHistory') ||
       (hasHistory && !history)
@@ -542,7 +563,8 @@ const version8Schema = z
         backup.meta.recovery.profile === 'base-json-1' ||
           backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
           backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-history-1',
+          backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
+          backup.meta.recovery.profile === 'base-json-automation-definitions-1',
         ctx
       );
     }
@@ -572,7 +594,11 @@ const periodicLinksVersion8Schema = version8Schema
   .safeExtend({
     meta: version8Schema.shape.meta.extend({
       recovery: recoveryMetadataSchema.safeExtend({
-        profile: z.enum(['base-json-periodic-links-1', 'base-json-periodic-history-1']),
+        profile: z.enum([
+          'base-json-periodic-links-1',
+          'base-json-periodic-history-1',
+          'base-json-automation-definitions-1',
+        ]),
       }),
     }),
     data: fullVersion8Schema.shape.data.extend({

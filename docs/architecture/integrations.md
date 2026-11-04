@@ -722,8 +722,14 @@ through trusted local API procedures.
 
 Proposals belong to their authoring workspace and are removed with it; created
 definitions belong to the project and survive workspace deletion. Deleting a
-saved definition also removes its accepted proposal. Logical export/import does
-not include proposals or the other new agent tables.
+saved definition also removes its accepted proposal. Logical export/import
+recovers definition bodies and supported execution preferences as disabled
+records, preserving both revisions and timestamps. It omits connections, event
+configuration, proposal provenance, activation and automation execution history.
+Ordinary agent inspection can read recovered bodies with no configured events.
+The existing explicit complete replacement editor can author fresh events where
+project/revision editing rules allow; archived projects and exhausted revisions
+retain their restrictions. No timer or event activation authority is restored.
 
 The live authoring evaluation uses the installed Codex ACP runtime, the actual
 MCP server and authoring API, a disposable database, and fixed provider

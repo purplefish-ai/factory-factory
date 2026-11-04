@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';
 import v6 from '@/backend/testing/fixtures/published-v6.json';
@@ -16,10 +16,14 @@ import {
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
+import definitions from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
+import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
-import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
+import periodicConfig from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import periodicHistory from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
+import periodicLinks from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -179,11 +183,12 @@ it('roundtrips the complete base graph with explicit null task links from publis
       .sort((a, b) => a.id.localeCompare(b.id));
   expect(associations(exported.data.workspaces)).toEqual(associations(v7.data.workspaces));
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', history.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery', definitions.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', {
     baseJson: { version: 1, jsonStorage: [] },
     periodicConfig: { version: 1, tasks: [] },
     periodicHistory: { version: 1, executions: [], jsonStorage: [] },
+    automationDefinitions: { version: 1, definitions: [] },
   });
   expect(exportDataSchema.parse(exported)).toEqual(exported);
   const expectedLinks = v7.data.workspaces
@@ -268,4 +273,67 @@ it('imports the frozen workspace-only profile with historical PR/session null no
     await destination.prisma
       .$queryRaw`SELECT typeof("providerMetadata") AS storage, json_type("providerMetadata") AS kind FROM "AgentSession" WHERE id = 'session'`
   ).toEqual([{ storage: 'null', kind: null }]);
+});
+
+describe('cold profile recovery imports', () => {
+  let ownedDatabase: IntegrationDatabase | undefined;
+  beforeEach(async () => {
+    ownedDatabase = await createIntegrationDatabase();
+    database.prisma = ownedDatabase.prisma;
+  }, 30_000);
+  afterEach(async () => {
+    database.prisma = destination.prisma;
+    const owned = ownedDatabase;
+    ownedDatabase = undefined;
+    if (owned) {
+      await destroyIntegrationDatabase(owned);
+    }
+  }, 30_000);
+  it.each([
+    fixed,
+    workspaceJson,
+    fullJson,
+    periodicConfig,
+    periodicLinks,
+    periodicHistory,
+    definitions,
+  ])(
+    'imports genuine $meta.recovery.profile with its exact manifest and definition authority',
+    async (raw) => {
+      const isolated = ownedDatabase!;
+      const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [raw]);
+      expect(raw.data.projects.length).toBeGreaterThan(0);
+      expect(result.projects).toEqual({ imported: raw.data.projects.length, skipped: 0 });
+      expect(result.workspaces).toEqual({ imported: raw.data.workspaces.length, skipped: 0 });
+      expect(result.agentSessions).toEqual({ imported: raw.data.agentSessions.length, skipped: 0 });
+      expect(result.terminalSessions).toEqual({
+        imported: raw.data.terminalSessions.length,
+        skipped: 0,
+      });
+      expect(await isolated.prisma.project.count()).toBe(raw.data.projects.length);
+      expect(await isolated.prisma.workspace.count()).toBe(raw.data.workspaces.length);
+      expect(result.recovery.manifest).toEqual(raw.meta.recovery);
+      if (raw === definitions) {
+        expect(result.recovery.automationDefinitions).toEqual({
+          model: 'AgentDefinition',
+          imported: 1,
+          skipped: 0,
+          sourceEnabled: 1,
+          restoredDisabled: 1,
+          reasons: { EXISTING_IDENTITY: 0, INCOMPLETE_DEPENDENCY: 0 },
+        });
+        expect(await isolated.prisma.agentDefinition.findMany()).toMatchObject([
+          {
+            id: 'body-definition',
+            isEnabled: false,
+            instructions:
+              definitions.data.recovery.automationDefinitions.definitions[0]!.instructions,
+          },
+        ]);
+      } else {
+        expect(result.recovery).not.toHaveProperty('automationDefinitions');
+        expect(await isolated.prisma.agentDefinition.count()).toBe(0);
+      }
+    }
+  );
 });

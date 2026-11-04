@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { Button } from '@/components/ui/button';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
+import definitions from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
 import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
@@ -205,6 +206,47 @@ export const PeriodicHistoryAllSkipped: Story = {
             CONFLICTING_IDENTITY_OR_PARENT: 1,
             INCOMPLETE_DEPENDENCY: 1,
           },
+        }
+      ),
+    },
+  },
+};
+
+export const AutomationDefinitionBodiesRecovery: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(
+        recoveryMetadataSchema.parse(definitions.meta.recovery),
+        {
+          model: 'PeriodicTask',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        },
+        { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } },
+        {
+          model: 'PeriodicTaskExecution',
+          imported: 3,
+          skipped: 6,
+          sourceRunning: 5,
+          restoredHistoricalFailed: 2,
+          restoredSettled: 1,
+          reasons: {
+            EXISTING_IDENTITY: 1,
+            CONFLICTING_IDENTITY_OR_PARENT: 2,
+            INCOMPLETE_DEPENDENCY: 3,
+          },
+        },
+        {
+          model: 'AgentDefinition',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
         }
       ),
     },

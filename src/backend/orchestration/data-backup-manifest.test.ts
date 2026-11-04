@@ -1,13 +1,13 @@
 import { expect, it } from 'vitest';
 import { prismaModelNames } from '@/backend/services/registry';
-import fixed from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
+import fixed from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
 import { assertRecoveryModelCoverage, createBaseRecoveryManifest } from './data-backup-manifest';
 
 it('classifies every current model with the frozen limitations', () => {
   const manifest = createBaseRecoveryManifest();
   expect(manifest).toEqual(fixed.meta.recovery);
-  expect(manifest.coverage.filter((e) => e.status === 'PARTIAL')).toHaveLength(16);
-  expect(manifest.coverage.filter((e) => e.status === 'EXCLUDED')).toHaveLength(21);
+  expect(manifest.coverage.filter((e) => e.status === 'PARTIAL')).toHaveLength(17);
+  expect(manifest.coverage.filter((e) => e.status === 'EXCLUDED')).toHaveLength(20);
   expect(new Set(manifest.coverage.map((e) => e.model))).toEqual(new Set(prismaModelNames));
   expect(createBaseRecoveryManifest()).not.toBe(manifest);
 });

@@ -39,6 +39,7 @@ import {
 } from '@prisma-gen/client';
 
 const mockTx = vi.hoisted(() => ({
+  agentDefinition: { findMany: vi.fn().mockResolvedValue([]) },
   periodicTaskExecution: { findMany: vi.fn().mockResolvedValue([]) },
   $queryRaw: vi.fn().mockResolvedValue([]),
   periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
@@ -80,6 +81,7 @@ const mockTx = vi.hoisted(() => ({
 
 vi.mock('@/backend/db', () => ({
   prisma: {
+    agentDefinition: { findMany: vi.fn().mockResolvedValue([]) },
     periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([]),
     project: {

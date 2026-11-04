@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { automationDefinitionsRecoverySchema } from './automation-definitions-recovery.schema';
 import {
   periodicConfigRecoverySchema,
   periodicHistoryRecoverySchema,
@@ -126,6 +127,12 @@ export const periodicHistoryModelCoverage = {
     'all supported retained execution scalars and canonical version-1 or legacy null launch snapshots with SQL NULL versus top-level JSON null fidelity; imported RUNNING rows become historical FAILED without asserting provider outcome; live execution and replay authority excluded.'
   ),
 };
+export const automationDefinitionsModelCoverage = {
+  ...periodicHistoryModelCoverage,
+  AgentDefinition: partial(
+    'all supported scalar definition bodies and execution preferences, source revisions and timestamps; restored disabled; connections, event membership, proposal provenance, activation and run/evaluation history excluded.'
+  ),
+};
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -138,6 +145,7 @@ export const recoverySectionsSchema = z.strictObject({
   baseJson: baseJsonSectionSchema.optional(),
   periodicConfig: periodicConfigRecoverySchema.optional(),
   periodicHistory: periodicHistoryRecoverySchema.optional(),
+  automationDefinitions: automationDefinitionsRecoverySchema.optional(),
 });
 export const recoveryMetadataSchema = z
   .strictObject({
@@ -149,12 +157,14 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-config-1',
       'base-json-periodic-links-1',
       'base-json-periodic-history-1',
+      'base-json-automation-definitions-1',
     ]),
     status: z.literal('PARTIAL'),
     capabilities: z.strictObject({
       baseJson: z.literal(1).optional(),
       periodicConfig: z.literal(1).optional(),
       periodicHistory: z.literal(1).optional(),
+      automationDefinitions: z.literal(1).optional(),
     }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
@@ -165,8 +175,16 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-config-1',
       'base-json-periodic-links-1',
       'base-json-periodic-history-1',
+      'base-json-automation-definitions-1',
     ].includes(metadata.profile);
-    const history = metadata.profile === 'base-json-periodic-history-1';
+    const automation = metadata.profile === 'base-json-automation-definitions-1';
+    const history = automation || metadata.profile === 'base-json-periodic-history-1';
+    if (
+      automation !== Object.hasOwn(metadata.capabilities, 'automationDefinitions') ||
+      (automation && metadata.capabilities.automationDefinitions !== 1)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Automation profile capabilities do not match' });
+    }
     if (
       history !== Object.hasOwn(metadata.capabilities, 'periodicHistory') ||
       (history && metadata.capabilities.periodicHistory !== 1)
@@ -197,6 +215,7 @@ export const recoveryMetadataSchema = z
           'base-json-periodic-config-1': periodicConfigModelCoverage,
           'base-json-periodic-links-1': periodicLinksModelCoverage,
           'base-json-periodic-history-1': periodicHistoryModelCoverage,
+          'base-json-automation-definitions-1': automationDefinitionsModelCoverage,
         }[metadata.profile]
       )
     );

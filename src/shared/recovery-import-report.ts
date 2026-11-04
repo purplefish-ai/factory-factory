@@ -9,6 +9,13 @@ export interface PeriodicConfigImportReport {
   reasons: { EXISTING_IDENTITY: number; INCOMPLETE_DEPENDENCY: number };
 }
 
+export interface AutomationDefinitionsImportReport extends Omit<
+  PeriodicConfigImportReport,
+  'model'
+> {
+  model: 'AgentDefinition';
+}
+
 export interface PeriodicWorkspaceLinksImportReport {
   model: 'Workspace';
   imported: number;
@@ -31,6 +38,7 @@ export interface PeriodicHistoryImportReport {
 }
 
 export interface RecoveryImportReport {
+  automationDefinitions?: AutomationDefinitionsImportReport;
   periodicHistory?: PeriodicHistoryImportReport;
   periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport;
   periodicConfig?: PeriodicConfigImportReport;
@@ -39,8 +47,14 @@ export interface RecoveryImportReport {
   warnings: string[];
   unreportedTotals: 'EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS';
 }
+function includesPeriodicHistory(metadata: RecoveryMetadata | undefined): boolean {
+  return (
+    metadata?.profile === 'base-json-periodic-history-1' ||
+    metadata?.profile === 'base-json-automation-definitions-1'
+  );
+}
 function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string {
-  return metadata?.profile === 'base-json-periodic-history-1'
+  return includesPeriodicHistory(metadata)
     ? 'Partial logical metadata only; physical nullable-JSON fidelity is supported for Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows, AgentSession.providerMetadata, and PeriodicTaskExecution.launchSnapshot. Omitted domains are not restored.'
     : metadata?.profile === 'base-json-1' ||
         metadata?.profile === 'base-json-periodic-config-1' ||
@@ -55,9 +69,11 @@ export function createRecoveryImportReport(
   metadata: RecoveryMetadata | undefined,
   periodicConfig?: PeriodicConfigImportReport,
   periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport,
-  periodicHistory?: PeriodicHistoryImportReport
+  periodicHistory?: PeriodicHistoryImportReport,
+  automationDefinitions?: AutomationDefinitionsImportReport
 ): RecoveryImportReport {
   return {
+    ...(automationDefinitions ? { automationDefinitions } : {}),
     ...(periodicHistory ? { periodicHistory } : {}),
     ...(periodicConfig ? { periodicConfig } : {}),
     ...(periodicWorkspaceLinks ? { periodicWorkspaceLinks } : {}),
@@ -69,12 +85,17 @@ export function createRecoveryImportReport(
       'Paths and provider-session IDs may be metadata; repository/worktree files, provider history bytes, secrets, native account homes and live runtime authority are excluded.',
       ...(periodicConfig
         ? [
-            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}.${metadata?.profile === 'base-json-periodic-history-1' ? '' : ' Periodic execution history excluded.'}`,
+            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}.${includesPeriodicHistory(metadata) ? '' : ' Periodic execution history excluded.'}`,
           ]
         : []),
       ...(periodicWorkspaceLinks
         ? [
-            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled${metadata?.profile === 'base-json-periodic-history-1' ? '.' : '; periodic execution history is excluded.'}`,
+            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled${includesPeriodicHistory(metadata) ? '.' : '; periodic execution history is excluded.'}`,
+          ]
+        : []),
+      ...(automationDefinitions
+        ? [
+            `Automation definition bodies restored disabled: ${automationDefinitions.imported} imported, ${automationDefinitions.skipped} skipped; ${automationDefinitions.sourceEnabled} enabled in the entire source section; ${automationDefinitions.restoredDisabled} restored disabled. Skips by reason: existing definition ID: ${automationDefinitions.reasons.EXISTING_IDENTITY}; project not created by this import: ${automationDefinitions.reasons.INCOMPLETE_DEPENDENCY}. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.`,
           ]
         : []),
       ...(periodicHistory
