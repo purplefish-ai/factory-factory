@@ -14,12 +14,33 @@ const projects = [
   { id: 'archived', name: 'Archived project', isArchived: true },
 ];
 
+const statusChildren = ['READY', 'PROVISIONING', 'FAILED'].map((status, index) => ({
+  id: `child-${index}`,
+  name: `${status.toLowerCase()} workspace`,
+  status,
+  projectSlug: 'project',
+  projectName: 'Project',
+  kanbanColumn: null,
+}));
+
+function getStoryData(path: string, input: unknown, childStatuses: boolean) {
+  if (path !== 'project.list') {
+    return childStatuses ? statusChildren : [];
+  }
+  const filter = projectFilters.parse(input);
+  return projects.filter(
+    (project) => filter?.isArchived === undefined || project.isArchived === filter.isArchived
+  );
+}
+
 function StoryProvider({
   children,
   failChildren = false,
+  childStatuses = false,
 }: {
   children: ReactNode;
   failChildren?: boolean;
+  childStatuses?: boolean;
 }) {
   const [failed] = useState({ value: false });
   const shouldFailChildren = (path: string) =>
@@ -41,15 +62,7 @@ function StoryProvider({
                 observer.error(new TRPCClientError('Offline'));
                 return;
               }
-              const filter =
-                op.path === 'project.list' ? projectFilters.parse(op.input) : undefined;
-              const data =
-                op.path === 'project.list'
-                  ? projects.filter(
-                      (project) =>
-                        filter?.isArchived === undefined || project.isArchived === filter.isArchived
-                    )
-                  : [];
+              const data = getStoryData(op.path, op.input, childStatuses);
               observer.next({ result: { data } });
               observer.complete();
             }),
@@ -69,7 +82,10 @@ const meta = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story, context) => (
-      <StoryProvider failChildren={context.parameters.failChildren === true}>
+      <StoryProvider
+        failChildren={context.parameters.failChildren === true}
+        childStatuses={context.parameters.childStatuses === true}
+      >
         <div className="h-80 w-[420px] max-w-[calc(100vw-2rem)]">
           <Story />
         </div>
@@ -129,5 +145,16 @@ export const RecoverableErrorPhone: Story = {
   play: async (context) => {
     await RecoverableError.play?.(context);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const StatusShapes: Story = {
+  parameters: { childStatuses: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const name of ['ready', 'provisioning', 'failed']) {
+      const indicator = await canvas.findByRole('img', { name });
+      await expect(indicator.querySelector('svg')).not.toBeNull();
+    }
   },
 };

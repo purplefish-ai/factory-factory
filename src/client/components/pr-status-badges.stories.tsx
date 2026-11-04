@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, within } from 'storybook/test';
 import type { GitHubStatusCheck } from '@/shared/github-types';
 import {
   CIChecksSection,
@@ -76,6 +77,10 @@ export default metaDot;
 type StoryDot = StoryObj<typeof metaDot>;
 
 export const Pass: StoryDot = {
+  play: async ({ canvasElement }) => {
+    const indicator = within(canvasElement).getByRole('img', { name: 'CI passed' });
+    await expect(indicator.querySelector('svg')).not.toBeNull();
+  },
   args: {
     checks: mockChecks,
     size: 'sm',

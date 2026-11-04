@@ -81,6 +81,7 @@
     "jsx-a11y/label-has-associated-control": "off",
     "factory/no-await-import": "error",
     "factory/no-native-dialogs": "error",
+    "factory/icon-button-name": "error",
     "factory/no-next-directives": "error",
     "factory/no-zod-any": "error",
     "factory/no-unsafe-json-parse-cast": "error",

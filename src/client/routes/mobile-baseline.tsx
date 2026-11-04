@@ -203,7 +203,7 @@ function GeneralMobileBaselinePage() {
               <SelectItem value="done">Done</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" aria-label="List view">
             <ListIcon className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm">
@@ -261,7 +261,7 @@ function GeneralMobileBaselinePage() {
           </div>
 
           <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
-            <SheetContent side="bottom" className="h-[88dvh] w-full max-w-none p-0">
+            <SheetContent side="bottom" className="h-[88dvh] w-full max-w-none p-0 pb-safe">
               <SheetHeader className="sr-only">
                 <SheetTitle>Review details</SheetTitle>
                 <SheetDescription>Mobile review request detail panel</SheetDescription>

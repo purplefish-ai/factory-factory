@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CIChecksSection, CIStatusBadge } from './pr-status-badges';
+import { CIChecksSection, CIStatusBadge, CIStatusDot } from './pr-status-badges';
 
 function createCheck(
   name: string,
@@ -137,5 +137,22 @@ describe('CIStatusBadge', () => {
 
     expect(markup).toContain('1 failed');
     expect(markup).not.toContain('1 skipped');
+  });
+});
+
+describe('CIStatusDot', () => {
+  it('distinguishes passing and failing checks by icon shape as well as color', () => {
+    const passing = renderToStaticMarkup(
+      <CIStatusDot checks={[createCheck('build', 'SUCCESS')]} />
+    );
+    const failing = renderToStaticMarkup(
+      <CIStatusDot checks={[createCheck('build', 'FAILURE')]} />
+    );
+    expect(passing).toContain('aria-label="CI passed"');
+    expect(failing).toContain('aria-label="CI failed"');
+    expect(passing.match(/<path[^>]*d="([^"]+)"/)?.[1]).toBeTruthy();
+    expect(passing.match(/<path[^>]*d="([^"]+)"/)?.[1]).not.toBe(
+      failing.match(/<path[^>]*d="([^"]+)"/)?.[1]
+    );
   });
 });

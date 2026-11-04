@@ -292,7 +292,7 @@ function ReviewsMobileLayout({
       />
 
       <Sheet open={mobileDetailsOpen && !!selectedPR} onOpenChange={setMobileDetailsOpen}>
-        <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0">
+        <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0 pb-safe">
           <SheetHeader className="sr-only">
             <SheetTitle>Pull request details</SheetTitle>
             <SheetDescription>Review request details and actions</SheetDescription>
