@@ -1,8 +1,59 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sessionCommandFactories } from '@/backend/services/session';
+import { MessageState } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createChatCommandRegistry } from './chat-message-router';
 import { createChatRouterServices } from './chat-message-router.test-helpers';
+
+it('publishes one session recovery when a direct provider send later fails', async () => {
+  const services = createChatRouterServices(sessionCommandFactories);
+  let fail!: (error: Error) => void;
+  const turn = new Promise<void>((_resolve, reject) => {
+    fail = reject;
+  });
+  const sendSessionMessage = vi.fn(() => turn);
+  const registry = createChatCommandRegistry({
+    ...services,
+    runtime: { isSessionRunning: () => true },
+    prompt: { sendSessionMessage },
+  });
+  const content = [
+    { type: 'text', text: 'original text' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
+  ];
+  expect(
+    await registry.user_input(
+      { sessionId: 'recovery-session', workingDir: '/tmp' },
+      { type: 'user_input', content }
+    )
+  ).toEqual({ replies: [] });
+  expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
+  fail(new Error('provider disconnected'));
+  await vi.waitFor(() =>
+    expect(services.eventBus.publishToSession).toHaveBeenCalledExactlyOnceWith('recovery-session', {
+      type: 'message_state_changed',
+      id: expect.any(String),
+      newState: MessageState.REJECTED,
+      errorMessage: 'Could not send message. Try again.',
+      userMessage: {
+        sessionId: 'recovery-session',
+        text: 'original text',
+        timestamp: expect.any(String),
+        attachments: [
+          {
+            id: expect.any(String),
+            name: 'image.png',
+            type: 'image/png',
+            contentType: 'image',
+            data: 'aGVsbG8=',
+            size: 5,
+          },
+        ],
+      },
+    })
+  );
+  expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+});
 
 describe('socket-free command registry', () => {
   it('uses the supplied application capabilities for every migrated command', async () => {

@@ -5,6 +5,7 @@ import type {
 } from '@/backend/services/session/service/chat/session-command.types';
 import type {
   SessionCommandHandler,
+  SessionCommandError,
   SessionCommandOutcome,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
@@ -18,6 +19,9 @@ export function createUserInputHandler(deps: {
   sessionService: SessionCommandPromptService;
   backgroundDelivery: SessionExecutionCommandServices['backgroundDelivery'];
   humanMessageAccepted?: SessionExecutionCommandServices['humanMessageAccepted'];
+  reportInputFailure(
+    error: Extract<SessionCommandError, { kind: 'user_input_failed' }>
+  ): void | Promise<void>;
 }): SessionCommandHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;
   const pendingAdmissions = new Map<string, Promise<void>>();
@@ -65,8 +69,18 @@ export function createUserInputHandler(deps: {
           assertCurrent();
           // The send promise spans the entire provider turn. Serialize only
           // admission and submission; the prompt service owns turn ordering.
-          void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
-            logger.error('Failed to send message to provider', { sessionId, error });
+          void sessionService.sendSessionMessage(sessionId, messageContent).catch(async (cause) => {
+            logger.error('Failed to send message to provider', { sessionId, error: cause });
+            try {
+              await deps.reportInputFailure({
+                kind: 'user_input_failed',
+                sessionId,
+                content: messageContent,
+                cause,
+              });
+            } catch (error) {
+              logger.warn('Failed to publish direct input recovery', { sessionId, error });
+            }
           });
           void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {
             logger.warn('Failed to resume PR delivery after human input', { sessionId, error });

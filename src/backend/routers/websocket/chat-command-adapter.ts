@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
-import { type MessageAttachment, MessageState } from '@/shared/acp-protocol';
+import { type MessageAttachment, MessageState, type WebSocketMessage } from '@/shared/acp-protocol';
 import { DirectInputContentItemSchema } from '@/shared/websocket/direct-input-content.schema';
 
 function recoverDirectInput(content: string | unknown[]) {
@@ -101,6 +101,23 @@ function formatCommandError(error: SessionCommandError): string {
   }
 }
 
+/** Build the same recoverable rejection for immediate and later provider failures. */
+export function buildUserInputRejection(
+  error: Extract<SessionCommandError, { kind: 'user_input_failed' }>
+): Extract<WebSocketMessage, { type: 'message_state_changed' }> {
+  return {
+    type: 'message_state_changed',
+    id: randomUUID(),
+    newState: MessageState.REJECTED,
+    errorMessage: formatCommandError(error),
+    userMessage: {
+      ...recoverDirectInput(error.content),
+      sessionId: error.sessionId,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
 /** Format requester outcomes; configuration publication belongs to the serialized service. */
 export function applySessionCommandOutcome(
   requester: { send(payload: string): void },
@@ -112,19 +129,7 @@ export function applySessionCommandOutcome(
   for (const reply of outcome.replies) {
     if (reply.type === 'error') {
       if (reply.error.kind === 'user_input_failed') {
-        requester.send(
-          JSON.stringify({
-            type: 'message_state_changed',
-            id: randomUUID(),
-            newState: MessageState.REJECTED,
-            errorMessage: formatCommandError(reply.error),
-            userMessage: {
-              ...recoverDirectInput(reply.error.content),
-              sessionId: reply.error.sessionId,
-              timestamp: new Date().toISOString(),
-            },
-          })
-        );
+        requester.send(JSON.stringify(buildUserInputRejection(reply.error)));
         continue;
       }
       requester.send(

@@ -12,6 +12,7 @@ import type {
   SessionFileLogger,
 } from '@/backend/services/session';
 import type { ChatMessageInput } from '@/shared/websocket';
+import { buildUserInputRejection } from './chat-command-adapter';
 import { executeSessionLoad } from './chat-load-adapter';
 
 export interface ChatMessageRouterServices {
@@ -64,6 +65,9 @@ export function createChatCommandRegistry(
       backgroundDelivery: services.execution.backgroundDelivery,
     }),
     user_input: createUserInputHandler({
+      reportInputFailure: (error) => {
+        services.eventBus.publishToSession(error.sessionId, buildUserInputRejection(error));
+      },
       humanMessageAccepted: services.execution.humanMessageAccepted,
       acpRuntimeManager: services.runtime,
       sessionService: services.prompt,

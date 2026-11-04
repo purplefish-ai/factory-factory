@@ -23,12 +23,65 @@ function createDeps(options?: { isSessionRunning?: boolean }) {
     sendSessionMessage: vi.fn(async () => undefined),
   };
   return {
+    reportInputFailure: vi.fn(),
     acpRuntimeManager,
     sessionService,
     backgroundDelivery: sessionBackgroundDeliveryService,
   };
 }
 const context = { sessionId: 'session-1', workingDir: '/tmp/work' };
+
+it('reports a late provider failure with original content after input submission completes', async () => {
+  let fail!: (error: Error) => void;
+  const providerTurn = new Promise<void>((_resolve, reject) => {
+    fail = reject;
+  });
+  const deps = createDeps({ isSessionRunning: true });
+  vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValue(providerTurn);
+  const reportInputFailure = vi.fn();
+  const handler = createUserInputHandler({ ...deps, reportInputFailure });
+  const content = [
+    { type: 'text', text: 'recover me' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
+  ];
+  expect(await handler(context, { type: 'user_input', content })).toEqual({ replies: [] });
+  expect(reportInputFailure).not.toHaveBeenCalled();
+  const cause = new Error('provider disconnected');
+  fail(cause);
+  await vi.waitFor(() =>
+    expect(reportInputFailure).toHaveBeenCalledExactlyOnceWith({
+      kind: 'user_input_failed',
+      sessionId: 'session-1',
+      content,
+      cause,
+    })
+  );
+  expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+});
+
+it.each([false, true])(
+  'contains failures from the recovery reporter (async: %s)',
+  async (asyncFailure) => {
+    const deps = createDeps({ isSessionRunning: true });
+    vi.mocked(deps.sessionService.sendSessionMessage).mockRejectedValue(
+      new Error('provider failed')
+    );
+    const reportInputFailure = vi.fn(() => {
+      if (asyncFailure) {
+        return Promise.reject(new Error('report failed'));
+      }
+      throw new Error('report failed');
+    });
+    expect(
+      await createUserInputHandler({ ...deps, reportInputFailure })(context, {
+        type: 'user_input',
+        text: 'recover',
+      })
+    ).toEqual({ replies: [] });
+    await vi.waitFor(() => expect(reportInputFailure).toHaveBeenCalledOnce());
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+  }
+);
 
 describe('createUserInputHandler', () => {
   beforeEach(() => {
