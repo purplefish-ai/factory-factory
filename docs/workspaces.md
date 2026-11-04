@@ -1,4 +1,46 @@
-# Workspace Progression Model
+# Workspaces: Glossary and Progression Model
+
+The [glossary](#glossary) is current. Everything after it is the
+[historical progression model](#historical-progression-model).
+
+## Glossary
+
+UI labels use these terms. Code identifiers, APIs and database fields keep their
+existing names, shown in parentheses where they differ.
+
+- **Project**: a repository Factory Factory manages. Each project has one board.
+- **Board**: the project's landing page (`/projects/:slug/workspaces`), with
+  Todo, Working, Waiting and Done columns. Open it from **Board** in the sidebar
+  or the project name in the header. The sidebar lists the same workspaces, so
+  it starts collapsed on the board to leave room for the columns.
+- **Workspace**: one isolated Git worktree and branch, with its chats, terminals
+  and pull requests. A workspace is what moves across the board. **New
+  Workspace** in the sidebar opens the new workspace; **New Workspace** in the
+  board header stays on the board so several can be launched in a row. The
+  retired `/projects/:slug/workspaces/new` URL opens the board's form.
+- **Chat** (`session`): one conversation with a coding agent inside a workspace,
+  shown as a tab such as "Chat 1". A workspace can have several. Search lists
+  chats as **Chat** results.
+- **Agent**: two senses. In status text such as "Agent working", the coding
+  agent (Claude or Codex) running in a chat. As a saved object, an automation in
+  the project's **Agents** section that launches workspaces: a **scheduled
+  agent** (`PeriodicTask`) or an **event agent**. Labels for saved agents name
+  the kind, as in a workspace's **Scheduled agent** tool tab.
+- **Sub-agent** (`subagent`): a helper that the provider starts inside a chat.
+  It works in the chat's workspace and appears in the workspace's **Sub-agents**
+  tool tab and as a transcript tab. UI text spells it "sub-agent".
+- **Child workspace**: a separate workspace, with its own branch and chats, that
+  a workspace's agent creates for delegated work. The parent lists its children
+  under **Child Workspaces** in the **Sub-agents** tab, next to the other
+  delegated work; board cards link parents and children.
+- **Issue**: a GitHub or Linear issue assigned to you, shown in the board's Todo
+  column and the sidebar's Todo group. Starting an issue creates a linked
+  workspace.
+- **Task**: not a separate object, so avoid it as a label. The board's former
+  **New Task** button is **New Workspace**; `PeriodicTask` in code is a
+  scheduled agent.
+
+## Historical progression model
 
 > **Historical workspace progression model.** The Ratchet fixer workflow and
 > related PR state described here have been replaced by PR monitoring. Use

@@ -54,8 +54,9 @@
   --accent: oklch(0.96 0 0);
   --accent-foreground: oklch(0.145 0 0);
   /*
-   * Light mode brand: Factory Yellow's hue (102, see .dark) darkened to a gold
-   * that reads as text on the light background (5.7:1). Bright yellow cannot.
+   * Light mode brand: a darker gold near Factory Yellow's hue (95 vs 102, see
+   * .dark) that reads as text on the light background (5.7:1). Bright yellow
+   * cannot.
    */
   --brand: oklch(0.5 0.105 95);
   --brand-foreground: oklch(0.98 0 0);

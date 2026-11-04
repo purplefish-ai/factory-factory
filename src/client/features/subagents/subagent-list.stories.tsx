@@ -173,7 +173,7 @@ export const ControllableSubagents: Story = {
   ],
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getAllByRole('button', { name: /^Stop subagent:/ })
+      within(canvasElement).getAllByRole('button', { name: /^Stop sub-agent:/ })
     ).toHaveLength(1);
   },
 };
@@ -182,7 +182,7 @@ export const SubagentStopPending: Story = {
   ...ControllableSubagents,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /^Stop subagent:/ }));
-    await expect(canvas.getByRole('button', { name: /^Stop subagent:/ })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: /^Stop sub-agent:/ }));
+    await expect(canvas.getByRole('button', { name: /^Stop sub-agent:/ })).toBeDisabled();
   },
 };

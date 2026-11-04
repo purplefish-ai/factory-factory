@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { usePromptAutoFocus } from './prompt-auto-focus';
 import {
   getOtherOptionValue,
   formatAnswer,
@@ -17,6 +18,9 @@ import {
   getAnswerError,
   getArrayAnswerError,
 } from './question-prompt-answers';
+
+const QUESTION_FIRST_FOCUSABLE_SELECTOR =
+  'input, button, textarea, [tabindex]:not([tabindex="-1"])';
 
 // =============================================================================
 // Types
@@ -517,18 +521,7 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
     setOtherTexts({});
   }, [currentRequestId]);
 
-  useEffect(() => {
-    if (!currentRequestId) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      const firstFocusable = containerRef.current?.querySelector<HTMLElement>(
-        'input, button, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      firstFocusable?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [currentRequestId]);
+  usePromptAutoFocus(currentRequestId, containerRef, QUESTION_FIRST_FOCUSABLE_SELECTOR);
 
   const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
     setAnswers((prev) => ({

@@ -21,8 +21,8 @@ export function WorkspaceMailDetail({
   const [readError, setReadError] = useState<string | null>(null);
   const [ackError, setAckError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(!!mail.acknowledgedAt);
-  const read = trpc.workspace.readMail.useMutation();
-  const ack = trpc.workspace.ackMail.useMutation();
+  const read = trpc.workspace.readMail.useMutation({ meta: { errorToast: false } });
+  const ack = trpc.workspace.ackMail.useMutation({ meta: { errorToast: false } });
   const { mutate: readBody } = read;
 
   useEffect(() => {

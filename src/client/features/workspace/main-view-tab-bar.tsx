@@ -4,12 +4,13 @@ import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { type SubagentSelection, useLiveSubagent } from '@/client/features/subagents';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,12 @@ import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import { ClosedSessionsDropdown } from './closed-sessions-dropdown';
 import { QuickActionsMenu } from './quick-actions-menu';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
+import {
+  describeSessionCloseRisk,
+  getSessionCloseRisk,
+  type SessionCloseRisk,
+  type SessionQueuedMessageCount,
+} from './session-close-guard';
 import { isWorkspaceSessionLimitReached } from './session-limit';
 import {
   deriveSessionTabRuntime,
@@ -257,6 +264,8 @@ interface MainViewTabBarProps {
   workspaceId: string;
   sessions?: Session[];
   currentSessionId?: string | null;
+  /** Queued (unsent) messages and their session; closing that session discards them. */
+  queuedMessageCount?: SessionQueuedMessageCount | null;
   sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: (codexAccountId?: string) => void;
@@ -274,6 +283,7 @@ export function MainViewTabBar({
   workspaceId,
   sessions,
   currentSessionId,
+  queuedMessageCount,
   sessionSummariesById,
   onSelectSession,
   onCreateSession,
@@ -285,6 +295,32 @@ export function MainViewTabBar({
   maxSessions,
 }: MainViewTabBarProps) {
   const { tabs, activeTabId, selectTab, closeTab, updateSubagentTab } = useWorkspacePanel();
+  // The request outlives `closeConfirmOpen` so the dialog keeps its copy while
+  // it animates closed.
+  const [closeRequest, setCloseRequest] = useState<{
+    sessionId: string;
+    label: string;
+    risk: SessionCloseRisk;
+  } | null>(null);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+
+  const requestCloseSession = (session: Session, label: string) => {
+    const risk = getSessionCloseRisk({
+      summary: sessionSummariesById?.get(session.id),
+      persistedStatus: session.status,
+      queuedMessageCount:
+        queuedMessageCount?.sessionId === session.id ? queuedMessageCount.count : 0,
+    });
+    if (!risk) {
+      onCloseSession?.(session.id);
+      return;
+    }
+    setCloseRequest({ sessionId: session.id, label, risk });
+    setCloseConfirmOpen(true);
+  };
+  const closeRequestCopy = closeRequest
+    ? describeSessionCloseRisk(closeRequest.label, closeRequest.risk)
+    : null;
 
   // Filter out the default 'chat' tab since we're showing sessions instead
   const nonChatTabs = tabs.filter((tab) => tab.type !== 'chat');
@@ -319,7 +355,9 @@ export function MainViewTabBar({
                 onSelectSession?.(session.id);
                 selectTab('chat');
               }}
-              onClose={sessions.length > 1 ? () => onCloseSession?.(session.id) : undefined}
+              onClose={
+                sessions.length > 1 ? () => requestCloseSession(session, baseLabel) : undefined
+              }
             />
           );
         })}
@@ -420,6 +458,21 @@ export function MainViewTabBar({
           </Tooltip>
         </div>
       )}
+
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={setCloseConfirmOpen}
+        title={closeRequestCopy?.title ?? ''}
+        description={closeRequestCopy?.description ?? ''}
+        confirmText={closeRequestCopy?.confirmText}
+        variant="destructive"
+        onConfirm={() => {
+          setCloseConfirmOpen(false);
+          if (closeRequest) {
+            onCloseSession?.(closeRequest.sessionId);
+          }
+        }}
+      />
     </div>
   );
 }

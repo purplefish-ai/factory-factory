@@ -1,9 +1,9 @@
 # Status colors
 
-Status color comes from theme tokens, never from Tailwind's fixed palette, so
-one state looks the same everywhere and follows the selected color scheme. The
-tokens live in [`globals.css`](../src/client/globals.css) and are overridden per
-preset in [`theme-presets.css`](../src/client/theme-presets.css). The
+Status color must come from theme tokens, never from Tailwind's fixed palette,
+so one state looks the same everywhere and follows the selected color scheme.
+The tokens live in [`globals.css`](../src/client/globals.css) and are overridden
+per preset in [`theme-presets.css`](../src/client/theme-presets.css). The
 `Foundations/Colors` and `Foundations/StatusPalette` Storybook stories show
 every token and tone with live contrast for the selected theme and scheme.
 
@@ -31,8 +31,9 @@ dark-mode fills. Destructive is the one exception in dark mode, where the shadcn
 Button and Badge render it at 60% opacity with light text. Do not use
 `*-foreground` for text on a tint; use the base token.
 
-Light mode cannot use bright yellow as text, so its brand is Factory Yellow's
-hue darkened to a gold. `running` follows `brand` in the Factory scheme.
+Light mode cannot use bright yellow as text, so its brand is a darker gold near
+Factory Yellow's hue (OKLCH hue 95 instead of 102). `running` follows `brand` in
+the Factory scheme.
 
 ### Presets
 

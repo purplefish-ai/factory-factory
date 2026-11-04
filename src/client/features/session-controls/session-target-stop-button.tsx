@@ -21,13 +21,13 @@ export function SessionTargetStopButton({
   target: SessionStopTarget;
   itemLabel: string;
 }) {
-  const mutation = trpc.session.stopTarget.useMutation();
+  const mutation = trpc.session.stopTarget.useMutation({ meta: { errorToast: false } });
   const pending = useSyncExternalStore(
     subscribePendingStops,
     () => isSessionTargetStopPending(sessionId, target),
     () => false
   );
-  const label = target.kind === 'task' ? 'Stop process' : 'Stop subagent';
+  const label = target.kind === 'task' ? 'Stop process' : 'Stop sub-agent';
   return (
     <TooltipProvider>
       <Tooltip>

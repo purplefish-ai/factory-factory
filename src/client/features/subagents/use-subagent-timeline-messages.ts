@@ -41,7 +41,7 @@ function getListState(
   return { kind: 'ready', subagents, ...pagination, error: error ?? undefined };
 }
 
-/** Share the Sessions panel's provider query and live invalidations. */
+/** Share the Sub-agents panel's provider query and live invalidations. */
 export function useSubagentTimelineMessages(
   messages: ChatMessage[],
   sessionId: string | null,

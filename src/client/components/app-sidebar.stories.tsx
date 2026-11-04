@@ -1,14 +1,41 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { expect, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { trpc } from '@/client/lib/trpc';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 
 type State = 'healthy' | 'failed' | 'loading' | 'empty' | 'project-switch';
-function SidebarStory({ state }: { state: State }) {
+
+/** Moves Storybook's shared MemoryRouter to the story's route before rendering. */
+function AtRoute({ path, children }: { path: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    void navigate(path, { replace: true });
+  }, [navigate, path]);
+  return pathname === path ? children : null;
+}
+
+function OpenMobileSheet() {
+  const { setOpenMobile } = useSidebar();
+  useEffect(() => setOpenMobile(true), [setOpenMobile]);
+  return null;
+}
+
+function SidebarStory({
+  state,
+  path = '/',
+  mobileOpen = false,
+}: {
+  state: State;
+  path?: string;
+  mobileOpen?: boolean;
+}) {
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
@@ -52,9 +79,12 @@ function SidebarStory({ state }: { state: State }) {
             Switch project
           </button>
         ) : null}
-        <SidebarProvider className="h-[640px] min-h-0">
-          <AppSidebar navData={navData} />
-        </SidebarProvider>
+        <AtRoute path={path}>
+          <SidebarProvider className="h-[640px] min-h-0">
+            {mobileOpen ? <OpenMobileSheet /> : null}
+            <AppSidebar navData={navData} />
+          </SidebarProvider>
+        </AtRoute>
       </QueryClientProvider>
     </trpc.Provider>
   );
@@ -62,7 +92,7 @@ function SidebarStory({ state }: { state: State }) {
 const meta = {
   title: 'Navigation/Agents badge',
   component: SidebarStory,
-  render: (args) => <SidebarStory key={args.state} {...args} />,
+  render: (args) => <SidebarStory key={`${args.state}:${args.path ?? '/'}`} {...args} />,
   args: { state: 'healthy' },
   argTypes: {
     state: {
@@ -88,5 +118,42 @@ export const NewWorkspaceImageDrop: Story = {
       throw new Error('Sidebar workspace content not found');
     }
     target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
+  },
+};
+
+const boardHref = '/projects/factory/workspaces';
+
+/** Board is the project landing page and the first project link in the footer. */
+export const BoardActive: Story = {
+  args: { path: boardHref },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveAttribute('href', boardHref);
+    await expect(board).toHaveAttribute('aria-current', 'page');
+    await expect(board).toHaveAttribute('data-active', 'true');
+  },
+};
+
+/** On workspace detail the workspace row is current, not Board, despite the shared URL prefix. */
+export const BoardInactiveOnWorkspace: Story = {
+  args: { path: `${boardHref}/workspace-1` },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).not.toHaveAttribute('aria-current');
+    await expect(board).toHaveAttribute('data-active', 'false');
+  },
+};
+
+/** Phones show the same footer, including Board, in the full-screen navigation sheet. */
+export const MobileSheet: Story = {
+  args: { path: `${boardHref}/workspace-1`, mobileOpen: true },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+  parameters: { layout: 'fullscreen' },
+  play: async ({ canvasElement }) => {
+    const sheet = await within(canvasElement.ownerDocument.body).findByRole('dialog');
+    await expect(within(sheet).getByRole('link', { name: 'Board' })).toHaveAttribute(
+      'href',
+      boardHref
+    );
   },
 };

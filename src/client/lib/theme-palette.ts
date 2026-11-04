@@ -17,13 +17,21 @@ const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
 const DECLARATION_PATTERN = /(--[\w-]+)\s*:\s*([^;]+);/g;
 const VAR_PATTERN = /^var\(\s*(--[\w-]+)\s*\)$/;
 
-/** Reads the custom properties declared directly in one top-level `selector { ... }` block. */
+/**
+ * Reads the custom properties declared directly in one top-level `selector { ... }`
+ * block. Throws when the block is missing or declared twice, so a typo or a
+ * second override block cannot silently escape the contrast checks.
+ */
 export function readThemeDeclarations(css: string, selector: string): Map<string, string> {
   const declarations = new Map<string, string>();
   const source = css.replace(COMMENT_PATTERN, '');
-  const start = source.indexOf(`\n${selector} {`);
+  const marker = `\n${selector} {`;
+  const start = source.indexOf(marker);
   if (start === -1) {
-    return declarations;
+    throw new Error(`Theme block not found: ${selector}`);
+  }
+  if (source.indexOf(marker, start + marker.length) !== -1) {
+    throw new Error(`Duplicate theme block: ${selector}`);
   }
   const bodyStart = source.indexOf('{', start) + 1;
   const bodyEnd = source.indexOf('}', bodyStart);

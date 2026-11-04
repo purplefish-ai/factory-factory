@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { PRDetailPanel } from './pr-detail-panel';
 
@@ -375,4 +376,41 @@ export const WithApprovedStatusDark: Story = {
 export const WithDiffDark: Story = {
   ...WithDiff,
   globals: { theme: 'dark' },
+};
+
+export const KeyboardShortcuts: Story = {
+  args: {
+    pr: mockPR,
+    diff: mockDiff,
+    diffLoading: false,
+    onFetchDiff: fn(),
+    onOpenGitHub: fn(),
+    onApprove: fn(),
+    approving: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Approving submits a GitHub review, so its shortcut is Shift+A. Tab shortcuts (i/d) ignore modified keys, so ⌘D still reaches the browser.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const approve = canvas.getByRole('button', { name: /^Approve/ });
+    await expect(approve).toHaveAttribute('aria-keyshortcuts', 'Shift+A');
+    await expect(approve).toHaveTextContent('⇧A');
+
+    await userEvent.keyboard('{Meta>}d{/Meta}');
+    await expect(canvas.getByRole('tab', { name: 'Info' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    await userEvent.keyboard('d');
+    await waitFor(() =>
+      expect(canvas.getByRole('tab', { name: 'Diff' })).toHaveAttribute('aria-selected', 'true')
+    );
+  },
 };

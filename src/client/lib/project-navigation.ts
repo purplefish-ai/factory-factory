@@ -34,6 +34,19 @@ export function getProjectSection(pathname: string): ProjectSection | null {
   return section === 'workspaces' || section === 'agents' || section === 'reviews' ? section : null;
 }
 
+/** The board is the project landing page; workspace detail routes sit below it. */
+export function isProjectBoardPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+\/workspaces\/?$/i.test(pathname);
+}
+
+/** Search parameter that asks the board to open its new workspace form once. */
+export const NEW_WORKSPACE_SEARCH_PARAM = 'new';
+
+/** Board URL that opens the new workspace form; replaces the removed `/workspaces/new` page. */
+export function getProjectNewWorkspacePath(slug: string): string {
+  return `${getProjectSectionPath(slug, 'workspaces')}?${NEW_WORKSPACE_SEARCH_PARAM}=1`;
+}
+
 /** Explicit legacy owners must resolve before the root onboarding redirect. */
 export function hasExplicitLegacyProjectOwner(pathname: string, search: string): boolean {
   return (
