@@ -48,11 +48,16 @@ export function KanbanControlsView({
         </Tooltip>
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Board actions">
-            <DotsThreeIcon className="h-5 w-5" />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Board actions">
+                <DotsThreeIcon className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Board actions</TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onRefresh} disabled={isSyncing}>
             {isSyncing ? (

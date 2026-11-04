@@ -17,7 +17,7 @@ every token and tone with live contrast for the selected theme and scheme.
 | `destructive` | Failed, error, changes requested, closed   | red           | red                |
 | `info`        | Waiting on something else, informational   | blue          | blue               |
 | `merged`      | Merged pull requests                       | purple        | purple             |
-| `brand`       | Factory Yellow accent (not a status)       | gold, hue 95  | `#FFE500`, hue 102 |
+| `brand`       | Factory Yellow accent (not a status)       | amber, hue 75 | `#FFE500`, hue 102 |
 | `ring`        | Focus rings; neutral so it is never status | gray          | gray               |
 
 Each status token is a text and icon color. It reaches WCAG AA (4.5:1) on the

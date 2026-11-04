@@ -68,7 +68,7 @@
   --accent-foreground: oklch(0.145 0 0);
   /*
    * Light mode brand: a deep amber for readable text. The separate running accent
-   * carries bright Factory Yellow on borders, dots and tinted surfaces.
+   * carries bright Factory Yellow on borders and tinted surfaces.
    */
   --brand: oklch(0.48 0.11 75);
   --brand-foreground: oklch(0.98 0 0);

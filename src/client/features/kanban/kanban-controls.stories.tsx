@@ -33,7 +33,13 @@ export const Desktop: Story = {
     await expect(
       canvas.queryByRole('button', { name: 'Refresh workspaces' })
     ).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: 'Board actions' }));
+    const actions = canvas.getByRole('button', { name: 'Board actions' });
+    await userEvent.hover(actions);
+    await expect(await within(document.body).findByRole('tooltip')).toHaveTextContent(
+      'Board actions'
+    );
+    await userEvent.unhover(actions);
+    await userEvent.click(actions);
     await userEvent.click(await within(document.body).findByRole('menuitem', { name: 'Sync now' }));
     await expect(args.onRefresh).toHaveBeenCalledOnce();
   },

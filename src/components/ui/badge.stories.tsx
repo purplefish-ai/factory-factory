@@ -86,3 +86,20 @@ export const AllVariantsDark: Story = {
   ...AllVariants,
   globals: { theme: 'dark' },
 };
+
+/** Linked status badges keep their accent tint and underline on hover. */
+export const LinkedStatusVariants: Story = {
+  render: () => (
+    <div className="flex gap-3">
+      {(['success', 'warning', 'info'] as const).map((variant) => (
+        <Badge key={variant} variant={variant} asChild>
+          <a href="#badge-preview">{variant}</a>
+        </Badge>
+      ))}
+    </div>
+  ),
+};
+export const LinkedStatusVariantsDark: Story = {
+  ...LinkedStatusVariants,
+  globals: { theme: 'dark' },
+};
