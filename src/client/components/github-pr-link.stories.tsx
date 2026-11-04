@@ -90,12 +90,16 @@ export const Mobile: Story = {
 
 export const AllStatesDark: Story = {
   globals: { theme: 'dark' },
-  render: (args) => (
-    <div className="grid gap-4">
-      <GitHubPRPreviewCard {...args} />
-      <GitHubPRPreviewCard {...args} data={{ ...data, isDraft: true }} />
-      <GitHubPRPreviewCard {...args} data={{ ...data, state: 'MERGED' }} />
-      <GitHubPRPreviewCard {...args} data={{ ...data, state: 'CLOSED' }} />
-    </div>
-  ),
+  render: (args) => {
+    // Derive every state from the story's data so control edits apply to all.
+    const base = args.data ?? data;
+    return (
+      <div className="grid gap-4">
+        <GitHubPRPreviewCard {...args} data={base} />
+        <GitHubPRPreviewCard {...args} data={{ ...base, isDraft: true }} />
+        <GitHubPRPreviewCard {...args} data={{ ...base, state: 'MERGED' }} />
+        <GitHubPRPreviewCard {...args} data={{ ...base, state: 'CLOSED' }} />
+      </div>
+    );
+  },
 };
