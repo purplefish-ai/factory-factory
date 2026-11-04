@@ -81,6 +81,11 @@ describe('deriveWorkspaceStatusReason', () => {
     });
     expect(deriveWorkspaceStatusReason(makeInput({ prState: 'CLOSED' }))).toMatchObject({
       code: 'PR_CLOSED',
+      tone: 'danger',
+    });
+    // Terminal PR tones match the PR state chips: merged is purple, closed red.
+    expect(deriveWorkspaceStatusReason(makeInput({ prState: 'MERGED' }))).toMatchObject({
+      tone: 'merged',
     });
   });
 

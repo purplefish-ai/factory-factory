@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -164,17 +165,17 @@ function NewChildWorkspaceDialog({
 function statusColor(status: string): string {
   switch (status) {
     case 'READY':
-      return 'bg-green-500';
+      return getStatusToneStyle('success').dot;
     case 'NEW':
     case 'PROVISIONING':
-      return 'bg-yellow-500 animate-pulse';
+      return cn(getStatusToneStyle('working').dot, 'animate-pulse motion-reduce:animate-none');
     case 'FAILED':
-      return 'bg-red-500';
+      return getStatusToneStyle('danger').dot;
     case 'ARCHIVED':
     case 'ARCHIVING':
-      return 'bg-muted-foreground';
+      return getStatusToneStyle('neutral').dot;
     default:
-      return 'bg-blue-500';
+      return getStatusToneStyle('info').dot;
   }
 }
 

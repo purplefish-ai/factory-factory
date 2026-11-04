@@ -54,8 +54,8 @@ function getKindMeta(kind: CodexFileChangeKind): {
     case 'update':
       return {
         icon: FileCodeIcon,
-        className: 'text-yellow-600 border-yellow-500/40 bg-yellow-500/10',
-        iconColorClass: 'text-yellow-600',
+        className: 'text-warning border-warning/40 bg-warning/10',
+        iconColorClass: 'text-warning',
       };
     case 'delete':
       return {
@@ -66,8 +66,8 @@ function getKindMeta(kind: CodexFileChangeKind): {
     case 'move':
       return {
         icon: ArrowsLeftRightIcon,
-        className: 'text-sky-600 border-sky-500/40 bg-sky-500/10',
-        iconColorClass: 'text-sky-600',
+        className: 'text-info border-info/40 bg-info/10',
+        iconColorClass: 'text-info',
       };
     case 'unknown':
       return {

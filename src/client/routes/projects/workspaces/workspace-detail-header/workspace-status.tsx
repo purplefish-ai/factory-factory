@@ -99,7 +99,7 @@ export function WorkspaceIssueLink({
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <DotOutlineIcon className="h-3 w-3 text-violet-500" />
+        <DotOutlineIcon className="h-3 w-3" />
         {workspace.linearIssueIdentifier}
       </a>
     );
@@ -113,7 +113,7 @@ export function WorkspaceIssueLink({
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <DotOutlineIcon className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
+        <DotOutlineIcon className="h-3 w-3" />#{workspace.githubIssueNumber}
       </a>
     );
   }

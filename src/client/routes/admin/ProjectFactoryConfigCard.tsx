@@ -89,7 +89,7 @@ export function ProjectFactoryConfigCard({
             <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {isSuccess &&
               (factoryConfig ? (
-                <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                <Badge variant="success">
                   <CheckCircleIcon className="w-3 h-3 mr-1" />
                   Configured
                 </Badge>

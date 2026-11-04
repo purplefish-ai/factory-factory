@@ -41,7 +41,7 @@ it('shows legacy agent identity in quick chat while preserving ordinary session 
     const tabs = container.querySelectorAll('[role="tab"]');
     expect(tabs[0]?.textContent).toBe('Agent');
     expect(
-      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-brand')
+      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-running')
     ).toBe(true);
     expect(tabs[1]?.textContent).toBe('Periodic task');
     expect(tabs[1]?.querySelector('[aria-label^="Agent:"]')).toBeNull();

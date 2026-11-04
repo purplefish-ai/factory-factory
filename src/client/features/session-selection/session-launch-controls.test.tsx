@@ -191,7 +191,7 @@ it('offers native permission choices from the compact Access icon and marks full
     '[aria-label="Access: Full access"]'
   );
   expect(trigger).not.toBeNull();
-  expect(trigger?.className).toContain('text-orange-600');
+  expect(trigger?.className).toContain('text-warning');
   expect(trigger?.querySelector('.truncate')).toBeNull();
   keyboardOpen(trigger);
   const readOnly = [...document.body.querySelectorAll('[role="menuitemradio"]')].find((option) =>

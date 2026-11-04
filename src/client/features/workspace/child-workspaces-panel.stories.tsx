@@ -90,3 +90,8 @@ export const Empty: Story = {
 export const EmptyDark: Story = {
   globals: { theme: 'dark' },
 };
+
+export const ActiveProjectPickerDark: typeof ActiveProjectPicker = {
+  ...ActiveProjectPicker,
+  globals: { theme: 'dark' },
+};

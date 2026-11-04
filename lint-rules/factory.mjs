@@ -29,7 +29,59 @@ function containsUnknownType(node, visitorKeys) {
   });
 }
 
+// Tailwind utilities that take a color, followed by a fixed palette hue and
+// shade (e.g. `bg-red-500`, `dark:text-emerald-300`, `hover:border-sky-500/40`).
+// A class must start the string or follow whitespace, a quote, a `:` variant
+// separator or the `!` important prefix, so paths like `/api/text-red-500`
+// are not mistaken for classes.
+// Theme tokens (`text-success`, `bg-running/10`) and `white`/`black` pass.
+const RAW_PALETTE_CLASS =
+  /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
+
+function reportRawPaletteClass(context, node, text) {
+  const match = typeof text === 'string' ? RAW_PALETTE_CLASS.exec(text) : null;
+  if (match) {
+    context.report({
+      node,
+      message: `Use a theme or status token instead of the fixed palette class "${match[0]}" (docs/status-colors.md).`,
+    });
+  }
+}
+
 const rules = {
+  'no-raw-palette-classes': {
+    meta: {
+      schema: [
+        {
+          type: 'object',
+          properties: {
+            exceptions: {
+              type: 'object',
+              additionalProperties: { type: 'string', minLength: 1 },
+            },
+          },
+          additionalProperties: false,
+        },
+      ],
+    },
+    create(context) {
+      // `exceptions` maps repository-relative paths to the reason each file
+      // may keep fixed palette colors (see docs/status-colors.md).
+      const exceptions = Object.keys(context.options[0]?.exceptions ?? {});
+      const filename = context.filename.replaceAll('\\', '/');
+      if (exceptions.some((path) => filename === path || filename.endsWith(`/${path}`))) {
+        return {};
+      }
+      return {
+        Literal(node) {
+          reportRawPaletteClass(context, node, node.value);
+        },
+        TemplateElement(node) {
+          reportRawPaletteClass(context, node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
   'no-await-import': {
     create(context) {
       return {

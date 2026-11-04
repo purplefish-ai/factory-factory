@@ -398,3 +398,14 @@ export const AllPRStatesDark: Story = {
   ...AllPRStates,
   globals: { theme: 'dark' },
 };
+
+export const WorkingDark: typeof Working = { ...Working, globals: { theme: 'dark' } };
+
+export const SetupFailedDark: typeof SetupFailed = { ...SetupFailed, globals: { theme: 'dark' } };
+
+export const RatchetReviewPendingDark: typeof RatchetReviewPending = {
+  ...RatchetReviewPending,
+  globals: { theme: 'dark' },
+};
+
+export const MergedDark: typeof Merged = { ...Merged, globals: { theme: 'dark' } };
