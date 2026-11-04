@@ -57,7 +57,9 @@ it('sanitizes native process errors and cleans up cancellation', async () => {
   const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), {
     signal: controller.signal,
   });
-  const rejected = expect(result).rejects.toThrow('Codex native account operation failed');
+  const rejected = expect(result).rejects.toThrow(
+    'Codex provider is unavailable. Please try again in a few moments.'
+  );
   await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
   expect(child.stderr.listenerCount('error')).toBeGreaterThan(0);
   child.stderr.write('private credential');
@@ -69,7 +71,9 @@ it('sanitizes native process errors and cleans up cancellation', async () => {
 it('bounds stalled native operations and never returns native error text', async () => {
   respond = false;
   const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 10 });
-  await expect(result).rejects.toThrow('Codex native account operation failed');
+  await expect(result).rejects.toThrow(
+    'Codex provider is unavailable. Please try again in a few moments.'
+  );
   expect(mocks.cleanup).toHaveBeenCalledWith(child, { timeoutMs: expect.any(Number) });
 });
 
@@ -82,7 +86,9 @@ it('includes slow cleanup within the configured operation deadline', async () =>
         new Promise((resolve) => setTimeout(resolve, options?.timeoutMs ?? 5000))
     );
     const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 100 });
-    const rejected = expect(result).rejects.toThrow('Codex native account operation failed');
+    const rejected = expect(result).rejects.toThrow(
+      'Codex provider is unavailable. Please try again in a few moments.'
+    );
     await vi.advanceTimersByTimeAsync(100);
     expect(child.stderr.destroyed).toBe(true);
     await rejected;
@@ -106,6 +112,6 @@ it('reports the operation failure instead of a later cleanup failure', async () 
   mocks.cleanup.mockRejectedValue(new Error('Disposable process cleanup failed'));
   await expect(
     withNativeRpc(context, (rpc) => rpc.request('account/read'), { timeoutMs: 10 })
-  ).rejects.toThrow('Codex native account operation failed');
+  ).rejects.toThrow('Codex provider is unavailable. Please try again in a few moments.');
   expect(child.stderr.destroyed).toBe(true);
 });

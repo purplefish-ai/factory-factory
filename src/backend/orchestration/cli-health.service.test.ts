@@ -176,6 +176,22 @@ describe('cliHealthService', () => {
     });
   });
 
+  it.each([
+    Object.assign(new Error('Command failed: /private/runtime cli -V'), {
+      killed: true,
+      signal: 'SIGTERM',
+    }),
+    Object.assign(new Error('Command failed: /private/runtime cli -V'), { code: 1 }),
+  ])('reports retry guidance when the Codex version command fails: %s', async (error) => {
+    mockExecFile.mockRejectedValue(error);
+    const status = await cliHealthService.checkCodexCLI();
+    expect(status.isInstalled).toBe(false);
+    expect(status.error).toContain('Please try again in a few moments');
+    expect(status.error).toContain('try restarting Factory Factory');
+    expect(status.error).not.toContain('reinstall');
+    expect(status.error).not.toContain('/private/runtime');
+  });
+
   it('reports a missing bundled runtime without suggesting a global install', async () => {
     mockResolve.mockImplementation(() => {
       throw new Error('package not found');

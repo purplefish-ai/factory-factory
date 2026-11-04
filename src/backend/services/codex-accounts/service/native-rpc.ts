@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
+import { CODEX_PROVIDER_UNAVAILABLE_MESSAGE } from '@/backend/lib/codex-provider-errors';
 import { getOwnedCodexCommand } from '@/backend/lib/owned-codex-command';
 import { terminateDisposableProcessTree } from '@/backend/lib/owned-process-cleanup';
 import { createLogger } from '@/backend/services/logger.service';
@@ -59,7 +60,7 @@ async function runNativeRpc<T>(
     rejectOperation = reject;
   });
   const fail = () => {
-    failure = new Error('Codex native account operation failed');
+    failure = new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE);
     for (const request of pending.values()) {
       request.reject(failure);
     }
@@ -109,7 +110,7 @@ async function runNativeRpc<T>(
     }
     pending.delete(message.id);
     if (message.error) {
-      request.reject(new Error('Codex native account request failed'));
+      request.reject(new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE));
     } else {
       request.resolve(message.result);
     }

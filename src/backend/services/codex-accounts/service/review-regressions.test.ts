@@ -419,3 +419,30 @@ it('does not route around known exhausted managed quota through an overlapping u
   );
   expect((await service.getPreviewRuntimeContext()).accountId).toBe(account.id);
 });
+
+it('reports unavailable capacity after removing overlapping native quota when another probe fails', async () => {
+  const { service, probe, makeObservation, native } = await setup();
+  const exhausted = await service.createAccount('Exhausted');
+  const unavailable = await service.createAccount('Unavailable');
+  probe.mockImplementation((context) => {
+    if (context.accountId === unavailable.id) {
+      return Promise.reject(new Error('Codex native account operation failed'));
+    }
+    const isNative = context.homeDir === native;
+    const value = {
+      ...makeObservation(isNative ? 'native-fallback' : exhausted.id),
+      email: 'same@example.com',
+      scopeVerified: !isNative,
+    };
+    value.usage = {
+      ...value.usage,
+      windows: [
+        { id: 'codex:primary', label: 'Global', usedPercent: isNative ? 20 : 100, resetsAt: null },
+      ],
+    };
+    return Promise.resolve(value);
+  });
+  await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(
+    'Codex provider is unavailable. Please try again in a few moments.'
+  );
+});

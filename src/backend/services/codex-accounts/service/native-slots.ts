@@ -1,3 +1,5 @@
+import { CODEX_PROVIDER_UNAVAILABLE_MESSAGE } from '@/backend/lib/codex-provider-errors';
+
 // Account listing may cover many profiles. Bound native processes and include
 // queue time in each caller's deadline instead of multiplying startup latency.
 let active = 0;
@@ -19,7 +21,13 @@ export async function acquireNativeSlot(
       };
       const failed = () => {
         cleanup();
-        reject(new Error('Codex native account operation timed out or cancelled'));
+        reject(
+          new Error(
+            signal?.aborted
+              ? 'Codex native account operation cancelled'
+              : CODEX_PROVIDER_UNAVAILABLE_MESSAGE
+          )
+        );
       };
       const ready = () => {
         cleanup();

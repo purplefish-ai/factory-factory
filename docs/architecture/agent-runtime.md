@@ -742,6 +742,14 @@ resume, plan approval, questions, native subagents, and reviewer permissions.
 
 ### Codex accounts
 
+Failed Codex runtime and account probes show retry/restart guidance rather than
+raw command paths or quota-exhaustion advice. Runtime resolution failures retain
+update/reinstall guidance. Auto selection still uses healthy candidates when
+another probe fails; if no candidate remains and any probe failed, capacity is
+unknown and the error asks the user to retry. Confirmed exhausted accounts
+retain the capacity error. These messages do not change probe deadlines or add
+retries.
+
 The composer previews only the model name; provider groups remain in the
 selection menu. Account labels are omitted from composer controls.
 

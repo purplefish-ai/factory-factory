@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { CODEX_PROVIDER_UNAVAILABLE_MESSAGE } from '@/backend/lib/codex-provider-errors';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   NATIVE_DEFAULT_CODEX_ACCOUNT_ID,
@@ -370,7 +371,7 @@ export class CodexAccountService {
     model?: string,
     includeExhausted = false,
     reasoningEffort?: string | null
-  ): Promise<AccountCandidate | null> {
+  ): Promise<AccountCandidate | 'unavailable' | null> {
     if (!row.enabled || this.logins.isPending(row.id)) {
       return null;
     }
@@ -383,7 +384,7 @@ export class CodexAccountService {
         accountId: row.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      return null;
+      return 'unavailable';
     }
     if (!observation.authenticated) {
       logger.info('Skipping Codex account: not signed in', { accountId: row.id });
@@ -413,7 +414,10 @@ export class CodexAccountService {
     const readings = await Promise.all(
       rows.map((row) => this.candidate(row, model, includeExhausted, reasoningEffort))
     );
-    const candidates = readings.filter((candidate) => candidate !== null);
+    let candidates = readings.filter(
+      (candidate): candidate is AccountCandidate =>
+        candidate !== null && candidate !== 'unavailable'
+    );
     const native = this.identityCache.get(NATIVE_DEFAULT_CODEX_ACCOUNT_ID)?.identity;
     if (
       native?.email &&
@@ -428,7 +432,12 @@ export class CodexAccountService {
         );
       })
     ) {
-      return candidates.filter((candidate) => candidate.id !== NATIVE_DEFAULT_CODEX_ACCOUNT_ID);
+      candidates = candidates.filter(
+        (candidate) => candidate.id !== NATIVE_DEFAULT_CODEX_ACCOUNT_ID
+      );
+    }
+    if (!candidates.length && readings.includes('unavailable')) {
+      throw new Error(CODEX_PROVIDER_UNAVAILABLE_MESSAGE);
     }
     return candidates;
   }
