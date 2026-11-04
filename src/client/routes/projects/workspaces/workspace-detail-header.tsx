@@ -39,7 +39,8 @@ import {
  * IDE. Everything else, including rename, details, provider settings, the
  * GitHub branch and archive, lives in "More actions" at every width. Controls
  * that collapse into that menu carry `data-header-inline` so the menu only
- * repeats them when they are hidden.
+ * repeats them when they are hidden. The IDE action stays in the menu at every
+ * width.
  */
 export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot({
   workspace,
@@ -155,7 +156,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               />
             </div>
           )}
-          <div data-header-inline="ide" className="hidden @[72rem]/header:flex">
+          <div className="hidden @[72rem]/header:flex">
             <OpenInIdeAction
               workspaceId={workspaceId}
               hasWorktreePath={Boolean(workspace.worktreePath)}

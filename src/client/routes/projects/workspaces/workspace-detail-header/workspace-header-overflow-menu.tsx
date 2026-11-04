@@ -34,9 +34,9 @@ import { WorkspaceProviderSettings } from './workspace-provider-settings';
 /**
  * Controls that the header also shows inline at wider widths. Each inline
  * wrapper carries `data-header-inline="<id>"`; the menu leaves out the ones
- * visible when it opens, so it never repeats a control on screen.
+ * visible when it opens. The IDE action stays in the menu at every width.
  */
-export type HeaderInlineControl = 'create-pr' | 'issue' | 'ide';
+export type HeaderInlineControl = 'create-pr' | 'issue';
 
 function getVisibleInlineControls(trigger: HTMLElement | null): ReadonlySet<string> {
   const header = trigger?.closest('header');
@@ -230,16 +230,14 @@ export function WorkspaceHeaderOverflowMenu({
             Provider settings
           </DropdownMenuItem>
           <WorkspaceBranchLink workspace={workspace} renderAsMenuItem />
-          {!isInline('ide') && (
-            <OpenInIdeAction
-              workspaceId={workspaceId}
-              hasWorktreePath={Boolean(workspace.worktreePath)}
-              availableIdes={availableIdes}
-              preferredIde={preferredIde}
-              openInIde={openInIde}
-              renderAsMenuItem
-            />
-          )}
+          <OpenInIdeAction
+            workspaceId={workspaceId}
+            hasWorktreePath={Boolean(workspace.worktreePath)}
+            availableIdes={availableIdes}
+            preferredIde={preferredIde}
+            openInIde={openInIde}
+            renderAsMenuItem
+          />
           <OpenDevAppAction workspaceId={workspaceId} renderAsMenuItem />
           <DropdownMenuSeparator />
           <ArchiveActionButton
