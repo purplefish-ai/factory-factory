@@ -16,7 +16,7 @@ export function RunScriptPortBadge({ workspaceId }: RunScriptPortBadgeProps) {
       href={launchInfo.href}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/15 text-green-700 dark:text-green-400 hover:bg-green-500/25 transition-colors text-sm font-medium"
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors text-sm font-medium"
       title={
         launchInfo.usesProxyUrl
           ? `Dev server tunnel on port ${launchInfo.port}`

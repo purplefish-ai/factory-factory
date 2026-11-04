@@ -82,8 +82,7 @@ export function AcpConfigSelector({
       className={cn(
         'shrink-0',
         presentation.active && 'bg-accent text-accent-foreground',
-        presentation.warning &&
-          'text-orange-600 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-400',
+        presentation.warning && 'text-warning hover:text-warning',
         invalid &&
           'text-destructive hover:text-destructive dark:text-destructive dark:hover:text-destructive'
       )}
@@ -99,10 +98,7 @@ export function AcpConfigSelector({
         key={option.value}
         value={option.value}
         textValue={option.name}
-        className={cn(
-          item.warning &&
-            'text-orange-600 focus:text-orange-600 dark:text-orange-400 dark:focus:text-orange-400'
-        )}
+        className={cn(item.warning && 'text-warning focus:text-warning')}
       >
         {ItemIcon && <ItemIcon className="size-4 shrink-0" aria-hidden="true" />}
         <span className="min-w-0">

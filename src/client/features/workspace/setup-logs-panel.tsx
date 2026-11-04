@@ -50,9 +50,9 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
       {showStatusBanner && (
         <div className="flex items-center gap-2 px-4 py-1.5 border-b text-xs text-muted-foreground">
           {status === 'PROVISIONING' && (
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-running animate-pulse motion-reduce:animate-none" />
           )}
-          {status === 'FAILED' && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+          {status === 'FAILED' && <span className="w-1.5 h-1.5 rounded-full bg-destructive" />}
           <span>Startup script: {statusLabel}</span>
         </div>
       )}

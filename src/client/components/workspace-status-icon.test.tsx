@@ -22,4 +22,29 @@ describe('WorkspaceStatusIcon', () => {
 
     expect(markup).toContain('data-icon="runtime-error"');
   });
+
+  it.each(['permission_request', 'plan_approval', 'user_question'] as const)(
+    'shows the %s request with the shared needs-you tone',
+    (pendingRequestType) => {
+      const markup = renderToStaticMarkup(
+        <WorkspaceStatusIcon pendingRequestType={pendingRequestType} />
+      );
+      expect(markup).toContain('data-status-tone="attention"');
+      expect(markup).toContain('text-warning');
+    }
+  );
+
+  it('uses the danger tone for runtime errors', () => {
+    const markup = renderToStaticMarkup(<WorkspaceStatusIcon sessionRuntimeErrorMessage="boom" />);
+    expect(markup).toContain('text-destructive');
+  });
+
+  it('pulses the running dot only while working', () => {
+    const working = renderToStaticMarkup(<WorkspaceStatusIcon isWorking />);
+    expect(working).toContain('bg-running');
+    expect(working).toContain('animate-pulse');
+    const idle = renderToStaticMarkup(<WorkspaceStatusIcon />);
+    expect(idle).toContain('bg-muted-foreground/50');
+    expect(idle).not.toContain('animate-pulse');
+  });
 });

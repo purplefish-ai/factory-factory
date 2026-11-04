@@ -332,3 +332,8 @@ export const DeclineAnswer: Story = {
     },
   },
 };
+
+export const SingleQuestionDark: typeof SingleQuestion = {
+  ...SingleQuestion,
+  globals: { theme: 'dark' },
+};

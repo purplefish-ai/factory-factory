@@ -171,3 +171,5 @@ export const AgentStates: Story = {
     </WorkspacePanelProvider>
   ),
 };
+
+export const AgentStatesDark: typeof AgentStates = { ...AgentStates, globals: { theme: 'dark' } };

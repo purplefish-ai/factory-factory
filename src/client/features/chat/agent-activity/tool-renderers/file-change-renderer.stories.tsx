@@ -21,3 +21,8 @@ export const RepeatedPaths: Story = {
     },
   },
 };
+
+export const RepeatedPathsDark: typeof RepeatedPaths = {
+  ...RepeatedPaths,
+  globals: { theme: 'dark' },
+};

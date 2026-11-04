@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,6 +15,7 @@ const rules = [
   'no-zod-any',
   'no-unsafe-json-parse-cast',
   'no-unsafe-resolver-cast',
+  'no-raw-palette-classes',
 ];
 writeFileSync(
   config,
@@ -53,6 +54,10 @@ describe('Oxlint project guardrails', () => {
     ['no-unsafe-json-parse-cast', 'const value = JSON.parse(input) as unknown as Response;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: unknown) => void;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: Array<unknown>) => void;'],
+    ['no-raw-palette-classes', 'const className = "flex bg-red-500";'],
+    ['no-raw-palette-classes', 'export const chip = <span className="dark:text-emerald-300" />;'],
+    ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],
+    ['no-raw-palette-classes', 'const progress = "[&>div]:bg-zinc-900";'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -69,6 +74,10 @@ describe('Oxlint project guardrails', () => {
     'const callback = resolve as (value: string) => void;',
     'const description = "use client";',
     'function example() { return "use server"; }',
+    'const className = "bg-success/10 text-running border-destructive/30";',
+    'const className = "bg-black/60 text-white";',
+    'const pattern = /text-red-500/;',
+    'const id = "my-text-red-500-id";',
   ].map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }));
 
   let report: z.infer<typeof reportSchema>;
@@ -107,5 +116,39 @@ describe('Oxlint project guardrails', () => {
     expect(
       report.diagnostics.filter(({ filename }) => filename === relative(directory, file))
     ).toEqual([]);
+  });
+});
+
+const paletteRuleSchema = z.tuple([
+  z.literal('error'),
+  z.object({ exceptions: z.record(z.string(), z.string().min(1)) }),
+]);
+const overridesSchema = z.object({
+  overrides: z.array(
+    z.object({ files: z.array(z.string()), rules: z.record(z.string(), z.unknown()) })
+  ),
+});
+
+describe('raw palette class exceptions', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const exceptions = projectConfig.overrides.flatMap((override) => {
+    const rule = override.rules['factory/no-raw-palette-classes'];
+    return Array.isArray(rule) ? Object.entries(paletteRuleSchema.parse(rule)[1].exceptions) : [];
+  });
+
+  it('keeps the allowlist small, with a reason for every file', () => {
+    expect(exceptions.length).toBeGreaterThan(0);
+    expect(exceptions.length).toBeLessThanOrEqual(8);
+    for (const [, reason] of exceptions) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it.each(exceptions.map(([file]) => file))('%s still needs its exception', (file) => {
+    expect(readFileSync(resolve(file), 'utf8')).toMatch(
+      /(?:bg|text|border|ring)-(?:red|amber|yellow|green|emerald|teal|violet|pink|lime|cyan|orange|blue|rose|zinc)-\d{2,3}/
+    );
   });
 });

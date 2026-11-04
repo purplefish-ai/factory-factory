@@ -125,16 +125,16 @@ export function ProviderCliWarning({
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-amber-500/50 bg-amber-50 p-3 text-sm dark:bg-amber-900/20">
-      <WarningIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+    <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
+      <WarningIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
       <div className="flex-1 space-y-1">
-        <p className="text-amber-900 dark:text-amber-200">{warning.title}</p>
-        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">{warning.description}</p>
+        <p className="text-warning">{warning.title}</p>
+        <p className="text-xs text-muted-foreground">{warning.description}</p>
       </div>
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40"
+        className="h-7 w-7 text-warning hover:bg-warning/10 hover:text-warning"
         onClick={() => {
           runInBackground(
             utils.admin.checkCLIHealth.invalidate(),

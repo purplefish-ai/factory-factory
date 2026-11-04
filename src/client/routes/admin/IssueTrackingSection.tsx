@@ -112,7 +112,7 @@ function LinearConfigFields({
           <div className="flex items-center gap-2">
             <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
             {isValidated && (
-              <span className="flex items-center gap-1 text-xs text-green-600">
+              <span className="flex items-center gap-1 text-xs text-success">
                 <CheckCircleIcon className="w-3 h-3" />
                 Connected as {viewerName}
               </span>
@@ -279,7 +279,7 @@ export function ProjectIssueTrackingCard({
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{projectName}</h3>
           {isConfigured && (
-            <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+            <Badge variant="success">
               <CheckCircleIcon className="w-3 h-3 mr-1" />
               {isLinear ? 'Linear' : 'GitHub'}
             </Badge>

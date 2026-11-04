@@ -102,6 +102,34 @@
       }
     },
     {
+      "files": [
+        "src/client/**/*.{ts,tsx}",
+        "src/components/**/*.{ts,tsx}",
+        "src/lib/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "factory/no-raw-palette-classes": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/components/subagent-icon.tsx": "Categorical identity palette: twelve distinguishable subagent hues, not statuses, so they cannot map onto status tokens.",
+              "src/client/features/workspace/terminal-panel.tsx": "Terminal surface stays dark zinc to match xterm's fixed palette (terminal-instance.tsx) until terminal theming (#2935).",
+              "src/client/features/workspace/terminal-tab-bar.tsx": "Terminal surface stays dark zinc to match xterm's fixed palette (terminal-instance.tsx) until terminal theming (#2935).",
+              "src/client/routes/projects/workspaces/init-output-panel.tsx": "Terminal-like setup log stays dark zinc to match the terminal until terminal theming (#2935).",
+              "src/client/routes/projects/workspaces/workspace-overlays.tsx": "Terminal mount stays dark zinc to match the terminal until terminal theming (#2935).",
+              "src/client/routes/workspace-header-pwa-preview.tsx": "Mock macOS window controls reproduce the operating system's red, yellow and green traffic lights."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "factory/no-raw-palette-classes": "off"
+      }
+    },
+    {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
       "rules": {
         "typescript/no-non-null-assertion": "off"

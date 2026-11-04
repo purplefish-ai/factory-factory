@@ -48,8 +48,8 @@ below AA on cards.
 
 [`status-tones.ts`](../src/client/lib/status-tones.ts) is the one presentation
 map. It extends `WorkspaceStatusReasonTone` from
-`src/shared/workspace-status-reason.ts` with message and PR tones and maps each
-tone to a token, classes for text, dot, chip, banner and border, and an icon:
+`src/shared/workspace-status-reason.ts` with message tones and maps each tone to
+a token, classes for text, dot, chip, banner and border, and an icon:
 
 | Tone        | Token              | Used for                                  |
 | ----------- | ------------------ | ----------------------------------------- |
@@ -78,3 +78,35 @@ Render statuses with `StatusDot`, `StatusIcon` and `StatusChip` from
 with `getStatusToneStyle(tone)` classes. Tinted chips and banners use
 `bg-<token>/10` with `text-<token>`; the Badge `success`, `warning` and `info`
 variants follow the same rule.
+
+## Lint guard
+
+`factory/no-raw-palette-classes` (in
+[`lint-rules/factory.mjs`](../lint-rules/factory.mjs)) rejects Tailwind color
+utilities with a fixed palette hue and shade, such as `bg-red-500`,
+`dark:text-emerald-300` or `hover:border-sky-500/40`, in string and template
+literals under `src/client`, `src/components` and `src/lib`. Theme tokens,
+`white` and `black` pass. Tests are exempt so they can assert that raw classes
+are absent.
+
+The remaining exceptions are the rule's `exceptions` option in
+[`.oxlintrc.json`](../.oxlintrc.json), a map from each path to its reason:
+
+- `subagent-icon.tsx`: twelve categorical identity hues that tell subagents
+  apart. They are not statuses, so they cannot map onto status tokens.
+- `terminal-panel.tsx`, `terminal-tab-bar.tsx`, `init-output-panel.tsx` and
+  `workspace-overlays.tsx`: the terminal and terminal-like log surfaces stay
+  dark zinc to match xterm's fixed palette in `terminal-instance.tsx`.
+- `workspace-header-pwa-preview.tsx`: mock macOS window controls reproduce the
+  operating system's red, yellow and green.
+
+`src/backend/testing/oxlint-factory-rules.test.ts` runs the rule through the
+Oxlint binary and fails when an exception no longer contains raw classes. Add an
+exception only for color that is not a status and has no theme token, and give
+its reason in the option.
+
+## Not yet themed
+
+Mermaid diagrams use Mermaid's default theme, chat prose uses the typography
+plugin's colors, and the terminal uses a fixed zinc palette. These are tracked
+in #2935.

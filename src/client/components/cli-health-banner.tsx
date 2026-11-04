@@ -144,9 +144,9 @@ export function CLIHealthBannerContent({
           <ul className="min-w-0 flex-1 basis-full space-y-2 sm:basis-0">
             {warnings.map((issue) => (
               <li key={issue.title} className="flex items-start gap-2 text-xs">
-                <WarningIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <WarningIcon className="mt-0.5 size-4 shrink-0 text-warning" />
                 <div role="alert" className="min-w-0 space-y-0.5">
-                  <p className="font-medium text-amber-800 dark:text-amber-300">{issue.title}</p>
+                  <p className="font-medium text-warning">{issue.title}</p>
                   <p className="text-muted-foreground [overflow-wrap:anywhere]">
                     {issue.description}
                     {issue.link && (

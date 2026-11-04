@@ -164,7 +164,7 @@ function ScreenshotThumbnail({
           type="button"
           onClick={handleDelete}
           aria-label={`Delete screenshot ${screenshot.name}`}
-          className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
+          className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive transition-colors"
         >
           <XIcon className="h-3 w-3" />
         </button>

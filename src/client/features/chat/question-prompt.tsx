@@ -78,7 +78,7 @@ function SingleQuestionLayout({
 }: SingleQuestionLayoutProps) {
   return (
     <PromptCard
-      icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      icon={<QuestionIcon className="h-5 w-5 text-warning" aria-hidden="true" />}
       role="form"
       label="Agent question"
       hideIconOnMobile
@@ -138,7 +138,7 @@ function MultiQuestionLayout({
 
   return (
     <PromptCard
-      icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      icon={<QuestionIcon className="h-5 w-5 text-warning" aria-hidden="true" />}
       role="form"
       label="Agent questions"
       hideIconOnMobile

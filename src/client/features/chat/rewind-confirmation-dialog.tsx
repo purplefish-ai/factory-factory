@@ -47,7 +47,7 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ArrowCounterClockwiseIcon className="h-5 w-5 text-amber-500" />
+            <ArrowCounterClockwiseIcon className="h-5 w-5 text-warning" />
             Rewind Files
           </DialogTitle>
           <DialogDescription>
@@ -86,11 +86,11 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
               <div
                 className={cn(
                   'flex items-start gap-2 rounded-lg border p-3 text-sm',
-                  'border-amber-500/50 bg-amber-50 dark:bg-amber-900/20'
+                  'border-warning/30 bg-warning/10'
                 )}
               >
-                <WarningIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <span className="text-amber-800 dark:text-amber-200">
+                <WarningIcon className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                <span className="text-warning">
                   This action cannot be undone. Make sure you want to revert these changes.
                 </span>
               </div>
@@ -110,7 +110,7 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
             variant="destructive"
             onClick={onConfirm}
             disabled={isLoading || hasError || !hasFiles}
-            className="bg-amber-600 hover:bg-amber-700"
+            className="bg-warning text-warning-foreground hover:bg-warning/90"
           >
             <ArrowCounterClockwiseIcon className="mr-2 h-4 w-4" />
             Rewind Files
