@@ -84,3 +84,43 @@ export const SystemPending: Story = {
     await expect(canvas.getByRole('link', { name: 'General' })).toBeVisible();
   },
 };
+
+export const Projects: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'project.list': () => [
+          { id: 'alpha', slug: 'alpha', name: 'Alpha' },
+          {
+            id: 'beta',
+            slug: 'beta',
+            name: 'Factory Factory workspace management and developer tooling',
+          },
+        ],
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: 'Project settings' }));
+    await expect(await canvas.findByRole('link', { name: 'Alpha' })).toHaveAttribute(
+      'href',
+      '/projects/alpha/settings'
+    );
+  },
+};
+export const ProjectsOnPhone: Story = {
+  ...Projects,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const NoProjects: Story = {
+  parameters: { trpc: { handlers: { 'project.list': () => [] } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: 'Project settings' }));
+    await expect(await canvas.findByRole('link', { name: 'Add a project' })).toHaveAttribute(
+      'href',
+      '/projects/new'
+    );
+  },
+};

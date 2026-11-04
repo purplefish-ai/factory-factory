@@ -78,64 +78,52 @@ export function FactoryConfigScripts({
 
   // Card variant for admin page
   return (
-    <div className="rounded-md border bg-muted/50 p-4 space-y-3">
-      <div className="flex items-start gap-3">
-        <CheckCircleIcon className="w-5 h-5 text-success mt-0.5" />
-        <div className="space-y-1 flex-1">
-          <p className="font-medium text-sm">Configuration Found</p>
+    <div className="space-y-4">
+      {factoryConfig.scripts.setup && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
+          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
+            {factoryConfig.scripts.setup}
+          </code>
           <p className="text-xs text-muted-foreground">
-            factory-factory.json is configured in this repository
+            Runs automatically when a new workspace is created
           </p>
         </div>
-      </div>
+      )}
 
-      <div className="space-y-2 pl-8">
-        {factoryConfig.scripts.setup && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
-            <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-              {factoryConfig.scripts.setup}
-            </code>
-            <p className="text-xs text-muted-foreground">
-              Runs automatically when a new workspace is created
-            </p>
-          </div>
-        )}
+      {factoryConfig.scripts.run && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Run Script</p>
+          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
+            {factoryConfig.scripts.run}
+          </code>
+          <p className="text-xs text-muted-foreground">
+            Available via the play button in each workspace
+          </p>
+        </div>
+      )}
 
-        {factoryConfig.scripts.run && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Run Script</p>
-            <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-              {factoryConfig.scripts.run}
-            </code>
-            <p className="text-xs text-muted-foreground">
-              Available via the play button in each workspace
-            </p>
-          </div>
-        )}
+      {factoryConfig.scripts.postRun && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Post-Run Script</p>
+          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
+            {factoryConfig.scripts.postRun}
+          </code>
+          <p className="text-xs text-muted-foreground">
+            Runs automatically after the dev server starts
+          </p>
+        </div>
+      )}
 
-        {factoryConfig.scripts.postRun && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Post-Run Script</p>
-            <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-              {factoryConfig.scripts.postRun}
-            </code>
-            <p className="text-xs text-muted-foreground">
-              Runs automatically after the dev server starts
-            </p>
-          </div>
-        )}
-
-        {factoryConfig.scripts.cleanup && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
-            <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
-              {factoryConfig.scripts.cleanup}
-            </code>
-            <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
-          </div>
-        )}
-      </div>
+      {factoryConfig.scripts.cleanup && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
+          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
+            {factoryConfig.scripts.cleanup}
+          </code>
+          <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
+        </div>
+      )}
     </div>
   );
 }

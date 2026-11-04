@@ -70,7 +70,7 @@ function AggressivenessSlider({
 }: AggressivenessSliderProps) {
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between w-[280px]">
+      <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-[280px]">
         <Label htmlFor={id}>{label}</Label>
         <span className="text-xs text-muted-foreground font-mono">
           {formatValue(value)} · {deriveAggressivenessLabel(value, min, max)}
@@ -78,7 +78,7 @@ function AggressivenessSlider({
       </div>
       <Slider
         id={id}
-        className="w-[280px]"
+        className="w-full sm:w-[280px]"
         value={[value]}
         onValueChange={([v]) => onChange(v ?? value)}
         onValueCommit={([v]) => onCommit(v ?? value)}
@@ -143,7 +143,7 @@ function DeepgramApiKeyField({
 }: DeepgramApiKeyFieldProps) {
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <div className="space-y-1.5">
+      <div className="w-full min-w-0 space-y-1.5 sm:w-auto">
         <div className="flex items-center gap-2">
           <Label htmlFor="deepgram-api-key">Deepgram API Key</Label>
           {validated && (
@@ -159,7 +159,7 @@ function DeepgramApiKeyField({
           value={apiKey}
           onChange={(e) => onApiKeyChange(e.target.value)}
           placeholder={hasStoredKey ? '••••••••••••••••••••' : 'Enter your Deepgram API key'}
-          className="font-mono text-sm w-[280px]"
+          className="font-mono text-sm w-full sm:w-[280px]"
         />
       </div>
       <Button variant="outline" onClick={onValidate} disabled={validating || !apiKey}>
@@ -391,7 +391,7 @@ export function VoiceModeSection() {
               onValueChange={(value) => updateConfig.mutate({ ttsModel: value })}
               disabled={updateConfig.isPending || !hasStoredKey}
             >
-              <SelectTrigger id="voice-model" className="w-[280px]">
+              <SelectTrigger id="voice-model" className="w-full sm:w-[280px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -407,13 +407,13 @@ export function VoiceModeSection() {
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between w-[280px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-[280px]">
               <Label htmlFor="voice-speed">Speed</Label>
               <span className="text-xs text-muted-foreground font-mono">{speed.toFixed(2)}x</span>
             </div>
             <Slider
               id="voice-speed"
-              className="w-[280px]"
+              className="w-full sm:w-[280px]"
               value={[speed]}
               onValueChange={([value]) => setSpeed(value ?? DEFAULT_DEEPGRAM_TTS_SPEED)}
               onValueCommit={([value]) =>
