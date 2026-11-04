@@ -21,6 +21,7 @@ describe('WorkspaceStatusIcon', () => {
     const markup = renderToStaticMarkup(<WorkspaceStatusIcon pendingRequestType={unknownType} />);
 
     expect(markup).toContain('data-icon="pending-request"');
+    expect(markup).toContain('data-status-tone="attention"');
   });
 
   it('shows runtime error icon when there is no pending request', () => {
