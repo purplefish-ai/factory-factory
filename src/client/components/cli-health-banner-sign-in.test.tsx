@@ -28,17 +28,20 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 vi.mock('@/client/features/project', () => ({
   SetupTerminalModal: ({
+    open,
     initialProvider,
     onClose,
   }: {
+    open: boolean;
     initialProvider: string;
     onClose: () => void;
-  }) => (
-    <div role="dialog">
-      {initialProvider}
-      <button onClick={onClose}>Close terminal</button>
-    </div>
-  ),
+  }) =>
+    open ? (
+      <div role="dialog">
+        {initialProvider}
+        <button onClick={onClose}>Close terminal</button>
+      </div>
+    ) : null,
 }));
 
 it('opens managed Claude login from the banner and refreshes health when it closes', async () => {
