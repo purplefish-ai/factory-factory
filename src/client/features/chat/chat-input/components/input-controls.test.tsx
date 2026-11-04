@@ -56,6 +56,8 @@ it.each([
     );
     const send = rootElement.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
     expect(send).not.toBeNull();
+    expect(send?.getAttribute('data-variant')).toBe('default');
+    expect(send?.className).not.toContain('hover:text-accent-foreground');
     send?.click();
     expect(onSendClick).toHaveBeenCalledWith(inputRef);
     rootElement.querySelector<HTMLButtonElement>('[aria-label="Stop agent"]')?.click();

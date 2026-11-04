@@ -90,6 +90,9 @@ it('selects an enabled date while preserving disabled dates and selected styling
     )
   );
   expect(dayButton(9).getAttribute('data-selected-single')).toBe('true');
+  expect(dayButton(9).getAttribute('data-variant')).toBe('default');
+  expect(dayButton(9).className).not.toContain('hover:text-accent-foreground');
+  expect(dayButton(11).getAttribute('data-variant')).toBe('ghost');
   expect(dayButton(10).disabled).toBe(true);
   await act(() => dayButton(10).click());
   expect(onSelect).not.toHaveBeenCalled();
@@ -134,4 +137,19 @@ it('changes month and year through dropdown captions', async () => {
     year.dispatchEvent(new Event('change', { bubbles: true }));
   });
   expect(container.querySelector('table')?.getAttribute('aria-label')).toBe('October 2027');
+});
+
+it('keeps range endpoints primary and the range interior muted on hover', async () => {
+  await act(() =>
+    root.render(
+      <Calendar
+        mode="range"
+        defaultMonth={new Date(2026, 8)}
+        selected={{ from: new Date(2026, 8, 9), to: new Date(2026, 8, 12) }}
+      />
+    )
+  );
+  expect(dayButton(9).getAttribute('data-variant')).toBe('default');
+  expect(dayButton(12).getAttribute('data-variant')).toBe('default');
+  expect(dayButton(10).getAttribute('data-variant')).toBe('ghost');
 });

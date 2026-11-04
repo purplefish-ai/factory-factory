@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, userEvent } from 'storybook/test';
 import { Calendar } from './calendar';
 
 const meta = {
@@ -28,3 +29,19 @@ function SelectableCalendar({ dropdown = false }: { dropdown?: boolean }) {
 }
 export const SingleDate: Story = { render: () => <SelectableCalendar /> };
 export const DropdownCaption: Story = { render: () => <SelectableCalendar dropdown /> };
+
+export const SelectedDateHover: Story = {
+  ...SingleDate,
+  play: async ({ canvasElement }) => {
+    const selected = canvasElement.querySelector('[data-selected-single="true"]');
+    if (!(selected instanceof HTMLButtonElement)) {
+      throw new Error('Expected a selected calendar day');
+    }
+    await expect(selected).toHaveAttribute('data-variant', 'default');
+    await userEvent.hover(selected);
+  },
+};
+export const SelectedDateHoverDark: Story = {
+  ...SelectedDateHover,
+  globals: { theme: 'dark' },
+};

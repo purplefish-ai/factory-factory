@@ -408,7 +408,7 @@ export const RightControls = memo(function RightControls({
         onClick={() => onSendClick(inputRef)}
         disabled={disabled}
         size="icon-sm"
-        className="bg-primary text-primary-foreground hover:bg-primary/90"
+        variant="default"
         aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
         <PaperPlaneTiltIcon className="h-4 w-4" />
