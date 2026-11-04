@@ -4,10 +4,10 @@ import { ChatCircleIcon } from '@phosphor-icons/react/dist/csr/ChatCircle';
 import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
 import type { SearchResult } from '@/shared/search';
-import type { ReactNode } from 'react';
 import { highlightSearchText } from './search-highlight';
 
 const resultKinds = {
@@ -162,9 +162,10 @@ export function SearchResults(props: SearchResultsProps) {
       (githubIssues.loading || githubIssues.error || githubIssues.results.length > 0));
   return (
     <>
-      {(local.results.length > 0 || local.loading || local.error || !(hasIssues || hasCommands)) && (
-        <LocalResults {...local} />
-      )}
+      {(local.results.length > 0 ||
+        local.loading ||
+        local.error ||
+        !(hasIssues || hasCommands)) && <LocalResults {...local} />}
       {commandGroups}
       {hasIssues && (
         <CommandGroup forceMount heading="GitHub issues" className="p-0">

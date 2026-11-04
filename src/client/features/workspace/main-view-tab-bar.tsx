@@ -346,7 +346,13 @@ export function MainViewTabBar({
       return false;
     }
     const index = sessions.findIndex((session) => session.id === currentSessionId);
-    const next = sessions[(index + step + sessions.length) % sessions.length];
+    const nextIndex =
+      index < 0
+        ? step === 1
+          ? 0
+          : sessions.length - 1
+        : (index + step + sessions.length) % sessions.length;
+    const next = sessions[nextIndex];
     if (!next) {
       return false;
     }

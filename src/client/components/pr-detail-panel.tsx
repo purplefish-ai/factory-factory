@@ -5,12 +5,12 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { QueryErrorState } from '@/client/components/query-error-state';
+import { useShortcut } from '@/client/features/shortcuts';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import {
   getMergeStatePresentation,
   getReviewStatePresentation,
 } from '@/client/lib/pr-status-presentation';
-import { useShortcut } from '@/client/features/shortcuts';
 import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

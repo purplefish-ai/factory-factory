@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useShortcut } from '@/client/features/shortcuts';
 import { GlobalSearch } from './global-search';
 
 const { query, issueQuery } = vi.hoisted(() => ({ query: vi.fn(), issueQuery: vi.fn() }));
@@ -84,7 +85,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
-async function render() {
+function ComposerCommand() {
+  useShortcut('chat.focusComposer', () => {
+    document.getElementById('composer-target')?.focus();
+  });
+  return <textarea id="composer-target" aria-label="Composer" />;
+}
+async function render(withCommands = false) {
   const container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -92,6 +99,7 @@ async function render() {
     root.render(
       <MemoryRouter initialEntries={['/projects/factory/workspaces/ws']}>
         <GlobalSearch />
+        {withCommands && <ComposerCommand />}
         <LocationProbe />
       </MemoryRouter>
     )
@@ -331,4 +339,24 @@ describe('GlobalSearch', () => {
     await key('k', { metaKey: true });
     expect(document.querySelector('input')?.value).toBe('');
   });
+});
+
+it('hands focus to a command target after closing the search focus trap', async () => {
+  query.mockReturnValue({
+    data: [],
+    isPending: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  });
+  await render(true);
+  await key('k', { ctrlKey: true });
+  const option = [...document.querySelectorAll('[role="option"]')].find((element) =>
+    element.textContent?.includes('Focus composer')
+  );
+  expect(option).toBeDefined();
+  await act(() => option?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(document.getElementById('composer-target'));
 });

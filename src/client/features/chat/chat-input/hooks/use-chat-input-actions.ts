@@ -154,7 +154,6 @@ export function useChatInputActions({
   );
 
   const preSlashShortcuts = useMemo<ComposerShortcut[]>(
-
     () => [
       {
         id: 'composer.send',

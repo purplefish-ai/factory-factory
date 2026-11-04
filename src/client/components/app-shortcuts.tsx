@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { KeyboardShortcutsDialog, useShortcut } from '@/client/features/shortcuts';
+import {
+  KeyboardShortcutsDialog,
+  useDesktopCommands,
+  useShortcut,
+} from '@/client/features/shortcuts';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import {
   getProjectNewWorkspacePath,
@@ -105,6 +109,7 @@ export function AppShortcuts({ navData }: { navData: ShortcutNavigationData }) {
     setHelpOpen(true);
   });
   useWorkspaceShortcuts(navData);
+  useDesktopCommands();
 
   return <KeyboardShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />;
 }

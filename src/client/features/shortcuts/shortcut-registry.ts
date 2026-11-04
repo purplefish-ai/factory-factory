@@ -7,7 +7,9 @@ import {
 } from '@/client/lib/keyboard-shortcuts';
 
 /** Return `false` to let the key through, for example when there is nothing to move to. */
-export type ShortcutHandler = (event?: KeyboardEvent) => boolean | undefined | void;
+export type ShortcutHandler =
+  | ((event?: KeyboardEvent) => boolean | undefined)
+  | ((event?: KeyboardEvent) => void);
 
 // The most recently registered handler for an id wins, so a nested surface (a
 // second composer, a dialog's own list) temporarily owns a shortcut and the
@@ -32,8 +34,7 @@ function handleKeyDown(event: KeyboardEvent) {
   for (const [id, stack] of handlers) {
     const handler = stack.at(-1);
     if (
-      !handler ||
-      !matchesShortcut(event, id, environment) ||
+      !(handler && matchesShortcut(event, id, environment)) ||
       isShortcutBlocked(event, getShortcut(id))
     ) {
       continue;

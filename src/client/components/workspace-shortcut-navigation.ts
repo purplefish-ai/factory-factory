@@ -3,10 +3,10 @@ import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 
 type NavigableWorkspace = Pick<ServerWorkspace, 'id' | 'pendingRequestType'>;
 
-/** Workspaces in sidebar order (Waiting, Working, Done), which ⌥↑/⌥↓ step through. */
+/** Workspaces in sidebar order (Working, Waiting, Done), which ⌥↑/⌥↓ step through. */
 export function getSidebarWorkspaceOrder(workspaces: ServerWorkspace[]): ServerWorkspace[] {
   const { waiting, working, done } = groupWorkspacesForSidebar(workspaces);
-  return [...waiting, ...working, ...done];
+  return [...working, ...waiting, ...done];
 }
 
 /**

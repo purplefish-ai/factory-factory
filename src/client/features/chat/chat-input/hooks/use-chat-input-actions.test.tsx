@@ -5,13 +5,13 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
+import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import {
   type ChatSettings,
   DEFAULT_CHAT_SETTINGS,
   type MessageAttachment,
 } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import { useChatInputActions } from './use-chat-input-actions';
 
 const uploadErrors = vi.hoisted(() => vi.fn());
@@ -384,7 +384,6 @@ describe('useChatInputActions keyboard shortcuts', () => {
   });
 
   it('sets the native mode with Alt+Shift+P when it owns planning', () => {
-
     const onSettingsChange = vi.fn();
     const onSetConfigOption = vi.fn();
     const { root, container, textarea } = renderHarness({
@@ -595,7 +594,6 @@ describe('useChatInputActions keyboard shortcuts', () => {
       flushSync(() => root.unmount());
       container.remove();
     }
-
   });
 });
 

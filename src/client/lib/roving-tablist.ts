@@ -14,8 +14,9 @@ export function handleTablistKeyDown(event: KeyboardEvent<HTMLElement>) {
     return;
   }
   const tabs = [...event.currentTarget.querySelectorAll<HTMLElement>(TAB_SELECTOR)];
-  const current = event.target instanceof Element ? event.target.closest('[role="tab"]') : null;
-  const index = tabs.findIndex((tab) => tab === current);
+  const current =
+    event.target instanceof Element ? event.target.closest<HTMLElement>('[role="tab"]') : null;
+  const index = current ? tabs.indexOf(current) : -1;
   if (index < 0 || tabs.length === 0) {
     return;
   }

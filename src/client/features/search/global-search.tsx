@@ -64,11 +64,10 @@ export function GlobalSearch() {
   const commands = useShortcutCommands();
   // A command moves focus itself (the composer, another page or dialog), so the
   // closing dialog must not return focus to the search button.
-  const ranCommandRef = useRef(false);
+  const pendingCommandRef = useRef<ShortcutId | null>(null);
   const runCommand = (id: ShortcutId) => {
-    ranCommandRef.current = true;
+    pendingCommandRef.current = id;
     setSearchOpen(false);
-    runShortcutCommand(id);
   };
   const search = trpc.search.metadata.useQuery(
     { query: debouncedQuery, includeArchived },
@@ -142,9 +141,11 @@ export function GlobalSearch() {
         commands={commands}
         onSelectCommand={runCommand}
         onCloseAutoFocus={(event) => {
-          if (ranCommandRef.current) {
-            ranCommandRef.current = false;
+          const command = pendingCommandRef.current;
+          if (command) {
+            pendingCommandRef.current = null;
             event.preventDefault();
+            runShortcutCommand(command);
           }
         }}
         trigger={
