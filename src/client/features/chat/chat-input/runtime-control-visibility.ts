@@ -42,16 +42,17 @@ export function getRuntimeControlVisibility({
   const hasNative = (...ids: string[]) =>
     nativeOptions.some((option) => ids.includes(option.id) || ids.includes(option.category ?? ''));
   const hasNativeReasoning = hasNative('reasoning', 'reasoning_effort', 'effort', 'thought_level');
-  const hasNativePlanning = nativeOptions.some(providesPlanning);
+  const planningOption = nativeOptions.find(providesPlanning);
   return {
     modelOption,
     nativeOptions,
+    planningOption,
     showReasoning:
       capabilities?.reasoning.enabled === true &&
       capabilities.reasoning.options.length > 0 &&
       !hasNativeReasoning,
     showThinking:
       capabilities?.thinking.enabled === true && !hasNative('thinking') && !hasNativeReasoning,
-    showPlanning: capabilities?.planMode.enabled === true && !hasNativePlanning,
+    showPlanning: capabilities?.planMode.enabled === true && !planningOption,
   };
 }

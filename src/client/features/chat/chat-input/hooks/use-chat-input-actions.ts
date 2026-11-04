@@ -137,12 +137,15 @@ export function useChatInputActions({
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A native effort option replaces the legacy thinking toggle; the legacy budget would be a no-op.
-  const thinkingEnabled = getRuntimeControlVisibility({
+  const {
+    showThinking: thinkingEnabled,
+    showPlanning: planModeEnabled,
+    planningOption,
+  } = getRuntimeControlVisibility({
     capabilities,
     acpConfigOptions,
     onSetConfigOption,
-  }).showThinking;
-  const planModeEnabled = capabilities?.planMode.enabled === true;
+  });
   const imageAttachmentsEnabled =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const modelSelectorEnabled = capabilities?.model.enabled === true;
@@ -170,6 +173,31 @@ export function useChatInputActions({
     [attachments.length, disabled, onChange, onSend, setAttachments]
   );
 
+  const handlePlanModeChange = useCallback(
+    (pressed: boolean) => {
+      if (disabled || stopping) {
+        return;
+      }
+      if (planningOption) {
+        const choices = planningOption.options.flatMap((entry) =>
+          'group' in entry ? entry.options : [entry]
+        );
+        const returnValue = (
+          choices.find((choice) => choice.value === 'default') ??
+          choices.find((choice) => choice.value !== 'plan')
+        )?.value;
+        const target = pressed ? 'plan' : returnValue;
+        if (!(target && choices.some((choice) => choice.value === target))) {
+          return;
+        }
+        onSetConfigOption?.(planningOption.id, target);
+      } else if (planModeEnabled) {
+        onSettingsChange?.({ planModeEnabled: pressed });
+      }
+    },
+    [disabled, stopping, planningOption, planModeEnabled, onSetConfigOption, onSettingsChange]
+  );
+
   const preSlashShortcuts = useMemo<ShortcutDefinition[]>(
     () => [
       {
@@ -190,9 +218,9 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!(disabled || stopping) && planModeEnabled) {
-            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
-          }
+          handlePlanModeChange(
+            planningOption ? planningOption.currentValue !== 'plan' : !settings?.planModeEnabled
+          );
         },
       },
       {
@@ -253,7 +281,8 @@ export function useChatInputActions({
       settings?.planModeEnabled,
       stopping,
       thinkingEnabled,
-      planModeEnabled,
+      handlePlanModeChange,
+      planningOption,
       imageAttachmentsEnabled,
     ]
   );
@@ -381,15 +410,6 @@ export function useChatInputActions({
       }
     },
     [thinkingEnabled, onSettingsChange]
-  );
-
-  const handlePlanModeChange = useCallback(
-    (pressed: boolean) => {
-      if (planModeEnabled) {
-        onSettingsChange?.({ planModeEnabled: pressed });
-      }
-    },
-    [planModeEnabled, onSettingsChange]
   );
 
   const handleReasoningChange = useCallback(

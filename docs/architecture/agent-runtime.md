@@ -270,9 +270,11 @@ choices toggle directly without opening a menu, with their state exposed through
 shown when provider-supplied. Ultracode uses a sparkle icon. Active toggles are
 highlighted; unrestricted access uses an orange warning icon. Native effort
 options replace the legacy thinking/reasoning controls, and a native mode menu
-offering Plan replaces the legacy planning toggle. Menus show provider-supplied
-descriptions for settings and choices. On mobile, the options sheet retains text
-labels.
+offering Plan replaces the legacy planning toggle. Mod+Shift+P updates that
+native option in both directions, choosing an advertised default or non-plan
+choice when leaving planning. It never queues a hidden legacy planning setting.
+Menus show provider-supplied descriptions for settings and choices. On mobile,
+the options sheet retains text labels.
 
 ### Provider and model selection
 

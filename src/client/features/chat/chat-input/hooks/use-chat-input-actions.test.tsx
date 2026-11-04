@@ -22,6 +22,7 @@ interface ShortcutHarnessProps {
   onSetConfigOption?: (configId: string, value: string) => void;
   disabled?: boolean;
   running?: boolean;
+  stopping?: boolean;
   settingsPlanEnabled?: boolean;
   settingsThinkingEnabled?: boolean;
   onCloseSlashMenu?: () => void;
@@ -35,6 +36,7 @@ function ShortcutHarness({
   onSetConfigOption,
   disabled = false,
   running = false,
+  stopping = false,
   settingsPlanEnabled = false,
   settingsThinkingEnabled = false,
   onCloseSlashMenu = () => undefined,
@@ -55,6 +57,7 @@ function ShortcutHarness({
     onSetConfigOption,
     disabled,
     running,
+    stopping,
     settings: {
       ...DEFAULT_CHAT_SETTINGS,
       planModeEnabled: settingsPlanEnabled,
@@ -68,6 +71,7 @@ function ShortcutHarness({
 
   return (
     <>
+      <button onClick={() => actions.handlePlanModeChange(false)}>Leave plan</button>
       <textarea onKeyDown={actions.handleKeyDown} data-testid="shortcut-input" />
       <input
         type="file"
@@ -359,7 +363,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('queues plan mode with Mod+Shift+P alongside a native Claude mode option', () => {
+  it('sets the native mode with Mod+Shift+P when it owns planning', () => {
     const onSettingsChange = vi.fn();
     const onSetConfigOption = vi.fn();
     const { root, container, textarea } = renderHarness({
@@ -372,9 +376,112 @@ describe('useChatInputActions keyboard shortcuts', () => {
 
     dispatchModShiftShortcut(textarea, 'p');
 
-    expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
-    expect(onSetConfigOption).not.toHaveBeenCalled();
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'plan');
 
+    root.unmount();
+    container.remove();
+  });
+
+  it.each([false, true])('leaves native plan mode with grouped choices=%s', (grouped) => {
+    const onSettingsChange = vi.fn();
+    const onSetConfigOption = vi.fn();
+    const options = claudeNativeConfigOptions();
+    const mode = options[0]!;
+    mode.currentValue = 'plan';
+    if (grouped) {
+      mode.options = [
+        {
+          group: 'Modes',
+          options: [
+            { value: 'acceptEdits', name: 'Accept edits' },
+            { value: 'plan', name: 'Plan' },
+          ],
+        },
+      ];
+    }
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: options,
+      onSetConfigOption,
+      onSettingsChange,
+    });
+    dispatchModShiftShortcut(textarea, 'p');
+    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'acceptEdits');
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    root.unmount();
+    container.remove();
+  });
+
+  it.each([{ disabled: true }, { stopping: true }])(
+    'does not change native planning while %j',
+    (state) => {
+      const onSettingsChange = vi.fn();
+      const onSetConfigOption = vi.fn();
+      const { root, container, textarea } = renderHarness({
+        capabilities: claudeChatBarCapabilities(),
+        acpConfigOptions: claudeNativeConfigOptions(),
+        onSetConfigOption,
+        onSettingsChange,
+        ...state,
+      });
+      dispatchModShiftShortcut(textarea, 'p');
+      expect(onSetConfigOption).not.toHaveBeenCalled();
+      expect(onSettingsChange).not.toHaveBeenCalled();
+      root.unmount();
+      container.remove();
+    }
+  );
+
+  it('routes the planning handler through the native option too', () => {
+    const onSettingsChange = vi.fn();
+    const onSetConfigOption = vi.fn();
+    const options = claudeNativeConfigOptions();
+    options[0]!.currentValue = 'plan';
+    const { root, container } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: options,
+      onSetConfigOption,
+      onSettingsChange,
+    });
+    flushSync(() => container.querySelector('button')!.click());
+    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'acceptEdits');
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    root.unmount();
+    container.remove();
+  });
+
+  it('does not invent a native exit mode or fall back to legacy planning', () => {
+    const onSettingsChange = vi.fn();
+    const onSetConfigOption = vi.fn();
+    const options = claudeNativeConfigOptions();
+    options[0] = {
+      ...options[0]!,
+      currentValue: 'plan',
+      options: [{ value: 'plan', name: 'Plan' }],
+    };
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: options,
+      onSetConfigOption,
+      onSettingsChange,
+    });
+    dispatchModShiftShortcut(textarea, 'p');
+    expect(onSetConfigOption).not.toHaveBeenCalled();
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    root.unmount();
+    container.remove();
+  });
+
+  it('retains the legacy shortcut when native options cannot be edited', () => {
+    const onSettingsChange = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      acpConfigOptions: claudeNativeConfigOptions(),
+      onSettingsChange,
+    });
+    dispatchModShiftShortcut(textarea, 'p');
+    expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
     root.unmount();
     container.remove();
   });
