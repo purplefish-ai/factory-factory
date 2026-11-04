@@ -28,6 +28,23 @@ describe('userSettingsAccessor.update', () => {
     }
   );
 
+  it.each(['Custom prompt', null])(
+    'persists ticket prompt %s on create and update',
+    async (prompt) => {
+      mockUpsert.mockImplementation(
+        async ({ create }: { create: Record<string, unknown> }) => create
+      );
+      expect(
+        (await userSettingsAccessor.update({ ticketDispatchPrompt: prompt })).ticketDispatchPrompt
+      ).toBe(prompt);
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ ticketDispatchPrompt: prompt }),
+          create: expect.objectContaining({ ticketDispatchPrompt: prompt }),
+        })
+      );
+    }
+  );
   it('preserves ratchetEnabled when update creates the settings', async () => {
     mockUpsert.mockImplementation(async ({ create }: { create: { ratchetEnabled?: boolean } }) => ({
       ...create,

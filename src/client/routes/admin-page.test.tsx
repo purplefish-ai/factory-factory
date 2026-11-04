@@ -53,6 +53,7 @@ vi.mock('./admin/index', () => ({
   ProjectSettingsSection: () => createElement('section', null, 'Factory Configuration'),
   AppInfoSection: () => createElement('section', null, 'App info'),
   ChatProviderDefaultsSection: () => createElement('section', null, 'Chat defaults'),
+  TicketDispatchSettingsSection: () => createElement('section', null, 'Ticket dispatch prompt'),
   ChildWorkspaceSettingsSection: () => createElement('section', null, 'Child workspaces'),
   CliAuthSection: () => createElement('section', null, 'CLI Authentication'),
   DataBackupSection: () => createElement('section', null, 'Data Backup'),

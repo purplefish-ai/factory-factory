@@ -263,6 +263,7 @@ const mockUserSettings: UserSettings = {
   preferredIde: 'cursor',
   customIdeCommand: null,
   playSoundOnComplete: true,
+  ticketDispatchPrompt: null,
   childWorkspacesEnabled: false,
   notificationSoundPath: '/path/to/sound.mp3',
   workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
@@ -412,6 +413,7 @@ function createImportData(
         preferredIde: 'cursor',
         customIdeCommand: null,
         playSoundOnComplete: true,
+        ticketDispatchPrompt: null,
         childWorkspacesEnabled: false,
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
@@ -535,6 +537,7 @@ describe('DataBackupService', () => {
       ]);
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
@@ -816,6 +819,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
@@ -856,6 +860,7 @@ describe('DataBackupService', () => {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           notificationSoundPath: null,
           ratchetEnabled: true,

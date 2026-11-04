@@ -1,4 +1,5 @@
 import type { createLogger } from '@/backend/services/logger.service';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 
@@ -20,7 +21,11 @@ export async function buildInitialPromptFromGitHubIssue(
       (project?.githubOwner && project.githubRepo
         ? `https://github.com/${project.githubOwner}/${project.githubRepo}/issues/${workspace.githubIssueNumber}`
         : null);
-    return url ? buildIssueStartPrompt({ url }) : '';
+    if (!url) {
+      return '';
+    }
+    const settings = await userSettingsService.get();
+    return buildIssueStartPrompt({ url, prompt: settings.ticketDispatchPrompt });
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
@@ -39,7 +44,11 @@ export async function buildInitialPromptFromLinearIssue(
     if (!(workspace?.linearIssueId && workspace.linearIssueUrl)) {
       return '';
     }
-    return buildIssueStartPrompt({ url: workspace.linearIssueUrl });
+    const settings = await userSettingsService.get();
+    return buildIssueStartPrompt({
+      url: workspace.linearIssueUrl,
+      prompt: settings.ticketDispatchPrompt,
+    });
   } catch (error) {
     logger.warn('Error building initial prompt from Linear issue', {
       workspaceId,
