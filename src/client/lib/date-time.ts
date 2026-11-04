@@ -23,21 +23,11 @@ type DatePrecision = 'date' | 'minute' | 'second';
 const MAX_FORMATTERS = 16;
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
-/** Cache configurations rather than dates; explicit locale/time-zone variants stay bounded. */
-function getFormatter(options: DateDisplayOptions, precision: DatePrecision): Intl.DateTimeFormat {
-  const locale = options.locale;
-  const localeStrings =
-    locale === undefined ? [] : Array.isArray(locale) ? locale.map(String) : [String(locale)];
-  const key = JSON.stringify({
-    locales: Intl.getCanonicalLocales(localeStrings),
-    timeZone: options.timeZone,
-    precision,
-  });
-  const cached = formatters.get(key);
-  if (cached) {
-    return cached;
-  }
-  const formatter = new Intl.DateTimeFormat(options.locale, {
+function createFormatter(
+  options: DateDisplayOptions,
+  precision: DatePrecision
+): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(options.locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -45,6 +35,31 @@ function getFormatter(options: DateDisplayOptions, precision: DatePrecision): In
     ...(precision === 'second' ? ({ second: '2-digit' } as const) : {}),
     timeZone: options.timeZone,
   });
+}
+
+/** Cache explicit configurations, leaving browser defaults live when either option is omitted. */
+function getFormatter(options: DateDisplayOptions, precision: DatePrecision): Intl.DateTimeFormat {
+  const locale = options.locale;
+  const localeStrings =
+    locale === undefined ? [] : Array.isArray(locale) ? locale.map(String) : [String(locale)];
+  if (localeStrings.length === 0 || options.timeZone === undefined) {
+    return createFormatter(options, precision);
+  }
+  const locales = Intl.getCanonicalLocales(localeStrings);
+  const key = JSON.stringify({
+    locales,
+    timeZone: options.timeZone,
+    precision,
+  });
+  const cached = formatters.get(key);
+  if (cached) {
+    return cached;
+  }
+  // Unsupported preferences also fall back to the browser's current locale.
+  if (Intl.DateTimeFormat.supportedLocalesOf(locales).length === 0) {
+    return createFormatter(options, precision);
+  }
+  const formatter = createFormatter(options, precision);
   if (formatters.size >= MAX_FORMATTERS) {
     const oldest = formatters.keys().next().value;
     if (oldest !== undefined) {
