@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
+import { FactoryUpdateBanner } from '@/client/components/factory-update-banner';
 import { Loading } from '@/client/components/loading';
 import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
 import { AppLayout } from '@/client/components/resizable-layout';
@@ -44,6 +45,7 @@ function RootLayout() {
       className="flex flex-col overflow-hidden"
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
+      <FactoryUpdateBanner />
       <CLIHealthBanner />
       <ModelCatalogWarning />
       <AppLayout className="flex-1 overflow-hidden">
