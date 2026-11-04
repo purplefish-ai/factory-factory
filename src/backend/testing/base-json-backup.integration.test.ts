@@ -10,6 +10,7 @@ import history from '@/shared/testing/recovery-automation-definitions-v8.fixture
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
+import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -49,6 +50,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearIntegrationDatabase(source.prisma);
   await clearIntegrationDatabase(destination.prisma);
+  await source.prisma.agentConnection.deleteMany();
+  await destination.prisma.agentConnection.deleteMany();
   state.prisma = destination.prisma;
 });
 const physical = (prisma: PrismaClient) =>
@@ -173,6 +176,7 @@ it('declares an empty section for all SQL NULL rows and restores explicit SQL NU
     periodicConfig: 1,
     periodicHistory: 1,
     automationDefinitions: 1,
+    slackConnections: 1,
   });
   expect(backup.data).toHaveProperty('recovery.baseJson', { version: 1, jsonStorage: [] });
   state.prisma = destination.prisma;
@@ -219,6 +223,15 @@ it('captures rows and markers from the same readonly snapshot across an applicat
       providerMetadata: Prisma.DbNull,
     },
   });
+  await source.prisma.agentConnection.create({
+    data: {
+      id: 'snapshot-slack',
+      provider: 'SLACK',
+      externalId: 'T-snapshot',
+      name: 'Before snapshot',
+      isEnabled: true,
+    },
+  });
   const reached = deferred();
   const committed = deferred();
   state.beforeAccounts = async () => {
@@ -228,6 +241,10 @@ it('captures rows and markers from the same readonly snapshot across an applicat
   const pending = dataBackupService.exportData('test');
   try {
     await reached.promise;
+    await source.prisma.agentConnection.update({
+      where: { id: 'snapshot-slack' },
+      data: { name: 'After snapshot', isEnabled: false },
+    });
     await source.prisma.workspace.update({
       where: { id: 'sql' },
       data: { creationMetadata: Prisma.JsonNull },
@@ -245,6 +262,9 @@ it('captures rows and markers from the same readonly snapshot across an applicat
     state.beforeAccounts = undefined;
   }
   const backup = await pending;
+  expect(backup.data).toHaveProperty('recovery.slackConnections.connections', [
+    expect.objectContaining({ id: 'snapshot-slack', name: 'Before snapshot', isEnabled: true }),
+  ]);
   expect(backup.data.workspaces[0]?.creationMetadata).toBeNull();
   expect(backup.data.workspaces[0]?.prs[0]?.observation).toBeNull();
   expect(backup.data.agentSessions[0]?.providerMetadata).toBeNull();
@@ -378,7 +398,7 @@ it('roundtrips PR and session SQL NULL versus JSON null at their existing insert
   ];
   expect(await read(source.prisma)).toEqual({ prs: expected, sessions: expected });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery', history.meta.recovery);
+  expect(backup.meta).toHaveProperty('recovery', slack.meta.recovery);
   state.prisma = destination.prisma;
   const result = await dataBackupService.importData(backup);
   expect(result.agentSessions).toEqual({ imported: 3, skipped: 0 });

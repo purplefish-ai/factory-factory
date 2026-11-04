@@ -52,6 +52,13 @@ Start Factory Factory without installing it:
 npx factory-factory@latest serve
 ```
 
+Before starting, `ff serve` checks the Node.js version, Git, and the files
+needed for the selected mode. If a prerequisite is missing, it exits with
+instructions to fix it before creating the database or starting servers. Node.js
+errors include commands for switching versions with nvm and a link to install
+Node.js. Development mode (`--dev`) also checks for the checkout's local tsx and
+Vite tools.
+
 Factory Factory opens in your browser and stores its database in
 `~/factory-factory/` by default.
 
@@ -67,6 +74,38 @@ Then:
 3. Choose Claude or Codex and start a session.
 4. Review the agent's changes, use the integrated terminal when needed, and open
    a pull request.
+
+## Updating
+
+When a newer stable release is available, the app shows an **Update** button.
+Each release notice can be dismissed independently; a later version appears
+again. Registry outages do not block startup or normal use.
+
+Automatic updates support writable global npm installations on macOS and Linux
+started with `ff serve`. The update waits for active agent work and queued
+messages to finish, prepares the replacement, and restarts at the same address.
+Restarting stops terminals and run scripts. Close other Factory Factory servers
+using the same installation before updating. The browser reconnects and reloads
+after the replacement is ready. Failed preparation keeps the current app
+running; failed migration or startup restores the previous package and database.
+
+Claude and Codex are bundled with Factory Factory. When a release includes newer
+runtime packages, their notices appear together and share the application
+update. Installing an unrelated global provider CLI does not update these
+bundled runtimes. Other installation methods show manual update guidance.
+
+- **Desktop app:** Download and install the latest package from
+  [GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases/latest),
+  then reopen Factory Factory.
+- **CLI:** Stop the running server, then launch the latest release with
+  `pnpm dlx factory-factory@latest serve`. If you installed globally, update
+  `factory-factory@latest` using the same package manager you used to install
+  it, then restart `ff serve`.
+- **Source checkout:** Pull the latest release, run `pnpm install` and
+  `pnpm exec tsx src/cli/index.ts build`, then restart the server.
+
+Manual updates require a restart. Your database remains in the configured data
+directory.
 
 ## What it does
 
@@ -108,23 +147,6 @@ For regular use, install the CLI globally:
 npm install -g factory-factory
 ff serve
 ```
-
-When a newer stable release is available, the app shows an **Update** button.
-Each release notice can be dismissed independently; a later version appears
-again. Registry outages do not block startup or normal use.
-
-Automatic updates support writable global npm installations on macOS and Linux
-started with `ff serve`. The update waits for active agent work and queued
-messages to finish, prepares the replacement, and restarts at the same address.
-Restarting stops terminals and run scripts. Close other Factory Factory servers
-using the same installation before updating. The browser reconnects and reloads
-after the replacement is ready. Failed preparation keeps the current app
-running; failed migration or startup restores the previous package and database.
-
-Claude and Codex are bundled with Factory Factory. When a release includes newer
-runtime packages, their notices appear together and share the application
-update. Installing an unrelated global provider CLI does not update these
-bundled runtimes. Other installation methods show manual update guidance.
 
 Useful commands:
 

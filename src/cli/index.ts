@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './serve-node-check';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
@@ -20,6 +21,7 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { checkServePrerequisites } from './serve-prerequisites';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
 import { runSupervisedServeSession } from './supervised-serve-session';
@@ -167,6 +169,19 @@ function printReadyBanner(opts: {
   console.log(chalk.gray('  ─────────────────────────────────────'));
 }
 
+function requireServePrerequisites(dev: boolean): boolean {
+  const issues = checkServePrerequisites(PROJECT_ROOT, dev);
+  if (issues.length === 0) {
+    return true;
+  }
+  console.error(chalk.red('  Cannot start Factory Factory. Fix the following prerequisites:\n'));
+  for (const issue of issues) {
+    console.error(`  • ${issue}\n`);
+  }
+  process.exitCode = 1;
+  return false;
+}
+
 program
   .name('ff')
   .description('FACTORY FACTORY - Workspace-based coding environment')
@@ -194,6 +209,10 @@ program
 
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
+
+    if (!requireServePrerequisites(!!options.dev)) {
+      return;
+    }
 
     // Ensure data directory exists
     if (verbose) {

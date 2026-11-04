@@ -6,6 +6,7 @@ import { open } from 'node:fs/promises';
  */
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { factoryReleaseChecker, isNewerRelease } from '@/backend/lib/factory-update';
 import { releaseVersionSchema } from '@/shared/application-updates';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { DecisionLog } from '@prisma-gen/client';
@@ -29,6 +30,21 @@ export const adminRouter = router({
   cancelUpdate: trustedLocalProcedure.mutation(({ ctx }) =>
     ctx.appContext.services.applicationUpdateService.cancelUpdate()
   ),
+  // Compatibility for clients loaded before the multi-component update prompt.
+  checkFactoryUpdate: publicProcedure.query(async ({ ctx }) => {
+    const currentVersion = ctx.appContext.services.configService.getAppVersion();
+    const latestVersion = await factoryReleaseChecker.getLatestVersion((error) => {
+      getLogger(ctx).debug('Factory release check failed; backing off', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return {
+      currentVersion,
+      latestVersion,
+      updateAvailable: latestVersion !== null && isNewerRelease(currentVersion, latestVersion),
+    };
+  }),
+
   /**
    * Get server information (port, environment, etc.)
    */

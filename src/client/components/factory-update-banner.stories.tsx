@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import type { ApplicationUpdates } from '@/shared/application-updates';
-import { ApplicationUpdateBannerContent } from './application-update-banner';
+import { FactoryUpdateBannerContent } from './factory-update-banner';
 
 const updates: ApplicationUpdates = {
   currentVersion: '0.5.3',
@@ -24,8 +24,8 @@ const updates: ApplicationUpdates = {
 const callbacks = { onUpdate: fn(), onCancel: fn(), onDismiss: fn() };
 
 const meta = {
-  title: 'Shared/ApplicationUpdateBanner',
-  component: ApplicationUpdateBannerContent,
+  title: 'Shared/FactoryUpdateBanner',
+  component: FactoryUpdateBannerContent,
   parameters: { layout: 'fullscreen' },
   args: { updates, ...callbacks },
   beforeEach: () => {
@@ -33,7 +33,7 @@ const meta = {
     callbacks.onCancel.mockClear();
     callbacks.onDismiss.mockClear();
   },
-} satisfies Meta<typeof ApplicationUpdateBannerContent>;
+} satisfies Meta<typeof FactoryUpdateBannerContent>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -102,7 +102,7 @@ export const DismissIndependently: Story = {
   render: (args) => {
     const [notices, setNotices] = useState(args.updates.notices);
     return (
-      <ApplicationUpdateBannerContent
+      <FactoryUpdateBannerContent
         {...args}
         updates={{ ...args.updates, notices }}
         onDismiss={(id) => setNotices((previous) => previous.filter((notice) => notice.id !== id))}
@@ -134,7 +134,7 @@ export const RecoveryFailureWithoutNotices: Story = {
   render: (args) => {
     const [status, setStatus] = useState(args.updates.status);
     return (
-      <ApplicationUpdateBannerContent
+      <FactoryUpdateBannerContent
         {...args}
         updates={{ ...args.updates, status }}
         onDismiss={(id, version) => {

@@ -58,8 +58,7 @@ package versions.
 
 ### Task 2: Shared update notices
 
-Files: `src/client/components/application-update-banner*`,
-`src/client/root.tsx`.
+Files: `src/client/components/factory-update-banner*`, `src/client/root.tsx`.
 
 Interfaces: `admin.checkUpdates`, `admin.requestUpdate({version})`,
 `admin.cancelUpdate`; shared contracts from Task 1.
@@ -120,3 +119,9 @@ visible independently of release rows; retries use the supervisor's previously
 validated pinned target when registry metadata is unavailable after restart. ACP
 admission is injected by composition to preserve its dependency isolation.
 Interrupted recovery runs before migrations and relaunches the restored CLI.
+
+Main-branch integration: PR #2972 introduced a basic release banner while this
+work was underway. Extend its existing `factory-update-banner` component and
+retain its per-release dismissal key as a fallback. Render a single shared
+prompt. Keep `checkFactoryUpdate` for older loaded clients and preserve the new
+CLI prerequisite checks from PR #2973.

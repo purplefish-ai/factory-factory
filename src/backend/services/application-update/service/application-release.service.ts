@@ -76,7 +76,8 @@ function readRuntimeVersion(packageRoot: string, adapter: string, runtime: strin
 }
 
 export function readInstalledApplication(moduleUrl = import.meta.url): InstalledApplication {
-  let directory = dirname(fileURLToPath(moduleUrl));
+  const modulePath = fileURLToPath(moduleUrl).replace(/\.asar\.unpacked([/\\])/, '.asar$1');
+  let directory = dirname(modulePath);
   while (true) {
     try {
       const manifest = packageSchema.parse(

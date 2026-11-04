@@ -222,3 +222,19 @@ it('locates the running package from its module and resolves runtimes from the a
     runtimeVersions: { claude: '0.3.312', codex: '0.165.0' },
   });
 });
+
+it('finds an Electron manifest kept in app.asar when backend code is unpacked', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ff-electron-release-'));
+  temporaryDirectories.push(root);
+  const packageRoot = join(root, 'app.asar');
+  mkdirSync(packageRoot, { recursive: true });
+  writeFileSync(
+    join(packageRoot, 'package.json'),
+    JSON.stringify({ name: 'factory-factory', version: '0.5.3' })
+  );
+  expect(
+    readInstalledApplication(
+      pathToFileURL(join(root, 'app.asar.unpacked/dist/backend/service.js')).href
+    )
+  ).toMatchObject({ packageRoot, currentVersion: '0.5.3' });
+});

@@ -5,6 +5,7 @@ import {
   periodicHistoryRecoverySchema,
 } from './periodic-recovery.schema';
 import { baseJsonSectionSchema } from './recovery-json-storage.schema';
+import { slackConnectionsRecoverySchema } from './slack-connections-recovery.schema';
 
 const coverageEntrySchema = z.strictObject({
   model: z.string(),
@@ -133,6 +134,85 @@ export const automationDefinitionsModelCoverage = {
     'all supported scalar definition bodies and execution preferences, source revisions and timestamps; restored disabled; connections, event membership, proposal provenance, activation and run/evaluation history excluded.'
   ),
 };
+export const slackConnectionsModelCoverage = {
+  Project: partial(
+    'configuration/paths; no encrypted tracker configuration restore or repository files.'
+  ),
+  Workspace: partial(
+    'base metadata; Workspace.periodicTaskId links to newly imported disabled tasks; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded.'
+  ),
+  WorkspaceMetadata: partial(
+    'existing generated summaries/provenance fields when parent is accepted; no full-domain recovery claim.'
+  ),
+  WorkspaceRunScript: partial(
+    'command/cleanup and inert runtime disposition; postRunCommand absent and PID/port/start authority excluded.'
+  ),
+  CodexAccount: partial(
+    'identity/label metadata; owner may remap identity; native home, credentials, timestamps and executable login authority excluded.'
+  ),
+  AgentSession: partial(
+    'base metadata/provider history identities; AgentSession.providerMetadata preserves SQL NULL versus top-level JSON null; provider history bytes/live process excluded.'
+  ),
+  TerminalSession: partial('label/metadata; process identities and terminal bytes excluded.'),
+  UserSettings: partial(
+    'exported preference subset; keys, credentials, workspace ordering and caches excluded.'
+  ),
+  WorkspacePR: partial(
+    'existing associations/cache; WorkspacePR.observation preserves SQL NULL versus top-level JSON null for actual included PR rows; no exact normalized full ledger guarantee.'
+  ),
+  WorkspacePRMonitoring: partial(
+    'base configuration/history; restored disabled, no executable monitoring authority.'
+  ),
+  WorkspacePRDedicatedSession: partial(
+    'existing base association where valid accepted owner graph exists; not an independent session/history payload.'
+  ),
+  WorkspacePREvent: partial(
+    'flattened raw event/effect evidence; no proof of omitted original members or original frozen ordering; unfinished effects inert.'
+  ),
+  WorkspacePRDelivery: partial(
+    'only evidence represented through base events; exact normalized delivery/membership/order not included.'
+  ),
+  WorkspacePRDiscovery: partial(
+    'base scheduling/cache fields where present; defaults otherwise, not delivery authority or full retained history.'
+  ),
+  DecisionLog: excluded('generic decision history absent.'),
+  WorkspaceLaunchOrigin: excluded('original launch provenance absent.'),
+  WorkspaceChildOrigin: excluded(
+    'original retained/deleted-child provenance absent; import-created invalidation/origin bookkeeping is not source recovery.'
+  ),
+  WorkspaceNotification: excluded(
+    'retained mailbox rows/revision/read/ack/supersession history absent.'
+  ),
+  WorkspaceMailState: excluded(
+    'retained wake/cursor proof absent; live claims/leases are intentionally never restored.'
+  ),
+  AgentSessionLaunchOrigin: excluded('original session launch provenance absent.'),
+  SessionLifecycleEvent: excluded('lifecycle history absent.'),
+  ClosedSession: excluded('archive payload/metadata recovery absent.'),
+  PeriodicTask: partial(
+    'complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority.'
+  ),
+  PeriodicTaskExecution: partial(
+    'all supported retained execution scalars and canonical version-1 or legacy null launch snapshots with SQL NULL versus top-level JSON null fidelity; imported RUNNING rows become historical FAILED without asserting provider outcome; live execution and replay authority excluded.'
+  ),
+  AgentDefinition: partial(
+    'all supported scalar definition bodies and execution preferences, source revisions and timestamps; restored disabled; connection bindings, event membership, proposal provenance, activation and run/evaluation history excluded.'
+  ),
+  AgentConnection: partial(
+    'SLACK connection identity, name, source enabled state and timestamps; restored disabled and without credentials; GitHub connections, credentials and live connection authority excluded.'
+  ),
+  AgentTrigger: excluded('automation trigger configuration absent.'),
+  AgentRun: excluded('automation run/effect history absent.'),
+  AgentProposal: excluded('draft/accepted proposal provenance absent.'),
+  AgentSourceState: excluded('source continuity state absent.'),
+  AgentSourcePage: excluded('source pages absent.'),
+  AgentSourceBaseline: excluded('source baselines absent.'),
+  AgentSourceCheckpoint: excluded('source checkpoint proof absent.'),
+  AgentSourceHead: excluded('source head proof absent.'),
+  AgentEvent: excluded('automation retained events absent.'),
+  AgentEvaluation: excluded('frozen automation decisions absent.'),
+  AgentInitialDelivery: excluded('initial automation effect evidence absent.'),
+} as const;
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -146,6 +226,7 @@ export const recoverySectionsSchema = z.strictObject({
   periodicConfig: periodicConfigRecoverySchema.optional(),
   periodicHistory: periodicHistoryRecoverySchema.optional(),
   automationDefinitions: automationDefinitionsRecoverySchema.optional(),
+  slackConnections: slackConnectionsRecoverySchema.optional(),
 });
 export const recoveryMetadataSchema = z
   .strictObject({
@@ -158,6 +239,7 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-links-1',
       'base-json-periodic-history-1',
       'base-json-automation-definitions-1',
+      'base-json-slack-connections-1',
     ]),
     status: z.literal('PARTIAL'),
     capabilities: z.strictObject({
@@ -165,9 +247,19 @@ export const recoveryMetadataSchema = z
       periodicConfig: z.literal(1).optional(),
       periodicHistory: z.literal(1).optional(),
       automationDefinitions: z.literal(1).optional(),
+      slackConnections: z.literal(1).optional(),
     }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
+  })
+  .superRefine((metadata, ctx) => {
+    const slack = metadata.profile === 'base-json-slack-connections-1';
+    if (
+      slack !== Object.hasOwn(metadata.capabilities, 'slackConnections') ||
+      (slack && metadata.capabilities.slackConnections !== 1)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Slack profile capabilities do not match' });
+    }
   })
   .superRefine((metadata, ctx) => {
     const workspaceJson = metadata.profile !== 'base-1';
@@ -176,8 +268,10 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-links-1',
       'base-json-periodic-history-1',
       'base-json-automation-definitions-1',
+      'base-json-slack-connections-1',
     ].includes(metadata.profile);
-    const automation = metadata.profile === 'base-json-automation-definitions-1';
+    const slack = metadata.profile === 'base-json-slack-connections-1';
+    const automation = slack || metadata.profile === 'base-json-automation-definitions-1';
     const history = automation || metadata.profile === 'base-json-periodic-history-1';
     if (
       automation !== Object.hasOwn(metadata.capabilities, 'automationDefinitions') ||
@@ -216,6 +310,7 @@ export const recoveryMetadataSchema = z
           'base-json-periodic-links-1': periodicLinksModelCoverage,
           'base-json-periodic-history-1': periodicHistoryModelCoverage,
           'base-json-automation-definitions-1': automationDefinitionsModelCoverage,
+          'base-json-slack-connections-1': slackConnectionsModelCoverage,
         }[metadata.profile]
       )
     );

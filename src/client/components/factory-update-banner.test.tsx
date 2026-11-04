@@ -6,10 +6,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationUpdates, ApplicationUpdateStatus } from '@/shared/application-updates';
 import {
-  ApplicationUpdateBanner,
-  ApplicationUpdateBannerContent,
+  FactoryUpdateBanner,
+  FactoryUpdateBannerContent,
   claimUpdateReload,
-} from './application-update-banner';
+} from './factory-update-banner';
 
 const mocks = vi.hoisted(() => ({
   data: undefined as ApplicationUpdates | undefined,
@@ -67,7 +67,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('application update notices', () => {
   it('shows independent versions with one shared update action and restart disclosure', () => {
     const html = renderToStaticMarkup(
-      <ApplicationUpdateBannerContent {...callbacks} updates={updates} />
+      <FactoryUpdateBannerContent {...callbacks} updates={updates} />
     );
     expect(html).toContain('Factory Factory');
     expect(html).toContain('0.5.3');
@@ -82,10 +82,7 @@ describe('application update notices', () => {
 
   it('explains manual installation without an automatic action', () => {
     const html = renderToStaticMarkup(
-      <ApplicationUpdateBannerContent
-        {...callbacks}
-        updates={{ ...updates, automaticUpdate: false }}
-      />
+      <FactoryUpdateBannerContent {...callbacks} updates={{ ...updates, automaticUpdate: false }} />
     );
     expect(html).toContain('npm install -g factory-factory@0.5.4');
     expect(html).not.toContain('>Update</button>');
@@ -96,7 +93,7 @@ describe('application update notices', () => {
     'shares %s progress across providers',
     (phase) => {
       const html = renderToStaticMarkup(
-        <ApplicationUpdateBannerContent
+        <FactoryUpdateBannerContent
           {...callbacks}
           updates={{ ...updates, status: { phase, targetVersion: '0.5.4' } }}
         />
@@ -110,7 +107,7 @@ describe('application update notices', () => {
 
   it('offers retry and dismissal after installation fails', () => {
     const html = renderToStaticMarkup(
-      <ApplicationUpdateBannerContent
+      <FactoryUpdateBannerContent
         {...callbacks}
         updates={{
           ...updates,
@@ -140,12 +137,12 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         'The replacement could not start.'
       );
       mocks.data = undefined;
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         'The replacement could not start.'
       );
@@ -176,7 +173,7 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       for (const label of ['Factory Factory', 'Claude', 'Codex']) {
         flushSync(() =>
           container
@@ -197,11 +194,36 @@ describe('application update notices', () => {
     }
   });
 
+  it('respects the prior Factory Factory release dismissal without hiding bundled providers or later app releases', () => {
+    localStorage.setItem('ff_dismissed_factory_release', '0.5.4');
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      expect(container.querySelector('[aria-label="Dismiss Factory Factory update"]')).toBeNull();
+      expect(container.querySelector('[aria-label="Dismiss Claude update"]')).not.toBeNull();
+      expect(container.querySelector('[aria-label="Dismiss Codex update"]')).not.toBeNull();
+      mocks.data = {
+        ...updates,
+        notices: updates.notices.map((notice) =>
+          notice.id === 'factory-factory' ? { ...notice, latestVersion: '0.5.5' } : notice
+        ),
+      };
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      expect(
+        container.querySelector('[aria-label="Dismiss Factory Factory update"]')
+      ).not.toBeNull();
+      expect(container.textContent).toContain('0.5.5');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('persists dismissal per notice and release without hiding other providers or later releases', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       const dismiss = container.querySelector<HTMLButtonElement>(
         '[aria-label="Dismiss Claude update"]'
       );
@@ -210,7 +232,7 @@ describe('application update notices', () => {
       expect(container.textContent).not.toContain('0.3.316');
       expect(container.textContent).toContain('Codex');
       flushSync(() => root.render(null));
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(container.textContent).not.toContain('0.3.316');
       mocks.data = {
         ...updates,
@@ -218,7 +240,7 @@ describe('application update notices', () => {
           notice.id === 'claude' ? { ...notice, latestVersion: '0.3.317' } : notice
         ),
       };
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(container.textContent).toContain('0.3.317');
     } finally {
       flushSync(() => root.unmount());
@@ -229,7 +251,7 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       flushSync(() =>
         [...container.querySelectorAll('button')]
           .find((button) => button.textContent === 'Update')
@@ -237,7 +259,7 @@ describe('application update notices', () => {
       );
       expect(mocks.request).toHaveBeenCalledWith({ version: '0.5.4' });
       mocks.data = { ...updates, status: { phase: 'waiting', targetVersion: '0.5.4' } };
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       flushSync(() =>
         [...container.querySelectorAll('button')]
           .find((button) => button.textContent === 'Cancel update')
@@ -253,7 +275,7 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       flushSync(() =>
         mocks.requestOptions?.onSuccess({ phase: 'waiting', targetVersion: '0.5.4' })
       );
@@ -272,7 +294,7 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       flushSync(() =>
         container.querySelector<HTMLButtonElement>('[aria-label="Dismiss update error"]')?.click()
       );
@@ -295,9 +317,9 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       mocks.data = undefined;
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(container.textContent).toContain('Restarting Factory Factory');
     } finally {
       flushSync(() => root.unmount());
@@ -311,13 +333,13 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(reload).not.toHaveBeenCalled();
       mocks.data = { ...updates, currentVersion: '0.5.8', notices: [], status: { phase: 'idle' } };
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(reload).toHaveBeenCalledOnce();
       mocks.data = { ...mocks.data };
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       expect(reload).toHaveBeenCalledOnce();
     } finally {
       flushSync(() => root.unmount());
@@ -334,7 +356,7 @@ describe('application update notices', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(<ApplicationUpdateBanner />));
+      flushSync(() => root.render(<FactoryUpdateBanner />));
       flushSync(() =>
         container.querySelector<HTMLButtonElement>('[aria-label="Dismiss Claude update"]')?.click()
       );

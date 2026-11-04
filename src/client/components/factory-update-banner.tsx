@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/spinner';
 import type { ApplicationUpdates, ApplicationUpdateStatus } from '@/shared/application-updates';
 
 const STORAGE_PREFIX = 'ff_update_dismissed:';
+const LEGACY_FACTORY_DISMISSAL_KEY = 'ff_dismissed_factory_release';
 const PENDING_TARGET_KEY = 'ff_update_pending_target';
 const RELOADED_TARGET_KEY = 'ff_update_reloaded_target';
 const reloadedWithoutStorage = new Set<string>();
@@ -83,7 +84,7 @@ function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Pr
           {progressLabel}
         </Button>
       ) : automaticUpdate ? (
-        <Button variant="ghost" size="sm" disabled={isPending} onClick={onUpdate}>
+        <Button variant="outline" size="sm" disabled={isPending} onClick={onUpdate}>
           {isPending && <Spinner className="size-3.5" aria-hidden="true" />}
           {updateLabel}
         </Button>
@@ -102,7 +103,7 @@ function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Pr
   );
 }
 
-export function ApplicationUpdateBannerContent({
+export function FactoryUpdateBannerContent({
   updates,
   isPending = false,
   onUpdate,
@@ -185,7 +186,7 @@ export function ApplicationUpdateBannerContent({
   );
 }
 
-export function ApplicationUpdateBanner() {
+export function FactoryUpdateBanner() {
   const [lastConfirmed, setLastConfirmed] = useState<ApplicationUpdates>();
   const [localStatus, setLocalStatus] = useState<ApplicationUpdateStatus>();
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
@@ -247,7 +248,12 @@ export function ApplicationUpdateBanner() {
   }
   const isDismissed = (id: string, version: string) => {
     const key = dismissalKey(id, version);
-    return dismissed.has(key) || readStorage('localStorage', key) === '1';
+    return (
+      dismissed.has(key) ||
+      readStorage('localStorage', key) === '1' ||
+      (id === 'factory-factory' &&
+        readStorage('localStorage', LEGACY_FACTORY_DISMISSAL_KEY) === version)
+    );
   };
   const status = localStatus ?? confirmed.status;
   const updates = {
@@ -260,7 +266,7 @@ export function ApplicationUpdateBanner() {
         : status,
   };
   return (
-    <ApplicationUpdateBannerContent
+    <FactoryUpdateBannerContent
       updates={updates}
       isPending={request.isPending || cancel.isPending}
       onUpdate={() => {

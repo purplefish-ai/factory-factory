@@ -10,7 +10,9 @@ import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import expectedSlack from '@/shared/testing/recovery-slack-import-report.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
+import { SlackConnectionMetadataRecovery } from './data-import-results.stories';
 
 const download = vi.hoisted(() => vi.fn());
 vi.mock('@/client/lib/download-file', () => ({ downloadFile: download }));
@@ -401,4 +403,20 @@ it('keeps and downloads exact definition-body results with all five normative pa
     mimeType: 'application/json',
     fileName: 'factory-factory-import-result.json',
   });
+});
+
+it('qualifies new-only definition scope and downloads the independent full Slack report JSON', async () => {
+  await mount();
+  await click('Dismiss');
+  const storyResult = SlackConnectionMetadataRecovery.args!.result!;
+  await act(() => publish(storyResult));
+  expect(storyResult).toEqual(expectedSlack);
+  expect(document.body.textContent).toContain(
+    'Only definition bodies and execution preferences are restored. Connection bindings, event configuration and automation history are excluded. Slack connection metadata is reported separately.'
+  );
+  expect(document.body.textContent).toContain(
+    'Slack connection metadata restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled without credentials.'
+  );
+  await click('Download JSON');
+  expect(JSON.parse(download.mock.calls[0]?.[0].data)).toEqual(expectedSlack);
 });
