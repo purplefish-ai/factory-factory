@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PairedToolCall } from '@/lib/chat-protocol';
-import { getToolActivityLabel, getToolGroupLabel } from './tool-activity-summary';
+import {
+  getToolActivityLabel,
+  getToolGroupFailureSummary,
+  getToolGroupLabel,
+} from './tool-activity-summary';
 
 function call(name: string, input: Record<string, unknown>): PairedToolCall {
   return { id: 'tool', name, input, status: 'success' };
@@ -126,5 +130,27 @@ describe('MCP and file listing summaries', () => {
     expect(getToolActivityLabel(listing)).toBe('List files');
     expect(getToolGroupLabel([listing])).toBe('Listed files');
     expect(getToolGroupLabel([{ ...listing, status: 'pending' }])).toBe('Listing files');
+  });
+});
+
+describe('tool group failure summary', () => {
+  const failed = (id: string): PairedToolCall => ({
+    ...call('Bash', { command: 'false' }),
+    id,
+    status: 'error',
+  });
+  const ok = (id: string): PairedToolCall => ({ ...call('Bash', { command: 'true' }), id });
+
+  it('is null when nothing failed', () => {
+    expect(getToolGroupFailureSummary([ok('a'), ok('b')])).toBeNull();
+  });
+
+  it('says a single failed call failed', () => {
+    expect(getToolGroupFailureSummary([failed('a')])).toBe('failed');
+  });
+
+  it('counts failures out of the whole group', () => {
+    expect(getToolGroupFailureSummary([ok('a'), failed('b'), ok('c')])).toBe('1 of 3 failed');
+    expect(getToolGroupFailureSummary([failed('a'), failed('b')])).toBe('2 of 2 failed');
   });
 });

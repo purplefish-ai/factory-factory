@@ -326,6 +326,7 @@ export function WorkspaceDetailContainer() {
     controlsHydrated,
     sendMessage,
     stopChat,
+    restartSession,
     inputRef,
     chatSettings,
     chatCapabilities,

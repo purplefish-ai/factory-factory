@@ -1,5 +1,11 @@
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { CopyIcon } from '@phosphor-icons/react/dist/csr/Copy';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
+import { useId, useState } from 'react';
+import { useCopyToClipboard } from '@/client/hooks/use-copy-to-clipboard';
+import { Button } from '@/components/ui/button';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +16,101 @@ interface SessionLifecycleMessageRendererProps {
 
 const ERROR_REASONS = new Set(['PROVIDER_ERROR', 'UNEXPECTED_EXIT']);
 
+function LifecycleTime({ timestamp, className }: { timestamp: string; className?: string }) {
+  return (
+    <time
+      className={cn('shrink-0 whitespace-nowrap text-xs opacity-80', className)}
+      dateTime={timestamp}
+    >
+      {new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(timestamp))}
+    </time>
+  );
+}
+
+/**
+ * Provider errors can be long (JSON bodies, stack traces), so error rows start
+ * as one line and expand inline to the full, selectable text with a Copy action.
+ */
+function ErrorLifecycleRow({
+  text,
+  timestamp,
+  className,
+}: {
+  text: string;
+  timestamp: string;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
+  const detailsId = useId();
+  const CopyStateIcon = copied ? CheckIcon : CopyIcon;
+
+  return (
+    <div
+      data-testid="session-lifecycle-message"
+      data-severity="error"
+      data-expanded={expanded}
+      className={cn(
+        'my-2 rounded-md border border-destructive/30 bg-destructive/5 text-sm text-destructive',
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 py-1 pr-1 pl-3">
+        <XCircleIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+        {expanded ? (
+          <span className="min-w-0 flex-1 truncate font-medium">Error details</span>
+        ) : (
+          <p id={detailsId} className="min-w-0 flex-1 truncate" title={text}>
+            {text}
+          </p>
+        )}
+        <LifecycleTime timestamp={timestamp} />
+        {expanded && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-destructive hover:text-destructive"
+            aria-label={copied ? 'Error copied' : 'Copy error'}
+            onClick={() => void copy(text)}
+          >
+            <CopyStateIcon aria-hidden="true" />
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-destructive hover:text-destructive"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          aria-label={expanded ? 'Collapse error' : 'Show full error'}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <CaretDownIcon
+            aria-hidden="true"
+            className={cn('transition-transform', expanded && 'rotate-180')}
+          />
+        </Button>
+        <span role="status" className="sr-only">
+          {copied ? 'Error copied to the clipboard' : ''}
+        </span>
+      </div>
+      {expanded && (
+        <p
+          id={detailsId}
+          className="mx-1 mb-1 max-h-80 overflow-y-auto rounded-sm whitespace-pre-wrap break-words px-2 pb-1 pl-8 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function SessionLifecycleMessageRenderer({
   message,
   className,
@@ -18,34 +119,30 @@ export function SessionLifecycleMessageRenderer({
     return null;
   }
 
-  const isError = ERROR_REASONS.has(message.lifecycle.reason);
-  const Icon = isError ? XCircleIcon : WarningCircleIcon;
+  const { lifecycle } = message;
+  if (ERROR_REASONS.has(lifecycle.reason)) {
+    return (
+      <ErrorLifecycleRow
+        text={lifecycle.message}
+        timestamp={lifecycle.timestamp}
+        className={className}
+      />
+    );
+  }
 
+  // Warnings are short system copy; they wrap instead of hiding text in a tooltip.
   return (
     <div
       data-testid="session-lifecycle-message"
-      data-severity={isError ? 'error' : 'warning'}
+      data-severity="warning"
       className={cn(
-        'my-2 flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
-        isError
-          ? 'border-destructive/30 bg-destructive/5 text-destructive'
-          : 'border-warning/30 bg-warning/5 text-muted-foreground',
+        'my-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-muted-foreground',
         className
       )}
     >
-      <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-      <p className="min-w-0 flex-1 truncate" title={message.lifecycle.message}>
-        {message.lifecycle.message}
-      </p>
-      <time
-        className="shrink-0 whitespace-nowrap text-xs opacity-80"
-        dateTime={message.lifecycle.timestamp}
-      >
-        {new Intl.DateTimeFormat(undefined, {
-          hour: 'numeric',
-          minute: '2-digit',
-        }).format(new Date(message.lifecycle.timestamp))}
-      </time>
+      <WarningCircleIcon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+      <p className="min-w-0 flex-1 break-words">{lifecycle.message}</p>
+      <LifecycleTime timestamp={lifecycle.timestamp} className="mt-0.5" />
     </div>
   );
 }

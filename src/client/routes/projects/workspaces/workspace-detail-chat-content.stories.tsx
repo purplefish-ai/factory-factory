@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { Button } from '@/components/ui/button';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import {
@@ -32,7 +33,37 @@ const question = createUserQuestion([
 ]);
 const noop = () => undefined;
 
-function MockConversation({ work }: { work?: SessionWorkState }) {
+function storyRuntime(work?: SessionWorkState, runtimeError?: string) {
+  if (runtimeError) {
+    return {
+      ...createInitialSessionRuntimeState(),
+      phase: 'error' as const,
+      processState: 'alive' as const,
+      errorMessage: runtimeError,
+    };
+  }
+  return work
+    ? {
+        ...createInitialSessionRuntimeState(),
+        phase: 'running' as const,
+        processState: 'alive' as const,
+        activity: 'WORKING' as const,
+        work,
+      }
+    : createInitialSessionRuntimeState();
+}
+
+function MockConversation({
+  work,
+  runtimeError,
+  onSendMessage = noop,
+  onRestartSession = noop,
+}: {
+  work?: SessionWorkState;
+  runtimeError?: string;
+  onSendMessage?: ChatContentProps['sendMessage'];
+  onRestartSession?: () => void;
+}) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
@@ -95,17 +126,7 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
             sessionId="story-session"
             messages={messages}
             sessionStatus={{ phase: work ? 'running' : 'ready' }}
-            sessionRuntime={
-              work
-                ? {
-                    ...createInitialSessionRuntimeState(),
-                    phase: 'running',
-                    processState: 'alive',
-                    activity: 'WORKING',
-                    work,
-                  }
-                : createInitialSessionRuntimeState()
-            }
+            sessionRuntime={storyRuntime(work, runtimeError)}
             transcriptScroll={{
               identity: 'main-story',
               active: true,
@@ -117,8 +138,9 @@ function MockConversation({ work }: { work?: SessionWorkState }) {
             approvePermission={noop}
             answerQuestion={noop}
             connected
-            sendMessage={noop}
+            sendMessage={onSendMessage}
             stopChat={noop}
+            restartSession={onRestartSession}
             inputRef={inputRef}
             chatSettings={{
               selectedModel: 'sonnet',
@@ -210,4 +232,52 @@ export const MessageImageDrop: Story = {
 export const MessageImageDropWhileRunning: Story = {
   args: PromptInFlight.args,
   play: MessageImageDrop.play,
+};
+
+const LONG_RUNTIME_ERROR = [
+  'Turn stopped: Claude returned HTTP 400 (invalid_request_error).',
+  '{"type":"error","error":{"type":"invalid_request_error","message":"messages.12.content.3.tool_result: the tool_use_id toolu_01AbCdEf does not match any tool_use block in the previous assistant message."},"request_id":"req_011CXyZ"}',
+].join('\n');
+
+/**
+ * The runtime error stays pinned above the composer however long the chat is;
+ * Retry resends the last message and Restart reuses the session restart action.
+ */
+export const RuntimeErrorPinnedAboveComposer: Story = {
+  args: {
+    runtimeError: 'Turn stopped: Codex returned HTTP 529 (Overloaded).',
+    onSendMessage: fn(),
+    onRestartSession: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const strip = await canvas.findByTestId('agent-error-strip');
+    await expect(within(strip).getByRole('alert')).toHaveTextContent('HTTP 529');
+    await userEvent.click(within(strip).getByRole('button', { name: 'Retry' }));
+    await expect(args.onSendMessage).toHaveBeenCalledWith(
+      'Mock conversation message 40. This is local fixture content.',
+      { preserveInput: true, attachments: [] }
+    );
+    await userEvent.click(within(strip).getByRole('button', { name: 'Restart agent' }));
+    await expect(args.onRestartSession).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const RuntimeErrorPinnedAboveComposerDark: Story = {
+  args: { runtimeError: 'Turn stopped: Codex returned HTTP 529 (Overloaded).' },
+  globals: { theme: 'dark' },
+};
+
+export const RuntimeErrorLongTextPhone: Story = {
+  args: { runtimeError: LONG_RUNTIME_ERROR },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+export const RuntimeErrorDismissed: Story = {
+  args: { runtimeError: 'Agent process exited unexpectedly (code 137)' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Dismiss error' }));
+    await expect(canvas.queryByTestId('agent-error-strip')).toBeNull();
+  },
 };
