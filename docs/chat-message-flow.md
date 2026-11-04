@@ -316,9 +316,22 @@ subcommand, such as “Ran python3” or “Ran git cherry-pick”. Shell wrappe
 as `sh -ec 'git status'` show the underlying command, “Ran git status”.
 Summaries omit command arguments and directory paths. Multiple reads or commands
 use the generic plural labels. Expanding the summary reveals chronological
-actions; each action expands to its full input and output. Failures appear
-within those expanded actions, without a failure count or error styling on the
-summary. Pending activity keeps its running indicator.
+actions; each action expands to its full input and output. A summary with failed
+actions ends with a danger-toned count, such as “Ran commands · 1 of 3 failed”
+(or “· failed” for a single action), and shows an error icon once nothing is
+pending. Pending activity keeps its running indicator.
+
+The current session runtime error is pinned in a strip above the composer, not
+in the scrolling transcript, so it stays visible in long chats. The strip
+announces the error as an alert and offers **Retry**, **Restart agent** and
+**Copy error**. Retry resends the newest sent user message with its attachments,
+leaving the composer draft alone; sending also restarts a stopped runtime. Retry
+is hidden when there is no sent message and disabled while disconnected or while
+a send awaits confirmation. Restart uses the session restart action, which
+resumes the provider conversation without sending anything. Dismissing hides the
+strip until the error message changes or the error clears. Error lifecycle rows
+in the transcript start as one line and expand inline to the full, selectable
+text with a copy button; warning rows wrap.
 
 Running sub-agent, background-process and completed sub-agent disclosures
 remember explicit expand/collapse choices per session in browser memory,

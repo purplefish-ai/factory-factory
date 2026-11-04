@@ -7,7 +7,9 @@ import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { memo, useState } from 'react';
+import { StatusIcon } from '@/client/components/status-indicators';
 import { AgentProposalCard, extractAgentProposal } from '@/client/features/agent-authoring';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
@@ -21,6 +23,7 @@ import { getMcpToolDisplay, isListFilesToolName } from './mcp-tool-display';
 import {
   getToolActivityKind,
   getToolActivityLabel,
+  getToolGroupFailureSummary,
   getToolGroupKinds,
   getToolGroupLabel,
   type ToolActivityKind,
@@ -176,6 +179,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   }
   const pending = calls.some((call) => call.status === 'pending');
   const label = getToolGroupLabel(calls);
+  const failureSummary = getToolGroupFailureSummary(calls);
   const GroupIcon = groupIcon(calls);
   const proposals = new Map(
     calls.flatMap((call) => {
@@ -195,12 +199,25 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
           <button type="button" className={triggerClassName}>
             {pending ? (
               <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
+            ) : failureSummary ? (
+              <StatusIcon tone="danger" icon={WarningCircleIcon} className="h-4 w-4" />
             ) : (
               <GroupIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
             )}
-            <span className="min-w-0 truncate" title={label}>
+            <span
+              className="min-w-0 truncate"
+              title={failureSummary ? `${label} · ${failureSummary}` : label}
+            >
               {label}
             </span>
+            {failureSummary && (
+              <span
+                data-testid="tool-group-failures"
+                className={cn('shrink-0 whitespace-nowrap', getStatusToneStyle('danger').text)}
+              >
+                {` · ${failureSummary}`}
+              </span>
+            )}
             {pending && <span className="sr-only">Running</span>}
             <DisclosureCaret />
           </button>

@@ -1,4 +1,6 @@
 // Components
+export type { AgentErrorStripProps } from './agent-error-strip';
+export { AgentErrorStrip } from './agent-error-strip';
 export { ChatTranscript } from './chat-transcript';
 export type { ChatTranscriptProps } from './chat-transcript';
 export type { TranscriptPosition, TranscriptScrollOptions } from './transcript-scroll.types';

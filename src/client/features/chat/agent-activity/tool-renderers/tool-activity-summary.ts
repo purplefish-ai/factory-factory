@@ -185,3 +185,15 @@ export function getToolGroupLabel(calls: PairedToolCall[]): string {
     })
     .join(', ');
 }
+
+/**
+ * Failure suffix for a collapsed group, e.g. "1 of 3 failed", so failures are
+ * visible without expanding it. Null when no call failed.
+ */
+export function getToolGroupFailureSummary(calls: PairedToolCall[]): string | null {
+  const failed = calls.filter((call) => call.status === 'error').length;
+  if (failed === 0) {
+    return null;
+  }
+  return calls.length === 1 ? 'failed' : `${failed} of ${calls.length} failed`;
+}
