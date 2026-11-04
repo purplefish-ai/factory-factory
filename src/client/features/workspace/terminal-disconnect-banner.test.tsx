@@ -19,11 +19,11 @@ describe('TerminalDisconnectBanner', () => {
     expect(markup).toContain('>Reconnect</button>');
   });
 
-  it('uses dark-scoped warning tokens rather than fixed palette colors', () => {
+  it('uses the active theme warning tokens without forcing dark mode', () => {
     const markup = renderToStaticMarkup(
       <TerminalDisconnectBanner gaveUp onReconnect={() => undefined} />
     );
-    expect(markup).toContain('dark ');
+    expect(markup).not.toMatch(/\bdark\b/);
     expect(markup).toContain('text-warning');
     expect(markup).not.toMatch(/\b(?:bg|text|border)-amber-\d/);
   });

@@ -120,7 +120,7 @@ export function ScriptFailedBanner({
       {expanded && hasStartupScript && (
         <InitOutputPanel
           output={initOutput}
-          className="mt-2 h-32 w-full rounded-md border bg-zinc-950"
+          className="mt-2 h-32 w-full rounded-md border bg-background"
         />
       )}
     </div>

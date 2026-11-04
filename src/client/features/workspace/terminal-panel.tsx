@@ -416,20 +416,20 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       return (
         <div
           className={cn(
-            'h-full flex flex-col items-center justify-center text-center p-4 bg-zinc-900',
+            'h-full flex flex-col items-center justify-center text-center p-4 bg-background',
             className
           )}
         >
-          <TerminalIcon className="h-10 w-10 text-zinc-500 mb-3" />
-          <p className="text-sm font-medium text-zinc-400">No terminal open</p>
-          <p className="text-xs text-zinc-500 mt-1">
+          <TerminalIcon className="h-10 w-10 text-muted-foreground mb-3" />
+          <p className="text-sm font-medium text-foreground">No terminal open</p>
+          <p className="text-xs text-foreground mt-1">
             {connected ? 'Click + to open a new terminal' : gaveUp ? 'Disconnected' : 'Connecting…'}
           </p>
           {gaveUp && (
             <button
               type="button"
               onClick={reconnect}
-              className="mt-2 px-2 py-1 text-xs rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="mt-2 px-2 py-1 text-xs rounded border border-border text-foreground hover:bg-muted"
             >
               Reconnect
             </button>
@@ -444,7 +444,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         {!connected && <TerminalDisconnectBanner gaveUp={gaveUp} onReconnect={reconnect} />}
         {/* Terminal tabs row - only show if not hidden */}
         {!hideHeader && (
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border-b border-zinc-800">
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-background border-b border-border">
             <TerminalTabBar
               tabs={tabs}
               activeTabId={activeTabId}
@@ -456,7 +456,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         )}
 
         {/* Terminal content */}
-        <div className="flex-1 overflow-hidden bg-zinc-900">
+        <div className="flex-1 overflow-hidden bg-background">
           {activeTab && (
             <Suspense fallback={<Loading size="compact" message="Loading terminal…" />}>
               <TerminalInstance

@@ -48,8 +48,8 @@ export function TerminalTabBar({
             className={cn(
               'flex items-center rounded-md transition-colors group flex-shrink-0',
               activeTabId === tab.id
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+                ? 'bg-muted text-foreground'
+                : 'text-foreground hover:bg-muted/50'
             )}
           >
             <button
@@ -65,7 +65,7 @@ export function TerminalTabBar({
               aria-label={`Close ${tab.label}`}
               onClick={() => onCloseTab(tab.id)}
               className={cn(
-                'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
+                'mr-1 p-0.5 rounded hover:bg-foreground/10 transition-colors',
                 activeTabId !== tab.id && 'hover-reveal'
               )}
             >

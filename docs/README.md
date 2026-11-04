@@ -20,6 +20,7 @@ context, not a new task or a substitute for current repository guidance.
 | Maintain UI primitives and dependencies       | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
 | Write and organize Storybook stories          | [Storybook](storybook.md)                                                                             |
 | Theme tokens and status colors                | [Status colors](status-colors.md)                                                                     |
+| Terminal palette and live appearance changes  | [Terminal theme](terminal-theme.md)                                                                   |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
 
 For implementation work, search the relevant source area and current guides

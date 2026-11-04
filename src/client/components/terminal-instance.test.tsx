@@ -84,6 +84,91 @@ describe('TerminalInstance', () => {
     document.body.innerHTML = '';
   });
 
+  it('updates terminal colors after theme mutations without losing output or rebuilding the terminal', async () => {
+    document.documentElement.style.setProperty('--background', '#ffffff');
+    document.documentElement.style.setProperty('--foreground', '#111111');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(TerminalInstance, {
+            onData: vi.fn(),
+            onResize: vi.fn(),
+            output: 'session output',
+          })
+        )
+      );
+      const instance = vi.mocked(Terminal).mock.results[0]?.value as {
+        options: {
+          theme: { background: string; foreground: string };
+          minimumContrastRatio: number;
+        };
+      };
+      expect(instance.options.theme.background).toBe('#ffffff');
+      expect(instance.options.theme.foreground).toBe('#111111');
+      document.documentElement.setAttribute('data-color-scheme', 'high-contrast');
+      document.documentElement.style.setProperty('--background', '#101010');
+      document.documentElement.style.setProperty('--foreground', '#eeeeee');
+      await vi.waitFor(() => expect(instance.options.theme.background).toBe('#101010'));
+      expect(instance.options.theme.foreground).toBe('#eeeeee');
+      expect(instance.options.minimumContrastRatio).toBe(7);
+      expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
+      expect(mocks.write.mock.calls).toEqual([['session output']]);
+      expect(mocks.clear).not.toHaveBeenCalled();
+      expect(mocks.dispose).not.toHaveBeenCalled();
+      root.unmount();
+      const lastTheme = instance.options.theme;
+      document.documentElement.style.setProperty('--background', '#222222');
+      await Promise.resolve();
+      expect(instance.options.theme).toBe(lastTheme);
+    } finally {
+      root.unmount();
+      document.documentElement.removeAttribute('style');
+      document.documentElement.removeAttribute('data-color-scheme');
+    }
+  });
+
+  it('tracks mode and preset changes applied through root attributes', async () => {
+    const style = document.createElement('style');
+    style.textContent = `
+      :root { --background: #ffffff; --foreground: #111111; }
+      :root.dark { --background: #222222; --foreground: #eeeeee; }
+      :root[data-color-scheme='github'].dark { --background: #333333; }
+    `;
+    document.head.appendChild(style);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() =>
+      root.render(
+        createElement(TerminalInstance, {
+          onData: vi.fn(),
+          onResize: vi.fn(),
+          output: 'unchanged',
+        })
+      )
+    );
+    const instance = vi.mocked(Terminal).mock.results[0]?.value as {
+      options: { theme: { background: string } };
+    };
+    try {
+      expect(instance.options.theme.background).toBe('#ffffff');
+      document.documentElement.classList.add('dark');
+      await vi.waitFor(() => expect(instance.options.theme.background).toBe('#222222'));
+      document.documentElement.setAttribute('data-color-scheme', 'github');
+      await vi.waitFor(() => expect(instance.options.theme.background).toBe('#333333'));
+      expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
+      expect(mocks.write.mock.calls).toEqual([['unchanged']]);
+    } finally {
+      root.unmount();
+      style.remove();
+      document.documentElement.classList.remove('dark');
+      document.documentElement.removeAttribute('data-color-scheme');
+    }
+  });
+
   it('waits for an explicit tap before focusing on touch screens, including after activation', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
     const container = document.createElement('div');
