@@ -111,14 +111,14 @@ batches above 128 MiB explicitly. Framing bounds each message, rather than
 reducing total replay bytes or adding pagination; the existing renderer
 transcript window and full backend transcript retention still apply.
 
-Main and quick-chat transcripts initially load the newest 1,000 entries. While
-reading near the top, the client requests older pages of up to 500 entries from
-`session.readTranscriptPage`, using the first loaded persisted message ID as an
-exclusive cursor. A page starts at a render-safe boundary; preceding fragments
-remain available on the next request. The read uses the already loaded backend
-transcript without provider hydration, startup, configuration, or queue
-dispatch. An evicted or replaced cursor fails explicitly and requires reloading
-the chat.
+Main and quick-chat transcripts initially load the newest 1,000 entries. Near
+the top of the loaded transcript, the client automatically requests older pages
+of up to 500 entries from `session.readTranscriptPage`, using the first loaded
+persisted message ID as an exclusive cursor. A page starts at a render-safe
+boundary; preceding fragments remain available on the next request. The read
+uses the already loaded backend transcript without provider hydration, startup,
+configuration, or queue dispatch. An evicted or replaced cursor fails explicitly
+and requires reloading the chat.
 
 Requested history stays in renderer memory until a hydration snapshot, replay,
 clear, or session switch. Nonempty live snapshots replace only their recent
@@ -131,11 +131,16 @@ precedence, without replaying old runtime, usage, thinking, or task effects.
 Request identities fence stale completions. Loading failures and connection
 interruptions retain visible messages and offer Retry. Failed requests restore
 the previous renderer limit and page boundaries; unavailable connections disable
-paging controls. Prepending preserves the content anchor, including when the
-loading header is visible at the very top. Reaching the oldest entry shows a
-beginning marker. Tool groups stay split at loaded page boundaries so prepending
-adjacent tools preserves existing row keys and expansion state; late results
-still pair across those boundaries.
+Retry. Idle and completed history show no header text or load button, including
+during workspace initialization. Prepending preserves the content anchor,
+including when the loading header is visible at the very top. Content anchors
+skip zero-height rows such as hidden thinking blocks. The stable history row
+shares the normal leading padding. At the top, header growth leaves loading
+feedback visible; header collapse compensates to preserve the content anchor.
+Reaching the oldest entry stops paging without a beginning marker. Tool groups
+stay split at loaded page boundaries so prepending adjacent tools preserves
+existing row keys and expansion state; late results still pair across those
+boundaries.
 
 Both managed providers accept image and text attachments. Connected conversation
 composers accept image drops, uploads, and the upload shortcut while an agent is

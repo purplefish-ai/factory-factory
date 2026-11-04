@@ -151,3 +151,17 @@ it('anchors content rather than the history header when paging at the very top',
   h.positioner.restore(position);
   expect(h.viewport.scrollTop).toBe(1000);
 });
+
+it('skips zero-height rows when anchoring content below the history header', () => {
+  const h = harness();
+  h.rows[0] = { ...h.rows[0]!, key: 'transcript:header', end: 36, size: 36 };
+  h.rows[1] = { ...h.rows[1]!, key: 'hidden-thinking', start: 44, end: 44, size: 0 };
+  h.rows.push({ key: 'tools', index: 2, start: 52, end: 252, size: 200, lane: 0 });
+  h.engine.options.count = 3;
+  const position = captureTranscriptPosition(h.viewport, h.engine, 'reading', true);
+  expect(position.anchor).toEqual({ key: 'tools', offset: -52 });
+  h.rows[2] = { ...h.rows[2]!, start: 1016, end: 1216 };
+  h.measure();
+  h.positioner.restore(position);
+  expect(h.viewport.scrollTop).toBe(964);
+});
