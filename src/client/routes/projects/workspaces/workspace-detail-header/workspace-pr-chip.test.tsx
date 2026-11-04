@@ -4,8 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ToggleRatchetingInput } from '@/client/hooks/use-toggle-ratcheting';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { RatchetingToggle } from './ratcheting-toggle';
 import type { WorkspaceHeaderWorkspace } from './types';
+import { WorkspacePrChip } from './workspace-pr-chip';
 
 type SelectionResult = { status: 'recipient_required'; bindingRevision: number; candidates: [] };
 const mocks = vi.hoisted(() => ({
@@ -43,6 +43,21 @@ vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
 let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
+  // The chip's tooltip opens when focus returns to it after the menu closes.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        // jsdom does no layout.
+      }
+      unobserve() {
+        // jsdom does no layout.
+      }
+      disconnect() {
+        // jsdom does no layout.
+      }
+    }
+  );
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
     value: true,
@@ -57,6 +72,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 async function renderToggle(overrides: Partial<WorkspaceHeaderWorkspace> = {}) {
   const workspace: Partial<WorkspaceHeaderWorkspace> = {
@@ -80,7 +96,7 @@ async function renderToggle(overrides: Partial<WorkspaceHeaderWorkspace> = {}) {
   await act(() =>
     root.render(
       <TooltipProvider>
-        <RatchetingToggle workspace={workspace as WorkspaceHeaderWorkspace} workspaceId="w" />
+        <WorkspacePrChip workspace={workspace as WorkspaceHeaderWorkspace} workspaceId="w" />
       </TooltipProvider>
     )
   );
@@ -243,17 +259,21 @@ it.each(['ARCHIVED', 'ARCHIVING'] as const)(
 );
 
 it.each([
-  { enabled: false, state: 'CI_RUNNING', label: 'Pull requests and updates, updates off' },
-  { enabled: true, state: 'IDLE', label: 'Pull requests and updates, updates on (Watching)' },
+  { enabled: false, state: 'CI_RUNNING', label: 'Pull requests and updates: no PR, updates off' },
+  {
+    enabled: true,
+    state: 'IDLE',
+    label: 'Pull requests and updates: no PR, updates on (Watching)',
+  },
   {
     enabled: true,
     state: 'CI_RUNNING',
-    label: 'Pull requests and updates, updates on (CI in progress)',
+    label: 'Pull requests and updates: no PR, updates on (CI in progress)',
   },
   {
     enabled: true,
     state: 'REVIEW_PENDING',
-    label: 'Pull requests and updates, updates on (Addressing reviews)',
+    label: 'Pull requests and updates: no PR, updates on (Addressing reviews)',
   },
 ] as const)(
   'includes monitoring state in the accessible name: $label',
@@ -262,3 +282,49 @@ it.each([
     expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(label);
   }
 );
+
+const pr = (overrides: Partial<WorkspaceHeaderWorkspace['prs'][number]> = {}) => ({
+  id: 'pr-42',
+  url: 'https://github.com/team/repository/pull/42',
+  number: 42,
+  title: 'Simplify workspace PR controls',
+  headRefName: 'feature/pr-menu',
+  baseRefName: 'main',
+  state: 'OPEN' as const,
+  reviewState: null,
+  ciStatus: 'SUCCESS' as const,
+  hasMergeConflict: false,
+  syncedAt: null,
+  ...overrides,
+});
+
+it.each([
+  { facts: {}, text: 'CI Passing', tone: 'success' },
+  { facts: { ciStatus: 'PENDING' as const }, text: 'CI Running', tone: 'waiting' },
+  { facts: { ciStatus: 'FAILURE' as const }, text: 'CI Failing', tone: 'danger' },
+  { facts: { state: 'CHANGES_REQUESTED' as const }, text: 'Changes requested', tone: 'danger' },
+  { facts: { state: 'MERGED' as const }, text: 'Merged', tone: 'merged' },
+  { facts: { hasMergeConflict: true }, text: 'Conflicts', tone: 'attention' },
+])('shows the PR number with its $text state in the shared tone', async ({ facts, text, tone }) => {
+  await renderToggle({ prs: [pr(facts)] });
+  const trigger = container.querySelector('button')!;
+  expect(trigger.getAttribute('aria-label')).toBe(
+    `Pull requests and updates: #42 ${text}, updates off`
+  );
+  expect(trigger.textContent).toContain('#42');
+  const chip = [...trigger.querySelectorAll<HTMLElement>('[data-status-tone]')].find(
+    (element) => element.textContent === text
+  );
+  expect(chip?.dataset.statusTone).toBe(tone);
+});
+
+it('counts the other PRs next to the selected one', async () => {
+  await renderToggle({
+    prs: [pr(), pr({ id: 'pr-43', number: 43, state: 'CLOSED' })],
+  });
+  const trigger = container.querySelector('button')!;
+  expect(trigger.getAttribute('aria-label')).toBe(
+    'Pull requests and updates: #42 CI Passing and 1 more, updates off'
+  );
+  expect(trigger.textContent).toContain('+1');
+});

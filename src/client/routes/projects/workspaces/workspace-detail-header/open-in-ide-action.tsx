@@ -51,7 +51,7 @@ export function OpenInIdeAction({
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 md:h-8 md:w-8"
+          className="h-6 w-6 md:h-8 md:w-8"
           onClick={() => openInIde.mutate({ id: workspaceId })}
           disabled={disabled}
           aria-label={

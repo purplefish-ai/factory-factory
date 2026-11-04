@@ -3,7 +3,7 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
-import { QuickActionsMenu } from '@/client/features/workspace';
+import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -146,14 +146,6 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               disabled={tabBarDisabled}
             />
           </div>
-          <QuickActionsMenu
-            onExecuteAgent={(action) => {
-              if (action.content) {
-                handleQuickAction(action.name, action.content);
-              }
-            }}
-            disabled={tabBarDisabled}
-          />
         </div>
 
         {/* Chat content */}
@@ -164,6 +156,11 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               codexAccountId={selectedCodexAccountId}
               chatState={chatState}
               transcriptScroll={transcriptScroll}
+              onRunQuickActionInNewChat={handleQuickAction}
+              newChatUnavailableReason={getNewChatUnavailableReason({
+                sessions: sessionsLoaded ? sessions : undefined,
+                isCreatingSession,
+              })}
             />
           ) : workspaceId ? (
             <QuickChatSessionState

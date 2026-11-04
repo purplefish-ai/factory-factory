@@ -1,7 +1,4 @@
-import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
-import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { memo, useState } from 'react';
-import { toast } from 'sonner';
+import { memo } from 'react';
 import {
   HeaderLeftExtraSlot,
   HeaderLeftStartSlot,
@@ -15,31 +12,34 @@ import {
   WorkspaceParentLink,
   WorkspaceFamilyMenu,
 } from '@/client/features/workspace';
-import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 import {
   ArchiveActionButton,
   getWorkspaceHeaderLabel,
   OpenInIdeAction,
-  RatchetingToggle,
   ToggleRightPanelButton,
-  WorkspaceBranchLink,
   WorkspaceHeaderOverflowMenu,
   type WorkspaceHeaderProps,
   WorkspaceIssueLink,
   WorkspacePrAction,
-  WorkspaceProviderSettings,
+  WorkspacePrChip,
   WorkspaceSwitcherDropdown,
 } from './workspace-detail-header/index';
 
 /**
  * Component that injects workspace header content into the app-level header
  * via portal slots. Rendered inside WorkspaceDetailContainer.
+ *
+ * Inline controls are the ones used on most visits: the dev server, the PR chip
+ * (with Create PR before a PR exists), and at wide widths the issue, port and
+ * IDE. Everything else, including rename, details, provider settings, the
+ * GitHub branch and archive, lives in "More actions" at every width. Controls
+ * that collapse into that menu carry `data-header-inline` so the menu only
+ * repeats them when they are hidden.
  */
 export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot({
   workspace,
@@ -58,36 +58,21 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
   const { slug, projects } = useWorkspaceProjectNavigation();
   const routeProject = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
 
-  const utils = trpc.useUtils();
-  const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
-  });
-
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const {
-    isEditing,
-    editValue,
-    setEditValue,
-    isSaving,
-    inputRef,
-    handleStartEdit,
-    handleSaveRename,
-    handleCancelRename,
-  } = useInlineWorkspaceRename({
-    workspaceId,
-    projectId: workspace.projectId,
-    name: workspace.name,
-    onRename: async (id, name) => {
-      await renameMutation.mutateAsync({ id, name });
-      await Promise.all([
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        utils.workspace.get.invalidate({ id }),
-      ]);
-    },
-  });
-
   const isArchived = workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
   const hasFamily = Boolean(workspace.parentWorkspace || workspace.childWorkspaceCount);
+  const runQuickAction = (name: string, prompt: string) => {
+    runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
+  };
+  const prAction = (renderAsMenuItem: boolean) => (
+    <WorkspacePrAction
+      renderAsMenuItem={renderAsMenuItem}
+      workspace={workspace}
+      hasChanges={hasChanges}
+      running={running}
+      isCreatingSession={isCreatingSession}
+      handleQuickAction={runQuickAction}
+    />
+  );
 
   useAppHeader({ title: '' });
 
@@ -120,64 +105,20 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               breadcrumb
             />
           )}
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              readOnly={isSaving}
-              aria-busy={isSaving}
-              aria-label="Workspace name"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  handleCancelRename();
-                }
-                e.stopPropagation();
-              }}
-              onBlur={() => void handleSaveRename()}
-              className="min-w-0 w-0 flex-1 max-w-[24rem] text-sm font-semibold bg-transparent border-b border-primary outline-none"
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <WorkspaceSwitcherDropdown
+              projectSlug={slug}
+              projectId={workspace.projectId}
+              currentWorkspaceId={workspaceId}
+              compact={hasFamily}
+              currentWorkspaceLabel={
+                workspace.parentWorkspace
+                  ? workspace.name
+                  : getWorkspaceHeaderLabel(workspace.branchName, workspace.name, isMobile)
+              }
+              currentWorkspaceName={workspace.name}
             />
-          ) : (
-            <div className="group flex min-w-0 flex-1 items-center gap-0.5">
-              <WorkspaceSwitcherDropdown
-                projectSlug={slug}
-                projectId={workspace.projectId}
-                currentWorkspaceId={workspaceId}
-                compact={hasFamily}
-                currentWorkspaceLabel={
-                  workspace.parentWorkspace
-                    ? workspace.name
-                    : getWorkspaceHeaderLabel(workspace.branchName, workspace.name, isMobile)
-                }
-                currentWorkspaceName={workspace.name}
-              />
-              {!isArchived && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 hover-reveal transition-opacity"
-                  onClick={handleStartEdit}
-                  disabled={isSaving}
-                  aria-label="Rename workspace"
-                >
-                  <PencilIcon className="h-3 w-3" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden @[72rem]/header:inline-flex h-6 w-6 shrink-0 hover-reveal transition-opacity"
-                onClick={() => setDetailsOpen(true)}
-                aria-label="View workspace details"
-              >
-                <InfoIcon className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
+          </div>
           {hasFamily && (
             <WorkspaceFamilyMenu
               key={workspaceId}
@@ -189,29 +130,32 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
         </div>
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
-        <div className="hidden @[48rem]/header:flex shrink-0 items-center gap-2">
-          <WorkspacePrAction
-            workspace={workspace}
-            hasChanges={hasChanges}
-            running={running}
-            isCreatingSession={isCreatingSession}
-            handleQuickAction={(name, prompt) => {
-              runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
-            }}
-          />
-          <div className="hidden @[72rem]/header:flex items-center gap-2">
+        <div className="hidden @[72rem]/header:flex shrink-0 items-center gap-2">
+          <div data-header-inline="issue" className="flex">
             <WorkspaceIssueLink workspace={workspace} />
-            <RunScriptPortBadge workspaceId={workspaceId} />
           </div>
+          <RunScriptPortBadge workspaceId={workspaceId} />
         </div>
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
         <div className="flex shrink-0 items-center gap-0.5">
           <RunScriptButton workspaceId={workspaceId} />
-          <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
-          <div className="hidden @[72rem]/header:flex items-center gap-0.5">
-            <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
-            <WorkspaceBranchLink workspace={workspace} />
+          <div data-header-inline="create-pr" className="hidden @[48rem]/header:flex">
+            {prAction(false)}
+          </div>
+          <WorkspacePrChip workspace={workspace} workspaceId={workspaceId} />
+          {/* Archiving is the next step for a finished workspace, so it stays in
+              view where there is room; More actions always has it. */}
+          {isWorkspaceDoneOrMerged(workspace) && !isArchived && (
+            <div className="hidden @[48rem]/header:flex">
+              <ArchiveActionButton
+                workspace={workspace}
+                archivePending={archivePending}
+                onArchiveRequest={onArchiveRequest}
+              />
+            </div>
+          )}
+          <div data-header-inline="ide" className="hidden @[72rem]/header:flex">
             <OpenInIdeAction
               workspaceId={workspaceId}
               hasWorktreePath={Boolean(workspace.worktreePath)}
@@ -219,97 +163,28 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               preferredIde={preferredIde}
               openInIde={openInIde}
             />
-            <ArchiveActionButton
-              workspace={workspace}
-              archivePending={archivePending}
-              onArchiveRequest={onArchiveRequest}
-            />
           </div>
           <ToggleRightPanelButton />
-          <div className="@[72rem]/header:hidden">
-            <WorkspaceHeaderOverflowMenu
-              isArchived={isArchived}
-              workspace={workspace}
-              workspaceId={workspaceId}
-              availableIdes={availableIdes}
-              preferredIde={preferredIde}
-              openInIde={openInIde}
-              archivePending={archivePending}
-              onArchiveRequest={onArchiveRequest}
-              statusContent={
-                <>
-                  <WorkspacePrAction
-                    renderAsMenuItem
-                    workspace={workspace}
-                    hasChanges={hasChanges}
-                    running={running}
-                    isCreatingSession={isCreatingSession}
-                    handleQuickAction={(name, prompt) => {
-                      runInBackground(
-                        handleQuickAction(name, prompt),
-                        "Couldn't run quick action."
-                      );
-                    }}
-                  />
+          <WorkspaceHeaderOverflowMenu
+            isArchived={isArchived}
+            workspace={workspace}
+            workspaceId={workspaceId}
+            availableIdes={availableIdes}
+            preferredIde={preferredIde}
+            openInIde={openInIde}
+            archivePending={archivePending}
+            onArchiveRequest={onArchiveRequest}
+            statusContent={(isInline) => (
+              <>
+                {!isInline('create-pr') && prAction(true)}
+                {!isInline('issue') && (
                   <WorkspaceIssueLink workspace={workspace} renderAsMenuItem />
-                </>
-              }
-            />
-          </div>
+                )}
+              </>
+            )}
+          />
         </div>
       </HeaderRightSlot>
-      <WorkspaceDetailsDialog
-        open={detailsOpen}
-        onOpenChange={setDetailsOpen}
-        workspace={workspace}
-      />
     </>
   );
 });
-
-function WorkspaceDetailsDialog({
-  open,
-  onOpenChange,
-  workspace,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  workspace: WorkspaceHeaderProps['workspace'];
-}) {
-  const initialPrompt = workspace.initialPrompt;
-  const hasContent = workspace.description || initialPrompt;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>Workspace details</DialogTitle>
-        </DialogHeader>
-        {hasContent ? (
-          <div className="flex flex-col gap-4">
-            {workspace.description && (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Description
-                </span>
-                <p className="text-sm whitespace-pre-wrap">{workspace.description}</p>
-              </div>
-            )}
-            {initialPrompt && (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Initial prompt
-                </span>
-                <p className="text-sm whitespace-pre-wrap">{initialPrompt}</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No description or initial prompt was provided for this workspace.
-          </p>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}

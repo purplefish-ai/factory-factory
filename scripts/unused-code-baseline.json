@@ -935,10 +935,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/client/features/chat/chat-input/constants.ts::types::QuickAction": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
     "src/client/features/chat/index.ts::exports::CompactingIndicator": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."

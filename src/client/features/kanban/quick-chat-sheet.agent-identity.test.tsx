@@ -43,7 +43,7 @@ vi.mock('./kanban-context', () => ({
   useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
 }));
 vi.mock('./quick-chat-content', () => ({ QuickChatContent: () => null }));
-vi.mock('@/client/features/workspace', () => ({ QuickActionsMenu: () => null }));
+vi.mock('@/client/features/workspace', () => ({ getNewChatUnavailableReason: () => null }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CLAUDE' } }) } },

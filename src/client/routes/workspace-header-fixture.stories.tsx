@@ -33,6 +33,60 @@ export const TabletWorkspace: Story = {
 export const PhoneWorkspace: Story = {
   globals: { viewport: { value: 'mobile1', isRotated: false } },
 };
+export const WorkspaceDark: Story = { globals: { theme: 'dark' } };
+export const PhoneWorkspaceDark: Story = {
+  globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
+};
+
+const openMoreActions = async (canvasElement: HTMLElement) => {
+  await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
+  const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
+  return [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+};
+const ALWAYS_IN_MORE_ACTIONS = [
+  'View details',
+  'Rename workspace',
+  'Provider settings',
+  'Open branch on GitHub',
+  'Open dev app',
+  'Archive workspace',
+];
+
+/** At desktop widths the menu skips what the header already shows inline. */
+export const DesktopMoreActions: Story = {
+  globals: { viewport: { value: 'desktop', isRotated: false } },
+  parameters: { docs: { story: { inline: false, iframeHeight: 420 } } },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(
+      await canvas.findByRole('button', { name: /^Pull requests and updates: #2643 Merged/ })
+    ).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Create PR' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Open in VS Code' })).toBeVisible();
+    const items = await openMoreActions(canvasElement);
+    for (const name of ALWAYS_IN_MORE_ACTIONS) {
+      await expect(items).toContain(name);
+    }
+    for (const inline of ['Create PR', 'Open in VS Code', '#3456']) {
+      await expect(items).not.toContain(inline);
+    }
+  },
+};
+
+/** On a phone, controls hidden from the header row move into the menu. */
+export const PhoneMoreActions: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  parameters: { docs: { story: { inline: false, iframeHeight: 520 } } },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(
+      await canvas.findByRole('button', { name: /^Pull requests and updates/ })
+    ).toBeVisible();
+    const items = await openMoreActions(canvasElement);
+    for (const name of [...ALWAYS_IN_MORE_ACTIONS, 'Create PR', 'Open in VS Code', '#3456']) {
+      await expect(items).toContain(name);
+    }
+  },
+};
+
 export const Project: Story = { args: { variant: 'project' } };
 export const Generic: Story = { args: { variant: 'generic' } };
 

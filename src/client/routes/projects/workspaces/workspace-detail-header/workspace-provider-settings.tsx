@@ -1,4 +1,3 @@
-import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { memo, useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { runInBackground } from '@/client/lib/background-task';
@@ -11,7 +10,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getWorkspaceDefaultOptionLabel,
@@ -34,17 +31,14 @@ import type { WorkspaceHeaderWorkspace } from './types';
 export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings({
   workspace,
   workspaceId,
-  open,
-  onOpenChange,
-  showTrigger = true,
+  open: dialogOpen,
+  onOpenChange: setDialogOpen,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  showTrigger?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [defaultProvider, setDefaultProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.defaultSessionProvider)
   );
@@ -66,15 +60,6 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
     },
   });
 
-  const isOpenControlled = open !== undefined;
-  const dialogOpen = isOpenControlled ? open : uncontrolledOpen;
-  const setDialogOpen = (nextOpen: boolean) => {
-    if (!isOpenControlled) {
-      setUncontrolledOpen(nextOpen);
-    }
-    onOpenChange?.(nextOpen);
-  };
-
   useEffect(() => {
     if (!dialogOpen) {
       return;
@@ -92,23 +77,6 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
 
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      {showTrigger && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 md:h-8 md:w-8"
-                aria-label="Provider settings"
-              >
-                <GearSixIcon className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Provider settings</TooltipContent>
-        </Tooltip>
-      )}
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle>Session provider defaults</DialogTitle>

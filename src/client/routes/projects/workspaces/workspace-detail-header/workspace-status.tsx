@@ -1,8 +1,10 @@
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { CREATE_PULL_REQUEST_QUICK_ACTION_ID } from '@/shared/quick-actions';
 import type { WorkspaceHeaderWorkspace } from './types';
 
 type WorkspacePrActionProps = {
@@ -22,7 +24,16 @@ export function WorkspacePrAction({
   handleQuickAction,
   renderAsMenuItem = false,
 }: WorkspacePrActionProps) {
+  // The same catalog entry as the quick actions menu's "Create Pull Request".
+  const { data: quickActions } = trpc.session.listQuickActions.useQuery(undefined, {
+    staleTime: Infinity,
+  });
+  const createPrAction = quickActions?.find(
+    (action) => action.id === CREATE_PULL_REQUEST_QUICK_ACTION_ID && action.content
+  );
+  // Once the branch has an open PR, the PR chip next to this button shows it instead.
   if (
+    createPrAction?.content &&
     hasChanges &&
     !running &&
     !workspace.prs.some(
@@ -32,11 +43,8 @@ export function WorkspacePrAction({
         (!pr.headRefName || pr.headRefName === workspace.branchName)
     )
   ) {
-    const createPr = () =>
-      handleQuickAction(
-        'Create Pull Request',
-        'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.'
-      );
+    const prompt = createPrAction.content;
+    const createPr = () => handleQuickAction(createPrAction.name, prompt);
     if (renderAsMenuItem) {
       return (
         <DropdownMenuItem disabled={isCreatingSession} onSelect={createPr}>
@@ -59,7 +67,7 @@ export function WorkspacePrAction({
             Create PR
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Create a pull request for this branch</TooltipContent>
+        <TooltipContent>Start a new chat that opens a pull request for this branch</TooltipContent>
       </Tooltip>
     );
   }

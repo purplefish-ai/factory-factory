@@ -29,7 +29,6 @@ export interface WorkspaceContentViewProps {
   onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   onRestartSession?: () => void;
-  onQuickAction?: (name: string, prompt: string) => void;
   children: ReactNode;
   /** Route-owned recovery content for workspaces without a session. */
   emptyState?: ReactNode;
@@ -62,7 +61,6 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   onCreateSession,
   onCloseSession,
   onRestartSession,
-  onQuickAction,
   children,
   emptyState,
   maxSessions,
@@ -86,7 +84,6 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
           onRestartSession={onRestartSession}
-          onQuickAction={onQuickAction}
           onSelectClosedSession={(sessionId) => {
             // Use a generic label - the tab will show the archive icon
             openTab('closed-session', sessionId, 'History');
