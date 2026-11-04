@@ -94,6 +94,47 @@ describe('quick actions menu', () => {
     expect(onRunInThisChat).not.toHaveBeenCalled();
   });
 
+  it('keeps an explicit new-chat target when its availability changes', async () => {
+    const onRunInNewChat = vi.fn();
+    const onRunInThisChat = vi.fn();
+    await openMenu({ onRunInNewChat, onRunInThisChat });
+    await act(() => radio('Run in new chat').click());
+    await act(() =>
+      root.render(
+        <QuickActionsDropdownView
+          actions={ACTIONS}
+          status="ready"
+          onRunInNewChat={onRunInNewChat}
+          onRunInThisChat={onRunInThisChat}
+          newChatUnavailableReason="Maximum sessions reached"
+        />
+      )
+    );
+    expect(radio('Run in new chat').getAttribute('aria-checked')).toBe('true');
+    expect(item('Review').getAttribute('aria-disabled')).toBe('true');
+    await act(() => item('Review').click());
+    expect(onRunInThisChat).not.toHaveBeenCalled();
+    expect(onRunInNewChat).not.toHaveBeenCalled();
+  });
+
+  it('disables open actions when both targets become unavailable', async () => {
+    const onRunInThisChat = vi.fn();
+    await openMenu({ onRunInThisChat });
+    await act(() =>
+      root.render(
+        <QuickActionsDropdownView
+          actions={ACTIONS}
+          status="ready"
+          onRunInThisChat={onRunInThisChat}
+          thisChatDisabled
+        />
+      )
+    );
+    expect(item('Review').getAttribute('aria-disabled')).toBe('true');
+    await act(() => item('Review').click());
+    expect(onRunInThisChat).not.toHaveBeenCalled();
+  });
+
   it('only offers this chat where new chats are not supported', async () => {
     await openMenu();
     expect(menuItems('menuitemradio')).toHaveLength(0);

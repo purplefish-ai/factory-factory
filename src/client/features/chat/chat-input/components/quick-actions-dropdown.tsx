@@ -119,17 +119,18 @@ export function QuickActionsDropdownView({
   status: 'loading' | 'error' | 'ready';
   onRetry?: () => void;
 }) {
-  const [chosenTarget, setChosenTarget] = useState<QuickActionTarget>('this-chat');
+  const [chosenTarget, setChosenTarget] = useState<QuickActionTarget | null>(null);
   const offersNewChat = onRunInNewChat !== undefined;
   const available = {
     thisChat: !thisChatDisabled,
     newChat: offersNewChat && !newChatUnavailableReason,
   };
-  const target = resolveQuickActionTarget(chosenTarget, available);
+  const target = chosenTarget ?? resolveQuickActionTarget('this-chat', available);
+  const targetAvailable = target === 'this-chat' ? available.thisChat : available.newChat;
   const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
 
   const run = (action: QuickActionOption) => {
-    if (!action.content) {
+    if (!action.content || !targetAvailable) {
       return;
     }
     if (target === 'new-chat') {
@@ -194,18 +195,26 @@ export function QuickActionsDropdownView({
             <DropdownMenuSeparator />
           </>
         )}
-        <QuickActionItems actions={actions} status={status} onRetry={onRetry} onRun={run} />
+        <QuickActionItems
+          actions={actions}
+          status={status}
+          onRetry={onRetry}
+          onRun={run}
+          disabled={!targetAvailable}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 function QuickActionItems({
+  disabled,
   actions,
   status,
   onRetry,
   onRun,
 }: {
+  disabled: boolean;
   actions: readonly QuickActionOption[];
   status: 'loading' | 'error' | 'ready';
   onRetry?: () => void;
@@ -237,7 +246,12 @@ function QuickActionItems({
   return actions.map((action) => {
     const ActionIcon = getActionIcon(action.icon);
     return (
-      <DropdownMenuItem key={action.id} onSelect={() => onRun(action)} className="items-start">
+      <DropdownMenuItem
+        key={action.id}
+        disabled={disabled}
+        onSelect={() => onRun(action)}
+        className="items-start"
+      >
         <ActionIcon className="mt-0.5 h-4 w-4" />
         <span className="flex min-w-0 flex-col">
           <span>{action.name}</span>

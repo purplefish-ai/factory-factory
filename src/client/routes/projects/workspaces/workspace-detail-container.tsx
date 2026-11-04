@@ -312,7 +312,7 @@ export function WorkspaceDetailContainer() {
 
   const runQuickActionInNewChat = useCallback(
     (name: string, prompt: string) => {
-      runInBackground(handleQuickAction(name, prompt), 'Could not run quick action');
+      runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
     },
     [handleQuickAction]
   );
