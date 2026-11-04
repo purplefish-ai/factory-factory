@@ -1,5 +1,9 @@
 /**
- * Shared diff styling utilities for consistent visual output
+ * Shared diff styling utilities for consistent visual output.
+ *
+ * Colors use the theme's status tokens (docs/status-colors.md): additions are
+ * success, deletions destructive and hunk headers info, so diffs follow the
+ * selected color scheme in light and dark mode.
  */
 
 import type { DiffLineType, SimpleDiffLineType } from './types';
@@ -10,9 +14,9 @@ import type { DiffLineType, SimpleDiffLineType } from './types';
 export function getDiffLineBackground(type: DiffLineType): string {
   const bgColors: Record<DiffLineType, string> = {
     header: 'bg-muted/50',
-    hunk: 'bg-blue-500/10',
-    addition: 'bg-green-500/20',
-    deletion: 'bg-red-500/20',
+    hunk: 'bg-info/10',
+    addition: 'bg-success/10',
+    deletion: 'bg-destructive/10',
     context: '',
   };
   return bgColors[type];
@@ -24,9 +28,9 @@ export function getDiffLineBackground(type: DiffLineType): string {
 export function getDiffLineTextColor(type: DiffLineType): string {
   const textColors: Record<DiffLineType, string> = {
     header: 'text-muted-foreground',
-    hunk: 'text-blue-400',
-    addition: 'text-green-400',
-    deletion: 'text-red-400',
+    hunk: 'text-info',
+    addition: 'text-success',
+    deletion: 'text-destructive',
     context: 'text-foreground',
   };
   return textColors[type];
@@ -52,9 +56,9 @@ export function getDiffLinePrefix(type: DiffLineType): string {
 export function getSimpleDiffLineClassName(type: SimpleDiffLineType): string {
   switch (type) {
     case 'add':
-      return 'bg-green-500/15 text-green-700 dark:text-green-400';
+      return 'bg-success/10 text-success';
     case 'del':
-      return 'bg-red-500/15 text-red-700 dark:text-red-400';
+      return 'bg-destructive/10 text-destructive';
     default:
       return '';
   }

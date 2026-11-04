@@ -1,6 +1,11 @@
 import { GitMergeIcon } from '@phosphor-icons/react/dist/csr/GitMerge';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import type { ComponentPropsWithoutRef, ReactElement } from 'react';
+import {
+  DIFF_STAT_CLASS_NAMES,
+  getPrStatePresentation,
+  getStatusToneStyle,
+} from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { type GitHubPRPreview, parseGitHubPRLink } from '@/shared/github-pr-preview';
 import {
@@ -9,12 +14,14 @@ import {
   githubPreviewQueryOptions,
 } from './github-link-preview';
 
-const PR_STATES = {
-  OPEN: { label: 'Open', color: 'bg-green-500/15 text-green-600 dark:text-green-400' },
-  MERGED: { label: 'Merged', color: 'bg-purple-500/15 text-purple-600 dark:text-purple-400' },
-  CLOSED: { label: 'Closed', color: 'bg-red-500/15 text-red-600 dark:text-red-400' },
-  DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
-};
+function getPreviewState(data: GitHubPRPreview): { label: string; color: string } | null {
+  const presentation = getPrStatePresentation(
+    data.state === 'OPEN' && data.isDraft ? 'DRAFT' : data.state
+  );
+  return presentation
+    ? { label: presentation.label, color: getStatusToneStyle(presentation.tone).chip }
+    : null;
+}
 
 export function GitHubPRPreviewCard({
   repo,
@@ -27,9 +34,7 @@ export function GitHubPRPreviewCard({
   data?: GitHubPRPreview;
   isError?: boolean;
 }) {
-  const state = data
-    ? PR_STATES[data.state === 'OPEN' && data.isDraft ? 'DRAFT' : data.state]
-    : null;
+  const state = data ? getPreviewState(data) : null;
   const Icon = data?.state === 'MERGED' ? GitMergeIcon : GitPullRequestIcon;
   return (
     <GitHubPreviewFrame
@@ -44,10 +49,8 @@ export function GitHubPRPreviewCard({
       {data && (
         <span className="flex items-center gap-2 tabular-nums">
           <span className="rounded-md bg-muted px-2 py-1">
-            <span className="text-green-600 dark:text-green-400">
-              +{data.additions.toLocaleString()}
-            </span>{' '}
-            <span className="text-red-600 dark:text-red-400">
+            <span className={DIFF_STAT_CLASS_NAMES.added}>+{data.additions.toLocaleString()}</span>{' '}
+            <span className={DIFF_STAT_CLASS_NAMES.removed}>
               −{data.deletions.toLocaleString()}
             </span>
           </span>

@@ -43,6 +43,26 @@ export const Disconnected: Story = {
     ],
   },
 };
+export const LongWorkspaceIdentity: Story = {
+  args: {
+    connections: [
+      {
+        id: 'constructor',
+        name: '北極星社-'.repeat(12),
+        workspaceId: `T-${'A'.repeat(200)}-製品部`,
+        hasCredentials: false,
+        isEnabled: false,
+      },
+      {
+        id: '',
+        name: '空の識別子',
+        workspaceId: 'T-empty-key',
+        hasCredentials: false,
+        isEnabled: false,
+      },
+    ],
+  },
+};
 export const Loading: Story = { args: { loading: true } };
 export const ConnectionError: Story = {
   args: {

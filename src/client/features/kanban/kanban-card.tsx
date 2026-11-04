@@ -119,15 +119,21 @@ function IssueAndPullRequestRow({
         </button>
       )}
       {workspace.prs?.length ? (
-        <ConnectedWorkspacePrMenu
-          workspaceId={workspace.id}
-          projectId={workspace.projectId}
-          prs={workspace.prs}
-          monitoring={workspace.prMonitoring}
-          reviewEnabled={Boolean(workspace.worktreePath)}
-          readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
-          compact
-        />
+        <div className="inline-flex items-center gap-1.5">
+          <ConnectedWorkspacePrMenu
+            workspaceId={workspace.id}
+            projectId={workspace.projectId}
+            prs={workspace.prs}
+            monitoring={workspace.prMonitoring}
+            reviewEnabled={Boolean(workspace.worktreePath)}
+            readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
+            compact
+          />
+          {/* With several PRs, each row in the menu shows its own state. */}
+          {workspace.prs.length === 1 && (
+            <PrStateBadge prState={workspace.prs[0]?.state} size="sm" showAllStates />
+          )}
+        </div>
       ) : (
         showPR &&
         selectedPr && (
@@ -144,7 +150,7 @@ function IssueAndPullRequestRow({
               <GitPullRequestIcon className="h-3 w-3 shrink-0" />
               <span>#{selectedPr.number}</span>
             </button>
-            <PrStateBadge prState={selectedPr.state} size="sm" />
+            <PrStateBadge prState={selectedPr.state} size="sm" showAllStates />
           </div>
         )
       )}

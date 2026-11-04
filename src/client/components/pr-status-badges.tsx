@@ -1,13 +1,20 @@
 import { useState } from 'react';
+import {
+  type CheckOutcome,
+  getCheckOutcome,
+  getCheckPresentation,
+  getReviewDecisionPresentation,
+} from '@/client/lib/pr-status-presentation';
+import { getCiStateTone, getStatusToneStyle } from '@/client/lib/status-tones';
 import { Badge } from '@/components/ui/badge';
 import {
   type CiVisualState,
-  deriveCiStatusFromCheckRollup,
   deriveCiVisualStateFromChecks,
   getCiVisualLabel,
   reduceCheckRollupToLatestRunAttempts,
 } from '@/shared/core';
 import type { GitHubStatusCheck, ReviewDecision } from '@/shared/github-types';
+import { StatusChip, StatusDot, StatusIcon } from './status-indicators';
 
 export type CIStatus = CiVisualState;
 
@@ -15,16 +22,18 @@ export function getCIStatus(checks: GitHubStatusCheck[] | null): CIStatus {
   return deriveCiVisualStateFromChecks(checks);
 }
 
-function getSingleCheckCiStatus(check: GitHubStatusCheck) {
-  return deriveCiStatusFromCheckRollup([check]);
-}
-
-function isSkippedCheck(check: GitHubStatusCheck): boolean {
-  return check.status === 'COMPLETED' && check.conclusion === 'SKIPPED';
-}
-
-function isPassedCheck(check: GitHubStatusCheck): boolean {
-  return getSingleCheckCiStatus(check) === 'SUCCESS' && !isSkippedCheck(check);
+function countCheckOutcomes(checks: GitHubStatusCheck[]): Record<CheckOutcome, number> {
+  const counts: Record<CheckOutcome, number> = {
+    passed: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+    unknown: 0,
+  };
+  for (const check of checks) {
+    counts[getCheckOutcome(check)] += 1;
+  }
+  return counts;
 }
 
 interface CIStatusDotProps {
@@ -32,33 +41,17 @@ interface CIStatusDotProps {
   size?: 'sm' | 'md';
 }
 
+const CI_STATUS_TITLES: Record<CIStatus, string> = {
+  PASSING: 'CI passed',
+  FAILING: 'CI failed',
+  RUNNING: 'Checks running...',
+  UNKNOWN: 'CI unknown',
+  NONE: 'No checks',
+};
+
 export function CIStatusDot({ checks, size = 'sm' }: CIStatusDotProps) {
   const status = getCIStatus(checks);
-
-  const sizeClasses = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5';
-
-  const dotStyles: Record<CIStatus, string> = {
-    PASSING: 'bg-green-500',
-    FAILING: 'bg-red-500',
-    RUNNING: 'bg-yellow-500 animate-pulse',
-    UNKNOWN: 'bg-gray-400',
-    NONE: 'bg-gray-400',
-  };
-
-  const titles: Record<CIStatus, string> = {
-    PASSING: 'CI passed',
-    FAILING: 'CI failed',
-    RUNNING: 'Checks running...',
-    UNKNOWN: 'CI unknown',
-    NONE: 'No checks',
-  };
-
-  return (
-    <span
-      className={`${sizeClasses} rounded-full inline-block flex-shrink-0 ${dotStyles[status]}`}
-      title={titles[status]}
-    />
-  );
+  return <StatusDot tone={getCiStateTone(status)} size={size} label={CI_STATUS_TITLES[status]} />;
 }
 
 // Deduplicate checks by name, keeping the most relevant status
@@ -66,22 +59,14 @@ function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
   const checkMap = new Map<string, GitHubStatusCheck>();
   const latestAttemptChecks = reduceCheckRollupToLatestRunAttempts(checks) ?? checks;
 
-  const getPriority = (check: GitHubStatusCheck): number => {
-    const ciStatus = getSingleCheckCiStatus(check);
-    if (ciStatus === 'FAILURE') {
-      return 5;
-    }
-    if (ciStatus === 'PENDING') {
-      return 4;
-    }
-    if (isPassedCheck(check)) {
-      return 3;
-    }
-    if (isSkippedCheck(check)) {
-      return 2;
-    }
-    return 1;
+  const priorities: Record<CheckOutcome, number> = {
+    failed: 5,
+    pending: 4,
+    passed: 3,
+    skipped: 2,
+    unknown: 1,
   };
+  const getPriority = (check: GitHubStatusCheck) => priorities[getCheckOutcome(check)];
 
   for (const check of latestAttemptChecks) {
     const existing = checkMap.get(check.name);
@@ -106,40 +91,18 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
     );
   }
 
-  const uniqueChecks = deduplicateChecks(checks);
-
-  const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
-  const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
-  const skipped = uniqueChecks.filter((c) => isSkippedCheck(c)).length;
-
+  const { failed, pending, passed, skipped } = countCheckOutcomes(deduplicateChecks(checks));
   if (failed > 0) {
-    return (
-      <Badge variant="destructive" className="text-xs">
-        {failed} failed
-      </Badge>
-    );
+    return <StatusChip tone="danger" icon size="md">{`${failed} failed`}</StatusChip>;
   }
   if (pending > 0) {
-    return (
-      <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 text-xs">
-        {pending} pending
-      </Badge>
-    );
+    return <StatusChip tone="waiting" icon size="md">{`${pending} pending`}</StatusChip>;
   }
   if (passed > 0) {
-    return (
-      <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
-        {passed} passed
-      </Badge>
-    );
+    return <StatusChip tone="success" icon size="md">{`${passed} passed`}</StatusChip>;
   }
   if (skipped > 0) {
-    return (
-      <Badge variant="secondary" className="bg-gray-500/20 text-gray-600 text-xs">
-        {skipped} skipped
-      </Badge>
-    );
+    return <StatusChip tone="neutral" icon size="md">{`${skipped} skipped`}</StatusChip>;
   }
   return (
     <Badge variant="outline" className="text-xs">
@@ -153,32 +116,12 @@ interface ReviewDecisionBadgeProps {
 }
 
 export function ReviewDecisionBadge({ decision }: ReviewDecisionBadgeProps) {
-  switch (decision) {
-    case 'APPROVED':
-      return (
-        <Badge className="bg-green-500/20 text-green-600 border-green-500/30 text-xs">
-          Approved
-        </Badge>
-      );
-    case 'CHANGES_REQUESTED':
-      return (
-        <Badge className="bg-red-500/20 text-red-600 border-red-500/30 text-xs">
-          Changes requested
-        </Badge>
-      );
-    case 'REVIEW_REQUIRED':
-      return (
-        <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30 text-xs">
-          Review required
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="outline" className="text-xs">
-          Pending
-        </Badge>
-      );
-  }
+  const { tone, label } = getReviewDecisionPresentation(decision);
+  return (
+    <StatusChip tone={tone} size="md">
+      {label}
+    </StatusChip>
+  );
 }
 
 interface CICheckItemProps {
@@ -186,41 +129,16 @@ interface CICheckItemProps {
 }
 
 function CICheckItem({ check }: CICheckItemProps) {
-  const ciStatus = getSingleCheckCiStatus(check);
-
-  const getStatusIcon = () => {
-    if (isSkippedCheck(check)) {
-      return <span className="text-gray-400">○</span>;
-    }
-    if (ciStatus === 'SUCCESS') {
-      return <span className="text-green-500">✓</span>;
-    }
-    if (ciStatus === 'FAILURE') {
-      return <span className="text-red-500">✗</span>;
-    }
-    return <span className="text-yellow-500 animate-pulse">◐</span>;
-  };
-
-  const getStatusColor = () => {
-    if (isSkippedCheck(check)) {
-      return 'text-gray-500';
-    }
-    if (ciStatus === 'SUCCESS') {
-      return 'text-green-600';
-    }
-    if (ciStatus === 'FAILURE') {
-      return 'text-red-600';
-    }
-    return 'text-yellow-600';
-  };
-
+  const { tone, label } = getCheckPresentation(check);
   const content = (
     <div className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted/50 transition-colors group">
-      <span className="w-4 flex-shrink-0">{getStatusIcon()}</span>
+      <span className="w-4 flex-shrink-0 flex justify-center">
+        <StatusIcon tone={tone} />
+      </span>
       <span className="flex-1 truncate text-sm" title={check.name}>
         {check.name}
       </span>
-      <span className={`text-xs ${getStatusColor()}`}>{check.conclusion || check.status}</span>
+      <span className={`text-xs ${getStatusToneStyle(tone).text}`}>{label}</span>
       {check.detailsUrl && (
         <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100">→</span>
       )}
@@ -251,11 +169,11 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
   }
 
   const uniqueChecks = deduplicateChecks(checks);
-
-  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
-  const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
-  const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const skipped = uniqueChecks.filter((c) => isSkippedCheck(c)).length;
+  const { passed, failed, pending, skipped } = countCheckOutcomes(uniqueChecks);
+  const successText = getStatusToneStyle('success').text;
+  const dangerText = getStatusToneStyle('danger').text;
+  const waitingText = getStatusToneStyle('waiting').text;
+  const neutralText = getStatusToneStyle('neutral').text;
 
   return (
     <div className="border-b">
@@ -266,10 +184,10 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
       >
         <span className="text-xs text-muted-foreground font-medium">CI CHECKS</span>
         <span className="flex items-center gap-1.5 text-xs">
-          {passed > 0 && <span className="text-green-600">{passed} passed</span>}
-          {failed > 0 && <span className="text-red-600">{failed} failed</span>}
-          {pending > 0 && <span className="text-yellow-600">{pending} pending</span>}
-          {skipped > 0 && <span className="text-gray-500">{skipped} skipped</span>}
+          {passed > 0 && <span className={successText}>{passed} passed</span>}
+          {failed > 0 && <span className={dangerText}>{failed} failed</span>}
+          {pending > 0 && <span className={waitingText}>{pending} pending</span>}
+          {skipped > 0 && <span className={neutralText}>{skipped} skipped</span>}
         </span>
         <span className="flex-1" />
         <span className="text-xs text-muted-foreground">{expanded ? '▼' : '▶'}</span>
