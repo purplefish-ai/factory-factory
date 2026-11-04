@@ -58,6 +58,7 @@ export function mermaidThemeConfig(element: HTMLElement): MermaidConfig {
     return {
       startOnLoad: false,
       theme: 'base',
+      themeCSS: `.mindmap-node.section-root > .label-container { stroke: ${border}; stroke-width: 1px; }`,
       look: 'classic',
       layout: 'dagre',
       securityLevel: 'strict',
@@ -73,6 +74,9 @@ export function mermaidThemeConfig(element: HTMLElement): MermaidConfig {
         darkMode: element.closest('.dark') !== null,
         background,
         primaryColor: surface,
+        // Mindmap roots use Git diagram variables rather than cScale labels.
+        git0: surface,
+        gitBranchLabel0: foreground,
         primaryTextColor: foreground,
         primaryBorderColor: border,
         secondaryColor: muted,

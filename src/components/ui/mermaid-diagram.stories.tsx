@@ -49,10 +49,38 @@ const meta = {
       return [r / 255, g / 255, b / 255];
     };
     const threshold = document.documentElement.dataset.colorScheme === 'high-contrast' ? 7 : 4.5;
+    const mindmapRoot = canvasElement.querySelector('.mindmap-node.section-root circle');
+    if (!mindmapRoot) {
+      throw new Error('Missing mindmap root');
+    }
+    await expect(rgb(getComputedStyle(mindmapRoot).stroke)).toEqual(
+      rgb(config.themeVariables.primaryBorderColor)
+    );
     for (const [shapeSelector, textSelector, property, fillToken, textToken] of [
       ['.node rect', '.node .nodeLabel', 'color', 'primaryColor', 'primaryTextColor'],
       ['.note', '.noteText', 'fill', 'noteBkgColor', 'noteTextColor'],
       ['.pieCircle', '.slice', 'fill', 'pie1', 'pieSectionTextColor'],
+      [
+        '.mindmap-node.section-root circle',
+        '.mindmap-node.section-root p',
+        'color',
+        'git0',
+        'gitBranchLabel0',
+      ],
+      [
+        '.mindmap-node.section-0 path',
+        '.mindmap-node.section-0 p',
+        'color',
+        'cScale1',
+        'cScaleLabel1',
+      ],
+      [
+        '.mindmap-node.section-1 path',
+        '.mindmap-node.section-1 p',
+        'color',
+        'cScale2',
+        'cScaleLabel2',
+      ],
     ] as const) {
       const shape = canvasElement.querySelector(shapeSelector);
       const text = canvasElement.querySelector(textSelector);
