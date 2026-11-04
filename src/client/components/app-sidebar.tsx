@@ -269,10 +269,7 @@ function ProjectFooterLinks({
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:
       projectSlug && navData.reviewCount > 0 ? (
-        <Badge
-          variant="secondary"
-          className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-warning/10 text-warning border-warning/30"
-        >
+        <Badge variant="warning" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
           {navData.reviewCount}
         </Badge>
       ) : null,

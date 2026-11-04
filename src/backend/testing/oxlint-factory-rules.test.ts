@@ -59,6 +59,8 @@ describe('Oxlint project guardrails', () => {
     ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],
     ['no-raw-palette-classes', 'const progress = "[&>div]:bg-zinc-900";'],
     ['no-raw-palette-classes', 'const glow = "text-shadow-red-500";'],
+    ['no-raw-palette-classes', 'const className = "dark:text-red-500";'],
+    ['no-raw-palette-classes', 'const className = "p-2 !bg-red-500";'],
     ['no-raw-palette-classes', 'const glow = "inset-ring-amber-400/50";'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
@@ -80,6 +82,8 @@ describe('Oxlint project guardrails', () => {
     'const className = "bg-black/60 text-white";',
     'const pattern = /text-red-500/;',
     'const id = "my-text-red-500-id";',
+    'const url = "/api/text-red-500";',
+    'const selector = "a.text-red-500";',
   ].map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }));
 
   let report: z.infer<typeof reportSchema>;
@@ -151,7 +155,7 @@ describe('raw palette class exceptions', () => {
   it.each(exceptions.map(([file]) => file))('%s still needs its exception', (file) => {
     // Same pattern as factory/no-raw-palette-classes in lint-rules/factory.mjs.
     expect(readFileSync(resolve(file), 'utf8')).toMatch(
-      /(?<![\w-])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/
+      /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/
     );
   });
 });

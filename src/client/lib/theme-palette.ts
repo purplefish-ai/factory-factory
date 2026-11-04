@@ -17,25 +17,33 @@ const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
 const DECLARATION_PATTERN = /(--[\w-]+)\s*:\s*([^;]+);/g;
 const VAR_PATTERN = /^var\(\s*(--[\w-]+)\s*\)$/;
 
+/** Innermost `selectors { declarations }` blocks; nested at-rule wrappers are skipped. */
+const BLOCK_PATTERN = /([^{};]+)\{([^{}]*)\}/g;
+
 /**
- * Reads the custom properties declared directly in one top-level `selector { ... }`
- * block. Throws when the block is missing or declared twice, so a typo or a
- * second override block cannot silently escape the contrast checks.
+ * Reads the custom properties declared directly in the block whose selector
+ * list contains `selector` (e.g. `.a.dark` in `.a.dark, .a .dark { ... }`).
+ * Throws when no block or more than one block matches, so a typo or a second
+ * override block cannot silently escape the contrast checks.
  */
 export function readThemeDeclarations(css: string, selector: string): Map<string, string> {
-  const declarations = new Map<string, string>();
   const source = css.replace(COMMENT_PATTERN, '');
-  const marker = `\n${selector} {`;
-  const start = source.indexOf(marker);
-  if (start === -1) {
+  const bodies = [...source.matchAll(BLOCK_PATTERN)]
+    .filter((match) =>
+      (match[1] ?? '')
+        .split(',')
+        .map((part) => part.trim())
+        .includes(selector)
+    )
+    .map((match) => match[2] ?? '');
+  if (bodies.length === 0) {
     throw new Error(`Theme block not found: ${selector}`);
   }
-  if (source.indexOf(marker, start + marker.length) !== -1) {
+  if (bodies.length > 1) {
     throw new Error(`Duplicate theme block: ${selector}`);
   }
-  const bodyStart = source.indexOf('{', start) + 1;
-  const bodyEnd = source.indexOf('}', bodyStart);
-  for (const match of source.slice(bodyStart, bodyEnd).matchAll(DECLARATION_PATTERN)) {
+  const declarations = new Map<string, string>();
+  for (const match of (bodies[0] ?? '').matchAll(DECLARATION_PATTERN)) {
     if (match[1] && match[2]) {
       declarations.set(match[1], match[2].trim());
     }
