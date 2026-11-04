@@ -296,7 +296,9 @@ export function createElectronLifecycle({
     registerNavigationHandlers(window);
     window.webContents.on('did-start-navigation', (event) => {
       // A full reload replaces preload listeners; SPA route changes do not.
-      if (event.isMainFrame && !event.isSameDocument) rendererReadyFrame = null;
+      if (event.isMainFrame && !event.isSameDocument) {
+        rendererReadyFrame = null;
+      }
     });
 
     window.on('focus', () => {
