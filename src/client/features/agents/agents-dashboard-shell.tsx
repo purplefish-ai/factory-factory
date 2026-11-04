@@ -1,6 +1,6 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import type { MouseEvent, ReactNode } from 'react';
+import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
@@ -149,6 +149,30 @@ export function AgentsDashboardShell({
   createDisabled,
   children,
 }: AgentsDashboardShellProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const [revealRequest, setRevealRequest] = useState(0);
+  const previousSelection = useRef(selectedAgentId);
+  useLayoutEffect(() => {
+    const changed = previousSelection.current !== selectedAgentId;
+    previousSelection.current = selectedAgentId;
+    if (!((revealRequest || changed) && contentRef.current && editorRef.current)) {
+      return;
+    }
+    if (getComputedStyle(contentRef.current).flexDirection !== 'column') {
+      return;
+    }
+    editorRef.current.focus({ preventScroll: true });
+    editorRef.current.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [revealRequest, selectedAgentId]);
+  const selectAgent = (id: string) => {
+    onAgentSelect?.(id);
+    setRevealRequest((request) => request + 1);
+  };
+  const createAgent = (...args: Parameters<typeof onCreate>) => {
+    onCreate(...args);
+    setRevealRequest((request) => request + 1);
+  };
   return (
     <div className="@container/agents flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
@@ -158,11 +182,11 @@ export function AgentsDashboardShell({
             Scheduled and event agents in this project.
           </p>
         </div>
-        <CreateAgentMenu onCreate={onCreate} disabled={createDisabled} />
+        <CreateAgentMenu onCreate={createAgent} disabled={createDisabled} />
       </header>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col @[48rem]/agents:flex-row">
-        <aside className="flex max-h-64 shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
-          <nav aria-label="Agents" className="min-h-0 overflow-y-auto p-2">
+      <div ref={contentRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto @[48rem]/agents:flex-row @[48rem]/agents:overflow-hidden">
+        <aside className="flex shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
+          <nav aria-label="Agents" className="min-h-0 overflow-visible p-2 @[48rem]/agents:overflow-y-auto">
             {error && (
               <div role="alert" className="space-y-2 p-2 text-xs">
                 <p className="break-words text-destructive">{error}</p>
@@ -180,7 +204,7 @@ export function AgentsDashboardShell({
                 icon={RobotIcon}
                 title="No agents yet"
                 description="Schedule recurring work or prepare an event agent."
-                action={<CreateAgentMenu onCreate={onCreate} disabled={createDisabled} outline />}
+                action={<CreateAgentMenu onCreate={createAgent} disabled={createDisabled} outline />}
               />
             )}
             {(!!agents?.length || continuation) &&
@@ -200,7 +224,7 @@ export function AgentsDashboardShell({
                         key={`${projectSlug}:${kind}:${agent.id}`}
                         agent={agent}
                         projectSlug={projectSlug}
-                        onAgentSelect={onAgentSelect}
+                        onAgentSelect={selectAgent}
                         selected={agent.id === selectedAgentId && kind === selectedKind}
                       />
                     ))}
@@ -209,7 +233,7 @@ export function AgentsDashboardShell({
               ))}
           </nav>
         </aside>
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <main ref={editorRef} tabIndex={-1} aria-label="Agent details" className="min-h-0 min-w-0 flex-none overflow-visible @[48rem]/agents:flex-1 @[48rem]/agents:overflow-y-auto">
           <div className="mx-auto w-full max-w-4xl space-y-7 p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>

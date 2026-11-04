@@ -480,3 +480,12 @@ Key tests are located at:
   and `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
 - live event propagation:
   `src/backend/orchestration/event-collector.orchestrator.test.ts`.
+
+## Phone navigation
+
+Workspace headers put project and family navigation beside the workspace name on
+a separate context row on phones. Actions keep their full touch targets.
+
+On narrow Agents panels, the agent list and editor share one vertical scroll
+surface. Selecting an agent brings its editor into view; wide panels retain
+independent list and editor scrolling.

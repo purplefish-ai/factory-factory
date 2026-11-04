@@ -37,7 +37,7 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
     <header className="app-header flex shrink-0 items-stretch border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
       <div className="app-header-controls @container/header flex min-w-0 flex-1 items-center gap-1 md:gap-x-2">
         {showSidebarToggle ? <SidebarToggleButton /> : null}
-        <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
+        <div data-slot="header-context" className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
           <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold empty:hidden">
             {title}

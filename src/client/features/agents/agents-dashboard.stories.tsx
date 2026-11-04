@@ -301,3 +301,42 @@ export const PhoneCreateMenu: Story = {
   ...CreateMenu,
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+function LongPhoneRail() {
+  const [selected, setSelected] = useState(agent.id);
+  const rail = [
+    ...agents,
+    ...Array.from({ length: 12 }, (_, index) => ({
+      ...agent,
+      id: `extra-${index}`,
+      name: `Additional agent ${index + 1}`,
+    })),
+  ];
+  return (
+    <div className="h-dvh">
+      <AgentsDashboardShell
+        projectSlug={project.slug}
+        agents={rail}
+        selectedAgentId={selected}
+        onAgentSelect={setSelected}
+        onCreate={() => undefined}
+      >
+        <h2 className="text-lg font-semibold">{rail.find((item) => item.id === selected)?.name}</h2>
+        <p>Agent details and controls</p>
+      </AgentsDashboardShell>
+    </div>
+  );
+}
+export const PhoneLongRail: Story = {
+  render: () => <LongPhoneRail />,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('link', { name: /Keep dependencies current/ }));
+    const editor = canvas.getByRole('main', { name: 'Agent details' });
+    await expect(editor).toHaveFocus();
+    await expect(editor).toHaveTextContent('Keep dependencies current');
+    await expect(editor.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    await expect(editor.getBoundingClientRect().top).toBeLessThan(window.innerHeight);
+  },
+};

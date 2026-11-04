@@ -133,3 +133,54 @@ it('offers the same explicit creation choices from header and empty state', () =
     container.remove();
   }
 });
+
+it.each(['column', 'row'])('reveals a newly selected editor only in %s layout', (direction) => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scroll,
+  });
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (selectedAgentId: string) =>
+    actFlushSync(() =>
+      root.render(
+        <MemoryRouter>
+          <AgentsDashboardShell
+            projectSlug="project"
+            selectedAgentId={selectedAgentId}
+            agents={[]}
+            onCreate={() => undefined}
+          >
+            <h2>Editor</h2>
+          </AgentsDashboardShell>
+        </MemoryRouter>
+      )
+    );
+  try {
+    render('one');
+    const body = container.querySelector<HTMLElement>('[class~="@container/agents"] > div')!;
+    body.style.flexDirection = direction;
+    expect(scroll).not.toHaveBeenCalled();
+    render('two');
+    const editor = container.querySelector('main');
+    expect(scroll.mock.calls.length).toBe(direction === 'column' ? 1 : 0);
+    if (direction === 'column') {
+      expect(document.activeElement).toBe(editor);
+    } else {
+      expect(document.activeElement).not.toBe(editor);
+    }
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    if (original) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', original);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  }
+});
