@@ -105,12 +105,17 @@ async function checkSurfaces(canvasElement: HTMLElement, native = false) {
     await expect(
       contrastRatio(renderedRgb(getComputedStyle(probe).backgroundColor), renderedRgb(sidebarColor))
     ).toBeGreaterThanOrEqual(1.08);
-    const surface = native ? header.querySelector('.app-header-controls') : header;
-    if (!surface) {
-      throw new Error('Expected header controls');
+    const headerColor = getComputedStyle(header).backgroundColor;
+    await expect(headerColor).toBe(
+      native ? getComputedStyle(document.body).backgroundColor : sidebarColor
+    );
+    if (native) {
+      const controls = header.querySelector('.app-header-controls');
+      if (!controls) {
+        throw new Error('Expected header controls');
+      }
+      await expect(getComputedStyle(controls, '::before').content).toBe('none');
     }
-    const headerColor = getComputedStyle(surface, native ? '::before' : null).backgroundColor;
-    await expect(headerColor).toBe(sidebarColor);
     await expect(getComputedStyle(tabs).backgroundColor).toBe(sidebarColor);
     const border = native ? getComputedStyle(header, '::after') : getComputedStyle(header);
     await expect(native ? border.height : border.borderBottomWidth).toBe('1px');
@@ -175,3 +180,12 @@ export const InstalledLight: Story = {
   },
 };
 export const InstalledDark: Story = { ...InstalledLight, globals: { theme: 'dark' } };
+
+export const InstalledGithubLight: Story = {
+  ...InstalledLight,
+  globals: { theme: 'light', colorScheme: 'github' },
+};
+export const InstalledGithubDark: Story = {
+  ...InstalledLight,
+  globals: { theme: 'dark', colorScheme: 'github' },
+};

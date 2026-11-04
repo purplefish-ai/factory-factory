@@ -18,7 +18,7 @@ const meta = {
       story: { inline: false, iframeHeight: 120 },
       description: {
         component:
-          'The installed desktop PWA uses compact controls centered in the browser-reported title-bar area. A subtle theme-relative surface has tight S-curves on either side, leaving room for native controls. Larger fonts can grow the row without clipping. Empty space drags the window; interactive controls remain clickable. PWA stories simulate native geometry using the production CSS. Browser tabs and unsupported installations retain the standard header.',
+          'The installed desktop PWA uses compact controls centered in the browser-reported title-bar area. A flat full-width divider sits below a header background that matches the native window-control corners in every theme. Larger fonts can grow the row without clipping. Empty space drags the window; interactive controls remain clickable. PWA stories simulate native geometry using the production CSS. Browser tabs and unsupported installations retain the standard header.',
       },
     },
   },

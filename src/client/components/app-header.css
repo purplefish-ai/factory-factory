@@ -16,21 +16,18 @@
 
 /* The installed desktop PWA shares its first row with native window controls.
  * The browser owns the native controls and reports the safe rectangle between
- * them. Compact our controls within that height, with a subtly raised surface
- * and tight S-curves at each end. Larger fonts can grow the row without clipping.
+ * them. Compact our controls within that height. A flat, full-width divider
+ * separates the header, while its background matches the native corners.
+ * Larger fonts can grow the row without clipping.
  * Browser tabs, fullscreen, and unsupported PWAs keep the normal header.
  */
 @media (display-mode: window-controls-overlay) {
   .app-header {
     --app-header-control-size: max(24px, 1.5rem);
-    --app-header-shoulder: 16px;
-    --app-header-surface: var(--shell);
 
     position: relative;
     min-height: 0;
-    /* Native-control corners keep the page color; the central surface matches
-     * the sidebar and pane headers. The full-width separator is drawn below.
-     */
+    /* Match the background used for native window controls and theme-color. */
     background: var(--background);
     border-bottom: 0;
     padding-top: env(titlebar-area-y, 0px);
@@ -45,10 +42,8 @@
   }
 
   .app-header-controls {
-    position: relative;
-    isolation: isolate;
     min-height: max(env(titlebar-area-height, 0px), calc(var(--app-header-control-size) + 4px));
-    padding: 2px calc(var(--app-header-shoulder) + 4px);
+    padding: 2px 20px;
     gap: 4px;
   }
 
@@ -60,34 +55,6 @@
     order: 0;
     flex-basis: auto;
     min-height: 0;
-  }
-
-  .app-header-controls::before {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    inset: 2px 0 0;
-    background: var(--app-header-surface);
-    border-radius: var(--app-header-shoulder) var(--app-header-shoulder) 0 0;
-    pointer-events: none;
-  }
-
-  /* Clip only the decoration, leaving focus rings and menus unobstructed.
-   * Older overlay-capable browsers retain the rounded surface above.
-   */
-  @supports (clip-path: shape(from 0 0, line to 100% 100%, close)) {
-    .app-header-controls::before {
-      border-radius: 0;
-      clip-path: shape(
-        from 0 100%,
-        curve to var(--app-header-shoulder) 0 with calc(var(--app-header-shoulder) / 2) 100% /
-          calc(var(--app-header-shoulder) / 2) 0,
-        hline to calc(100% - var(--app-header-shoulder)),
-        curve to 100% 100% with calc(100% - var(--app-header-shoulder) / 2) 0 /
-          calc(100% - var(--app-header-shoulder) / 2) 100%,
-        close
-      );
-    }
   }
 
   .app-header::after {
