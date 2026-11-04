@@ -15,9 +15,11 @@ const badgeVariants = cva(
         outline:
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        success: 'border-transparent bg-success/15 text-success hover:bg-success/25',
-        warning: 'border-transparent bg-warning/15 text-warning-foreground hover:bg-warning/25',
-        info: 'border-transparent bg-info/15 text-info hover:bg-info/25',
+        // Tinted status variants: the token is the text color on a 10% tint
+        // (docs/status-colors.md). *-foreground is only for solid fills.
+        success: 'border-transparent bg-success/10 text-success [a&]:hover:bg-success/20',
+        warning: 'border-transparent bg-warning/10 text-warning [a&]:hover:bg-warning/20',
+        info: 'border-transparent bg-info/10 text-info [a&]:hover:bg-info/20',
         link: 'text-primary underline-offset-4 [a&]:hover:underline',
       },
     },

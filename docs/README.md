@@ -17,6 +17,7 @@ context, not a new task or a substitute for current repository guidance.
 | Mixed Agents management and scheduled history | [Scheduled agents](architecture/integrations.md#scheduled-agents)                                     |
 | User and project configuration                | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies       | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
+| Theme tokens and status colors                | [Status colors](status-colors.md)                                                                     |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
 
 For implementation work, search the relevant source area and current guides

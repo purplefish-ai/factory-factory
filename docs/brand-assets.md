@@ -1,8 +1,10 @@
 # Brand assets
 
 Factory Factory's logo is a black six-tooth gear with a circular bore on safety
-yellow (`#FFE500`). The vector follows the approved concept's individual tooth
-proportions and curved recesses. Its silhouette has 99.8%
+yellow (`#FFE500`). The app's dark theme uses this yellow as its brand color;
+the light theme darkens the same hue to a gold that reads as text (see
+[status colors](status-colors.md)). The vector follows the approved concept's
+individual tooth proportions and curved recesses. Its silhouette has 99.8%
 intersection-over-union with the concept at the original 1254-pixel size; the
 center opening is a true circle. There are no fonts or embedded bitmaps in the
 symbol.
