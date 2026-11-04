@@ -11,7 +11,11 @@ import { z } from 'zod';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
-import { chooseAgentCreation, renderEventCreationCancel } from './agent-menu.test-support';
+import {
+  chooseAgentCreation,
+  fillAgentDraft,
+  renderEventCreationCancel,
+} from './agent-menu.test-support';
 import { AgentsPage } from './agents-page';
 import type { Agent } from './types';
 
@@ -593,20 +597,7 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     await chooseAgentCreation(container);
-    actFlushSync(() => {
-      const name = container.querySelector('input[name="name"]');
-      const instructions = container.querySelector('textarea');
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
-        name,
-        'New agent'
-      );
-      name?.dispatchEvent(new Event('input', { bubbles: true }));
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
-        instructions,
-        'Find regressions'
-      );
-      instructions?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    fillAgentDraft(container, 'New agent', 'Find regressions');
     let finishMutation: () => void = vi.fn();
     mutationWait = new Promise<void>((resolve) => {
       finishMutation = resolve;
@@ -710,20 +701,7 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
     await chooseAgentCreation(container);
-    actFlushSync(() => {
-      const name = container.querySelector('input[name="name"]');
-      const instructions = container.querySelector('textarea');
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
-        name,
-        'New agent'
-      );
-      name?.dispatchEvent(new Event('input', { bubbles: true }));
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
-        instructions,
-        'Review changes'
-      );
-      instructions?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    fillAgentDraft(container, 'New agent', 'Review changes');
     let finishMutation: () => void = vi.fn();
     mutationWait = new Promise<void>((resolve) => {
       finishMutation = resolve;
@@ -797,19 +775,7 @@ describe('AgentsPage coordination', () => {
     );
     await chooseAgentCreation(container);
     expect(container.textContent).toContain('first run starts shortly after creation');
-    const setters = [
-      ['input[name="name"]', 'Daily agent'],
-      ['textarea', 'Review code'],
-    ] as const;
-    actFlushSync(() => {
-      for (const [selector, value] of setters) {
-        const field = container.querySelector(selector);
-        const prototype =
-          selector === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
-        field?.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    });
+    fillAgentDraft(container, 'Daily agent', 'Review code');
     failMutation = 'periodicTask.create';
     await act(async () =>
       container

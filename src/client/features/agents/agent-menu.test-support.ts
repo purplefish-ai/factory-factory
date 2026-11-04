@@ -31,3 +31,19 @@ export async function chooseAgentCreation(
 export function renderEventCreationCancel(onCancel: () => void) {
   return createElement('button', { type: 'button', onClick: onCancel }, 'Cancel');
 }
+
+export function fillAgentDraft(scope: ParentNode, name: string, instructions: string) {
+  actFlushSync(() => {
+    for (const [selector, value, prototype] of [
+      ['input[name="name"]', name, HTMLInputElement.prototype],
+      ['textarea', instructions, HTMLTextAreaElement.prototype],
+    ] as const) {
+      const field = scope.querySelector(selector);
+      if (!field) {
+        throw new Error(`Missing draft field: ${selector}`);
+      }
+      Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+}
