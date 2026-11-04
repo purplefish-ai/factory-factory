@@ -100,7 +100,37 @@ export const Desktop: Story = {
     if (!(todo instanceof HTMLElement)) {
       throw new Error('Todo column is missing');
     }
-    await userEvent.click(within(todo).getByRole('button', { name: 'New workspace' }));
+    // Header actions must not push Waiting/Done below Working or the Todo button.
+    const createButton = within(todo).getByRole('button', { name: 'New workspace' });
+    const firstItems = [
+      createButton,
+      ...['ws-1', 'ws-3', 'ws-4'].map((id) => {
+        const card = canvasElement.querySelector<HTMLElement>(`[data-workspace-id="${id}"]`);
+        if (!card) {
+          throw new Error(`Missing card ${id}`);
+        }
+        return card;
+      }),
+    ];
+    const top = createButton.getBoundingClientRect().top;
+    for (const item of firstItems) {
+      await expect(Math.abs(item.getBoundingClientRect().top - top)).toBeLessThan(1);
+    }
+    const headings = canvas.getAllByRole('heading', { level: 3 });
+    await expect(headings).toHaveLength(4);
+    const headerTop = headings[0]!.getBoundingClientRect().top;
+    for (const [index, heading] of headings.entries()) {
+      const header = heading.parentElement!.parentElement!;
+      const headerBounds = header.getBoundingClientRect();
+      await expect(Math.abs(heading.getBoundingClientRect().top - headerTop)).toBeLessThan(1);
+      await expect(headerBounds.height).toBe(52);
+      await expect(
+        Math.abs(
+          heading.getBoundingClientRect().left - firstItems[index]!.getBoundingClientRect().left
+        )
+      ).toBeLessThan(1);
+    }
+    await userEvent.click(createButton);
     await expect(within(todo).getByPlaceholderText('What should the agent work on?')).toBeVisible();
     await expect(
       within(todo).queryByRole('button', { name: 'New workspace' })

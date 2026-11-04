@@ -70,7 +70,7 @@ export function KanbanColumn({
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
       {/* Column headers are replaced by column pills on mobile. */}
-      <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
+      <div className="hidden md:flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
