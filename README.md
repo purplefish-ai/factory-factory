@@ -75,6 +75,28 @@ Then:
 4. Review the agent's changes, use the integrated terminal when needed, and open
    a pull request.
 
+## Updating
+
+Factory Factory shows a dismissible banner when a newer stable release is
+available. **View upgrade instructions** opens this section. Dismissal is saved
+for that release in your browser; a later release can prompt again. Checks run
+in the background with a short timeout and caching. If npmjs is unavailable,
+Factory keeps working and retains any previously discovered update.
+
+- **Desktop app:** Download and install the latest package from
+  [GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases/latest),
+  then reopen Factory Factory.
+- **CLI:** Stop the running server, then launch the latest release with
+  `pnpm dlx factory-factory@latest serve`. If you installed globally, update
+  `factory-factory@latest` using the same package manager you used to install
+  it, then restart `ff serve`.
+- **Source checkout:** Pull the latest release, run `pnpm install` and
+  `pnpm exec tsx src/cli/index.ts build`, then restart the server.
+
+Updating requires a restart. The banner does not install software or interrupt
+active sessions automatically. Your database remains in the configured data
+directory.
+
 ## What it does
 
 - **Parallel, isolated work:** Each task runs in a dedicated worktree and branch

@@ -7,6 +7,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { readAppVersion } from '@/backend/lib/app-version';
 import { expandEnvVars, getDefaultBaseDir } from '@/backend/lib/env';
 import { ConfigEnvSchema } from './env-schemas';
 import { createLogger } from './logger.service';
@@ -344,7 +345,7 @@ function loadSystemConfig(): SystemConfig {
     },
 
     // App version
-    appVersion: env.npm_package_version ?? '0.1.0',
+    appVersion: readAppVersion() ?? 'unknown',
   };
 
   return config;

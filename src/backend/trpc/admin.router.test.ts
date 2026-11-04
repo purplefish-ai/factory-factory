@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { factoryReleaseChecker } from '@/backend/lib/factory-update';
 import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 
 const mockExportData = vi.hoisted(() => vi.fn());
@@ -174,6 +175,26 @@ function createCaller(requestTrust?: Context['requestTrust']) {
 }
 
 describe('adminRouter', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    ['0.3.7', true],
+    ['0.3.6', false],
+    ['0.3.5', false],
+    [null, false],
+  ])(
+    'reports update availability for registry version %s',
+    async (latestVersion, updateAvailable) => {
+      vi.spyOn(factoryReleaseChecker, 'getLatestVersion').mockResolvedValue(latestVersion);
+      const { caller } = createCaller();
+      await expect(caller.checkFactoryUpdate()).resolves.toEqual({
+        currentVersion: '0.3.6',
+        latestVersion,
+        updateAvailable,
+      });
+    }
+  );
+
   beforeEach(() => {
     vi.clearAllMocks();
 

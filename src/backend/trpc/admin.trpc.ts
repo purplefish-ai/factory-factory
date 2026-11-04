@@ -7,6 +7,7 @@
 import { open } from 'node:fs/promises';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { factoryReleaseChecker, isNewerRelease } from '@/backend/lib/factory-update';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { DecisionLog } from '@prisma-gen/client';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
@@ -18,6 +19,20 @@ const loggerName = 'admin-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 export const adminRouter = router({
+  checkFactoryUpdate: publicProcedure.query(async ({ ctx }) => {
+    const currentVersion = ctx.appContext.services.configService.getAppVersion();
+    const latestVersion = await factoryReleaseChecker.getLatestVersion((error) => {
+      getLogger(ctx).debug('Factory release check failed; backing off', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return {
+      currentVersion,
+      latestVersion,
+      updateAvailable: latestVersion !== null && isNewerRelease(currentVersion, latestVersion),
+    };
+  }),
+
   /**
    * Get server information (port, environment, etc.)
    */
