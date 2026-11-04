@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import type { ReviewRequest } from './types';
+
+function getDiffFailureMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : "Couldn't load pull request diff";
+}
 
 export function useReviewActions({
   selectedPR,
@@ -21,6 +27,7 @@ export function useReviewActions({
   setPendingDiffs: React.Dispatch<React.SetStateAction<Set<string>>>;
 }) {
   const utils = trpc.useUtils();
+  const [diffErrors, setDiffErrors] = useState<Map<string, string>>(new Map());
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -61,6 +68,11 @@ export function useReviewActions({
       return;
     }
 
+    setDiffErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(selectedKey);
+      return next;
+    });
     setPendingDiffs((prev) => new Set(prev).add(selectedKey));
     try {
       const result = await utils.client.prReview.getDiff.query({
@@ -70,8 +82,10 @@ export function useReviewActions({
       if (mounted.current) {
         setDiffs((prev) => new Map(prev).set(selectedKey, result.diff));
       }
-    } catch (_err) {
+    } catch (error) {
       if (mounted.current) {
+        const message = getDiffFailureMessage(error);
+        setDiffErrors((prev) => new Map(prev).set(selectedKey, message));
         toast.error('Failed to load diff');
       }
     } finally {
@@ -104,6 +118,7 @@ export function useReviewActions({
   }, [selectedPR]);
 
   return {
+    diffError: selectedKey ? (diffErrors.get(selectedKey) ?? null) : null,
     fetchDiff,
     handleApprove,
     handleOpenGitHub,

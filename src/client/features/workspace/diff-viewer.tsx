@@ -131,7 +131,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     restoreDeps: [showPreview, filePath, data?.diff?.length],
   });
 
-  if (isLoading) {
+  if (isLoading || !(data || error)) {
     return <Loading message="Loading diff…" />;
   }
 

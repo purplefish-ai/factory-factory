@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import {
   getMergeStatePresentation,
@@ -32,6 +33,7 @@ interface PRDetailPanelProps {
   pr: PRWithFullDetails | null;
   diff: string | null;
   diffLoading: boolean;
+  diffError?: string | null;
   onFetchDiff: () => void;
   onOpenGitHub: () => void;
   onApprove: () => void;
@@ -241,9 +243,21 @@ function InfoTabContent({ pr }: InfoTabContentProps) {
 interface DiffTabContentProps {
   diffLoading: boolean;
   diff: string | null;
+  diffError?: string | null;
+  onRetry: () => void;
 }
 
-function DiffTabContent({ diffLoading, diff }: DiffTabContentProps) {
+function DiffTabContent({ diffLoading, diff, diffError, onRetry }: DiffTabContentProps) {
+  if (diffError && !diff) {
+    return (
+      <QueryErrorState
+        title="Couldn't load pull request diff"
+        error={{ message: diffError }}
+        onRetry={onRetry}
+        isRetrying={diffLoading}
+      />
+    );
+  }
   if (diffLoading) {
     return <Loading size="compact" message="Loading diff…" />;
   }
@@ -329,6 +343,7 @@ export function PRDetailPanel({
   pr,
   diff,
   diffLoading,
+  diffError,
   onFetchDiff,
   onOpenGitHub,
   onApprove,
@@ -346,10 +361,10 @@ export function PRDetailPanel({
 
   // Fetch diff when diff tab is selected
   useEffect(() => {
-    if (activeTab === 'diff' && pr && !diff && !diffLoading) {
+    if (activeTab === 'diff' && pr && !diff && !diffLoading && !diffError) {
       onFetchDiff();
     }
-  }, [activeTab, pr, diff, diffLoading, onFetchDiff]);
+  }, [activeTab, pr, diff, diffLoading, diffError, onFetchDiff]);
 
   // Handle keyboard shortcuts for tabs
   useEffect(() => {
@@ -379,7 +394,12 @@ export function PRDetailPanel({
         {activeTab === 'info' ? (
           <InfoTabContent pr={pr} />
         ) : (
-          <DiffTabContent diffLoading={diffLoading} diff={diff} />
+          <DiffTabContent
+            diffLoading={diffLoading}
+            diff={diff}
+            diffError={diffError}
+            onRetry={onFetchDiff}
+          />
         )}
       </div>
       <ActionButtons

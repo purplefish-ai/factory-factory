@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   empty: false,
   loaded: true,
+  selectionPending: false,
   workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
   content: vi.fn(),
 }));
@@ -57,7 +58,7 @@ vi.mock('./use-quick-chat', () => ({
           { id: 'first', name: 'Chat 1', status: 'IDLE', createdAt: '2026-10-27T12:00:00Z' },
           { id: 'second', name: 'Chat 2', status: 'IDLE', createdAt: '2026-10-27T12:01:00Z' },
         ],
-    selectedSessionId: mocks.empty ? null : 'first',
+    selectedSessionId: mocks.empty || mocks.selectionPending ? null : 'first',
     selectedCodexAccountId: 'work',
     setSelectedSessionId: mocks.select,
     handleCloseSession: mocks.close,
@@ -72,6 +73,7 @@ vi.mock('./use-quick-chat', () => ({
 beforeEach(() => {
   mocks.empty = false;
   mocks.loaded = true;
+  mocks.selectionPending = false;
   mocks.workspaceProvider = 'CLAUDE';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -104,13 +106,19 @@ it.each([false, true])(
         expect(mocks.close).toHaveBeenCalledWith('first');
       } else {
         expect(document.body.querySelector('[role="tab"]')).toBeNull();
+        expect(document.body.textContent).toContain('No chats yet');
+        expect(document.body.textContent).not.toContain('Loading sessions…');
       }
       expect(document.body.querySelector('[aria-label^="New conversation provider"]')).toBeNull();
       expect(document.body.querySelector('[aria-label^="Thinking level"]')).toBeNull();
       expect(
         document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
       ).toBe(false);
-      const create = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
+      const create = empty
+        ? [...document.body.querySelectorAll('button')].find(
+            (button) => button.textContent === 'New chat'
+          )
+        : document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
       expect(create?.disabled).toBe(false);
       await act(() => create?.click());
       expect(mocks.create).toHaveBeenCalledOnce();
@@ -179,3 +187,18 @@ it.each(['CODEX', 'WORKSPACE_DEFAULT'] as const)(
     }
   }
 );
+
+it('keeps a loaded nonempty list pending until its first session is selected', async () => {
+  mocks.selectionPending = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(document.body.textContent).toContain('Loading sessions…');
+    expect(document.body.textContent).not.toContain('No chats yet');
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
