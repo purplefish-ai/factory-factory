@@ -105,6 +105,15 @@ describe('getPendingRequestType', () => {
     ).toBe('user_question');
   });
 
+  it.each([
+    { toolName: 'ExitPlanMode', rawToolName: 'mcp__server__plan' },
+    { toolName: 'mcp__server__plan' },
+  ])('keeps MCP identity ahead of plan-shaped input: %j', (identity) => {
+    expect(getPendingRequestType({ ...identity, input: { type: 'ExitPlanMode' } })).toBe(
+      'permission_request'
+    );
+  });
+
   it('classifies MCP and other tool requests as permission requests', () => {
     expect(
       getPendingRequestType({

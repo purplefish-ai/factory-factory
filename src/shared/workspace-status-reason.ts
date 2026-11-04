@@ -1,6 +1,6 @@
 import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
-import { PENDING_REQUEST_TYPES, type PendingRequestType } from './pending-request-types';
+import { PENDING_REQUEST_TYPES, type PendingRequestType } from './pending-request-constants';
 import type { PRMonitoringProjection } from './pr-monitoring';
 
 export const WORKSPACE_PENDING_REQUEST_TYPES = PENDING_REQUEST_TYPES;

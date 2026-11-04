@@ -155,8 +155,10 @@ export const Results: Story = {
   args: { query: 'search' },
   play: async ({ canvasElement }) => {
     // Session results use the glossary term "Chat", matching the chat tabs they open.
+    // Query highlighting splits the title into inline spans, and the testing
+    // library's name computation drops the spaces between them.
     const option = await within(canvasElement.ownerDocument.body).findByRole('option', {
-      name: /Search interaction polish/,
+      name: /Search\s*interaction polish/,
     });
     await expect(option).toHaveTextContent('Chat');
   },
@@ -227,7 +229,11 @@ export const GitHubIssues: Story = {
   args: { query: 'search', githubIssues, onSelect: fn() },
   play: async ({ canvasElement, args }) => {
     const body = within(canvasElement.ownerDocument.body);
-    await userEvent.click(body.getByRole('option', { name: /Improve search keyboard navigation/ }));
+    // Query highlighting splits the title into inline spans, and the testing
+    // library's name computation drops the spaces between them.
+    await userEvent.click(
+      await body.findByRole('option', { name: /Improve\s*search\s*keyboard navigation/ })
+    );
     await expect(args.onSelect).toHaveBeenCalledWith(githubIssues.results[0]);
   },
 };
@@ -242,7 +248,7 @@ export const GitHubSearchAction: Story = {
   args: { query: 'search', onSearchGitHub: fn() },
   play: async ({ canvasElement, args }) => {
     await userEvent.click(
-      within(canvasElement.ownerDocument.body).getByRole('option', {
+      await within(canvasElement.ownerDocument.body).findByRole('option', {
         name: /Search GitHub issues for/,
       })
     );

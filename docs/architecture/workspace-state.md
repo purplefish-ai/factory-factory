@@ -696,10 +696,10 @@ Closing an awaiting-input tab still asks for confirmation, because closing it
 stops the prompt.
 
 The sidebar glow (`useWorkspaceAttention`) still fades after 30 seconds, even
-while a request is pending. It marks a new event and goes with the notification
-sound. The workspace's pending-request icon stays in the sidebar and the tab
-status stays on the tab until the request resolves. A glow that never stopped
-would keep animating for every blocked workspace.
+while a request is pending. It marks a new attention event and does not play the
+completion sound. The workspace's pending-request icon stays in the sidebar and
+the tab status stays on the tab until the request resolves. A glow that never
+stopped would keep animating for every blocked workspace.
 
 ## Completion notifications
 

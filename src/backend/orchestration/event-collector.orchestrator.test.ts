@@ -1327,19 +1327,19 @@ describe('configureEventCollector', () => {
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
   });
 
+  const sessionRecord = {
+    id: 's-1',
+    name: 'Chat 1',
+    workflow: 'followup',
+    model: 'claude-sonnet',
+    status: 'IDLE',
+  } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number];
+
   it('session_activity_changed refreshes session summaries', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
-      {
-        id: 's-1',
-        name: 'Chat 1',
-        workflow: 'followup',
-        model: 'claude-sonnet',
-        status: 'IDLE',
-      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
-    ]);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([sessionRecord]);
 
     configureEventCollector();
 
@@ -1379,15 +1379,7 @@ describe('configureEventCollector', () => {
       id: 's-1',
       workspaceId: 'ws-1',
     } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
-    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
-      {
-        id: 's-1',
-        name: 'Chat 1',
-        workflow: 'followup',
-        model: 'claude-sonnet',
-        status: 'IDLE',
-      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
-    ]);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([sessionRecord]);
 
     configureEventCollector();
 
@@ -1423,18 +1415,10 @@ describe('configureEventCollector', () => {
       id: 's-1',
       workspaceId: 'ws-1',
     } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
-    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
-      {
-        id: 's-1',
-        name: 'Chat 1',
-        workflow: 'followup',
-        model: 'claude-sonnet',
-        status: 'IDLE',
-      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
-    ]);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([sessionRecord]);
     vi.mocked(computePendingRequestType).mockReturnValue('permission_request');
     const request = { requestId: 'r-1', toolName: 'Bash', toolUseId: 't-1', input: {} };
-    vi.mocked(chatEventForwarderService.getAllPendingRequests).mockReturnValueOnce(
+    vi.mocked(chatEventForwarderService.getAllPendingRequests).mockReturnValue(
       new Map([['s-1', { ...request, planContent: null, timestamp: '2026-11-04' }]])
     );
 
@@ -1445,16 +1429,29 @@ describe('configureEventCollector', () => {
       .mock.calls.find((call) => call[0] === 'pending_request_changed');
     const handler = onCall![1] as (event: { sessionId: string }) => void;
 
+    const read = deferred<(typeof sessionRecord)[]>();
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockReturnValueOnce(read.promise);
+    const runtimeHandler = vi
+      .mocked(sessionDomainService.on)
+      .mock.calls.find((call) => call[0] === 'runtime_changed')![1] as (event: {
+      sessionId: string;
+    }) => void;
+    runtimeHandler({ sessionId: 's-1' });
+    await vi.advanceTimersByTimeAsync(0);
     handler({ sessionId: 's-1' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
+    read.resolve([sessionRecord]);
     await vi.advanceTimersByTimeAsync(150);
 
     expect(computePendingRequestType).toHaveBeenCalledWith(['s-1'], expect.any(Map));
     // Each tab's own type travels with the workspace-level type, from the same map.
     const [workspaceId, fields, source] = vi.mocked(workspaceSnapshotStore.upsert).mock.lastCall!;
-    expect([workspaceId, source]).toEqual(['ws-1', 'event:pending_request_changed']);
+    expect(workspaceId).toBe('ws-1');
+    expect(source).toContain('event:pending_request_changed');
     expect(fields.pendingRequestType).toBe('permission_request');
     expect(fields.sessionSummaries?.[0]?.pendingRequestType).toBe('permission_request');
-    expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -119,7 +119,7 @@ function getInputPlaceholder({
   if (sessionRuntime.phase === 'error') {
     return 'Agent encountered an error. Type a message to retry...';
   }
-  if (pendingRequestType) {
+  if (pendingRequestType && sessionRuntime.phase === 'running') {
     return getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
   }
   if (promptInFlight) {
@@ -303,7 +303,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       <ChatTranscript
         sessionId={props.sessionId}
         thinkingInFooter
-        pendingRequestType={pendingRequestType}
+        pendingRequestType={props.sessionRuntime.phase === 'running' ? pendingRequestType : null}
         header={header}
         workspaceId={props.workspaceId}
         messages={groupedMessages}

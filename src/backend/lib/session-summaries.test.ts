@@ -41,7 +41,11 @@ describe('buildWorkspaceSessionSummaries', () => {
   });
 
   it('keeps runtime fields alongside the pending request', () => {
-    const [summary] = buildWorkspaceSessionSummaries([session('s-1')], () => runtime, new Map());
+    const [summary] = buildWorkspaceSessionSummaries(
+      [session('s-1')],
+      () => runtime,
+      new Map([['s-1', { toolName: 'ExitPlanMode', input: {} }]])
+    );
 
     expect(summary).toMatchObject({
       sessionId: 's-1',
@@ -49,7 +53,7 @@ describe('buildWorkspaceSessionSummaries', () => {
       activity: 'WORKING',
       lastExit: null,
       errorMessage: null,
-      pendingRequestType: null,
+      pendingRequestType: 'plan_approval',
     });
   });
 });

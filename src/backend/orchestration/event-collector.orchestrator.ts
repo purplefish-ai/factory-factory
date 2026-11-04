@@ -387,8 +387,6 @@ function refreshWorkspaceSessionSummaries(
 
 interface SessionSummaryRefreshOptions {
   includeWorking?: boolean;
-  /** Also publish the workspace-level type, from the same map as each tab's own type. */
-  includePendingRequestType?: boolean;
 }
 
 async function loadWorkspaceSessionSummaries(
@@ -413,16 +411,14 @@ async function loadWorkspaceSessionSummaries(
       (sessionId) => state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId),
       pendingRequests
     );
-    const pendingRequestType = options?.includePendingRequestType
-      ? state.dependencies.computePendingRequestType(
-          sessions.map((s) => s.id),
-          pendingRequests
-        )
-      : undefined;
+    const pendingRequestType = state.dependencies.computePendingRequestType(
+      sessions.map((s) => s.id),
+      pendingRequests
+    );
     coalescer.enqueue(
       workspaceId,
       {
-        ...(pendingRequestType !== undefined ? { pendingRequestType } : {}),
+        pendingRequestType,
         sessionSummaries,
         ...(sessionSummaries.length > 0 ? { hasHadSessions: true } : {}),
         ...(options?.includeWorking
@@ -453,11 +449,9 @@ async function refreshWorkspacePendingRequestType(
     if (!workspaceId || state.activeCoalescer !== coalescer) {
       return;
     }
-    state.sessionRefreshes.run(`pending-request:${workspaceId}`, () =>
-      loadWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
-        includePendingRequestType: true,
-      })
-    );
+    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
+      includeWorking: true,
+    });
   } catch (error) {
     state.logger.warn('Failed to refresh workspace pending request type', {
       sessionId,

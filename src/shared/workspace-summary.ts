@@ -13,7 +13,7 @@ import {
   WorkspaceProviderSelection,
   WorkspaceStatus,
 } from '@/shared/core';
-import { PENDING_REQUEST_TYPES } from '@/shared/pending-request-types';
+import { PENDING_REQUEST_TYPES } from '@/shared/pending-request-constants';
 import { prDeliveryModeSchema } from '@/shared/schemas/pr-event.schema';
 import {
   SESSION_RUNTIME_ACTIVITIES,

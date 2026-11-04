@@ -4,10 +4,17 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { ThemeProvider } from 'next-themes';
 import { type ReactNode, useState } from 'react';
-import { Toaster } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import { DataImportResultsProvider } from '@/client/features/data-import';
+import {
+  APPEARANCE_STORAGE_KEY,
+  applyAppearance,
+  COLOR_SCHEME_ATTRIBUTE,
+} from '@/client/lib/appearance';
 import { trpc } from '@/client/lib/trpc';
+import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
@@ -179,8 +186,8 @@ function SettingsStoryProvider({
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
+        {/* Toasts render in the app Toaster that .storybook/preview.ts mounts. */}
         <div className="mx-auto w-full max-w-3xl">{children}</div>
-        <Toaster />
       </QueryClientProvider>
     </trpc.Provider>
   );
@@ -225,10 +232,18 @@ function AppearanceStoryProvider({ children }: { children: ReactNode }) {
 }
 
 export const Appearance: Story = {
+  // The app's AppearanceProvider applies the saved preset to <html>, so picking
+  // Solarized restyles the story as it would the app. Restore the page after.
+  beforeEach: () => () => {
+    applyAppearance(DEFAULT_APPEARANCE);
+    localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+  },
   render: () => (
     <AppearanceStoryProvider>
       <SettingsStoryProvider>
-        <AppearanceSettingsSection />
+        <AppearanceProvider>
+          <AppearanceSettingsSection />
+        </AppearanceProvider>
       </SettingsStoryProvider>
     </AppearanceStoryProvider>
   ),
@@ -246,7 +261,14 @@ export const Appearance: Story = {
     await waitFor(() =>
       expect(canvas.getByLabelText('Color scheme')).toHaveTextContent('Solarized')
     );
-    await expect(canvas.getByRole('button', { name: 'Reset appearance' })).toBeEnabled();
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute(COLOR_SCHEME_ATTRIBUTE, 'solarized')
+    );
+    // The select hides the rest of the page from assistive tech until its
+    // closing animation ends.
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: 'Reset appearance' })).toBeEnabled()
+    );
   },
 };
 
@@ -414,7 +436,10 @@ export const NoProjects: Story = {
 export const Backup: Story = {
   render: () => (
     <SettingsStoryProvider>
-      <DataBackupSection />
+      {/* The app root provides import results to the import button. */}
+      <DataImportResultsProvider>
+        <DataBackupSection />
+      </DataImportResultsProvider>
     </SettingsStoryProvider>
   ),
 };
@@ -601,7 +626,10 @@ export const ManagedProviderLoginActions: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Open Terminal to Log In' }));
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Terminal' }));
-    await expect(dialog.getByRole('button', { name: 'Sign in to Claude' })).toBeVisible();
+    // The dialog fades in.
+    await waitFor(() =>
+      expect(dialog.getByRole('button', { name: 'Sign in to Claude' })).toBeVisible()
+    );
     await expect(dialog.getByRole('button', { name: 'Sign in to Codex' })).toBeVisible();
   },
 };

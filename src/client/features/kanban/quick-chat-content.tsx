@@ -47,7 +47,9 @@ export function QuickChatContent({
   const startingSession = chatState.sessionStatus.phase === 'starting';
   const pendingRequestType = getChatPendingRequestType(chatState.pendingRequest);
   let placeholder = promptInFlight ? 'Message will be queued...' : 'Type a message...';
-  if (pendingRequestType) {
+  if (stopping) {
+    placeholder = 'Stopping...';
+  } else if (pendingRequestType && running) {
     placeholder = getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
   }
 
@@ -57,7 +59,7 @@ export function QuickChatContent({
       <ChatTranscript
         sessionId={chatState.runtimeSessionId}
         thinkingInFooter
-        pendingRequestType={pendingRequestType}
+        pendingRequestType={running ? pendingRequestType : null}
         workspaceId={workspaceId}
         messages={groupedMessages}
         subagentTimelineError={timeline.error}

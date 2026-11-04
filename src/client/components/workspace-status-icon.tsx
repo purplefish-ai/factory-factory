@@ -21,15 +21,12 @@ export function WorkspaceStatusIcon({
   sessionRuntimeErrorMessage,
 }: WorkspaceStatusIconProps) {
   if (pendingRequestType) {
+    const presentation = getPendingRequestPresentation(pendingRequestType);
+    const icon = presentation?.icon ?? WarningIcon;
+    const name = PENDING_REQUEST_ICON_NAMES[pendingRequestType] ?? 'pending-request';
     return (
-      <span
-        data-icon={PENDING_REQUEST_ICON_NAMES[pendingRequestType]}
-        className="inline-flex shrink-0"
-      >
-        <StatusIcon
-          tone="attention"
-          icon={getPendingRequestPresentation(pendingRequestType).icon}
-        />
+      <span data-icon={name} className="inline-flex shrink-0">
+        <StatusIcon tone="attention" icon={icon} />
       </span>
     );
   }

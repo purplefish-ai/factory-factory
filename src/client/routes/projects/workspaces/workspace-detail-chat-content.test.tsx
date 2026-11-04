@@ -215,6 +215,27 @@ describe('ChatContent pending request wording', () => {
       expect(transcript.mock.lastCall?.[0]).toMatchObject({
         pendingRequestType: testCase.pendingRequestType,
       });
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, phase: 'stopping' }}
+            sessionStatus={{ phase: 'stopping' }}
+          />
+        )
+      );
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, phase: 'idle' }}
+            sessionStatus={{ phase: 'ready' }}
+          />
+        )
+      );
+      expect(input.mock.lastCall?.[0].placeholder).toBe('Type a message to start the agent...');
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
     } finally {
       flushSync(() => root.unmount());
     }

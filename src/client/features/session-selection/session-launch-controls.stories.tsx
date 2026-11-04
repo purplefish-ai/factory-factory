@@ -151,11 +151,14 @@ export const FailedDiscovery: Story = { args: { state: 'error' } };
 export const UnsupportedSelection: Story = { args: { state: 'invalid' } };
 export const LongUnsupportedSelection: Story = {
   args: { state: 'invalid', longLabels: true },
-  parameters: { viewport: { value: 'mobile1' } },
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
 };
 export const UnsupportedPlan: Story = { args: { state: 'unsupported' } };
 export const LongLabels: Story = { args: { longLabels: true } };
-export const Narrow: Story = { ...LongLabels, parameters: { viewport: { value: 'mobile1' } } };
+export const Narrow: Story = {
+  ...LongLabels,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+};
 
 export const FullAccess: Story = { args: { fullAccess: true } };
 

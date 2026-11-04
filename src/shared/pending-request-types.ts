@@ -11,17 +11,8 @@ export {
   isUserQuestionRequest,
 } from './acp-protocol/question-input';
 
-/**
- * Kinds of interactive request that block an agent until the user responds,
- * in the order a workspace reports them when several sessions are blocked.
- */
-export const PENDING_REQUEST_TYPES = [
-  'plan_approval',
-  'user_question',
-  'permission_request',
-] as const;
-
-export type PendingRequestType = (typeof PENDING_REQUEST_TYPES)[number];
+export type { PendingRequestType } from './pending-request-constants';
+import type { PendingRequestType } from './pending-request-constants';
 
 /** The fields that classify a pending request; both stored and wire shapes have them. */
 export interface PendingRequestClassificationInput {
@@ -81,7 +72,10 @@ export interface PendingInteractiveRequest {
 export function getPendingRequestType(
   request: PendingRequestClassificationInput
 ): PendingRequestType {
-  if (isExitPlanModeRequest(request)) {
+  if (
+    !(request.rawToolName?.startsWith('mcp__') || request.toolName.startsWith('mcp__')) &&
+    isExitPlanModeRequest(request)
+  ) {
     return 'plan_approval';
   }
   if (isUserQuestionRequest(request)) {

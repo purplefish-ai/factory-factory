@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ThinkingFooter } from './thinking-footer';
 
 const meta = {
@@ -99,7 +99,8 @@ export const ActivityChanges: Story = {
     preview.focus();
     await expect(preview).toHaveFocus();
     canvas.getByRole('button', { name: 'Toggle activity' }).click();
-    await expect(footer.contains(document.activeElement)).toBe(false);
+    // Focus leaves the disabled preview once React commits the inactive state.
+    await waitFor(() => expect(footer.contains(document.activeElement)).toBe(false));
     await expect(preview).toBeDisabled();
     await expect(preview).not.toHaveFocus();
     await expect(footer.getBoundingClientRect().height).toBe(height);

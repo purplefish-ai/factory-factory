@@ -44,6 +44,8 @@ function ToasterStory({ preset }: { preset: ToastPreset }) {
 const meta = {
   title: 'UI/Toaster',
   component: ToasterStory,
+  // This story renders the Toaster under test; skip the preview's global one.
+  parameters: { toaster: false },
   args: { preset: 'error-and-success' },
 } satisfies Meta<typeof ToasterStory>;
 

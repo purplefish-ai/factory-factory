@@ -100,6 +100,14 @@ describe('QuickChatContent composer and queue controls', () => {
       pendingRequestType: 'user_question',
       placeholder: 'Answer the question above, or queue a message...',
     },
+    {
+      pendingRequest: {
+        type: 'question',
+        request: { requestId: 'r-3', toolName: 'ExitPlanMode', questions: [] },
+      },
+      pendingRequestType: 'plan_approval',
+      placeholder: 'Approve the plan or keep planning...',
+    },
   ])(
     'tells the footer and composer the agent waits on a $pendingRequestType',
     ({ pendingRequest, pendingRequestType, placeholder }) => {
@@ -136,6 +144,27 @@ describe('QuickChatContent composer and queue controls', () => {
         );
         expect(list.mock.lastCall?.[0].pendingRequestType).toBe(pendingRequestType);
         expect(input.mock.lastCall?.[0].placeholder).toBe(placeholder);
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={{
+                ...chatState,
+                sessionStatus: { phase: 'stopping' },
+                sessionRuntime: { ...chatState.sessionRuntime, phase: 'stopping' },
+              }}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
+            />
+          )
+        );
+        expect(input.mock.lastCall?.[0].placeholder).toBe('Stopping...');
+        expect(list.mock.lastCall?.[0].pendingRequestType).toBeNull();
       } finally {
         flushSync(() => root.unmount());
       }

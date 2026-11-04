@@ -1,5 +1,9 @@
 import type { PendingRequest } from '@/client/features/chat/reducer/types';
-import { isExitPlanModeRequest, type PendingRequestType } from '@/shared/pending-request-types';
+import {
+  getPendingRequestType,
+  isExitPlanModeRequest,
+  type PendingRequestType,
+} from '@/shared/pending-request-types';
 
 /**
  * The kind of request the open chat is blocked on, classified like the
@@ -12,13 +16,14 @@ export function getChatPendingRequestType(
     case 'none':
       return null;
     case 'question':
-      return 'user_question';
-    case 'permission':
-      return isExitPlanModeRequest({
-        toolName: pendingRequest.request.toolName,
-        input: pendingRequest.request.toolInput,
-      })
+      return isExitPlanModeRequest({ toolName: pendingRequest.request.toolName ?? '' })
         ? 'plan_approval'
-        : 'permission_request';
+        : 'user_question';
+    case 'permission':
+      return getPendingRequestType({
+        toolName: pendingRequest.request.toolName,
+        rawToolName: pendingRequest.request.rawToolName,
+        input: pendingRequest.request.toolInput,
+      });
   }
 }

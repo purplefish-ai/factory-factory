@@ -43,8 +43,8 @@ describe('getSessionCloseRisk', () => {
     expect(
       getSessionCloseRisk({
         summary: summary({
-          runtimePhase: 'running',
-          activity: 'WORKING',
+          runtimePhase: 'idle',
+          activity: 'IDLE',
           pendingRequestType: 'permission_request',
         }),
       })

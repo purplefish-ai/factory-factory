@@ -122,6 +122,7 @@ describe('convertPendingRequest', () => {
       request: {
         requestId: 'mcp-question',
         toolName: 'AskUserQuestion',
+        rawToolName: request.rawToolName,
         toolInput: { questions },
         planContent: null,
         acpOptions: request.acpOptions,
