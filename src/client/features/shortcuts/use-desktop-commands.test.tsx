@@ -5,6 +5,9 @@ import { expect, it, vi } from 'vitest';
 import { registerShortcutHandler } from '@/client/lib/shortcut-registry';
 import type { DesktopCommand } from '@/types/electron';
 import { useDesktopCommands } from './use-desktop-commands';
+
+vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+
 function Harness() {
   useDesktopCommands();
   return null;
