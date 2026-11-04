@@ -7,6 +7,7 @@ import {
   type ReviewProject,
 } from '@/client/hooks/use-project-review-requests';
 import { runInBackground } from '@/client/lib/background-task';
+import { getReviewShortcut } from '@/client/lib/review-shortcuts';
 import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
@@ -148,31 +149,6 @@ function useInitialReviewSelection({
   }, [initialRepo, initialPR]);
 }
 
-function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
-  if (
-    event.defaultPrevented ||
-    event.isComposing ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey
-  ) {
-    return true;
-  }
-  const target = event.target instanceof Element ? event.target : document.activeElement;
-  if (
-    target?.closest(
-      'input, textarea, select, dialog, [contenteditable]:not([contenteditable="false"]), ' +
-        '[role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menubar"], ' +
-        '[role^="menuitem"], [role="dialog"], [role="alertdialog"], [role="textbox"], [role="searchbox"]'
-    )
-  ) {
-    return true;
-  }
-  const control = target?.closest('button, a[href]');
-  return !!control && !control.matches('[data-review-list] > button');
-}
-
 function moveReviewSelection(previous: number, count: number, step: number): number {
   const last = Math.max(0, count - 1);
   const current = Math.max(0, Math.min(previous, last));
@@ -194,22 +170,25 @@ function useReviewKeyboardShortcuts({
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (shouldIgnoreReviewShortcut(event)) {
+      const shortcut = getReviewShortcut(event);
+      if (!shortcut) {
         return;
       }
 
+      // Approving submits a GitHub review immediately, so it takes a deliberate
+      // Shift chord rather than a single key that is easy to hit by accident.
       const actionByKey: Partial<Record<string, () => void>> = {
         j: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, 1)),
         k: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, -1)),
         o: onOpenGitHub,
-        a: () => {
+        'Shift+A': () => {
           if (reviewDecision !== 'APPROVED') {
             onApprove();
           }
         },
       };
 
-      const action = actionByKey[event.key];
+      const action = actionByKey[shortcut];
       if (!action) {
         return;
       }

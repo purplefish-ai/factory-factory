@@ -4,9 +4,10 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
+import { getReviewShortcut } from '@/client/lib/review-shortcuts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Kbd } from '@/components/ui/kbd';
+import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   getSimpleDiffLineClassName,
@@ -331,12 +332,14 @@ function ActionButtons({ pr, approving, onOpenGitHub, onApprove }: ActionButtons
         onClick={onApprove}
         className={`flex-1 h-8 min-w-0 ${getApproveButtonClassName(pr.reviewDecision)}`}
         disabled={approving || pr.reviewDecision === 'APPROVED'}
+        aria-keyshortcuts="Shift+A"
       >
         <span className="truncate">{getApproveButtonText(approving, pr.reviewDecision)}</span>
         {!approving && pr.reviewDecision !== 'APPROVED' && (
-          <span className="ml-2 flex items-center gap-1 opacity-80">
-            <Kbd>a</Kbd>
-          </span>
+          <KbdGroup className="ml-2 opacity-80" aria-hidden="true">
+            <Kbd>⇧</Kbd>
+            <Kbd>A</Kbd>
+          </KbdGroup>
         )}
       </Button>
     </div>
@@ -372,16 +375,12 @@ export function PRDetailPanel({
   // Handle keyboard shortcuts for tabs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      if (e.key === 'd' && pr) {
+      // Yield to modified keys (⌘D bookmarks the page), text fields and menus.
+      const shortcut = pr ? getReviewShortcut(e) : null;
+      const tab = shortcut === 'd' ? 'diff' : shortcut === 'i' ? 'info' : null;
+      if (tab) {
         e.preventDefault();
-        setActiveTab('diff');
-      }
-      if (e.key === 'i' && pr) {
-        e.preventDefault();
-        setActiveTab('info');
+        setActiveTab(tab);
       }
     };
     window.addEventListener('keydown', handleKeyDown);

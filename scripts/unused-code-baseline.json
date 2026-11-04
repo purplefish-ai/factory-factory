@@ -1195,10 +1195,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
     },
-    "src/components/ui/kbd.tsx::exports::KbdGroup": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
     "src/components/ui/popover.tsx::exports::PopoverAnchor": {
       "disposition": "maintained-api",
       "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
