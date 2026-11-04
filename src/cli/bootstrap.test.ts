@@ -68,15 +68,28 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     const pidFile = join(root, 'worker.pid');
     writeFileSync(
       worker,
-      `import { writeFileSync } from 'node:fs'; ${stubborn ? "process.on('SIGTERM', () => {});" : ''} writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`
+      `import { writeFileSync } from 'node:fs';
+       if (process.argv.includes('--stubborn')) process.on('SIGTERM', () => {});
+       writeFileSync(new URL('./worker.pid', import.meta.url), String(process.pid));
+       setInterval(() => {}, 1000);`
     );
     writeFileSync(
       join(root, 'index.js'),
-      `import { createSetupIO, confirmFix } from './serve-prerequisites.mjs'; const io = createSetupIO(); io.interactive = true; io.ask = async () => 'y'; await confirmFix([process.execPath, ${JSON.stringify(worker)}], io);`
+      `import { fileURLToPath } from 'node:url';
+       import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+       const io = createSetupIO();
+       io.interactive = true;
+       io.ask = async () => 'y';
+       const args = process.argv.includes('--stubborn') ? ['--stubborn'] : [];
+       await confirmFix([process.execPath, fileURLToPath(new URL('./worker.mjs', import.meta.url)), ...args], io);`
     );
-    const child = spawn(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
-      stdio: 'ignore',
-    });
+    const child = spawn(
+      process.execPath,
+      [join(root, 'bootstrap.mjs'), 'serve', ...(stubborn ? ['--stubborn'] : [])],
+      {
+        stdio: 'ignore',
+      }
+    );
     const closed = new Promise((resolve) => child.once('exit', resolve));
     let workerPid: number | undefined;
     try {
