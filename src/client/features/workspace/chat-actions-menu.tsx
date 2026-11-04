@@ -1,5 +1,6 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { DotsThreeVerticalIcon } from '@phosphor-icons/react/dist/csr/DotsThreeVertical';
+import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,11 +20,13 @@ export function ChatActionsMenu({
   chatLabel,
   onRestartSession,
   disabled = false,
+  onRename,
 }: {
   /** The selected chat's tab label; null when no chat is selected. */
   chatLabel: string | null;
   onRestartSession: () => void;
   disabled?: boolean;
+  onRename?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -41,6 +44,11 @@ export function ChatActionsMenu({
         <DropdownMenuLabel className="truncate">
           {chatLabel ?? 'No chat selected'}
         </DropdownMenuLabel>
+        {onRename && (
+          <DropdownMenuItem disabled={disabled || chatLabel === null} onSelect={onRename}>
+            <PencilIcon className="h-4 w-4" /> Rename chat
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           disabled={disabled || chatLabel === null}
           onSelect={onRestartSession}

@@ -375,3 +375,30 @@ export const AwaitingInputDark: Story = {
   render: () => <AwaitingInputTabBar />,
   globals: { theme: 'dark' },
 };
+
+export const RenameChatInline: Story = {
+  parameters: { trpc: { handlers: { 'session.updateSession': () => ({}) } } },
+  render: () => (
+    <WorkspacePanelProvider workspaceId="rename-chat-story">
+      <MainViewTabBar
+        workspaceId="rename-chat-story"
+        sessions={[{ id: 'session-rename', name: 'Chat 1', status: 'IDLE' }]}
+        currentSessionId="session-rename"
+        onRestartSession={fn()}
+      />
+    </WorkspacePanelProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Chat actions' }));
+    await userEvent.click(
+      await within(canvasElement.ownerDocument.body).findByRole('menuitem', { name: 'Rename chat' })
+    );
+    const input = await canvas.findByRole('textbox', { name: 'Chat name' });
+    await expect(input).toHaveFocus();
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Review API{Enter}');
+    await waitFor(() => expect(canvas.queryByRole('textbox')).not.toBeInTheDocument());
+    await expect(canvas.getByRole('tab', { name: /Chat 1/ })).toBeVisible();
+  },
+};

@@ -42,4 +42,5 @@ export interface TranscriptDisplayProps {
   onWorkspaceFileLink?: (path: string) => void;
   /** Init banner for showing workspace initialization status */
   initBanner?: WorkspaceInitBanner | null;
+  onViewSetupOutput?: () => void;
 }

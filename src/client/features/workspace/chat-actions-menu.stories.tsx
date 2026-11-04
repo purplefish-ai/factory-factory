@@ -14,7 +14,7 @@ const meta = {
       },
     },
   },
-  args: { chatLabel: 'Chat 2', onRestartSession: fn() },
+  args: { chatLabel: 'Chat 2', onRestartSession: fn(), onRename: fn() },
 } satisfies Meta<typeof ChatActionsMenu>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -42,3 +42,12 @@ export const Busy: Story = {
 };
 
 export const Dark: Story = { globals: { theme: 'dark' } };
+
+export const Rename: Story = {
+  play: async ({ args, canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Chat actions' }));
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await body.findByRole('menuitem', { name: 'Rename chat' }));
+    await expect(args.onRename).toHaveBeenCalled();
+  },
+};

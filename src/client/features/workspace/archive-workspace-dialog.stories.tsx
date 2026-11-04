@@ -23,6 +23,7 @@ export const Default: Story = {
   play: async () => {
     const dialog = within(document.body).getByRole('alertdialog');
     await expect(within(dialog).getByRole('heading', { name: 'Archive workspace?' })).toBeVisible();
+    await expect(dialog).toHaveTextContent('Running agents and processes will stop.');
     await expect(dialog).toHaveTextContent('Chat history and the branch are kept.');
     await expect(dialog).toHaveTextContent('cannot be undone in the app.');
     await expect(within(dialog).getByRole('button', { name: 'Archive' })).toBeEnabled();

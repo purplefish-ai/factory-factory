@@ -2,7 +2,7 @@
 
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 
@@ -92,6 +92,40 @@ describe('TranscriptRenderingFixture loading status', () => {
       expect(container.textContent).toContain('pnpm storybook');
       expect(container.textContent).not.toContain('Agent is working');
       expect(container.querySelector('.animate-spin')).toBeNull();
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('opens setup output from the initialization spinner row', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const onViewSetupOutput = vi.fn();
+    try {
+      flushSync(() =>
+        root.render(
+          <TranscriptRenderingFixture
+            messages={[]}
+            running={false}
+            startingSession={false}
+            loadingSession
+            onViewSetupOutput={onViewSetupOutput}
+            initBanner={{
+              kind: 'info',
+              message: 'Setting up…',
+              showRetry: false,
+              showPlay: false,
+              showDismiss: false,
+            }}
+          />
+        )
+      );
+      const output = [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'View setup output'
+      );
+      expect(output).toBeDefined();
+      flushSync(() => output?.click());
+      expect(onViewSetupOutput).toHaveBeenCalledOnce();
     } finally {
       root.unmount();
     }

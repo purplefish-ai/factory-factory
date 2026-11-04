@@ -49,3 +49,20 @@ new one; see [quick actions](architecture/agent-runtime.md#quick-actions).
 Check these in Storybook under **Navigation / AppHeader** (desktop, tablet,
 phone, dark, and the More actions stories), **Workspace / WorkspacePrChip**,
 **Workspace / ChatActionsMenu** and **Chat / Input / QuickActionsMenu**.
+
+## Chat names, setup and composer
+
+Choose **Chat actions → Rename chat** to edit the selected chat's name in its
+tab. Enter or leaving the input saves a trimmed name; Escape cancels. Empty
+names retain the existing name. A failed save keeps the draft and exposes Retry
+through Enter.
+
+The conversation and composer use a centered column capped at 56rem. Multiline
+drafts grow up to the smaller of 40% of the viewport height or 320px, then
+scroll inside the input. Send has a filled primary control, and Stop exposes the
+platform's modifier-period shortcut in its tooltip.
+
+During workspace initialization, **View setup output** beside the progress
+spinner opens the setup logs in the workspace tools panel. The archive dialog
+explains that agents and processes stop, changes are committed and the worktree
+is removed while the branch and chat history are retained.

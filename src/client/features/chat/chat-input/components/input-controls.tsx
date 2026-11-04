@@ -360,6 +360,7 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
 });
 
 export const RightControls = memo(function RightControls({
+  modLabel = '⌘',
   pendingMessageCount,
   running,
   promptInFlight = running,
@@ -371,6 +372,7 @@ export const RightControls = memo(function RightControls({
   children,
 }: {
   children?: React.ReactNode;
+  modLabel?: string;
   pendingMessageCount: number;
   running: boolean;
   promptInFlight?: boolean;
@@ -390,25 +392,35 @@ export const RightControls = memo(function RightControls({
         </div>
       )}
       {running && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onStop}
-          disabled={stopping}
-          className="h-7 w-7"
-          aria-label={stopping ? 'Stopping…' : 'Stop agent'}
-        >
-          {stopping ? (
-            <Spinner aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <SquareIcon className="h-3 w-3" weight="fill" />
-          )}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onStop}
+                  disabled={stopping}
+                  className="h-7 w-7"
+                  aria-label={stopping ? 'Stopping…' : 'Stop agent'}
+                >
+                  {stopping ? (
+                    <Spinner aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <SquareIcon className="h-3 w-3" weight="fill" />
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Stop agent ({modLabel}+.)</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       <InputGroupButton
         onClick={() => onSendClick(inputRef)}
         disabled={disabled}
         size="icon-sm"
+        className="bg-primary text-primary-foreground hover:bg-primary/90"
         aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
         <PaperPlaneTiltIcon className="h-4 w-4" />

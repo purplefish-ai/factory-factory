@@ -289,7 +289,7 @@ export const ChatInput = memo(function ChatInput({
           // Reserve a full line plus py-3 even while an empty field's intrinsic
           // size is recalculated; a transient shrink clamps the transcript above.
           className={cn(
-            'min-h-[calc(1lh+1.5rem)] max-h-[110px] overflow-y-auto [field-sizing:content]',
+            'min-h-[calc(1lh+1.5rem)] max-h-[min(40dvh,320px)] overflow-y-auto [field-sizing:content]',
             isDisabled && 'opacity-50 cursor-not-allowed',
             pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
           )}
@@ -330,6 +330,7 @@ export const ChatInput = memo(function ChatInput({
 
           {/* Right side: Sending indicator + Stop button (when running) + Send button */}
           <RightControls
+            modLabel={modLabel}
             pendingMessageCount={pendingMessageCount}
             running={running}
             promptInFlight={promptInFlight}
