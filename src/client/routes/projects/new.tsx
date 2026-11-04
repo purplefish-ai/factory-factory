@@ -248,14 +248,14 @@ export default function NewProjectPage() {
           <Card>
             <CardHeader>
               <div role="alert">
-                <CardTitle>Unable to load projects</CardTitle>
+                <CardTitle>Couldn't load projects</CardTitle>
                 <CardDescription>{projectsError.message}</CardDescription>
               </div>
             </CardHeader>
             <CardContent className="flex gap-2">
               <Button onClick={() => void refetchProjects()}>Retry</Button>
               <Button variant="outline" asChild>
-                <Link to="/projects">Back to Projects</Link>
+                <Link to="/projects">Back to projects</Link>
               </Button>
             </CardContent>
           </Card>

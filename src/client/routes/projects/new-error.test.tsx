@@ -212,12 +212,12 @@ describe('NewProjectPage project query recovery', () => {
     listProjects.mockRejectedValue(new Error('Backend unavailable'));
     const { container, button } = renderPage();
     await waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
-    expect(container.textContent).toContain('Unable to load projects');
+    expect(container.textContent).toContain("Couldn't load projects");
     expect(container.textContent).toContain('Backend unavailable');
     expect(container.textContent).not.toContain('Loading projects');
     expect(container.textContent).not.toContain('Get started');
     expect(button('Retry')).toBeDefined();
-    expect(container.querySelector('a[href="/projects"]')?.textContent).toBe('Back to Projects');
+    expect(container.querySelector('a[href="/projects"]')?.textContent).toBe('Back to projects');
   });
 
   it.each([{ result: [] }, { result: projects }])(
