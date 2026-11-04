@@ -11,10 +11,11 @@ import { QuickChatContent } from './quick-chat-content';
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
 const list = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatTranscript>) => null));
 vi.mock('@/client/features/chat', async (importOriginal) => {
-  const { useGroupedChatMessages } =
+  const { getChatPendingRequestType, useGroupedChatMessages } =
     await importOriginal<typeof import('@/client/features/chat')>();
   return {
     ChatTranscript: list,
+    getChatPendingRequestType,
     useGroupedChatMessages,
     ChatInput: input,
     PermissionPrompt: () => null,
@@ -76,6 +77,114 @@ describe('QuickChatContent composer and queue controls', () => {
           running: true,
           promptInFlight: promptInFlight ?? true,
         });
+      } finally {
+        flushSync(() => root.unmount());
+      }
+    }
+  );
+
+  it.each([
+    {
+      pendingRequest: {
+        type: 'permission',
+        request: { requestId: 'r-1', toolName: 'Bash', toolInput: { command: 'ls' } },
+      },
+      pendingRequestType: 'permission_request',
+      placeholder: 'Respond to the request above, or queue a message...',
+    },
+    {
+      pendingRequest: {
+        type: 'question',
+        request: { requestId: 'r-2', toolName: 'AskUserQuestion', questions: [] },
+      },
+      pendingRequestType: 'user_question',
+      placeholder: 'Answer the question above, or queue a message...',
+    },
+    {
+      pendingRequest: {
+        type: 'question',
+        request: { requestId: 'r-3', toolName: 'ExitPlanMode', questions: [] },
+      },
+      pendingRequestType: 'plan_approval',
+      placeholder: 'Approve the plan or keep planning...',
+    },
+  ])(
+    'tells the footer and composer the agent waits on a $pendingRequestType',
+    ({ pendingRequest, pendingRequestType, placeholder }) => {
+      const chatState = {
+        runtimeSessionId: 'quick-chat-waiting',
+        messages: [],
+        queuedMessages: [],
+        pendingMessages: new Map(),
+        pendingRequest,
+        sessionStatus: { phase: 'running' },
+        sessionRuntime: {
+          ...createInitialSessionRuntimeState(),
+          phase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+        },
+      } as unknown as UseChatWebSocketReturn;
+      const root = createRoot(document.createElement('div'));
+      try {
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={chatState}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
+            />
+          )
+        );
+        expect(list.mock.lastCall?.[0].pendingRequestType).toBe(pendingRequestType);
+        expect(input.mock.lastCall?.[0].placeholder).toBe(placeholder);
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={{
+                ...chatState,
+                sessionRuntime: { ...chatState.sessionRuntime, processState: 'stopped' },
+              }}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
+            />
+          )
+        );
+        expect(list.mock.lastCall?.[0].pendingRequestType).toBeNull();
+        expect(input.mock.lastCall?.[0].placeholder).not.toBe(placeholder);
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={{
+                ...chatState,
+                sessionStatus: { phase: 'stopping' },
+                sessionRuntime: { ...chatState.sessionRuntime, phase: 'stopping' },
+              }}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
+            />
+          )
+        );
+        expect(input.mock.lastCall?.[0].placeholder).toBe('Stopping...');
+        expect(list.mock.lastCall?.[0].pendingRequestType).toBeNull();
       } finally {
         flushSync(() => root.unmount());
       }

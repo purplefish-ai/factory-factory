@@ -236,8 +236,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({ componentStack: errorInfo.componentStack ?? null });
   }
 
-  override componentDidUpdate(prevProps: ErrorBoundaryProps) {
-    if (this.state.error && !Object.is(prevProps.resetKey, this.props.resetKey)) {
+  override componentDidUpdate(prevProps: ErrorBoundaryProps, prevState: ErrorBoundaryState) {
+    if (
+      prevState.error &&
+      this.state.error &&
+      !Object.is(prevProps.resetKey, this.props.resetKey)
+    ) {
       this.handleReset();
     }
   }

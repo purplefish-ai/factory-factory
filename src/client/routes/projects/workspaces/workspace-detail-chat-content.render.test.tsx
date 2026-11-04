@@ -37,6 +37,11 @@ vi.mock('@/client/features/chat', async () => ({
       '@/client/features/chat/chat-transcript'
     )
   ).ChatTranscript,
+  getChatPendingRequestType: (
+    await vi.importActual<typeof import('@/client/features/chat/pending-request-type')>(
+      '@/client/features/chat/pending-request-type'
+    )
+  ).getChatPendingRequestType,
   useGroupedChatMessages: (messages: unknown[]) => messages,
   ChatInput: spies.input,
   PermissionPrompt: () => null,

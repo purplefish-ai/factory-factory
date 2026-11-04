@@ -275,6 +275,26 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SavedCodexDefaults: Story = {};
+export const OverflowingPrompt: Story = {
+  args: { projectId: 'preview-overflowing-prompt' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox') as HTMLTextAreaElement;
+    await waitFor(() => expect(input).toBeEnabled());
+    await userEvent.clear(input);
+    await userEvent.type(input, 'A long task instruction.\n'.repeat(20));
+    await expect(input.scrollHeight).toBeGreaterThan(input.clientHeight);
+    await expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(240);
+    // userEvent edits are synthetic; establish the native caret scroll first.
+    input.scrollTop = input.scrollHeight;
+    await userEvent.type(input, 'Continue typing here');
+    await waitFor(() => expect(input.scrollTop).toBeGreaterThan(0));
+    await expect(input.scrollHeight - input.clientHeight - input.scrollTop).toBeLessThanOrEqual(1);
+    await userEvent.clear(input);
+    await waitFor(() => expect(input.getBoundingClientRect().height).toBeLessThan(100));
+    canvasElement.dataset.promptScrollVerified = 'true';
+  },
+};
 export const OpenFromButton: Story = { args: { startCollapsed: true } };
 export const SavedClaudeDefaults: Story = { args: { provider: 'CLAUDE' } };
 export const Dark: Story = { globals: { theme: 'dark' } };

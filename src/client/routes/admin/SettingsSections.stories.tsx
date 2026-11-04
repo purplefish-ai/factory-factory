@@ -13,6 +13,7 @@ import {
   applyAppearance,
   COLOR_SCHEME_ATTRIBUTE,
 } from '@/client/lib/appearance';
+import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
 import { trpc } from '@/client/lib/trpc';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
@@ -204,7 +205,43 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const onPermissionRequest = fn<() => Promise<NotificationPermission>>();
+function mockNotificationPermission(
+  permission: NotificationPermission | 'unsupported',
+  enabled = false
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'Notification');
+  const preference = localStorage.getItem(BROWSER_NOTIFICATIONS_KEY);
+  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
+  const api = {
+    permission,
+    requestPermission: () => onPermissionRequest(),
+  };
+  onPermissionRequest.mockReset();
+  onPermissionRequest.mockImplementation(() => {
+    api.permission = 'granted';
+    return Promise.resolve('granted');
+  });
+  Object.defineProperty(window, 'Notification', {
+    configurable: true,
+    value: permission === 'unsupported' ? undefined : api,
+  });
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(window, 'Notification', descriptor);
+    } else {
+      Reflect.deleteProperty(window, 'Notification');
+    }
+    if (preference === null) {
+      localStorage.removeItem(BROWSER_NOTIFICATIONS_KEY);
+    } else {
+      localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, preference);
+    }
+  };
+}
+
 export const Notifications: Story = {
+  beforeEach: () => mockNotificationPermission('default'),
   render: () => (
     <SettingsStoryProvider>
       <NotificationSettingsSection />
@@ -219,6 +256,74 @@ export const Notifications: Story = {
       expect(onRequest).toHaveBeenCalledWith('userSettings.update', { playSoundOnComplete: false })
     );
     await waitFor(() => expect(toggle).not.toBeChecked());
+    const desktop = canvas.getByRole('switch', { name: 'Desktop notifications' });
+    await expect(desktop).not.toBeChecked();
+    await expect(onPermissionRequest).not.toHaveBeenCalled();
+    await userEvent.click(desktop);
+    await waitFor(() => expect(desktop).toBeChecked());
+    await expect(onPermissionRequest).toHaveBeenCalledOnce();
+    await userEvent.click(desktop);
+    await expect(desktop).not.toBeChecked();
+  },
+};
+
+export const NotificationsDark: Story = { ...Notifications, globals: { theme: 'dark' } };
+export const NotificationsPhone: Story = {
+  ...Notifications,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const NotificationsEnabled: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('granted', true),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeChecked();
+    await expect(
+      canvas.getByText('On for this browser. Select a notification to open its workspace.')
+    ).toBeVisible();
+  },
+};
+export const NotificationsBlocked: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('denied'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeDisabled();
+    await expect(canvas.getByText(/Allow them in your browser settings/)).toBeVisible();
+  },
+};
+export const NotificationsUnsupported: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('unsupported'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeDisabled();
+    await expect(
+      canvas.getByText("This browser doesn't support desktop notifications.")
+    ).toBeVisible();
+  },
+};
+export const NotificationsPermissionError: Story = {
+  ...Notifications,
+  beforeEach: () => {
+    const restore = mockNotificationPermission('default');
+    onPermissionRequest.mockRejectedValue(new Error('Permission API failed'));
+    return restore;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const desktop = await canvas.findByRole('switch', { name: 'Desktop notifications' });
+    await userEvent.click(desktop);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't enable notifications"
+    );
+    await expect(desktop).not.toBeChecked();
   },
 };
 
@@ -397,7 +502,7 @@ export const Ratchet: Story = {
         ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
       })
     );
-    await userEvent.click(await canvas.findByRole('button', { name: 'Check All PRs Now' }));
+    await userEvent.click(await canvas.findByRole('button', { name: /^check all prs now$/i }));
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('admin.triggerRatchetCheck', undefined)
     );
@@ -453,7 +558,7 @@ export const WorktreeCleanup: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Found 2 orphaned worktrees not used by any active workspace.');
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove Orphaned Worktrees' }));
+    await userEvent.click(canvas.getByRole('button', { name: /^remove orphaned worktrees$/i }));
     const dialog = within(document.body);
     await userEvent.click(await dialog.findByRole('button', { name: 'Remove' }));
     await waitFor(() =>
@@ -481,7 +586,7 @@ export const CustomIdeFirstSetup: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByLabelText('Preferred IDE'));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Custom' }));
-    const command = await canvas.findByRole('textbox', { name: 'Custom Command' });
+    const command = await canvas.findByRole('textbox', { name: /^custom command$/i });
     await expect(onRequest).not.toHaveBeenCalledWith('userSettings.update', expect.anything());
     await userEvent.type(command, 'code-insiders {{workspace}');
     await userEvent.tab();
@@ -572,7 +677,7 @@ export const FailedFactorySave: Story = {
     await userEvent.click(edit);
     const dialog = await within(document.body).findByRole('dialog');
     await expect(within(dialog).getByLabelText(/^Run Command/)).toHaveValue('pnpm dev');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save Configuration' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^save configuration$/i }));
     await within(dialog).findByText('Error: Request rejected: project.saveFactoryConfig');
     await within(document.body).findByText(
       'Failed to save configuration: Request rejected: project.saveFactoryConfig'
@@ -589,12 +694,12 @@ export const ServerLogs: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const link = canvas.getByRole('link', { name: 'View Logs' });
+    const link = canvas.getByRole('link', { name: /^view logs$/i });
     await expect(link).toHaveAttribute('href', '/logs');
     await expect(within(link).queryByRole('button')).not.toBeInTheDocument();
     link.focus();
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Download Log File' })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: /^download log file$/i })).toHaveFocus();
   },
 };
 
@@ -611,7 +716,7 @@ export const RefreshCLIAuthentication: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
     await expect(
-      canvas.queryByRole('button', { name: 'Open Terminal to Log In' })
+      canvas.queryByRole('button', { name: /^open terminal to log in$/i })
     ).not.toBeInTheDocument();
   },
 };
@@ -624,7 +729,9 @@ export const ManagedProviderLoginActions: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Open Terminal to Log In' }));
+    await userEvent.click(
+      await canvas.findByRole('button', { name: /^open terminal to log in$/i })
+    );
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Terminal' }));
     // The dialog fades in.
     await waitFor(() =>

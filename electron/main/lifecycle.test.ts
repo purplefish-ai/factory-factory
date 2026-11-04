@@ -64,6 +64,8 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
   readonly destroy = vi.fn(() => this.close());
   readonly show = vi.fn();
   readonly focus = vi.fn();
+  readonly isMinimized = vi.fn(() => true);
+  readonly restore = vi.fn();
 
   private readonly listeners: Record<'focus' | 'blur' | 'closed', Array<() => void>> = {
     focus: [],
@@ -935,5 +937,37 @@ describe('links leaving the app window', () => {
     const logged = vi.mocked(logger.error).mock.calls.flat().map(String).join('\n');
     expect(logged).toContain('No handler for <url>');
     expect(logged).not.toContain('secret');
+  });
+});
+
+describe('window:focus IPC handler', () => {
+  it('restores, shows and focuses only the trusted main frame', async () => {
+    const { lifecycle, ipcMain } = createTestLifecycle();
+    const window = await lifecycle.createWindow();
+    lifecycle.registerIpcHandlers();
+    const handleMock = vi.mocked(ipcMain.handle);
+    const call = handleMock.mock.calls.find(([channel]) => channel === 'window:focus');
+    expect(call).toBeDefined();
+    const handler = call![1];
+    for (const senderFrame of [{}, null]) {
+      handler({ senderFrame });
+      expect(window?.restore).not.toHaveBeenCalled();
+      expect(window?.show).not.toHaveBeenCalled();
+      expect(window?.focus).not.toHaveBeenCalled();
+    }
+    handler({ senderFrame: window!.webContents.mainFrame });
+    expect(window?.restore).toHaveBeenCalledOnce();
+    expect(window?.show).toHaveBeenCalledOnce();
+    expect(window?.focus).toHaveBeenCalledOnce();
+    const fake = FakeBrowserWindow.instances[0]!;
+    fake.isMinimized.mockReturnValue(false);
+    handler({ senderFrame: window!.webContents.mainFrame });
+    expect(window?.restore).toHaveBeenCalledOnce();
+    expect(window?.focus).toHaveBeenCalledTimes(2);
+    window?.destroy();
+    handler({ senderFrame: window!.webContents.mainFrame });
+    expect(window?.restore).toHaveBeenCalledOnce();
+    expect(window?.show).toHaveBeenCalledTimes(2);
+    expect(window?.focus).toHaveBeenCalledTimes(2);
   });
 });

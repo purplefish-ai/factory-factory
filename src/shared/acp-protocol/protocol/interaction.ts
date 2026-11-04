@@ -48,6 +48,8 @@ export interface UserQuestionRequest {
 export interface PermissionRequest {
   requestId: string;
   toolName: string;
+  /** Provider identity, distinct from the display label. */
+  rawToolName?: string;
   toolInput: Record<string, unknown>;
   elicitation?: 'form' | 'url';
   timestamp: string;

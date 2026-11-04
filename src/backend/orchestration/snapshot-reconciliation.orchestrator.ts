@@ -207,8 +207,10 @@ export class SnapshotReconciliationService {
     allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>
   ): SnapshotUpdateInput {
     const sessionIds = [...(ws.agentSessions?.map((s) => s.id) ?? [])];
-    const sessionSummaries = buildWorkspaceSessionSummaries(ws.agentSessions ?? [], (sessionId) =>
-      this.dependencies.session.getRuntimeSnapshot(sessionId)
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      ws.agentSessions ?? [],
+      (sessionId) => this.dependencies.session.getRuntimeSnapshot(sessionId),
+      allPendingRequests
     );
     const isWorking = hasWorkingSessionSummary(sessionSummaries);
     const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);

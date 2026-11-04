@@ -91,6 +91,8 @@ describe('failed PR attachment streaming', () => {
         runScriptStateMachine: new EventEmitter(),
         sessionDomainService: new EventEmitter(),
         sessionDataService: { findAgentSessionsByWorkspaceId: findSessions },
+        chatEventForwarderService: { getAllPendingRequests: () => new Map() },
+        computePendingRequestType: () => null,
       } as unknown as EventCollectorDependencies;
       collector = createEventCollectorOrchestrator(dependencies);
       collector.start();

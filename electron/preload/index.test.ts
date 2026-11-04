@@ -53,6 +53,9 @@ it('runs the compiled preload in a sandbox and exposes the dialog and clipboard 
     throw new Error('Preload did not expose its API');
   }
   expect(api.isElectron).toBe(true);
+  expect(api.focusWindow).toBeTypeOf('function');
+  await api.focusWindow?.();
+  expect(invoke).toHaveBeenLastCalledWith('window:focus');
   await expect(api.readClipboardImageAsPng()).resolves.toBeNull();
   expect(invoke).toHaveBeenLastCalledWith('clipboard:readImagePng');
   const result = { canceled: false, filePaths: ['/tmp/project'] };

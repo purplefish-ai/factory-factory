@@ -43,6 +43,8 @@ interface BrowserWindowLike {
   isDestroyed(): boolean;
   show(): void;
   focus(): void;
+  isMinimized(): boolean;
+  restore(): void;
 }
 
 interface BrowserWindowConstructorLike {
@@ -516,6 +518,22 @@ export function createElectronLifecycle({
   };
 
   const registerIpcHandlers = (): void => {
+    // Only the app's trusted top-level frame may raise the desktop window.
+    ipcMain.handle('window:focus', (event: IpcMainInvokeEventLike): void => {
+      const currentWindow = resolveMainWindow();
+      if (
+        !(currentWindow && appOrigin) ||
+        event.senderFrame !== currentWindow.webContents.mainFrame
+      ) {
+        return;
+      }
+      if (currentWindow.isMinimized()) {
+        currentWindow.restore();
+      }
+      currentWindow.show();
+      currentWindow.focus();
+    });
+
     ipcMain.handle('dialog:showOpen', (_event: unknown, options: OpenDialogOptions) => {
       const currentWindow = resolveMainWindow();
       if (!currentWindow) {

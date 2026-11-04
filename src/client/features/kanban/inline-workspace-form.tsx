@@ -2,7 +2,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
-import { useCallback, useEffect, useId, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   AgentScheduleFields,
@@ -93,7 +93,6 @@ interface InlineWorkspaceFormProps {
 }
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
-const MAX_PROMPT_TEXTAREA_HEIGHT_PX = 240;
 
 async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
   const files = event.target.files;
@@ -197,6 +196,24 @@ export function InlineWorkspaceForm({
     setScheduledTime,
   } = recovery;
   const { prompt: initialPrompt, attachments, mode, cadence, scheduledTime } = draft;
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (
+      !textarea ||
+      textarea.value !== initialPrompt ||
+      typeof CSS === 'undefined' ||
+      CSS.supports('field-sizing', 'content')
+    ) {
+      return;
+    }
+    // Older browsers need manual sizing. Preserve the scroll that measuring at
+    // auto height clamps, and resize only once after the draft is committed.
+    const top = textarea.scrollTop;
+    const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight + borderHeight, 240)}px`;
+    textarea.scrollTop = top;
+  }, [initialPrompt]);
   const submission = useWorkspaceCreationSubmission(projectId);
   const submitted = useRef<WorkspaceCreationSubmission | null>(null);
   const completeCreation = (
@@ -217,29 +234,10 @@ export function InlineWorkspaceForm({
     );
   };
 
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      const fullHeight = el.scrollHeight;
-      const clampedHeight = Math.min(fullHeight, MAX_PROMPT_TEXTAREA_HEIGHT_PX);
-      el.style.height = `${clampedHeight}px`;
-      el.style.overflowY = fullHeight > MAX_PROMPT_TEXTAREA_HEIGHT_PX ? 'auto' : 'hidden';
-    }
-  }, []);
-
-  const onPromptChange = useCallback(
-    (value: string) => {
-      setInitialPrompt(value);
-      autoResize();
-    },
-    [autoResize, setInitialPrompt]
-  );
-
   const fileMentions = useProjectFileMentions({
     projectId,
     inputRef: textareaRef,
-    onChange: onPromptChange,
+    onChange: setInitialPrompt,
   });
 
   const { data: slashCommandsData, isFetched: slashCommandsFetched } =
@@ -251,15 +249,8 @@ export function InlineWorkspaceForm({
     slashCommands: projectCommands,
     commandsLoaded: slashCommandsFetched,
     inputRef: textareaRef,
-    onChange: onPromptChange,
+    onChange: setInitialPrompt,
   });
-
-  useEffect(() => {
-    // Wait until React has applied a restored value before measuring its height.
-    if (textareaRef.current?.value === initialPrompt) {
-      autoResize();
-    }
-  }, [autoResize, initialPrompt]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onMutate: async (input): Promise<CreateWorkspaceMutationContext> => {
@@ -439,7 +430,6 @@ export function InlineWorkspaceForm({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     slashCommands.handleInputChange(e);
     fileMentions.detectFileMention(e.target.value);
-    autoResize();
   };
 
   return (
@@ -497,7 +487,7 @@ export function InlineWorkspaceForm({
             onDragLeave={pasteDropHandler.handleDragLeave}
             rows={2}
             className={cn(
-              'min-h-16 resize-none text-sm focus-visible:ring-1',
+              'min-h-16 max-h-[240px] overflow-y-auto resize-none text-sm focus-visible:ring-1',
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus

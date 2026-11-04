@@ -39,6 +39,18 @@ describe('getSessionCloseRisk', () => {
     );
   });
 
+  it('flags a session awaiting input as running, since closing stops its prompt', () => {
+    expect(
+      getSessionCloseRisk({
+        summary: summary({
+          runtimePhase: 'idle',
+          activity: 'IDLE',
+          pendingRequestType: 'permission_request',
+        }),
+      })
+    ).toEqual({ running: true, awaitingInput: true, queuedMessageCount: 0 });
+  });
+
   it('uses the persisted status only when no live summary exists', () => {
     expect(getSessionCloseRisk({ persistedStatus: 'RUNNING' })?.running).toBe(true);
     expect(getSessionCloseRisk({ summary: summary({}), persistedStatus: 'RUNNING' })).toBeNull();
@@ -53,6 +65,21 @@ describe('getSessionCloseRisk', () => {
 });
 
 describe('describeSessionCloseRisk', () => {
+  it.each([0, 2])(
+    'explains awaiting input when closing with %s queued messages',
+    (queuedMessageCount) => {
+      const risk = getSessionCloseRisk({
+        summary: summary({ pendingRequestType: 'permission_request' }),
+        queuedMessageCount,
+      });
+      expect(risk).not.toBeNull();
+      const dialog = describeSessionCloseRisk('Chat 1', risk!);
+      expect(dialog.description).toContain('waiting for your input');
+      expect(dialog.description).not.toContain('still working');
+      expect(dialog.confirmText).toBe('Stop and close');
+    }
+  );
+
   it('describes each risk with a matching action', () => {
     expect(describeSessionCloseRisk('Chat 1', { running: true, queuedMessageCount: 0 })).toEqual({
       title: 'Stop and close Chat 1?',

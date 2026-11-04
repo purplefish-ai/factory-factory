@@ -2,6 +2,7 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { isNativeModeConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import { resolveLaunchAccessMode } from '@/shared/session-launch';
 import { getConfigOptionValues } from './session-config-option-helpers';
 import { readSessionLaunchSettings } from './session-launch-settings';
 import { isAppliedAccessMode } from './session-permission-policy';
@@ -22,9 +23,14 @@ export async function applyStartupLaunchAccess(
   if (session.workflow === ADVERSARIAL_REVIEW_WORKFLOW) {
     throw new Error('Adversarial review permissions must remain read-only');
   }
-  const target = launch.accessMode;
   const option = handle.configOptions.find((entry) => isNativeModeConfigOption(entry, 'mode'));
-  if (!option || target === 'plan' || !getConfigOptionValues(option).includes(target)) {
+  const values = option ? getConfigOptionValues(option) : [];
+  // Frozen Claude RELAXED intent has the same compatible native fallback as presets.
+  const target =
+    handle.provider === 'CLAUDE' && launch.accessMode === 'auto'
+      ? (resolveLaunchAccessMode('CLAUDE', 'RELAXED', values) ?? launch.accessMode)
+      : launch.accessMode;
+  if (!option || target === 'plan' || !values.includes(target)) {
     throw new Error('Requested access mode is unavailable for the selected provider/model');
   }
   confirmation?.assertCurrent();

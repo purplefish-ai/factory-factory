@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
+import {
+  getSessionCloseRisk,
+  describeSessionCloseRisk,
+} from '@/client/features/workspace/session-close-guard';
+import {
+  deriveSessionTabRuntime,
+  type WorkspaceSessionRuntimeSummary,
+} from '@/client/features/workspace/session-tab-runtime';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,
@@ -111,6 +118,70 @@ describe('buildSessionSummariesById', () => {
       ...overrides,
     };
   }
+
+  it('retains pending-input status in the selected connected overlay and its close guard', () => {
+    const result = buildSessionSummariesById({
+      workspaceSummaries: [makeSummary({ pendingRequestType: 'permission_request' })],
+      sessions: [makeSession()],
+      selectedSessionId: 'session-1',
+      liveRuntime: makeLiveRuntime(),
+      runtimeSessionId: 'session-1',
+      chatConnected: true,
+    });
+    const summary = result.get('session-1');
+    expect(summary?.pendingRequestType).toBe('permission_request');
+    const risk = getSessionCloseRisk({ summary });
+    expect(risk).toMatchObject({ running: true, awaitingInput: true });
+    expect(describeSessionCloseRisk('Chat 1', risk!).description).toContain(
+      'waiting for your input'
+    );
+  });
+
+  it.each(['user_question', null] as const)(
+    'uses authoritative live pending type %s instead of a stale snapshot',
+    (livePendingRequestType) => {
+      const result = buildSessionSummariesById({
+        workspaceSummaries: [makeSummary({ pendingRequestType: 'plan_approval' })],
+        sessions: [makeSession()],
+        selectedSessionId: 'session-1',
+        liveRuntime: makeLiveRuntime(),
+        runtimeSessionId: 'session-1',
+        chatConnected: true,
+        livePendingRequestType,
+      });
+      expect(result.get('session-1')?.pendingRequestType).toBe(livePendingRequestType);
+      expect(
+        getSessionCloseRisk({ summary: result.get('session-1') })?.awaitingInput ?? false
+      ).toBe(livePendingRequestType !== null);
+    }
+  );
+
+  it.each([
+    { phase: 'loading', processState: 'alive', label: 'Loading' },
+    { phase: 'starting', processState: 'alive', label: 'Starting' },
+    { phase: 'stopping', processState: 'alive', label: 'Stopping' },
+    { phase: 'error', processState: 'alive', label: 'Error' },
+    { phase: 'running', processState: 'stopped', label: 'Stopped' },
+    { phase: 'idle', processState: 'stopped', label: 'Stopped' },
+  ] as const)(
+    'keeps retained pending metadata subordinate to $phase/$processState lifecycle',
+    ({ phase, processState, label }) => {
+      const result = buildSessionSummariesById({
+        workspaceSummaries: [makeSummary()],
+        sessions: [makeSession()],
+        selectedSessionId: 'session-1',
+        liveRuntime: makeLiveRuntime({ phase, processState }),
+        livePendingRequestType: 'permission_request',
+        runtimeSessionId: 'session-1',
+        chatConnected: true,
+      });
+      const summary = result.get('session-1');
+      expect(summary?.pendingRequestType).toBe('permission_request');
+      expect(deriveSessionTabRuntime(summary)).toMatchObject({ label });
+      expect(deriveSessionTabRuntime(summary).awaitingInput).not.toBe(true);
+      expect(getSessionCloseRisk({ summary })?.awaitingInput).not.toBe(true);
+    }
+  );
 
   it('returns snapshot summaries as the base map', () => {
     const result = buildSessionSummariesById({

@@ -4,6 +4,7 @@ import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { memo, useCallback } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useFileTreeExpansion } from './file-tree-context';
 import { FileTreeRow } from './file-tree-row';
@@ -137,7 +138,7 @@ const FileNode = memo(function FileNode({ entry, depth, onFileSelect }: FileNode
 // =============================================================================
 
 export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: FileTreeProps) {
-  const { data, isLoading, error } = trpc.workspace.listFiles.useQuery(
+  const { data, isLoading, error, refetch, isFetching } = trpc.workspace.listFiles.useQuery(
     {
       workspaceId,
       path: path || undefined,
@@ -152,7 +153,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     }
   );
 
-  if (isLoading) {
+  if (isLoading || !(data || error)) {
     return (
       <div
         className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground"
@@ -167,10 +168,21 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
   if (error && !data) {
     return (
       <div
-        className="px-2 py-1 text-sm text-destructive"
+        role="alert"
+        className="flex items-center gap-2 px-2 py-1 text-sm text-destructive"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        Couldn't load folder: {error.message}
+        <span>Couldn't load folder. {error.message}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            void refetch();
+          }}
+          disabled={isFetching}
+        >
+          {isFetching ? 'Retrying…' : 'Retry'}
+        </Button>
       </div>
     );
   }

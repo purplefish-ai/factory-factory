@@ -37,6 +37,8 @@ export interface BuildSessionSummariesOptions {
   sessions: SessionForRuntimeOverlay[] | undefined;
   selectedSessionId: string | null;
   liveRuntime: SessionRuntimeState;
+  /** Undefined preserves the snapshot; null authoritatively clears a resolved request. */
+  livePendingRequestType?: WorkspaceSessionRuntimeSummary['pendingRequestType'];
   /** The session the live runtime was hydrated for (null before hydration). */
   runtimeSessionId: string | null;
   chatConnected: boolean;
@@ -80,6 +82,10 @@ export function buildSessionSummariesById(
     model: existing?.model ?? session.model ?? null,
     provider: existing?.provider ?? session.provider,
     persistedStatus: existing?.persistedStatus ?? session.status,
+    pendingRequestType:
+      options.livePendingRequestType === undefined
+        ? (existing?.pendingRequestType ?? null)
+        : options.livePendingRequestType,
     runtimePhase: liveRuntime.phase,
     processState: liveRuntime.processState,
     activity: liveRuntime.activity,

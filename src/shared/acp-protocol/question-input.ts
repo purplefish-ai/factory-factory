@@ -51,6 +51,11 @@ export function hasAskUserQuestionInput(
   return getAskUserQuestions(input).length > 0;
 }
 
+/** Provider identity wins over display titles and provider-shaped tool arguments. */
+export function isMcpToolRequest(request: { toolName: string; rawToolName?: string }): boolean {
+  return !!request.rawToolName?.startsWith('mcp__') || request.toolName.startsWith('mcp__');
+}
+
 /**
  * Returns true when a pending request should be treated as a user-question prompt.
  */
@@ -61,7 +66,7 @@ export function isUserQuestionRequest(request: {
 }): boolean {
   // An MCP tool may use both a question-shaped argument and a question-like
   // display title without being a provider's interactive question request.
-  if (request.rawToolName?.startsWith('mcp__') || request.toolName.startsWith('mcp__')) {
+  if (isMcpToolRequest(request)) {
     return false;
   }
   return hasAskUserQuestionInput(request.input);
