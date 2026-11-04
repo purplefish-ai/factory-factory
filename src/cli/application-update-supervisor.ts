@@ -126,9 +126,12 @@ export class ApplicationUpdateSupervisor {
       error: `Could not update Factory Factory. ${message}`,
     });
     await this.persistence;
-    if (!stopped && this.prepared) {
+    if (this.prepared) {
       await this.prepared.dispose();
       this.prepared = null;
+      this.restoreDatabase = undefined;
+      this.setStatus({ ...this.status });
+      await this.persistence;
     }
   }
 

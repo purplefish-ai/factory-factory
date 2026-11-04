@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -13,7 +13,8 @@ const manifestSchema = z.looseObject({
 });
 const runtimeSchema = z.object({ version: versionSchema });
 const manifestPath = join(process.cwd(), 'package.json');
-const manifest = manifestSchema.parse(JSON.parse(readFileSync(manifestPath, 'utf8')));
+const originalManifest = readFileSync(manifestPath);
+const manifest = manifestSchema.parse(JSON.parse(originalManifest.toString('utf8')));
 const fromApp = createRequire(manifestPath);
 
 function runtimeManifestPath(fromAdapter, runtime) {
@@ -57,4 +58,10 @@ manifest.factoryFactoryRuntimeVersions = {
   ),
   codex: resolvedRuntimeVersion('@agentclientprotocol/codex-acp', '@openai/codex'),
 };
+// Keep the first checkout bytes across retries after a failed or interrupted pack.
+// The package's files allowlist excludes this recovery file from the artifact.
+const backupPath = join(process.cwd(), '.package.json.runtime-metadata-backup');
+if (!existsSync(backupPath)) {
+  writeFileSync(backupPath, originalManifest, { flag: 'wx' });
+}
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

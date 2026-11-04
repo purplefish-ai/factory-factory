@@ -359,3 +359,21 @@ describe('production serve update integration', () => {
     expect(onReady).toHaveBeenCalledOnce();
   });
 });
+
+it('disables automatic installation while another app server is running', async () => {
+  mocks.otherServers = true;
+  start();
+  const running = await backend();
+  running.child.emit('message', { type: 'update-hello' });
+  expect(running.messages).toContainEqual(
+    expect.objectContaining({ type: 'update-capabilities', automaticUpdate: false })
+  );
+  await ready(running);
+  running.child.emit('message', { type: 'update-request', version: '0.5.4' });
+  running.child.emit('message', { type: 'update-ready' });
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(running.messages).toContainEqual({
+    type: 'update-status',
+    status: expect.objectContaining({ phase: 'failed', error: expect.stringMatching(/manual/i) }),
+  });
+});

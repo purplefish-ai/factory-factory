@@ -925,7 +925,7 @@ export function recoverStaleProvisioningWorkspace(
   reason: string
 ): Promise<boolean> {
   // A live initializer owns the path until it settles; the next poll can re-check it.
-  if (workspaceInitializationTails.has(workspaceId)) {
+  if (applicationUpdateAdmission.isClosed() || workspaceInitializationTails.has(workspaceId)) {
     return Promise.resolve(false);
   }
 

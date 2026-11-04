@@ -68,7 +68,8 @@ export class ApplicationUpdateInstaller {
   }
 
   async isSupported(): Promise<boolean> {
-    if ((this.options.platform ?? process.platform) === 'win32') {
+    const platform = this.options.platform ?? process.platform;
+    if (platform !== 'darwin' && platform !== 'linux') {
       return false;
     }
     try {

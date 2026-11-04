@@ -251,12 +251,10 @@ async function finishRecovery(state: Journal, stage: string | undefined, rolledB
   if (stage && !rolledBack) {
     await rm(stage, { recursive: true, force: true });
   }
-  if (stage) {
-    await rm(join(dirname(state.packageRoot), '.factory-factory-update-lock'), {
-      recursive: true,
-      force: true,
-    });
-  }
+  await rm(join(dirname(state.packageRoot), '.factory-factory-update-lock'), {
+    recursive: true,
+    force: true,
+  });
 }
 
 /** Returns true when the caller must relaunch the restored CLI before migrations. */

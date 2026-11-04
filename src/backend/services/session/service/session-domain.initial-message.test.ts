@@ -77,7 +77,7 @@ it('republishes an undelivered task after its queue is destructively cleared', (
   expect(domain.getQueueSnapshot('session-1')).toEqual([retry]);
 });
 
-it('counts queued and initial work and preserves rejected input during update preparation', () => {
+it('counts queued and initial work and rejects new input during update preparation', () => {
   expect(domain.hasPendingUpdateWork()).toBe(false);
   domain.storeInitialMessage('s1', 'Initial');
   expect(domain.hasPendingUpdateWork()).toBe(true);

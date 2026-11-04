@@ -6,14 +6,14 @@ import {
   type ApplicationUpdates,
   type ApplicationUpdateStatus,
   type UpdateNotice,
+  type UpdateSupervisorMessage,
   releaseVersionSchema,
   updateSupervisorMessageSchema,
 } from '@/shared/application-updates';
 
 const JOB = 'application-update-idle';
-type SupervisorMessage = ReturnType<typeof updateSupervisorMessageSchema.parse>;
 export interface UpdateSupervisorPort {
-  send(message: SupervisorMessage): void;
+  send(message: UpdateSupervisorMessage): void;
   subscribe(listener: (message: unknown) => void): () => void;
 }
 interface Dependencies {
@@ -144,7 +144,12 @@ export class ApplicationUpdateService {
       );
     }
     if (this.status.phase === 'waiting') {
-      this.dependencies.supervisor?.send({ type: 'update-cancel' });
+      try {
+        this.dependencies.supervisor?.send({ type: 'update-cancel' });
+      } catch (error) {
+        this.fail(error);
+        return Promise.resolve({ ...this.status });
+      }
       // Readiness can race the parent's preparation. Only its idle acknowledgement
       // may reopen admission once update-ready has been sent.
       if (!this.ready) {

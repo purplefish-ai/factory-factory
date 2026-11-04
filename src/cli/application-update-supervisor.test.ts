@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { ApplicationUpdateSupervisor } from './application-update-supervisor';
 function fixture() {
   const prepared = {
@@ -90,7 +91,7 @@ it('rejects unsupported installations and arbitrary version arguments', () => {
   const { options } = fixture();
   const supervisor = new ApplicationUpdateSupervisor({ ...options, automaticUpdate: false });
   expect(() => supervisor.request('0.5.4')).toThrow(/manual/i);
-  expect(() => supervisor.request('$(touch injected)')).toThrow();
+  expect(() => supervisor.request('$(touch injected)')).toThrow(z.ZodError);
 });
 it('retains the backup and reports recovery failure instead of destroying it', async () => {
   const { supervisor, options, prepared } = fixture();
@@ -134,4 +135,16 @@ it('requests recovery restart when graceful shutdown exits unsuccessfully', asyn
   expect(supervisor.status.phase).toBe('failed');
   expect(supervisor.restartRequired).toBe(true);
   expect(prepared.activate).not.toHaveBeenCalled();
+});
+
+it('disposes an unactivated replacement after shutdown failure without needing another backend start', async () => {
+  const { options, prepared } = fixture();
+  options.backupDatabase.mockRejectedValue(new Error('snapshot failed'));
+  const supervisor = new ApplicationUpdateSupervisor(options);
+  supervisor.request('0.5.4');
+  await supervisor.ready();
+  expect(supervisor.restartRequired).toBe(true);
+  expect(prepared.activate).not.toHaveBeenCalled();
+  expect(prepared.dispose).toHaveBeenCalledOnce();
+  expect(supervisor.recoveryPath).toBeUndefined();
 });

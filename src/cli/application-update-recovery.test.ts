@@ -143,15 +143,20 @@ describe('application update recovery journal', () => {
     expect(await readFile(f.databasePath, 'utf8')).toBe('migrated database');
   });
 
-  it.each(['packageRoot', 'databasePath', 'recoveryPath', 'databaseBackup'])(
+  it.each([
+    ['packageRoot', 'Update journal installation or database path does not match this launch.'],
+    ['databasePath', 'Update journal installation or database path does not match this launch.'],
+    ['recoveryPath', 'Update journal recovery path is not a safe installation staging directory.'],
+    ['databaseBackup', 'Update journal database backup path is not a recorded staging snapshot.'],
+  ])(
     'rejects a mismatched or unsafe %s without modifying files',
-    async (field) => {
+    async (field, expectedMessage) => {
       const f = await fixture();
       await f.previousPackage();
       await f.writeState({ [field]: join(f.prefix, 'unrelated') });
       await expect(
         recoverInterruptedApplicationUpdate(f.packageRoot, f.databasePath)
-      ).rejects.toThrow(/path|installation|database|journal/i);
+      ).rejects.toThrow(expectedMessage);
       expect(await readFile(f.databasePath, 'utf8')).toBe('migrated database');
       await expect(access(f.recoveryPath)).resolves.toBeUndefined();
     }
@@ -251,4 +256,18 @@ describe('application update recovery journal', () => {
     await recoverInterruptedApplicationUpdate(f.packageRoot, f.databasePath);
     expect(await readFile(f.databasePath, 'utf8')).toBe('migrated database');
   });
+});
+
+it('removes the installation lock after interrupted preparation before a stage was recorded', async () => {
+  const f = await fixture();
+  const lock = join(dirname(f.packageRoot), '.factory-factory-update-lock');
+  await mkdir(lock);
+  await f.writeState({
+    status: { phase: 'preparing', targetVersion: '0.5.5' },
+    recoveryPath: undefined,
+    databaseBackup: undefined,
+  });
+  expect(await recoverInterruptedApplicationUpdate(f.packageRoot, f.databasePath)).toBe(false);
+  await expect(access(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await readFile(f.databasePath, 'utf8')).toBe('migrated database');
 });

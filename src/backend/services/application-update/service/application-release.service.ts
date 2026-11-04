@@ -3,7 +3,11 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { toError } from '@/backend/lib/error-utils';
+import { createLogger } from '@/backend/services/logger.service';
 import { releaseVersionSchema, type UpdateNotice } from '@/shared/application-updates';
+
+const logger = createLogger('application-release');
 
 const stableVersionSchema = releaseVersionSchema.refine((version) =>
   version.split('.').every((part) => Number.isSafeInteger(Number(part)))
@@ -28,6 +32,7 @@ interface Dependencies {
   fetch?: typeof fetch;
   now?: () => number;
   loadInstallation?: () => InstalledApplication;
+  onError?: (error: unknown) => void;
 }
 interface ReleaseCheck {
   currentVersion: string;
@@ -127,6 +132,7 @@ export class ApplicationReleaseService {
   private readonly installed: InstalledApplication;
   private readonly fetch: typeof fetch;
   private readonly now: () => number;
+  private readonly onError: (error: unknown) => void;
   private latest: Release | undefined;
   private expiresAt = 0;
   private pending: Promise<void> | undefined;
@@ -135,6 +141,9 @@ export class ApplicationReleaseService {
     this.installed = (dependencies.loadInstallation ?? readInstalledApplication)();
     this.fetch = dependencies.fetch ?? globalThis.fetch;
     this.now = dependencies.now ?? Date.now;
+    this.onError =
+      dependencies.onError ??
+      ((error) => logger.debug('Release check unavailable', { error: toError(error).message }));
   }
 
   getPackageRoot(): string {
@@ -196,9 +205,14 @@ export class ApplicationReleaseService {
       };
       this.latest = await Promise.race([request(), timeout]);
       this.expiresAt = this.now() + 60 * 60 * 1000;
-    } catch {
+    } catch (error) {
       // Keep the last confirmed release while offline; checks never create an error banner.
       this.expiresAt = this.now() + 5 * 60 * 1000;
+      try {
+        this.onError(error);
+      } catch {
+        // Diagnostics must not affect release checks or their retry backoff.
+      }
     } finally {
       clearTimeout(timer);
     }

@@ -1,11 +1,17 @@
 import { z } from 'zod';
 
 export const releaseVersionSchema = z.string().regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
-export const applicationUpdateStatusSchema = z.object({
-  phase: z.enum(['idle', 'waiting', 'preparing', 'restarting', 'failed']),
-  targetVersion: releaseVersionSchema.optional(),
-  error: z.string().optional(),
-});
+export const applicationUpdateStatusSchema = z
+  .object({
+    phase: z.enum(['idle', 'waiting', 'preparing', 'restarting', 'failed']),
+    targetVersion: releaseVersionSchema.optional(),
+    error: z.string().optional(),
+  })
+  .refine(
+    (status) =>
+      status.phase === 'idle' || status.phase === 'failed' || status.targetVersion !== undefined,
+    { message: 'An active update requires a target version.', path: ['targetVersion'] }
+  );
 export type ApplicationUpdateStatus = z.infer<typeof applicationUpdateStatusSchema>;
 export interface UpdateNotice {
   id: 'factory-factory' | 'claude' | 'codex';
@@ -33,3 +39,5 @@ export const updateSupervisorMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('update-status'), status: applicationUpdateStatusSchema }),
 ]);
+
+export type UpdateSupervisorMessage = z.infer<typeof updateSupervisorMessageSchema>;

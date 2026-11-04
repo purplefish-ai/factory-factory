@@ -52,7 +52,9 @@ export const Waiting: Story = {
   args: { updates: { ...updates, status: { phase: 'waiting', targetVersion: '0.5.4' } } },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('status')).toHaveTextContent('Waiting for active agent work');
+    await expect(canvas.getByRole('status')).toHaveTextContent(
+      'Waiting for active agent work to finish before updating.'
+    );
     await userEvent.click(canvas.getByRole('button', { name: 'Cancel update' }));
     await expect(args.onCancel).toHaveBeenCalledOnce();
   },
@@ -60,11 +62,22 @@ export const Waiting: Story = {
 export const Preparing: Story = {
   args: { updates: { ...updates, status: { phase: 'preparing', targetVersion: '0.5.4' } } },
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByRole('button', { name: 'Updating…' })).toBeDisabled();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(
+      'Preparing the update. Factory Factory will restart shortly.'
+    );
+    await expect(canvas.getByRole('button', { name: 'Updating…' })).toBeDisabled();
   },
 };
 export const Restarting: Story = {
   args: { updates: { ...updates, status: { phase: 'restarting', targetVersion: '0.5.4' } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(
+      'Restarting Factory Factory. Reconnecting automatically…'
+    );
+    await expect(canvas.getByRole('button', { name: 'Restarting…' })).toBeDisabled();
+  },
 };
 export const Failed: Story = {
   args: {

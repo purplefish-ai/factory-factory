@@ -13,6 +13,7 @@
  */
 
 import 'dotenv/config';
+import type { UpdateSupervisorMessage } from '@/shared/application-updates';
 import { createApplication } from './app-context';
 import { registerFatalErrorHandlers } from './fatal-error-handlers';
 import { toError } from './lib/error-utils';
@@ -32,7 +33,13 @@ serverInstance
   .start()
   .then(() => {
     if (process.connected && process.send) {
-      process.send({ type: 'update-backend-ready' });
+      process.send({ type: 'update-backend-ready' } satisfies UpdateSupervisorMessage, (error) => {
+        if (error) {
+          logger.warn('Failed to notify update supervisor that backend is ready', {
+            error: error.message,
+          });
+        }
+      });
     }
   })
   .catch((error) => {

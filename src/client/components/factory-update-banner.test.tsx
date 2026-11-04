@@ -89,21 +89,23 @@ describe('application update notices', () => {
     expect(html).toContain('Restart Factory Factory');
   });
 
-  it.each(['waiting', 'preparing', 'restarting'] as const)(
-    'shares %s progress across providers',
-    (phase) => {
-      const html = renderToStaticMarkup(
-        <FactoryUpdateBannerContent
-          {...callbacks}
-          updates={{ ...updates, status: { phase, targetVersion: '0.5.4' } }}
-        />
-      );
-      expect(html).toContain('Claude');
-      expect(html).toContain('Updates with Factory Factory');
-      expect(html.includes('>Cancel update</button>')).toBe(phase === 'waiting');
-      expect(html).not.toContain('>Update</button>');
-    }
-  );
+  it.each([
+    ['waiting', 'Waiting for active agent work to finish before updating.'],
+    ['preparing', 'Preparing the update. Factory Factory will restart shortly.'],
+    ['restarting', 'Restarting Factory Factory. Reconnecting automatically…'],
+  ] as const)('shares %s progress across providers', (phase, progress) => {
+    const html = renderToStaticMarkup(
+      <FactoryUpdateBannerContent
+        {...callbacks}
+        updates={{ ...updates, status: { phase, targetVersion: '0.5.4' } }}
+      />
+    );
+    expect(html).toContain(progress);
+    expect(html).toContain('Claude');
+    expect(html).toContain('Updates with Factory Factory');
+    expect(html.includes('>Cancel update</button>')).toBe(phase === 'waiting');
+    expect(html).not.toContain('>Update</button>');
+  });
 
   it('offers retry and dismissal after installation fails', () => {
     const html = renderToStaticMarkup(
@@ -156,6 +158,42 @@ describe('application update notices', () => {
         container.querySelector<HTMLButtonElement>('[aria-label="Dismiss update error"]')?.click()
       );
       expect(container.querySelector('[aria-label="Application updates"]')).toBeNull();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it('retries the recovery target after repeated request failures without release notices', () => {
+    mocks.data = {
+      ...updates,
+      notices: [],
+      status: { phase: 'failed', targetVersion: '0.5.4', error: 'Recovery failed' },
+    };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      for (const message of ['First retry failed', 'Second retry failed']) {
+        flushSync(() => mocks.requestOptions?.onError({ message }));
+        expect(container.querySelector('[role="alert"]')?.textContent).toBe(message);
+        flushSync(() =>
+          [...container.querySelectorAll('button')]
+            .find((button) => button.textContent === 'Retry update')
+            ?.click()
+        );
+        expect(mocks.request).toHaveBeenLastCalledWith({ version: '0.5.4' });
+      }
+      expect(mocks.request).toHaveBeenCalledTimes(2);
+      flushSync(() =>
+        mocks.requestOptions?.onSuccess({ phase: 'waiting', targetVersion: '0.5.5' })
+      );
+      flushSync(() => mocks.requestOptions?.onError({ message: 'New target failed' }));
+      flushSync(() =>
+        [...container.querySelectorAll('button')]
+          .find((button) => button.textContent === 'Retry update')
+          ?.click()
+      );
+      expect(mocks.request).toHaveBeenLastCalledWith({ version: '0.5.5' });
     } finally {
       flushSync(() => root.unmount());
     }
@@ -346,6 +384,39 @@ describe('application update notices', () => {
     }
   });
 
+  it('allows a new update request to reload a previously loaded target once', () => {
+    const reload = vi.fn();
+    vi.stubGlobal('window', { localStorage, sessionStorage, location: { reload } });
+    expect(claimUpdateReload('0.5.9', '0.5.9')).toBe(true);
+    mocks.data = {
+      ...updates,
+      currentVersion: '0.5.9',
+      notices: [],
+      status: { phase: 'failed', targetVersion: '0.5.9', error: 'Reinstall required' },
+    };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      flushSync(() =>
+        [...container.querySelectorAll('button')]
+          .find((button) => button.textContent === 'Retry update')
+          ?.click()
+      );
+      flushSync(() =>
+        mocks.requestOptions?.onSuccess({ phase: 'restarting', targetVersion: '0.5.9' })
+      );
+      mocks.data = { ...updates, currentVersion: '0.5.9', notices: [], status: { phase: 'idle' } };
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      expect(reload).toHaveBeenCalledOnce();
+      mocks.data = { ...mocks.data };
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      expect(reload).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('renders safely when browser storage is blocked', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked');
@@ -379,6 +450,13 @@ describe('update reconnect reload protection', () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+
+  it('clears an old target guard after observing a different running version', () => {
+    expect(claimUpdateReload('0.5.10', '0.5.10')).toBe(true);
+    expect(claimUpdateReload('0.5.9', '0.5.10')).toBe(false);
+    expect(claimUpdateReload('0.5.10', '0.5.10')).toBe(true);
+    expect(claimUpdateReload('0.5.10', '0.5.10')).toBe(false);
   });
 
   it('reloads only once after the running version reaches the requested target', () => {

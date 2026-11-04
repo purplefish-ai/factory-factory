@@ -11,6 +11,9 @@ afterEach(async () => {
 function setup(manualCommand?: string, withSupervisor = true) {
   const ipc = new EventEmitter();
   const sent: unknown[] = [];
+  const send = vi.fn((message: unknown) => {
+    sent.push(message);
+  });
   const release = {
     check: vi.fn(async () => ({
       currentVersion: '1.0.0',
@@ -35,9 +38,7 @@ function setup(manualCommand?: string, withSupervisor = true) {
     jobs,
     supervisor: withSupervisor
       ? {
-          send: (message) => {
-            sent.push(message);
-          },
+          send,
           subscribe: (listener) => {
             ipc.on('message', listener);
             return () => ipc.off('message', listener);
@@ -60,6 +61,7 @@ function setup(manualCommand?: string, withSupervisor = true) {
     gate,
     jobs,
     sent,
+    send,
     emit,
     supported,
     setBusy: (value: boolean) => {
@@ -88,7 +90,9 @@ describe('application update orchestration', () => {
   it('accepts only the advertised stable app release and coalesces concurrent requests', async () => {
     const { service, supported, sent } = setup();
     supported();
-    await expect(service.requestUpdate('1.1.0; malicious')).rejects.toThrow();
+    await expect(service.requestUpdate('1.1.0; malicious')).rejects.toThrow(
+      'Invalid release version'
+    );
     await expect(service.requestUpdate('2.0.0')).rejects.toThrow('advertised');
     const statuses = await Promise.all([
       service.requestUpdate('1.1.0'),
@@ -184,3 +188,30 @@ it('retries a previously validated failed target when release metadata is unavai
   });
   expect(sent).toContainEqual({ type: 'update-request', version: '1.1.0' });
 });
+
+it('releases admission and returns a failed status when cancellation cannot reach the supervisor', async () => {
+  const { service, supported, emit, gate, send } = setup();
+  supported();
+  await service.requestUpdate('1.1.0');
+  emit({ type: 'update-status', status: { phase: 'waiting', targetVersion: '1.1.0' } });
+  service.pollIdle();
+  expect(gate.isClosed()).toBe(true);
+  send.mockImplementationOnce(() => {
+    throw new Error('Update supervisor disconnected.');
+  });
+  await expect(service.cancelUpdate()).resolves.toEqual({
+    phase: 'failed',
+    targetVersion: '1.1.0',
+    error: 'Update supervisor disconnected.',
+  });
+  expect(gate.isClosed()).toBe(false);
+});
+
+it.each(['waiting', 'preparing', 'restarting'])(
+  'ignores a %s status without a target at the IPC boundary',
+  async (phase) => {
+    const { service, emit } = setup();
+    emit({ type: 'update-status', status: { phase } });
+    expect((await service.checkUpdates()).status).toEqual({ phase: 'idle' });
+  }
+);

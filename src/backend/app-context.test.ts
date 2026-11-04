@@ -25,6 +25,9 @@ describe('createApplication', () => {
     expect(configureAdmission).toHaveBeenCalledExactlyOnceWith(
       graph.services.applicationUpdateAdmission
     );
+    expect(configureAdmission.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(graph.lifecycle.wireDomainBridges).mock.invocationCallOrder[0] ?? 0
+    );
   });
   it('binds agent intake to its own application service graph', () => {
     const { services } = createDefaultApplicationDependencies();

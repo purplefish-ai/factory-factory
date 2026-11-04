@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { ApplicationUpdateInstaller } from './application-update-installer';
 
 const roots: string[] = [];
@@ -71,9 +72,9 @@ it('stages a pinned release without changing the running installation', async ()
 });
 it('rejects versions and mismatched candidates before activation', async () => {
   const { installer, root } = await fixture();
-  await expect(
-    installer.prepare('latest;echo bad', new AbortController().signal)
-  ).rejects.toThrow();
+  await expect(installer.prepare('latest;echo bad', new AbortController().signal)).rejects.toThrow(
+    z.ZodError
+  );
   await expect(installer.prepare('0.5.5', new AbortController().signal)).rejects.toThrow(
     /version|release/i
   );
@@ -103,7 +104,7 @@ it('refuses unsupported platforms and a different package root', async () => {
     }).isSupported()
   ).toBe(false);
 });
-it('serializes replacement of the same global installation across CLI processes', async () => {
+it('rejects a second preparation while the installation lock is held', async () => {
   const { installer } = await fixture();
   const prepared = await installer.prepare('0.5.4', new AbortController().signal);
   await expect(installer.prepare('0.5.4', new AbortController().signal)).rejects.toThrow(
@@ -113,3 +114,19 @@ it('serializes replacement of the same global installation across CLI processes'
   const retry = await installer.prepare('0.5.4', new AbortController().signal);
   await retry.dispose();
 });
+
+it.each(['freebsd', 'openbsd', 'aix', 'sunos'] as const)(
+  'uses manual updates on unsupported platform %s',
+  async (platform) => {
+    const { root, run } = await fixture();
+    expect(
+      await new ApplicationUpdateInstaller({
+        packageRoot: root,
+        env: {},
+        run,
+        platform,
+      }).isSupported()
+    ).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  }
+);

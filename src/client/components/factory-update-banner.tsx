@@ -36,8 +36,19 @@ function removeStorage(kind: 'localStorage' | 'sessionStorage', key: string) {
   }
 }
 
+function resetUpdateReload(targetVersion: string) {
+  reloadedWithoutStorage.delete(targetVersion);
+  if (readStorage('sessionStorage', RELOADED_TARGET_KEY) === targetVersion) {
+    removeStorage('sessionStorage', RELOADED_TARGET_KEY);
+  }
+}
+
 export function claimUpdateReload(currentVersion: string, targetVersion: string): boolean {
-  if (currentVersion !== targetVersion || reloadedWithoutStorage.has(targetVersion)) {
+  if (currentVersion !== targetVersion) {
+    resetUpdateReload(targetVersion);
+    return false;
+  }
+  if (reloadedWithoutStorage.has(targetVersion)) {
     return false;
   }
   if (readStorage('sessionStorage', RELOADED_TARGET_KEY) === targetVersion) {
@@ -213,8 +224,10 @@ export function FactoryUpdateBanner() {
   const reportError = (error: { message: string }) => {
     setLocalStatus({
       phase: 'failed',
-      targetVersion: confirmed?.notices.find((notice) => notice.id === 'factory-factory')
-        ?.latestVersion,
+      targetVersion:
+        localStatus?.targetVersion ??
+        confirmed?.status.targetVersion ??
+        confirmed?.notices.find((notice) => notice.id === 'factory-factory')?.latestVersion,
       error: error.message,
     });
   };
@@ -274,6 +287,7 @@ export function FactoryUpdateBanner() {
           confirmed.notices.find((notice) => notice.id === 'factory-factory')?.latestVersion ??
           status.targetVersion;
         if (version) {
+          resetUpdateReload(version);
           const errorKey = dismissalKey('update-error', version);
           removeStorage('localStorage', errorKey);
           setDismissed((previous) => new Set([...previous].filter((key) => key !== errorKey)));

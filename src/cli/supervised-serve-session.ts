@@ -14,6 +14,7 @@ import {
   hasOtherApplicationServers,
 } from './application-update-installer';
 import { getUpdateStatePath, persistApplicationUpdateState } from './application-update-recovery';
+import { stopBackendForUpdate } from './application-update-shutdown';
 import { ApplicationUpdateSupervisor } from './application-update-supervisor';
 import { runServeSession } from './serve-session';
 
@@ -97,8 +98,10 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         packageRoot: options.projectRoot,
         databasePath: options.databasePath,
         status,
-        recoveryPath: supervisor.recoveryPath ?? preparationRecoveryPath,
-        databaseBackup: snapshotExists ? backupPath : undefined,
+        recoveryPath:
+          supervisor.recoveryPath ??
+          (status.phase === 'preparing' ? preparationRecoveryPath : undefined),
+        databaseBackup: snapshotExists && supervisor.recoveryPath ? backupPath : undefined,
       });
     },
     isBackendStopped: () => !!backend && (backend.exitCode !== null || backend.signalCode !== null),
@@ -107,34 +110,7 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         throw new Error('The backend exited before it could prepare the update.');
       }
       expectedExit = true;
-      const child = backend;
-      gracefulExit = new Promise<void>((resolve, reject) => {
-        const deadline = setTimeout(() => {
-          child.kill('SIGKILL');
-        }, 120_000);
-        const exited = (code: number | null) => {
-          clearTimeout(deadline);
-          child.off('error', failed);
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`Backend shutdown failed (${code}). No update was activated.`));
-          }
-        };
-        const failed = (error: Error) => {
-          clearTimeout(deadline);
-          child.off('exit', exited);
-          reject(error);
-        };
-        child.once('exit', exited);
-        child.once('error', failed);
-        if (!child.kill('SIGTERM')) {
-          clearTimeout(deadline);
-          child.off('exit', exited);
-          child.off('error', failed);
-          reject(new Error('Could not request graceful backend shutdown.'));
-        }
-      });
+      gracefulExit = stopBackendForUpdate(backend);
       await gracefulExit;
     },
     backupDatabase: async () => {

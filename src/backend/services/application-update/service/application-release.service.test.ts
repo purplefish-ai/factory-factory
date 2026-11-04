@@ -141,6 +141,34 @@ describe('application release detection', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
+  it('reports failures diagnostically without interrupting cached notices or retry backoff', async () => {
+    let time = 0;
+    const failure = new Error('offline');
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(latest))
+      .mockRejectedValue(failure);
+    const onError = vi.fn(() => {
+      throw new Error('Diagnostic sink failed');
+    });
+    const checker = new ApplicationReleaseService({
+      fetch: fetcher,
+      now: () => time,
+      loadInstallation: () => installation,
+      onError,
+    });
+    const confirmed = await checker.check();
+    time = 3_600_000;
+    await expect(checker.check()).resolves.toEqual(confirmed);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    time += 299_999;
+    await expect(checker.check()).resolves.toEqual(confirmed);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    time += 1;
+    await checker.check();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
     { version: '0.5.4-beta.1' },
     { version: '01.5.4' },

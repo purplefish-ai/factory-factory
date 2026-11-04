@@ -3,7 +3,6 @@
 import './serve-node-check';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -12,6 +11,7 @@ import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getCurrentProcessEnv, getLogFilePath } from '@/backend/services/logger.service';
+import { registerApplicationServerMarker } from './application-server-marker';
 import { ApplicationUpdateInstaller } from './application-update-installer';
 import { recoverInterruptedApplicationUpdate } from './application-update-recovery';
 import { registerBuildCommand } from './build-command';
@@ -221,7 +221,7 @@ program
     ensureDataDir(databasePath);
 
     const { frontendPort, backendPort } = await resolvePortsOrExit(options, verbose);
-    let runningMarker: string | undefined;
+    let releaseRunningMarker: (() => void) | undefined;
     if (
       !options.dev &&
       (await new ApplicationUpdateInstaller({
@@ -229,23 +229,22 @@ program
         env: getCurrentProcessEnv(),
       }).isSupported())
     ) {
-      runningMarker = join(dirname(PROJECT_ROOT), `.factory-factory-running-${process.pid}`);
-      await mkdir(runningMarker, { recursive: true });
+      releaseRunningMarker = registerApplicationServerMarker(
+        join(dirname(PROJECT_ROOT), `.factory-factory-running-${process.pid}`)
+      );
     }
     try {
       if (!options.dev && (await recoverInterruptedApplicationUpdate(PROJECT_ROOT, databasePath))) {
-        if (runningMarker) {
-          await rm(runningMarker, { recursive: true, force: true });
-        }
+        releaseRunningMarker?.();
         const restarted = spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit' });
         process.exit(restarted.status ?? 1);
       }
       await runMigrationsOrExit(databasePath, verbose);
     } catch (error) {
-      if (runningMarker) {
-        await rm(runningMarker, { recursive: true, force: true });
-      }
-      throw error;
+      releaseRunningMarker?.();
+      console.error(chalk.red(`\n  ✗ ${error instanceof Error ? error.message : String(error)}`));
+      process.exitCode = 1;
+      return;
     }
 
     const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
@@ -299,6 +298,7 @@ program
     } finally {
       unregisterShutdownHandlers();
       removeServePortFile(portFilePath);
+      releaseRunningMarker?.();
     }
   });
 
