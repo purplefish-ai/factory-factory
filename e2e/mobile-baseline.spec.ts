@@ -220,31 +220,36 @@ for (const viewport of mobileViewports) {
 }
 
 for (const width of [320, 375, 390, 412, 1280]) {
-  test(`settings menu scrolls without widening the page at ${width}px`, async ({ page }) => {
+  test(`settings navigation wraps without widening the page at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/__mobile-baseline?surface=settings');
-    const tabs = page.getByRole('tablist');
-    await expect(tabs).toBeVisible();
-    // Check both document and page container: an ancestor can absorb overflow.
+    const sections = page.getByRole('navigation', { name: 'Settings sections' });
+    await expect(sections).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-    expect(await tabs.evaluate((list) => list.closest('.overflow-y-auto')?.scrollWidth)).toBe(
+    expect(await sections.evaluate((list) => list.closest('.overflow-y-auto')?.scrollWidth)).toBe(
       width
     );
-    const scroller = tabs.locator('..');
-    if (width < 500) {
-      expect(await scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
-      await scroller.evaluate((el) => {
-        el.scrollLeft = el.scrollWidth;
-      });
-      expect(await scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    for (const name of [
+      'General',
+      'Workspace',
+      'Integrations',
+      'Appearance',
+      'Voice',
+      'System',
+      'Server logs',
+      'Project settings',
+    ]) {
+      await expect(sections.getByRole('link', { name, exact: true })).toBeInViewport();
     }
-    const voiceTab = page.getByRole('tab', { name: 'Voice Mode' });
-    await voiceTab.click();
-    await expect(voiceTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('tabpanel')).toHaveText('Voice settings content');
-    await page.getByRole('tab', { name: 'General Settings' }).focus();
-    await expect(page.getByRole('tab', { name: 'General Settings' })).toBeInViewport();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await expect(sections.getByRole('link', { name: 'Voice', exact: true })).toHaveAttribute(
+      'href',
+      '/admin/voice'
+    );
+    await expect(
+      sections.getByRole('link', { name: 'Project settings', exact: true })
+    ).toHaveAttribute('href', '/admin/project');
+    await sections.getByRole('link', { name: 'General', exact: true }).focus();
+    await expect(sections.getByRole('link', { name: 'General', exact: true })).toBeFocused();
   });
 }
 

@@ -8,14 +8,14 @@ interface WorkspacesBackLinkProps {
 
 /**
  * Reusable component for linking back to the workspaces board.
- * Displays "Workspaces" with an arrow icon, responsive to screen size.
+ * Keeps the Board destination accessible at every screen size.
  */
 export function WorkspacesBackLink({ projectSlug }: WorkspacesBackLinkProps) {
   return (
     <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
       <Link to={`/projects/${projectSlug}/workspaces`}>
         <ArrowLeftIcon className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Workspaces</span>
+        <span>Back to Board</span>
       </Link>
     </Button>
   );

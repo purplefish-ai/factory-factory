@@ -175,7 +175,7 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
 }
 
 export default function LogsPage() {
-  useAppHeader({ title: 'Logs' });
+  useAppHeader({ title: 'Server logs' });
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -279,13 +279,23 @@ export default function LogsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-4 p-3 md:p-6">
+        <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+          <Link className="underline" to="/">
+            Board
+          </Link>{' '}
+          /{' '}
+          <Link className="underline" to="/admin">
+            Settings
+          </Link>{' '}
+          / Server logs
+        </nav>
         <PageHeader title="Server logs" description={data?.filePath}>
-          <Link to="/admin">
-            <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin">
               <ArrowLeftIcon className="w-4 h-4 mr-1" />
-              Settings
-            </Button>
-          </Link>
+              Back to settings
+            </Link>
+          </Button>
         </PageHeader>
 
         {/* Controls */}

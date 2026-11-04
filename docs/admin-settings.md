@@ -1,9 +1,30 @@
 # Settings
 
-Open Settings from the app navigation. General Settings includes IDE
-preferences, chat defaults, and server logs. Appearance controls the color
-scheme, text size, and fonts. Project Settings controls the selected project's
-factory configuration and issue provider.
+Open Settings from the app navigation. Each section has its own URL, so you can
+bookmark it and use the browser's Back button:
+
+- **General** (`/admin`): notifications, preferred IDE, and chat defaults.
+- **Workspace** (`/admin/workspace`): child workspaces, ticket dispatch prompts,
+  and PR review defaults.
+- **Integrations** (`/admin/integrations`): Codex accounts, CLI authentication,
+  and Slack.
+- **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
+- **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
+- **System** (`/admin/system`): API usage, processes, app information, backups,
+  and worktree cleanup. Diagnostics poll only while this section is open;
+  loading or failed diagnostics never block other settings.
+- **Server logs** (`/admin/logs`): searchable logs; `/logs` remains available.
+- **Project settings** (`/admin/project`): links to each project's settings at
+  `/projects/:slug/settings`, including factory configuration and issue
+  tracking. Opening a project's settings does not change the selected project
+  elsewhere.
+
+Toggles and preset selects save immediately. Text and secrets use explicit Save
+or Connect actions; custom IDE commands and custom font families also submit
+with Enter. Failed saves preserve text for retry. Sliders save when you finish
+the interaction. Color pickers save when focus leaves the picker, so click or
+tab to another control after choosing a color. Linear credentials and their
+validated team are submitted together with Save.
 
 Scheduled agents are managed from **Agents** in the sidebar or the Agents link
 in Settings. The management page replaces the former Periodic Tasks settings
@@ -14,7 +35,9 @@ for schedule and run behavior.
 
 Color scheme, color overrides, font size, and fonts are saved with the other
 user settings and apply on every device that opens this server. Mode is saved in
-the browser and does not sync across devices. Each change saves immediately.
+the browser and does not sync across devices. Presets save immediately; custom
+font-family text requires **Save** or Enter. Color pickers save when focus
+leaves the picker; sliders save when you finish the interaction.
 
 - **Color scheme** picks a palette. Factory is the default; GitHub, One,
   Solarized, and High contrast are inspired by the corresponding editor themes.
@@ -192,8 +215,9 @@ disappear.
 Select **Custom** under **Preferred IDE** to reveal the command field. For a new
 custom IDE, the saved preference remains unchanged until a nonempty command is
 saved successfully. Enter a command such as `code-insiders {workspace}`, then
-leave the field to save it. The command must include `{workspace}` and pass the
-server's command validation. A rejected save leaves the field available to edit.
+choose **Save** or press Enter to save it. The command must include
+`{workspace}` and pass the server's command validation. A rejected save leaves
+the field available to edit.
 
 **Test** runs the command currently in the field. Choosing Cursor or VS Code
 preserves the saved custom command for later use.
@@ -220,13 +244,13 @@ synchronize normally after saves settle.
 
 Archiving or deleting a workspace removes its worktree. Worktrees can still be
 left behind by a failed cleanup or an older version. **Worktree Cleanup** in
-General Settings lists `workspace-*` folders under each project's worktree
-directory that no non-archived workspace owns. Cleanup also protects configured
-project repositories, including paths reached through symlinks or inside a
-candidate folder. Standalone repositories, folders containing nested
-repositories (including bare repositories), and linked worktrees whose owning
-repository cannot be identified are never listed. An unreadable directory or
-unverifiable Git registration is skipped and logged.
+**System** lists `workspace-*` folders under each project's worktree directory
+that no non-archived workspace owns. Cleanup also protects configured project
+repositories, including paths reached through symlinks or inside a candidate
+folder. Standalone repositories, folders containing nested repositories
+(including bare repositories), and linked worktrees whose owning repository
+cannot be identified are never listed. An unreadable directory or unverifiable
+Git registration is skipped and logged.
 
 **Remove Orphaned Worktrees** asks for confirmation. Folders Git still tracks as
 worktrees are removed through their owning repository with
@@ -250,6 +274,9 @@ Save failures appear both in the editor and in an error toast; the editor stays
 open so you can correct the configuration or retry.
 
 ## Server logs
+
+Open **Server logs** at `/admin/logs`; the legacy `/logs` URL still works. Use
+**Back to settings** or the breadcrumb to return to settings.
 
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not

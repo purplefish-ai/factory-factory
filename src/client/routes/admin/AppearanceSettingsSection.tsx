@@ -288,6 +288,7 @@ function FontScaleField({ value, disabled, onCommit }: FontScaleFieldProps) {
 }
 
 interface FontFamilyFieldProps {
+  resetKey: number;
   id: string;
   label: string;
   helpText: string;
@@ -299,6 +300,7 @@ interface FontFamilyFieldProps {
 
 /** Preset font stacks plus a Custom entry that reveals a free-form font-family input. */
 function FontFamilyField({
+  resetKey,
   id,
   label,
   helpText,
@@ -320,6 +322,13 @@ function FontFamilyField({
       setCustomDraft(value ?? '');
     }
   }, [savedOptionId, value]);
+
+  // Autosaved preset failures revert the selection; explicit custom saves retain drafts.
+  useEffect(() => {
+    if (resetKey) {
+      setSelectedId((current) => (current === CUSTOM_FONT_OPTION_ID ? current : savedOptionId));
+    }
+  }, [resetKey, savedOptionId]);
 
   const handleSelect = (nextId: string) => {
     setSelectedId(nextId);
@@ -367,7 +376,13 @@ function FontFamilyField({
         </SelectContent>
       </Select>
       {selectedId === CUSTOM_FONT_OPTION_ID && (
-        <div className="space-y-1">
+        <form
+          className="space-y-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            commitCustom();
+          }}
+        >
           <Input
             id={customInputId}
             aria-label={`${label} family`}
@@ -376,17 +391,19 @@ function FontFamilyField({
               setCustomDraft(event.target.value);
               setCustomError(null);
             }}
-            onBlur={commitCustom}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                commitCustom();
-              }
-            }}
             placeholder='"Fira Code", monospace'
             className={`${FIELD_WIDTH} font-mono text-sm`}
             disabled={disabled}
             aria-invalid={customError ? true : undefined}
           />
+          <Button
+            type="submit"
+            size="sm"
+            aria-label={`Save ${label.toLowerCase()}`}
+            disabled={disabled || !customDraft.trim()}
+          >
+            Save
+          </Button>
           {customError && (
             <p className="text-xs text-destructive" role="alert">
               {customError}
@@ -395,7 +412,7 @@ function FontFamilyField({
           <p className="text-xs text-muted-foreground">
             Any font installed on this device, written as a CSS font-family list.
           </p>
-        </div>
+        </form>
       )}
       <p className="text-xs text-muted-foreground">{helpText}</p>
     </div>
@@ -505,7 +522,7 @@ export function AppearanceSettingsSection() {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <FontFamilyField
-              key={`sans-${resetKey}`}
+              resetKey={resetKey}
               id="appearance-font-sans"
               label="Interface font"
               helpText="Used for navigation, chat, and settings."
@@ -515,7 +532,7 @@ export function AppearanceSettingsSection() {
               onCommit={(fontSans) => update({ appearanceFontSans: fontSans })}
             />
             <FontFamilyField
-              key={`mono-${resetKey}`}
+              resetKey={resetKey}
               id="appearance-font-mono"
               label="Monospace font"
               helpText="Used for code, diffs, and terminals."

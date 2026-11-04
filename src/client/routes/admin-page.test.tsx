@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 
-import { createElement, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
 
 const mocks = vi.hoisted(() => ({
   statsError: null as Error | null,
+  unresolvedDiagnostics: false,
+  statsQuery: vi.fn(),
+  processesQuery: vi.fn(),
   processesError: null as Error | null,
   projectsError: null as Error | null,
   refetchStats: vi.fn(),
@@ -66,22 +70,31 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     admin: {
       getSystemStats: {
-        useQuery: () => ({
-          data: mocks.statsError ? undefined : { apiUsage: [], environment: 'test' },
-          error: mocks.statsError,
-          isLoading: false,
-          isFetching: false,
-          refetch: mocks.refetchStats,
-        }),
+        useQuery: () => {
+          mocks.statsQuery();
+          return {
+            data:
+              mocks.statsError || mocks.unresolvedDiagnostics
+                ? undefined
+                : { apiUsage: [], environment: 'test' },
+            error: mocks.statsError,
+            isLoading: false,
+            isFetching: false,
+            refetch: mocks.refetchStats,
+          };
+        },
       },
       getActiveProcesses: {
-        useQuery: () => ({
-          data: mocks.processesError ? undefined : [],
-          error: mocks.processesError,
-          isLoading: false,
-          isFetching: false,
-          refetch: mocks.refetchProcesses,
-        }),
+        useQuery: () => {
+          mocks.processesQuery();
+          return {
+            data: mocks.processesError || mocks.unresolvedDiagnostics ? undefined : [],
+            error: mocks.processesError,
+            isLoading: false,
+            isFetching: false,
+            refetch: mocks.refetchProcesses,
+          };
+        },
       },
       resetApiUsageStats: {
         useMutation: (options: typeof mocks.resetMutationOptions) => {
@@ -156,78 +169,32 @@ afterEach(() => {
   document.body.innerHTML = '';
   localStorage.clear();
   mocks.statsError = null;
+  mocks.unresolvedDiagnostics = false;
   mocks.processesError = null;
   mocks.projectsError = null;
   mocks.resetMutationOptions = undefined;
   vi.clearAllMocks();
 });
 
-describe('AdminDashboardPage settings tabs', () => {
-  it('separates general and project settings into top tabs', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(AdminDashboardPage));
-    });
-
-    expect(container.textContent).toContain('General settings');
-    expect(container.textContent).toContain('Project settings');
-    expect(container.textContent).not.toContain('Manage scheduled agents and their runs.');
-    expect(container.querySelector('a[href="/projects/alpha/agents"]')).toBeNull();
-    expect(container.textContent).not.toContain('Periodic Tasks');
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    const generalTab = tabs.find((tab) => tab.textContent?.includes('General settings'));
-    const projectTab = tabs.find((tab) => tab.textContent?.includes('Project settings'));
-
-    expect(generalTab).toBeDefined();
-    expect(projectTab).not.toBeNull();
-    expect(generalTab?.getAttribute('aria-selected')).toBe('true');
-    expect(projectTab?.getAttribute('aria-selected')).toBe('false');
-
-    const activePanelBefore = container.querySelector('[role="tabpanel"][data-state="active"]');
-    expect(activePanelBefore?.textContent).toContain('Notification Settings');
-    expect(activePanelBefore?.textContent).not.toContain('Factory Configuration');
-
-    flushSync(() => {
-      projectTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      projectTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(generalTab?.getAttribute('aria-selected')).toBe('false');
-    expect(projectTab?.getAttribute('aria-selected')).toBe('true');
-
-    const activePanelAfter = container.querySelector('[role="tabpanel"][data-state="active"]');
-    expect(activePanelAfter?.textContent).toContain('Factory Configuration');
-    expect(activePanelAfter?.textContent).not.toContain('Notification Settings');
-
-    root.unmount();
-  });
-
-  it('renders workspaces back link for the selected project slug from storage', () => {
-    localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(AdminDashboardPage));
-    });
-
-    const backLink = container.querySelector('a[href="/projects/beta/workspaces"]');
-    expect(backLink).not.toBeNull();
-
-    root.unmount();
-  });
-});
-
-function renderAdmin() {
+function renderAdmin(path = '/admin') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   flushSync(() => {
-    root.render(createElement(AdminDashboardPage));
+    root.render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: [path] },
+        createElement(
+          Routes,
+          null,
+          createElement(Route, {
+            path: '/admin/:section?',
+            element: createElement(AdminDashboardPage),
+          })
+        )
+      )
+    );
   });
   return { container, root };
 }
@@ -239,64 +206,104 @@ function clickButton(container: HTMLElement, label: string, index = 0) {
   flushSync(() => buttons[index]?.click());
 }
 
-describe('AdminDashboardPage load failures', () => {
-  it('shows API usage and process errors with Retry instead of zeroed stats', () => {
-    mocks.statsError = new Error('Stats unavailable');
-    mocks.processesError = new Error('Process list unavailable');
+describe('settings URL sections', () => {
+  it('renders General immediately without mounting diagnostics polling', () => {
     const { container, root } = renderAdmin();
+    expect(container.textContent).toContain('Notification Settings');
+    expect(container.textContent).not.toContain('Processes');
+    expect(container.textContent).not.toContain('Child workspaces');
+    expect(mocks.statsQuery).not.toHaveBeenCalled();
+    expect(mocks.processesQuery).not.toHaveBeenCalled();
+    expect(container.querySelector('a[href="/admin/workspace"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/admin/logs"]')).not.toBeNull();
+    root.unmount();
+  });
 
-    const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
-    expect(alerts.map((alert) => alert.textContent)).toEqual([
-      expect.stringContaining("Couldn't load API usage"),
-      expect.stringContaining("Couldn't load active processes"),
-    ]);
+  it('recovers an unknown section to General', async () => {
+    const { container, root } = renderAdmin('/admin/unknown');
+    await act(async () => undefined);
+    expect(container.textContent).toContain('Notification Settings');
+    expect(container.querySelector('a[href="/admin"][aria-current="page"]')).not.toBeNull();
+    root.unmount();
+  });
+
+  it('opens Workspace directly and navigates with a URL link', async () => {
+    const { container, root } = renderAdmin('/admin/workspace');
+    expect(container.textContent).toContain('Child workspaces');
+    expect(container.textContent).toContain('Ticket dispatch prompt');
+    expect(container.textContent).not.toContain('Notification Settings');
+    const general = container.querySelector<HTMLAnchorElement>('a[href="/admin"]');
+    await act(async () => general?.click());
+    expect(container.textContent).toContain('Notification Settings');
+    expect(container.textContent).not.toContain('Ticket dispatch prompt');
+    root.unmount();
+  });
+
+  it('links legacy Project settings to explicit project URLs without changing selection', () => {
+    localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
+    const { container, root } = renderAdmin('/admin/project');
+    expect(container.querySelector('a[href="/projects/alpha/settings"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/projects/beta/settings"]')).not.toBeNull();
+    expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('beta');
+    expect(container.textContent).not.toContain('Factory Configuration');
+    root.unmount();
+  });
+
+  it('keeps unresolved offline diagnostics loading without showing empty data', () => {
+    mocks.unresolvedDiagnostics = true;
+    const { container, root } = renderAdmin('/admin/system');
+    expect(container.textContent).toContain('Loading API usage…');
+    expect(container.textContent).toContain('Processes Loading');
+    expect(container.textContent).not.toContain('Environment:');
+    expect(container.textContent).not.toContain('unknown');
     expect(
       [...container.querySelectorAll('section')].some(
         (section) => section.textContent === 'API usage'
       )
     ).toBe(false);
-    expect(container.textContent).not.toContain('Processes');
-    expect(container.textContent).toContain('Notification Settings');
+    expect(
+      [...container.querySelectorAll('section')].some(
+        (section) => section.textContent === 'Processes'
+      )
+    ).toBe(false);
+    root.unmount();
+  });
 
+  it('shows independent System failures with Retry while preserving navigation and maintenance', () => {
+    mocks.statsError = new Error('Stats unavailable');
+    mocks.processesError = new Error('Process list unavailable');
+    const { container, root } = renderAdmin('/admin/system');
+    const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
+    expect(alerts.map((alert) => alert.textContent)).toEqual([
+      expect.stringContaining("Couldn't load API usage"),
+      expect.stringContaining("Couldn't load active processes"),
+    ]);
+    expect(container.textContent).toContain('Data Backup');
+    expect(container.querySelector('a[href="/admin/integrations"]')).not.toBeNull();
     clickButton(container, 'Retry', 0);
     expect(mocks.refetchStats).toHaveBeenCalledOnce();
     clickButton(container, 'Retry', 1);
     expect(mocks.refetchProcesses).toHaveBeenCalledOnce();
-
     root.unmount();
   });
 
-  it('shows a project load error in the project tab instead of loading forever', () => {
+  it('shows project-list errors with retry instead of a false empty state', () => {
     mocks.projectsError = new Error('Projects unavailable');
-    const { container, root } = renderAdmin();
-
-    const projectTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (tab) => tab.textContent?.includes('Project settings')
+    const { container, root } = renderAdmin('/admin/project');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't load projects"
     );
-    flushSync(() => {
-      projectTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      projectTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const panel = container.querySelector('[role="tabpanel"][data-state="active"]');
-    expect(panel?.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load projects");
-    expect(panel?.textContent).not.toContain('Loading projects…');
-
     clickButton(container, 'Retry');
     expect(mocks.refetchProjects).toHaveBeenCalledOnce();
-
     root.unmount();
   });
 
   it('reports a failed stats reset with a titled toast', () => {
-    const { root } = renderAdmin();
-
+    const { root } = renderAdmin('/admin/system');
     mocks.resetMutationOptions?.onError?.(new Error('Rate limiter offline'));
-
     expect(mocks.toastError).toHaveBeenCalledWith("Couldn't reset API usage stats.", {
       description: 'Rate limiter offline',
     });
-
     root.unmount();
   });
 });
