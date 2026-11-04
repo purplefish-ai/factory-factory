@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
+import { z } from 'zod';
 import { Loading } from '@/client/components/loading';
 import { getAgentRouteKind, type AgentKind } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,11 @@ import { EventAgentCreate } from './event-agent-create';
 import { EventAgentSelection } from './event-agent-selection';
 import type { AgentProject } from './types';
 import { useAgentsController } from './use-agents-controller';
+
+const editorRevealState = z.object({
+  revealAgentEditor: z.boolean().optional(),
+  createAgent: z.boolean().optional(),
+});
 
 type Controller = ReturnType<typeof useAgentsController>;
 type EventCreationRenderer = (onCancel: () => void) => ReactNode;
@@ -156,8 +162,10 @@ function AgentsPageSession({
   project: routeProject,
   kind,
   renderEventCreation,
+  revealEditorOnMount,
 }: {
   project: AgentProject;
+  revealEditorOnMount: boolean;
   kind: AgentKind;
   renderEventCreation: EventCreationRenderer;
 }) {
@@ -167,6 +175,7 @@ function AgentsPageSession({
     <>
       <AgentsDashboardShell
         projectSlug={project.slug}
+        revealEditorOnMount={revealEditorOnMount}
         agents={
           list.data || controller.events.data
             ? [
@@ -240,6 +249,10 @@ export function AgentsPage({
 }) {
   const location = useLocation();
   const kind = getAgentRouteKind(location.search);
+  const revealState = editorRevealState.safeParse(location.state);
+  const revealEditor =
+    revealState.success &&
+    (revealState.data.revealAgentEditor === true || revealState.data.createAgent === true);
   if (!kind) {
     return (
       <p role="alert" className="p-6 text-sm">
@@ -250,6 +263,7 @@ export function AgentsPage({
   return (
     <AgentsPageSession
       key={`${project.id}:${kind}:${location.key}`}
+      revealEditorOnMount={revealEditor}
       project={project}
       kind={kind}
       renderEventCreation={renderEventCreation}

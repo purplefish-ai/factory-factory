@@ -1,7 +1,10 @@
 import { createElement } from 'react';
-import { actFlushSync } from '@/test-utils/react-act';
+import { actFlushSync, waitForReact } from '@/test-utils/react-act';
 
-export function chooseAgentCreation(scope: ParentNode, kind: 'scheduled' | 'event' = 'scheduled') {
+export async function chooseAgentCreation(
+  scope: ParentNode,
+  kind: 'scheduled' | 'event' = 'scheduled'
+) {
   const trigger = [...scope.querySelectorAll('button')].find(
     (button) => button.textContent === 'Create agent'
   );
@@ -18,8 +21,29 @@ export function chooseAgentCreation(scope: ParentNode, kind: 'scheduled' | 'even
     throw new Error(`Missing ${kind} creation choice`);
   }
   actFlushSync(() => item.click());
+  await waitForReact(() => {
+    if (document.querySelector('[role="menu"]')) {
+      throw new Error('Creation menu is still closing');
+    }
+  });
 }
 
 export function renderEventCreationCancel(onCancel: () => void) {
   return createElement('button', { type: 'button', onClick: onCancel }, 'Cancel');
+}
+
+export function fillAgentDraft(scope: ParentNode, name: string, instructions: string) {
+  actFlushSync(() => {
+    for (const [selector, value, prototype] of [
+      ['input[name="name"]', name, HTMLInputElement.prototype],
+      ['textarea', instructions, HTMLTextAreaElement.prototype],
+    ] as const) {
+      const field = scope.querySelector(selector);
+      if (!field) {
+        throw new Error(`Missing draft field: ${selector}`);
+      }
+      Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
 }

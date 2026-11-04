@@ -1,3 +1,19 @@
+/* Give workspace context its own line on phones. Actions retain full touch
+ * targets while the project, ancestry and workspace switcher share the width.
+ */
+@media (width < 48rem) {
+  .app-header-controls:has([data-workspace-header]) {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+
+  .app-header-controls:has([data-workspace-header]) > [data-slot='header-context'] {
+    order: 1;
+    flex-basis: 100%;
+    min-height: 44px;
+  }
+}
+
 /* The installed desktop PWA shares its first row with native window controls.
  * The browser owns the native controls and reports the safe rectangle between
  * them. Compact our controls within that height, with a subtly raised surface
@@ -30,6 +46,16 @@
     min-height: max(env(titlebar-area-height, 0px), calc(var(--app-header-control-size) + 4px));
     padding: 2px calc(var(--app-header-shoulder) + 4px);
     gap: 4px;
+  }
+
+  .app-header-controls:has([data-workspace-header]) {
+    flex-wrap: nowrap;
+  }
+
+  .app-header-controls:has([data-workspace-header]) > [data-slot='header-context'] {
+    order: 0;
+    flex-basis: auto;
+    min-height: 0;
   }
 
   .app-header-controls::before {

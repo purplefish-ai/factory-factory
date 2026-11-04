@@ -79,7 +79,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
   return (
     <>
       <HeaderLeftStartSlot>
-        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <div data-workspace-header className="flex min-w-0 flex-1 items-center gap-0.5">
           <div
             className={
               hasFamily ? 'min-w-0 max-w-[25%] shrink' : 'min-w-0 max-w-[50%] shrink md:max-w-[40%]'

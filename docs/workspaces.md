@@ -56,6 +56,15 @@ With no projects, onboarding uses the full page without an empty sidebar.
 Desktop onboarding starts with **Local Path**; the browser starts with **GitHub
 URL**. Both sources remain available.
 
+## Phone navigation
+
+Workspace headers put project and family navigation beside the workspace name on
+a separate context row on phones. Actions keep their full touch targets.
+
+On narrow Agents panels, the agent list and editor share one vertical scroll
+surface. Selecting an agent brings its editor into view; wide panels retain
+independent list and editor scrolling.
+
 ## Historical progression model
 
 > **Historical workspace progression model.** The Ratchet fixer workflow and

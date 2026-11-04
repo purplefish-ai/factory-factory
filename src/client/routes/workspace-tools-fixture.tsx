@@ -51,6 +51,10 @@ export function WorkspaceToolsFixture() {
                 },
                 'workspace.listScreenshots': { screenshots: [] },
                 'workspace.listChildren': [],
+                'userSettings.get': {
+                  defaultSessionProvider: 'CLAUDE',
+                  childWorkspacesEnabled: true,
+                },
                 'project.list': [{ id: 'demo', name: 'Demo', slug: 'demo' }],
               };
               if (!(op.path in responses)) {

@@ -125,7 +125,20 @@ function fixtureEventCreation(mode: string | null, onCancel: () => void) {
 /** Frontend-only phone fixture; shared components retain their production links. */
 function MobileAgentsSession() {
   const nextAgentId = useRef(1);
-  const [agents, setAgents] = useState([review, dependencies]);
+  const [agents, setAgents] = useState(() =>
+    new URLSearchParams(window.location.search).has('many-agents')
+      ? [
+          review,
+          dependencies,
+          ...Array.from({ length: 12 }, (_, index) => ({
+            ...review,
+            id: `extra-${index}`,
+            name: `Additional agent ${index + 1}`,
+            executions: [],
+          })),
+        ]
+      : [review, dependencies]
+  );
   const [selectedId, setSelectedId] = useState(review.id);
   const [selectedKind, setSelectedKind] = useState<'scheduled' | 'event'>('scheduled');
   const [events, setEvents] = useState(() => mobileEventFixtures(project.id));

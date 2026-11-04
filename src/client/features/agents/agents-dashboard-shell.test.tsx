@@ -99,11 +99,13 @@ it('groups both kinds and keeps event continuation inside the event section', ()
   }
 });
 
-it('offers the same explicit creation choices from header and empty state', () => {
+it('offers the same explicit creation choices after the menu closes', async () => {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const onCreate = vi.fn();
+  const onCreate = vi.fn(() => {
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
   actFlushSync(() =>
     root.render(
       <MemoryRouter>
@@ -126,10 +128,111 @@ it('offers the same explicit creation choices from header and empty state', () =
       expect(items.map((item) => item.textContent)).toEqual(['Scheduled agent', 'Event agent']);
       expect(onCreate).toHaveBeenCalledTimes(index);
       actFlushSync(() => items[index]?.click());
-      expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event');
+      await vi.waitFor(() =>
+        expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event')
+      );
     }
   } finally {
     actFlushSync(() => root.unmount());
     container.remove();
+  }
+});
+
+it.each(['column', 'row'])('reveals a newly selected editor only in %s layout', (direction) => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scroll,
+  });
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (selectedAgentId: string) =>
+    actFlushSync(() =>
+      root.render(
+        <MemoryRouter>
+          <AgentsDashboardShell
+            projectSlug="project"
+            selectedAgentId={selectedAgentId}
+            agents={[]}
+            onCreate={() => undefined}
+          >
+            <h2>Editor</h2>
+          </AgentsDashboardShell>
+        </MemoryRouter>
+      )
+    );
+  try {
+    render('one');
+    const body = container.querySelector<HTMLElement>('[class~="@container/agents"] > div')!;
+    body.style.flexDirection = direction;
+    expect(scroll).not.toHaveBeenCalled();
+    render('two');
+    const editor = container.querySelector('main');
+    expect(scroll.mock.calls.length).toBe(direction === 'column' ? 1 : 0);
+    if (direction === 'column') {
+      expect(document.activeElement).toBe(editor);
+    } else {
+      expect(document.activeElement).not.toBe(editor);
+    }
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    if (original) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', original);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  }
+});
+
+it('waits for the loading rail before revealing route intent once, then preserves user scroll on refresh', () => {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  const scroll = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scroll,
+  });
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (isLoading: boolean) =>
+    actFlushSync(() =>
+      root.render(
+        <MemoryRouter>
+          <AgentsDashboardShell
+            projectSlug="project"
+            selectedAgentId="one"
+            revealEditorOnMount
+            isLoading={isLoading}
+            agents={[]}
+            onCreate={() => undefined}
+          >
+            <h2>Editor</h2>
+          </AgentsDashboardShell>
+        </MemoryRouter>
+      )
+    );
+  try {
+    render(true);
+    const body = container.querySelector<HTMLElement>('[class~="@container/agents"] > div')!;
+    body.style.flexDirection = 'column';
+    expect(scroll).not.toHaveBeenCalled();
+    render(false);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    render(true);
+    render(false);
+    expect(scroll).toHaveBeenCalledTimes(1);
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+    if (original) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', original);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
   }
 });

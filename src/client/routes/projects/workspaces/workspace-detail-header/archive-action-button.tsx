@@ -23,12 +23,7 @@ export function ArchiveActionButton({
   if (renderAsMenuItem) {
     return (
       <DropdownMenuItem
-        onSelect={(event) => {
-          event.preventDefault();
-          requestAnimationFrame(() => {
-            onArchiveRequest();
-          });
-        }}
+        onSelect={onArchiveRequest}
         disabled={archivePending}
         className={cn(
           completed ? '' : 'text-destructive focus:text-destructive dark:text-destructive'

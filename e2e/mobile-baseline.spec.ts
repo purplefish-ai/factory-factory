@@ -6,6 +6,7 @@ import superjson from 'superjson';
 const fixture = initTRPC.create({ transformer: superjson });
 const usageRouter = fixture.router({
   session: fixture.router({
+    listQuickActions: fixture.procedure.query(() => []),
     getProviderUsage: fixture.procedure.query(() => ({
       provider: 'CLAUDE',
       status: 'available',
@@ -27,7 +28,7 @@ for (const viewport of mobileViewports) {
   test(`mobile baseline layout - ${viewport.name}`, async ({ page }) => {
     // PR fixture timestamps are fixed; keep relative-age labels stable in screenshots.
     await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
-    await page.route('**/api/trpc/session.getProviderUsage*', async (route) => {
+    await page.route('**/api/trpc/**', async (route) => {
       const response = await fetchRequestHandler({
         endpoint: '/api/trpc',
         req: new Request(route.request().url(), { headers: route.request().headers() }),
@@ -86,6 +87,7 @@ for (const viewport of mobileViewports) {
     await page.keyboard.press('Escape');
     await messageInput.fill('');
 
+    await composer.scrollIntoViewIfNeeded();
     const composerBefore = await composer.boundingBox();
     expect(composerBefore).not.toBeNull();
 
@@ -184,9 +186,9 @@ for (const viewport of mobileViewports) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     ).toBeLessThanOrEqual(1);
-    await page.locator('main').evaluate((element) => {
-      element.scrollTop = 0;
-    });
+    await page
+      .getByRole('heading', { name: 'Review recent changes', exact: true })
+      .scrollIntoViewIfNeeded();
     await review.blur();
     await expect(page).toHaveScreenshot(`agents-detail-${viewport.name}.png`);
     await workspaceLink.focus();
