@@ -6,6 +6,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { Spinner } from '@/components/ui/spinner';
 import type { CommandInfo } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
@@ -128,7 +129,10 @@ export function SlashCommandPalette({
         <CommandList>
           <CommandEmpty>
             {isLoading ? (
-              <span className="text-xs text-muted-foreground">Loading commands…</span>
+              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <Spinner className="size-3" aria-hidden="true" />
+                Loading commands…
+              </span>
             ) : (
               'No commands found'
             )}

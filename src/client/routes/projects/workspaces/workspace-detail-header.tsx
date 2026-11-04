@@ -196,7 +196,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
             running={running}
             isCreatingSession={isCreatingSession}
             handleQuickAction={(name, prompt) => {
-              runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action");
+              runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
             }}
           />
           <div className="hidden @[72rem]/header:flex items-center gap-2">
@@ -245,7 +245,10 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                     running={running}
                     isCreatingSession={isCreatingSession}
                     handleQuickAction={(name, prompt) => {
-                      runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action");
+                      runInBackground(
+                        handleQuickAction(name, prompt),
+                        "Couldn't run quick action."
+                      );
                     }}
                   />
                   <WorkspaceIssueLink workspace={workspace} renderAsMenuItem />

@@ -1,5 +1,6 @@
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { Link } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
 import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
@@ -36,11 +37,7 @@ function ProjectLookupState({
   retry: () => void;
 }) {
   if (!error) {
-    return (
-      <p role="status" className="text-xs text-muted-foreground">
-        Loading agent project…
-      </p>
-    );
+    return <Loading size="compact" message="Loading agent project…" />;
   }
   return (
     <div role="alert" className="space-y-2 text-xs">
@@ -86,9 +83,7 @@ function MissingAgentState({
           )}
         </>
       ) : (
-        <p role="status" className="text-muted-foreground">
-          Loading agent…
-        </p>
+        <Loading size="compact" message="Loading agent…" />
       )}
     </div>
   );
@@ -165,9 +160,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
         {project.data ? (
           <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />
         ) : !project.error ? (
-          <p role="status" className="text-xs text-muted-foreground">
-            Loading agent project…
-          </p>
+          <Loading size="compact" message="Loading agent project…" />
         ) : null}
       </div>
     </div>

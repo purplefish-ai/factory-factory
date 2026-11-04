@@ -1,4 +1,5 @@
 import { Outlet, useParams } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 
@@ -52,12 +53,7 @@ export function ProjectLayout() {
     );
   }
   if (isLoading) {
-    return (
-      <div role="status" className="flex items-center justify-center h-64">
-        <span className="sr-only">Loading project…</span>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <Loading message="Loading project…" className="h-64" />;
   }
   return (
     <ProjectLoadError

@@ -28,20 +28,20 @@ export function WorktreeCleanupSection() {
     onSuccess: ({ removed, failed }) => {
       if (failed.length > 0) {
         toast.error(
-          `Removed ${removed.length}; failed to remove ${failed.length}: ${failed[0]?.error}`
+          `Couldn't remove all worktrees. Removed ${removed.length}; failed to remove ${failed.length}. ${failed[0]?.error}`
         );
       } else {
         toast.success(`Removed ${pluralizeWorktrees(removed.length)}`);
       }
     },
     onError: (error) => {
-      toast.error(`Cleanup failed: ${error.message}`);
+      toast.error(`Couldn't remove orphaned worktrees. ${error.message}`);
     },
     onSettled: () => {
       setConfirmOpen(false);
       runInBackground(
         utils.admin.listOrphanedWorktrees.invalidate(),
-        "Couldn't refresh orphaned worktrees"
+        "Couldn't refresh orphaned worktrees."
       );
     },
   });
@@ -71,7 +71,7 @@ export function WorktreeCleanupSection() {
               variant="outline"
               className="w-full sm:w-auto"
               disabled={isRefetching}
-              onClick={() => runInBackground(refetch(), "Couldn't scan for orphaned worktrees")}
+              onClick={() => runInBackground(refetch(), "Couldn't scan for orphaned worktrees.")}
             >
               Retry
             </Button>

@@ -68,7 +68,7 @@ export default function AdminDashboardPage() {
       runInBackground(refetch(), "Couldn't refresh data.");
     },
     onError: (error) => {
-      toast.error("Couldn't reset API usage stats", { description: error.message });
+      toast.error("Couldn't reset API usage stats.", { description: error.message });
     },
   });
 
@@ -159,7 +159,7 @@ export default function AdminDashboardPage() {
                 isRetrying={projectsQuery.isFetching}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">Loading projects…</p>
+              <Loading size="compact" message="Loading projects…" />
             )}
           </TabsContent>
 

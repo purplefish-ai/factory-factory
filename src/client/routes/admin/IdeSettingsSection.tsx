@@ -72,7 +72,7 @@ export function IdeSettingsSection() {
 
   const handleTestCommand = () => {
     if (!localCustomCommand.trim()) {
-      toast.error('Please enter a custom command first');
+      toast.error("Couldn't test the command. Enter a custom command first.");
       return;
     }
     testCommand.mutate({ customCommand: localCustomCommand });

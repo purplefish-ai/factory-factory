@@ -8,6 +8,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import {
   type PaletteKeyboardHandle,
@@ -165,7 +166,10 @@ export function FileMentionPalette({
         <CommandList>
           <CommandEmpty>
             {isLoading ? (
-              <span className="text-xs text-muted-foreground">Loading files…</span>
+              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <Spinner className="size-3" aria-hidden="true" />
+                Loading files…
+              </span>
             ) : (
               'No files found'
             )}

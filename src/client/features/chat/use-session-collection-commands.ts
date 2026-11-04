@@ -78,7 +78,7 @@ export function useSessionCollectionCommands({
       );
     },
     onError: (error) => {
-      toast.error(error.message || "Couldn't create or start session");
+      toast.error(error.message || "Couldn't create or start session.");
     },
   });
   const deleteSession = trpc.session.deleteSession.useMutation({
@@ -98,7 +98,7 @@ export function useSessionCollectionCommands({
           context.previousSessions
         );
       }
-      toast.error(error.message || "Couldn't delete session");
+      toast.error(error.message || "Couldn't delete session.");
     },
     onSettled: (_data, _error, _variables, context) => {
       if (context?.workspaceId) {

@@ -3,6 +3,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 function getWarning(
@@ -138,12 +139,16 @@ export function ProviderCliWarning({
         onClick={() => {
           runInBackground(
             utils.admin.checkCLIHealth.invalidate(),
-            "Couldn't check provider status"
+            "Couldn't check provider status."
           );
         }}
         disabled={isRefetching}
       >
-        <ArrowsClockwiseIcon className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+        {isRefetching ? (
+          <Spinner className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
+        )}
         <span className="sr-only">Recheck</span>
       </Button>
     </div>

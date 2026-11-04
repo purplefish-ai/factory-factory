@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 
@@ -51,7 +52,14 @@ export function ChatImage({
         )}
       >
         <span>
-          {loading ? 'Loading image…' : 'Image unavailable'}
+          {loading ? (
+            <>
+              <Spinner className="mr-1 inline size-3 align-text-bottom" aria-hidden="true" />
+              Loading image…
+            </>
+          ) : (
+            'Image unavailable'
+          )}
           {alt ? `: ${alt}` : ''}
         </span>
         {source &&

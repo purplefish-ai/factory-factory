@@ -1,4 +1,5 @@
 import { Navigate, useLocation, useParams } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { useAppNavigationDataContext } from '@/client/hooks/use-app-navigation-data';
 import {
   getAgentRouteKind,
@@ -53,9 +54,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
   return project ? (
     <Navigate replace to={getProjectAgentPath(project.slug, id)} />
   ) : (
-    <p role="status" className="p-6">
-      Loading agent project…
-    </p>
+    <Loading message="Loading agent project…" />
   );
 }
 function LegacyAgentsIndex() {
@@ -75,11 +74,7 @@ function LegacyAgentsIndex() {
     );
   }
   if (!navigation.projects) {
-    return (
-      <p role="status" className="p-6">
-        Loading projects…
-      </p>
-    );
+    return <Loading message="Loading projects…" />;
   }
   const slug = resolveSelectedProjectSlug(navigation.projects);
   return <Navigate replace to={slug ? getProjectSectionPath(slug, 'agents') : '/projects/new'} />;

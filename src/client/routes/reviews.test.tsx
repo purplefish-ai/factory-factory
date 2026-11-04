@@ -307,6 +307,42 @@ describe('project reviews', () => {
     }
   );
 
+  it.each(['paused', 'idle'])(
+    'waits for an unresolved enabled project while fetch is %s',
+    (fetchStatus) => {
+      projectQueryMock.mockReturnValue({
+        data: undefined,
+        error: null,
+        isLoading: false,
+        fetchStatus,
+        status: 'pending',
+      });
+      const view = mountReviews();
+      expect(view.container.textContent).toContain('Loading project…');
+      expect(view.container.textContent).not.toContain('Project not found');
+      expect(listReviewRequestsMock).not.toHaveBeenCalled();
+      view.unmount();
+    }
+  );
+  it.each([false, true])(
+    'keeps settled missing and disabled project routes truthful (disabled=%s)',
+    (disabled) => {
+      if (disabled) {
+        project.slug = '';
+      }
+      projectQueryMock.mockReturnValue({
+        data: disabled ? undefined : null,
+        error: null,
+        isLoading: false,
+        status: disabled ? 'pending' : 'success',
+      });
+      const view = mountReviews();
+      expect(view.container.textContent).toContain('Project not found');
+      expect(view.container.textContent).not.toContain('Loading project…');
+      view.unmount();
+    }
+  );
+
   it('waits for project resolution and exposes retryable project/review errors', () => {
     projectQueryMock.mockReturnValue({ isLoading: true });
     const view = mountReviews();

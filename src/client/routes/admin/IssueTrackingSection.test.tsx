@@ -225,7 +225,9 @@ describe('Linear key/team validation', () => {
       if (superseded) {
         expect(toast.error).not.toHaveBeenCalled();
       } else {
-        expect(toast.error).toHaveBeenCalledExactlyOnceWith('Validation failed: Transport failure');
+        expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+          "Couldn't validate issue tracking credentials. Transport failure"
+        );
       }
     }
   );

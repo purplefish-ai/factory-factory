@@ -18,7 +18,9 @@ export function useDownloadServerLog() {
       });
       toast.success('Log file downloaded');
     } catch (error) {
-      toast.error(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(
+        `Couldn't download log file. ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setIsDownloading(false);
     }

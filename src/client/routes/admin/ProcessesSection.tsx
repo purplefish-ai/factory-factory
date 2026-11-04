@@ -266,7 +266,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                     process={process}
                     isStopping={stoppingSessionIds.has(process.sessionId)}
                     onStop={(sessionId) => {
-                      runInBackground(handleStopSession(sessionId), "Couldn't stop process");
+                      runInBackground(handleStopSession(sessionId), "Couldn't stop process.");
                     }}
                   />
                 ))}
@@ -330,7 +330,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                             onClick={() => {
                               runInBackground(
                                 handleStopSession(process.sessionId),
-                                "Couldn't stop process"
+                                "Couldn't stop process."
                               );
                             }}
                             disabled={

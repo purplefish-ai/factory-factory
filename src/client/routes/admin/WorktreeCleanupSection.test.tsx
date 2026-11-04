@@ -161,7 +161,9 @@ describe('WorktreeCleanupSection', () => {
       })
     );
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Removed 1; failed to remove 1: locked');
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Couldn't remove all worktrees. Removed 1; failed to remove 1. locked"
+    );
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
   });
@@ -172,7 +174,7 @@ describe('WorktreeCleanupSection', () => {
 
     settle((options) => options.onError(new Error('FORBIDDEN')));
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Cleanup failed: FORBIDDEN');
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't remove orphaned worktrees. FORBIDDEN");
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
     expect(findButton('Remove')).toBeUndefined();
   });

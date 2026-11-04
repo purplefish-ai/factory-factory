@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { Loading } from '@/client/components/loading';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { SubagentTranscriptView } from '@/client/features/subagents';
 import { cn } from '@/lib/utils';
@@ -54,13 +55,7 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
         variant="compact"
         title="Couldn't load the viewer"
       >
-        <Suspense
-          fallback={
-            <div role="status" className="p-4 text-sm text-muted-foreground">
-              Loading viewer…
-            </div>
-          }
-        >
+        <Suspense fallback={<Loading size="compact" message="Loading viewer…" />}>
           {filePath && activeTabKey && (
             <FileViewer
               key={activeTabKey}

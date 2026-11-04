@@ -252,7 +252,7 @@ describe('useChatState rejected message recovery', () => {
     expect(harness.chatRef.current?.inputAttachments).toEqual([createAttachment()]);
     expect(sessionStorage.getItem('chat-attachments-session-A')).toBeNull();
     expect(toast.error).toHaveBeenCalledWith(
-      'Attachments were not autosaved',
+      "Couldn't autosave attachments.",
       expect.objectContaining({
         description:
           'They are still in this composer, but may be lost if you reload or switch sessions.',
@@ -291,7 +291,7 @@ describe('useChatState rejected message recovery', () => {
     expect(harness.chatRef.current?.inputAttachments).toEqual([]);
     expect(sessionStorage.getItem('chat-attachments-session-A')).toContain('secret.txt');
     expect(toast.error).toHaveBeenCalledWith(
-      'Saved attachments could not be cleared',
+      "Couldn't clear saved attachments.",
       expect.objectContaining({
         description: 'Previously saved attachments may reappear after a reload or session switch.',
       })

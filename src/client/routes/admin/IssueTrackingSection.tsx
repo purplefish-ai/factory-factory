@@ -67,12 +67,14 @@ function LinearConfigFields({
         setViewerName(result.viewerName ?? null);
         setTeams(result.teams ?? []);
       } else {
-        toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
+        toast.error(
+          `Couldn't validate issue tracking credentials. ${result.error ?? 'Unknown error'}`
+        );
       }
     } catch (error) {
       if (generation === formGeneration.current) {
         toast.error(
-          `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Couldn't validate issue tracking credentials. ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
     }
@@ -132,7 +134,7 @@ function LinearConfigFields({
         <Button
           variant="outline"
           onClick={() => {
-            runInBackground(handleValidate(), "Couldn't update issue tracking");
+            runInBackground(handleValidate(), "Couldn't update issue tracking.");
           }}
           disabled={validateAndList.isPending || !apiKey}
         >
@@ -165,7 +167,7 @@ function LinearConfigFields({
           </div>
           <Button
             onClick={() => {
-              runInBackground(handleSave(), "Couldn't update issue tracking");
+              runInBackground(handleSave(), "Couldn't update issue tracking.");
             }}
             disabled={!selectedTeamId || isSaving}
             className="self-end"
@@ -295,7 +297,7 @@ export function ProjectIssueTrackingCard({
             <Select
               value={provider}
               onValueChange={(value) => {
-                runInBackground(handleProviderChange(value), "Couldn't update issue tracking");
+                runInBackground(handleProviderChange(value), "Couldn't update issue tracking.");
               }}
               disabled={updateProvider.isPending || updateProject.isPending}
             >

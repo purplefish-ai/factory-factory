@@ -25,7 +25,7 @@ export function ServerLogsSection() {
         <Button
           variant="outline"
           onClick={() => {
-            runInBackground(download(), "Couldn't download logs");
+            runInBackground(download(), "Couldn't download logs.");
           }}
           disabled={isDownloading}
           className="w-full sm:w-auto"

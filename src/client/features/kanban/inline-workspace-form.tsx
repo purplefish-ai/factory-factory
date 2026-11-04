@@ -81,7 +81,7 @@ function handleFormKeyDown(
 }
 
 function reportUnavailableLaunch(reason?: string) {
-  toast.error(reason ?? 'Workspace creation is not ready');
+  toast.error(reason ?? "Couldn't create workspace. Creation is not ready.");
 }
 
 interface InlineWorkspaceFormProps {
@@ -232,7 +232,7 @@ export function InlineWorkspaceForm({
           onComplete();
         }
       }),
-      "Couldn't finalize task creation"
+      "Couldn't finalize task creation."
     );
   };
 
@@ -520,7 +520,7 @@ export function InlineWorkspaceForm({
             multiple
             accept={ATTACHMENT_ACCEPT_TYPES}
             onChange={(event) => {
-              runInBackground(handleFileSelect(event), "Couldn't attach file");
+              runInBackground(handleFileSelect(event), "Couldn't attach file.");
             }}
             className="hidden"
             aria-label="Attach files"
@@ -540,7 +540,7 @@ export function InlineWorkspaceForm({
             size="sm"
             className="h-7 text-xs whitespace-nowrap"
             onClick={() => {
-              runInBackground(recovery.discardDraft(), "Couldn't clear canceled task");
+              runInBackground(recovery.discardDraft(), "Couldn't clear canceled task.");
               onCancel();
             }}
             disabled={isBusy}

@@ -176,7 +176,7 @@ export const ChatInput = memo(function ChatInput({
   const { handleFileSelect } = actions;
   const onFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      runInBackground(handleFileSelect(event), "Couldn't attach file");
+      runInBackground(handleFileSelect(event), "Couldn't attach file.");
     },
     [handleFileSelect]
   );

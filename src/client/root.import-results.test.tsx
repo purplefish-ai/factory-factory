@@ -173,7 +173,7 @@ describe('Root import results', () => {
     rpc.failure = new Error('Backup could not be imported');
     await importBackup();
     await click('Import');
-    expect(rpc.error).toHaveBeenCalledWith('Import failed: Backup could not be imported');
+    expect(rpc.error).toHaveBeenCalledWith("Couldn't import backup. Backup could not be imported");
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(document.body.textContent).not.toContain('Destination route');
     expect(rpc.invalidate).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -71,11 +72,7 @@ export function ClosedSessionsDropdown({
         <DropdownMenuLabel>Closed Sessions</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {isLoading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            Loading closed sessions...
-          </div>
-        )}
+        {isLoading && <Loading size="compact" message="Loading closed sessions…" />}
 
         {!(isLoading || hasClosedSessions) && (
           <div className="py-6 px-2 text-center text-sm text-muted-foreground">

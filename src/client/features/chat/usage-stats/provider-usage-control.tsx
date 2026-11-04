@@ -232,7 +232,8 @@ function PlanWindows({
           </div>
         ))
       ) : (
-        <p className="text-muted-foreground">
+        <p className="inline-flex items-center gap-2 text-muted-foreground">
+          {!planUsage?.message && refreshing && <Spinner className="size-3" aria-hidden="true" />}
           {planUsage?.message ?? (refreshing ? 'Loading plan limits…' : 'Plan limits unavailable')}
         </p>
       )}

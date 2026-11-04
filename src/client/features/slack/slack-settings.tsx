@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,11 +34,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {props.loading && (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading Slack connections…
-          </p>
-        )}
+        {props.loading && <Loading size="compact" message="Loading Slack connections…" />}
         {props.error && (
           <p role="alert" className="text-sm text-destructive">
             {props.error}

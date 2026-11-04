@@ -3,6 +3,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -144,11 +145,7 @@ export function AgentsDashboardShell({
                 )}
               </div>
             )}
-            {isLoading && !agents && (
-              <p role="status" className="p-3 text-xs text-muted-foreground">
-                Loading agents…
-              </p>
-            )}
+            {isLoading && !agents && <Loading size="compact" message="Loading agents…" />}
             {!(error || isLoading) && agents?.length === 0 && (
               <EmptyState
                 size="compact"

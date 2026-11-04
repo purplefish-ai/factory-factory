@@ -27,7 +27,7 @@ export function useCopyToClipboard() {
       }
       await navigator.clipboard.writeText(text);
     } catch {
-      toast.error("Couldn't copy to the clipboard");
+      toast.error("Couldn't copy to the clipboard.");
       return false;
     }
     setCopied(true);

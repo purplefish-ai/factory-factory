@@ -45,7 +45,7 @@ class DropDrainBoundary extends Component<{ children: ReactNode }, { failed: boo
     for (const projectId of getPendingWorkspaceCreationDropProjectIds()) {
       takeWorkspaceCreationAttachments(projectId);
     }
-    toast.error('Dropped images could not be attached. Try dropping them again.');
+    toast.error("Couldn't attach dropped images. Try dropping them again.");
     reportBoundaryError(error, errorInfo);
   }
 

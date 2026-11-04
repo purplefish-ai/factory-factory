@@ -266,7 +266,7 @@ describe('ProjectsListPage archive confirmation', () => {
 
     mocks.archiveMutationOptions?.onError?.(new Error(''));
 
-    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't archive project");
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't archive project.");
 
     root.unmount();
   });

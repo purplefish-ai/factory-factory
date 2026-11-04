@@ -131,7 +131,7 @@ describe('ChatContent runtime error placeholder', () => {
       );
       expect(transcript.mock.lastCall?.[0].header).toBeUndefined();
       expect(input.mock.lastCall?.[0].placeholder).toBe(
-        'Agent encountered an error. Type a message to retry…'
+        "Couldn't continue this chat. Type a message to retry…"
       );
     } finally {
       flushSync(() => root.unmount());

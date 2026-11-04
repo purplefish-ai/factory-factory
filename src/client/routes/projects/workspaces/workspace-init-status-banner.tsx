@@ -5,6 +5,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 
@@ -57,7 +58,7 @@ export const InitStatusBanner = memo(function InitStatusBanner({
                   onClick={onRetry}
                 >
                   {retryPending ? (
-                    <SpinnerGapIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    <Spinner className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
                   ) : (
                     <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
                   )}

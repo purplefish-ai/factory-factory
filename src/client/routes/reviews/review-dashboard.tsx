@@ -303,7 +303,7 @@ function ReviewsMobileLayout({
             diffLoading={diffLoading}
             diffError={diffError}
             onFetchDiff={() => {
-              runInBackground(onFetchDiff(), "Couldn't load pull request diff");
+              runInBackground(onFetchDiff(), "Couldn't load pull request diff.");
             }}
             onOpenGitHub={onOpenGitHub}
             onApprove={onApprove}
@@ -364,7 +364,7 @@ function ReviewsDesktopLayout({
           diffLoading={diffLoading}
           diffError={diffError}
           onFetchDiff={() => {
-            runInBackground(onFetchDiff(), "Couldn't load pull request diff");
+            runInBackground(onFetchDiff(), "Couldn't load pull request diff.");
           }}
           onOpenGitHub={onOpenGitHub}
           onApprove={onApprove}

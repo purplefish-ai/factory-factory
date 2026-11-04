@@ -127,7 +127,11 @@ it('opens the preview after hovering with a mouse', async () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
   });
   expect(document.body.textContent).toContain('Loading pull request');
-  expect(document.querySelector('[data-slot="tooltip-content"] svg')).toBeNull();
+  expect(
+    document
+      .querySelector('[data-slot="tooltip-content"] svg.animate-spin')
+      ?.getAttribute('aria-hidden')
+  ).toBe('true');
 });
 
 it.each([

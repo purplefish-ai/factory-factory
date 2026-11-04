@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Loading } from '@/client/components/loading';
 import {
   appendToRollingOutput,
   TERMINAL_OUTPUT_MAX_CHARS,
@@ -457,13 +458,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         {/* Terminal content */}
         <div className="flex-1 overflow-hidden bg-zinc-900">
           {activeTab && (
-            <Suspense
-              fallback={
-                <div className="h-full flex items-center justify-center text-zinc-500">
-                  Loading terminal...
-                </div>
-              }
-            >
+            <Suspense fallback={<Loading size="compact" message="Loading terminal…" />}>
               <TerminalInstance
                 key={activeTab.id}
                 output={activeTab.output}

@@ -53,7 +53,7 @@ export function DataImportButton({
       onImportSuccess?.();
     },
     onError: (error) => {
-      toast.error(`Import failed: ${error.message}`);
+      toast.error(`Couldn't import backup. ${error.message}`);
       setConfirmState({ open: false, data: null, summary: '' });
     },
   });
@@ -138,7 +138,7 @@ export function DataImportButton({
         type="file"
         accept=".json"
         onChange={(event) => {
-          runInBackground(handleFileSelect(event), "Couldn't import backup");
+          runInBackground(handleFileSelect(event), "Couldn't import backup.");
         }}
         className="hidden"
       />

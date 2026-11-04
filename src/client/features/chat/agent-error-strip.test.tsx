@@ -65,7 +65,7 @@ describe('AgentErrorStrip', () => {
     flushSync(() => button('Copy error')?.click());
 
     await vi.waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("Couldn't copy to the clipboard")
+      expect(toastError).toHaveBeenCalledWith("Couldn't copy to the clipboard.")
     );
     expect(button('Copy error')).toBeDefined();
   });

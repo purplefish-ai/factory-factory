@@ -322,7 +322,7 @@ export function ConnectedWorkspacePrMenu({
                 setRemoveId(null);
               }
             })(),
-            "Couldn't update pull request"
+            "Couldn't update pull request."
           );
         }}
       />
@@ -348,7 +348,7 @@ export function ConnectedWorkspacePrMenu({
                     setError(result.error);
                   }
                 })(),
-                "Couldn't update pull request"
+                "Couldn't update pull request."
               );
             }}
             className="space-y-3"

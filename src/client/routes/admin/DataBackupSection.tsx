@@ -25,7 +25,9 @@ export function DataBackupSection() {
       });
       toast.success('Export completed');
     } catch (error) {
-      toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(
+        `Couldn't export backup. ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setIsExporting(false);
     }
@@ -46,7 +48,7 @@ export function DataBackupSection() {
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
           <Button
             onClick={() => {
-              runInBackground(handleExport(), "Couldn't export backup");
+              runInBackground(handleExport(), "Couldn't export backup.");
             }}
             disabled={isExporting}
             variant="outline"

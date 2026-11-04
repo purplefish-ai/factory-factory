@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 
 export function RatchetSettingsSection() {
@@ -161,8 +162,8 @@ export function RatchetSettingsSection() {
             >
               {triggerRatchetCheck.isPending ? (
                 <>
-                  <ArrowsClockwiseIcon className="w-4 h-4 mr-2 animate-spin" />
-                  Checking...
+                  <Spinner className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Checking…
                 </>
               ) : (
                 <>

@@ -86,7 +86,7 @@ export function useReviewActions({
       if (mounted.current) {
         const message = getDiffFailureMessage(error);
         setDiffErrors((prev) => new Map(prev).set(selectedKey, message));
-        toast.error("Couldn't load diff");
+        toast.error("Couldn't load diff.");
       }
     } finally {
       if (mounted.current) {

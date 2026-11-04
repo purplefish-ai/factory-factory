@@ -125,7 +125,7 @@ export function IssueLaunchSheet({
       onStarted?.();
     },
     onError: (error) => {
-      toast.error(error.message || "Couldn't start workspace");
+      toast.error(error.message || "Couldn't start workspace.");
     },
   });
 
@@ -156,7 +156,7 @@ export function IssueLaunchSheet({
       });
     } else if (issue.githubIssueNumber) {
       if (!trimmedPrompt) {
-        toast.error('Prompt cannot be empty');
+        toast.error("Couldn't start workspace. Enter a prompt.");
         return;
       }
 

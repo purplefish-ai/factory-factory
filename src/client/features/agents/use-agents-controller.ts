@@ -130,7 +130,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
         invalidateAgentProjectQueries(utils, projectId),
         utils.periodicTask.get.invalidate({ id: agentId }),
       ]),
-      "Couldn't refresh agents"
+      "Couldn't refresh agents."
     );
   };
   const save = async (values: AgentFormValues) => {

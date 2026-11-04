@@ -141,7 +141,7 @@ export function ProjectSelectorDropdown({
             + Create project
           </SelectItem>
           <SelectItem value="__manage__" className="text-muted-foreground">
-            Manage projects...
+            Manage projects…
           </SelectItem>
         </SelectContent>
       </Select>

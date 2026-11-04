@@ -63,6 +63,13 @@ Pick the loading pattern by what the user is waiting for:
   no known layout. Give it a specific message ("Loading diff…");
   `size="compact"` drops the 200px minimum height for side panels.
 
+Keep inline fallbacks inline: image and link previews can appear inside Markdown
+paragraphs, so use a `Spinner` beside their existing label rather than nesting a
+`Loading` block inside a `span`. A pending action replaces its static action
+icon with `Spinner`; the idle action retains its icon. Loading labels in
+disabled select options and input placeholders do not need a second spinner when
+their surrounding control already communicates the wait.
+
 Spinners inherit the surrounding text color. `Loading` places them in muted
 text, so a page-level wait reads as muted, and a button spinner matches the
 button's label on every variant. Don't color spinners with `text-brand`: brand
@@ -122,7 +129,7 @@ rejection goes to its caller. The rule is therefore:
 - A mutation that reports errors per call, through a `mutateAsync` try/catch, or
   with inline error UI sets `meta: { errorToast: false }`.
 - Otherwise a failure shows an error toast. For a specific title, set a literal
-  string such as `meta: { errorToast: "Couldn't start dev server" }`; it is
+  string such as `meta: { errorToast: "Couldn't start dev server." }`; it is
   shown verbatim, and the server message becomes the description.
 
 Error toasts stay for 10 seconds and have a close button. `toast.error` gets

@@ -107,14 +107,14 @@ function useValidateApiKeyMutation(apiKey: string, setValidatedKey: (key: string
         if (variables.apiKey === apiKey) {
           setValidatedKey(null);
         }
-        toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
+        toast.error(`Couldn't validate the Deepgram API key. ${result.error ?? 'Unknown error'}`);
       }
     },
     onError: (error, variables) => {
       if (variables.apiKey === apiKey) {
         setValidatedKey(null);
       }
-      toast.error(`Validation failed: ${error.message}`);
+      toast.error(`Couldn't validate the Deepgram API key. ${error.message}`);
     },
   });
 }

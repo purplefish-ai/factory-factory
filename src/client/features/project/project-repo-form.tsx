@@ -74,7 +74,7 @@ export function ProjectRepoForm({
               type="button"
               variant="outline"
               onClick={() => {
-                runInBackground(handleBrowse(), "Couldn't browse project directories");
+                runInBackground(handleBrowse(), "Couldn't browse project directories.");
               }}
             >
               <FolderOpenIcon className="h-4 w-4" />

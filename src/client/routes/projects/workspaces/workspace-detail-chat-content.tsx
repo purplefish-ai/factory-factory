@@ -121,7 +121,7 @@ function getInputPlaceholder({
     return 'Agent is starting…';
   }
   if (sessionRuntime.phase === 'error') {
-    return 'Agent encountered an error. Type a message to retry…';
+    return "Couldn't continue this chat. Type a message to retry…";
   }
   if (pendingRequestType && sessionRuntime.phase === 'running') {
     return getPendingRequestPresentation(pendingRequestType).composerPlaceholder;

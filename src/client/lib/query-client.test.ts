@@ -43,12 +43,12 @@ describe('app QueryClient fallback mutation error toast', () => {
   });
 
   it('uses meta.errorToast as the toast title', async () => {
-    const observer = failingObserver({ meta: { errorToast: "Couldn't start dev server" } });
+    const observer = failingObserver({ meta: { errorToast: "Couldn't start dev server." } });
     await expect(observer.mutate()).rejects.toThrow();
 
     expect(mocks.toastError).toHaveBeenCalledOnce();
     expect(mocks.toastError).toHaveBeenCalledWith(
-      "Couldn't start dev server",
+      "Couldn't start dev server.",
       expect.objectContaining({ description: 'Server said no' })
     );
   });

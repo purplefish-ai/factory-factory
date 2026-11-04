@@ -292,7 +292,7 @@ describe('AdminDashboardPage load failures', () => {
 
     mocks.resetMutationOptions?.onError?.(new Error('Rate limiter offline'));
 
-    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't reset API usage stats", {
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't reset API usage stats.", {
       description: 'Rate limiter offline',
     });
 

@@ -6,7 +6,7 @@ import { withErrorToastDefaults } from '@/components/ui/sonner';
  * Mutation `meta` understood by the app's MutationCache.
  *
  * `errorToast` controls the fallback error toast:
- * - omitted: a failure shows a generic "Couldn't complete that action" toast
+ * - omitted: a failure shows a generic "Couldn't complete that action." toast
  *   (unless the mutation has an options-level `onError`).
  * - string: a failure shows a toast with this title and the server message as
  *   the description.
@@ -23,7 +23,7 @@ declare module '@tanstack/react-query' {
   }
 }
 
-export const DEFAULT_MUTATION_ERROR_TITLE = "Couldn't complete that action";
+export const DEFAULT_MUTATION_ERROR_TITLE = "Couldn't complete that action.";
 
 function describeError(error: unknown): string | undefined {
   if (error instanceof Error) {

@@ -1,5 +1,4 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useState } from 'react';
 import { ComposerMenuTrigger } from '@/client/components/composer-menu-trigger';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 import { ProviderModelSubmenu } from './provider-model-submenu';
 
@@ -127,11 +127,7 @@ export function ProviderModelPicker({
           className="shrink"
           indicator={
             updating ? (
-              <SpinnerGapIcon
-                role="status"
-                aria-label="Applying model selection"
-                className="size-3 shrink-0 animate-spin"
-              />
+              <Spinner role="status" aria-label="Applying model selection" className="size-3" />
             ) : undefined
           }
         >
@@ -141,7 +137,11 @@ export function ProviderModelPicker({
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>{onProviderChange ? 'Provider and model' : 'Model'}</DropdownMenuLabel>
         {modelsLoading && (
-          <div role="status" className="px-2 py-1.5 text-xs text-muted-foreground">
+          <div
+            role="status"
+            className="inline-flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground"
+          >
+            <Spinner className="size-3" aria-hidden="true" />
             Loading models…
           </div>
         )}

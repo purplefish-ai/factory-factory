@@ -54,7 +54,7 @@ describe('CLI health recheck', () => {
       await vi.waitFor(() => {
         expect(toast.getHistory()).toContainEqual(
           expect.objectContaining({
-            title: "Couldn't check provider status",
+            title: "Couldn't check provider status.",
             description: 'Provider status unavailable',
           })
         );

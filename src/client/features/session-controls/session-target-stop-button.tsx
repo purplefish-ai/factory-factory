@@ -1,8 +1,8 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useSyncExternalStore } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SessionStopTarget } from '@/shared/acp-protocol/subagents';
 import {
@@ -46,7 +46,7 @@ export function SessionTargetStopButton({
             }}
           >
             {pending ? (
-              <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin" />
+              <Spinner className="h-4 w-4" aria-hidden="true" />
             ) : (
               <SquareIcon className="h-3 w-3" weight="fill" />
             )}

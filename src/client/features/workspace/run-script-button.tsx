@@ -40,7 +40,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   // Mutations
   // Failures surface through the app's fallback mutation error toast.
   const startScript = trpc.workspace.startRunScript.useMutation({
-    meta: { errorToast: "Couldn't start dev server" },
+    meta: { errorToast: "Couldn't start dev server." },
     onSuccess: () => {
       runInBackground(refetch(), "Couldn't refresh data.");
       setActiveBottomTab('dev-logs');
@@ -49,7 +49,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   });
 
   const stopScript = trpc.workspace.stopRunScript.useMutation({
-    meta: { errorToast: "Couldn't stop dev server" },
+    meta: { errorToast: "Couldn't stop dev server." },
     onSuccess: () => {
       runInBackground(refetch(), "Couldn't refresh data.");
     },

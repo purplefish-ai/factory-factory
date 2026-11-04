@@ -215,7 +215,7 @@ export const DeleteFailed: Story = {
     const dialog = await openDeleteConfirmation(canvasElement);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     const body = within(canvasElement.ownerDocument.body);
-    const title = await body.findByText("Couldn't delete screenshot");
+    const title = await body.findByText("Couldn't delete screenshot.");
     await waitFor(() => expect(title).toBeVisible());
     await waitFor(() => expect(body.getByRole('alertdialog')).toBeVisible());
   },

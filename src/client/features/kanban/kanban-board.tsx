@@ -114,10 +114,10 @@ function KanbanBoardContent() {
   // Context commands are recreated on every render. Stable wrappers let the
   // memoized cards skip re-rendering when another workspace changes.
   const handleToggleRatcheting = useStableCallback((workspaceId: string, enabled: boolean) => {
-    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), "Couldn't update workspace");
+    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), "Couldn't update workspace.");
   });
   const handleArchiveWorkspace = useStableCallback((workspaceId: string) => {
-    runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace");
+    runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace.");
   });
   const handleRenameWorkspace = useStableCallback(renameWorkspace);
   const handleGitLockOpenChange = useStableCallback((open: boolean) => {
@@ -352,7 +352,7 @@ function KanbanBoardContent() {
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
         onConfirm={() => {
-          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces");
+          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.");
         }}
         description={`This will archive ${workspacesInBulkArchiveColumn.length} ${workspacesInBulkArchiveColumn.length === 1 ? 'workspace' : 'workspaces'} in this column. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />

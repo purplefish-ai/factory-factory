@@ -88,7 +88,7 @@ export default function ProjectsListPage() {
       runInBackground(refetch({ throwOnError: true }), "Couldn't refresh data.");
     },
     onError: (error) => {
-      toast.error(error.message || "Couldn't archive project");
+      toast.error(error.message || "Couldn't archive project.");
     },
   });
 

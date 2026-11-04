@@ -307,7 +307,7 @@ export default function NewProjectPage() {
 
               <DataImportButton
                 onImportSuccess={() => {
-                  runInBackground(handleImportSuccess(), "Couldn't open projects after import");
+                  runInBackground(handleImportSuccess(), "Couldn't open projects after import.");
                 }}
                 variant="outline"
                 className="w-full"

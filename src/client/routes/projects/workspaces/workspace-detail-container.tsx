@@ -249,7 +249,7 @@ export function WorkspaceDetailContainer() {
   const handleBackToWorkspaces = useCallback(() => {
     runInBackground(
       Promise.resolve(navigate(`/projects/${slug}/workspaces`)),
-      "Couldn't open workspace list"
+      "Couldn't open workspace list."
     );
   }, [navigate, slug]);
   const handleConfirmArchive = useCallback(() => handleArchive(), [handleArchive]);
