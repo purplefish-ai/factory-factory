@@ -829,6 +829,10 @@ unchanged.
 
 ## Board views and Waiting intervals
 
+The sidebar's Board link shows Working and Waiting workspace counts for the
+selected project, including zero counts. They follow the same Kanban column
+groups as the sidebar lists and update with workspace snapshots.
+
 The board and sidebar use Todo, Working, Waiting, Done order. Todo opens the
 in-app issue launch sheet; external issue links remain explicit. Issue loading,
 provider configuration and fetch failures have separate states, with retry and

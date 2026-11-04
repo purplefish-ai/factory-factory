@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 
@@ -88,13 +89,45 @@ it.each([
         [...view.container.querySelectorAll('[data-sidebar="footer"] a')].map(
           (link) => link.textContent
         )
-      ).toEqual(['Board', 'Agents', 'Reviews3', 'Settings']);
+      ).toEqual(['BoardWorking 0Waiting 0', 'Agents', 'Reviews3', 'Settings']);
       expect(view.container.querySelector('a[href="/projects/stale/agents"]')).toBeNull();
     } finally {
       await view.dispose();
     }
   }
 );
+it('shows working and waiting board counts by column, excluding completed workspaces', async () => {
+  const serverWorkspaces = (['WORKING', 'WAITING', 'WAITING', 'DONE'] as const).map(
+    (kanbanColumn, index) => ({
+      ...createOptimisticWorkspaceSummary({
+        id: `workspace-${index}`,
+        projectId: 'stale-id',
+        name: `Workspace ${index}`,
+        ratchetEnabled: true,
+      }),
+      kanbanColumn,
+      isWorking: kanbanColumn !== 'WORKING',
+    })
+  );
+  const view = await render('/admin', { ...navData, serverWorkspaces });
+  try {
+    const board = view.container.querySelector('a[href="/projects/stale/workspaces"]');
+    expect(board?.textContent).toContain('Working 1');
+    expect(board?.textContent).toContain('Waiting 2');
+  } finally {
+    await view.dispose();
+  }
+});
+it('shows zero board counts when the project has no workspaces', async () => {
+  const view = await render('/admin');
+  try {
+    const board = view.container.querySelector('a[href="/projects/stale/workspaces"]');
+    expect(board?.textContent).toContain('Working 0');
+    expect(board?.textContent).toContain('Waiting 0');
+  } finally {
+    await view.dispose();
+  }
+});
 it('uses the selected project outside project routes', async () => {
   const view = await render('/admin');
   try {
@@ -171,7 +204,9 @@ it('offers Board in the mobile sheet and closes the sheet after navigating to it
     const board = document.body.querySelector<HTMLAnchorElement>(
       '[role="dialog"] a[href="/projects/alpha/workspaces"]'
     );
-    expect(board?.textContent).toBe('Board');
+    expect(board?.getAttribute('aria-label')).toBe('Board');
+    expect(board?.textContent).toContain('Working 0');
+    expect(board?.textContent).toContain('Waiting 0');
     expect(board?.getAttribute('aria-current')).toBeNull();
     await act(() => board!.click());
     expect(container.querySelector('output')?.textContent).toBe('/projects/alpha/workspaces');
