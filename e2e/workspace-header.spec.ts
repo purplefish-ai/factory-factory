@@ -337,7 +337,7 @@ for (const width of [375, 810]) {
         page.getByRole('menuitem', { name: '+ Create project', exact: true })
       ).toBeVisible();
       await expect(
-        page.getByRole('menuitem', { name: 'Manage projects...', exact: true })
+        page.getByRole('menuitem', { name: 'Manage projects…', exact: true })
       ).toBeVisible();
     });
   }

@@ -34,6 +34,15 @@ export function getProjectSection(pathname: string): ProjectSection | null {
   return section === 'workspaces' || section === 'agents' || section === 'reviews' ? section : null;
 }
 
+/** Switch project while retaining the section and valid event-agent view only. */
+export function getProjectSwitchPath(slug: string, pathname: string, search: string): string {
+  const section = getProjectSection(pathname) ?? 'workspaces';
+  const path = getProjectSectionPath(slug, section);
+  return section === 'agents' && getAgentRouteKind(search) === 'event'
+    ? `${path}?kind=event`
+    : path;
+}
+
 /** The board is the project landing page; workspace detail routes sit below it. */
 export function isProjectBoardPath(pathname: string): boolean {
   return /^\/projects\/[^/]+\/workspaces\/?$/i.test(pathname);

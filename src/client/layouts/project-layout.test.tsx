@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
@@ -59,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  onlineManager.setOnline(true);
   vi.unstubAllGlobals();
 });
 function notFound() {
@@ -90,7 +91,7 @@ function requestResult(path: string, input: unknown): Promise<unknown> {
       return Promise.reject(new Error(`Unexpected request ${path}`));
   }
 }
-function render() {
+function render(withOwner = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -120,10 +121,12 @@ function render() {
       <trpc.Provider client={client} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <AppHeaderProvider>
-            <MemoryRouter initialEntries={['/projects/alpha/agents/agent']}>
+            <MemoryRouter
+              initialEntries={[withOwner ? '/projects/alpha/agents/agent' : '/unowned']}
+            >
               <Link to="/projects/beta/agents">Switch project</Link>
               <Routes>
-                <Route path="/projects/:slug" element={<ProjectLayout />}>
+                <Route path={withOwner ? '/projects/:slug' : '*'} element={<ProjectLayout />}>
                   <Route path="agents/:id?" element={<AgentsRoute />} />
                 </Route>
               </Routes>
@@ -241,4 +244,27 @@ it('does not retain the prior project draft while a different owner is loading',
   expect(container.textContent).not.toContain('Scheduled review');
   await act(async () => resolveProject?.(projects[1]));
   await waitForReact(() => expect(container.textContent).toContain('Give recurring work an agent'));
+});
+
+it('keeps a paused first project query unresolved until connectivity returns', async () => {
+  onlineManager.setOnline(false);
+  const { container, queryClient } = render();
+  const key = getQueryKey(trpc.project.getBySlug, { slug: 'alpha' }, 'query');
+  expect(queryClient.getQueryState(key)?.fetchStatus).toBe('paused');
+  expect(container.textContent).toContain('Loading project…');
+  expect(container.textContent).not.toContain('Project not found');
+  expect(container.querySelector('a[href="/projects"]')).toBeNull();
+  expect(projectRead).not.toHaveBeenCalled();
+  await act(() => onlineManager.setOnline(true));
+  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
+});
+
+it('keeps a disabled idle project query unresolved without inventing a missing owner', () => {
+  const { container, queryClient } = render(false);
+  const key = getQueryKey(trpc.project.getBySlug, { slug: '' }, 'query');
+  expect(queryClient.getQueryState(key)?.fetchStatus).toBe('idle');
+  expect(container.textContent).toContain('Loading project…');
+  expect(container.textContent).not.toContain('Project not found');
+  expect(container.querySelector('a[href="/projects"]')).toBeNull();
+  expect(projectRead).not.toHaveBeenCalled();
 });

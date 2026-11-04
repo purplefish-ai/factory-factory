@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { type ReactNode, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { ProjectSelectorDropdown } from './project-selector';
 
@@ -6,9 +8,27 @@ const projectChange = fn();
 const currentProject = fn();
 const retryProjects = fn();
 
+function ProjectPath({ path, children }: { path?: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    if (path && `${pathname}${search}` !== path) {
+      void navigate(path);
+    }
+  }, [path, pathname, search, navigate]);
+  return children;
+}
+
 const meta = {
   title: 'Navigation/ProjectSelector',
   component: ProjectSelectorDropdown,
+  decorators: [
+    (Story, context) => (
+      <ProjectPath path={context.parameters.projectPath}>
+        <Story />
+      </ProjectPath>
+    ),
+  ],
   args: {
     selectedProjectSlug: 'alpha',
     projects: [
@@ -63,10 +83,13 @@ export const KeyboardNavigation: Story = {
   },
 };
 export const ModifiedClick: Story = {
-  play: async ({ canvasElement, args }) => {
+  play: async ({ canvasElement, args, parameters }) => {
     const screen = await openMenu(canvasElement);
     const beta = screen.getByRole('menuitem', { name: 'Beta' });
-    await expect(beta).toHaveAttribute('href', '/projects/beta/workspaces');
+    await expect(beta).toHaveAttribute(
+      'href',
+      parameters.projectPath ? '/projects/beta/agents?kind=event' : '/projects/beta/workspaces'
+    );
     let browserDefaultAvailable = false;
     // Observe React's handling, then stop synthetic navigation from leaving the
     // test frame. A real browser follows the href in a new tab.
@@ -92,4 +115,9 @@ export const PhoneLongProjectName: Story = {
       screen.getByRole('menuitem', { name: 'Factory Factory platform infrastructure' })
     ).toBeVisible();
   },
+};
+
+export const EventAgentModifiedClick: Story = {
+  ...ModifiedClick,
+  parameters: { projectPath: '/projects/alpha/agents/event-1?kind=event' },
 };

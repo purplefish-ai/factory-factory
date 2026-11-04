@@ -2,7 +2,7 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
 import { type MouseEvent, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
+import { getProjectSectionPath, getProjectSwitchPath } from '@/client/lib/project-navigation';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,8 +67,7 @@ export function ProjectSelectorDropdown({
   const selectedProjectName = selectedProject?.name ?? 'Select a project';
   const projectButtonLabel =
     isMobile && selectedProject ? getProjectInitials(selectedProject.name) : selectedProjectName;
-  const { pathname } = useLocation();
-  const section = getProjectSection(pathname) ?? 'workspaces';
+  const { pathname, search } = useLocation();
 
   // Keep browser link behavior for new tabs/windows and middle clicks. Only
   // ordinary activation changes this tab's persisted project selection.
@@ -137,7 +136,11 @@ export function ProjectSelectorDropdown({
             return (
               <DropdownMenuItem key={project.id} asChild>
                 <Link
-                  to={getProjectSectionPath(project.slug, openCurrent ? 'workspaces' : section)}
+                  to={
+                    openCurrent
+                      ? getProjectSectionPath(project.slug, 'workspaces')
+                      : getProjectSwitchPath(project.slug, pathname, search)
+                  }
                   aria-current={isCurrent ? 'true' : undefined}
                   onClick={(event) =>
                     activateLink(event, () => {

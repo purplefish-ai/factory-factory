@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { onlineManager } from '@tanstack/react-query';
 import { TRPCError } from '@trpc/server';
 import { useEffect } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router';
@@ -58,4 +59,21 @@ export const ConnectionFailure: Story = {
     await expect(await canvas.findByRole('button', { name: 'Retry project' })).toBeVisible();
     await expect(canvas.queryByText('Project not found')).not.toBeInTheDocument();
   },
+};
+
+export const PausedProject: Story = {
+  beforeEach: () => {
+    onlineManager.setOnline(false);
+    return () => onlineManager.setOnline(true);
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Loading project…')).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: 'Go to projects' })).not.toBeInTheDocument();
+    await expect(canvas.queryByText('Project not found')).not.toBeInTheDocument();
+  },
+};
+export const IdleProject: Story = {
+  render: () => <ProjectLayout />,
+  play: PausedProject.play,
 };

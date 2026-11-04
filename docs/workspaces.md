@@ -44,8 +44,9 @@ existing names, shown in parentheses where they differ.
 
 The project menu in the header lists projects and includes **Create project**
 and **Manage projects**. Switching projects keeps the current Board, Agents or
-Reviews section. Menu links support opening a project in another tab. The
-project name opens its board; the following breadcrumb identifies the section.
+Reviews section, including the event-agent view. Menu links support opening a
+project in another tab. The project name opens its board; the following
+breadcrumb identifies the section.
 
 The home page restores the saved project only while it appears in the active
 project list; otherwise it opens the first active project. A missing project

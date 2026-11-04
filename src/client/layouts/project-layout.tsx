@@ -34,7 +34,6 @@ export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
   const {
     data: project,
-    isLoading,
     isFetching,
     error,
     refetch,
@@ -60,15 +59,16 @@ export function ProjectLayout() {
       </>
     );
   }
-  if (isLoading) {
+  // Paused and disabled queries can be unresolved without actively fetching.
+  if (!error) {
     return <Loading message="Loading project…" className="h-64" />;
   }
   return (
     <ProjectLoadError
-      message={error && !notFound ? `Couldn't load project. ${error.message}` : 'Project not found'}
+      message={notFound ? 'Project not found' : `Couldn't load project. ${error.message}`}
       retry={retry}
       pending={isFetching}
-      notFound={notFound || !error}
+      notFound={notFound}
     />
   );
 }
