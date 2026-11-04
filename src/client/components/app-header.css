@@ -17,7 +17,7 @@
 /* The installed desktop PWA shares its first row with native window controls.
  * The browser owns the native controls and reports the safe rectangle between
  * them. Compact our controls within that height. A flat, full-width divider
- * separates the header, while its background matches the native corners.
+ * sits below the native area, while its background matches the native corners.
  * Larger fonts can grow the row without clipping.
  * Browser tabs, fullscreen, and unsupported PWAs keep the normal header.
  */
@@ -25,11 +25,11 @@
   .app-header {
     --app-header-control-size: max(24px, 1.5rem);
 
-    position: relative;
     min-height: 0;
     /* Match the background used for native window controls and theme-color. */
     background: var(--background);
-    border-bottom: 0;
+    /* Keep the border in flow, below the native overlay rather than inside it. */
+    border-bottom: 1px solid var(--border);
     padding-top: env(titlebar-area-y, 0px);
     padding-left: env(titlebar-area-x, 0px);
     padding-right: max(
@@ -55,15 +55,6 @@
     order: 0;
     flex-basis: auto;
     min-height: 0;
-  }
-
-  .app-header::after {
-    content: '';
-    position: absolute;
-    inset: auto 0 0;
-    height: 1px;
-    background: var(--border);
-    pointer-events: none;
   }
 
   .app-header :is(button, a, input, select, [role='button'], [role='combobox']) {
