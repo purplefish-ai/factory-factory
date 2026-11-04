@@ -6,6 +6,7 @@ import {
   createThinkingMessage,
   createUserMessage,
 } from '@/lib/claude-fixtures';
+import { ChatInput } from './chat-input/chat-input';
 import { ChatTranscript } from './chat-transcript';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
 
@@ -371,5 +372,28 @@ export const ShortReadingTranscript: Story = {
       initialIntent: 'reading',
       initialPosition: null,
     },
+  },
+};
+
+/** Exercise composer growth and clearing next to a scrollable transcript. */
+function ComposerScrollPreview(args: ComponentProps<typeof ChatTranscript>) {
+  const [draft, setDraft] = useState('');
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex-1 min-h-0">
+        <ChatTranscript {...args} />
+      </div>
+      <ChatInput onSend={() => undefined} value={draft} onChange={setDraft} />
+    </div>
+  );
+}
+
+export const ComposerResizing: Story = {
+  render: (args) => <ComposerScrollPreview {...args} />,
+  args: {
+    loadingSession: false,
+    messages: Array.from({ length: 30 }, (_, index) =>
+      createUserMessage(`Message ${index}. ${'Scrollable transcript content. '.repeat(6)}`)
+    ),
   },
 };
