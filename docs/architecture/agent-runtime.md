@@ -152,6 +152,13 @@ remain available. Claude provider caches exclude `project:` and `workspace:`
 commands, including nested names, regardless of disk-scan availability. Passive
 loads also reject scoped entries left in an older global cache.
 
+Stopping a session retains dispatched user prompts in the live transcript when
+termination rejects the in-flight prompt RPC, unless the rejection proves the
+prompt was never sent (steering, authority fences, a busy turn, or invalid
+attachments). Unsent queued messages are still cleared. Background notification
+and PR delivery entries retain their rollback rules so provisional transcript
+content does not establish delivery.
+
 Workspace notification recovery ignores provisional user transcript entries
 while their provider dispatch is unsettled, including across session stop/reset.
 Only settled transcript evidence can acknowledge delivery; a failed send leaves
