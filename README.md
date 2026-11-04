@@ -52,6 +52,12 @@ Start Factory Factory without installing it:
 npx factory-factory@latest serve
 ```
 
+Before starting, `ff serve` checks the Node.js version, Git, and the files
+needed for the selected mode. Development mode (`--dev`) also checks for the
+checkout's local tsx and Vite tools. Missing builds or development tools print
+checkout-specific recovery commands before creating the database or starting
+servers.
+
 Factory Factory opens in your browser and stores its database in
 `~/factory-factory/` by default.
 

@@ -94,8 +94,9 @@ export function DataImportResultsProvider({
                     disabled: {definitions.restoredDisabled}
                   </p>
                   <p>
-                    Only definition bodies and execution preferences are restored. Connections,
-                    event configuration and automation history are excluded.
+                    {active.recovery.manifest?.profile === 'base-json-slack-connections-1'
+                      ? 'Only definition bodies and execution preferences are restored. Connection bindings, event configuration and automation history are excluded. Slack connection metadata is reported separately.'
+                      : 'Only definition bodies and execution preferences are restored. Connections, event configuration and automation history are excluded.'}
                   </p>
                   <p>
                     Inspect recovered bodies and author new complete event configuration where

@@ -3,6 +3,7 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
+import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { exportDataSchema } from './export-data.schema';
 
 it('accepts the independently frozen workspace profile through three parses', () => {
@@ -216,3 +217,12 @@ it.each(['WorkspacePR', 'AgentSession'] as const)(
     expect(exportDataSchema.safeParse(file).success).toBe(true);
   }
 );
+
+it('applies inherited physical JSON-null validation to the Slack profile', () => {
+  const input = structuredClone(slack);
+  expect(exportDataSchema.safeParse(input).success).toBe(true);
+  Object.assign(input.data.recovery.baseJson, {
+    jsonStorage: [{ model: 'Workspace', identity: ['absent'], field: 'creationMetadata' }],
+  });
+  expect(exportDataSchema.safeParse(input).success).toBe(false);
+});

@@ -48,3 +48,9 @@ it.each([4, 5, 6, 7])(
     expect(parsed.meta.schemaVersion).toBe(schemaVersion === 7 ? 7 : 6);
   }
 );
+
+// Independent frozen wire literal: authored before the new profile codec.
+import slackFixture from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
+it('accepts the disconnected Slack metadata recovery profile', () => {
+  expect(exportDataSchema.safeParse(slackFixture).success).toBe(true);
+});

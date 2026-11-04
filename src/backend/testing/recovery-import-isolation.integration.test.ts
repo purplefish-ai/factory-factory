@@ -5,7 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
-import history from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
+import history from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -171,6 +171,14 @@ it('commits the existing base graph and account mapping through the private tran
     recovery: {
       status: 'PARTIAL',
       manifest: history.meta.recovery,
+      slackConnections: {
+        model: 'AgentConnection',
+        imported: 0,
+        skipped: 0,
+        sourceEnabled: 0,
+        restoredDisabled: 0,
+        reasons: { EXISTING_IDENTITY: 0 },
+      },
       automationDefinitions: {
         model: 'AgentDefinition',
         imported: 0,

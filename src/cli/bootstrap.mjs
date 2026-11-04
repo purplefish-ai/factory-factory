@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureNode } from './serve-prerequisites.mjs';
+import { ensureNode } from './setup-prerequisites.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 let root = directory;

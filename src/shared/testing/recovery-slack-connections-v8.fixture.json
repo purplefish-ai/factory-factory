@@ -1,0 +1,300 @@
+{
+  "meta": {
+    "exportedAt": "2026-11-03T12:00:00.000Z",
+    "version": "independent-definition-body-contract",
+    "schemaVersion": 8,
+    "recovery": {
+      "version": 1,
+      "profile": "base-json-slack-connections-1",
+      "status": "PARTIAL",
+      "capabilities": {
+        "baseJson": 1,
+        "periodicConfig": 1,
+        "periodicHistory": 1,
+        "automationDefinitions": 1,
+        "slackConnections": 1
+      },
+      "coverage": [
+        {
+          "model": "Project",
+          "status": "PARTIAL",
+          "limitation": "configuration/paths; no encrypted tracker configuration restore or repository files."
+        },
+        {
+          "model": "Workspace",
+          "status": "PARTIAL",
+          "limitation": "base metadata; Workspace.periodicTaskId links to newly imported disabled tasks; Workspace.creationMetadata preserves SQL NULL versus top-level JSON null; worktree contents, complete origin history and live workflow/process authority excluded."
+        },
+        {
+          "model": "WorkspaceMetadata",
+          "status": "PARTIAL",
+          "limitation": "existing generated summaries/provenance fields when parent is accepted; no full-domain recovery claim."
+        },
+        {
+          "model": "WorkspaceRunScript",
+          "status": "PARTIAL",
+          "limitation": "command/cleanup and inert runtime disposition; postRunCommand absent and PID/port/start authority excluded."
+        },
+        {
+          "model": "CodexAccount",
+          "status": "PARTIAL",
+          "limitation": "identity/label metadata; owner may remap identity; native home, credentials, timestamps and executable login authority excluded."
+        },
+        {
+          "model": "AgentSession",
+          "status": "PARTIAL",
+          "limitation": "base metadata/provider history identities; AgentSession.providerMetadata preserves SQL NULL versus top-level JSON null; provider history bytes/live process excluded."
+        },
+        {
+          "model": "TerminalSession",
+          "status": "PARTIAL",
+          "limitation": "label/metadata; process identities and terminal bytes excluded."
+        },
+        {
+          "model": "UserSettings",
+          "status": "PARTIAL",
+          "limitation": "exported preference subset; keys, credentials, workspace ordering and caches excluded."
+        },
+        {
+          "model": "WorkspacePR",
+          "status": "PARTIAL",
+          "limitation": "existing associations/cache; WorkspacePR.observation preserves SQL NULL versus top-level JSON null for actual included PR rows; no exact normalized full ledger guarantee."
+        },
+        {
+          "model": "WorkspacePRMonitoring",
+          "status": "PARTIAL",
+          "limitation": "base configuration/history; restored disabled, no executable monitoring authority."
+        },
+        {
+          "model": "WorkspacePRDedicatedSession",
+          "status": "PARTIAL",
+          "limitation": "existing base association where valid accepted owner graph exists; not an independent session/history payload."
+        },
+        {
+          "model": "WorkspacePREvent",
+          "status": "PARTIAL",
+          "limitation": "flattened raw event/effect evidence; no proof of omitted original members or original frozen ordering; unfinished effects inert."
+        },
+        {
+          "model": "WorkspacePRDelivery",
+          "status": "PARTIAL",
+          "limitation": "only evidence represented through base events; exact normalized delivery/membership/order not included."
+        },
+        {
+          "model": "WorkspacePRDiscovery",
+          "status": "PARTIAL",
+          "limitation": "base scheduling/cache fields where present; defaults otherwise, not delivery authority or full retained history."
+        },
+        {
+          "model": "DecisionLog",
+          "status": "EXCLUDED",
+          "limitation": "generic decision history absent."
+        },
+        {
+          "model": "WorkspaceLaunchOrigin",
+          "status": "EXCLUDED",
+          "limitation": "original launch provenance absent."
+        },
+        {
+          "model": "WorkspaceChildOrigin",
+          "status": "EXCLUDED",
+          "limitation": "original retained/deleted-child provenance absent; import-created invalidation/origin bookkeeping is not source recovery."
+        },
+        {
+          "model": "WorkspaceNotification",
+          "status": "EXCLUDED",
+          "limitation": "retained mailbox rows/revision/read/ack/supersession history absent."
+        },
+        {
+          "model": "WorkspaceMailState",
+          "status": "EXCLUDED",
+          "limitation": "retained wake/cursor proof absent; live claims/leases are intentionally never restored."
+        },
+        {
+          "model": "AgentSessionLaunchOrigin",
+          "status": "EXCLUDED",
+          "limitation": "original session launch provenance absent."
+        },
+        {
+          "model": "SessionLifecycleEvent",
+          "status": "EXCLUDED",
+          "limitation": "lifecycle history absent."
+        },
+        {
+          "model": "ClosedSession",
+          "status": "EXCLUDED",
+          "limitation": "archive payload/metadata recovery absent."
+        },
+        {
+          "model": "PeriodicTask",
+          "status": "PARTIAL",
+          "limitation": "complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority."
+        },
+        {
+          "model": "PeriodicTaskExecution",
+          "status": "PARTIAL",
+          "limitation": "all supported retained execution scalars and canonical version-1 or legacy null launch snapshots with SQL NULL versus top-level JSON null fidelity; imported RUNNING rows become historical FAILED without asserting provider outcome; live execution and replay authority excluded."
+        },
+        {
+          "model": "AgentDefinition",
+          "status": "PARTIAL",
+          "limitation": "all supported scalar definition bodies and execution preferences, source revisions and timestamps; restored disabled; connection bindings, event membership, proposal provenance, activation and run/evaluation history excluded."
+        },
+        {
+          "model": "AgentConnection",
+          "status": "PARTIAL",
+          "limitation": "SLACK connection identity, name, source enabled state and timestamps; restored disabled and without credentials; GitHub connections, credentials and live connection authority excluded."
+        },
+        {
+          "model": "AgentTrigger",
+          "status": "EXCLUDED",
+          "limitation": "automation trigger configuration absent."
+        },
+        {
+          "model": "AgentRun",
+          "status": "EXCLUDED",
+          "limitation": "automation run/effect history absent."
+        },
+        {
+          "model": "AgentProposal",
+          "status": "EXCLUDED",
+          "limitation": "draft/accepted proposal provenance absent."
+        },
+        {
+          "model": "AgentSourceState",
+          "status": "EXCLUDED",
+          "limitation": "source continuity state absent."
+        },
+        {
+          "model": "AgentSourcePage",
+          "status": "EXCLUDED",
+          "limitation": "source pages absent."
+        },
+        {
+          "model": "AgentSourceBaseline",
+          "status": "EXCLUDED",
+          "limitation": "source baselines absent."
+        },
+        {
+          "model": "AgentSourceCheckpoint",
+          "status": "EXCLUDED",
+          "limitation": "source checkpoint proof absent."
+        },
+        {
+          "model": "AgentSourceHead",
+          "status": "EXCLUDED",
+          "limitation": "source head proof absent."
+        },
+        {
+          "model": "AgentEvent",
+          "status": "EXCLUDED",
+          "limitation": "automation retained events absent."
+        },
+        {
+          "model": "AgentEvaluation",
+          "status": "EXCLUDED",
+          "limitation": "frozen automation decisions absent."
+        },
+        {
+          "model": "AgentInitialDelivery",
+          "status": "EXCLUDED",
+          "limitation": "initial automation effect evidence absent."
+        }
+      ],
+      "exclusions": [
+        "SECRETS_AND_ENCRYPTION_KEYS",
+        "NATIVE_ACCOUNT_HOMES",
+        "WORKTREE_AND_REPOSITORY_CONTENTS",
+        "PROVIDER_OWNED_HISTORY",
+        "LIVE_PROCESS_IDS_AND_RUNTIME_LEASES"
+      ]
+    }
+  },
+  "data": {
+    "projects": [
+      {
+        "id": "body-project",
+        "name": "Recovered bodies",
+        "slug": "body-project",
+        "repoPath": "/repos/body",
+        "worktreeBasePath": "/worktrees/body",
+        "defaultBranch": "main",
+        "githubOwner": null,
+        "githubRepo": null,
+        "issueProvider": "GITHUB",
+        "issueTrackerConfig": null,
+        "isArchived": false,
+        "startupScriptCommand": null,
+        "startupScriptPath": null,
+        "startupScriptTimeout": 300,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "workspaces": [],
+    "agentSessions": [],
+    "terminalSessions": [],
+    "codexAccounts": [],
+    "userSettings": null,
+    "recovery": {
+      "baseJson": {
+        "version": 1,
+        "jsonStorage": []
+      },
+      "periodicConfig": {
+        "version": 1,
+        "tasks": []
+      },
+      "periodicHistory": {
+        "version": 1,
+        "executions": [],
+        "jsonStorage": []
+      },
+      "automationDefinitions": {
+        "version": 1,
+        "definitions": [
+          {
+            "id": "body-definition",
+            "projectId": "body-project",
+            "name": "  original name  ",
+            "instructions": "Keep literal token=authored-instruction prose.\n",
+            "isEnabled": true,
+            "executionConfig": {
+              "version": 1,
+              "provider": "CODEX",
+              "model": "custom-model",
+              "reasoningEffort": "high"
+            },
+            "definitionRevision": 7,
+            "managementRevision": 9,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-02-01T00:00:00.000Z"
+          }
+        ]
+      },
+      "slackConnections": {
+        "version": 1,
+        "connections": [
+          {
+            "id": "slack-recovered-enabled",
+            "provider": "SLACK",
+            "externalId": "T-recovered-enabled",
+            "name": "Imported Slack A",
+            "isEnabled": true,
+            "createdAt": "2026-11-01T10:00:00.000Z",
+            "updatedAt": "2026-11-02T10:00:00.000Z"
+          },
+          {
+            "id": "slack-recovered-disabled",
+            "provider": "SLACK",
+            "externalId": "T-recovered-disabled",
+            "name": "Imported Slack B",
+            "isEnabled": false,
+            "createdAt": "2026-11-01T10:00:00.000Z",
+            "updatedAt": "2026-11-02T10:00:00.000Z"
+          }
+        ]
+      }
+    }
+  }
+}

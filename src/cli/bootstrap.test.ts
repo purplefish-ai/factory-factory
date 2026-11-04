@@ -11,7 +11,7 @@ function fixture(minimum: string) {
   directories.push(root);
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   writeFileSync(join(root, '.node-version'), minimum);
-  for (const file of ['bootstrap.mjs', 'serve-prerequisites.mjs']) {
+  for (const file of ['bootstrap.mjs', 'setup-prerequisites.mjs']) {
     copyFileSync(new URL(file, import.meta.url), join(root, file));
   }
   writeFileSync(
@@ -76,7 +76,7 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     writeFileSync(
       join(root, 'index.js'),
       `import { fileURLToPath } from 'node:url';
-       import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+       import { createSetupIO, confirmFix } from './setup-prerequisites.mjs';
        const io = createSetupIO();
        io.interactive = true;
        io.ask = async () => 'y';
@@ -128,7 +128,7 @@ it('cancels startup on Ctrl+C at the confirmation prompt', () => {
     join(root, 'index.js'),
     `
     import { PassThrough } from 'node:stream';
-    import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+    import { createSetupIO, confirmFix } from './setup-prerequisites.mjs';
     const input = new PassThrough();
     const output = new PassThrough();
     output.isTTY = true;
@@ -172,7 +172,7 @@ it.skipIf(process.platform === 'win32')(
       join(root, 'index.js'),
       `
     import { fileURLToPath } from 'node:url';
-    import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+    import { createSetupIO, confirmFix } from './setup-prerequisites.mjs';
     const io = createSetupIO(); io.interactive = true; io.ask = async () => 'y';
     await confirmFix([process.execPath, fileURLToPath(new URL('./worker.mjs', import.meta.url))], io);
   `

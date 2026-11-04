@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './serve-node-check';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,9 +17,10 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
-import { ensureNode, ensureServeTools } from './serve-prerequisites.mjs';
+import { checkServePrerequisites } from './serve-prerequisites';
 import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
+import { ensureServeTools } from './setup-prerequisites.mjs';
 import { registerStudioCommand } from './studio';
 import { registerTailscaleCommand } from './tailscale';
 
@@ -192,8 +194,19 @@ program
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
 
-    const minimumNode = readFileSync(join(PROJECT_ROOT, '.node-version'), 'utf8').trim();
-    if (!((await ensureNode(process.versions.node, minimumNode)) && (await ensureServeTools()))) {
+    if (!(await ensureServeTools())) {
+      process.exitCode = 1;
+      return;
+    }
+
+    const prerequisiteIssues = checkServePrerequisites(PROJECT_ROOT, !!options.dev);
+    if (prerequisiteIssues.length) {
+      console.error(
+        chalk.red('  Cannot start Factory Factory. Fix the following prerequisites:\n')
+      );
+      for (const issue of prerequisiteIssues) {
+        console.error(`  • ${issue}\n`);
+      }
       process.exitCode = 1;
       return;
     }
