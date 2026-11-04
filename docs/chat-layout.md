@@ -28,17 +28,18 @@ control, PR chip and right panel toggle inline. **Create PR** is available when
 the workspace has changes, the agent is idle, and the current branch has no open
 PR, including after an earlier PR was merged or closed. At 48rem and wider this
 action appears beside the chip; below that it is in More actions. At 72rem and
-wider the header adds the issue link, dev server port and **Open in IDE**. A
-finished workspace (done, merged or closed) also shows **Archive** inline at
-48rem and wider; narrower layouts offer it in More actions.
+wider the header adds the issue link and dev server port. A finished workspace
+(done, merged or closed) also shows **Archive** inline at 48rem and wider;
+narrower layouts offer it in More actions.
 
 **More actions** (⋯) is always present. It holds View details, Rename workspace,
 Provider settings, Open branch on GitHub, Open dev app, Open in IDE and Archive
 workspace, plus whichever of Create PR and the issue link the header is not
 showing inline. Inline wrappers carry `data-header-inline`, and the menu checks
 which are visible when it opens, so Create PR and the issue link do not repeat.
-Open in IDE and Archive remain in the menu even when the header also offers them
-inline. Every icon-only control has an accessible name and a tooltip.
+Open in IDE is available only in this menu at every width. Archive remains in
+the menu even when the header also offers it inline. Every icon-only control has
+an accessible name and a tooltip.
 
 The chat tab bar holds the chat tabs, closed chats, **New session** and a **Chat
 actions** (⋮) menu with **Rename chat** and **Restart agent** for the selected

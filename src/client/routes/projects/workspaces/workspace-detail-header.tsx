@@ -21,7 +21,6 @@ import { useWorkspaceProjectNavigation } from './use-workspace-project-navigatio
 import {
   ArchiveActionButton,
   getWorkspaceHeaderLabel,
-  OpenInIdeAction,
   ToggleRightPanelButton,
   WorkspaceHeaderOverflowMenu,
   type WorkspaceHeaderProps,
@@ -36,9 +35,9 @@ import {
  * via portal slots. Rendered inside WorkspaceDetailContainer.
  *
  * Inline controls are the ones used on most visits: the dev server, the PR chip
- * (with Create PR before a PR exists), and at wide widths the issue, port and
- * IDE. Everything else, including rename, details, provider settings, the
- * GitHub branch and archive, lives in "More actions" at every width. Controls
+ * (with Create PR before a PR exists), and at wide widths the issue and port.
+ * Everything else, including rename, details, provider settings, the GitHub
+ * branch and archive, lives in "More actions" at every width. Controls
  * that collapse into that menu carry `data-header-inline` so the menu only
  * repeats them when they are hidden. The IDE action stays in the menu at every
  * width.
@@ -157,15 +156,6 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               />
             </div>
           )}
-          <div className="hidden @[72rem]/header:flex">
-            <OpenInIdeAction
-              workspaceId={workspaceId}
-              hasWorktreePath={Boolean(workspace.worktreePath)}
-              availableIdes={availableIdes}
-              preferredIde={preferredIde}
-              openInIde={openInIde}
-            />
-          </div>
           <WorkspaceHeaderOverflowMenu
             isArchived={isArchived}
             workspace={workspace}

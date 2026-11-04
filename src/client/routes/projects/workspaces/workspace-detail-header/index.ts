@@ -1,7 +1,6 @@
 export { AdversarialReviewButton } from './adversarial-review-button';
 export { ArchiveActionButton } from './archive-action-button';
 export { OpenDevAppAction } from './open-dev-app-action';
-export { OpenInIdeAction } from './open-in-ide-action';
 export { WorkspacePrChip } from './workspace-pr-chip';
 export { ToggleRightPanelButton } from './toggle-right-panel-button';
 export type { WorkspaceHeaderProps } from './types';
