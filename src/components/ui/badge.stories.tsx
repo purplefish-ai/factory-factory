@@ -80,3 +80,9 @@ export const AllVariants: Story = {
     </div>
   ),
 };
+
+/** Status variants are tinted: the token is the text color on a 10% tint. */
+export const AllVariantsDark: Story = {
+  ...AllVariants,
+  globals: { theme: 'dark' },
+};

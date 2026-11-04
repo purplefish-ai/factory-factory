@@ -53,21 +53,35 @@
   --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.96 0 0);
   --accent-foreground: oklch(0.145 0 0);
-  /* Light mode brand: Amber 600 (#d97706) for better contrast */
-  --brand: oklch(0.62 0.17 55);
+  /*
+   * Light mode brand: a darker gold near Factory Yellow's hue (95 vs 102, see
+   * .dark) that reads as text on the light background (5.7:1). Bright yellow
+   * cannot.
+   */
+  --brand: oklch(0.5 0.105 95);
   --brand-foreground: oklch(0.98 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
-  --ring: oklch(0.62 0.17 55);
-  --success: oklch(0.627 0.194 145.8);
+  /* Focus is neutral so it never reads as a status. */
+  --ring: oklch(0.55 0 0);
+  /*
+   * Status palette (docs/status-colors.md). Every base token is legible as
+   * text on the background, cards and its own 10% tint; every *-foreground is
+   * the text color for a solid fill of its token, in both modes.
+   */
+  --running: var(--brand);
+  --running-foreground: var(--brand-foreground);
+  --success: oklch(0.5 0.14 148);
   --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.55 0.18 55);
-  --warning-foreground: oklch(0.3 0.05 55);
-  --info: oklch(0.623 0.214 259.1);
+  --warning: oklch(0.52 0.15 50);
+  --warning-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.52 0.2 27);
+  --destructive-foreground: oklch(0.98 0 0);
+  --info: oklch(0.5 0.19 259);
   --info-foreground: oklch(0.98 0 0);
-  --chart-1: oklch(0.62 0.17 55);
+  --merged: oklch(0.5 0.2 300);
+  --merged-foreground: oklch(0.98 0 0);
+  --chart-1: oklch(0.5 0.105 95);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
@@ -79,7 +93,7 @@
   --sidebar-accent: oklch(0.94 0 0);
   --sidebar-accent-foreground: oklch(0.145 0 0);
   --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.62 0.17 55);
+  --sidebar-ring: oklch(0.55 0 0);
 }
 
 /* xterm.js terminal styling */
@@ -130,6 +144,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-running: var(--running);
+  --color-running-foreground: var(--running-foreground);
+  --color-merged: var(--merged);
+  --color-merged-foreground: var(--merged-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -184,23 +202,32 @@
   --secondary: oklch(0.22 0 0);
   --secondary-foreground: oklch(0.98 0 0);
   --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.6 0 0);
+  --muted-foreground: oklch(0.65 0 0);
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(0.98 0 0);
   /* Factory Yellow: #FFE500 */
   --brand: oklch(0.93 0.21 102);
   --brand-foreground: oklch(0.145 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(1 0 0 / 15%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.93 0.21 102);
-  --success: oklch(0.696 0.17 145.8);
+  --ring: oklch(0.7 0 0);
+  /* Warning is amber, a distinct hue from the yellow brand/running color. */
+  --running: var(--brand);
+  --running-foreground: var(--brand-foreground);
+  --success: oklch(0.75 0.16 150);
   --success-foreground: oklch(0.145 0 0);
-  --warning: oklch(0.93 0.21 102);
+  --warning: oklch(0.77 0.15 60);
   --warning-foreground: oklch(0.145 0 0);
-  --info: oklch(0.623 0.194 259.1);
-  --info-foreground: oklch(0.98 0 0);
+  /*
+   * Destructive keeps light text: the shadcn Button and Badge render it as
+   * bg-destructive/60 in dark mode, which needs light text (see the docs).
+   */
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.98 0 0);
+  --info: oklch(0.72 0.14 255);
+  --info-foreground: oklch(0.145 0 0);
+  --merged: oklch(0.72 0.15 300);
+  --merged-foreground: oklch(0.145 0 0);
   --chart-1: oklch(0.93 0.21 102);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.623 0.194 259.1);
@@ -213,7 +240,7 @@
   --sidebar-accent: oklch(0.22 0 0);
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.93 0.21 102);
+  --sidebar-ring: oklch(0.7 0 0);
 }
 
 @layer base {
