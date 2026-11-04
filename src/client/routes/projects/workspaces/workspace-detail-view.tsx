@@ -4,6 +4,7 @@ import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer
 import type { SubagentSelection } from '@/client/features/subagents';
 import { ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { RightPanel } from '@/client/features/workspace/right-panel';
+import type { SessionQueuedMessageCount } from '@/client/features/workspace/session-close-guard';
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
 import { WorkspaceContentView } from '@/client/features/workspace/workspace-content-view';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
@@ -46,8 +47,8 @@ interface SessionTabsProps {
   selectedSessionControlId?: string;
   selectedSessionControlRuntimeId?: string;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
-  /** Unsent queued messages in the selected session; closing its tab discards them. */
-  selectedSessionQueuedMessageCount?: number;
+  /** Unsent queued messages and their session; closing that tab discards them. */
+  queuedMessageCount?: SessionQueuedMessageCount | null;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
@@ -204,7 +205,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         sessions={sessionTabs.sessions}
         selectedSessionId={sessionTabs.selectedDbSessionId}
         sessionSummariesById={sessionTabs.sessionSummariesById}
-        selectedSessionQueuedMessageCount={sessionTabs.selectedSessionQueuedMessageCount}
+        queuedMessageCount={sessionTabs.queuedMessageCount}
         isCreatingSession={header.isCreatingSession}
         isDeletingSession={sessionTabs.isDeletingSession}
         onSelectSession={sessionTabs.handleSelectSession}

@@ -33,7 +33,7 @@ describe('getReviewShortcut', () => {
     expect(keydown(document.body, 'd', init)).toBeNull();
   });
 
-  it('ignores text fields and unrelated buttons but not review rows', () => {
+  it('ignores text fields and unrelated buttons but not review rows or tabs', () => {
     const input = document.createElement('input');
     const button = document.createElement('button');
     const list = document.createElement('div');
@@ -45,5 +45,10 @@ describe('getReviewShortcut', () => {
     expect(keydown(input, 'd')).toBeNull();
     expect(keydown(button, 'd')).toBeNull();
     expect(keydown(row, 'd')).toBe('d');
+
+    const tab = document.createElement('button');
+    tab.setAttribute('role', 'tab');
+    document.body.append(tab);
+    expect(keydown(tab, 'd')).toBe('d');
   });
 });

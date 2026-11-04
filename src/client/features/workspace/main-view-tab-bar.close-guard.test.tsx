@@ -9,6 +9,7 @@ import {
   setupSubagentTabTestEnvironment,
 } from '@/test-utils/subagent-tabs';
 import { MainViewTabBar } from './main-view-tab-bar';
+import type { SessionQueuedMessageCount } from './session-close-guard';
 import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -35,7 +36,7 @@ afterEach(cleanupSubagentTabTestEnvironment);
 
 async function renderCloseGuard(options: {
   currentSessionId: string;
-  queuedMessageCount?: number;
+  queuedMessageCount?: SessionQueuedMessageCount | null;
   summaries?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
 }) {
   const container = document.createElement('div');
@@ -50,7 +51,7 @@ async function renderCloseGuard(options: {
             workspaceId="close-guard"
             sessions={sessions}
             currentSessionId={options.currentSessionId}
-            currentSessionQueuedMessageCount={options.queuedMessageCount}
+            queuedMessageCount={options.queuedMessageCount}
             sessionSummariesById={options.summaries ?? new Map([['working', workingSummary]])}
             onCloseSession={onCloseSession}
           />
@@ -103,8 +104,11 @@ describe('MainViewTabBar session close guard', () => {
   });
 
   it('closes an idle session immediately', async () => {
-    // The queued messages belong to the current (working) session, not this one.
-    const view = await renderCloseGuard({ currentSessionId: 'working', queuedMessageCount: 3 });
+    // The queued messages belong to the working session, not this one.
+    const view = await renderCloseGuard({
+      currentSessionId: 'working',
+      queuedMessageCount: { sessionId: 'working', count: 3 },
+    });
     try {
       await view.clickClose('Docs pass');
       expect(view.onCloseSession).toHaveBeenCalledExactlyOnceWith('idle');
@@ -115,7 +119,10 @@ describe('MainViewTabBar session close guard', () => {
   });
 
   it('confirms before discarding queued messages in an idle session', async () => {
-    const view = await renderCloseGuard({ currentSessionId: 'idle', queuedMessageCount: 1 });
+    const view = await renderCloseGuard({
+      currentSessionId: 'idle',
+      queuedMessageCount: { sessionId: 'idle', count: 1 },
+    });
     try {
       await view.clickClose('Docs pass');
       expect(view.onCloseSession).not.toHaveBeenCalled();
@@ -123,6 +130,40 @@ describe('MainViewTabBar session close guard', () => {
 
       await view.clickDialogButton('Discard and close');
       expect(view.onCloseSession).toHaveBeenCalledExactlyOnceWith('idle');
+    } finally {
+      await act(() => view.root.unmount());
+    }
+  });
+
+  // Regression: during a tab switch the chat state still holds the previous
+  // session's queue, so the count must follow its owner, not the selection.
+  it('charges a stale queue to its owning session after switching tabs', async () => {
+    const view = await renderCloseGuard({
+      currentSessionId: 'working',
+      queuedMessageCount: { sessionId: 'idle', count: 2 },
+    });
+    try {
+      await view.clickClose('Docs pass');
+      expect(view.onCloseSession).not.toHaveBeenCalled();
+      expect(view.dialog()?.textContent).toContain('2 queued messages');
+    } finally {
+      await act(() => view.root.unmount());
+    }
+  });
+
+  it('does not charge a queue to a session it does not belong to', async () => {
+    const idleSummaries = new Map<string, WorkspaceSessionRuntimeSummary>([
+      ['working', { ...workingSummary, runtimePhase: 'idle', activity: 'IDLE' }],
+    ]);
+    const view = await renderCloseGuard({
+      currentSessionId: 'working',
+      queuedMessageCount: { sessionId: 'idle', count: 2 },
+      summaries: idleSummaries,
+    });
+    try {
+      await view.clickClose('Refactor auth');
+      expect(view.onCloseSession).toHaveBeenCalledExactlyOnceWith('working');
+      expect(view.dialog()).toBeNull();
     } finally {
       await act(() => view.root.unmount());
     }

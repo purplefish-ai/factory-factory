@@ -31,6 +31,9 @@ describe('getSessionCloseRisk', () => {
       running: true,
       queuedMessageCount: 0,
     });
+    expect(
+      getSessionCloseRisk({ summary: summary({ runtimePhase: 'running', activity: 'IDLE' }) })
+    ).toEqual({ running: true, queuedMessageCount: 0 });
     expect(getSessionCloseRisk({ summary: summary({ runtimePhase: 'starting' }) })?.running).toBe(
       true
     );
@@ -57,9 +60,12 @@ describe('describeSessionCloseRisk', () => {
         'Chat 1 is still working. Closing the tab stops the agent and its transcript moves to Closed sessions.',
       confirmText: 'Stop and close',
     });
-    expect(
-      describeSessionCloseRisk('Chat 1', { running: true, queuedMessageCount: 2 }).description
-    ).toContain('has 2 queued messages. Closing the tab stops the agent, discards the queued');
+    expect(describeSessionCloseRisk('Chat 1', { running: true, queuedMessageCount: 2 })).toEqual({
+      title: 'Stop and close Chat 1?',
+      description:
+        'Chat 1 is still working and has 2 queued messages. Closing the tab stops the agent, discards the queued messages, and its transcript moves to Closed sessions.',
+      confirmText: 'Stop and close',
+    });
     expect(describeSessionCloseRisk('Chat 1', { running: false, queuedMessageCount: 2 })).toEqual({
       title: 'Discard queued messages in Chat 1?',
       description:

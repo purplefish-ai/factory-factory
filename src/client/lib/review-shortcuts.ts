@@ -24,8 +24,10 @@ export function shouldIgnoreReviewShortcut(event: KeyboardEvent): boolean {
   if (target?.closest(REVIEW_SHORTCUT_BLOCKING_CONTEXT)) {
     return true;
   }
+  // Review rows and tab triggers keep shortcuts: clicking a row or the Info/Diff
+  // tabs leaves focus there, and letter keys have no native meaning on them.
   const control = target?.closest('button, a[href]');
-  return !!control && !control.matches('[data-review-list] > button');
+  return !!control && !control.matches('[data-review-list] > button, [role="tab"]');
 }
 
 /**

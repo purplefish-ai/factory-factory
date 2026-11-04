@@ -5,6 +5,7 @@ import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
+import type { SessionQueuedMessageCount } from './session-close-guard';
 import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -20,8 +21,8 @@ export interface WorkspaceContentViewProps {
   sessions: Session[] | undefined;
   selectedSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
-  /** Unsent queued messages in the selected session; closing its tab discards them. */
-  selectedSessionQueuedMessageCount?: number;
+  /** Unsent queued messages and their session; closing that tab discards them. */
+  queuedMessageCount?: SessionQueuedMessageCount | null;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
@@ -54,7 +55,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   sessions,
   selectedSessionId,
   sessionSummariesById,
-  selectedSessionQueuedMessageCount,
+  queuedMessageCount,
   isCreatingSession,
   isDeletingSession,
   onSelectSession,
@@ -79,7 +80,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
           workspaceId={workspaceId}
           sessions={sessions}
           currentSessionId={selectedSessionId}
-          currentSessionQueuedMessageCount={selectedSessionQueuedMessageCount}
+          queuedMessageCount={queuedMessageCount}
           sessionSummariesById={sessionSummariesById}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}

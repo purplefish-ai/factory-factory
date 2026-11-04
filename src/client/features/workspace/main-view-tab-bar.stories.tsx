@@ -198,7 +198,9 @@ function CloseGuardTabBar({ queuedMessageCount = 0 }: { queuedMessageCount?: num
           { id: 'idle', name: 'Docs pass', status: 'IDLE', provider: 'CLAUDE' },
         ]}
         currentSessionId={queuedMessageCount > 0 ? 'idle' : 'working'}
-        currentSessionQueuedMessageCount={queuedMessageCount}
+        queuedMessageCount={
+          queuedMessageCount > 0 ? { sessionId: 'idle', count: queuedMessageCount } : null
+        }
         sessionSummariesById={new Map([['working', workingSummary]])}
         onCloseSession={closeSession}
       />

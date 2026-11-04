@@ -22,6 +22,7 @@ import {
   describeSessionCloseRisk,
   getSessionCloseRisk,
   type SessionCloseRisk,
+  type SessionQueuedMessageCount,
 } from './session-close-guard';
 import { isWorkspaceSessionLimitReached } from './session-limit';
 import {
@@ -263,8 +264,8 @@ interface MainViewTabBarProps {
   workspaceId: string;
   sessions?: Session[];
   currentSessionId?: string | null;
-  /** Queued (unsent) messages for the current session; closing discards them. */
-  currentSessionQueuedMessageCount?: number;
+  /** Queued (unsent) messages and their session; closing that session discards them. */
+  queuedMessageCount?: SessionQueuedMessageCount | null;
   sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: (codexAccountId?: string) => void;
@@ -282,7 +283,7 @@ export function MainViewTabBar({
   workspaceId,
   sessions,
   currentSessionId,
-  currentSessionQueuedMessageCount = 0,
+  queuedMessageCount,
   sessionSummariesById,
   onSelectSession,
   onCreateSession,
@@ -307,7 +308,8 @@ export function MainViewTabBar({
     const risk = getSessionCloseRisk({
       summary: sessionSummariesById?.get(session.id),
       persistedStatus: session.status,
-      queuedMessageCount: session.id === currentSessionId ? currentSessionQueuedMessageCount : 0,
+      queuedMessageCount:
+        queuedMessageCount?.sessionId === session.id ? queuedMessageCount.count : 0,
     });
     if (!risk) {
       onCloseSession?.(session.id);

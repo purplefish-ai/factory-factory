@@ -2,6 +2,16 @@ import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import { sessionUiStatusKindFromSummary } from '@/shared/session-runtime';
 import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 
+/**
+ * Unsent queued messages, tagged with the session they belong to. The chat
+ * reducer keeps the previous session's queue during a switch until the new
+ * session hydrates, so an untagged count could be charged to the wrong tab.
+ */
+export interface SessionQueuedMessageCount {
+  sessionId: string;
+  count: number;
+}
+
 /** Work that closing a session tab would interrupt or discard. */
 export interface SessionCloseRisk {
   running: boolean;

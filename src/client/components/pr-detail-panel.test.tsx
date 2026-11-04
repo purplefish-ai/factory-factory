@@ -110,6 +110,19 @@ describe('PRDetailPanel keyboard shortcuts', () => {
     return { container, root, activeTab, press, onFetchDiff };
   }
 
+  it('keeps d and i working after clicking a tab trigger', async () => {
+    const view = await renderPanel();
+    try {
+      const infoTab = view.container.querySelector<HTMLElement>('[role="tab"]');
+      await act(() => infoTab?.focus());
+      expect(document.activeElement).toBe(infoTab);
+      await view.press(infoTab!, 'd');
+      expect(view.activeTab()).toBe('Diff');
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+
   it('switches tabs on plain d and i', async () => {
     const view = await renderPanel();
     try {

@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   passiveTransportSessionId: null as string | null,
   transport: {
     messages: [],
-    queuedMessages: [],
+    queuedMessages: [] as { id: string }[],
     connected: true,
     chatCapabilities: { attachments: { enabled: true, kinds: ['image'] } },
     sessionStatus: { phase: 'ready' },
@@ -180,6 +180,7 @@ beforeEach(() => {
   mocks.selectedSessionId = 'session-a';
   mocks.passiveTransportSessionId = null;
   mocks.transport.runtimeSessionId = 'session-a';
+  mocks.transport.queuedMessages = [];
   mocks.transport.connected = true;
   mocks.transport.sessionStatus.phase = 'ready';
   mocks.transport.sessionRuntime.phase = 'idle';
@@ -277,6 +278,28 @@ describe('WorkspaceDetailContainer transcript composition', () => {
     expect(latest().chat.sessionId).toBeNull();
     expect(latest().chat.transcriptScroll.ready).toBe(false);
     expect(latest().chat.transcriptScroll.identity).toBe('workspace-one/main/none');
+  });
+
+  // Regression: the chat reducer keeps the previous session's queue until the
+  // newly selected session hydrates, so the close guard must not charge it to
+  // the new selection.
+  it('attributes queued messages to the hydrated session across a tab switch', async () => {
+    mocks.transport.queuedMessages = [{ id: 'q1' }, { id: 'q2' }];
+    await render();
+    expect(latest().sessionTabs.queuedMessageCount).toEqual({ sessionId: 'session-a', count: 2 });
+
+    mocks.selectedSessionId = 'session-b';
+    await render();
+    expect(latest().sessionTabs.queuedMessageCount).toEqual({ sessionId: 'session-a', count: 2 });
+
+    mocks.transport.runtimeSessionId = null;
+    await render();
+    expect(latest().sessionTabs.queuedMessageCount).toBeNull();
+
+    mocks.transport.runtimeSessionId = 'session-b';
+    mocks.transport.queuedMessages = [];
+    await render();
+    expect(latest().sessionTabs.queuedMessageCount).toEqual({ sessionId: 'session-b', count: 0 });
   });
 
   it('rejects the previous session snapshot on the selection render before transport passive cleanup', async () => {
