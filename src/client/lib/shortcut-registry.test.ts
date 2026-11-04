@@ -49,3 +49,38 @@ it('does not approve while typing or when a dialog owns focus', () => {
   key({ key: 'A', shiftKey: true });
   expect(approve).not.toHaveBeenCalled();
 });
+
+it('cleans up the exact registration when the same handler is registered twice', () => {
+  const same = vi.fn();
+  const middle = vi.fn();
+  const first = registerShortcutHandler('app.search', same);
+  cleanups.push(first);
+  cleanups.push(registerShortcutHandler('app.search', middle));
+  cleanups.push(registerShortcutHandler('app.search', same));
+  first();
+  triggerShortcut('app.search');
+  expect(same).toHaveBeenCalledTimes(1);
+  expect(middle).not.toHaveBeenCalled();
+});
+it('exposes and runs only currently actionable registered commands', () => {
+  let visible = false;
+  const focus = vi.fn();
+  cleanups.push(registerShortcutHandler('chat.focusComposer', focus, () => visible));
+  expect(hasShortcutHandler('chat.focusComposer')).toBe(false);
+  expect(triggerShortcut('chat.focusComposer')).toBe(false);
+  expect(focus).not.toHaveBeenCalled();
+  visible = true;
+  expect(hasShortcutHandler('chat.focusComposer')).toBe(true);
+  expect(triggerShortcut('chat.focusComposer')).toBe(true);
+  expect(focus).toHaveBeenCalledOnce();
+});
+
+it('lets a visible outer composer own a shortcut while a later composer is hidden', () => {
+  const outer = vi.fn();
+  const hidden = vi.fn();
+  cleanups.push(registerShortcutHandler('chat.focusComposer', outer));
+  cleanups.push(registerShortcutHandler('chat.focusComposer', hidden, () => false));
+  expect(triggerShortcut('chat.focusComposer')).toBe(true);
+  expect(outer).toHaveBeenCalledOnce();
+  expect(hidden).not.toHaveBeenCalled();
+});

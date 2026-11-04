@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import {
   formatShortcut,
   getShortcut,
@@ -13,23 +13,34 @@ import {
   type ShortcutHandler,
   subscribeToShortcutHandlers,
   triggerShortcut,
-} from './shortcut-registry';
+} from '@/client/lib/shortcut-registry';
 
 /**
  * Binds `handler` to a registry shortcut while mounted and `enabled`. The
  * shortcut's context guard decides where it fires; the latest handler is used
  * without re-registering on every render.
  */
-export function useShortcut(id: ShortcutId, handler: ShortcutHandler, enabled = true) {
+export function useShortcut(
+  id: ShortcutId,
+  handler: ShortcutHandler,
+  enabled = true,
+  available?: () => boolean
+) {
+  const availabilityRef = useRef(available);
   const handlerRef = useRef(handler);
   useLayoutEffect(() => {
     handlerRef.current = handler;
+    availabilityRef.current = available;
   });
   useEffect(() => {
     if (!enabled) {
       return;
     }
-    return registerShortcutHandler(id, (event) => handlerRef.current(event));
+    return registerShortcutHandler(
+      id,
+      (event) => handlerRef.current(event),
+      () => availabilityRef.current?.() ?? true
+    );
   }, [id, enabled]);
 }
 
@@ -44,30 +55,26 @@ export interface ShortcutCommand {
 
 /** ⌘K commands whose shortcuts currently have a handler, in registry order. */
 export function useShortcutCommands(): ShortcutCommand[] {
-  const version = useSyncExternalStore(
+  useSyncExternalStore(
     subscribeToShortcutHandlers,
     getShortcutHandlersVersion,
     getShortcutHandlersVersion
   );
-  return useMemo(() => {
-    // `version` changes whenever a handler registers or unregisters.
-    void version;
-    return SHORTCUTS.flatMap((definition) => {
-      const { command } = getShortcut(definition.id);
-      if (!(command && hasShortcutHandler(definition.id))) {
-        return [];
-      }
-      return [
-        {
-          id: definition.id,
-          label: command.label,
-          section: command.section,
-          keywords: command.keywords ?? [],
-          shortcut: formatShortcut(definition.id),
-        },
-      ];
-    });
-  }, [version]);
+  return SHORTCUTS.flatMap((definition) => {
+    const { command } = getShortcut(definition.id);
+    if (!(command && hasShortcutHandler(definition.id))) {
+      return [];
+    }
+    return [
+      {
+        id: definition.id,
+        label: command.label,
+        section: command.section,
+        keywords: command.keywords ?? [],
+        shortcut: formatShortcut(definition.id),
+      },
+    ];
+  });
 }
 
 export function runShortcutCommand(id: ShortcutId): boolean {

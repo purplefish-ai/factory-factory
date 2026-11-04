@@ -9,6 +9,7 @@ import { SubagentIcon } from '@/client/components/subagent-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { useShortcut } from '@/client/features/shortcuts';
 import { type SubagentSelection, useLiveSubagent } from '@/client/features/subagents';
+import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
 import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -304,6 +305,7 @@ export function MainViewTabBar({
   disabled,
   maxSessions,
 }: MainViewTabBarProps) {
+  const tabBarRef = useTablistFocus();
   const { tabs, activeTabId, selectTab, closeTab, updateSubagentTab } = useWorkspacePanel();
   // The request outlives `closeConfirmOpen` so the dialog keeps its copy while
   // it animates closed.
@@ -375,7 +377,7 @@ export function MainViewTabBar({
     : null;
 
   return (
-    <div className={cn('flex items-center bg-muted/50', className)}>
+    <div ref={tabBarRef} className={cn('flex items-center bg-muted/50', className)}>
       {/* Scrollable tab area. Chats and open files are separate tablists, each
           one Tab stop with arrow-key navigation; the menus between them are
           ordinary buttons, which a tablist may not contain. */}

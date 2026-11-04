@@ -6,7 +6,7 @@ const TAB_SELECTOR = '[role="tab"]:not([aria-disabled="true"])';
  * Arrow-key navigation for a `role="tablist"` (WAI-ARIA tabs pattern with
  * manual activation): ←/→ move focus between tabs, wrapping at the ends, and
  * Home/End jump to the first and last tab. Enter or Space on a tab selects it.
- * Pair it with a roving tabindex: only the selected tab has `tabIndex={0}`, so
+ * Pair it with a roving tabindex: only the focused tab has `tabIndex={0}`, so
  * the tablist is a single Tab stop.
  */
 export function handleTablistKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -26,6 +26,9 @@ export function handleTablistKeyDown(event: KeyboardEvent<HTMLElement>) {
   }
   event.preventDefault();
   const target = tabs[targetIndex];
+  for (const tab of tabs) {
+    tab.tabIndex = tab === target ? 0 : -1;
+  }
   target?.focus();
   target?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }

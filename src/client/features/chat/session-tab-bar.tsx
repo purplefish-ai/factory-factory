@@ -9,6 +9,7 @@ import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
+import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
 import { getAriaKeyShortcuts, matchesShortcut } from '@/client/lib/keyboard-shortcuts';
 import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
@@ -226,6 +227,7 @@ export function SessionTabBar({
   className,
   readOnly = false,
 }: SessionTabBarProps) {
+  const tabBarRef = useTablistFocus();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -285,7 +287,10 @@ export function SessionTabBar({
   }, [updateScrollArrows]);
 
   return (
-    <div className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}>
+    <div
+      ref={tabBarRef}
+      className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}
+    >
       {/* Left scroll arrow */}
       {showLeftArrow && (
         <Button

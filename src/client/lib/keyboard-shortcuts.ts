@@ -119,6 +119,25 @@ function getEventElement(event: KeyboardEvent): Element | null {
   return typeof document === 'undefined' ? null : document.activeElement;
 }
 
+function blocksNativeShortcutContext(
+  event: KeyboardEvent,
+  definition: ShortcutDefinition,
+  target: Element
+): boolean {
+  if (!definition.allowInDialog && target.closest(MODAL_SELECTOR)) {
+    return true;
+  }
+  // ⌘/Ctrl chords (⌘K, ⌘B) mean nothing to these widgets; arrows and letters do.
+  if (!(event.metaKey || event.ctrlKey) && target.closest(WIDGET_SELECTOR)) {
+    return true;
+  }
+  // Option/Alt bracket chords type punctuation on macOS and other layouts.
+  if (event.altKey && target.closest(EDITABLE_SELECTOR)) {
+    return true;
+  }
+  return !definition.allowInTerminal && Boolean(target.closest(TERMINAL_SELECTOR));
+}
+
 /**
  * True when a matched global shortcut should yield to the focused element or an
  * earlier handler. `element` shortcuts are routed by their own control and
@@ -135,22 +154,23 @@ export function isShortcutBlocked(event: KeyboardEvent, definition: ShortcutDefi
   if (!target) {
     return false;
   }
-  if (!definition.allowInDialog && target.closest(MODAL_SELECTOR)) {
-    return true;
-  }
-  // ⌘/Ctrl chords (⌘K, ⌘B) mean nothing to these widgets; arrows and letters do.
-  if (!(event.metaKey || event.ctrlKey) && target.closest(WIDGET_SELECTOR)) {
+  if (blocksNativeShortcutContext(event, definition, target)) {
     return true;
   }
   if (definition.context === 'anywhere') {
-    return !definition.allowInTerminal && Boolean(target.closest(TERMINAL_SELECTOR));
+    return false;
   }
   if (target.closest(EDITABLE_SELECTOR)) {
     return true;
   }
   if (definition.context === 'reviews') {
     const control = target.closest('button, a[href]');
-    return !!control && !control.matches('[data-review-list] > button, [role="tab"]');
+    return (
+      !!control &&
+      !control.matches(
+        '[data-review-row][aria-current="true"], [data-review-tab="info"], [data-review-tab="diff"]'
+      )
+    );
   }
   return false;
 }

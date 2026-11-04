@@ -291,8 +291,12 @@ function TabBar({ activeTab, onTabChange }: TabBarProps) {
     <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0 bg-muted">
       <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as Tab)}>
         <TabsList className="h-8">
-          <TabsTrigger value="info">Info</TabsTrigger>
-          <TabsTrigger value="diff">Diff</TabsTrigger>
+          <TabsTrigger value="info" data-review-tab="info">
+            Info
+          </TabsTrigger>
+          <TabsTrigger value="diff" data-review-tab="diff">
+            Diff
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       <div className="flex items-center gap-1 text-xs text-muted-foreground">

@@ -2,6 +2,7 @@ import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple'
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import { registerShortcutHandler } from '@/client/lib/shortcut-registry';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -117,8 +118,11 @@ const SidebarProvider = React.forwardRef<
       return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
     }, [isMobile, setOpen]);
 
-    // ⌘B lives in the app shortcut registry (`app.toggleSidebar`), which applies
-    // the shared input guards and lists it in the shortcut help.
+    // Each provider owns the same registry shortcut, including standalone layouts.
+    React.useEffect(
+      () => registerShortcutHandler('app.toggleSidebar', toggleSidebar),
+      [toggleSidebar]
+    );
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.

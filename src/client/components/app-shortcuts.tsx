@@ -1,18 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import {
-  KeyboardShortcutsDialog,
-  useDesktopCommands,
-  useShortcut,
-} from '@/client/features/shortcuts';
+import { KeyboardShortcutsDialog, useShortcut } from '@/client/features/shortcuts';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import {
   getProjectNewWorkspacePath,
   getProjectSectionPath,
   type ProjectSection,
 } from '@/client/lib/project-navigation';
-import { useSidebar } from '@/components/ui/sidebar';
 import {
   getAdjacentWorkspaceId,
   getNextWorkspaceNeedingInput,
@@ -99,17 +94,12 @@ function useWorkspaceShortcuts(navData: ShortcutNavigationData) {
  * "?" help dialog. Rendered once inside the app layout.
  */
 export function AppShortcuts({ navData }: { navData: ShortcutNavigationData }) {
-  const { toggleSidebar } = useSidebar();
   const [helpOpen, setHelpOpen] = useState(false);
 
-  useShortcut('app.toggleSidebar', () => {
-    toggleSidebar();
-  });
   useShortcut('app.showShortcuts', () => {
     setHelpOpen(true);
   });
   useWorkspaceShortcuts(navData);
-  useDesktopCommands();
 
   return <KeyboardShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />;
 }

@@ -321,8 +321,8 @@ export const KeyboardNavigation: Story = {
     tabs[0]!.focus();
     await userEvent.keyboard('{ArrowRight}');
     await expect(tabs[1]).toHaveFocus();
-    await expect(tabs[0]).toHaveAttribute('tabindex', '0');
-    await expect(tabs[1]).toHaveAttribute('tabindex', '-1');
+    await expect(tabs[0]).toHaveAttribute('tabindex', '-1');
+    await expect(tabs[1]).toHaveAttribute('tabindex', '0');
     await userEvent.keyboard('{Enter}');
     await expect(args.onSelectSession).toHaveBeenCalledWith('beta');
     await expect(

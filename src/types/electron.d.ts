@@ -20,16 +20,8 @@ export interface OpenDialogResult {
   filePaths: string[];
 }
 
-export type DesktopCommand =
-  | 'nav.settings'
-  | 'nav.newWorkspace'
-  | 'app.search'
-  | 'app.toggleSidebar';
-
 export interface ElectronAPI {
   isElectron: true;
-  /** Subscribe to native menu commands, with cleanup on unmount. */
-  onAppCommand?: (listener: (command: DesktopCommand) => void) => () => void;
   /** Restore and focus the trusted desktop window after a notification click. */
   focusWindow?: () => Promise<void>;
   showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;

@@ -10,6 +10,7 @@ const { navigation } = vi.hoisted(() => ({
     projectsError: null as Error | null,
   },
 }));
+vi.mock('@/client/components/app-shortcuts', () => ({ AppShortcuts: () => null }));
 vi.mock('@/client/hooks/use-app-navigation-data', () => ({
   useAppNavigationData: () => navigation,
   AppNavigationDataProvider: ({ children }: { children: ReactNode }) => children,

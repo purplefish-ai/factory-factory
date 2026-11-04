@@ -12,7 +12,6 @@ import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { ShortcutKeys } from '@/client/features/shortcuts';
-import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -151,7 +150,6 @@ export function QuickActionsDropdownView({
                 disabled={!(available.thisChat || available.newChat)}
                 className="h-6 w-6 p-0"
                 aria-label="Quick actions"
-                aria-keyshortcuts={getAriaKeyShortcuts('composer.quickActions')}
               >
                 <LightningIcon className="h-3.5 w-3.5" />
               </Button>
@@ -160,7 +158,9 @@ export function QuickActionsDropdownView({
           <TooltipContent side="top">
             <p className="flex items-center gap-2">
               Quick actions
-              <ShortcutKeys id="composer.quickActions" />
+              <span className="inline-flex items-center gap-1">
+                In composer <ShortcutKeys id="composer.quickActions" all />
+              </span>
             </p>
           </TooltipContent>
         </Tooltip>

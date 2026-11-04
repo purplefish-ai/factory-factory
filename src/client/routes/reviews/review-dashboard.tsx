@@ -195,7 +195,15 @@ function useScrollToSelectedReview(
   useEffect(() => {
     const ref = itemRefs.current.get(selectedIndex);
     if (ref) {
-      ref.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (document.activeElement?.closest('[data-review-row]')) {
+        ref.focus({ preventScroll: true });
+      }
+      ref.scrollIntoView({
+        block: 'nearest',
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+      });
     }
   }, [itemRefs, selectedIndex]);
 }

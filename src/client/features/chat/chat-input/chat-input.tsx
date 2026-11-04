@@ -203,14 +203,22 @@ export const ChatInput = memo(function ChatInput({
 
   // "/" focuses the composer from elsewhere on the page; a hidden composer
   // (another tab is showing) lets the key through.
-  useShortcut('chat.focusComposer', () => {
-    const input = resolvedInputRef.current;
-    if (!input || input.disabled || input.getClientRects().length === 0) {
-      return false;
+  useShortcut(
+    'chat.focusComposer',
+    () => {
+      const input = resolvedInputRef.current;
+      if (!input || input.disabled || input.getClientRects().length === 0) {
+        return false;
+      }
+      input.focus();
+      return true;
+    },
+    true,
+    () => {
+      const input = resolvedInputRef.current;
+      return Boolean(input && !input.disabled && input.getClientRects().length > 0);
     }
-    input.focus();
-    return true;
-  });
+  );
 
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches

@@ -12,7 +12,6 @@ import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
 import { ProviderModelPicker } from '@/client/features/session-selection';
 import { ShortcutKeys } from '@/client/features/shortcuts';
-import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
 import {
@@ -77,7 +76,6 @@ const FileUploadButton = memo(function FileUploadButton({
               disabled={disabled}
               className="h-6 w-6 p-0"
               aria-label="Upload image"
-              aria-keyshortcuts={getAriaKeyShortcuts('composer.attachImage')}
             >
               <ImageIcon className="h-3.5 w-3.5" />
             </Button>

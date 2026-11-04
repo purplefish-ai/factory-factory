@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import { SessionTabBar } from './session-tab-bar';
 it('provides one tab stop, arrow navigation with manual activation, and sibling close controls', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
   const container = document.createElement('div');
   document.body.append(container);
@@ -40,6 +41,7 @@ it('provides one tab stop, arrow navigation with manual activation, and sibling 
     });
     expect(document.activeElement).toBe(tabs[2]);
     expect(select).not.toHaveBeenCalled();
+    expect(tabs.map(({ tabIndex }) => tabIndex)).toEqual([-1, -1, 0]);
     await act(() => {
       press('ArrowRight');
     });
@@ -59,5 +61,46 @@ it('provides one tab stop, arrow navigation with manual activation, and sibling 
     await act(() => root.unmount());
     container.remove();
     setShortcutEnvironmentForTesting(null);
+    vi.unstubAllGlobals();
+  }
+});
+
+function ClosingChats() {
+  const [names, setNames] = useState(['Alpha', 'Beta']);
+  return (
+    <SessionTabBar
+      sessions={names.map((name) => ({ id: name, name, status: 'IDLE', createdAt: new Date(0) }))}
+      currentSessionId="Alpha"
+      onCreateSession={() => undefined}
+      onSelectSession={() => undefined}
+      onCloseSession={(id) => setNames((items) => items.filter((name) => name !== id))}
+    />
+  );
+}
+
+it('keeps keyboard focus in the chat bar after deleting the focused tab', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<ClosingChats />));
+    const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
+    tabs[1]!.focus();
+    await act(() => {
+      tabs[1]!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })
+      );
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(document.activeElement).toBe(tabs[0]);
+    expect(tabs[0]?.tabIndex).toBe(0);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    setShortcutEnvironmentForTesting(null);
+    vi.unstubAllGlobals();
   }
 });

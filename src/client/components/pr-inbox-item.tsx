@@ -30,6 +30,8 @@ export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(funct
     <button
       type="button"
       ref={ref}
+      data-review-row
+      aria-current={isSelected ? 'true' : undefined}
       onClick={onSelect}
       className={`cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border px-3 py-2 rounded-md w-full max-w-full overflow-hidden text-left ${
         isSelected ? 'bg-muted border-border shadow-sm' : 'border-transparent hover:bg-muted/50'

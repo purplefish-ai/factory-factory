@@ -109,14 +109,14 @@ describe('shortcut focus guards', () => {
     const event = new KeyboardEvent('keydown', { key: 'a', shiftKey: true, bubbles: true });
     button.dispatchEvent(event);
     expect(isShortcutBlocked(event, getShortcut('reviews.approve'))).toBe(true);
-    const terminal = document.querySelector('textarea')!;
+    const terminal = document.querySelector('.xterm')!;
     const terminalEvent = new KeyboardEvent('keydown', {
       key: 'ArrowDown',
       altKey: true,
       bubbles: true,
     });
     terminal.dispatchEvent(terminalEvent);
-    expect(isShortcutBlocked(terminalEvent, getShortcut('workspace.next'))).toBe(true);
+    expect(isShortcutBlocked(terminalEvent, getShortcut('nav.newWorkspace'))).toBe(true);
   });
   it('ignores composition, repeats and already handled keys', () => {
     expect(
@@ -135,4 +135,33 @@ describe('shortcut focus guards', () => {
     event.preventDefault();
     expect(isShortcutBlocked(event, getShortcut('app.search'))).toBe(true);
   });
+});
+
+it.each([
+  ['<button data-review-row aria-current="true">Selected</button>', false],
+  ['<button data-review-row>Other PR</button>', true],
+  ['<button role="tab" data-review-tab="info">Info</button>', false],
+  ['<button role="tab">Another tab</button>', true],
+] as const)('scopes review action exceptions to %s', (markup, blocked) => {
+  expect(
+    isShortcutBlocked(
+      dispatch(markup, { key: 'A', shiftKey: true }),
+      getShortcut('reviews.approve')
+    )
+  ).toBe(blocked);
+});
+
+it('preserves Alt-bracket text entry while retaining desktop Control+Tab chat switching', () => {
+  expect(
+    isShortcutBlocked(
+      dispatch('<textarea />', { key: '“', code: 'BracketLeft', altKey: true }),
+      getShortcut('chat.previous')
+    )
+  ).toBe(true);
+  expect(
+    isShortcutBlocked(
+      dispatch('<textarea />', { key: 'Tab', ctrlKey: true }),
+      getShortcut('chat.next')
+    )
+  ).toBe(false);
 });

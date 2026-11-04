@@ -12,21 +12,24 @@ Commands share handlers with keyboard shortcuts and the desktop app menu.
 - `Alt+Shift+P`: toggle planning; `Alt+Shift+E`: toggle thinking; `Alt+Shift+Q`:
   open quick actions when those controls are available.
 
-The browser keeps `⌘⇧T`, `⌘⇧A`, `Ctrl+Shift+P`, and `Ctrl+Tab`. The desktop app
-additionally retains its original composer shortcuts and uses `Ctrl+Tab` for
-chat switching. Its native menu supplies Settings (`⌘,` / `Ctrl+,`) and New
-workspace (`⌘N` / `Ctrl+N`).
+The browser keeps `Mod+Shift+P`, `Mod+Shift+T`, `Mod+Shift+A` and `Ctrl+Tab`
+(`Mod` means Command on macOS and Ctrl elsewhere). The desktop app additionally
+retains its original composer shortcuts and uses `Ctrl+Tab` for chat switching.
+Its native menu supplies Settings (`⌘,` / `Ctrl+,`) and New workspace (`⌘N` /
+`Ctrl+N`).
 
 Tab bars have one Tab stop. Left/Right and Home/End move focus; Enter/Space
-select the focused tab. Delete (the Mac Backspace key) closes a focused chat,
-with the existing confirmation when it has active work or queued messages. Close
-controls sit beside their tabs, never inside the tab control.
+select the focused tab. Delete (the Mac Backspace key) closes a focused tab when
+it offers a close action, with the existing confirmation when it has active work
+or queued messages. Close controls sit beside their tabs, never inside the tab
+control.
 
-Plain keys yield to text fields, interactive widgets and modal dialogs.
-Workspace arrow shortcuts yield to text fields so native paragraph navigation
-continues to work. Navigation keys yield to terminals; search and sidebar
-toggling remain available there. Review approval requires Shift+A; modifier
-combinations such as `⌘D` do not invoke review actions.
+Plain keys yield to text fields, typeahead widgets and modal dialogs; `?` and
+`/` remain available on ordinary buttons and links. Workspace arrows and
+Alt-bracket chat shortcuts yield to text fields so native paragraph navigation
+and punctuation entry continues to work. Navigation keys yield to terminals;
+search and sidebar toggling remain available there. Review approval requires
+Shift+A; modifier combinations such as `⌘D` do not invoke review actions.
 
 Definitions live in `src/client/lib/shortcut-definitions.ts`; matching, platform
 labels and context guards are in `keyboard-shortcuts.ts`. Feature handlers

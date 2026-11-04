@@ -1,6 +1,6 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { type ComponentProps, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { type ComponentProps, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ShortcutCommand } from '@/client/features/shortcuts';
 import type { ShortcutId } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
@@ -51,17 +51,21 @@ export function SearchDialog({
   onCloseAutoFocus,
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
+  const previousLocalReady = useRef(!(loading || error));
   const matchingCommands = useMemo(
     () => (onSelectCommand ? filterCommands(commands, query) : []),
     [commands, onSelectCommand, query]
   );
   useEffect(() => {
-    // Wait for local matches before automatically selecting a lower row.
-    if (!open || loading || error) {
+    const recovered = !(previousLocalReady.current || loading || error);
+    previousLocalReady.current = !(loading || error);
+    // Keep commands available even when metadata cannot load.
+    if (!open) {
       setSelected('');
       return;
     }
-    const available = results.map((result) => `${result.kind}:${result.id}`);
+    const available =
+      loading || error ? [] : results.map((result) => `${result.kind}:${result.id}`);
     available.push(...matchingCommands.map((command) => getCommandValue(command.id)));
     if (onSearchGitHub) {
       available.push('search-github-issues');
@@ -71,7 +75,9 @@ export function SearchDialog({
         ...(githubIssues?.results ?? []).map((result) => `${result.kind}:${result.id}`)
       );
     }
-    setSelected((current) => (available.includes(current) ? current : (available[0] ?? '')));
+    setSelected((current) =>
+      !recovered && available.includes(current) ? current : (available[0] ?? '')
+    );
   }, [
     results,
     matchingCommands,

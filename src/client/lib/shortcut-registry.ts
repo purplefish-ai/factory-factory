@@ -14,7 +14,11 @@ export type ShortcutHandler =
 // The most recently registered handler for an id wins, so a nested surface (a
 // second composer, a dialog's own list) temporarily owns a shortcut and the
 // previous owner resumes when it unmounts.
-const handlers = new Map<ShortcutId, ShortcutHandler[]>();
+interface Registration {
+  handler: ShortcutHandler;
+  available: () => boolean;
+}
+const handlers = new Map<ShortcutId, Registration[]>();
 const listeners = new Set<() => void>();
 let version = 0;
 let listening = false;
@@ -26,13 +30,24 @@ function notify() {
   }
 }
 
+function currentRegistration(id: ShortcutId): Registration | undefined {
+  const stack = handlers.get(id) ?? [];
+  for (let index = stack.length - 1; index >= 0; index--) {
+    const entry = stack[index];
+    if (entry?.available()) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
 function handleKeyDown(event: KeyboardEvent) {
   if (event.defaultPrevented || event.isComposing) {
     return;
   }
   const environment = getShortcutEnvironment();
-  for (const [id, stack] of handlers) {
-    const handler = stack.at(-1);
+  for (const id of handlers.keys()) {
+    const handler = currentRegistration(id)?.handler;
     if (
       !(handler && matchesShortcut(event, id, environment)) ||
       isShortcutBlocked(event, getShortcut(id))
@@ -61,15 +76,20 @@ function updateListener() {
 }
 
 /** Binds a handler to a registry shortcut; returns the unregister function. */
-export function registerShortcutHandler(id: ShortcutId, handler: ShortcutHandler): () => void {
+export function registerShortcutHandler(
+  id: ShortcutId,
+  handler: ShortcutHandler,
+  available: () => boolean = () => true
+): () => void {
+  const registration = { handler, available };
   const stack = handlers.get(id) ?? [];
-  stack.push(handler);
+  stack.push(registration);
   handlers.set(id, stack);
   updateListener();
   notify();
   return () => {
     const current = handlers.get(id);
-    const index = current?.lastIndexOf(handler) ?? -1;
+    const index = current?.indexOf(registration) ?? -1;
     if (!current || index < 0) {
       return;
     }
@@ -83,16 +103,16 @@ export function registerShortcutHandler(id: ShortcutId, handler: ShortcutHandler
 }
 
 export function hasShortcutHandler(id: ShortcutId): boolean {
-  return Boolean(handlers.get(id)?.length);
+  return Boolean(currentRegistration(id));
 }
 
 /** Runs a shortcut's current handler without a key press, as ⌘K commands do. */
 export function triggerShortcut(id: ShortcutId): boolean {
-  const handler = handlers.get(id)?.at(-1);
-  if (!handler) {
+  const registration = currentRegistration(id);
+  if (!registration) {
     return false;
   }
-  return handler() !== false;
+  return registration.handler() !== false;
 }
 
 export function subscribeToShortcutHandlers(listener: () => void): () => void {
