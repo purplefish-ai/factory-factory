@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { KeyboardShortcutsDialog, useShortcut } from '@/client/features/shortcuts';
+import {
+  KeyboardShortcutsDialog,
+  useShortcut,
+  useDesktopCommands,
+} from '@/client/features/shortcuts';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import {
   getProjectNewWorkspacePath,
@@ -74,13 +78,9 @@ function useWorkspaceShortcuts(navData: ShortcutNavigationData) {
   useShortcut('nav.board', () => goToSection('workspaces'), Boolean(slug));
   useShortcut('nav.agents', () => goToSection('agents'), Boolean(slug));
   useShortcut('nav.reviews', () => goToSection('reviews'), Boolean(slug));
-  useShortcut(
-    'nav.newWorkspace',
-    () => {
-      void navigate(getProjectNewWorkspacePath(slug));
-    },
-    Boolean(slug)
-  );
+  useShortcut('nav.newWorkspace', () => {
+    void navigate(slug ? getProjectNewWorkspacePath(slug) : PROJECTS_PATH);
+  });
   useShortcut('nav.settings', () => {
     void navigate(SETTINGS_PATH);
   });
@@ -100,6 +100,7 @@ export function AppShortcuts({ navData }: { navData: ShortcutNavigationData }) {
     setHelpOpen(true);
   });
   useWorkspaceShortcuts(navData);
+  useDesktopCommands();
 
   return <KeyboardShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />;
 }

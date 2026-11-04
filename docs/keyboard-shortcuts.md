@@ -34,3 +34,10 @@ labels and context guards are in `keyboard-shortcuts.ts`. Feature handlers
 register through `useShortcut` from the shortcuts feature. The help sheet,
 tooltips, accessible key labels and command palette use those same definitions.
 Add a registry definition and context tests when adding a shortcut.
+
+The desktop native menu exposes Settings (`⌘,` / `Ctrl+,`), New workspace (`⌘N`
+/ `Ctrl+N`), Search (`⌘K` / `Ctrl+K`) and Toggle sidebar (`⌘B` / `Ctrl+B`)
+through the same mounted handlers. Before a project is selected, New workspace
+opens the Projects page (`/projects`) to choose a project. Native commands wait
+for the trusted renderer subscription during startup and full reloads. The
+production menu omits Reload and DevTools; development retains those actions.

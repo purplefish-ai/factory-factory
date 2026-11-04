@@ -1,5 +1,6 @@
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { useEffect } from 'react';
+import { parseThemeColor, rgbToHex } from '@/client/lib/color-contrast';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
@@ -23,6 +24,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     document.body.append(colorProbe);
     const updateThemeColor = () => {
       const background = getComputedStyle(document.body).backgroundColor;
+      const nativeBackground = parseThemeColor(
+        getComputedStyle(document.documentElement).getPropertyValue('--background')
+      );
+      if (nativeBackground) {
+        void window.electronAPI
+          ?.setBackgroundColor?.(rgbToHex(nativeBackground.rgb))
+          .catch(() => undefined);
+      }
       const backdropCount = document.querySelectorAll(backdropSelector).length;
       let color = background;
       if (backdropCount > 0) {

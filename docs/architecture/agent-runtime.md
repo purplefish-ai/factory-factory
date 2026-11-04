@@ -1308,6 +1308,22 @@ opened externally. Only `http`, `https` and `mailto` URLs reach
 `shell.openExternal`; other schemes are blocked
 (`electron/main/external-links.ts`).
 
+The native app menu exposes Settings, New workspace, Search and Toggle sidebar
+through the renderer shortcut registry, preserving the same actions as keyboard
+and command search. Commands wait for the trusted renderer subscription, so
+opening a window or starting the backend does not lose the first menu action.
+Standard editing and window controls remain available; Reload and DevTools are
+development-only menu items.
+
+The desktop shell (`electron/main/desktop-shell.ts`) saves normal window bounds
+and maximization in `window-state.json` under Electron's userData directory on
+close. It validates restored JSON and clamps bounds to the current display work
+area, so removed monitors do not strand the window. Missing or corrupt optional
+preferences do not block startup. The minimum window size is 640 × 480 (bounded
+by the display work area). The loading window uses system appearance until the
+renderer syncs the selected application's background, including theme presets
+and custom overrides; trusted IPC accepts only an opaque hex color.
+
 On macOS a utility process runs from the Electron Helper binary, so Electron
 main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
 provider CLIs and the child-workspace MCP server launch with

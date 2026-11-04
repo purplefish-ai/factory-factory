@@ -1,177 +1,91 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createElectronLifecycle,
-  type ElectronLifecycleBrowserWindow,
-  type ElectronLifecycleDependencies,
-} from './lifecycle.js';
+import type { ElectronLifecycleDependencies } from './lifecycle.js';
+import { createTestLifecycle, deferred, FakeBrowserWindow } from './lifecycle.test-support.js';
 import { LOADING_PAGE_URL } from './loading-page.js';
 
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-
-  return { promise, resolve };
-}
-
-interface FakeNavigationEvent {
-  url: string;
-  isMainFrame: boolean;
-  preventDefault(): void;
-}
-
-type NavigationEventName = 'will-navigate' | 'will-redirect';
-
-class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
-  static windows: FakeBrowserWindow[] = [];
-  static instances: FakeBrowserWindow[] = [];
-  static loadUrlImpl: (url: string) => Promise<void> = () => Promise.resolve();
-  // Electron emits `window-all-closed` synchronously when the last window closes.
-  static onAllWindowsClosed: (() => void) | null = null;
-
-  static getAllWindows(): FakeBrowserWindow[] {
-    return [...FakeBrowserWindow.windows];
-  }
-
-  windowOpenHandler: ((details: { url: string }) => { action: 'deny' }) | null = null;
-  private readonly navigationListeners: Record<
-    NavigationEventName,
-    Array<(event: FakeNavigationEvent) => void>
-  > = { 'will-navigate': [], 'will-redirect': [] };
-
-  readonly webContents = {
-    send: vi.fn(),
-    mainFrame: {},
-    setWindowOpenHandler: (handler: (details: { url: string }) => { action: 'deny' }) => {
-      this.windowOpenHandler = handler;
-    },
-    on: (event: NavigationEventName, listener: (event: FakeNavigationEvent) => void) => {
-      this.navigationListeners[event].push(listener);
-    },
-  };
-
-  // Emits a navigation event and reports whether a listener prevented it.
-  navigate(event: NavigationEventName, url: string, { isMainFrame = true } = {}): boolean {
-    const navigation = { url, isMainFrame, preventDefault: vi.fn() };
-    for (const listener of this.navigationListeners[event]) {
-      listener(navigation);
-    }
-    return navigation.preventDefault.mock.calls.length > 0;
-  }
-
-  readonly loadURL = vi.fn((url: string) => FakeBrowserWindow.loadUrlImpl(url));
-  readonly destroy = vi.fn(() => this.close());
-  readonly show = vi.fn();
-  readonly focus = vi.fn();
-  readonly isMinimized = vi.fn(() => true);
-  readonly restore = vi.fn();
-
-  private readonly listeners: Record<'focus' | 'blur' | 'closed', Array<() => void>> = {
-    focus: [],
-    blur: [],
-    closed: [],
-  };
-  private destroyed = false;
-
-  constructor(_options: unknown) {
-    FakeBrowserWindow.windows.push(this);
-    FakeBrowserWindow.instances.push(this);
-  }
-
-  on(event: 'focus' | 'blur' | 'closed', listener: () => void): void {
-    this.listeners[event].push(listener);
-  }
-
-  isDestroyed(): boolean {
-    return this.destroyed;
-  }
-
-  close(): void {
-    this.destroyed = true;
-    FakeBrowserWindow.windows = FakeBrowserWindow.windows.filter((window) => window !== this);
-    for (const listener of this.listeners.closed) {
-      listener();
-    }
-    if (FakeBrowserWindow.windows.length === 0) {
-      FakeBrowserWindow.onAllWindowsClosed?.();
-    }
-  }
-}
-
-type ServerManagerDependency = ElectronLifecycleDependencies['serverManager'];
-type TestServerManager = Omit<ServerManagerDependency, 'onUnexpectedExit'> &
-  Partial<Pick<ServerManagerDependency, 'onUnexpectedExit'>>;
-
-function createTestLifecycle(
-  overrides: Partial<
-    Pick<ElectronLifecycleDependencies, 'platform' | 'clipboard' | 'nativeImage'>
-  > & { serverManager?: TestServerManager } = {}
-) {
-  FakeBrowserWindow.windows = [];
-  FakeBrowserWindow.instances = [];
-  FakeBrowserWindow.loadUrlImpl = () => Promise.resolve();
-  FakeBrowserWindow.onAllWindowsClosed = null;
-
-  const app: ElectronLifecycleDependencies['app'] = {
-    on: vi.fn(),
-    whenReady: vi.fn().mockResolvedValue(undefined),
-    quit: vi.fn(),
-  };
-
-  const dialog: ElectronLifecycleDependencies['dialog'] = {
-    showErrorBox: vi.fn(),
-    showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ['/tmp/file'] }),
-    showMessageBox: vi.fn().mockResolvedValue({ response: 0, checkboxChecked: false }),
-  };
-
-  const ipcMain: ElectronLifecycleDependencies['ipcMain'] = {
-    handle: vi.fn(),
-  };
-
-  const clipboard = overrides.clipboard ?? { read: vi.fn().mockResolvedValue([]) };
-  const nativeImage = overrides.nativeImage ?? {
-    createFromBuffer: (buffer: Buffer) => ({
-      isEmpty: () => buffer.length === 0,
-      toPNG: () => buffer,
-    }),
-  };
-
-  const logger: ElectronLifecycleDependencies['logger'] = {
-    log: vi.fn(),
-    error: vi.fn(),
-  };
-
-  const serverManager: ServerManagerDependency = {
-    onUnexpectedExit: vi.fn(),
-    ...(overrides.serverManager ?? {
-      start: vi.fn().mockResolvedValue('http://localhost:3001'),
-      stop: vi.fn().mockResolvedValue(undefined),
-    }),
-  };
-
-  const shell: ElectronLifecycleDependencies['shell'] = {
-    openExternal: vi.fn().mockResolvedValue(undefined),
-  };
-
-  const lifecycle = createElectronLifecycle({
-    app,
-    browserWindow: FakeBrowserWindow,
-    clipboard,
-    nativeImage,
-    dialog,
-    ipcMain,
-    logger,
-    platform: overrides.platform ?? 'darwin',
-    preloadPath: '/tmp/preload.js',
-    serverManager,
-    shell,
-  });
-
-  return { lifecycle, app, clipboard, dialog, ipcMain, logger, serverManager, shell };
-}
-
 describe('electron lifecycle coordination', () => {
+  it('applies shell bounds before creating the window and registers persistence', async () => {
+    const desktopShell = {
+      installMenu: vi.fn(),
+      setBackgroundColor: vi.fn(),
+      getWindowOptions: () => ({
+        width: 1100,
+        height: 720,
+        x: 50,
+        y: 60,
+        minWidth: 640,
+        backgroundColor: '#ffffff',
+      }),
+      registerWindow: vi.fn(),
+    };
+    const { lifecycle } = createTestLifecycle({ desktopShell });
+    await lifecycle.createWindow();
+    const window = FakeBrowserWindow.instances[0]!;
+    expect(window.options).toMatchObject({
+      width: 1100,
+      height: 720,
+      x: 50,
+      y: 60,
+      minWidth: 640,
+      backgroundColor: '#ffffff',
+    });
+    expect(desktopShell.registerWindow).toHaveBeenCalledWith(window);
+  });
+
+  it('queues menu commands until the trusted renderer subscribes, including cold startup', async () => {
+    const startGate = deferred<string>();
+    const { lifecycle, ipcMain } = createTestLifecycle({
+      serverManager: {
+        start: () => startGate.promise,
+        stop: async () => undefined,
+      },
+    });
+    lifecycle.registerIpcHandlers();
+    const delivery = lifecycle.dispatchAppCommand('nav.settings');
+    const window = FakeBrowserWindow.instances[0]!;
+    expect(window.webContents.send).not.toHaveBeenCalledWith('app:command', 'nav.settings');
+    startGate.resolve('http://localhost:3001');
+    await delivery;
+    expect(window.webContents.send).not.toHaveBeenCalledWith('app:command', 'nav.settings');
+    const ready = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === 'app:commands-ready')![1];
+    ready({ senderFrame: {} }, true);
+    expect(window.webContents.send).not.toHaveBeenCalledWith('app:command', 'nav.settings');
+    ready({ senderFrame: window.webContents.mainFrame }, true);
+    expect(window.webContents.send).toHaveBeenLastCalledWith('app:command', 'nav.settings');
+    ready({ senderFrame: window.webContents.mainFrame }, false);
+    await lifecycle.dispatchAppCommand('app.search');
+    expect(window.webContents.send).not.toHaveBeenCalledWith('app:command', 'app.search');
+    ready({ senderFrame: window.webContents.mainFrame }, true);
+    expect(window.webContents.send).toHaveBeenLastCalledWith('app:command', 'app.search');
+    window.navigate('did-start-navigation', 'http://localhost:3001/projects', {
+      isSameDocument: true,
+    });
+    await lifecycle.dispatchAppCommand('app.toggleSidebar');
+    expect(window.webContents.send).toHaveBeenLastCalledWith('app:command', 'app.toggleSidebar');
+    window.navigate('did-start-navigation', 'http://localhost:3001/projects');
+    window.webContents.send.mockClear();
+    await lifecycle.dispatchAppCommand('nav.newWorkspace');
+    expect(window.webContents.send).not.toHaveBeenCalledWith('app:command', 'nav.newWorkspace');
+    ready({ senderFrame: window.webContents.mainFrame }, true);
+    expect(window.webContents.send).toHaveBeenLastCalledWith('app:command', 'nav.newWorkspace');
+  });
+
+  it('applies validated renderer background only from the trusted main frame', async () => {
+    const { lifecycle, ipcMain, desktopShell } = createTestLifecycle();
+    lifecycle.registerIpcHandlers();
+    const window = await lifecycle.createWindow();
+    const handler = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === 'window:background-color')![1];
+    handler({ senderFrame: {} }, '#123456');
+    handler({ senderFrame: window!.webContents.mainFrame }, 'untrusted CSS');
+    expect(desktopShell.setBackgroundColor).not.toHaveBeenCalled();
+    handler({ senderFrame: window!.webContents.mainFrame }, '#123456');
+    expect(desktopShell.setBackgroundColor).toHaveBeenCalledWith('#123456');
+  });
+
   it('deduplicates concurrent createWindow calls', async () => {
     const startGate = deferred<string>();
     const serverManager = {

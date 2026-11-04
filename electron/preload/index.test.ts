@@ -32,6 +32,8 @@ afterAll(() => {
 it('runs the compiled preload in a sandbox and exposes the dialog and clipboard IPC bridge', async () => {
   let api: ElectronAPI | undefined;
   const invoke = vi.fn().mockResolvedValue(null);
+  const on = vi.fn();
+  const removeListener = vi.fn();
   runInNewContext(compiledPreload, {
     exports: {},
     require: (name: string) => {
@@ -45,7 +47,7 @@ it('runs the compiled preload in a sandbox and exposes the dialog and clipboard 
             api = value;
           },
         },
-        ipcRenderer: { invoke },
+        ipcRenderer: { invoke, on, removeListener },
       };
     },
   });
@@ -53,6 +55,37 @@ it('runs the compiled preload in a sandbox and exposes the dialog and clipboard 
     throw new Error('Preload did not expose its API');
   }
   expect(api.isElectron).toBe(true);
+  const onCommand = vi.fn();
+  const cleanup = api.onAppCommand?.(onCommand);
+  expect(cleanup).toBeTypeOf('function');
+  const [channel, handler] = on.mock.calls[0]!;
+  expect(channel).toBe('app:command');
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', true);
+  for (const command of ['nav.settings', 'nav.newWorkspace', 'app.search', 'app.toggleSidebar']) {
+    handler({ untrustedEvent: true }, command);
+    expect(onCommand).toHaveBeenLastCalledWith(command);
+  }
+  handler({}, 'arbitrary:command');
+  handler({}, { command: 'nav.settings' });
+  expect(onCommand).toHaveBeenCalledTimes(4);
+  const secondCleanup = api.onAppCommand?.(vi.fn());
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', true);
+  cleanup?.();
+  cleanup?.();
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', true);
+  expect(removeListener).toHaveBeenCalledTimes(1);
+  secondCleanup?.();
+  secondCleanup?.();
+  expect(removeListener).toHaveBeenCalledTimes(2);
+  expect(invoke.mock.calls.filter(([channel]) => channel === 'app:commands-ready')).toEqual([
+    ['app:commands-ready', true],
+    ['app:commands-ready', true],
+    ['app:commands-ready', false],
+  ]);
+  expect(removeListener).toHaveBeenCalledWith('app:command', handler);
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', false);
+  await api.setBackgroundColor?.('#123456');
+  expect(invoke).toHaveBeenLastCalledWith('window:background-color', '#123456');
   expect(api.focusWindow).toBeTypeOf('function');
   await api.focusWindow?.();
   expect(invoke).toHaveBeenLastCalledWith('window:focus');

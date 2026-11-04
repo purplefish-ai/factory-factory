@@ -1,6 +1,10 @@
 {
   "version": 1,
   "production": {
+    "electron/main/lifecycle.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "Electron window and lifecycle fakes extracted to keep lifecycle regressions below the file length limit; only tests import this harness."
+    },
     "src/backend/lib/file-lock-mutex.ts": {
       "disposition": "review-required",
       "reason": "Only mutex tests currently import this implementation; investigate lock ownership before removal."
