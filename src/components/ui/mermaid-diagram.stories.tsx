@@ -37,11 +37,6 @@ const meta = {
       config.themeVariables.primaryColor
     );
     await expect(canvasElement.textContent).not.toContain('Error rendering diagram');
-    const node = canvasElement.querySelector('.node rect');
-    const label = canvasElement.querySelector('.node .nodeLabel');
-    if (!(node && label)) {
-      throw new Error('Missing flowchart nodes');
-    }
     const context = document.createElement('canvas').getContext('2d');
     if (!context) {
       throw new Error('Canvas unavailable');
@@ -53,13 +48,25 @@ const meta = {
       const [r = 0, g = 0, b = 0] = context.getImageData(0, 0, 1, 1).data;
       return [r / 255, g / 255, b / 255];
     };
-    const ratio = contrastRatio(
-      rgb(getComputedStyle(node).fill),
-      rgb(getComputedStyle(label).color)
-    );
-    await expect(ratio).toBeGreaterThanOrEqual(
-      document.documentElement.dataset.colorScheme === 'high-contrast' ? 7 : 4.5
-    );
+    const threshold = document.documentElement.dataset.colorScheme === 'high-contrast' ? 7 : 4.5;
+    for (const [shapeSelector, textSelector, property, fillToken, textToken] of [
+      ['.node rect', '.node .nodeLabel', 'color', 'primaryColor', 'primaryTextColor'],
+      ['.note', '.noteText', 'fill', 'noteBkgColor', 'noteTextColor'],
+      ['.pieCircle', '.slice', 'fill', 'pie1', 'pieSectionTextColor'],
+    ] as const) {
+      const shape = canvasElement.querySelector(shapeSelector);
+      const text = canvasElement.querySelector(textSelector);
+      if (!(shape && text)) {
+        throw new Error(`Missing themed chart elements: ${shapeSelector}`);
+      }
+      const fill = rgb(getComputedStyle(shape).fill);
+      const foreground = rgb(getComputedStyle(text)[property]);
+      await expect(fill).toEqual(rgb(config.themeVariables[fillToken]));
+      await expect(foreground).toEqual(rgb(config.themeVariables[textToken]));
+      await expect(contrastRatio(fill, foreground), shapeSelector).toBeGreaterThanOrEqual(
+        threshold
+      );
+    }
   },
 } satisfies Meta<typeof Gallery>;
 export default meta;

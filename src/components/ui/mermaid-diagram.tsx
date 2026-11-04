@@ -17,10 +17,10 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
       const current = ++revision;
       const isStale = () => cancelled || current !== revision;
       try {
-        setError(null);
         const svg = await renderThemedMermaid(chart, element, isStale);
         if (!isStale() && ref.current && svg) {
           ref.current.innerHTML = svg;
+          setError(null);
         }
       } catch (err) {
         if (isStale()) {

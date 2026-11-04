@@ -153,10 +153,6 @@
       "disposition": "test-support",
       "reason": "Reads rendered theme colors for the Foundations Storybook stories."
     },
-    "src/client/lib/color-contrast.ts": {
-      "disposition": "test-support",
-      "reason": "Contrast math for the status palette test and the Foundations Storybook stories; not browser runtime code."
-    },
     "src/client/lib/ratchet-toggle-cache.ts": {
       "disposition": "review-required",
       "reason": "Only its regression tests import applyRatchetToggleState; review current workspace cache update path."

@@ -1,4 +1,5 @@
 import mermaid, { type MermaidConfig } from 'mermaid';
+import { contrastRatio, parseThemeColor } from '@/client/lib/color-contrast';
 
 /** Mermaid's color utilities require sRGB hex rather than CSS variables/OKLCH. */
 export function mermaidThemeConfig(element: HTMLElement): MermaidConfig {
@@ -27,9 +28,27 @@ export function mermaidThemeConfig(element: HTMLElement): MermaidConfig {
     const muted = color('muted');
     const border = color('ring');
     const categories = ['brand', 'info', 'success', 'warning', 'merged', 'destructive'];
+    const minimumContrast =
+      document.documentElement.dataset.colorScheme === 'high-contrast' ? 7 : 4.5;
+    const parsedForeground = parseThemeColor(foreground);
     const scaleColors = Object.fromEntries(
       Array.from({ length: 12 }, (_, index) => {
-        const fill = color(categories[index % categories.length] ?? 'muted', index < 6 ? 10 : 20);
+        const token = categories[index % categories.length] ?? 'muted';
+        let tint = index < 6 ? 10 : 20;
+        let fill = color(token, tint);
+        let parsedFill = parseThemeColor(fill);
+        // Solarized text has little contrast headroom. Reduce categorical tints
+        // until their labels remain readable, retaining the active preset hue.
+        while (
+          parsedForeground &&
+          parsedFill &&
+          contrastRatio(parsedForeground.rgb, parsedFill.rgb) < minimumContrast &&
+          tint > 0
+        ) {
+          tint -= 2;
+          fill = tint ? color(token, tint) : background;
+          parsedFill = parseThemeColor(fill);
+        }
         return [`cScale${index}`, fill];
       })
     );
@@ -81,7 +100,7 @@ export function mermaidThemeConfig(element: HTMLElement): MermaidConfig {
         labelBoxBorderColor: border,
         labelTextColor: foreground,
         loopTextColor: foreground,
-        noteBkgColor: muted,
+        noteBkgColor: surface,
         noteTextColor: foreground,
         noteBorderColor: border,
         activationBkgColor: muted,
@@ -153,6 +172,10 @@ export function renderThemedMermaid(chart: string, element: HTMLElement, cancell
     scratch.dataset.mermaidRender = '';
     scratch.style.position = 'absolute';
     scratch.style.visibility = 'hidden';
+    const width = element.clientWidth || element.parentElement?.clientWidth;
+    if (width) {
+      scratch.style.width = `${width}px`;
+    }
     document.body.appendChild(scratch);
     try {
       const { svg } = await mermaid.render(`mermaid-${++nextId}`, chart, scratch);
