@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import { getBundledClaudeCommand } from '@/backend/lib/claude-cli-command';
 import { getBundledCodexCommand } from '@/backend/lib/codex-cli-command';
+import { CODEX_RETRY_GUIDANCE } from '@/backend/lib/codex-provider-errors';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/services/github';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
@@ -97,8 +98,20 @@ class CLIHealthService {
 
   /** Check the same bundled Codex executable used by ACP sessions. */
   async checkCodexCLI(): Promise<CodexCLIHealthStatus> {
+    let versionCommand: ReturnType<typeof getBundledCodexCommand>;
     try {
-      const versionCommand = getBundledCodexCommand(['--version']);
+      versionCommand = getBundledCodexCommand(['--version']);
+    } catch (error) {
+      logger.warn('Bundled Codex runtime could not be resolved', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        isInstalled: false,
+        isAuthenticated: false,
+        error: 'Bundled Codex runtime is unavailable. Update or reinstall Factory Factory.',
+      };
+    }
+    try {
       const env = { ...getCurrentProcessEnv(), ELECTRON_RUN_AS_NODE: '1' };
       const { stdout } = await execFileAsync(versionCommand.command, versionCommand.args, {
         env,
@@ -121,11 +134,13 @@ class CLIHealthService {
         };
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('Bundled Codex runtime check failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         isInstalled: false,
         isAuthenticated: false,
-        error: `Bundled Codex runtime is unavailable. Update or reinstall Factory Factory. ${message}`,
+        error: CODEX_RETRY_GUIDANCE,
       };
     }
   }

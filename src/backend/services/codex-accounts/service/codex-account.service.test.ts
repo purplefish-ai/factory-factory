@@ -181,6 +181,34 @@ it('rejects every known exhausted account', async () => {
     'remaining capacity'
   );
 });
+it('reports provider unavailability instead of quota exhaustion when account probes fail', async () => {
+  const { service, probe } = await fixture();
+  probe.mockRejectedValue(new Error('Codex native account operation failed'));
+  for (const attempt of [
+    () => service.getPreviewRuntimeContext(),
+    () => service.withAccountReservation({}, async (id) => id),
+  ]) {
+    await expect(attempt()).rejects.toThrow(
+      'Codex provider is unavailable. Please try again in a few moments. If this continues, try restarting Factory Factory.'
+    );
+  }
+});
+
+it('does not claim all accounts are exhausted when another account could not be checked', async () => {
+  const { service, observations, observation, probe } = await fixture();
+  const exhausted = await service.createAccount('Exhausted');
+  observations.set(exhausted.id, observation(100));
+  const read = probe.getMockImplementation()!;
+  probe.mockImplementation((context) =>
+    context.accountId === 'codex-native-default'
+      ? Promise.reject(new Error('Codex native account operation failed'))
+      : read(context)
+  );
+  await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(
+    'Codex provider is unavailable. Please try again in a few moments.'
+  );
+});
+
 it('logs why each Auto candidate was skipped', async () => {
   const { service, observations, observation, probe } = await fixture();
   const exhausted = await service.createAccount('Exhausted');
@@ -554,3 +582,27 @@ it('does not overwrite an identity pinned by another writer during verification'
   await expect(usage).rejects.toThrow('changed during identity verification');
   expect(setup.rows[0]?.identityKey).toBe('other-writer');
 });
+
+it.each(['changed', 'unverified', 'duplicate'])(
+  'keeps %s identity failures actionable during Auto selection',
+  async (failure) => {
+    const { service, rows, observations, observation, unverified } = await fixture();
+    const account = await service.createAccount('Work');
+    rows[0]!.enabled = false;
+    let expected: string;
+    if (failure === 'changed') {
+      rows[1]!.identityKey = 'original';
+      observations.set(account.id, { ...observation(), identityKey: 'replacement' });
+      expected = 'sign in to the original account';
+    } else if (failure === 'unverified') {
+      unverified.add(account.id);
+      expected = 'identity could not be verified';
+    } else {
+      rows[0]!.identityKey = 'duplicate';
+      observations.set(account.id, { ...observation(), identityKey: 'duplicate' });
+      expected = 'already connected';
+    }
+    await expect(service.getPreviewRuntimeContext()).rejects.toThrow(expected);
+    await expect(service.withAccountReservation({}, async (id) => id)).rejects.toThrow(expected);
+  }
+);
