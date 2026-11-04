@@ -45,8 +45,6 @@ const meta = {
     onPlanModeChange: fn(),
     running: false,
     disabled: false,
-    modLabel: '⌘',
-    modifierHeld: false,
     fileInputRef: createRef<HTMLInputElement>(),
     onFileSelect: fn(),
     supportedImageTypes: ['image/png'],

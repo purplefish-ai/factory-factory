@@ -342,9 +342,9 @@ export const NativePlanningShortcut: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('textbox'));
-    await userEvent.keyboard('{Control>}{Shift>}P{/Shift}{/Control}');
+    await userEvent.keyboard('[AltLeft>][ShiftLeft>][KeyP][/ShiftLeft][/AltLeft]');
     await expect(args.onSetConfigOption).toHaveBeenLastCalledWith('mode', 'plan');
-    await userEvent.keyboard('{Control>}{Shift>}P{/Shift}{/Control}');
+    await userEvent.keyboard('[AltLeft>][ShiftLeft>][KeyP][/ShiftLeft][/AltLeft]');
     await expect(args.onSetConfigOption).toHaveBeenLastCalledWith('mode', 'default');
     await expect(args.onSettingsChange).not.toHaveBeenCalled();
   },

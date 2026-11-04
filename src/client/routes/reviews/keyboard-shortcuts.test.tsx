@@ -238,9 +238,13 @@ it('preserves review shortcuts after focusing and selecting an actual PRInboxIte
     expect(document.activeElement).toBe(row);
     await key(row!, 'j');
     expect(selected(view.container)).toBe('PR 2');
+    const nextRow = view.container.querySelector('[title="PR 2"]')?.closest('button');
+    expect(document.activeElement).toBe(nextRow);
     await approveChord(row!);
+    expect(mocks.approve).not.toHaveBeenCalled();
+    await approveChord(nextRow!);
     expect(mocks.approve).toHaveBeenLastCalledWith({ repo: 'o/r', number: 2, action: 'approve' });
-    await key(row!, 'k');
+    await key(nextRow!, 'k');
     await key(row!.querySelector('[title="PR 1"]')!, 'o');
     expect(selected(view.container)).toBe('PR 1');
     expect(mocks.open).toHaveBeenCalledWith(

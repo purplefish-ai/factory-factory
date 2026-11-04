@@ -1,8 +1,14 @@
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ErrorBoundary } from '@/client/error-boundary';
+import { runShortcutCommand, useShortcut, useShortcutCommands } from '@/client/features/shortcuts';
 import { normalizeGitHubIssue } from '@/client/lib/issue-normalization';
+import {
+  formatShortcut,
+  getAriaKeyShortcuts,
+  type ShortcutId,
+} from '@/client/lib/keyboard-shortcuts';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -54,24 +60,15 @@ export function GlobalSearch() {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
     return () => window.clearTimeout(timer);
   }, [query]);
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === 'k' &&
-        !event.altKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        !event.isComposing &&
-        !event.defaultPrevented
-      ) {
-        event.preventDefault();
-        setSearchOpen(!open);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, setSearchOpen]);
+  useShortcut('app.search', () => setSearchOpen(!open));
+  const commands = useShortcutCommands();
+  // A command moves focus itself (the composer, another page or dialog), so the
+  // closing dialog must not return focus to the search button.
+  const pendingCommandRef = useRef<ShortcutId | null>(null);
+  const runCommand = (id: ShortcutId) => {
+    pendingCommandRef.current = id;
+    setSearchOpen(false);
+  };
   const search = trpc.search.metadata.useQuery(
     { query: debouncedQuery, includeArchived },
     {
@@ -107,7 +104,6 @@ export function GlobalSearch() {
     setArchiveOpen(false);
     void navigate(getSearchResultUrl(result));
   };
-  const modifier = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
   return (
     <>
       <SearchDialog
@@ -142,18 +138,28 @@ export function GlobalSearch() {
           void search.refetch();
         }}
         onSelect={select}
+        commands={commands}
+        onSelectCommand={runCommand}
+        onCloseAutoFocus={(event) => {
+          const command = pendingCommandRef.current;
+          if (command) {
+            pendingCommandRef.current = null;
+            event.preventDefault();
+            runShortcutCommand(command);
+          }
+        }}
         trigger={
           <Button
             variant="ghost"
             size="sm"
             aria-label="Search"
-            aria-keyshortcuts="Meta+K Control+K"
+            aria-keyshortcuts={getAriaKeyShortcuts('app.search')}
             className="h-8 shrink-0 gap-2 px-2 text-muted-foreground"
           >
             <MagnifyingGlassIcon className="size-4" />
             <span className="hidden @[72rem]/header:inline">Search</span>
             <kbd className="hidden rounded border px-1 text-[10px] font-normal @[72rem]/header:inline">
-              {modifier} K
+              {formatShortcut('app.search')}
             </kbd>
           </Button>
         }

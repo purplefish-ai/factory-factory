@@ -9,6 +9,9 @@ import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
+import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
+import { getAriaKeyShortcuts, matchesShortcut } from '@/client/lib/keyboard-shortcuts';
+import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -85,6 +88,8 @@ interface SessionTabProps {
   session: SessionData;
   displayName: string;
   isActive: boolean;
+  /** The tablist's single Tab stop (roving tabindex). */
+  tabStop: boolean;
   isRunning: boolean;
   onSelect: () => void;
   onClose: () => void;
@@ -96,6 +101,7 @@ function SessionTab({
   session,
   displayName,
   isActive,
+  tabStop,
   isRunning,
   onSelect,
   onClose,
@@ -124,59 +130,73 @@ function SessionTab({
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onSelect();
+      } else if (!readOnly && matchesShortcut(e, 'tabs.close')) {
+        e.preventDefault();
+        onClose();
       }
     },
-    [disabled, onSelect]
+    [disabled, onSelect, onClose, readOnly]
   );
 
+  // The close button is the tab's sibling rather than its child (interactive
+  // controls must not nest); it stays out of the Tab order because Delete
+  // closes the focused tab.
   return (
     <div
-      role="tab"
-      tabIndex={disabled ? -1 : 0}
-      onClick={disabled ? undefined : onSelect}
-      onKeyDown={handleKeyDown}
-      title={isRunning ? 'Running' : session.status}
-      aria-selected={isActive}
-      aria-disabled={disabled}
       className={cn(
-        'group relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium cursor-pointer',
-        'rounded-md transition-all whitespace-nowrap',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'border',
+        'group relative flex items-center text-sm font-medium',
+        'rounded-md transition-all whitespace-nowrap border',
+        'has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-offset-2',
         isActive
           ? 'bg-background text-foreground shadow-md border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',
-        disabled && 'pointer-events-none opacity-50 cursor-default'
+        disabled && 'pointer-events-none opacity-50'
       )}
     >
-      {/* Status indicator */}
-      {isAgent ? (
-        <AgentSessionStatus
-          label={statusLabel}
-          icon={StatusIcon}
-          color={getStatusIconClass(session.status, isRunning)}
-          pulse={isRunning || session.status === 'RUNNING'}
-        />
-      ) : (
-        <StatusIcon
-          className={cn(
-            'h-3.5 w-3.5 shrink-0',
-            getStatusIconClass(session.status, isRunning),
-            (isRunning || session.status === 'RUNNING') && 'animate-pulse'
-          )}
-        />
-      )}
+      <div
+        role="tab"
+        tabIndex={tabStop && !disabled ? 0 : -1}
+        onClick={disabled ? undefined : onSelect}
+        onKeyDown={handleKeyDown}
+        title={isRunning ? 'Running' : session.status}
+        aria-selected={isActive}
+        aria-disabled={disabled}
+        aria-keyshortcuts={readOnly ? undefined : getAriaKeyShortcuts('tabs.close')}
+        className={cn(
+          'flex min-w-0 items-center gap-2 py-1.5 px-3 outline-none',
+          disabled ? 'cursor-default' : 'cursor-pointer'
+        )}
+      >
+        {/* Status indicator */}
+        {isAgent ? (
+          <AgentSessionStatus
+            label={statusLabel}
+            icon={StatusIcon}
+            color={getStatusIconClass(session.status, isRunning)}
+            pulse={isRunning || session.status === 'RUNNING'}
+          />
+        ) : (
+          <StatusIcon
+            className={cn(
+              'h-3.5 w-3.5 shrink-0',
+              getStatusIconClass(session.status, isRunning),
+              (isRunning || session.status === 'RUNNING') && 'animate-pulse'
+            )}
+          />
+        )}
 
-      <span className="truncate max-w-[120px]">{displayName}</span>
+        <span className="truncate max-w-[120px]">{displayName}</span>
+      </div>
 
       {/* Close button - visible on hover, hidden in readOnly mode */}
       {!readOnly && (
         <button
           type="button"
+          tabIndex={-1}
           onClick={handleClose}
           disabled={disabled}
           className={cn(
-            'ml-1 rounded p-0.5 transition-opacity',
+            'mr-3 rounded p-0.5 transition-opacity',
             'hover-reveal',
             'hover:bg-muted-foreground/20',
             disabled && 'pointer-events-none'
@@ -207,6 +227,7 @@ export function SessionTabBar({
   className,
   readOnly = false,
 }: SessionTabBarProps) {
+  const tabBarRef = useTablistFocus();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -215,6 +236,7 @@ export function SessionTabBar({
   const sortedSessions = [...sessions].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
+  const hasActiveSession = sortedSessions.some((session) => session.id === currentSessionId);
 
   // Check for overflow and update arrow visibility
   const updateScrollArrows = useCallback(() => {
@@ -265,7 +287,10 @@ export function SessionTabBar({
   }, [updateScrollArrows]);
 
   return (
-    <div className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}>
+    <div
+      ref={tabBarRef}
+      className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}
+    >
       {/* Left scroll arrow */}
       {showLeftArrow && (
         <Button
@@ -284,12 +309,16 @@ export function SessionTabBar({
       <div
         ref={scrollContainerRef}
         role="tablist"
+        aria-label="Chats"
+        onKeyDown={handleTablistKeyDown}
         onScroll={handleScroll}
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {sortedSessions.length === 0 ? (
-          <div className="px-3 py-1.5 text-sm text-muted-foreground">No sessions</div>
+          <div role="presentation" className="px-3 py-1.5 text-sm text-muted-foreground">
+            No sessions
+          </div>
         ) : (
           sortedSessions.map((session, index) => {
             const isActive = session.id === currentSessionId;
@@ -301,6 +330,7 @@ export function SessionTabBar({
                 session={session}
                 displayName={getSessionDisplayName(session, `Session ${index + 1}`)}
                 isActive={isActive}
+                tabStop={isActive || (!hasActiveSession && index === 0)}
                 isRunning={isRunning}
                 onSelect={() => onSelectSession(session.id)}
                 onClose={() => onCloseSession(session.id)}

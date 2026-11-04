@@ -1,6 +1,8 @@
 import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
 import { GlobalSearch } from '@/client/features/search';
+import { ShortcutKeys } from '@/client/features/shortcuts';
+import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,12 +22,16 @@ function SidebarToggleButton() {
           size="icon"
           className="h-8 w-8 shrink-0 md:h-9 md:w-9"
           aria-label="Toggle sidebar"
+          aria-keyshortcuts={getAriaKeyShortcuts('app.toggleSidebar')}
           onClick={toggleSidebar}
         >
           {isMobile ? <ListIcon className="h-5 w-5" /> : <SidebarSimpleIcon className="h-4 w-4" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="right">Toggle sidebar</TooltipContent>
+      <TooltipContent side="right" className="flex items-center gap-2">
+        Toggle sidebar
+        <ShortcutKeys id="app.toggleSidebar" />
+      </TooltipContent>
     </Tooltip>
   );
 }

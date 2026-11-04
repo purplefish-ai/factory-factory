@@ -1,5 +1,6 @@
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useCallback } from 'react';
+import { getAriaKeyShortcuts, matchesShortcut } from '@/client/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -25,6 +26,11 @@ interface TabButtonProps {
   className?: string;
   /** Position of the icon relative to label (default: left) */
   iconSide?: 'left' | 'right';
+  /**
+   * Whether this tab is the tablist's Tab stop (roving tabindex). Defaults to
+   * `isActive`; the tablist moves focus between tabs with the arrow keys.
+   */
+  tabStop?: boolean;
 }
 
 // =============================================================================
@@ -45,6 +51,7 @@ export function TabButton({
   maxLabelWidth = 120,
   className,
   iconSide = 'left',
+  tabStop = isActive,
 }: TabButtonProps) {
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -59,9 +66,12 @@ export function TabButton({
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onSelect();
+      } else if (onClose && matchesShortcut(e, 'tabs.close')) {
+        e.preventDefault();
+        onClose();
       }
     },
-    [onSelect]
+    [onSelect, onClose]
   );
   const iconOnRight = iconSide === 'right';
 
@@ -86,40 +96,51 @@ export function TabButton({
     );
   }
 
-  // Full variant with keyboard handling, optional close button, and truncation
+  // Full variant: a tab for a `role="tablist"` with arrow-key focus, an optional
+  // close button and truncation. The close button is the tab's sibling rather
+  // than its child (interactive controls must not nest); it stays out of the
+  // Tab order because Delete closes the focused tab.
   return (
     <div
-      role="tab"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      aria-selected={isActive}
       className={cn(
-        'group relative flex items-center gap-1.5 px-2 py-1 text-sm font-medium cursor-pointer',
-        'rounded-md transition-all whitespace-nowrap',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'border',
+        'group relative flex items-center rounded-md transition-all whitespace-nowrap',
+        'text-sm font-medium border',
+        'has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-offset-2',
         isActive
           ? 'bg-background text-foreground shadow-sm border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',
         className
       )}
     >
-      {!iconOnRight && icon}
-      <span
-        className={cn(truncate && 'truncate')}
-        style={truncate ? { maxWidth: maxLabelWidth } : undefined}
+      <div
+        role="tab"
+        tabIndex={tabStop ? 0 : -1}
+        onClick={onSelect}
+        onKeyDown={handleKeyDown}
+        aria-selected={isActive}
+        aria-keyshortcuts={onClose ? getAriaKeyShortcuts('tabs.close') : undefined}
+        className={cn(
+          'flex min-w-0 cursor-pointer items-center gap-1.5 py-1 pl-2 outline-none',
+          onClose ? 'pr-2.5' : 'pr-2'
+        )}
       >
-        {label}
-      </span>
-      {iconOnRight && icon}
+        {!iconOnRight && icon}
+        <span
+          className={cn(truncate && 'truncate')}
+          style={truncate ? { maxWidth: maxLabelWidth } : undefined}
+        >
+          {label}
+        </span>
+        {iconOnRight && icon}
+      </div>
 
       {onClose && (
         <button
           type="button"
+          tabIndex={-1}
           onClick={handleClose}
           className={cn(
-            'ml-1 rounded p-0.5 transition-opacity',
+            'mr-2 rounded p-0.5 transition-opacity',
             'hover-reveal',
             'hover:bg-muted-foreground/20'
           )}

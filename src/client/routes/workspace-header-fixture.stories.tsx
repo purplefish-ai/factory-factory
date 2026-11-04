@@ -150,7 +150,9 @@ export const InstalledPwaHeaderTooltips: Story = {
     for (const name of ['Toggle sidebar', 'Hide right panel']) {
       const trigger = canvas.getByRole('button', { name });
       await userEvent.hover(trigger);
-      const tooltip = await body.findByRole('tooltip', { name });
+      const tooltip = await body.findByRole('tooltip', {
+        name: name === 'Toggle sidebar' ? /^Toggle sidebar/ : name,
+      });
       await waitFor(async () => {
         const content = tooltip.closest('[data-slot="tooltip-content"]');
         await expect(content).not.toBeNull();

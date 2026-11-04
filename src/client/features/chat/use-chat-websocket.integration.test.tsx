@@ -141,8 +141,6 @@ function Harness({
         onPlanModeChange={() => undefined}
         running={false}
         disabled={false}
-        modLabel="⌘"
-        modifierHeld={false}
         fileInputRef={fileInputRef}
         onFileSelect={() => undefined}
         supportedImageTypes={[]}

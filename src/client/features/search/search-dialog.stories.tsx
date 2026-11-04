@@ -255,3 +255,24 @@ export const GitHubSearchAction: Story = {
     await expect(args.onSearchGitHub).toHaveBeenCalledOnce();
   },
 };
+
+export const Commands: Story = {
+  args: {
+    results: [],
+    commands: [
+      {
+        id: 'nav.settings',
+        label: 'Settings',
+        section: 'Go to',
+        keywords: ['preferences'],
+        shortcut: null,
+      },
+    ],
+    onSelectCommand: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await body.findByRole('option', { name: 'Settings' }));
+    await expect(args.onSelectCommand).toHaveBeenCalledWith('nav.settings');
+  },
+};

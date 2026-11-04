@@ -4,6 +4,7 @@ import { ChatCircleIcon } from '@phosphor-icons/react/dist/csr/ChatCircle';
 import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
 import type { SearchResult } from '@/shared/search';
@@ -28,6 +29,10 @@ export interface SearchResultsProps extends SearchGroupState {
   onSearchGitHub?: () => void;
   query: string;
   onSelect: (result: SearchResult) => void;
+  /** Command groups, rendered between local results and GitHub issues. */
+  commandGroups?: ReactNode;
+  /** Matching commands replace the "No results" message. */
+  hasCommands?: boolean;
 }
 
 function MatchedText({ text, query }: { text: string; query: string }) {
@@ -150,16 +155,18 @@ function LocalResults({ query, results, loading, error, onRetry, onSelect }: Sea
 }
 
 export function SearchResults(props: SearchResultsProps) {
-  const { githubIssues, onSearchGitHub, ...local } = props;
+  const { githubIssues, onSearchGitHub, commandGroups, hasCommands = false, ...local } = props;
   const hasIssues =
     Boolean(onSearchGitHub) ||
     (githubIssues &&
       (githubIssues.loading || githubIssues.error || githubIssues.results.length > 0));
   return (
     <>
-      {(local.results.length > 0 || local.loading || local.error || !hasIssues) && (
-        <LocalResults {...local} />
-      )}
+      {(local.results.length > 0 ||
+        local.loading ||
+        local.error ||
+        !(hasIssues || hasCommands)) && <LocalResults {...local} />}
+      {commandGroups}
       {hasIssues && (
         <CommandGroup forceMount heading="GitHub issues" className="p-0">
           {onSearchGitHub && (

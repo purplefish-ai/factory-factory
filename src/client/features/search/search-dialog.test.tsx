@@ -320,3 +320,26 @@ describe('SearchDialog', () => {
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 });
+
+it.each([
+  { loading: true, error: false },
+  { loading: false, error: true },
+])('selects commands independently of metadata status %j', async (status) => {
+  const onSelectCommand = vi.fn();
+  await render({
+    ...status,
+    commands: [
+      { id: 'nav.settings', label: 'Settings', section: 'Go to', keywords: [], shortcut: null },
+    ],
+    onSelectCommand,
+  });
+  const options = [...document.querySelectorAll('[role="option"]')];
+  expect(options).toHaveLength(1);
+  expect(options[0]?.textContent).toContain('Settings');
+  await act(() =>
+    document
+      .querySelector('input')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  );
+  expect(onSelectCommand).toHaveBeenCalledWith('nav.settings');
+});

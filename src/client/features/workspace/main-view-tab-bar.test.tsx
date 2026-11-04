@@ -146,7 +146,11 @@ describe('MainViewTabBar subagent tabs', () => {
       expect(icon?.classList.contains('text-amber-600')).toBe(true);
       expect(indicator?.classList.contains('animate-pulse')).toBe(pulses);
       expect(indicator?.classList.contains('motion-reduce:animate-none')).toBe(pulses);
-      expect(tab?.querySelector('button[aria-label="Close Security review"]')).not.toBeNull();
+      // The close button is the tab's sibling, not a nested interactive child.
+      expect(tab?.querySelector('button')).toBeNull();
+      expect(
+        tab?.parentElement?.querySelector('button[aria-label="Close Security review"]')
+      ).not.toBeNull();
     });
 
     await act(() => root.unmount());

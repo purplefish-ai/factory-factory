@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { type PropsWithChildren, useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import type { SessionData } from './session-tab-bar';
 import { SessionTabBar } from './session-tab-bar';
@@ -306,3 +306,27 @@ export const MixedStatusesDark: typeof MixedStatuses = {
 };
 
 export const AgentStatesDark: typeof AgentStates = { ...AgentStates, globals: { theme: 'dark' } };
+
+export const KeyboardNavigation: Story = {
+  args: {
+    sessions: [
+      createSession('alpha', 3, { name: 'Alpha' }),
+      createSession('beta', 2, { name: 'Beta' }),
+      createSession('gamma', 1, { name: 'Gamma' }),
+    ],
+    currentSessionId: 'alpha',
+  },
+  play: async ({ canvasElement, args }) => {
+    const tabs = within(canvasElement).getAllByRole('tab');
+    tabs[0]!.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(tabs[1]).toHaveFocus();
+    await expect(tabs[0]).toHaveAttribute('tabindex', '-1');
+    await expect(tabs[1]).toHaveAttribute('tabindex', '0');
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onSelectSession).toHaveBeenCalledWith('beta');
+    await expect(
+      within(canvasElement).getByRole('button', { name: 'Close Beta' }).closest('[role="tab"]')
+    ).toBeNull();
+  },
+};

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { createRef } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { formatShortcut } from '@/client/lib/keyboard-shortcuts';
 import { RightControls } from './input-controls';
 
 const meta = {
@@ -35,12 +36,12 @@ export const SendingAndStopping: Story = {
 export const SendingAndStoppingDark: Story = { ...SendingAndStopping, globals: { theme: 'dark' } };
 
 export const StopShortcut: Story = {
-  args: { stopping: false, disabled: false, pendingMessageCount: 0, modLabel: '⌘' },
+  args: { stopping: false, disabled: false, pendingMessageCount: 0 },
   play: async ({ canvasElement }) => {
     await userEvent.hover(within(canvasElement).getByRole('button', { name: 'Stop agent' }));
     await expect(
       await within(canvasElement.ownerDocument.body).findByRole('tooltip')
-    ).toHaveTextContent('Stop agent (⌘+.)');
+    ).toHaveTextContent(`Stop agent (${formatShortcut('composer.stop')})`);
   },
 };
 export const ReadyToSend: Story = {
