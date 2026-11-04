@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
+import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 import {
@@ -37,6 +38,16 @@ function OpenMobileSheet() {
   const { setOpenMobile } = useSidebar();
   useEffect(() => setOpenMobile(true), [setOpenMobile]);
   return null;
+}
+
+// Observe the sidebar's query without starting another request.
+function IssueQueryStatus({ projectId }: { projectId: string }) {
+  const query = trpc.github.listIssuesForProject.useQuery({ projectId }, { enabled: false });
+  return (
+    <output aria-label="Issue query status" className="sr-only">
+      {query.status}
+    </output>
+  );
 }
 
 function SidebarStory({
@@ -73,6 +84,9 @@ function SidebarStory({
   };
   const content = (
     <>
+      {['issues-empty', 'issues-disconnected', 'issues-error'].includes(state) ? (
+        <IssueQueryStatus projectId={switched ? 'other' : 'factory'} />
+      ) : null}
       {state === 'project-switch' ? (
         <button type="button" onClick={() => setSwitched((value) => !value)}>
           Switch project
@@ -215,11 +229,11 @@ export const TodoLaunch: Story = {
 };
 async function expectTodoHidden(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await canvas.findByText('Working');
   await waitFor(async () => {
-    await expect(canvas.queryByText('Todo')).not.toBeInTheDocument();
-    await expect(canvas.queryByText('No assigned issues')).not.toBeInTheDocument();
+    await expect(canvas.getByLabelText('Issue query status')).toHaveTextContent('success');
   });
+  await expect(canvas.queryByText('Todo')).not.toBeInTheDocument();
+  await expect(canvas.queryByText('No assigned issues')).not.toBeInTheDocument();
 }
 
 export const TodoEmpty: Story = {
