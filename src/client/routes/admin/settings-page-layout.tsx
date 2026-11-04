@@ -46,25 +46,12 @@ function GlobalSettingsHeader() {
   );
 }
 
-export function SettingsPageLayout({
-  children,
-  breadcrumb,
-  projectSettings = false,
-}: {
-  children: ReactNode;
-  breadcrumb?: ReactNode;
-  projectSettings?: boolean;
-}) {
+export function SettingsPageLayout({ children }: { children: ReactNode }) {
   return (
     <div className="h-full overflow-y-auto">
-      {!projectSettings ? <GlobalSettingsHeader /> : null}
+      <GlobalSettingsHeader />
       <div className="space-y-6 p-3 md:p-6">
-        {breadcrumb ? (
-          <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-            {breadcrumb}
-          </nav>
-        ) : null}
-        <SettingsTabsList projectSettings={projectSettings} />
+        <SettingsTabsList />
         <div className="space-y-6">{children}</div>
       </div>
     </div>

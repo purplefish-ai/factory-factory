@@ -1,6 +1,5 @@
-import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
-import { Link, Navigate, useParams } from 'react-router';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
@@ -19,10 +18,13 @@ import {
   RatchetSettingsSection,
   VoiceModeSection,
 } from './admin/index';
+import { ProjectSettingsRow } from './admin/project-settings-row';
 import { SettingsPageLayout } from './admin/settings-page-layout';
 import { SystemSettingsSection } from './admin/SystemSettingsSection';
 
-function ProjectSettingsLinks() {
+function ProjectSettingsAccordion() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const expandedProject = searchParams.get('project');
   const query = trpc.project.list.useQuery();
   if (!query.data) {
     return query.error ? (
@@ -44,25 +46,32 @@ function ProjectSettingsLinks() {
           Project settings
         </CardTitle>
         <CardDescription>
-          Choose a project to configure its scripts and issue tracking.
+          Expand a project to configure its scripts and issue tracking.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {query.data.length ? (
           <ul className="divide-y rounded-md border">
             {query.data.map((project) => (
-              <li key={project.id}>
-                <Link
-                  className="flex items-center justify-between gap-3 px-3 py-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-ring"
-                  to={`/projects/${project.slug}/settings`}
-                >
-                  <span className="min-w-0 break-words">{project.name}</span>
-                  <CaretRightIcon
-                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                </Link>
-              </li>
+              <ProjectSettingsRow
+                key={project.id}
+                project={project}
+                open={expandedProject === project.slug}
+                onOpenChange={(open) => {
+                  setSearchParams(
+                    (previous) => {
+                      const next = new URLSearchParams(previous);
+                      if (open) {
+                        next.set('project', project.slug);
+                      } else {
+                        next.delete('project');
+                      }
+                      return next;
+                    },
+                    { replace: true }
+                  );
+                }}
+              />
             ))}
           </ul>
         ) : (
@@ -112,7 +121,7 @@ function SettingsContent({ section }: { section: string }) {
     case 'system':
       return <SystemSettingsSection />;
     case 'project':
-      return <ProjectSettingsLinks />;
+      return <ProjectSettingsAccordion />;
     default:
       return <Navigate to="/admin" replace />;
   }

@@ -3,7 +3,7 @@
 import { act, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
@@ -56,9 +56,14 @@ vi.mock('@/client/components/loading', () => ({
   Loading: ({ message }: { message: string }) => createElement('div', null, message),
 }));
 
-vi.mock('@/client/features/workspace', () => ({
-  WorkspacesBackLink: ({ projectSlug }: { projectSlug: string }) =>
-    createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Back'),
+vi.mock('./admin/ProjectSettingsSection', () => ({
+  ProjectSettingsSection: ({ project }: { project: { id: string; name: string } }) =>
+    createElement(
+      'section',
+      { 'data-project': project.id },
+      `${project.name} configuration`,
+      createElement('input', { 'aria-label': `${project.name} draft`, defaultValue: '' })
+    ),
 }));
 vi.mock('./admin/index', () => ({
   AdversarialReviewSection: () => createElement('section', null, 'Adversarial review'),
@@ -190,7 +195,15 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderAdmin(path = '/admin') {
+function BackButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => void navigate(-1)}>
+      Back
+    </button>
+  );
+}
+function renderAdmin(path = '/admin', initialEntries = [path]) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -198,7 +211,8 @@ function renderAdmin(path = '/admin') {
     root.render(
       createElement(
         MemoryRouter,
-        { initialEntries: [path] },
+        { initialEntries },
+        createElement(BackButton),
         createElement(
           Routes,
           null,
@@ -253,14 +267,92 @@ describe('settings URL sections', () => {
     root.unmount();
   });
 
-  it('links legacy Project settings to explicit project URLs without changing selection', () => {
+  it('expands project settings inline without changing the selected project', async () => {
     localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
     const { container, root } = renderAdmin('/admin/project');
-    expect(container.querySelector('a[href="/projects/alpha/settings"]')).not.toBeNull();
-    expect(container.querySelector('a[href="/projects/beta/settings"]')).not.toBeNull();
+    expect(container.querySelector('[data-project]')).toBeNull();
+    await act(() =>
+      container.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')?.click()
+    );
+    expect(container.querySelector('[data-project]')?.getAttribute('data-project')).toBe(
+      'project-1'
+    );
+    expect(container.querySelector('button[aria-expanded="true"]')?.textContent).toBe('Alpha');
+    expect(
+      [...container.querySelectorAll('nav[aria-label="Breadcrumb"]')].filter(
+        (nav) => !nav.closest('header')
+      )
+    ).toHaveLength(0);
+    await act(() => clickButton(container, 'Beta'));
+    expect(
+      container
+        .querySelector('[data-slot="collapsible-content"]:not([hidden]) [data-project]')
+        ?.getAttribute('data-project')
+    ).toBe('project-2');
+    expect(
+      container.querySelectorAll('[data-slot="collapsible-content"]:not([hidden]) [data-project]')
+    ).toHaveLength(1);
     expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('beta');
-    expect(container.textContent).not.toContain('Factory Configuration');
+    await act(() => clickButton(container, 'Beta'));
+    expect(
+      container.querySelector('[data-slot="collapsible-content"]:not([hidden]) [data-project]')
+    ).toBeNull();
     root.unmount();
+  });
+
+  it('preserves project drafts across collapse, switching rows, and reselecting the active tab', async () => {
+    const { container, root } = renderAdmin('/admin/project?project=alpha');
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[aria-label="Alpha draft"]')!;
+      input.value = 'unsaved Linear API key';
+      const alpha = container.querySelector<HTMLButtonElement>(
+        '[data-slot="collapsible-trigger"]'
+      )!;
+      await act(() => alpha.click());
+      await act(() => alpha.click());
+      expect(
+        container.querySelector<HTMLInputElement>('input[aria-label="Alpha draft"]')?.value
+      ).toBe('unsaved Linear API key');
+      await act(() => clickButton(container, 'Beta'));
+      await act(() => alpha.click());
+      expect(
+        container.querySelector<HTMLInputElement>('input[aria-label="Alpha draft"]')?.value
+      ).toBe('unsaved Linear API key');
+      await act(() =>
+        container.querySelector<HTMLAnchorElement>('a[href^="/admin/project"]')?.click()
+      );
+      expect(alpha.getAttribute('aria-expanded')).toBe('true');
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('does not add browser history entries for accordion changes', async () => {
+    const { container, root } = renderAdmin('/admin/project', [
+      '/admin/workspace',
+      '/admin/project',
+    ]);
+    try {
+      await act(() =>
+        container.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')?.click()
+      );
+      await act(() => clickButton(container, 'Beta'));
+      await act(() => clickButton(container, 'Back'));
+      expect(container.textContent).toContain('Child workspaces');
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('opens a linked project directly without falling back for unknown projects', () => {
+    const { container, root } = renderAdmin('/admin/project?project=beta');
+    expect(container.querySelector('[data-project]')?.getAttribute('data-project')).toBe(
+      'project-2'
+    );
+    root.unmount();
+    const unknown = renderAdmin('/admin/project?project=missing');
+    expect(unknown.container.querySelector('[data-project]')).toBeNull();
+    unknown.root.unmount();
   });
 
   it('keeps unresolved offline diagnostics loading without showing empty data', () => {

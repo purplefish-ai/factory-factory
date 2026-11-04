@@ -12,7 +12,7 @@ const LegacyAgentsPage = lazy(() => import('./routes/agents/legacy'));
 const AdminPage = lazy(() => import('./routes/admin-page'));
 const HomePage = lazy(() => import('./routes/home'));
 const LogsPage = lazy(() => import('./routes/logs'));
-const ProjectSettingsPage = lazy(() => import('./routes/projects/settings'));
+const ProjectSettingsRedirect = lazy(() => import('./routes/projects/settings'));
 const ProjectsListPage = lazy(() => import('./routes/projects/list'));
 const NewProjectPage = lazy(() => import('./routes/projects/new'));
 const ProjectRedirectPage = lazy(() => import('./routes/projects/redirect'));
@@ -83,7 +83,7 @@ export const router = createBrowserRouter([
             path: 'new',
             element: <NewProjectPage />,
           },
-          { path: ':slug/settings', element: <ProjectSettingsPage /> },
+          { path: ':slug/settings', element: <ProjectSettingsRedirect /> },
           {
             path: ':slug',
             element: <ProjectLayout />,

@@ -178,7 +178,7 @@ export const IssuesDisconnected: Story = {
     ).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Project settings' })).toHaveAttribute(
       'href',
-      '/projects/demo/settings'
+      '/admin/project?project=demo'
     );
   },
 };

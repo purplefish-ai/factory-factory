@@ -14,12 +14,14 @@ bookmark it and use the browser's Back button:
   and worktree cleanup. Diagnostics poll only while this section is open;
   loading or failed diagnostics never block other settings.
 - **Server logs** (`/admin/logs`): searchable logs; `/logs` remains available.
-- **Project settings** (`/admin/project`): links to each project's settings at
-  `/projects/:slug/settings`, including factory configuration and issue
-  tracking. Opening a project's settings does not change the selected project
-  elsewhere. Individual project pages keep the settings section navigation, with
-  **Project settings** selected. Use the **Projects** breadcrumb to return to
-  the project list.
+- **Project settings** (`/admin/project`): expand a project row to edit its
+  factory configuration and issue tracking inline. One project is expanded at a
+  time; opening another collapses the previous one. Unsaved edits survive
+  collapsing or switching rows while you stay in Project settings. Expanding
+  rows does not add browser history entries. This does not change the selected
+  project elsewhere. Links to `/admin/project?project=:slug` expand that project
+  directly; old `/projects/:slug/settings` bookmarks redirect here. Project
+  settings use the same section navigation without an in-page breadcrumb.
 
 Settings keeps the project picker in the top navigation, followed by
 **Settings**. Use it to return to a project board, switch projects, or create a
