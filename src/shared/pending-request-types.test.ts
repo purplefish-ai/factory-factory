@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getPendingRequestType,
   hasAskUserQuestionInput,
   hasExitPlanModeInput,
   isExitPlanModeRequest,
@@ -84,5 +85,36 @@ describe('pending-request-types helpers', () => {
         input: { type: 'ExitPlanMode' },
       })
     ).toBe(true);
+  });
+});
+
+describe('getPendingRequestType', () => {
+  it('classifies plan approval by tool name or input type', () => {
+    expect(getPendingRequestType({ toolName: 'ExitPlanMode' })).toBe('plan_approval');
+    expect(
+      getPendingRequestType({ toolName: 'Ready to code?', input: { type: 'ExitPlanMode' } })
+    ).toBe('plan_approval');
+  });
+
+  it('classifies non-MCP requests with usable questions as user questions', () => {
+    expect(
+      getPendingRequestType({
+        toolName: 'AskUserQuestion',
+        input: { questions: [{ question: 'What next?', options: [] }] },
+      })
+    ).toBe('user_question');
+  });
+
+  it('classifies MCP and other tool requests as permission requests', () => {
+    expect(
+      getPendingRequestType({
+        toolName: 'Ask',
+        rawToolName: 'mcp__server__ask',
+        input: { questions: [{ question: 'What next?', options: [] }] },
+      })
+    ).toBe('permission_request');
+    expect(getPendingRequestType({ toolName: 'Bash', input: { command: 'ls' } })).toBe(
+      'permission_request'
+    );
   });
 });

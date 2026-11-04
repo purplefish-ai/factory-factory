@@ -1,14 +1,11 @@
 import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
+import { PENDING_REQUEST_TYPES, type PendingRequestType } from './pending-request-types';
 import type { PRMonitoringProjection } from './pr-monitoring';
 
-export const WORKSPACE_PENDING_REQUEST_TYPES = [
-  'plan_approval',
-  'user_question',
-  'permission_request',
-] as const;
+export const WORKSPACE_PENDING_REQUEST_TYPES = PENDING_REQUEST_TYPES;
 
-export type WorkspacePendingRequestType = (typeof WORKSPACE_PENDING_REQUEST_TYPES)[number];
+export type WorkspacePendingRequestType = PendingRequestType;
 
 export const WORKSPACE_STATUS_REASON_TONES = [
   'neutral',

@@ -32,7 +32,8 @@ function isSessionActive(
     return persistedStatus === 'RUNNING';
   }
   const kind = sessionUiStatusKindFromSummary(summary);
-  return kind === 'working' || kind === 'starting';
+  // A session awaiting input still has a prompt in flight that closing would stop.
+  return kind === 'working' || kind === 'starting' || kind === 'awaiting-input';
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { SessionStatus } from '@/shared/core';
 import type { AcpBackgroundTask } from './acp-protocol/subagents';
+import type { PendingRequestType } from './pending-request-types';
 
 export const SESSION_RUNTIME_PHASES = [
   'loading',
@@ -40,6 +41,8 @@ export interface SessionSummary {
   updatedAt: string;
   lastExit: SessionRuntimeLastExit | null;
   errorMessage?: string | null;
+  /** The interactive request blocking this session on the user, if any. */
+  pendingRequestType?: PendingRequestType | null;
 }
 
 export interface SessionWorkState {
@@ -73,6 +76,7 @@ export type SessionUiStatusKind =
   | 'error'
   | 'unexpected-exit'
   | 'stopped'
+  | 'awaiting-input'
   | 'working'
   | 'idle';
 
@@ -81,6 +85,7 @@ export interface SessionUiStatusInput {
   processState: SessionRuntimeProcessState;
   activity: SessionRuntimeActivity;
   lastExit?: SessionRuntimeLastExit | null;
+  pendingRequestType?: PendingRequestType | null;
 }
 
 export function deriveSessionUiStatusKind(input: SessionUiStatusInput): SessionUiStatusKind {
@@ -93,6 +98,11 @@ export function deriveSessionUiStatusKind(input: SessionUiStatusInput): SessionU
   if (input.processState === 'stopped') {
     return input.lastExit?.unexpected ? 'unexpected-exit' : 'stopped';
   }
+  // A blocked prompt still reads as WORKING, so a pending request must win
+  // over activity: the agent is waiting on the user, not processing.
+  if (input.pendingRequestType) {
+    return 'awaiting-input';
+  }
   if (input.activity === 'WORKING' || input.phase === 'running') {
     return 'working';
   }
@@ -100,13 +110,17 @@ export function deriveSessionUiStatusKind(input: SessionUiStatusInput): SessionU
 }
 
 export function sessionUiStatusKindFromSummary(
-  summary: Pick<SessionSummary, 'runtimePhase' | 'processState' | 'activity' | 'lastExit'>
+  summary: Pick<
+    SessionSummary,
+    'runtimePhase' | 'processState' | 'activity' | 'lastExit' | 'pendingRequestType'
+  >
 ): SessionUiStatusKind {
   return deriveSessionUiStatusKind({
     phase: summary.runtimePhase,
     processState: summary.processState,
     activity: summary.activity,
     lastExit: summary.lastExit,
+    pendingRequestType: summary.pendingRequestType,
   });
 }
 

@@ -105,3 +105,18 @@ export const ActivityChanges: Story = {
     await expect(footer.getBoundingClientRect().height).toBe(height);
   },
 };
+
+export const WaitingForApproval: Story = {
+  args: { waitingFor: 'permission_request' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Waiting for your approval');
+    await expect(canvas.queryByRole('button', { name: 'Show thinking preview' })).toBeNull();
+  },
+};
+export const WaitingForAnswer: Story = { args: { waitingFor: 'user_question' } };
+export const WaitingForPlanApproval: Story = { args: { waitingFor: 'plan_approval' } };
+export const WaitingForApprovalDark: Story = {
+  args: { waitingFor: 'permission_request' },
+  globals: { theme: 'dark' },
+};

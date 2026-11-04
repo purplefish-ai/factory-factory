@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
   ChatInput,
+  getChatPendingRequestType,
   PermissionPrompt,
   QuestionPrompt,
   type UseChatWebSocketReturn,
@@ -10,6 +11,7 @@ import {
 } from '@/client/features/chat';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { useSubagentTimelineMessages } from '@/client/features/subagents';
+import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
 
 interface QuickChatContentProps {
   workspaceId: string;
@@ -43,6 +45,11 @@ export function QuickChatContent({
   const stopping = chatState.sessionStatus.phase === 'stopping';
   const loadingSession = chatState.sessionStatus.phase === 'loading';
   const startingSession = chatState.sessionStatus.phase === 'starting';
+  const pendingRequestType = getChatPendingRequestType(chatState.pendingRequest);
+  let placeholder = promptInFlight ? 'Message will be queued...' : 'Type a message...';
+  if (pendingRequestType) {
+    placeholder = getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -50,6 +57,7 @@ export function QuickChatContent({
       <ChatTranscript
         sessionId={chatState.runtimeSessionId}
         thinkingInFooter
+        pendingRequestType={pendingRequestType}
         workspaceId={workspaceId}
         messages={groupedMessages}
         subagentTimelineError={timeline.error}
@@ -97,7 +105,7 @@ export function QuickChatContent({
           stopping={stopping}
           promptInFlight={promptInFlight}
           inputRef={chatState.inputRef}
-          placeholder={promptInFlight ? 'Message will be queued...' : 'Type a message...'}
+          placeholder={placeholder}
           settings={chatState.chatSettings}
           capabilities={chatState.chatCapabilities}
           capabilitiesLoaded={chatState.chatCapabilitiesLoaded}

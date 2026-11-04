@@ -13,6 +13,7 @@ import {
   WorkspaceProviderSelection,
   WorkspaceStatus,
 } from '@/shared/core';
+import { PENDING_REQUEST_TYPES } from '@/shared/pending-request-types';
 import { prDeliveryModeSchema } from '@/shared/schemas/pr-event.schema';
 import {
   SESSION_RUNTIME_ACTIVITIES,
@@ -49,6 +50,7 @@ export const WorkspaceSessionSummarySchema = z.object({
   updatedAt: z.string(),
   lastExit: SessionRuntimeLastExitSchema.nullable(),
   errorMessage: z.string().nullable().optional(),
+  pendingRequestType: z.enum(PENDING_REQUEST_TYPES).nullable().optional(),
 });
 
 export const WorkspaceGitStatsSchema = z.object({

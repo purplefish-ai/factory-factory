@@ -11,6 +11,7 @@ function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['s
     case 'stopping':
       return { phase: 'stopping' };
     case 'working':
+    case 'awaiting-input':
       return { phase: 'running' };
     default:
       return { phase: 'ready' };

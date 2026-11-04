@@ -1415,7 +1415,7 @@ describe('configureEventCollector', () => {
     );
   });
 
-  it('pending_request_changed refreshes pendingRequestType', async () => {
+  it('pending_request_changed refreshes pendingRequestType and session summaries', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
@@ -1433,6 +1433,21 @@ describe('configureEventCollector', () => {
       } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
     ]);
     vi.mocked(computePendingRequestType).mockReturnValue('permission_request');
+    vi.mocked(chatEventForwarderService.getAllPendingRequests).mockReturnValueOnce(
+      new Map([
+        [
+          's-1',
+          {
+            requestId: 'req-1',
+            toolName: 'Bash',
+            toolUseId: 'tool-1',
+            input: { command: 'rm -rf build' },
+            planContent: null,
+            timestamp: '2026-11-04T00:00:00.000Z',
+          },
+        ],
+      ])
+    );
 
     configureEventCollector();
 
@@ -1445,13 +1460,19 @@ describe('configureEventCollector', () => {
       hasPending: boolean;
     }) => void;
 
-    handler({ sessionId: 's-1', requestId: 'req-1', hasPending: false });
+    handler({ sessionId: 's-1', requestId: 'req-1', hasPending: true });
     await vi.advanceTimersByTimeAsync(150);
 
     expect(computePendingRequestType).toHaveBeenCalledWith(['s-1'], expect.any(Map));
+    // The tab's own pending request travels with the workspace-level type, from the same map.
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { pendingRequestType: 'permission_request' },
+      {
+        pendingRequestType: 'permission_request',
+        sessionSummaries: [
+          expect.objectContaining({ sessionId: 's-1', pendingRequestType: 'permission_request' }),
+        ],
+      },
       'event:pending_request_changed',
       expect.any(Number)
     );

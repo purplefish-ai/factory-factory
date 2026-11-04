@@ -401,8 +401,10 @@ async function loadWorkspaceSessionSummaries(
     if (state.activeCoalescer !== coalescer) {
       return;
     }
-    const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
-      state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId)
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      sessions,
+      (sessionId) => state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId),
+      state.dependencies.chatEventForwarderService.getAllPendingRequests()
     );
     coalescer.enqueue(
       workspaceId,
@@ -460,11 +462,19 @@ async function loadWorkspacePendingRequestType(
     if (state.activeCoalescer !== coalescer) {
       return;
     }
+    const pendingRequests = state.dependencies.chatEventForwarderService.getAllPendingRequests();
     const pendingRequestType = state.dependencies.computePendingRequestType(
       sessions.map((s) => s.id),
-      state.dependencies.chatEventForwarderService.getAllPendingRequests()
+      pendingRequests
     );
-    coalescer.enqueue(workspaceId, { pendingRequestType }, source);
+    // Session summaries carry each tab's own pending request, so refresh them
+    // from the same map: the workspace and tab indicators then change together.
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      sessions,
+      (sessionId) => state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId),
+      pendingRequests
+    );
+    coalescer.enqueue(workspaceId, { pendingRequestType, sessionSummaries }, source);
   } catch (error) {
     state.logger.warn('Failed to refresh workspace pending request type', {
       workspaceId,

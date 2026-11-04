@@ -39,6 +39,18 @@ describe('getSessionCloseRisk', () => {
     );
   });
 
+  it('flags a session awaiting input as running, since closing stops its prompt', () => {
+    expect(
+      getSessionCloseRisk({
+        summary: summary({
+          runtimePhase: 'running',
+          activity: 'WORKING',
+          pendingRequestType: 'permission_request',
+        }),
+      })
+    ).toEqual({ running: true, queuedMessageCount: 0 });
+  });
+
   it('uses the persisted status only when no live summary exists', () => {
     expect(getSessionCloseRisk({ persistedStatus: 'RUNNING' })?.running).toBe(true);
     expect(getSessionCloseRisk({ summary: summary({}), persistedStatus: 'RUNNING' })).toBeNull();

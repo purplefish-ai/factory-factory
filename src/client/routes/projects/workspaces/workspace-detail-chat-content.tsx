@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/client/features/chat';
 import {
   ChatInput,
+  getChatPendingRequestType,
   PermissionPrompt,
   QuestionPrompt,
   RewindConfirmationDialog,
@@ -16,7 +17,9 @@ import {
   useSubagentTimelineMessages,
 } from '@/client/features/subagents';
 import { VoiceModeToggle } from '@/client/features/voice';
+import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
+import type { PendingRequestType } from '@/shared/pending-request-types';
 import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
@@ -89,7 +92,7 @@ function getInputPlaceholder({
   displayStartingState,
   running,
   promptInFlight,
-  pendingRequest,
+  pendingRequestType,
   sessionPhase,
   sessionRuntime,
   messageCount,
@@ -99,7 +102,7 @@ function getInputPlaceholder({
   displayStartingState: boolean;
   running: boolean;
   promptInFlight: boolean;
-  pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
+  pendingRequestType: PendingRequestType | null;
   sessionPhase: ReturnType<typeof useChatWebSocket>['sessionStatus']['phase'];
   sessionRuntime: SessionRuntimeState;
   messageCount: number;
@@ -116,8 +119,8 @@ function getInputPlaceholder({
   if (sessionRuntime.phase === 'error') {
     return 'Agent encountered an error. Type a message to retry...';
   }
-  if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
-    return 'Approve the plan or keep planning...';
+  if (pendingRequestType) {
+    return getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
   }
   if (promptInFlight) {
     return 'Message will be queued...';
@@ -249,9 +252,8 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
   const permissionRequestId =
     props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
-  const isPlanApproval =
-    props.pendingRequest.type === 'permission' &&
-    props.pendingRequest.request.toolName === 'ExitPlanMode';
+  const pendingRequestType = getChatPendingRequestType(props.pendingRequest);
+  const isPlanApproval = pendingRequestType === 'plan_approval';
 
   useEffect(() => {
     if (!(isPlanApproval && permissionRequestId)) {
@@ -270,7 +272,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     displayStartingState,
     running,
     promptInFlight,
-    pendingRequest: props.pendingRequest,
+    pendingRequestType,
     sessionPhase: props.sessionStatus.phase,
     sessionRuntime: props.sessionRuntime,
     messageCount: props.messages.length,
@@ -301,6 +303,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       <ChatTranscript
         sessionId={props.sessionId}
         thinkingInFooter
+        pendingRequestType={pendingRequestType}
         header={header}
         workspaceId={props.workspaceId}
         messages={groupedMessages}

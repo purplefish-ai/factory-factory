@@ -79,8 +79,8 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
   const status = deriveSessionTabRuntime(sessionSummary, persistedStatus);
   const StatusIcon = status.icon;
 
-  // CI fix sessions show wrench icon instead of dot
-  if (isCIFix) {
+  // CI fix sessions show wrench icon instead of dot, unless they need the user
+  if (isCIFix && !status.awaitingInput) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -118,6 +118,8 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
             />
           ) : (
             <StatusIcon
+              role="img"
+              aria-label={status.label}
               className={cn(
                 'h-3.5 w-3.5 shrink-0',
                 status.color,

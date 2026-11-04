@@ -47,8 +47,10 @@ export const workspaceChildrenRouter = router({
       const pendingRequests = sessionDomainService.getAllPendingRequests();
 
       return children.map((child) => {
-        const sessionSummaries = buildWorkspaceSessionSummaries(child.agentSessions, (id) =>
-          sessionLifecycleService.getRuntimeSnapshot(id)
+        const sessionSummaries = buildWorkspaceSessionSummaries(
+          child.agentSessions,
+          (id) => sessionLifecycleService.getRuntimeSnapshot(id),
+          pendingRequests
         );
         // Derived on read through the same function workspace.get uses. The
         // query already loads each child with its sessions, so this does not

@@ -5,6 +5,47 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it.each([
+    ['permission_request', 'Waiting for your approval'],
+    ['user_question', 'Waiting for your answer'],
+    ['plan_approval', 'Waiting for your plan approval'],
+  ] as const)('says the agent waits on a %s instead of working', (type, text) => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(<ThinkingFooter active latestThinking="Checking CI" waitingFor={type} />)
+      );
+      const status = host.querySelector('[role="status"]');
+      expect(status?.textContent).toBe(text);
+      expect(status?.classList.contains('text-warning')).toBe(true);
+      expect(host.textContent).not.toContain('Checking CI');
+      expect(host.querySelector('button')).toBeNull();
+      expect(host.querySelector('[data-testid="thinking-footer"]')?.className).toContain('h-8');
+    } finally {
+      root.unmount();
+    }
+  });
+
+  it('returns to the thinking preview once the request resolves', () => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(
+          <ThinkingFooter active latestThinking="Running tests" waitingFor="permission_request" />
+        )
+      );
+      flushSync(() =>
+        root.render(<ThinkingFooter active latestThinking="Running tests" waitingFor={null} />)
+      );
+      expect(host.querySelector('button')?.textContent).toContain('Running tests');
+      expect(host.querySelector('[role="status"]')?.textContent).toBe('Agent is working');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('shows literal separators from the latest paragraph of fenced code', () => {
     const host = document.createElement('div');
     const root = createRoot(host);
