@@ -1,6 +1,5 @@
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
@@ -247,8 +247,8 @@ export function DevServerSetupPanel({
             >
               {isPending ? (
                 <>
-                  <SpinnerGapIcon className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
+                  <Spinner className="mr-2" aria-hidden="true" />
+                  Saving…
                 </>
               ) : (
                 <>

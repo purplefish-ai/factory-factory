@@ -203,7 +203,7 @@ describe('ScreenshotsPanel', () => {
       );
     });
 
-    expect(container.textContent).toContain('Taking Screenshots...');
+    expect(container.textContent).toContain('Taking screenshots…');
     expect(container.querySelector('button')).toBeNull();
 
     flushSync(() => {
@@ -217,7 +217,7 @@ describe('ScreenshotsPanel', () => {
     });
 
     const retryButton = container.querySelector('button');
-    expect(retryButton?.textContent).toContain('Take Screenshots');
+    expect(retryButton?.textContent).toContain('Take screenshots');
 
     retryButton?.click();
     expect(mocks.onTakeScreenshots).toHaveBeenCalledOnce();

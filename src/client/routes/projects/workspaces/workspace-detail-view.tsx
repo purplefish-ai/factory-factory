@@ -184,7 +184,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   );
 
   if (workspaceState.workspaceLoading) {
-    return <Loading message="Loading workspace..." />;
+    return <Loading message="Loading workspace…" />;
   }
 
   if (!workspaceState.workspace) {

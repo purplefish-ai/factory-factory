@@ -11,6 +11,19 @@
   [data-sd-animate-marker]::marker {
     animation: none;
   }
+
+  /*
+   * Looping loaders and status pulses stop for reduced motion. Spinners keep
+   * their gap shape and an accessible label, and skeletons stay as static
+   * blocks, so the pending state still reads without movement. Unlayered, so
+   * it wins over the utilities layer.
+   */
+  .animate-spin,
+  .animate-pulse,
+  .animate-ping,
+  .animate-bounce {
+    animation: none;
+  }
 }
 
 @custom-variant dark (&:is(.dark *));

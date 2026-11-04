@@ -73,7 +73,7 @@ export function EventAgentInspection({ agent }: { agent: EventAgent }) {
           <TriggerInspection key={trigger.id} trigger={trigger} />
         ))}
         {agent.configurationMembership === 'KNOWN' && agent.configuredTriggers.length === 0 && (
-          <p className="text-sm">No configured triggers.</p>
+          <p className="text-sm">No configured triggers</p>
         )}
       </section>
       <section className="space-y-3">
@@ -82,7 +82,7 @@ export function EventAgentInspection({ agent }: { agent: EventAgent }) {
           <TriggerInspection key={trigger.id} trigger={trigger} />
         ))}
         {agent.retainedTriggers.length === 0 && (
-          <p className="text-sm">No retained records on this page.</p>
+          <p className="text-sm">No retained records on this page</p>
         )}
       </section>
     </div>

@@ -1,6 +1,7 @@
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
 import { ChatTranscript, type TranscriptScrollOptions } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
@@ -25,24 +26,6 @@ export interface SubagentTranscriptContentProps {
   selection: SubagentSelection;
   state: SubagentTranscriptState;
   scroll?: Pick<TranscriptScrollOptions, 'ready' | 'initialPosition' | 'onPositionChange'>;
-}
-
-function LoadingState() {
-  return (
-    <div className="flex h-full items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-      <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-      Loading transcript…
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
-      <RobotIcon className="h-7 w-7 opacity-40" />
-      <p className="text-sm">No transcript messages yet.</p>
-    </div>
-  );
 }
 
 function UnavailableState({
@@ -169,8 +152,15 @@ export function SubagentTranscriptContent({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="min-h-0 flex-1">
-        {state.kind === 'loading' && <LoadingState />}
-        {state.kind === 'empty' && <EmptyState />}
+        {state.kind === 'loading' && <Loading size="compact" message="Loading transcript…" />}
+        {state.kind === 'empty' && (
+          <EmptyState
+            icon={RobotIcon}
+            title="No transcript messages yet"
+            description="Messages appear here as the subagent works."
+            className="h-full"
+          />
+        )}
         {state.kind === 'unavailable' && (
           <UnavailableState selection={selection} message={state.message} onRetry={state.onRetry} />
         )}

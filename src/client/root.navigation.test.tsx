@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type ReactNode } from 'react';
+import { act, lazy, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { expect, it, vi } from 'vitest';
@@ -69,3 +69,36 @@ it.each([
     }
   }
 );
+
+it('offers reload rather than an ineffective retry for a rejected route chunk', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('reportError', vi.fn());
+  const FailedRoute = lazy(() => Promise.reject(new Error('Route chunk unavailable')));
+  const container = document.createElement('div');
+  const root = createRoot(container, { onCaughtError: () => undefined });
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={['/projects/demo']}>
+          <Routes>
+            <Route path="/" element={<Root />}>
+              <Route path="projects/demo" element={<FailedRoute />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    );
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain('Route chunk unavailable');
+    const labels = Array.from(
+      alert?.querySelectorAll('button') ?? [],
+      (button) => button.textContent
+    );
+    expect(labels).toContain('Reload');
+    expect(labels).toContain('Copy details');
+    expect(labels).not.toContain('Try again');
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});

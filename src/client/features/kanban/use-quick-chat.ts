@@ -12,7 +12,12 @@ function isPendingCreatedSelection(
 }
 
 export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CLAUDE' | 'CODEX') {
-  const { data: sessions } = trpc.session.listSessions.useQuery(
+  const {
+    data: sessions,
+    error: sessionsError,
+    refetch: refetchSessions,
+    isFetching: isFetchingSessions,
+  } = trpc.session.listSessions.useQuery(
     { workspaceId: workspaceId ?? '' },
     { enabled: !!workspaceId, staleTime: 0, refetchOnWindowFocus: false }
   );
@@ -130,6 +135,9 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
   return {
     sessions: sessions ?? [],
     sessionsLoaded: sessions !== undefined,
+    sessionsError,
+    refetchSessions,
+    isFetchingSessions,
     selectedSessionId,
     selectedCodexAccountId: selectedSession
       ? selectedSession.codexAccountId

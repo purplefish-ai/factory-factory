@@ -2,6 +2,7 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router';
+import { EmptyState } from '@/client/components/empty-state';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -149,7 +150,18 @@ export function AgentsDashboardShell({
               </p>
             )}
             {!(error || isLoading) && agents?.length === 0 && (
-              <p className="p-3 text-xs text-muted-foreground">No agents in this project.</p>
+              <EmptyState
+                size="compact"
+                icon={RobotIcon}
+                title="No agents yet"
+                description="Agents run on a schedule or when an event arrives."
+                action={
+                  <Button variant="outline" size="sm" onClick={onCreate} disabled={createDisabled}>
+                    <PlusIcon aria-hidden="true" />
+                    Create agent
+                  </Button>
+                }
+              />
             )}
             {agents?.map((agent) => (
               <AgentRailItem

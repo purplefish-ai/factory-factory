@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, within } from 'storybook/test';
 import { Loading } from './loading';
 
 const meta = {
@@ -26,13 +27,13 @@ export const Default: Story = {
 
 export const CustomMessage: Story = {
   args: {
-    message: 'Fetching workspaces...',
+    message: 'Fetching workspaces…',
   },
 };
 
 export const LongMessage: Story = {
   args: {
-    message: 'Initializing workspace and setting up git worktree...',
+    message: 'Initializing workspace and setting up git worktree…',
   },
 };
 
@@ -45,6 +46,31 @@ export const InSmallContainer: Story = {
     ),
   ],
   args: {
-    message: 'Loading...',
+    message: 'Loading…',
+  },
+};
+
+/** Side panels drop the minimum height. */
+export const Compact: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-[280px] h-[160px] border rounded">
+        <Story />
+      </div>
+    ),
+  ],
+  args: {
+    size: 'compact',
+    message: 'Loading changes…',
+  },
+};
+
+export const Dark: Story = {
+  globals: { theme: 'dark' },
+  args: {
+    message: 'Loading workspace…',
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('status')).toHaveTextContent('Loading workspace…');
   },
 };

@@ -14,7 +14,7 @@ export default function WorkspaceDetailPage() {
       workspaceId={workspaceId}
       initialActiveTabId={searchParams.has('session') ? 'chat' : undefined}
     >
-      <Suspense fallback={<Loading message="Loading chat..." />}>
+      <Suspense fallback={<Loading message="Loading chat…" />}>
         {/* Key by workspaceId to reset all state when switching workspaces.
             Without this, selectedDbSessionId would persist from the previous
             workspace and no session tab would be highlighted. */}

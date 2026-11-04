@@ -312,7 +312,7 @@ describe('ProjectsListPage load failure', () => {
     const alert = container.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain("Couldn't load projects");
     expect(alert?.textContent).toContain('Backend unavailable');
-    expect(container.textContent).not.toContain('No projects found');
+    expect(container.textContent).not.toContain('No projects yet');
     expect(container.textContent).not.toContain('Create your first project');
 
     const retry = Array.from(container.querySelectorAll('button')).find(
@@ -352,7 +352,7 @@ describe('ProjectsListPage load failure', () => {
     mocks.listData = [];
     const { container, root } = renderPage();
 
-    expect(container.textContent).toContain('No projects found');
+    expect(container.textContent).toContain('No projects yet');
     expect(container.querySelector('[role="alert"]')).toBeNull();
 
     root.unmount();

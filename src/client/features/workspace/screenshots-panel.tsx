@@ -1,13 +1,15 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryState } from '@/client/components/query-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -50,7 +52,7 @@ export function ScreenshotsPanel({
     },
   });
 
-  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.listScreenshots.useQuery(
+  const screenshotsQuery = trpc.workspace.listScreenshots.useQuery(
     { workspaceId },
     {
       refetchInterval: isTakingScreenshots ? 3000 : 10_000,
@@ -58,7 +60,7 @@ export function ScreenshotsPanel({
     }
   );
 
-  const screenshots = data?.screenshots ?? [];
+  const screenshots = screenshotsQuery.data?.screenshots ?? [];
   const deleteTargetListed =
     deleteTarget !== null && screenshots.some((shot) => shot.path === deleteTarget.path);
 
@@ -70,56 +72,41 @@ export function ScreenshotsPanel({
     }
   }, [deleteDialogOpen, deleteMutation.isPending, deleteTargetListed]);
 
-  let body: ReactNode;
-  if (isLoading) {
-    body = (
-      <div className="flex items-center justify-center h-full">
-        <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  } else if (error && !data) {
-    body = (
-      <QueryErrorState
-        title="Couldn't load screenshots"
-        error={error}
-        onRetry={() => {
-          void refetch();
-        }}
-        isRetrying={isFetching}
-        className="h-full"
-      />
-    );
-  } else if (screenshots.length === 0) {
-    body = (
-      <ScreenshotsEmptyState
-        isTakingScreenshots={isTakingScreenshots}
-        onTakeScreenshots={onTakeScreenshots}
-      />
-    );
-  } else {
-    body = (
-      <ScrollArea className="h-full">
-        <div className="p-2 grid grid-cols-2 gap-2">
-          {screenshots.map((screenshot) => (
-            <ScreenshotThumbnail
-              key={screenshot.path}
-              workspaceId={workspaceId}
-              screenshot={screenshot}
-              onClick={() => openTab('screenshot', screenshot.path, screenshot.name)}
-              onDelete={() => {
-                setDeleteTarget(screenshot);
-                setDeleteDialogOpen(true);
-              }}
-            />
-          ))}
-        </div>
-      </ScrollArea>
-    );
-  }
-
   return (
     <>
-      {body}
+      <QueryState
+        query={screenshotsQuery}
+        errorTitle="Couldn't load screenshots"
+        loadingMessage="Loading screenshots…"
+        size="compact"
+        className="h-full"
+        isEmpty={(data) => data.screenshots.length === 0}
+        empty={
+          <ScreenshotsEmptyState
+            isTakingScreenshots={isTakingScreenshots}
+            onTakeScreenshots={onTakeScreenshots}
+          />
+        }
+      >
+        {(data) => (
+          <ScrollArea className="h-full">
+            <div className="p-2 grid grid-cols-2 gap-2">
+              {data.screenshots.map((screenshot) => (
+                <ScreenshotThumbnail
+                  key={screenshot.path}
+                  workspaceId={workspaceId}
+                  screenshot={screenshot}
+                  onClick={() => openTab('screenshot', screenshot.path, screenshot.name)}
+                  onDelete={() => {
+                    setDeleteTarget(screenshot);
+                    setDeleteDialogOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+      </QueryState>
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={(open) => {
@@ -154,37 +141,35 @@ function ScreenshotsEmptyState({
     onTakeScreenshots?.();
   }, [onTakeScreenshots]);
 
+  if (isTakingScreenshots) {
+    return (
+      <EmptyState
+        size="compact"
+        icon={CameraIcon}
+        title="Taking screenshots…"
+        description="The agent is capturing the dev app."
+        action={<Spinner className="size-5 text-muted-foreground" aria-hidden="true" />}
+        className="h-full"
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4 gap-3">
-      <CameraIcon className="h-8 w-8 text-muted-foreground" />
-      <div>
-        {isTakingScreenshots ? (
-          <>
-            <p className="text-sm font-medium text-muted-foreground">Taking Screenshots...</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              The agent is capturing the dev app
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-sm font-medium text-muted-foreground">No screenshots yet</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Capture screenshots of the running dev app
-            </p>
-          </>
-        )}
-      </div>
-      {isTakingScreenshots ? (
-        <SpinnerGapIcon className="h-5 w-5 animate-spin text-muted-foreground" />
-      ) : (
-        onTakeScreenshots && (
-          <Button variant="outline" size="sm" onClick={handleTakeScreenshots} className="gap-1.5">
-            <CameraIcon className="h-3.5 w-3.5" />
-            Take Screenshots
+    <EmptyState
+      size="compact"
+      icon={CameraIcon}
+      title="No screenshots yet"
+      description="Capture screenshots of the running dev app."
+      action={
+        onTakeScreenshots ? (
+          <Button variant="outline" size="sm" onClick={handleTakeScreenshots}>
+            <CameraIcon aria-hidden="true" />
+            Take screenshots
           </Button>
-        )
-      )}
-    </div>
+        ) : null
+      }
+      className="h-full"
+    />
   );
 }
 
@@ -227,9 +212,7 @@ function ScreenshotThumbnail({
         className="absolute inset-0"
       >
         {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
+          <Skeleton className="absolute inset-0 rounded-none" aria-hidden="true" />
         ) : data ? (
           <img
             src={`data:${data.mimeType};base64,${data.data}`}

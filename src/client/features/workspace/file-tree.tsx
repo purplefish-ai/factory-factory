@@ -1,9 +1,11 @@
 import { FileIcon } from '@phosphor-icons/react/dist/csr/File';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo, useCallback } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useFileTreeExpansion } from './file-tree-context';
 import { FileTreeRow } from './file-tree-row';
 
@@ -136,7 +138,7 @@ const FileNode = memo(function FileNode({ entry, depth, onFileSelect }: FileNode
 // =============================================================================
 
 export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: FileTreeProps) {
-  const { data, isLoading, error } = trpc.workspace.listFiles.useQuery(
+  const { data, isLoading, error, refetch, isFetching } = trpc.workspace.listFiles.useQuery(
     {
       workspaceId,
       path: path || undefined,
@@ -151,25 +153,36 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     }
   );
 
-  if (isLoading) {
+  if (isLoading || !(data || error)) {
     return (
       <div
         className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        <SpinnerGapIcon className="h-4 w-4 animate-spin" />
-        <span>Loading...</span>
+        <Spinner aria-hidden="true" />
+        <span>Loading…</span>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div
-        className="px-2 py-1 text-sm text-destructive"
+        role="alert"
+        className="flex items-center gap-2 px-2 py-1 text-sm text-destructive"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        Failed to load: {error.message}
+        <span>Couldn't load folder. {error.message}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            void refetch();
+          }}
+          disabled={isFetching}
+        >
+          {isFetching ? 'Retrying…' : 'Retry'}
+        </Button>
       </div>
     );
   }
@@ -181,10 +194,12 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     // Show different message based on whether workspace has a worktree
     if (!hasWorktree && depth === 0) {
       return (
-        <div className="px-3 py-4 text-sm text-muted-foreground">
-          <p className="font-medium mb-1">No files available</p>
-          <p className="text-xs">This workspace doesn't have a directory configured yet.</p>
-        </div>
+        <EmptyState
+          size="compact"
+          icon={FolderIcon}
+          title="No files available"
+          description="This workspace doesn't have a directory yet."
+        />
       );
     }
 

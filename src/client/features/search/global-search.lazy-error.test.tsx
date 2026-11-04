@@ -103,9 +103,13 @@ it('contains a failed launch chunk and keeps the app and search usable', async (
     await act(() => chunk.reject(new Error('Failed to fetch launch chunk')));
     await waitForReact(() =>
       expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-        'Unable to load issue launch options'
+        "Couldn't load issue launch options"
       )
     );
+    const recoveryButtons = [...document.querySelectorAll('[role="dialog"] button')].map(
+      (button) => button.textContent
+    );
+    expect(recoveryButtons).toContain('Reload');
     expect(container.querySelector('output')?.textContent).toBe('App shell');
     expect(uncaught).not.toHaveBeenCalled();
     const close = Array.from(document.querySelectorAll('button')).find(

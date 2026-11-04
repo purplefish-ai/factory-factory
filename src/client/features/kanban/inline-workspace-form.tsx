@@ -1,6 +1,5 @@
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useId, useLayoutEffect, useRef } from 'react';
@@ -37,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
@@ -557,7 +557,7 @@ export function InlineWorkspaceForm({
               title={launchDisabledReason}
               aria-description={launchDisabledReason}
             >
-              {isCreating ? <SpinnerGapIcon className="h-3 w-3 animate-spin mr-1" /> : null}
+              {isCreating ? <Spinner className="size-3" aria-hidden="true" /> : null}
               <span className="truncate">{launchButtonLabels[mode]}</span>
             </Button>
             <DropdownMenu>

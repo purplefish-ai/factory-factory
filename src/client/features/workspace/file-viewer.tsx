@@ -1,12 +1,14 @@
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
 import { Component, useRef, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -35,35 +37,37 @@ type FileData = RouterOutputs['workspace']['readFile'];
 
 export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   const { resolvedTheme } = useTheme();
-  const { data, isLoading, error } = trpc.workspace.readFile.useQuery({
+  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.readFile.useQuery({
     workspaceId,
     path: filePath,
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <SpinnerGapIcon className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Loading message="Loading file…" />;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <WarningCircleIcon className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-lg font-medium text-destructive">Failed to load file</p>
-        <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
-      </div>
+      <QueryErrorState
+        title="Couldn't load file"
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+        isRetrying={isFetching}
+        className="h-full"
+      />
     );
   }
 
   if (!data) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <FileCodeIcon className="h-12 w-12 text-muted-foreground mb-4" />
-        <p className="text-lg font-medium text-muted-foreground">No content</p>
-      </div>
+      <EmptyState
+        icon={FileCodeIcon}
+        title="No content"
+        description={filePath}
+        className="h-full"
+      />
     );
   }
 

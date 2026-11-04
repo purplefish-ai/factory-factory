@@ -60,7 +60,7 @@ it('contains a rejected viewer chunk while retaining the mounted chat', async ()
     await act(() => chunk.reject(new Error('Failed to fetch viewer chunk')));
     await vi.waitFor(() =>
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-        'Unable to load viewer'
+        "Couldn't load the viewer"
       )
     );
     expect(container.querySelector('[data-testid="chat"]')).toBe(chat);

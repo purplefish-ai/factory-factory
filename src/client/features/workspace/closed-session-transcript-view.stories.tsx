@@ -158,7 +158,8 @@ export const CorruptWire: Story = {
   render: () => <ArchiveFixture wire={'{"messages":false}'} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText('Failed to load transcript')).toBeVisible();
+    await expect(await canvas.findByRole('alert')).toHaveTextContent("Couldn't load transcript");
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect(canvas.queryByText('Transcript not found')).not.toBeInTheDocument();
   },
 };

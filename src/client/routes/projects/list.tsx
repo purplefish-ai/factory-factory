@@ -1,9 +1,12 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
 import { runInBackground } from '@/client/lib/background-task';
@@ -90,12 +93,7 @@ export default function ProjectsListPage() {
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full gap-2 p-6">
-        <Spinner className="size-5" />
-        <span className="text-muted-foreground">Loading projects...</span>
-      </div>
-    );
+    return <Loading message="Loading projects…" />;
   }
 
   return (
@@ -125,15 +123,20 @@ export default function ProjectsListPage() {
             isRetrying={isFetching}
           />
         ) : !projects || projects.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <p>No projects found.</p>
-            <Link
-              to="/projects/new"
-              className="text-primary hover:text-primary/80 mt-2 inline-block"
-            >
-              Create your first project
-            </Link>
-          </div>
+          <EmptyState
+            icon={FolderIcon}
+            title="No projects yet"
+            description="Add a repository to start creating workspaces."
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link to="/projects/new">
+                  <PlusIcon aria-hidden="true" />
+                  Create your first project
+                </Link>
+              </Button>
+            }
+            className="p-8"
+          />
         ) : isMobile ? (
           <div className="space-y-2 p-2">
             {projects.map((project) => (

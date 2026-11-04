@@ -25,7 +25,7 @@ export default function WorkspacesListPage() {
   const { data: project } = trpc.project.getBySlug.useQuery({ slug });
 
   if (!project) {
-    return <Loading message="Loading project..." />;
+    return <Loading message="Loading project…" />;
   }
 
   return (

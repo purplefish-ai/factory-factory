@@ -88,15 +88,31 @@ export const LoadError: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent("Couldn't load projects");
-    await expect(canvas.queryByText('No projects found.')).toBeNull();
+    await expect(canvas.queryByText('No projects yet')).toBeNull();
   },
 };
 
+/** The first-run empty state links to project creation. */
 export const Empty: Story = {
   args: { response: 'empty' },
   play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByText('No projects found.')).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('No projects yet')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Create your first project' })).toHaveAttribute(
+      'href',
+      '/projects/new'
+    );
   },
+};
+
+export const EmptyDark: Story = {
+  args: { response: 'empty' },
+  globals: { theme: 'dark' },
+};
+
+export const EmptyPhone: Story = {
+  args: { response: 'empty' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };
 
 export const Projects: Story = {

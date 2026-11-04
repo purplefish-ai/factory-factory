@@ -5,12 +5,32 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiffViewer } from './diff-viewer';
 
-const query = vi.hoisted(() => ({ diff: '', theme: 'dark' }));
+const query = vi.hoisted(() => ({
+  diff: '',
+  theme: 'dark',
+  unresolved: false,
+  isLoading: false,
+  error: null as Error | null,
+  isFetching: false,
+  refetch: vi.fn(),
+}));
 vi.mock('./workspace-panel-context', () => ({
   useWorkspacePanel: () => ({ getScrollState: () => null, setScrollState: () => undefined }),
 }));
 vi.mock('@/client/lib/trpc', () => ({
-  trpc: { workspace: { getFileDiff: { useQuery: () => ({ data: { diff: query.diff } }) } } },
+  trpc: {
+    workspace: {
+      getFileDiff: {
+        useQuery: () => ({
+          data: query.unresolved ? undefined : { diff: query.diff },
+          isLoading: query.isLoading,
+          error: query.error,
+          isFetching: query.isFetching,
+          refetch: query.refetch,
+        }),
+      },
+    },
+  },
 }));
 vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: query.theme }) }));
 vi.mock('./use-persistent-scroll', () => ({
@@ -55,6 +75,11 @@ beforeEach(() => {
   vi.stubGlobal('Worker', TestWorker);
   TestWorker.instances = [];
   query.theme = 'dark';
+  query.unresolved = false;
+  query.isLoading = false;
+  query.error = null;
+  query.isFetching = false;
+  query.refetch.mockClear();
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
     this: HTMLElement
   ) {
@@ -188,4 +213,34 @@ describe('DiffViewer performance', () => {
     await render();
     expect(container.textContent).toContain('const value0 = true;');
   });
+});
+
+it.each([true, false])(
+  'shows unresolved diff data as loading even when paused (isLoading=%s)',
+  async (isLoading) => {
+    query.unresolved = true;
+    query.isLoading = isLoading;
+    await render();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Loading diff');
+    expect(container.textContent).not.toContain('No changes');
+  }
+);
+it('retries a failed diff query without presenting it as empty', async () => {
+  query.unresolved = true;
+  query.error = new Error('Offline');
+  await render();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Offline');
+  const retry = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Retry'
+  );
+  await act(() => retry?.click());
+  expect(query.refetch).toHaveBeenCalledOnce();
+  expect(container.textContent).not.toContain('No changes');
+});
+it('keeps a cached diff visible after a failed background refresh', async () => {
+  query.diff = makeDiff(2);
+  query.error = new Error('Offline');
+  await render();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.textContent).toContain('const value0 = true;');
 });

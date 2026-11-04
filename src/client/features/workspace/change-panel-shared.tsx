@@ -1,11 +1,10 @@
-import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { FileChangeItem, type FileChangeKind } from './file-change-item';
 import { FILE_TREE_ROW_HEIGHT, FileTreeRow } from './file-tree-row';
@@ -155,44 +154,6 @@ export function useOpenDiffTab() {
       openTab('diff', path, `Diff: ${path.split('/').pop()}`);
     },
     [openTab]
-  );
-}
-
-export function PanelLoadingState() {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
-}
-
-interface PanelErrorStateProps {
-  title: string;
-  errorMessage?: string;
-}
-
-export function PanelErrorState({ title, errorMessage }: PanelErrorStateProps) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <WarningCircleIcon className="h-8 w-8 text-destructive mb-2" />
-      <p className="text-sm text-destructive">{title}</p>
-      {errorMessage && <p className="text-xs text-muted-foreground mt-1">{errorMessage}</p>}
-    </div>
-  );
-}
-
-interface PanelEmptyStateProps {
-  title: string;
-  description: string;
-}
-
-export function PanelEmptyState({ title, description }: PanelEmptyStateProps) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <FileCodeIcon className="h-8 w-8 text-muted-foreground mb-2" />
-      <p className="text-sm font-medium text-muted-foreground">{title}</p>
-      <p className="text-xs text-muted-foreground/70 mt-1">{description}</p>
-    </div>
   );
 }
 
@@ -350,7 +311,7 @@ function UntrackedDirContents({
         className="flex items-center gap-1 px-2 text-sm text-muted-foreground"
         style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
-        <SpinnerGapIcon className="h-4 w-4 shrink-0 animate-spin" />
+        <Spinner aria-hidden="true" />
         <span>Loading…</span>
       </div>
     );

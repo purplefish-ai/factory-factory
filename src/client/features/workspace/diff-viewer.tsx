@@ -1,10 +1,11 @@
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useTheme } from 'next-themes';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -41,26 +42,28 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
     data: fileData,
     isLoading: isLoadingFile,
     error: fileError,
+    isFetching: isFetchingFile,
+    refetch: refetchFile,
   } = trpc.workspace.readFile.useQuery({
     workspaceId,
     path: filePath,
   });
 
   if (isLoadingFile) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <SpinnerGapIcon className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <Loading message="Loading preview…" />;
   }
 
-  if (fileError) {
+  if (fileError && !fileData) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <WarningCircleIcon className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-lg font-medium text-destructive">Failed to load file</p>
-        <p className="text-sm text-muted-foreground mt-2">{fileError.message}</p>
-      </div>
+      <QueryErrorState
+        title="Couldn't load file"
+        error={fileError}
+        onRetry={() => {
+          void refetchFile();
+        }}
+        isRetrying={isFetchingFile}
+        className="h-full"
+      />
     );
   }
 
@@ -90,7 +93,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     (state: ScrollState) => setScrollState(tabId, 'code', state),
     [setScrollState, tabId]
   );
-  const { data, isLoading, error } = trpc.workspace.getFileDiff.useQuery({
+  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.getFileDiff.useQuery({
     workspaceId,
     filePath,
   });
@@ -128,31 +131,32 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     restoreDeps: [showPreview, filePath, data?.diff?.length],
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <SpinnerGapIcon className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (isLoading || !(data || error)) {
+    return <Loading message="Loading diff…" />;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <WarningCircleIcon className="h-12 w-12 text-destructive mb-4" />
-        <p className="text-lg font-medium text-destructive">Failed to load diff</p>
-        <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
-      </div>
+      <QueryErrorState
+        title="Couldn't load diff"
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+        isRetrying={isFetching}
+        className="h-full"
+      />
     );
   }
 
   if (!data?.diff || parsedDiff.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <FileCodeIcon className="h-12 w-12 text-muted-foreground mb-4" />
-        <p className="text-lg font-medium text-muted-foreground">No changes</p>
-        <p className="text-sm text-muted-foreground/70 mt-2">{filePath}</p>
-      </div>
+      <EmptyState
+        icon={FileCodeIcon}
+        title="No changes"
+        description={filePath}
+        className="h-full"
+      />
     );
   }
 

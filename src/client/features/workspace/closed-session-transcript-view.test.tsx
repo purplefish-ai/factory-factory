@@ -59,7 +59,7 @@ async function render(messages: unknown[]) {
   const wire: Wire = JSON.stringify({ messages });
   const fixture = renderWire(wire);
   await vi.waitFor(() =>
-    expect(fixture.container.textContent).not.toContain('Loading transcript...')
+    expect(fixture.container.textContent).not.toContain('Loading transcript…')
   );
   return fixture.container;
 }
@@ -123,7 +123,7 @@ function failRead(fixture: ReturnType<typeof renderWire>, kind: (typeof failureK
 
 describe('compatible archive view with real query selection, projection and rich renderer', () => {
   it('retains the loading state while its query has no response', () => {
-    expect(renderWire(undefined).container.textContent).toContain('Loading transcript...');
+    expect(renderWire(undefined).container.textContent).toContain('Loading transcript…');
   });
 
   it('retains the empty state for a valid empty messages array', async () => {
@@ -319,7 +319,7 @@ describe('compatible archive view with real query selection, projection and rich
       const failure = readFailure(kind);
       const fixture = renderWire(failure.wire, failure.error);
       await vi.waitFor(() =>
-        expect(fixture.container.textContent).toContain('Failed to load transcript')
+        expect(fixture.container.textContent).toContain("Couldn't load transcript")
       );
       expect(fixture.container.querySelector('[role="status"]')).toBeNull();
       expect(rawPre(fixture.container)).toEqual([]);
@@ -341,7 +341,8 @@ describe('compatible archive view with real query selection, projection and rich
     fixture.response.wire = JSON.stringify({ messages: [user('new session')] });
     fixture.renderSession('different-session');
     expect(fixture.container.textContent).not.toContain('previous session');
-    expect(fixture.container.querySelector('[role="status"]')).toBeNull();
+    // The new session's loading state is a status region too; the stale notice must not carry over.
+    expect(fixture.container.textContent).not.toContain(staleNotice);
     await vi.waitFor(() => expect(fixture.container.textContent).toContain('new session'));
     expect(
       fixture.queryClient.getQueryData(

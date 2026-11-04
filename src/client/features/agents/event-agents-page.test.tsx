@@ -603,7 +603,7 @@ it('does not auto-select or claim empty when either initial list fails', async (
   await render('/projects/owner/agents');
   await waitForReact(() => expect(container.textContent).toContain('Event list unavailable'));
   expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
-  expect(container.textContent).not.toContain('No agents in this project.');
+  expect(container.textContent).not.toContain('No agents yet');
 });
 
 it('keeps same-ID rail highlights and drafts distinct between kinds', async () => {
