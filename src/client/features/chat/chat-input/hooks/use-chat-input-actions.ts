@@ -5,6 +5,7 @@ import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/r
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import type { FileMentionKeyResult, SlashKeyResult } from '@/client/features/composer';
 import { collectAttachments } from '@/client/lib/attachment-file-conversion';
+import { matchesShortcut, type ShortcutId } from '@/client/lib/keyboard-shortcuts';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
@@ -47,64 +48,21 @@ interface UseChatInputActionsReturn {
   supportedImageTypes: readonly string[];
 }
 
-interface ShortcutDefinition {
-  key: string;
-  mod?: boolean;
-  shift?: boolean;
-  alt?: boolean;
-  ctrl?: boolean;
-  meta?: boolean;
+interface ComposerShortcut {
+  id: ShortcutId;
+  /** Extra condition, such as ⌘↵ sending while a menu is open but plain ↵ not. */
+  when?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   action: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  shouldHandle?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
-  preventDefault?: boolean;
 }
 
-function normalizeKey(key: string): string {
-  return key.length === 1 ? key.toLowerCase() : key;
-}
-
-function matchesShortcut(
-  event: KeyboardEvent<HTMLTextAreaElement>,
-  shortcut: ShortcutDefinition
-): boolean {
-  if (normalizeKey(event.key) !== normalizeKey(shortcut.key)) {
-    return false;
-  }
-
-  if (shortcut.mod !== undefined) {
-    const hasMod = event.metaKey || event.ctrlKey;
-    if (shortcut.mod !== hasMod) {
-      return false;
-    }
-  }
-  if (shortcut.shift !== undefined && shortcut.shift !== event.shiftKey) {
-    return false;
-  }
-  if (shortcut.alt !== undefined && shortcut.alt !== event.altKey) {
-    return false;
-  }
-  if (shortcut.ctrl !== undefined && shortcut.ctrl !== event.ctrlKey) {
-    return false;
-  }
-  if (shortcut.meta !== undefined && shortcut.meta !== event.metaKey) {
-    return false;
-  }
-
-  return true;
-}
-
+/** Runs the first composer shortcut from the registry that matches the key press. */
 function runShortcuts(
   event: KeyboardEvent<HTMLTextAreaElement>,
-  shortcuts: ShortcutDefinition[]
+  shortcuts: ComposerShortcut[]
 ): boolean {
   for (const shortcut of shortcuts) {
-    if (matchesShortcut(event, shortcut)) {
-      if (shortcut.shouldHandle && !shortcut.shouldHandle(event)) {
-        continue;
-      }
-      if (shortcut.preventDefault !== false) {
-        event.preventDefault();
-      }
+    if (matchesShortcut(event, shortcut.id) && (!shortcut.when || shortcut.when(event))) {
+      event.preventDefault();
       shortcut.action(event);
       return true;
     }
@@ -195,13 +153,12 @@ export function useChatInputActions({
     [disabled, stopping, planningOption, planModeEnabled, onSetConfigOption, onSettingsChange]
   );
 
-  const preSlashShortcuts = useMemo<ShortcutDefinition[]>(
+  const preSlashShortcuts = useMemo<ComposerShortcut[]>(
+
     () => [
       {
-        key: 'Enter',
-        mod: true,
-        shift: false,
-        alt: false,
+        id: 'composer.send',
+        when: (event) => event.metaKey || event.ctrlKey,
         action: (event) => {
           if (sendFromInput(event.currentTarget)) {
             onCloseSlashMenu?.();
@@ -210,10 +167,7 @@ export function useChatInputActions({
         },
       },
       {
-        key: 'p',
-        mod: true,
-        shift: true,
-        alt: false,
+        id: 'composer.togglePlanMode',
         action: () => {
           handlePlanModeChange(
             planningOption ? planningOption.currentValue !== 'plan' : !settings?.planModeEnabled
@@ -221,10 +175,7 @@ export function useChatInputActions({
         },
       },
       {
-        key: 't',
-        mod: true,
-        shift: true,
-        alt: false,
+        id: 'composer.toggleThinking',
         action: () => {
           if (!(disabled || stopping) && thinkingEnabled) {
             onSettingsChange?.({ thinkingEnabled: !settings?.thinkingEnabled });
@@ -232,10 +183,7 @@ export function useChatInputActions({
         },
       },
       {
-        key: 'u',
-        mod: true,
-        shift: true,
-        alt: false,
+        id: 'composer.attachImage',
         action: () => {
           if (!disabled && imageAttachmentsEnabled) {
             fileInputRef.current?.click();
@@ -243,10 +191,7 @@ export function useChatInputActions({
         },
       },
       {
-        key: 'a',
-        mod: true,
-        shift: true,
-        alt: false,
+        id: 'composer.quickActions',
         action: () => {
           if (!disabled) {
             onOpenQuickActions?.();
@@ -254,10 +199,7 @@ export function useChatInputActions({
         },
       },
       {
-        key: '.',
-        mod: true,
-        shift: false,
-        alt: false,
+        id: 'composer.stop',
         action: () => {
           if (running && !stopping) {
             onStop?.();
@@ -284,13 +226,11 @@ export function useChatInputActions({
     ]
   );
 
-  const postSlashShortcuts = useMemo<ShortcutDefinition[]>(
+  const postSlashShortcuts = useMemo<ComposerShortcut[]>(
     () => [
       {
-        key: 'Enter',
-        shift: false,
-        alt: false,
-        mod: false,
+        id: 'composer.send',
+        when: (event) => !(event.metaKey || event.ctrlKey),
         action: (event) => {
           sendFromInput(event.currentTarget);
         },

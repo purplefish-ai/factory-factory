@@ -1,6 +1,8 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ComponentProps, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { ShortcutCommand } from '@/client/features/shortcuts';
+import type { ShortcutId } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import {
@@ -11,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { filterCommands, getCommandValue, SearchCommands } from './search-commands';
 import { SearchResults, type SearchResultsProps } from './search-results';
 
 export interface SearchDialogProps extends SearchResultsProps {
@@ -20,7 +23,13 @@ export interface SearchDialogProps extends SearchResultsProps {
   onQueryChange: (query: string) => void;
   includeArchived: boolean;
   onIncludeArchivedChange: (include: boolean) => void;
+  /** Registry commands ("Go to", "Actions") listed below local results. */
+  commands?: readonly ShortcutCommand[];
+  onSelectCommand?: (id: ShortcutId) => void;
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
 }
+
+const noCommands: readonly ShortcutCommand[] = [];
 
 export function SearchDialog({
   open,
@@ -37,35 +46,55 @@ export function SearchDialog({
   error,
   onRetry,
   onSelect,
+  commands = noCommands,
+  onSelectCommand,
+  onCloseAutoFocus,
 }: SearchDialogProps) {
   const [selected, setSelected] = useState('');
+  const matchingCommands = useMemo(
+    () => (onSelectCommand ? filterCommands(commands, query) : []),
+    [commands, onSelectCommand, query]
+  );
   useEffect(() => {
-    // Wait for local matches before automatically selecting a lower GitHub row.
+    // Wait for local matches before automatically selecting a lower row.
     if (!open || loading || error) {
       setSelected('');
       return;
     }
-    const available = [
-      ...results,
-      ...(!githubIssues?.loading ? (githubIssues?.results ?? []) : []),
-    ].map((result) => `${result.kind}:${result.id}`);
+    const available = results.map((result) => `${result.kind}:${result.id}`);
+    available.push(...matchingCommands.map((command) => getCommandValue(command.id)));
     if (onSearchGitHub) {
       available.push('search-github-issues');
     }
+    if (!githubIssues?.loading) {
+      available.push(
+        ...(githubIssues?.results ?? []).map((result) => `${result.kind}:${result.id}`)
+      );
+    }
     setSelected((current) => (available.includes(current) ? current : (available[0] ?? '')));
-  }, [results, githubIssues?.results, githubIssues?.loading, loading, error, open, onSearchGitHub]);
+  }, [
+    results,
+    matchingCommands,
+    githubIssues?.results,
+    githubIssues?.loading,
+    loading,
+    error,
+    open,
+    onSearchGitHub,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent
         showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
         className="top-[calc(var(--overlay-titlebar-bottom,0px)+1rem)] max-h-[calc(100dvh-2rem)] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-xl p-0 shadow-2xl sm:top-[max(calc(var(--overlay-titlebar-bottom,0px)+1rem),min(18vh,8rem))]"
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">
-          Find projects, workspaces, chats, pull requests, and GitHub issues. Select an issue to
-          start a workspace.
+          Find projects, workspaces, chats, pull requests, and GitHub issues, or run a command.
+          Select an issue to start a workspace.
         </DialogDescription>
         <Command
           shouldFilter={false}
@@ -81,7 +110,7 @@ export function SearchDialog({
               value={query}
               onValueChange={onQueryChange}
               maxLength={200}
-              placeholder="Search names, branches, PRs, or issues…"
+              placeholder="Search names, branches, PRs, issues, or commands…"
               aria-label="Search metadata"
               className="h-14 pr-10 text-base sm:text-sm"
             />
@@ -100,6 +129,12 @@ export function SearchDialog({
               error={error}
               onRetry={onRetry}
               onSelect={onSelect}
+              hasCommands={matchingCommands.length > 0}
+              commandGroups={
+                onSelectCommand && (
+                  <SearchCommands commands={matchingCommands} onSelect={onSelectCommand} />
+                )
+              }
             />
           </CommandList>
         </Command>

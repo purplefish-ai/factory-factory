@@ -7,7 +7,9 @@ import { useEffect, useState } from 'react';
 import { AgentSessionStatus } from '@/client/components/agent-session-status';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
+import { useShortcut } from '@/client/features/shortcuts';
 import { type SubagentSelection, useLiveSubagent } from '@/client/features/subagents';
+import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TabButton } from '@/components/ui/tab-button';
@@ -145,17 +147,19 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
 interface TabItemProps {
   tab: MainViewTab;
   isActive: boolean;
+  tabStop: boolean;
   onSelect: () => void;
   onClose?: () => void;
 }
 
-function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
+function TabItem({ tab, isActive, tabStop, onSelect, onClose }: TabItemProps) {
   const Icon = getTabIcon(tab.type);
   return (
     <TabButton
       icon={<Icon className="h-3.5 w-3.5 shrink-0" />}
       label={tab.label}
       isActive={isActive}
+      tabStop={tabStop}
       onSelect={onSelect}
       onClose={onClose}
       truncate
@@ -167,6 +171,7 @@ interface SubagentTabItemProps {
   selection: SubagentSelection;
   label: string;
   isActive: boolean;
+  tabStop: boolean;
   onSelect: () => void;
   onClose: () => void;
   onRefresh: (selection: SubagentSelection) => void;
@@ -176,6 +181,7 @@ function SubagentTabItem({
   selection,
   label,
   isActive,
+  tabStop,
   onSelect,
   onClose,
   onRefresh,
@@ -206,6 +212,7 @@ function SubagentTabItem({
       }
       label={label}
       isActive={isActive}
+      tabStop={tabStop}
       onSelect={onSelect}
       onClose={onClose}
       truncate
@@ -220,6 +227,7 @@ function SubagentTabItem({
 interface SessionTabItemProps {
   label: string;
   isActive: boolean;
+  tabStop: boolean;
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
   isAgent?: boolean;
@@ -231,6 +239,7 @@ interface SessionTabItemProps {
 function SessionTabItem({
   label,
   isActive,
+  tabStop,
   sessionSummary,
   isCIFix,
   isAgent,
@@ -250,6 +259,7 @@ function SessionTabItem({
       }
       label={label}
       isActive={isActive}
+      tabStop={tabStop}
       onSelect={onSelect}
       onClose={onClose}
       truncate
@@ -325,6 +335,27 @@ export function MainViewTabBar({
 
   // Filter out the default 'chat' tab since we're showing sessions instead
   const nonChatTabs = tabs.filter((tab) => tab.type !== 'chat');
+  const hasActiveFileTab = nonChatTabs.some((tab) => tab.id === activeTabId);
+  const hasSelectedSession = Boolean(sessions?.some((session) => session.id === currentSessionId));
+  const selectSession = (sessionId: string) => {
+    onSelectSession?.(sessionId);
+    selectTab('chat');
+  };
+  const stepSession = (step: 1 | -1) => {
+    if (!sessions || sessions.length < 2) {
+      return false;
+    }
+    const index = sessions.findIndex((session) => session.id === currentSessionId);
+    const next = sessions[(index + step + sessions.length) % sessions.length];
+    if (!next) {
+      return false;
+    }
+    selectSession(next.id);
+    return true;
+  };
+  const canSwitchSessions = !disabled && (sessions?.length ?? 0) > 1;
+  useShortcut('chat.next', () => stepSession(1), canSwitchSessions);
+  useShortcut('chat.previous', () => stepSession(-1), canSwitchSessions);
 
   // Check if active session limit is reached
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
@@ -339,35 +370,43 @@ export function MainViewTabBar({
 
   return (
     <div className={cn('flex items-center bg-muted/50', className)}>
-      {/* Scrollable tab area */}
+      {/* Scrollable tab area. Chats and open files are separate tablists, each
+          one Tab stop with arrow-key navigation; the menus between them are
+          ordinary buttons, which a tablist may not contain. */}
       <div
-        role="tablist"
         className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto p-1"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* Session tabs (Chat 1, Chat 2, etc.) */}
-        {sessions?.map((session, index) => {
-          const isSelected = session.id === currentSessionId;
-          const baseLabel = getSessionDisplayName(session, `Chat ${index + 1}`);
-          return (
-            <SessionTabItem
-              key={session.id}
-              label={baseLabel}
-              isActive={isSelected && activeTabId === 'chat'}
-              sessionSummary={sessionSummariesById?.get(session.id)}
-              isCIFix={session.workflow === 'ci-fix'}
-              isAgent={session.workflow === 'periodic-task'}
-              persistedStatus={session.status}
-              onSelect={() => {
-                onSelectSession?.(session.id);
-                selectTab('chat');
-              }}
-              onClose={
-                sessions.length > 1 ? () => requestCloseSession(session, baseLabel) : undefined
-              }
-            />
-          );
-        })}
+        {sessions && sessions.length > 0 && (
+          <div
+            role="tablist"
+            aria-label="Chats"
+            onKeyDown={handleTablistKeyDown}
+            className="flex shrink-0 items-center gap-0.5"
+          >
+            {sessions.map((session, index) => {
+              const isSelected = session.id === currentSessionId;
+              const baseLabel = getSessionDisplayName(session, `Chat ${index + 1}`);
+              return (
+                <SessionTabItem
+                  key={session.id}
+                  label={baseLabel}
+                  isActive={isSelected && activeTabId === 'chat'}
+                  tabStop={isSelected || (!hasSelectedSession && index === 0)}
+                  sessionSummary={sessionSummariesById?.get(session.id)}
+                  isCIFix={session.workflow === 'ci-fix'}
+                  isAgent={session.workflow === 'periodic-task'}
+                  persistedStatus={session.status}
+                  onSelect={() => selectSession(session.id)}
+                  onClose={
+                    sessions.length > 1 ? () => requestCloseSession(session, baseLabel) : undefined
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
 
         {onSelectClosedSession && (
           <div className="ml-0.5 shrink-0">
@@ -380,29 +419,42 @@ export function MainViewTabBar({
         )}
 
         {/* Separator between sessions and file tabs */}
-        {nonChatTabs.length > 0 && <div className="h-4 w-px bg-border mx-1" />}
+        {nonChatTabs.length > 0 && <div className="h-4 w-px shrink-0 bg-border mx-1" />}
 
         {/* File/diff tabs */}
-        {nonChatTabs.map((tab) =>
-          tab.type === 'subagent' && tab.subagentSelection ? (
-            <SubagentTabItem
-              key={tab.id}
-              selection={tab.subagentSelection}
-              label={tab.label}
-              isActive={tab.id === activeTabId}
-              onSelect={() => selectTab(tab.id)}
-              onClose={() => closeTab(tab.id)}
-              onRefresh={updateSubagentTab}
-            />
-          ) : (
-            <TabItem
-              key={tab.id}
-              tab={tab}
-              isActive={tab.id === activeTabId}
-              onSelect={() => selectTab(tab.id)}
-              onClose={() => closeTab(tab.id)}
-            />
-          )
+        {nonChatTabs.length > 0 && (
+          <div
+            role="tablist"
+            aria-label="Open tabs"
+            onKeyDown={handleTablistKeyDown}
+            className="flex shrink-0 items-center gap-0.5"
+          >
+            {nonChatTabs.map((tab, index) => {
+              const isActive = tab.id === activeTabId;
+              const tabStop = isActive || (!hasActiveFileTab && index === 0);
+              return tab.type === 'subagent' && tab.subagentSelection ? (
+                <SubagentTabItem
+                  key={tab.id}
+                  selection={tab.subagentSelection}
+                  label={tab.label}
+                  isActive={isActive}
+                  tabStop={tabStop}
+                  onSelect={() => selectTab(tab.id)}
+                  onClose={() => closeTab(tab.id)}
+                  onRefresh={updateSubagentTab}
+                />
+              ) : (
+                <TabItem
+                  key={tab.id}
+                  tab={tab}
+                  isActive={isActive}
+                  tabStop={tabStop}
+                  onSelect={() => selectTab(tab.id)}
+                  onClose={() => closeTab(tab.id)}
+                />
+              );
+            })}
+          </div>
         )}
       </div>
 

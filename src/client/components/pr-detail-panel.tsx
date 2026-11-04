@@ -10,7 +10,7 @@ import {
   getMergeStatePresentation,
   getReviewStatePresentation,
 } from '@/client/lib/pr-status-presentation';
-import { getReviewShortcut } from '@/client/lib/review-shortcuts';
+import { useShortcut } from '@/client/features/shortcuts';
 import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -366,20 +366,9 @@ export function PRDetailPanel({
     }
   }, [activeTab, pr, diff, diffLoading, diffError, onFetchDiff]);
 
-  // Handle keyboard shortcuts for tabs
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Yield to modified keys (⌘D bookmarks the page), text fields and menus.
-      const shortcut = pr ? getReviewShortcut(e) : null;
-      const tab = shortcut === 'd' ? 'diff' : shortcut === 'i' ? 'info' : null;
-      if (tab) {
-        e.preventDefault();
-        setActiveTab(tab);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pr]);
+  // Plain-key shortcuts yield to modified keys (⌘D bookmarks the page), text fields and menus.
+  useShortcut('reviews.showDiff', () => setActiveTab('diff'), Boolean(pr));
+  useShortcut('reviews.showInfo', () => setActiveTab('info'), Boolean(pr));
 
   if (!pr) {
     return <NoPRSelected />;

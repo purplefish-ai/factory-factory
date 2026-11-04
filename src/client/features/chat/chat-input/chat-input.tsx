@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provider-usage-control';
 import {
@@ -7,6 +7,7 @@ import {
   usePasteDropHandler,
   useSlashCommands,
 } from '@/client/features/composer';
+import { useShortcut } from '@/client/features/shortcuts';
 import { runInBackground } from '@/client/lib/background-task';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
@@ -118,7 +119,6 @@ export const ChatInput = memo(function ChatInput({
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
-  const [modifierHeld, setModifierHeld] = useState(false);
   const fallbackInputRef = useRef<HTMLTextAreaElement | null>(null);
   const resolvedInputRef = inputRef ?? fallbackInputRef;
 
@@ -201,36 +201,16 @@ export const ChatInput = memo(function ChatInput({
     disabled,
   });
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Meta' || event.key === 'Control') {
-        setModifierHeld(true);
-      }
-    };
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === 'Meta' || event.key === 'Control') {
-        setModifierHeld(false);
-      }
-    };
-    const handleBlur = () => setModifierHeld(false);
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
-
-  const modLabel = useMemo(() => {
-    if (typeof navigator === 'undefined') {
-      return 'Ctrl';
+  // "/" focuses the composer from elsewhere on the page; a hidden composer
+  // (another tab is showing) lets the key through.
+  useShortcut('chat.focusComposer', () => {
+    const input = resolvedInputRef.current;
+    if (!input || input.disabled || input.getClientRects().length === 0) {
+      return false;
     }
-    const platform = navigator.platform?.toLowerCase() ?? '';
-    return platform.includes('mac') ? '⌘' : 'Ctrl';
-  }, []);
+    input.focus();
+    return true;
+  });
 
   // Restore input value from draft when component mounts or value prop changes
   // This preserves the draft across tab switches
@@ -316,8 +296,6 @@ export const ChatInput = memo(function ChatInput({
             onPlanModeChange={actions.handlePlanModeChange}
             running={running}
             stopping={stopping}
-            modLabel={modLabel}
-            modifierHeld={modifierHeld}
             fileInputRef={actions.fileInputRef}
             onFileSelect={onFileSelect}
             supportedImageTypes={actions.supportedImageTypes}

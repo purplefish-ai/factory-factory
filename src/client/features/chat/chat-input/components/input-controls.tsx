@@ -11,6 +11,8 @@ import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/r
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
 import { ProviderModelPicker } from '@/client/features/session-selection';
+import { ShortcutKeys } from '@/client/features/shortcuts';
+import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
 import {
@@ -57,15 +59,11 @@ const FileUploadButton = memo(function FileUploadButton({
   onFileSelect,
   supportedImageTypes,
   disabled,
-  modLabel,
-  modifierHeld,
 }: {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   supportedImageTypes: readonly string[];
   disabled: boolean;
-  modLabel: string;
-  modifierHeld: boolean;
 }) {
   return (
     <>
@@ -79,14 +77,15 @@ const FileUploadButton = memo(function FileUploadButton({
               disabled={disabled}
               className="h-6 w-6 p-0"
               aria-label="Upload image"
+              aria-keyshortcuts={getAriaKeyShortcuts('composer.attachImage')}
             >
               <ImageIcon className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>
+            <p className="flex items-center gap-2">
               Upload image
-              {modifierHeld ? ` (${modLabel}+Shift+U)` : ''}
+              <ShortcutKeys id="composer.attachImage" />
             </p>
           </TooltipContent>
         </Tooltip>
@@ -114,8 +113,6 @@ export interface LeftControlsProps {
   onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
   stopping?: boolean;
-  modLabel: string;
-  modifierHeld: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   supportedImageTypes: readonly string[];
@@ -221,8 +218,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
             icon={BrainIcon}
             label="Extended thinking mode"
             ariaLabel="Toggle thinking mode"
-            shortcut={`${props.modLabel}+Shift+T`}
-            showShortcut={props.modifierHeld}
+            shortcutId="composer.toggleThinking"
           />
         )}
       {controls.showPlanning &&
@@ -235,8 +231,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
             icon={MapTrifoldIcon}
             label="Planning mode"
             ariaLabel="Toggle planning mode"
-            shortcut={`${props.modLabel}+Shift+P`}
-            showShortcut={props.modifierHeld}
+            shortcutId="composer.togglePlanMode"
           />
         )}
     </>
@@ -341,8 +336,6 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
           onFileSelect={props.onFileSelect}
           supportedImageTypes={props.supportedImageTypes}
           disabled={props.disabled}
-          modLabel={props.modLabel}
-          modifierHeld={props.modifierHeld}
         />
       )}
       <QuickActionsDropdown
@@ -352,8 +345,6 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         newChatUnavailableReason={props.newChatUnavailableReason}
         open={props.quickActionsOpen}
         onOpenChange={props.onQuickActionsOpenChange}
-        shortcut={`${props.modLabel}+Shift+A`}
-        showShortcut={props.modifierHeld}
       />
     </div>
   );

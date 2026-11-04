@@ -5,12 +5,12 @@ import { useSearchParams } from 'react-router';
 import { EmptyState } from '@/client/components/empty-state';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
+import { useShortcut } from '@/client/features/shortcuts';
 import {
   useProjectReviewRequests,
   type ReviewProject,
 } from '@/client/hooks/use-project-review-requests';
 import { runInBackground } from '@/client/lib/background-task';
-import { getReviewShortcut } from '@/client/lib/review-shortcuts';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -172,37 +172,20 @@ function useReviewKeyboardShortcuts({
   reviewDecision: PRWithFullDetails['reviewDecision'] | null | undefined;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const shortcut = getReviewShortcut(event);
-      if (!shortcut) {
-        return;
-      }
-
-      // Approving submits a GitHub review immediately, so it takes a deliberate
-      // Shift chord rather than a single key that is easy to hit by accident.
-      const actionByKey: Partial<Record<string, () => void>> = {
-        j: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, 1)),
-        k: () => setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, -1)),
-        o: onOpenGitHub,
-        'Shift+A': () => {
-          if (reviewDecision !== 'APPROVED') {
-            onApprove();
-          }
-        },
-      };
-
-      const action = actionByKey[shortcut];
-      if (!action) {
-        return;
-      }
-      event.preventDefault();
-      action();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prsLength, onOpenGitHub, onApprove, reviewDecision, setSelectedIndex]);
+  useShortcut('reviews.next', () =>
+    setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, 1))
+  );
+  useShortcut('reviews.previous', () =>
+    setSelectedIndex((prev) => moveReviewSelection(prev, prsLength, -1))
+  );
+  useShortcut('reviews.openOnGitHub', onOpenGitHub);
+  // Approving submits a GitHub review immediately, so it takes a deliberate
+  // Shift chord rather than a single key that is easy to hit by accident.
+  useShortcut('reviews.approve', () => {
+    if (reviewDecision !== 'APPROVED') {
+      onApprove();
+    }
+  });
 }
 
 function useScrollToSelectedReview(

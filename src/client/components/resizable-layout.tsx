@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
+import { AppShortcuts } from '@/client/components/app-shortcuts';
 import { AppSidebar } from '@/client/components/app-sidebar';
 import {
   AppNavigationDataProvider,
@@ -31,6 +32,7 @@ export function AppLayout({ children, className }: AppLayoutProps) {
         >
           <AppNavigationDataProvider value={navData}>
             <AppHeaderProvider>
+              <AppShortcuts navData={navData} />
               <AppHeader showSidebarToggle={!isFirstRun} />
               <div className="flex flex-1 min-h-0 overflow-hidden">
                 {isFirstRun ? null : <AppSidebar navData={navData} />}

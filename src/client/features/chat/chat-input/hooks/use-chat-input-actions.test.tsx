@@ -11,6 +11,7 @@ import {
   type MessageAttachment,
 } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import { useChatInputActions } from './use-chat-input-actions';
 
 const uploadErrors = vi.hoisted(() => vi.fn());
@@ -27,7 +28,8 @@ interface ShortcutHarnessProps {
   settingsThinkingEnabled?: boolean;
   onCloseSlashMenu?: () => void;
   onSend?: (text: string) => void;
-  onSettingsChange: (settings: Partial<ChatSettings>) => void;
+  onOpenQuickActions?: () => void;
+  onSettingsChange?: (settings: Partial<ChatSettings>) => void;
 }
 
 function ShortcutHarness({
@@ -41,13 +43,14 @@ function ShortcutHarness({
   settingsThinkingEnabled = false,
   onCloseSlashMenu = () => undefined,
   onSend = () => undefined,
-  onSettingsChange,
+  onOpenQuickActions = () => undefined,
+  onSettingsChange = () => undefined,
 }: ShortcutHarnessProps) {
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const actions = useChatInputActions({
     onSend,
     onStop: () => undefined,
-    onOpenQuickActions: () => undefined,
+    onOpenQuickActions,
     onCloseSlashMenu,
     onCloseFileMentionMenu: () => undefined,
     onChange: () => undefined,
@@ -110,6 +113,22 @@ function dispatchModShiftShortcut(textarea: HTMLTextAreaElement, key: string): K
   const event = new KeyboardEvent('keydown', {
     key,
     ctrlKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  flushSync(() => {
+    textarea.dispatchEvent(event);
+  });
+  return event;
+}
+
+// macOS turns ⌥⇧P into "∏", so Alt chords are matched by physical key.
+function dispatchAltShiftShortcut(textarea: HTMLTextAreaElement, code: string): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    key: '∏',
+    code,
+    altKey: true,
     shiftKey: true,
     bubbles: true,
     cancelable: true,
@@ -275,7 +294,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('toggles plan mode with Mod+Shift+P when plan mode is enabled', () => {
+  it('toggles plan mode with Alt+Shift+P when plan mode is enabled', () => {
     const onSettingsChange = vi.fn();
     const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
@@ -284,7 +303,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsPlanEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
 
     expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
 
@@ -292,7 +311,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('toggles plan mode with Mod+Shift+P for the next turn while running', () => {
+  it('toggles plan mode with Alt+Shift+P for the next turn while running', () => {
     const onSettingsChange = vi.fn();
     const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
@@ -302,7 +321,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsPlanEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
 
     expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
 
@@ -310,7 +329,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('toggles thinking mode with Mod+Shift+T when thinking is enabled', () => {
+  it('toggles thinking mode with Alt+Shift+E when thinking is enabled', () => {
     const onSettingsChange = vi.fn();
     const capabilities = claudeChatBarCapabilities();
     const { root, container, textarea } = renderHarness({
@@ -319,7 +338,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsThinkingEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 't');
+    dispatchAltShiftShortcut(textarea, 'KeyE');
 
     expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
 
@@ -327,7 +346,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('ignores Mod+Shift+T when a native Claude effort option replaces the thinking toggle', () => {
+  it('ignores Alt+Shift+E when a native Claude effort option replaces the thinking toggle', () => {
     const onSettingsChange = vi.fn();
     const onSetConfigOption = vi.fn();
     const { root, container, textarea } = renderHarness({
@@ -338,7 +357,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsThinkingEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 't');
+    dispatchAltShiftShortcut(textarea, 'KeyE');
 
     expect(onSettingsChange).not.toHaveBeenCalled();
     expect(onSetConfigOption).not.toHaveBeenCalled();
@@ -347,7 +366,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('keeps Mod+Shift+T on the legacy toggle when native options are read-only', () => {
+  it('keeps Alt+Shift+E on the legacy toggle when native options are read-only', () => {
     const onSettingsChange = vi.fn();
     const { root, container, textarea } = renderHarness({
       capabilities: claudeChatBarCapabilities(),
@@ -356,7 +375,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsThinkingEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 't');
+    dispatchAltShiftShortcut(textarea, 'KeyE');
 
     expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
 
@@ -364,7 +383,8 @@ describe('useChatInputActions keyboard shortcuts', () => {
     container.remove();
   });
 
-  it('sets the native mode with Mod+Shift+P when it owns planning', () => {
+  it('sets the native mode with Alt+Shift+P when it owns planning', () => {
+
     const onSettingsChange = vi.fn();
     const onSetConfigOption = vi.fn();
     const { root, container, textarea } = renderHarness({
@@ -375,7 +395,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       settingsPlanEnabled: false,
     });
 
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
 
     expect(onSettingsChange).not.toHaveBeenCalled();
     expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'plan');
@@ -407,7 +427,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       onSetConfigOption,
       onSettingsChange,
     });
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
     expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'default');
     expect(onSettingsChange).not.toHaveBeenCalled();
     root.unmount();
@@ -426,7 +446,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
         onSettingsChange,
         ...state,
       });
-      dispatchModShiftShortcut(textarea, 'p');
+      dispatchAltShiftShortcut(textarea, 'KeyP');
       expect(onSetConfigOption).not.toHaveBeenCalled();
       expect(onSettingsChange).not.toHaveBeenCalled();
       root.unmount();
@@ -472,7 +492,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
         onSetConfigOption,
         onSettingsChange,
       });
-      dispatchModShiftShortcut(textarea, 'p');
+      dispatchAltShiftShortcut(textarea, 'KeyP');
       expect(onSetConfigOption).not.toHaveBeenCalled();
       expect(onSettingsChange).not.toHaveBeenCalled();
       root.unmount();
@@ -495,7 +515,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       onSetConfigOption,
       onSettingsChange,
     });
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
     expect(onSetConfigOption).not.toHaveBeenCalled();
     expect(onSettingsChange).not.toHaveBeenCalled();
     root.unmount();
@@ -509,10 +529,73 @@ describe('useChatInputActions keyboard shortcuts', () => {
       acpConfigOptions: claudeNativeConfigOptions(),
       onSettingsChange,
     });
-    dispatchModShiftShortcut(textarea, 'p');
+    dispatchAltShiftShortcut(textarea, 'KeyP');
     expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
     root.unmount();
     container.remove();
+  });
+
+  it('opens quick actions with Alt+Shift+Q', () => {
+    const onOpenQuickActions = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      onOpenQuickActions,
+    });
+    try {
+      expect(dispatchAltShiftShortcut(textarea, 'KeyQ').defaultPrevented).toBe(true);
+      expect(onOpenQuickActions).toHaveBeenCalledTimes(1);
+    } finally {
+      flushSync(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  // Firefox opens a private window on Ctrl+Shift+P; Chrome reopens a tab on
+  // Ctrl+Shift+T and searches tabs on ⌘⇧A. The browser keeps those keys.
+  it.each(['p', 't', 'a'])('leaves Mod+Shift+%s to the browser', (key) => {
+    setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+    const onSettingsChange = vi.fn();
+    const onOpenQuickActions = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      onSettingsChange,
+      onOpenQuickActions,
+    });
+    try {
+      expect(dispatchModShiftShortcut(textarea, key).defaultPrevented).toBe(false);
+      expect(onSettingsChange).not.toHaveBeenCalled();
+      expect(onOpenQuickActions).not.toHaveBeenCalled();
+    } finally {
+      setShortcutEnvironmentForTesting(null);
+      flushSync(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the original Mod+Shift keys in the desktop app', () => {
+    setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'electron' });
+    const onSettingsChange = vi.fn();
+    const onOpenQuickActions = vi.fn();
+    const { root, container, textarea } = renderHarness({
+      capabilities: claudeChatBarCapabilities(),
+      onSettingsChange,
+      onOpenQuickActions,
+      settingsPlanEnabled: false,
+      settingsThinkingEnabled: false,
+    });
+    try {
+      dispatchModShiftShortcut(textarea, 'p');
+      dispatchModShiftShortcut(textarea, 't');
+      dispatchModShiftShortcut(textarea, 'a');
+      expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
+      expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
+      expect(onOpenQuickActions).toHaveBeenCalledTimes(1);
+    } finally {
+      setShortcutEnvironmentForTesting(null);
+      flushSync(() => root.unmount());
+      container.remove();
+    }
+
   });
 });
 

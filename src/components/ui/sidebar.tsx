@@ -21,7 +21,6 @@ const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = '18rem';
 const SIDEBAR_WIDTH_ICON = '3rem';
-const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
 function getPersistedSidebarState(): boolean | null {
   try {
@@ -118,18 +117,8 @@ const SidebarProvider = React.forwardRef<
       return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
     }, [isMobile, setOpen]);
 
-    // Adds a keyboard shortcut to toggle the sidebar.
-    React.useEffect(() => {
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault();
-          toggleSidebar();
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [toggleSidebar]);
+    // ⌘B lives in the app shortcut registry (`app.toggleSidebar`), which applies
+    // the shared input guards and lists it in the shortcut help.
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.

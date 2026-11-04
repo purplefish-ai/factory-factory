@@ -1,4 +1,6 @@
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { ShortcutKeys } from '@/client/features/shortcuts';
+import { getAriaKeyShortcuts, type ShortcutId } from '@/client/lib/keyboard-shortcuts';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -10,8 +12,8 @@ interface SettingsToggleProps {
   icon: Icon;
   label: string;
   ariaLabel: string;
-  shortcut?: string;
-  showShortcut?: boolean;
+  /** Registry shortcut shown in the tooltip and exposed as `aria-keyshortcuts`. */
+  shortcutId?: ShortcutId;
 }
 
 /**
@@ -25,10 +27,8 @@ export function SettingsToggle({
   icon: Icon,
   label,
   ariaLabel,
-  shortcut,
-  showShortcut = false,
+  shortcutId,
 }: SettingsToggleProps) {
-  const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
   return (
     <TooltipProvider>
       <Tooltip>
@@ -44,14 +44,17 @@ export function SettingsToggle({
                 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
             )}
             aria-label={ariaLabel}
+            aria-keyshortcuts={shortcutId ? getAriaKeyShortcuts(shortcutId) : undefined}
           >
             <Icon className="h-3.5 w-3.5" />
           </Toggle>
         </TooltipTrigger>
         <TooltipContent side="top">
-          <p>
-            {label} {pressed ? '(on)' : '(off)'}
-            {shortcutText}
+          <p className="flex items-center gap-2">
+            <span>
+              {label} {pressed ? '(on)' : '(off)'}
+            </span>
+            {shortcutId && <ShortcutKeys id={shortcutId} />}
           </p>
         </TooltipContent>
       </Tooltip>

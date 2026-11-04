@@ -11,6 +11,9 @@ import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
+import { ShortcutKeys } from '@/client/features/shortcuts';
+import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
+
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -47,8 +50,6 @@ export interface QuickActionsDropdownProps {
   thisChatDisabled?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  shortcut?: string;
-  showShortcut?: boolean;
 }
 
 const ICON_MAP: Record<string, Icon> = {
@@ -112,8 +113,6 @@ export function QuickActionsDropdownView({
   thisChatDisabled = false,
   open,
   onOpenChange,
-  shortcut,
-  showShortcut = false,
 }: QuickActionsDropdownProps & {
   actions?: readonly QuickActionOption[];
   status: 'loading' | 'error' | 'ready';
@@ -127,7 +126,6 @@ export function QuickActionsDropdownView({
   };
   const target = chosenTarget ?? resolveQuickActionTarget('this-chat', available);
   const targetAvailable = target === 'this-chat' ? available.thisChat : available.newChat;
-  const shortcutText = showShortcut && shortcut ? ` (${shortcut})` : '';
 
   const run = (action: QuickActionOption) => {
     if (!(action.content && targetAvailable)) {
@@ -139,6 +137,7 @@ export function QuickActionsDropdownView({
       onRunInThisChat(action.content);
     }
   };
+
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -152,13 +151,17 @@ export function QuickActionsDropdownView({
                 disabled={!(available.thisChat || available.newChat)}
                 className="h-6 w-6 p-0"
                 aria-label="Quick actions"
+                aria-keyshortcuts={getAriaKeyShortcuts('composer.quickActions')}
               >
                 <LightningIcon className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>Quick actions{shortcutText}</p>
+            <p className="flex items-center gap-2">
+              Quick actions
+              <ShortcutKeys id="composer.quickActions" />
+            </p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
