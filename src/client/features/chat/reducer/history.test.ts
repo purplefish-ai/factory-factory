@@ -218,3 +218,38 @@ it('drops all retained provider rows when the provider identity is replaced', ()
   expect(next.messages).toEqual([local]);
   expect(next.transcriptPageBoundaries.size).toBe(0);
 });
+
+it('treats an empty live snapshot as an authoritative clear and fences in-flight history', () => {
+  const initial = createInitialChatState({
+    sessionStatus: { phase: 'ready' },
+    messages: [message(0), message(500)],
+    rendererTranscriptLimit: null,
+    transcriptPageBoundaries: new Set(['m-500']),
+  });
+  const loading = chatReducer(initial, {
+    type: 'TRANSCRIPT_HISTORY_START',
+    requestId: 'r',
+    beforeMessageId: 'm-0',
+  });
+  const cleared = chatReducer(loading, {
+    type: 'SESSION_SNAPSHOT',
+    payload: {
+      messages: [],
+      queuedMessages: [],
+      sessionRuntime: initial.sessionRuntime,
+      removedMessageIds: ['m-500'],
+    },
+  });
+  expect(cleared.messages).toEqual([]);
+  expect(cleared.transcriptPageBoundaries.size).toBe(0);
+  expect(cleared.rendererTranscriptLimit).toBeUndefined();
+  expect(cleared.transcriptHistory).toEqual({ status: 'idle' });
+  expect(
+    chatReducer(cleared, {
+      type: 'TRANSCRIPT_HISTORY_LOADED',
+      requestId: 'r',
+      messages: [message(0)],
+      hasMore: false,
+    })
+  ).toBe(cleared);
+});

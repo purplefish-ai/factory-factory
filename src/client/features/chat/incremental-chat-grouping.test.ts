@@ -417,7 +417,7 @@ it('keeps a previously visible result at a page boundary when older text duplica
   ).toEqual(['older-response', 'current-result']);
 });
 
-it('preserves a visible result anchor when its raw page boundary is hidden reasoning', () => {
+it('projects hidden page boundaries into separate tool groups with duplicate filtering enabled', () => {
   const hidden: ChatMessage = {
     id: 'hidden-boundary',
     source: 'agent',
@@ -428,15 +428,21 @@ it('preserves a visible result anchor when its raw page boundary is hidden reaso
       message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Reasoning' }] },
     },
   };
-  const current = result('visible-result', 'Done', 2);
+  const current = toolUse('current-tool', 'current-call', 2);
+  const response = result('visible-result', 'Done', 3);
   const grouper = createIncrementalChatGrouper({
     filterDuplicateResults: true,
     groupBoundaries: new Set([hidden.id]),
   });
-  expect(grouper.group([hidden, current]).map((entry) => entry.id)).toEqual(['visible-result']);
+  const before = grouper.group([hidden, current, response]);
+  expect(before.map((entry) => entry.id)).toEqual(['tool-seq-current-tool', 'visible-result']);
+  const after = grouper.group([toolUse('older-tool', 'older-call', 0), hidden, current, response]);
+  expect(after.map((entry) => entry.id)).toEqual([
+    'tool-seq-older-tool',
+    before[0]?.id,
+    'visible-result',
+  ]);
   expect(
-    grouper
-      .group([assistant('older-response', 'Done', 0), hidden, current])
-      .map((entry) => entry.id)
-  ).toEqual(['older-response', 'visible-result']);
+    toolSequences(after).map((sequence) => sequence.pairedCalls.map((call) => call.id))
+  ).toEqual([['older-call'], ['current-call']]);
 });

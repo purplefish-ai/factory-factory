@@ -20,7 +20,13 @@ type SnapshotHistory = Pick<
 >;
 
 function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): SnapshotHistory {
-  if (payload.isHydration || state.transcriptPageBoundaries.size === 0) {
+  // An empty backend snapshot is authoritative for the whole transcript.
+  // Reset request identities too, so an older response cannot repopulate it.
+  if (
+    payload.isHydration ||
+    payload.messages.length === 0 ||
+    state.transcriptPageBoundaries.size === 0
+  ) {
     return {
       messages: payload.messages,
       transcriptHistory: { status: 'idle' },
