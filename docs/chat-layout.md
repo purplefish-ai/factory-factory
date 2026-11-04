@@ -2,12 +2,15 @@
 
 The message viewport takes the remaining height above the composer. When the
 user scrolls away from the latest messages, the **Scroll to bottom** control
-occupies a nonshrinking row between the viewport and composer. Keeping this row
-in normal layout flow makes it visible and clickable as multiline drafts,
-attachments, permission prompts, and questions change the composer height. Tall
-permission and question prompts scroll within the available composer height,
-keeping the input and its controls reachable on narrow screens. Clicking it
-returns to the latest messages and hides the row.
+overlays the bottom of the message viewport, above the reserved thinking footer.
+Showing it does not resize the viewport or reserve a separate row above the
+composer. Only the button intercepts pointer input; the surrounding overlay
+passes input through to the messages beneath it. The control stays inside the
+viewport as multiline drafts, attachments, permission prompts, and questions
+change the composer height. Tall permission and question prompts scroll within
+the available composer height, keeping the input and its controls reachable on
+narrow screens. Clicking the control returns to the latest messages and hides
+the button.
 
 For local UI checks, open **Workspace / ChatContent / Composer Height Changes**
 in `pnpm storybook`. This story uses mock conversation messages and local
