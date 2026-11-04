@@ -35,7 +35,7 @@ function AuthStatusSection({
   if (authStatus.authenticated) {
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+        <div className="flex items-center gap-2 text-sm text-success">
           <CheckCircleIcon className="h-4 w-4" />
           <span>Authenticated{authStatus.user ? ` as ${authStatus.user}` : ''}</span>
         </div>
@@ -45,7 +45,7 @@ function AuthStatusSection({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+      <div className="flex items-center gap-2 text-sm text-warning">
         <WarningIcon className="h-4 w-4" />
         <span>Not authenticated — private repos will fail to clone</span>
       </div>

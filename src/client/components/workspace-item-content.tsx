@@ -6,6 +6,7 @@ import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure'
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';
+import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
@@ -34,7 +35,7 @@ function CreationSourceIcon({ creationSource }: { creationSource?: string | null
     );
   }
   if (creationSource === 'CHILD_WORKSPACE') {
-    return <TreeStructureIcon className="h-3 w-3 shrink-0 text-violet-500" />;
+    return <TreeStructureIcon className="h-3 w-3 shrink-0 text-info" />;
   }
   return null;
 }
@@ -122,8 +123,10 @@ export function WorkspaceItemContent({
           <span className="flex items-center gap-1 shrink-0 justify-end">
             {showStats && workspace.gitStats && (
               <>
-                <span className="text-green-600">+{workspace.gitStats.additions}</span>
-                <span className="text-red-600">-{workspace.gitStats.deletions}</span>
+                <span className={DIFF_STAT_CLASS_NAMES.added}>+{workspace.gitStats.additions}</span>
+                <span className={DIFF_STAT_CLASS_NAMES.removed}>
+                  -{workspace.gitStats.deletions}
+                </span>
               </>
             )}
           </span>

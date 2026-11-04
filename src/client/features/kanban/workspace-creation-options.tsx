@@ -105,7 +105,7 @@ function WorkspaceSettings({
           className={cn(
             'relative h-7 w-7 shrink-0 px-0 text-muted-foreground',
             active && 'text-foreground',
-            warning && 'text-orange-600 dark:text-orange-400',
+            warning && 'text-warning',
             invalid && 'text-destructive'
           )}
           aria-label="Workspace settings"

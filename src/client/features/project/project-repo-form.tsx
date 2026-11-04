@@ -82,7 +82,7 @@ export function ProjectRepoForm({
           )}
         </div>
         {factoryConfigExists && repoPath.trim() && (
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+          <div className="flex items-center gap-2 text-sm text-success">
             <CheckCircleIcon className="h-4 w-4" />
             <span>factory-factory.json detected</span>
           </div>

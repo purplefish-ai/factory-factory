@@ -99,7 +99,7 @@ const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
         isActive={isActive}
         className={cn(
           'h-auto py-1.5 px-2',
-          workspace.pendingRequestType && 'border-amber-500/30 bg-amber-500/5'
+          workspace.pendingRequestType && 'border-warning/30 bg-warning/5'
         )}
       >
         <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -269,10 +269,7 @@ function ProjectFooterLinks({
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:
       projectSlug && navData.reviewCount > 0 ? (
-        <Badge
-          variant="secondary"
-          className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-        >
+        <Badge variant="warning" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
           {navData.reviewCount}
         </Badge>
       ) : null,

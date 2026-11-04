@@ -26,13 +26,13 @@ describe('KanbanStatusChip', () => {
 
   it.each([
     ['neutral', 'bg-muted'],
-    ['working', 'bg-brand/15'],
-    ['waiting', 'bg-yellow-500/15'],
-    ['attention', 'bg-amber-500/15'],
-    ['success', 'bg-emerald-500/15'],
-    ['danger', 'bg-red-500/15'],
+    ['working', 'bg-running/10'],
+    ['waiting', 'bg-info/10'],
+    ['attention', 'bg-warning/10'],
+    ['success', 'bg-success/10'],
+    ['danger', 'bg-destructive/10'],
   ] satisfies [WorkspaceStatusReasonTone, string][])(
-    'maps the %s tone to its card chip treatment',
+    'maps the %s tone to the shared status chip treatment',
     (tone, expectedClass) => {
       const markup = renderChip({
         code: 'READY_FOR_NEXT_PROMPT',

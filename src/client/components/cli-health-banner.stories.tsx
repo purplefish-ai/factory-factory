@@ -94,3 +94,8 @@ export const Rechecking: Story = {
 export const Healthy: Story = {
   args: { issues: [] },
 };
+
+export const MissingToolsDark: typeof MissingTools = {
+  ...MissingTools,
+  globals: { theme: 'dark' },
+};

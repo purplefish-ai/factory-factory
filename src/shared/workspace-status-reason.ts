@@ -17,6 +17,7 @@ export const WORKSPACE_STATUS_REASON_TONES = [
   'attention',
   'success',
   'danger',
+  'merged',
 ] as const;
 
 export type WorkspaceStatusReasonTone = (typeof WORKSPACE_STATUS_REASON_TONES)[number];
@@ -235,11 +236,12 @@ function deriveTerminalPrReason(input: WorkspaceStatusReasonInput): OptionalWork
     input.prState === 'MERGED' ||
     input.ratchetState === 'MERGED'
   ) {
-    return reason('MERGED', 'Merged', 'success');
+    return reason('MERGED', 'Merged', 'merged');
   }
 
   if (input.prState === 'CLOSED') {
-    return reason('PR_CLOSED', 'PR closed', 'neutral');
+    // Closed (unmerged) PRs read as red, matching GitHub and the PR state chips.
+    return reason('PR_CLOSED', 'PR closed', 'danger');
   }
 
   return null;

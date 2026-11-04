@@ -62,16 +62,16 @@ function getStatusIcon(status: SessionStatus, isRunning: boolean) {
 
 function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
-    return 'text-brand';
+    return 'text-running';
   }
   if (status === 'IDLE') {
-    return 'text-emerald-500';
+    return 'text-muted-foreground';
   }
   if (status === 'PAUSED') {
     return 'text-muted-foreground';
   }
   if (status === 'COMPLETED') {
-    return 'text-blue-500';
+    return 'text-success';
   }
   return 'text-destructive';
 }
