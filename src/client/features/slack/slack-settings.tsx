@@ -134,8 +134,8 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
             }
           }}
           title="Disconnect Slack?"
-          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app.${disconnectError ? ` ${disconnectError}` : ''}`}
-          confirmText="Disconnect Slack"
+          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app. You can reconnect with a valid token.${disconnectError ? ` ${disconnectError}` : ''}`}
+          confirmText="Disconnect"
           variant="destructive"
           isPending={props.busy}
           onConfirm={() => {
@@ -146,10 +146,10 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
                   if (result.succeeded) {
                     setDisconnectId(undefined);
                   } else {
-                    setDisconnectError(result.error ?? 'Could not disconnect Slack. Try again.');
+                    setDisconnectError(result.error ?? "Couldn't disconnect Slack. Try again.");
                   }
                 },
-                () => setDisconnectError('Could not disconnect Slack. Try again.')
+                () => setDisconnectError("Couldn't disconnect Slack. Try again.")
               );
             }
           }}
@@ -179,8 +179,7 @@ export function SlackSettings() {
       setNotice(await operation());
       succeeded = true;
     } catch (error) {
-      operationError =
-        error instanceof Error ? error.message : 'Could not update Slack connection.';
+      operationError = error instanceof Error ? error.message : "Couldn't update Slack connection.";
       setError(operationError);
     } finally {
       try {

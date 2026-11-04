@@ -56,7 +56,7 @@ function AgentRequestError({
     >
       {task.error.data?.code === 'NOT_FOUND'
         ? 'Agent not found. This agent is no longer available.'
-        : `Could not ${refresh ? 'refresh' : 'load'} agent: ${task.error.message}`}
+        : `Couldn't ${refresh ? 'refresh' : 'load'} agent: ${task.error.message}`}
     </RequestError>
   );
 }
@@ -73,7 +73,7 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
     return (
       <>
         <div>
-          <h2 className="text-xl font-semibold">Create Agent</h2>
+          <h2 className="text-xl font-semibold">Create agent</h2>
         </div>
         <AgentForm
           key={`create-${project.id}`}
@@ -102,7 +102,7 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
   if (mode === 'edit' && task.data) {
     return (
       <>
-        <h2 className="text-xl font-semibold">Edit Agent</h2>
+        <h2 className="text-xl font-semibold">Edit agent</h2>
         <AgentRequestError task={task} refresh />
         <AgentForm
           key={`edit-${project.id}:scheduled:${task.data.id}`}
@@ -189,9 +189,9 @@ function AgentsPageSession({
         }
         error={
           [
-            list.error ? `Could not load scheduled agents: ${list.error.message}` : '',
+            list.error ? `Couldn't load scheduled agents. ${list.error.message}` : '',
             controller.events.error
-              ? `Could not load event agents: ${controller.events.error.message}`
+              ? `Couldn't load event agents. ${controller.events.error.message}`
               : '',
           ]
             .filter(Boolean)
@@ -214,9 +214,9 @@ function AgentsPageSession({
             controller.setDeleteOpen(open);
           }
         }}
-        title="Delete Agent?"
-        description={`The agent definition and run history will be removed. Generated workspaces and conversations are preserved.${actionError ? ` ${actionError}` : ''}`}
-        confirmText="Delete Agent"
+        title="Delete agent?"
+        description={`The agent definition and run history will be permanently deleted. Generated workspaces and chats are kept. This cannot be undone.${actionError ? ` ${actionError}` : ''}`}
+        confirmText="Delete"
         variant="destructive"
         onConfirm={controller.deleteAgent}
         isPending={pending}

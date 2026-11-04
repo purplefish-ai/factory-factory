@@ -118,7 +118,7 @@ function RightPanelStory({
                   );
                 }}
               >
-                Delete Agent
+                Delete agent
               </Button>
               <div
                 className="flex h-[650px] border"
@@ -262,7 +262,7 @@ export const DeleteWhileOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await userEvent.click(canvas.getByRole('button', { name: 'Delete Agent' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Delete agent' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
@@ -282,8 +282,8 @@ export const ToolTabLabels: Story = {
     await expect(canvas.getByRole('button', { name: 'Scheduled agent' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: 'Sub-agents' }));
-    await expect(await canvas.findByText('Child Workspaces')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Subagents' }));
+    await expect(await canvas.findByText('Child workspaces')).toBeVisible();
     await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
   },
 };
@@ -307,9 +307,9 @@ export const OpenSubagentFromActivity: Story = {
   args: { showActivity: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: '1 sub-agent running' }));
+    await userEvent.click(canvas.getByRole('button', { name: '1 subagent running' }));
     await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Sub-agents' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Subagents' })).not.toBeInTheDocument();
     await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
       'false'
     );

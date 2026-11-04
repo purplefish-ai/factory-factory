@@ -223,7 +223,7 @@ describe('ProjectsListPage archive confirmation', () => {
       flushSync(() => mocks.archiveMutationOptions?.onSuccess?.());
       await vi.waitFor(() => {
         expect(mocks.toastError).toHaveBeenCalledWith(
-          'Could not refresh data',
+          "Couldn't refresh data",
           expect.objectContaining({ description: 'Refresh failed' })
         );
       });
@@ -266,7 +266,7 @@ describe('ProjectsListPage archive confirmation', () => {
 
     mocks.archiveMutationOptions?.onError?.(new Error(''));
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Failed to archive project');
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't archive project");
 
     root.unmount();
   });

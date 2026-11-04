@@ -72,7 +72,7 @@ function findButton(name: string) {
 
 function openConfirmDialog() {
   flushSync(() => {
-    findButton('Remove Orphaned Worktrees')?.click();
+    findButton('Remove orphaned worktrees')?.click();
   });
 }
 
@@ -110,7 +110,7 @@ describe('WorktreeCleanupSection', () => {
     const container = render();
 
     expect(container.textContent).toContain('No orphaned worktrees found.');
-    expect(findButton('Remove Orphaned Worktrees')?.disabled).toBe(true);
+    expect(findButton('Remove orphaned worktrees')?.disabled).toBe(true);
   });
 
   it('shows a scan failure with a retry instead of an empty result', () => {
@@ -118,10 +118,10 @@ describe('WorktreeCleanupSection', () => {
     const container = render();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'Could not scan for orphaned worktrees: EACCES'
+      "Couldn't scan for orphaned worktrees. EACCES"
     );
     expect(container.textContent).not.toContain('No orphaned worktrees found.');
-    expect(findButton('Remove Orphaned Worktrees')).toBeUndefined();
+    expect(findButton('Remove orphaned worktrees')).toBeUndefined();
 
     flushSync(() => {
       findButton('Retry')?.click();

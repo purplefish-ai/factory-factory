@@ -228,12 +228,12 @@ describe('KanbanBoard', () => {
       }).catch(() => undefined);
       act(() => root.render(createElement(BoardWithHeader)));
       expect(container.querySelector('input')).toBeNull();
-      click('New Workspace');
+      click('New workspace');
       expect(container.querySelector('input')).not.toBeNull();
       click('Cancel creation');
       act(() => root.render(createElement(BoardWithHeader)));
       expect(container.querySelector('input')).toBeNull();
-      expect(findButton(container, 'New Workspace')).toBeDefined();
+      expect(findButton(container, 'New workspace')).toBeDefined();
     }
   );
 
@@ -248,7 +248,7 @@ describe('KanbanBoard', () => {
       })
     );
     void act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     const oldScrollContainer = container.querySelector('input')!.closest('.overflow-y-auto')!
       .parentElement!.parentElement!;
     oldScrollContainer.scrollTop = 200;
@@ -266,7 +266,7 @@ describe('KanbanBoard', () => {
   it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
     mocks.isMobile = mobile;
     act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     click('Complete creation');
     mocks.workspaces = mocks.workspaces.map((workspace) =>
       workspace.id === 'new-task'
@@ -302,7 +302,7 @@ describe('KanbanBoard', () => {
 
   it('stays on To Do when task creation is cancelled', () => {
     void act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     click('Cancel creation');
     expect(container.querySelector('[data-column="WORKING"]')).toBeNull();
     expect(
@@ -314,7 +314,7 @@ describe('KanbanBoard', () => {
   it('keeps the desktop board visible after creation', () => {
     mocks.isMobile = false;
     void act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     click('Complete creation');
     expect(container.querySelector('[data-column="WORKING"]')?.textContent).toContain('New task');
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
@@ -328,24 +328,24 @@ describe('KanbanBoard', () => {
     mocks.isMobile = false;
     act(() => root.render(createElement(BoardWithHeader)));
     const buttons = [...container.querySelectorAll('button')];
-    expect(buttons.filter((button) => button.textContent === 'New Workspace')).toHaveLength(1);
+    expect(buttons.filter((button) => button.textContent === 'New workspace')).toHaveLength(1);
     expect(buttons.some((button) => button.textContent === 'New Task')).toBe(false);
 
     mocks.isMobile = true;
     act(() => root.render(createElement(BoardWithHeader)));
-    const mobileButton = findButton(container, 'New Workspace');
+    const mobileButton = findButton(container, 'New workspace');
     expect(mobileButton?.textContent).toBe('');
-    expect(mobileButton?.getAttribute('aria-label')).toBe('New Workspace');
+    expect(mobileButton?.getAttribute('aria-label')).toBe('New workspace');
   });
 
   it('reveals an already open form when New Workspace is pressed from another mobile tab', () => {
     act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     expect(container.querySelector('input')).not.toBeNull();
     click('Waiting1');
     expect(container.querySelector('input')).toBeNull();
     expect(mocks.showInlineForm).toBe(true);
-    click('New Workspace');
+    click('New workspace');
     expect(container.querySelector('input')).not.toBeNull();
   });
 
@@ -353,7 +353,7 @@ describe('KanbanBoard', () => {
     const loaded = mocks.workspaces;
     mocks.workspaces = undefined as unknown as WorkspaceWithKanban[];
     act(() => root.render(createElement(BoardWithHeader)));
-    click('New Workspace');
+    click('New workspace');
     expect(container.querySelector('input')).not.toBeNull();
     // Loaded data includes a Waiting workspace, which would normally be the first tab.
     mocks.workspaces = loaded;

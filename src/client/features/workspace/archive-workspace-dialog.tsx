@@ -11,7 +11,7 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 
 const defaultDescription =
-  'Any uncommitted changes will be committed before the worktree is removed.';
+  'Uncommitted changes will be committed before the worktree is removed. Chat history and the branch are kept. Worktree removal cannot be undone in the app.';
 
 export type ArchiveWorkspaceDialogProps = {
   open: boolean;
@@ -37,7 +37,7 @@ export function ArchiveWorkspaceDialog({
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>Archive Workspace</AlertDialogTitle>
+          <AlertDialogTitle>Archive workspace?</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3">

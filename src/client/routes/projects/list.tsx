@@ -85,10 +85,10 @@ export default function ProjectsListPage() {
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {
       setArchiveDialogOpen(false);
-      runInBackground(refetch({ throwOnError: true }), 'Could not refresh data');
+      runInBackground(refetch({ throwOnError: true }), "Couldn't refresh data");
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to archive project');
+      toast.error(error.message || "Couldn't archive project");
     },
   });
 
@@ -241,8 +241,8 @@ export default function ProjectsListPage() {
           }
           setArchiveDialogOpen(open);
         }}
-        title="Archive Project"
-        description="Are you sure you want to archive this project?"
+        title="Archive project?"
+        description="The project will be hidden from the project list. Its repository and workspaces are kept. There is no restore action in the app."
         confirmText="Archive"
         variant="destructive"
         onConfirm={() => {
