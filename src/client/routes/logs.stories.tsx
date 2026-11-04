@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Navigate, Route, Routes } from 'react-router';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { AppHeaderProvider } from '@/client/components/app-header-context';
 import {
   STORY_TRPC_PENDING,
   StoryTrpcProvider,
   storyTrpcHandlersFrom,
 } from '@/client/lib/storybook-trpc';
+import { SettingsStoryLayout } from './admin/settings-page-layout.story-fixtures';
 import LogsPage from './logs';
 
 const onRequest = fn();
@@ -52,14 +52,14 @@ const meta = {
   parameters: { layout: 'fullscreen', trpc: { handlers: { 'admin.getLogs': () => logs } } },
   render: (_, { parameters }) => (
     <StoryTrpcProvider handlers={storyTrpcHandlersFrom(parameters)} onRequest={onRequest}>
-      <AppHeaderProvider>
+      <SettingsStoryLayout>
         <div className="h-screen">
           <Routes>
             <Route path="/" element={<Navigate to="/admin/logs" replace />} />
             <Route path="/admin/logs" element={<LogsPage />} />
           </Routes>
         </div>
-      </AppHeaderProvider>
+      </SettingsStoryLayout>
     </StoryTrpcProvider>
   ),
   beforeEach: () => {

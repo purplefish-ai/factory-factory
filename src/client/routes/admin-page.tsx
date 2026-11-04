@@ -1,5 +1,4 @@
 import { Link, Navigate, useParams } from 'react-router';
-import { useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
@@ -104,7 +103,6 @@ function SettingsContent({ section }: { section: string }) {
 
 export default function AdminDashboardPage() {
   const { section = 'general' } = useParams<{ section: string }>();
-  useAppHeader({ title: 'Settings' });
   return (
     <SettingsPageLayout>
       <SettingsContent section={section} />

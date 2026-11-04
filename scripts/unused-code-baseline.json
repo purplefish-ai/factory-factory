@@ -173,6 +173,10 @@
       "disposition": "test-support",
       "reason": "Parses the theme CSS for the status palette contrast test; not browser runtime code."
     },
+    "src/client/routes/admin/settings-page-layout.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Shared navigation providers and header portal for settings and server-logs Storybook scenarios; no production caller is expected."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."

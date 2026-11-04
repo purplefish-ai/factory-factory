@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
+
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }));
 
 vi.mock('@/client/features/slack', () => ({
@@ -33,9 +35,19 @@ vi.mock('@/client/features/codex-accounts', () => ({
 }));
 
 vi.mock('@/client/components/app-header-context', () => ({
+  HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => children,
   HeaderLeftExtraSlot: ({ children }: { children: ReactNode }) =>
     createElement('div', null, children),
   useAppHeader: vi.fn(),
+}));
+
+vi.mock('@/client/hooks/use-project-header-navigation', () => ({
+  useProjectHeaderNavigation: () => ({
+    selectedProjectSlug: 'alpha',
+    projects: [{ id: 'project-1', slug: 'alpha', name: 'Alpha' }],
+    handleProjectChange: vi.fn(),
+    handleCurrentProjectSelect: vi.fn(),
+  }),
 }));
 
 vi.mock('@/client/components/loading', () => ({

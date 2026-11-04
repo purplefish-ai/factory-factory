@@ -6,7 +6,6 @@ import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGl
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { keepPreviousData } from '@tanstack/react-query';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
-import { useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
@@ -204,8 +203,6 @@ function LogsResults({
 }
 
 export default function LogsPage() {
-  useAppHeader({ title: 'Settings' });
-
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');
