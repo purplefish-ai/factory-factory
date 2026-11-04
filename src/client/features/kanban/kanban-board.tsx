@@ -16,6 +16,7 @@ import { getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
+import { useWaitingSortOrder } from './use-waiting-sort-order';
 
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
@@ -138,6 +139,7 @@ function KanbanBoardContent() {
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
   const [search, setSearch] = useState('');
+  const [waitingSortOrder, setWaitingSortOrder] = useWaitingSortOrder();
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
 
@@ -170,11 +172,11 @@ function KanbanBoardContent() {
     }
 
     for (const column of Object.keys(grouped) as KanbanColumnType[]) {
-      grouped[column] = sortBoardWorkspaces(grouped[column]);
+      grouped[column] = sortBoardWorkspaces(grouped[column], waitingSortOrder);
     }
 
     return grouped;
-  }, [workspaces, search]);
+  }, [workspaces, search, waitingSortOrder]);
 
   useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
 
@@ -255,6 +257,8 @@ function KanbanBoardContent() {
         column={column}
         workspaces={workspacesByColumn[column.id] ?? []}
         projectSlug={projectSlug}
+        waitingSortOrder={waitingSortOrder}
+        onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
         onToggleRatcheting={handleToggleRatcheting}
         togglingWorkspaceId={togglingWorkspaceId}

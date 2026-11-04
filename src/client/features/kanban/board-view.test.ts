@@ -9,14 +9,48 @@ const workspace = (id: string, waitingSince: string | null, createdAt: string) =
   createdAt: new Date(createdAt),
 });
 describe('board view', () => {
-  it('sorts oldest known Waiting first without substituting creation time', () => {
+  it('sorts Waiting by latest activity by default, falling back to creation', () => {
     const rows = [
-      workspace('unknown', null, '2020-01-01'),
-      workspace('new', '2026-11-02T00:00:00Z', '2020-01-02'),
-      workspace('old', '2026-11-01T00:00:00Z', '2020-01-03'),
+      { ...workspace('newest-created', null, '2026-11-03'), lastActivityAt: null },
+      {
+        ...workspace('latest-message', null, '2026-11-01'),
+        lastActivityAt: '2026-11-04T00:00:00Z',
+      },
+      { ...workspace('older-message', null, '2026-11-02'), lastActivityAt: '2026-11-02T12:00:00Z' },
     ];
-    expect(sortBoardWorkspaces(rows).map((row) => row.id)).toEqual(['old', 'new', 'unknown']);
-    expect(rows[0]?.id).toBe('unknown');
+    expect(sortBoardWorkspaces(rows).map((row) => row.id)).toEqual([
+      'latest-message',
+      'newest-created',
+      'older-message',
+    ]);
+    expect(rows[0]?.id).toBe('newest-created');
+    expect(sortBoardWorkspaces(rows, 'created').map((row) => row.id)).toEqual([
+      'newest-created',
+      'older-message',
+      'latest-message',
+    ]);
+  });
+
+  it('keeps other columns newest-created and breaks activity ties by creation', () => {
+    const rows = [
+      { ...workspace('old', null, '2026-11-01'), lastActivityAt: '2026-11-04T00:00:00Z' },
+      { ...workspace('new', null, '2026-11-02'), lastActivityAt: '2026-11-04T00:00:00Z' },
+    ];
+    expect(sortBoardWorkspaces(rows).map((row) => row.id)).toEqual(['new', 'old']);
+    expect(
+      sortBoardWorkspaces(
+        rows.map((row, index) => ({
+          ...row,
+          kanbanColumn: 'WORKING',
+          lastActivityAt: index === 0 ? '2026-11-05T00:00:00Z' : row.lastActivityAt,
+        }))
+      ).map((row) => row.id)
+    ).toEqual(['new', 'old']);
+    expect(
+      sortBoardWorkspaces(rows.map((row) => ({ ...row, lastActivityAt: 'invalid' }))).map(
+        (row) => row.id
+      )
+    ).toEqual(['new', 'old']);
   });
   it('filters names, branches and summary text case insensitively', () => {
     const row = {

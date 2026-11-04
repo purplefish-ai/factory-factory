@@ -12,17 +12,25 @@ export function filterBoardWorkspaces(rows: WorkspaceWithKanban[], search: strin
   );
 }
 
-export function sortBoardWorkspaces(rows: WorkspaceWithKanban[]) {
+export type WaitingSortOrder = 'latest-message' | 'created';
+
+export function sortBoardWorkspaces(
+  rows: WorkspaceWithKanban[],
+  waitingSortOrder: WaitingSortOrder = 'latest-message'
+) {
   return [...rows].sort((a, b) => {
-    if (a.kanbanColumn === 'WAITING' && b.kanbanColumn === 'WAITING') {
-      const timestamp = (value: string | null | undefined) =>
-        value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : Number.POSITIVE_INFINITY;
-      const difference = timestamp(a.waitingSince) - timestamp(b.waitingSince);
-      if (difference !== 0 && !Number.isNaN(difference)) {
-        return difference;
-      }
+    const createdDifference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    if (
+      waitingSortOrder === 'latest-message' &&
+      a.kanbanColumn === 'WAITING' &&
+      b.kanbanColumn === 'WAITING'
+    ) {
+      const timestamp = (row: WorkspaceWithKanban) => {
+        const activity = row.lastActivityAt ? Date.parse(row.lastActivityAt) : Number.NaN;
+        return Number.isFinite(activity) ? activity : new Date(row.createdAt).getTime();
+      };
+      return timestamp(b) - timestamp(a) || createdDifference;
     }
-    const difference = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    return -difference;
+    return createdDifference;
   });
 }

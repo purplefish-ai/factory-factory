@@ -260,3 +260,69 @@ export const ArchiveDoneColumn: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
   },
 };
+
+export const WaitingSort: Story = {
+  beforeEach: () => {
+    localStorage.removeItem('kanban-waiting-sort-order');
+    return () => localStorage.removeItem('kanban-waiting-sort-order');
+  },
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'workspace.listForProject': () => ({
+          workspaces: [
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'WAITING',
+              id: 'older-created',
+              name: 'Recent message',
+              createdAt: new Date('2026-11-01'),
+              lastActivityAt: '2026-11-04T12:00:00Z',
+            },
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'WAITING',
+              id: 'newer-created',
+              name: 'Recent creation',
+              createdAt: new Date('2026-11-03'),
+              lastActivityAt: '2026-11-03T12:00:00Z',
+            },
+          ],
+          reviewCount: 0,
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Recent message');
+    const ids = () =>
+      [...canvasElement.querySelectorAll('[data-workspace-id]')].map((el) =>
+        el.getAttribute('data-workspace-id')
+      );
+    await expect(ids()).toEqual(['older-created', 'newer-created']);
+    await expect(canvas.queryByText(/Waiting since/)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(body.getByRole('menuitemradio', { name: 'Latest message' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await userEvent.click(body.getByRole('menuitemradio', { name: 'Created' }));
+    await expect(ids()).toEqual(['newer-created', 'older-created']);
+    await expect(localStorage.getItem('kanban-waiting-sort-order')).toBe('created');
+    await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
+    await expect(body.getByRole('menuitemradio', { name: 'Created' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await userEvent.click(body.getByRole('menuitemradio', { name: 'Latest message' }));
+    await expect(ids()).toEqual(['older-created', 'newer-created']);
+  },
+};
+
+export const PhoneWaitingSort: Story = {
+  ...WaitingSort,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
