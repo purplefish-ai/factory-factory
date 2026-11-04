@@ -44,27 +44,31 @@ export function ArchiveActionButton({
     );
   }
 
+  // Inline, the header only shows this for a finished workspace, as its next step.
+  const label = archivePending ? 'Archiving...' : 'Archive workspace';
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           variant={completed ? 'default' : 'ghost'}
-          size="icon"
+          size="sm"
           className={cn(
-            'h-9 w-9 md:h-8 md:w-8',
+            'h-7 gap-1.5 px-2 text-xs',
             completed ? '' : 'hover:bg-destructive/10 hover:text-destructive'
           )}
           onClick={onArchiveRequest}
           disabled={archivePending}
+          aria-label={label}
         >
           {archivePending ? (
             <SpinnerGapIcon className="h-4 w-4 animate-spin" />
           ) : (
             <ArchiveIcon className="h-4 w-4" />
           )}
+          <span>Archive</span>
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }

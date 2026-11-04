@@ -45,9 +45,10 @@ vi.mock('@/client/lib/trpc', () => ({
     },
   },
 }));
+// session-limit.test.ts covers the real reasons; the sheet only forwards them.
 vi.mock('@/client/features/workspace', () => ({
-  QuickActionsMenu: ({ disabled }: { disabled?: boolean }) =>
-    createElement('button', { disabled, 'aria-label': 'Quick actions' }),
+  getNewChatUnavailableReason: ({ sessions }: { sessions?: unknown[] }) =>
+    sessions === undefined ? 'Loading chats…' : null,
 }));
 vi.mock('./use-quick-chat', () => ({
   useQuickChat: () => ({
@@ -107,9 +108,16 @@ it.each([false, true])(
       }
       expect(document.body.querySelector('[aria-label^="New conversation provider"]')).toBeNull();
       expect(document.body.querySelector('[aria-label^="Thinking level"]')).toBeNull();
-      expect(
-        document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
-      ).toBe(false);
+      // Quick actions live in the composer, which can also start them in a new chat.
+      if (!empty) {
+        expect(mocks.content).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            onRunQuickActionInNewChat: expect.any(Function),
+            newChatUnavailableReason: null,
+          })
+        );
+      }
+      expect(document.body.querySelector('[aria-label="Quick actions"]')).toBeNull();
       const create = document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
       expect(create?.disabled).toBe(false);
       await act(() => create?.click());
@@ -121,7 +129,7 @@ it.each([false, true])(
   }
 );
 
-it('blocks new chats and quick actions until sessions load', async () => {
+it('blocks new chats until sessions load', async () => {
   mocks.empty = true;
   mocks.loaded = false;
   const container = document.createElement('div');
@@ -134,9 +142,8 @@ it('blocks new chats and quick actions until sessions load', async () => {
     expect(
       document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
     ).toBe(true);
-    expect(
-      document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
-    ).toBe(true);
+    // No composer yet, so no quick actions either.
+    expect(mocks.content).not.toHaveBeenCalled();
   } finally {
     await act(() => root.unmount());
     container.remove();

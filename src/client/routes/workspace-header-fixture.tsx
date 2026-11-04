@@ -213,6 +213,16 @@ export function WorkspaceHeaderFixture({
                       claude: { isInstalled: true },
                       codex: { isInstalled: true, isAuthenticated: true },
                     };
+                  case 'session.listQuickActions':
+                    return [
+                      {
+                        id: 'create-pr',
+                        name: 'Create Pull Request',
+                        description: 'Open a pull request for this branch',
+                        type: 'agent',
+                        content: 'Create a pull request for the current branch.',
+                      },
+                    ];
                   case 'search.githubIssues':
                     return { results: [], errors: [] };
                   default:

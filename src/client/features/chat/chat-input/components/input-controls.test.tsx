@@ -15,6 +15,15 @@ import { LeftControls, RightControls } from './input-controls';
 
 const mocks = vi.hoisted(() => ({ mobile: false }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => mocks.mobile }));
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    session: {
+      listQuickActions: {
+        useQuery: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
+      },
+    },
+  },
+}));
 
 afterEach(() => {
   document.body.innerHTML = '';

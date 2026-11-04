@@ -34,6 +34,7 @@ import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { createPRMonitoringMenuProps } from './pr-monitoring-menu-actions';
 import { PRMonitoringMenuItems, type PRMonitoringMenuProps } from './pr-monitoring-menu-items';
 import { useWorkspacePrActions } from './use-workspace-pr-actions';
+import { getPrCiState } from './workspace-pr-status';
 
 export function WorkspacePrMenu({
   prs,
@@ -121,22 +122,6 @@ export function WorkspacePrMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
-
-function getPrCiState(pr: WorkspacePullRequest) {
-  if (pr.state === 'MERGED' || pr.state === 'CLOSED') {
-    return pr.state;
-  }
-  if (pr.hasMergeConflict) {
-    return 'CONFLICT';
-  }
-  const states = {
-    FAILURE: 'FAILING',
-    SUCCESS: 'PASSING',
-    PENDING: 'RUNNING',
-    UNKNOWN: 'UNKNOWN',
-  } as const;
-  return states[pr.ciStatus];
 }
 
 function WorkspacePrMenuRow({

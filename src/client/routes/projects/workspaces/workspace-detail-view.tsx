@@ -8,7 +8,6 @@ import type { SessionQueuedMessageCount } from '@/client/features/workspace/sess
 import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
 import { WorkspaceContentView } from '@/client/features/workspace/workspace-content-view';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
-import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { SessionlessSetupFailure } from './sessionless-setup-failure';
@@ -53,7 +52,6 @@ interface SessionTabsProps {
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
-  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
   handleRestartSession: () => void;
   handleOpenSubagentTab: (selection: SubagentSelection) => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
@@ -175,14 +173,6 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
     ]
   );
 
-  const { handleQuickAction: runSessionQuickAction } = sessionTabs;
-  const handleQuickAction = useCallback(
-    (name: string, prompt: string) => {
-      runInBackground(runSessionQuickAction(name, prompt), 'Could not run quick action');
-    },
-    [runSessionQuickAction]
-  );
-
   if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
@@ -212,7 +202,6 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
         onRestartSession={sessionTabs.handleRestartSession}
-        onQuickAction={handleQuickAction}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
         emptyState={

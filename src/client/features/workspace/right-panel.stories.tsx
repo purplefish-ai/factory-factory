@@ -48,7 +48,6 @@ function RightPanelStory({
             observable((observer) => {
               const responses: Record<string, () => unknown> = {
                 'userSettings.get': () => ({ childWorkspacesEnabled: true }),
-                'session.listQuickActions': () => [],
                 'session.listSubagents': () => ({
                   supported: true,
                   subagents: [activitySelection.subagent],
@@ -132,7 +131,6 @@ function RightPanelStory({
                         sessions={[{ id: 'session-1', name: 'Chat 1', status: 'IDLE' }]}
                         currentSessionId="session-1"
                         onCreateSession={fn()}
-                        onQuickAction={fn()}
                         onRestartSession={fn()}
                       />
                     </div>

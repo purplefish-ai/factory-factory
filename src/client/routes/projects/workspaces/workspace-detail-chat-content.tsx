@@ -74,6 +74,9 @@ export interface ChatContentProps {
   autoStartPending?: boolean;
   initBanner: WorkspaceInitBanner | null;
   isScriptFailed: boolean;
+  /** Runs a quick action in a new chat; the composer's menu offers it next to this chat. */
+  onRunQuickActionInNewChat?: (name: string, prompt: string) => void;
+  newChatUnavailableReason?: string | null;
 }
 
 function shouldShowStartingState(
@@ -385,6 +388,8 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             codexAccountId={props.codexAccountId}
             acpConfigOptions={props.acpConfigOptions}
             onSetConfigOption={props.setConfigOption}
+            onRunQuickActionInNewChat={props.onRunQuickActionInNewChat}
+            newChatUnavailableReason={props.newChatUnavailableReason}
           />
         </div>
       </div>

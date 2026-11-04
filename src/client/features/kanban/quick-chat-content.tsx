@@ -16,6 +16,8 @@ interface QuickChatContentProps {
   codexAccountId?: string | null;
   chatState: UseChatWebSocketReturn;
   transcriptScroll: TranscriptScrollOptions;
+  onRunQuickActionInNewChat?: (name: string, prompt: string) => void;
+  newChatUnavailableReason?: string | null;
 }
 
 export function QuickChatContent({
@@ -23,6 +25,8 @@ export function QuickChatContent({
   codexAccountId,
   chatState,
   transcriptScroll,
+  onRunQuickActionInNewChat,
+  newChatUnavailableReason,
 }: QuickChatContentProps) {
   const timeline = useSubagentTimelineMessages(
     chatState.messages,
@@ -113,6 +117,8 @@ export function QuickChatContent({
           codexAccountId={codexAccountId}
           acpConfigOptions={chatState.acpConfigOptions}
           onSetConfigOption={chatState.setConfigOption}
+          onRunQuickActionInNewChat={onRunQuickActionInNewChat}
+          newChatUnavailableReason={newChatUnavailableReason}
         />
       </div>
     </div>

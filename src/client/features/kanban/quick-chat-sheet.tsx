@@ -1,7 +1,7 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
-import { QuickActionsMenu } from '@/client/features/workspace';
+import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
@@ -95,14 +95,6 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               disabled={tabBarDisabled}
             />
           </div>
-          <QuickActionsMenu
-            onExecuteAgent={(action) => {
-              if (action.content) {
-                handleQuickAction(action.name, action.content);
-              }
-            }}
-            disabled={tabBarDisabled}
-          />
         </div>
 
         {/* Chat content */}
@@ -113,6 +105,11 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               codexAccountId={selectedCodexAccountId}
               chatState={chatState}
               transcriptScroll={transcriptScroll}
+              onRunQuickActionInNewChat={handleQuickAction}
+              newChatUnavailableReason={getNewChatUnavailableReason({
+                sessions: sessionsLoaded ? sessions : undefined,
+                isCreatingSession,
+              })}
             />
           ) : workspaceId ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">

@@ -7,6 +7,7 @@ import {
   useChatTranscriptPersistence,
   useWorkspacePanel,
 } from '@/client/features/workspace';
+import { getNewChatUnavailableReason } from '@/client/features/workspace/session-limit';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
@@ -304,6 +305,20 @@ export function WorkspaceDetailContainer() {
     ]
   );
 
+  const runQuickActionInNewChat = useCallback(
+    (name: string, prompt: string) => {
+      runInBackground(handleQuickAction(name, prompt), 'Could not run quick action');
+    },
+    [handleQuickAction]
+  );
+  const newChatUnavailableReason = getNewChatUnavailableReason({
+    sessions,
+    maxSessions,
+    isCreatingSession: createSession.isPending,
+    isDeletingSession: deleteSession.isPending,
+    hasWorktreePath: Boolean(workspace?.worktreePath),
+  });
+
   // A fresh object per render is fine: ChatContent is memoized on these fields,
   // and only the context consumer re-renders when it changes.
   const chatViewModel: ChatContentProps = {
@@ -357,6 +372,8 @@ export function WorkspaceDetailContainer() {
     autoStartPending: isIssueAutoStartPending,
     initBanner,
     isScriptFailed,
+    onRunQuickActionInNewChat: runQuickActionInNewChat,
+    newChatUnavailableReason,
   };
 
   const workspaceState = useMemo(
@@ -403,7 +420,6 @@ export function WorkspaceDetailContainer() {
       handleSelectSession,
       handleNewChat,
       handleCloseChatSession,
-      handleQuickAction,
       handleRestartSession: restartSession,
       handleOpenSubagentTab: openSubagentTab,
       maxSessions,
@@ -421,7 +437,6 @@ export function WorkspaceDetailContainer() {
       handleSelectSession,
       handleNewChat,
       handleCloseChatSession,
-      handleQuickAction,
       restartSession,
       openSubagentTab,
       maxSessions,

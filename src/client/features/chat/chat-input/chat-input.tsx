@@ -65,6 +65,10 @@ export interface ChatInputProps {
   acpConfigOptions?: AcpConfigOption[] | null;
   // Called when user selects an ACP config option value
   onSetConfigOption?: (configId: string, value: string) => void;
+  /** Lets quick actions start a new chat; omit where only this chat applies. */
+  onRunQuickActionInNewChat?: (name: string, prompt: string) => void;
+  /** Why a new chat can't start right now; shown in the quick actions menu. */
+  newChatUnavailableReason?: string | null;
 }
 
 // =============================================================================
@@ -106,6 +110,8 @@ export const ChatInput = memo(function ChatInput({
   codexAccountId,
   acpConfigOptions,
   onSetConfigOption,
+  onRunQuickActionInNewChat,
+  newChatUnavailableReason,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -311,6 +317,8 @@ export const ChatInput = memo(function ChatInput({
             supportedImageTypes={actions.supportedImageTypes}
             disabled={isDisabled}
             onQuickAction={actions.handleQuickAction}
+            onRunQuickActionInNewChat={onRunQuickActionInNewChat}
+            newChatUnavailableReason={newChatUnavailableReason}
             quickActionsOpen={quickActionsOpen}
             onQuickActionsOpenChange={setQuickActionsOpen}
             acpConfigOptions={acpConfigOptions}
