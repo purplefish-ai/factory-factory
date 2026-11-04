@@ -23,12 +23,14 @@ scrolling at 320px, 375px, and desktop widths.
 
 ## Header and chat tab bar controls
 
-The workspace header keeps the controls used on most visits inline: the project
-and workspace switchers, the dev server control, the PR chip (with **Create PR**
-next to it before a PR exists), and the right panel toggle. At 48rem and wider
-the header also shows **Create PR** inline; at 72rem and wider it adds the issue
-link, the dev server port and **Open in IDE**. A finished (done or merged)
-workspace also shows **Archive** inline as its next step.
+The workspace header keeps the project and workspace switchers, dev server
+control, PR chip and right panel toggle inline. **Create PR** is available when
+the workspace has changes, the agent is idle, and the current branch has no open
+PR, including after an earlier PR was merged or closed. At 48rem and wider this
+action appears beside the chip; below that it is in More actions. At 72rem and
+wider the header adds the issue link, dev server port and **Open in IDE**. A
+finished workspace (done, merged or closed) also shows **Archive** inline at
+48rem and wider; narrower layouts offer it in More actions.
 
 **More actions** (⋯) is always present. It holds View details, Rename workspace,
 Provider settings, Open branch on GitHub, Open dev app and Archive workspace,
