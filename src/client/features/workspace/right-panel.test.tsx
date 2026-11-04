@@ -102,6 +102,8 @@ vi.mock('./agents-panel', () => ({
 }));
 
 vi.mock('@/client/features/inbox', () => ({
+  useWorkspaceUnreadCounts: () => ({ data: undefined }),
+  UnreadMailBadge: () => null,
   WorkspaceInboxPanel: () => createElement('section', { 'data-testid': 'inbox-panel' }),
 }));
 

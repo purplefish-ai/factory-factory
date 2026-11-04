@@ -122,6 +122,7 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     }),
     workspace: {
+      unreadMailCounts: { useQuery: () => ({ data: {} }) },
       listForProject: {
         _def: () => ({ path: ['workspace', 'listForProject'] }),
         useQuery: ({ projectId }: { projectId: string }) => ({

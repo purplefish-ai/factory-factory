@@ -84,6 +84,7 @@ function useRevealMobileInlineForm({
 
 function KanbanBoardContent() {
   const {
+    unreadMailCounts,
     projectId,
     projectSlug,
     issueProvider,
@@ -278,6 +279,7 @@ function KanbanBoardContent() {
         column={column}
         workspaces={workspacesByColumn[column.id] ?? []}
         projectSlug={projectSlug}
+        unreadMailCounts={unreadMailCounts}
         onToggleRatcheting={handleToggleRatcheting}
         togglingWorkspaceId={togglingWorkspaceId}
         onArchive={handleArchiveWorkspace}

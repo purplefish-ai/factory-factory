@@ -61,6 +61,51 @@ afterAll(async () => {
 });
 
 describe('durable workspace mailbox', () => {
+  it('aggregates only current unread mail per project without reading or acknowledging it', async () => {
+    const first = await workspace();
+    const second = await workspace();
+    const empty = await workspace();
+    const paginated = await workspace();
+    for (let index = 0; index < 21; index++) {
+      await send(paginated);
+    }
+    await send(first);
+    const read = await send(first);
+    await mail.readMail({ workspaceId: first, ids: [read.id] });
+    const acknowledged = await send(first);
+    await mail.ackMail({
+      workspaceId: first,
+      ids: [acknowledged.id],
+      throughRevision: acknowledged.revision,
+    });
+    await send(first, 'old progress', { kind: 'PROGRESS', taskKey: 'audit', taskRevision: 1 });
+    await send(first, 'current progress', { kind: 'PROGRESS', taskKey: 'audit', taskRevision: 2 });
+    await send(second);
+    await send(second);
+    await state.client!.project.create({
+      data: {
+        id: 'foreign-mail-project',
+        name: 'Other',
+        slug: 'other-mail',
+        repoPath: '/tmp/other',
+        worktreeBasePath: '/tmp/other-work',
+      },
+    });
+    await state.client!.workspace.create({
+      data: { id: 'foreign-recipient', name: 'Other', projectId: 'foreign-mail-project' },
+    });
+    await send('foreign-recipient');
+    const before = await mail.listMail({ workspaceId: first, unreadOnly: true });
+    const counts = await mail.unreadCountsForProject({ projectId: 'mail-project' });
+    expect(counts[first]).toBe(2);
+    expect(counts[second]).toBe(2);
+    expect(counts[empty]).toBeUndefined();
+    expect(counts[paginated]).toBe(21);
+    expect(counts['foreign-recipient']).toBeUndefined();
+    expect(await mail.listMail({ workspaceId: first, unreadOnly: true })).toEqual(before);
+    expect(await mail.unreadCountsForProject({ projectId: 'missing-project' })).toEqual({});
+  });
+
   it('bounds summaries and pages by monotonic revision without returning bodies', async () => {
     const id = await workspace();
     for (let n = 0; n < 23; n++) {

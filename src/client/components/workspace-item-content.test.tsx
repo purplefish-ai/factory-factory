@@ -40,7 +40,9 @@ function renderContent(
     onOpenPr,
     onOpenIssue,
     onParentPointerUp,
+    unreadCount,
   }: {
+    unreadCount?: number;
     onOpenPr?: () => void;
     onOpenIssue?: () => void;
     onParentPointerUp?: () => void;
@@ -55,7 +57,7 @@ function renderContent(
       createElement(
         'div',
         { onPointerUp: onParentPointerUp },
-        createElement(WorkspaceItemContent, { workspace, onOpenPr, onOpenIssue })
+        createElement(WorkspaceItemContent, { workspace, onOpenPr, onOpenIssue, unreadCount })
       )
     );
   });
@@ -77,6 +79,12 @@ afterEach(() => {
 });
 
 describe('WorkspaceItemContent', () => {
+  it('shows the workspace unread count beside the name without adding an interactive action', () => {
+    const { container, root } = renderContent(baseWorkspace, { unreadCount: 3 });
+    expect(within(container).getByRole('img', { name: '3 unread inbox messages' })).toBeDefined();
+    expect(container.querySelector('button')).toBeNull();
+    actFlushSync(() => root.unmount());
+  });
   it('shows the current focus with the full summary and update time available on hover', () => {
     const { container, root } = renderContent({
       ...baseWorkspace,

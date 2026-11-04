@@ -122,3 +122,18 @@ export const PullRequestWithChangeCountsDark: typeof PullRequestWithChangeCounts
   ...PullRequestWithChangeCounts,
   globals: { theme: 'dark' },
 };
+
+export const UnreadInbox: Story = {
+  args: { unreadCount: 3 },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('img', { name: '3 unread inbox messages' })
+    ).toBeVisible();
+  },
+};
+
+export const UnreadInboxDark: Story = { ...UnreadInbox, globals: { theme: 'dark' } };
+export const UnreadInboxPhone: Story = {
+  ...UnreadInbox,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};

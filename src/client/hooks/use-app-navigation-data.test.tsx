@@ -65,6 +65,7 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     },
     workspace: {
+      unreadMailCounts: { useQuery: () => ({ data: undefined }) },
       listForProject: { useQuery: mocks.listForProject },
       syncAllPRStatuses: { useMutation: () => mutation },
     },

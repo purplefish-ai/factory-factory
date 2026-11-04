@@ -14,6 +14,8 @@ import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/t
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import {
   ackMailInputSchema,
+  unreadMailCountsInputSchema,
+  unreadMailCountsResultSchema,
   listMailInputSchema,
   readMailInputSchema,
   workspaceMailSendMetadataSchema,
@@ -231,6 +233,13 @@ export const workspaceChildrenRouter = router({
         ctx.appContext.services
       );
     }),
+
+  unreadMailCounts: trustedLocalProcedure
+    .input(unreadMailCountsInputSchema)
+    .output(unreadMailCountsResultSchema)
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceNotificationService.unreadCountsForProject(input)
+    ),
 
   listMail: trustedLocalProcedure
     .input(listMailInputSchema)

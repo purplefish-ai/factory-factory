@@ -1220,6 +1220,16 @@ acknowledgement operations are scoped to the recipient workspace. Inbox previews
 and bodies require trusted-local access, as do acknowledgement and explicit wake
 retry. The MCP tools bind the recipient to their launch context.
 
+The Inbox tab, board cards and sidebar rows show unread counts from one shared
+project query rather than loading each workspace's messages. Counts match the
+inbox's unread filter: only mail with no read, acknowledgement or supersession
+timestamp is included, including current progress. The trusted-local endpoint
+returns counts only, covering all inbox pages. It performs no read or
+acknowledgement writes. Counts refresh every 15 seconds and after explicit UI
+reads or acknowledgements; merely opening Inbox or viewing a board does not mark
+mail read. Display counts cap at 99+, while accessible names retain the full
+total.
+
 A durable revision and fenced wake claim keep one outstanding notification per
 workspace. New arrivals do not queue repeated prompts while a signal remains
 outstanding. Acknowledging selected mail at an observed revision releases its

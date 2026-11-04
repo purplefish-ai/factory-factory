@@ -1,5 +1,6 @@
 import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { UnreadMailBadge } from '@/client/features/inbox';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -24,10 +25,12 @@ const tabClassName =
 
 export function MobileToolSwitcher({
   periodicTaskId,
+  unreadCount,
   onOpenLogs,
   children,
 }: {
   periodicTaskId: string | null;
+  unreadCount?: number;
   onOpenLogs: () => void;
   children: ReactNode;
 }) {
@@ -84,6 +87,9 @@ export function MobileToolSwitcher({
                 className={tabClassName}
               >
                 {activeOverflowTool.label}
+                {activeOverflowTool.value === 'inbox' && (
+                  <UnreadMailBadge count={unreadCount} icon={false} />
+                )}
               </TabsTrigger>
             )}
           </TabsList>
@@ -93,10 +99,21 @@ export function MobileToolSwitcher({
             <Button
               variant="ghost"
               size="icon"
-              className="size-11 rounded-none"
-              aria-label="More tools"
+              className="relative size-11 rounded-none"
+              aria-label={
+                unreadCount && activeTool !== 'inbox'
+                  ? `More tools, ${unreadCount} unread inbox ${unreadCount === 1 ? 'message' : 'messages'}`
+                  : 'More tools'
+              }
             >
               <DotsThreeIcon className="size-4" />
+              {activeTool !== 'inbox' && (
+                <UnreadMailBadge
+                  count={unreadCount}
+                  icon={false}
+                  className="absolute right-0 top-0"
+                />
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -106,6 +123,7 @@ export function MobileToolSwitcher({
                 .map((tool) => (
                   <DropdownMenuRadioItem key={tool.value} value={tool.value} className="min-h-11">
                     {tool.label}
+                    {tool.value === 'inbox' && <UnreadMailBadge count={unreadCount} icon={false} />}
                   </DropdownMenuRadioItem>
                 ))}
             </DropdownMenuRadioGroup>

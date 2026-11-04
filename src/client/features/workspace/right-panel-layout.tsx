@@ -9,6 +9,7 @@ export function RightPanelLayout({
   workspaceId,
   isMobile,
   mobilePanel,
+  unreadCount,
   periodicTaskId,
   onOpenLogs,
   className,
@@ -18,6 +19,7 @@ export function RightPanelLayout({
   workspaceId: string;
   isMobile: boolean;
   mobilePanel: 'top' | 'bottom';
+  unreadCount?: number;
   periodicTaskId: string | null;
   onOpenLogs: () => void;
   className?: string;
@@ -34,7 +36,11 @@ export function RightPanelLayout({
   if (isMobile) {
     return (
       <div className={cn('flex h-full min-h-0 flex-col', className)}>
-        <MobileToolSwitcher periodicTaskId={periodicTaskId} onOpenLogs={onOpenLogs}>
+        <MobileToolSwitcher
+          periodicTaskId={periodicTaskId}
+          onOpenLogs={onOpenLogs}
+          unreadCount={unreadCount}
+        >
           <TabsContent
             forceMount
             value={activeTopTab}

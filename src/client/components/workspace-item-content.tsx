@@ -5,6 +5,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
+import { UnreadMailBadge } from '@/client/features/inbox';
 import { ConnectedWorkspacePrMenu } from '@/client/features/workspace';
 import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
@@ -79,7 +80,9 @@ export function WorkspaceItemContent({
   workspace,
   onOpenPr,
   onOpenIssue,
+  unreadCount,
 }: {
+  unreadCount?: number;
   workspace: ServerWorkspace;
   onOpenPr?: () => void;
   onOpenIssue?: () => void;
@@ -108,6 +111,7 @@ export function WorkspaceItemContent({
         />
         <CreationSourceIcon creationSource={workspace.creationSource} />
         <span className="truncate text-sm">{workspace.name}</span>
+        <UnreadMailBadge count={unreadCount} />
       </div>
       <ConversationFocus summary={workspace.conversationSummary} />
       {hasMetaRow && (

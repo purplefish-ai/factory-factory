@@ -89,7 +89,8 @@ const baseWorkspace = {
 
 function renderCard(
   workspace: WorkspaceWithKanban,
-  onCardClick?: () => void
+  onCardClick?: () => void,
+  unreadCount?: number
 ): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -103,6 +104,7 @@ function renderCard(
         createElement(KanbanCard, {
           workspace,
           projectSlug: 'project',
+          unreadCount,
         })
       )
     );
@@ -436,4 +438,10 @@ describe('KanbanCard', () => {
     actFlushSync(() => root.unmount());
     container.remove();
   });
+});
+
+it('shows unread inbox mail on the card even without other metadata', () => {
+  const { container, root } = renderCard(baseWorkspace, undefined, 7);
+  expect(container.querySelector('[aria-label="7 unread inbox messages"]')).not.toBeNull();
+  actFlushSync(() => root.unmount());
 });

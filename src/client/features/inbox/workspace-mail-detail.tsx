@@ -22,8 +22,19 @@ export function WorkspaceMailDetail({
   const [readError, setReadError] = useState<string | null>(null);
   const [ackError, setAckError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(!!mail.acknowledgedAt);
-  const read = trpc.workspace.readMail.useMutation({ meta: { errorToast: false } });
-  const ack = trpc.workspace.ackMail.useMutation({ meta: { errorToast: false } });
+  // Mutation-level callbacks survive a detail unmount; per-call UI callbacks do not.
+  const invalidateInbox = () => {
+    void utils.workspace.listMail.invalidate({ workspaceId });
+    void utils.workspace.unreadMailCounts.invalidate();
+  };
+  const read = trpc.workspace.readMail.useMutation({
+    meta: { errorToast: false },
+    onSuccess: invalidateInbox,
+  });
+  const ack = trpc.workspace.ackMail.useMutation({
+    meta: { errorToast: false },
+    onSuccess: invalidateInbox,
+  });
   const { mutate: readBody } = read;
 
   useEffect(() => {
@@ -43,7 +54,6 @@ export function WorkspaceMailDetail({
           setBody(item.body);
           setNextOffset(item.nextOffset);
           setObservedRevision(result.revision);
-          void utils.workspace.listMail.invalidate({ workspaceId });
         },
         onError: (error) => {
           if (active) {
@@ -55,7 +65,7 @@ export function WorkspaceMailDetail({
     return () => {
       active = false;
     };
-  }, [workspaceId, mail.id, readBody, utils]);
+  }, [workspaceId, mail.id, readBody]);
 
   function readMore(offset: number) {
     setReadError(null);
@@ -71,7 +81,6 @@ export function WorkspaceMailDetail({
           setBody((current) => (offset === 0 ? item.body : current + item.body));
           setNextOffset(item.nextOffset);
           setObservedRevision(result.revision);
-          void utils.workspace.listMail.invalidate({ workspaceId });
         },
         onError: (error) => setReadError(error.message),
       }
@@ -123,7 +132,6 @@ export function WorkspaceMailDetail({
                       }
                     );
                   }
-                  void utils.workspace.listMail.invalidate({ workspaceId });
                 },
                 onError: (error) => setAckError(error.message),
               }

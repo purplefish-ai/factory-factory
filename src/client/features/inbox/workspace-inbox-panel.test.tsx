@@ -7,6 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { useWorkspaceUnreadCounts } from './use-workspace-unread-counts';
 import { WorkspaceInboxPanel } from './workspace-inbox-panel';
 import inboxStory from './workspace-inbox-panel.stories';
 
@@ -27,6 +28,11 @@ const summary = {
   taskRevision: null,
 };
 
+function TestUnreadCount() {
+  const counts = useWorkspaceUnreadCounts('mail-project');
+  return <span data-testid="unread-count">{counts.data?.recipient ?? 'loading'}</span>;
+}
+
 describe('WorkspaceInboxPanel', () => {
   let root: Root;
   let container: HTMLDivElement;
@@ -34,10 +40,12 @@ describe('WorkspaceInboxPanel', () => {
   let render: () => void;
   let requests: { path: string; input: unknown }[];
   let respond: (path: string, input: unknown) => unknown;
+  let showUnreadCount: boolean;
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     requests = [];
+    showUnreadCount = false;
     respond = (path) => {
       if (path === 'workspace.listMail') {
         return { items: [summary], revision: 3, nextCursor: null };
@@ -80,6 +88,7 @@ describe('WorkspaceInboxPanel', () => {
           <trpc.Provider client={api} queryClient={client}>
             <QueryClientProvider client={client}>
               <WorkspaceInboxPanel workspaceId="recipient" />
+              {showUnreadCount && <TestUnreadCount />}
             </QueryClientProvider>
           </trpc.Provider>
         )
@@ -91,6 +100,75 @@ describe('WorkspaceInboxPanel', () => {
     container.remove();
     vi.unstubAllGlobals();
   });
+  it('updates the shared badge after an explicit read without acknowledging or reading on list open', async () => {
+    showUnreadCount = true;
+    let unread = 1;
+    const original = respond;
+    respond = (path, input) => {
+      if (path === 'workspace.unreadMailCounts') {
+        return { recipient: unread };
+      }
+      if (path === 'workspace.readMail') {
+        unread = 0;
+      }
+      return original(path, input);
+    };
+    await render();
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
+      );
+    });
+    expect(
+      requests.filter(
+        (request) => request.path === 'workspace.readMail' || request.path === 'workspace.ackMail'
+      )
+    ).toHaveLength(0);
+    await click('Review ready');
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('0')
+      );
+    });
+    expect(requests.filter((request) => request.path === 'workspace.ackMail')).toHaveLength(0);
+  });
+
+  it('refreshes shared counts when a pending read finishes after leaving its detail view', async () => {
+    showUnreadCount = true;
+    let unread = 1;
+    let complete: () => void = () => undefined;
+    const original = respond;
+    respond = (path, input) => {
+      if (path === 'workspace.unreadMailCounts') {
+        return { recipient: unread };
+      }
+      if (path === 'workspace.readMail') {
+        return new Promise((resolve) => {
+          complete = () => {
+            unread = 0;
+            resolve(original(path, input));
+          };
+        });
+      }
+      return original(path, input);
+    };
+    await render();
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
+      );
+    });
+    await click('Review ready');
+    await click('Inbox');
+    await act(() => complete());
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('0')
+      );
+    });
+    expect(requests.filter((request) => request.path === 'workspace.ackMail')).toHaveLength(0);
+  });
+
   async function waitForText(text: string) {
     await act(async () => {
       await vi.waitFor(() => expect(container.textContent).toContain(text));

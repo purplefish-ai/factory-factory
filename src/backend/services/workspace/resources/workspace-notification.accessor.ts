@@ -3,6 +3,9 @@ import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
   ackMailInputSchema,
+  unreadMailCountsInputSchema,
+  type UnreadMailCountsInput,
+  type WorkspaceUnreadMailCounts,
   listMailInputSchema,
   readMailInputSchema,
   workspaceMailSendMetadataSchema,
@@ -61,6 +64,21 @@ function summarize(row: Prisma.WorkspaceNotificationGetPayload<{ select: typeof 
 }
 
 class WorkspaceNotificationAccessor {
+  async unreadCountsForProject(input: UnreadMailCountsInput): Promise<WorkspaceUnreadMailCounts> {
+    const { projectId } = unreadMailCountsInputSchema.parse(input);
+    const rows = await prisma.workspaceNotification.groupBy({
+      by: ['workspaceId'],
+      where: {
+        workspace: { projectId },
+        readAt: null,
+        acknowledgedAt: null,
+        supersededAt: null,
+      },
+      _count: { _all: true },
+    });
+    return Object.fromEntries(rows.map((row) => [row.workspaceId, row._count._all]));
+  }
+
   create(input: CreateNotificationInput): Promise<WorkspaceNotification> {
     const metadata = workspaceMailSendMetadataSchema.parse(input);
     const {

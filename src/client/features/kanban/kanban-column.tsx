@@ -36,6 +36,7 @@ interface KanbanColumnProps {
   column: ColumnConfig;
   workspaces: WorkspaceWithKanban[];
   projectSlug: string;
+  unreadMailCounts?: Record<string, number>;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   togglingWorkspaceId?: string | null;
   onArchive?: (workspaceId: string) => void;
@@ -52,6 +53,7 @@ export function KanbanColumn({
   column,
   workspaces,
   projectSlug,
+  unreadMailCounts,
   onToggleRatcheting,
   togglingWorkspaceId,
   onArchive,
@@ -127,6 +129,7 @@ export function KanbanColumn({
               <KanbanCard
                 workspace={workspace}
                 projectSlug={projectSlug}
+                unreadCount={unreadMailCounts?.[workspace.id]}
                 onToggleRatcheting={onToggleRatcheting}
                 isTogglePending={togglingWorkspaceId === workspace.id}
                 onArchive={onArchive}
