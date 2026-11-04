@@ -1,8 +1,22 @@
+import { useEffect, useState } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import type { TranscriptHistoryControls } from './use-transcript-history';
 
 export function TranscriptHistoryHeader({ history }: { history: TranscriptHistoryControls }) {
-  if (history.status !== 'loading' && history.status !== 'error') {
+  const [showLoading, setShowLoading] = useState(false);
+  const loading = history.status === 'loading';
+  useEffect(() => {
+    if (!loading) {
+      setShowLoading(false);
+      return;
+    }
+    // Opening a short transcript checks for history even when none remains.
+    // Avoid inserting and collapsing a status row for these fast requests.
+    const timer = setTimeout(() => setShowLoading(true), 250);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  if (!(loading && showLoading) && history.status !== 'error') {
     return null;
   }
   return (

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { type ComponentProps, useState } from 'react';
+import { type ComponentProps, useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import {
@@ -442,6 +442,9 @@ export const LoadingEarlierMessages: Story = {
       initialPosition: null,
     },
   },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText('Loading earlier messages…')).toBeVisible();
+  },
 };
 
 export const EarlierMessagesFailed: Story = {
@@ -506,5 +509,21 @@ export const EarlierMessagesLoadAutomatically: Story = {
     await expect(
       canvas.queryByRole('button', { name: 'Load earlier messages' })
     ).not.toBeInTheDocument();
+  },
+};
+
+/** A fast empty history check must not insert a loading row above the messages. */
+export const FastHistoryCheck: Story = {
+  render: (args) => {
+    const [status, setStatus] = useState<'loading' | 'complete'>('loading');
+    useEffect(() => {
+      void Promise.resolve().then(() => setStatus('complete'));
+    }, []);
+    return <ChatTranscript {...args} history={{ status, loadOlder: () => undefined }} />;
+  },
+  args: { ...LoadingEarlierMessages.args },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('Loading earlier messages…')).not.toBeInTheDocument();
   },
 };
