@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './serve-node-check';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { checkServePrerequisites } from './serve-prerequisites';
 import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
@@ -190,6 +192,18 @@ program
 
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
+
+    const prerequisiteIssues = checkServePrerequisites(PROJECT_ROOT, !!options.dev);
+    if (prerequisiteIssues.length) {
+      console.error(
+        chalk.red('  Cannot start Factory Factory. Fix the following prerequisites:\n')
+      );
+      for (const issue of prerequisiteIssues) {
+        console.error(`  • ${issue}\n`);
+      }
+      process.exitCode = 1;
+      return;
+    }
 
     // Ensure data directory exists
     if (verbose) {
