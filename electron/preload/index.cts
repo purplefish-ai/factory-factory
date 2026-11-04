@@ -1,18 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopCommand, OpenDialogOptions, OpenDialogResult } from '../../src/types/electron';
 
+const desktopCommands: Record<DesktopCommand, true> = {
+  'nav.settings': true,
+  'nav.newWorkspace': true,
+  'app.search': true,
+  'app.toggleSidebar': true,
+};
+function isDesktopCommand(value: unknown): value is DesktopCommand {
+  return typeof value === 'string' && Object.hasOwn(desktopCommands, value);
+}
+
 let appCommandSubscriptions = 0;
 
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   onAppCommand: (listener: (command: DesktopCommand) => void): (() => void) => {
     const handler = (_event: unknown, command: unknown) => {
-      if (
-        command === 'nav.settings' ||
-        command === 'nav.newWorkspace' ||
-        command === 'app.search' ||
-        command === 'app.toggleSidebar'
-      ) {
+      if (isDesktopCommand(command)) {
         listener(command);
       }
     };

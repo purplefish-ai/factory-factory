@@ -1308,7 +1308,7 @@ opened externally. Only `http`, `https` and `mailto` URLs reach
 `shell.openExternal`; other schemes are blocked
 (`electron/main/external-links.ts`).
 
-The native app menu exposes Settings, New Workspace, Search and Toggle Sidebar
+The native app menu exposes Settings, New workspace, Search and Toggle sidebar
 through the renderer shortcut registry, preserving the same actions as keyboard
 and command search. Commands wait for the trusted renderer subscription, so
 opening a window or starting the backend does not lose the first menu action.

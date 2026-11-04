@@ -68,7 +68,20 @@ it('runs the compiled preload in a sandbox and exposes the dialog and clipboard 
   handler({}, 'arbitrary:command');
   handler({}, { command: 'nav.settings' });
   expect(onCommand).toHaveBeenCalledTimes(4);
+  const secondCleanup = api.onAppCommand?.(vi.fn());
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', true);
   cleanup?.();
+  cleanup?.();
+  expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', true);
+  expect(removeListener).toHaveBeenCalledTimes(1);
+  secondCleanup?.();
+  secondCleanup?.();
+  expect(removeListener).toHaveBeenCalledTimes(2);
+  expect(invoke.mock.calls.filter(([channel]) => channel === 'app:commands-ready')).toEqual([
+    ['app:commands-ready', true],
+    ['app:commands-ready', true],
+    ['app:commands-ready', false],
+  ]);
   expect(removeListener).toHaveBeenCalledWith('app:command', handler);
   expect(invoke).toHaveBeenLastCalledWith('app:commands-ready', false);
   await api.setBackgroundColor?.('#123456');

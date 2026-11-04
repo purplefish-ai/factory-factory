@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { MenuItemConstructorOptions } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDesktopShell, type DesktopShellWindow } from './desktop-shell.js';
@@ -79,9 +79,9 @@ describe('desktop shell', () => {
     settings.click?.({} as never, {} as never, {} as never);
     expect(onCommand).toHaveBeenCalledWith('nav.settings');
     for (const [label, command] of [
-      ['New Workspace', 'nav.newWorkspace'],
+      ['New workspace', 'nav.newWorkspace'],
       ['Search', 'app.search'],
-      ['Toggle Sidebar', 'app.toggleSidebar'],
+      ['Toggle sidebar', 'app.toggleSidebar'],
     ]) {
       items.find((item) => item.label === label)!.click?.({} as never, {} as never, {} as never);
       expect(onCommand).toHaveBeenLastCalledWith(command);
@@ -152,6 +152,19 @@ describe('desktop shell', () => {
     themeListeners.forEach((listener) => listener());
     expect(window.setBackgroundColor).toHaveBeenLastCalledWith('#123456');
     expect(shell.getWindowOptions().backgroundColor).toBe('#123456');
+  });
+
+  it('logs an unavailable preference store without preventing the window from closing', () => {
+    const { shell, statePath, logger } = setup();
+    const { window, emit } = fakeWindow();
+    shell.registerWindow(window);
+    rmSync(dirname(statePath), { recursive: true, force: true });
+    expect(() => emit('close')).not.toThrow();
+    expect(logger.error).toHaveBeenCalledExactlyOnceWith(
+      '[electron] Could not save window preferences:',
+      expect.any(Error)
+    );
+    expect(shell.getWindowOptions()).toMatchObject({ width: 1000, height: 700 });
   });
 
   it('ignores invalid saved geometry rather than constructing an unusable window', () => {

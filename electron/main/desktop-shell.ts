@@ -82,7 +82,7 @@ export function createDesktopShell<MenuType>({
     click: () => onCommand(command),
   });
   const settings = action('Settings…', 'CmdOrCtrl+,', 'nav.settings');
-  const newWorkspace = action('New Workspace', 'CmdOrCtrl+N', 'nav.newWorkspace');
+  const newWorkspace = action('New workspace', 'CmdOrCtrl+N', 'nav.newWorkspace');
 
   return {
     setBackgroundColor(color) {
@@ -132,7 +132,7 @@ export function createDesktopShell<MenuType>({
           label: 'View',
           submenu: [
             action('Search', 'CmdOrCtrl+K', 'app.search'),
-            action('Toggle Sidebar', 'CmdOrCtrl+B', 'app.toggleSidebar'),
+            action('Toggle sidebar', 'CmdOrCtrl+B', 'app.toggleSidebar'),
             { type: 'separator' },
             { role: 'togglefullscreen' },
             ...(!isPackaged
