@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { QueryState } from '@/client/components/query-state';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
 import { useWorkspaceCreationDraft } from '@/client/features/kanban/use-workspace-creation-draft';
 import { useWorkspaceCreationSubmission } from '@/client/features/kanban/use-workspace-creation-submission';
+import { getWorkspaceCreationDraftSnapshot } from '@/client/features/kanban/workspace-creation-draft-storage';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -24,16 +25,25 @@ export function EventAgentWorkspaceForm({
   const submission = useWorkspaceCreationSubmission(draftId);
   const draft = useWorkspaceCreationDraft(draftId);
   const [isCanceling, setIsCanceling] = useState(false);
+  const cancelRevision = useRef<string | undefined>(undefined);
   const workspaces = trpc.workspace.listForProject.useQuery({ projectId });
   const cancelFallback = () => {
     if (submission.isPending || draft.isRestoring || isCanceling) {
       return;
     }
+    cancelRevision.current ??= draft.hasDraft ? draft.draft.revision : undefined;
     setIsCanceling(true);
+    const discard = cancelRevision.current
+      ? draft.clearSubmittedDraft(cancelRevision.current)
+      : draft.discardDraft();
     runInBackground(
-      draft
-        .discardDraft()
-        .then(onCancel)
+      discard
+        .then(() => {
+          cancelRevision.current = undefined;
+          if (getWorkspaceCreationDraftSnapshot(draftId).draft === null) {
+            onCancel();
+          }
+        })
         .finally(() => setIsCanceling(false)),
       "Couldn't clear canceled event agent draft."
     );

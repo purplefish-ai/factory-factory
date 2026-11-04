@@ -79,7 +79,7 @@ const meta = {
 } satisfies Meta<typeof CancelEventCreation>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-function cancellationStory(failure: boolean): Story {
+function cancellationStory(failure: boolean, failDelete = false, replaceDraft = false): Story {
   return {
     beforeEach: async () => {
       ordinary = {
@@ -126,10 +126,47 @@ function cancellationStory(failure: boolean): Story {
       }
       const cancel = canvas.getByRole('button', { name: 'Cancel' });
       await waitFor(() => expect(cancel).toBeEnabled());
-      await userEvent.click(cancel);
-      await expect(
-        await canvas.findByRole('heading', { name: event.name, level: 2 })
-      ).toBeVisible();
+      const originalDelete = IDBObjectStore.prototype.delete;
+      let failedOnce = false;
+      if (failDelete) {
+        IDBObjectStore.prototype.delete = function (key) {
+          const request = originalDelete.call(this, key);
+          if (key === eventKey && !failedOnce) {
+            failedOnce = true;
+            this.transaction.abort();
+          }
+          return request;
+        };
+      }
+      try {
+        const originalDraft = getWorkspaceCreationDraftSnapshot(eventKey).draft;
+        await userEvent.click(cancel);
+        if (failDelete) {
+          await waitFor(() => expect(failedOnce).toBe(true));
+          await waitFor(() => expect(canvas.getByRole('button', { name: 'Cancel' })).toBeEnabled());
+          await expect(getWorkspaceCreationDraftSnapshot(eventKey).draft).toBeNull();
+          await expect(await readPersistedDraft(eventKey)).toEqual(originalDraft);
+          if (replaceDraft) {
+            const newer = {
+              ...createWorkspaceCreationDraft(),
+              prompt: 'Keep the newer event revision',
+            };
+            await saveWorkspaceCreationDraft(eventKey, newer);
+            await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+            await waitFor(() =>
+              expect(canvas.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+            );
+            await expect(getWorkspaceCreationDraftSnapshot(eventKey).draft).toEqual(newer);
+            await expect(await readPersistedDraft(eventKey)).toEqual(newer);
+          }
+          await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+        }
+        await expect(
+          await canvas.findByRole('heading', { name: event.name, level: 2 })
+        ).toBeVisible();
+      } finally {
+        IDBObjectStore.prototype.delete = originalDelete;
+      }
       await expect(canvas.getByRole('link', { name: new RegExp(event.name) })).toHaveAttribute(
         'aria-current',
         'page'
@@ -144,3 +181,6 @@ function cancellationStory(failure: boolean): Story {
 }
 export const NamesLoading: Story = cancellationStory(false);
 export const NamesFailure: Story = cancellationStory(true);
+
+export const RetryFailedDelete: Story = cancellationStory(false, true);
+export const RetryPreservesNewerRevision: Story = cancellationStory(true, true, true);
