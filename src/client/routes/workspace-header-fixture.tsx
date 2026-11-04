@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider, useAppHeader } from '@/client/components/app-header-context';
@@ -170,6 +170,10 @@ export function WorkspaceHeaderFixture({
   pendingActions = false,
 }: { variant?: string; projectsError?: boolean; pendingActions?: boolean } = {}) {
   const [params] = useSearchParams();
+  const pendingActionsRef = useRef(pendingActions);
+  useEffect(() => {
+    pendingActionsRef.current = pendingActions;
+  }, [pendingActions]);
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   );
@@ -180,7 +184,7 @@ export function WorkspaceHeaderFixture({
           ({ op }) =>
             observable((observer) => {
               if (op.type !== 'query') {
-                if (pendingActions) {
+                if (pendingActionsRef.current) {
                   return;
                 }
                 observer.error(

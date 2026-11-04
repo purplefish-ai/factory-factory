@@ -26,6 +26,19 @@ describe('client date and time presentation', () => {
       'Nov 3, 2026'
     );
     expect(formatDate(instant, utc)).toBe('Nov 4, 2026');
+    expect(formatDateTime(instant, { ...utc, timeZone: 'America/New_York' })).toBe(
+      'Nov 4, 2026, 5:23 AM'
+    );
+    expect(formatDateTime(instant, { ...utc, locale: 'en-GB' })).toBe('4 Nov 2026, 10:23');
+  });
+
+  it('accepts Locale objects and ordered locale preferences in cached configurations', () => {
+    expect(formatDateTime(instant, { ...utc, locale: new Intl.Locale('en-GB') })).toBe(
+      '4 Nov 2026, 10:23'
+    );
+    expect(formatDateTime(instant, { ...utc, locale: ['en-US', 'en-GB'] })).toBe(
+      'Nov 4, 2026, 10:23 AM'
+    );
   });
 
   it.each([null, undefined, '', 'not a date', new Date(Number.NaN), Number.NaN, Infinity])(

@@ -52,6 +52,7 @@ describe('AgentRunHistory', () => {
     expect(time?.dateTime).toBe('2026-11-04T10:23:45.678Z');
     expect(time?.title).toContain(':45');
     expect(time?.textContent).toContain('2026');
+    expect(time?.textContent).toMatch(/\d{1,2}:\d{2}/);
     expect(time?.textContent).not.toContain(':45');
   });
 
