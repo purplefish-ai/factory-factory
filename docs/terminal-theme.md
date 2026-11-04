@@ -7,8 +7,9 @@ place rather than recreating the terminal.
 
 The ANSI red, green, yellow, blue and magenta slots use the destructive,
 success, warning, info and merged theme tokens. Cyan blends the blue and green
-hues; bright variants move toward the foreground. Neutral ANSI slots use the
-preset's foreground and muted foreground so they remain useful in both modes.
+hues; bright variants move toward the foreground. ANSI black and white use the
+darker and lighter of the preset's foreground/background pair, preserving their
+meaning when programs use them as backgrounds. Bright black uses muted text.
 Cursor and selection colors follow the text and background. Xterm enforces a
 minimum text contrast of 4.5:1, raised to 7:1 for High contrast, including
 application-supplied ANSI colors. Programs supplying explicit true-color or

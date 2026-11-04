@@ -32,9 +32,9 @@ describe('readTerminalTheme', () => {
       selectionForeground: '#111111',
       selectionBackground: '#cfcfcf',
       black: '#111111',
-      white: '#555555',
+      white: '#ffffff',
       brightBlack: '#555555',
-      brightWhite: '#111111',
+      brightWhite: '#ffffff',
       red: '#aa0000',
       green: '#008800',
       yellow: '#885500',
@@ -42,6 +42,16 @@ describe('readTerminalTheme', () => {
       magenta: '#880088',
       cyan: '#004455',
       brightRed: '#8b0303',
+    });
+  });
+
+  it('preserves ANSI black and white background meanings in dark mode', () => {
+    document.documentElement.style.setProperty('--background', '#111111');
+    document.documentElement.style.setProperty('--foreground', '#eeeeee');
+    expect(readTerminalTheme()).toMatchObject({
+      black: '#111111',
+      white: '#eeeeee',
+      brightWhite: '#eeeeee',
     });
   });
 

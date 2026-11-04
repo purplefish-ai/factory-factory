@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { TerminalDisconnectBanner } from './terminal-disconnect-banner';
 import { TerminalTabBar } from './terminal-tab-bar';
 
-const meta = {
+const meta: Meta<typeof TerminalTabBar> = {
   title: 'Workspace/TerminalTabs',
   component: TerminalTabBar,
   args: {

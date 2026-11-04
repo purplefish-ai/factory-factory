@@ -98,11 +98,6 @@ The remaining exceptions are the rule's `exceptions` option in
 
 - `subagent-icon.tsx`: twelve categorical identity hues that tell subagents
   apart. They are not statuses, so they cannot map onto status tokens.
-- `terminal-panel.tsx`, `terminal-tab-bar.tsx`, `init-output-panel.tsx` and
-  `workspace-overlays.tsx`: the terminal and terminal-like log surfaces stay
-  dark zinc to match xterm's fixed palette in `terminal-instance.tsx`. Status UI
-  on the terminal, such as `terminal-disconnect-banner.tsx`, lives in separate
-  files that use dark-scoped tokens and stay under the rule.
 - `workspace-header-pwa-preview.tsx`: mock macOS window controls reproduce the
   operating system's red, yellow and green.
 
@@ -111,8 +106,25 @@ Oxlint binary and fails when an exception no longer contains raw classes. Add an
 exception only for color that is not a status and has no theme token, and give
 its reason in the option.
 
-## Not yet themed
+## Content surfaces
 
-Mermaid diagrams use Mermaid's default theme, chat prose uses the typography
-plugin's colors, and the terminal uses a fixed zinc palette. These are tracked
-in #2935.
+Markdown prose keeps the typography plugin's layout while mapping its colors to
+active theme tokens in `src/client/prose.css`. Body text, headings, quotes and
+code use the foreground; links use the primary color, and secondary details use
+the muted foreground. The mapping applies to both Markdown renderers and plain
+prose wrappers, including live custom appearance overrides. The
+`Foundations/Typography` stories cover every preset and mode.
+
+Mermaid diagrams resolve the active theme tokens to sRGB colors before
+rendering. Mounted diagrams rerender when the mode, preset or custom colors
+change. Mermaid configuration and rendering run in one queue because its
+configuration is global; chart directives cannot override the application's
+theme or strict security settings. The `Chat/Transcript/MermaidDiagram` stories
+cover flowcharts, class, state, sequence, pie, Gantt and mindmap diagrams.
+
+Terminals and setup logs follow the selected theme too. Xterm updates its
+palette in place, preserving existing output and sessions, and enforces a
+minimum text contrast of 4.5:1 (7:1 in High contrast). ANSI colors derive from
+the semantic status tokens; see [terminal theme](terminal-theme.md) for palette
+details and Storybook coverage. Terminal surfaces no longer need raw-palette
+lint exceptions.
