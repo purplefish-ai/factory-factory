@@ -1,14 +1,11 @@
+import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  type ChangeListEntry,
-  ChangeTreeView,
-  PanelEmptyState,
-  PanelErrorState,
-  PanelLoadingState,
-  useOpenDiffTab,
-} from './change-panel-shared';
+import { type ChangeListEntry, ChangeTreeView, useOpenDiffTab } from './change-panel-shared';
 import { fileChangeKindFromDiffStatus, fileChangeKindFromGitStatus } from './file-change-item';
 
 type GitFileStatus = 'M' | 'A' | 'D' | '?';
@@ -85,13 +82,14 @@ export function getPartialDataWarning(params: {
 
 function NoMergeBaseState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <WarningCircleIcon className="h-8 w-8 text-warning mb-2" />
-      <p className="text-sm font-medium text-muted-foreground">No common history with main</p>
-      <p className="text-xs text-muted-foreground/70 mt-1">
-        This branch doesn't share history with the main branch
-      </p>
-    </div>
+    <EmptyState
+      size="compact"
+      icon={WarningCircleIcon}
+      iconClassName="text-warning"
+      title="No common history with main"
+      description="This branch doesn't share history with the main branch."
+      className="h-full"
+    />
   );
 }
 
@@ -188,10 +186,24 @@ function CombinedChangesContent({
       return <NoMergeBaseState />;
     }
     if (partialDataWarning) {
-      return <PanelEmptyState title="No visible changes" description={partialDataWarning} />;
+      return (
+        <EmptyState
+          size="compact"
+          icon={FileCodeIcon}
+          title="No visible changes"
+          description={partialDataWarning}
+          className="h-full"
+        />
+      );
     }
     return (
-      <PanelEmptyState title="No changes" description="Working tree is clean and up to date" />
+      <EmptyState
+        size="compact"
+        icon={FileCodeIcon}
+        title="No changes"
+        description="The working tree is clean and up to date."
+        className="h-full"
+      />
     );
   }
 
@@ -246,6 +258,8 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     data: gitData,
     isLoading: isGitLoading,
     error: gitError,
+    isFetching: isGitFetching,
+    refetch: refetchGit,
   } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
     { refetchInterval: 15_000, staleTime: 10_000 }
@@ -254,6 +268,8 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     data: diffData,
     isLoading: isDiffLoading,
     error: diffError,
+    isFetching: isDiffFetching,
+    refetch: refetchDiff,
   } = trpc.workspace.getDiffVsMain.useQuery(
     { workspaceId },
     { refetchInterval: 15_000, staleTime: 10_000 }
@@ -268,14 +284,20 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   );
 
   if (isGitLoading || isDiffLoading || isUnpushedLoading) {
-    return <PanelLoadingState />;
+    return <Loading size="compact" message="Loading changes…" />;
   }
 
   if (gitError && diffError) {
     return (
-      <PanelErrorState
-        title="Failed to load changes"
-        errorMessage={gitError?.message ?? diffError?.message}
+      <QueryErrorState
+        title="Couldn't load changes"
+        error={gitError}
+        onRetry={() => {
+          void refetchGit();
+          void refetchDiff();
+        }}
+        isRetrying={isGitFetching || isDiffFetching}
+        className="h-full"
       />
     );
   }

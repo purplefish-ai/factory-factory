@@ -213,6 +213,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Populated: Story = {};
 export const Empty: Story = { args: { state: 'empty' } };
+export const EmptyDark: Story = { args: { state: 'empty' }, globals: { theme: 'dark' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const RequestFailure: Story = { args: { state: 'error' } };
 export const Create: Story = { args: { state: 'create' } };

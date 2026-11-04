@@ -28,7 +28,7 @@ function placeholderImage(label: string, hue: number): string {
   return btoa(svg);
 }
 
-type ListResponse = 'screenshots' | 'empty' | 'error';
+type ListResponse = 'screenshots' | 'empty' | 'error' | 'loading';
 
 interface ScreenshotsStoryProps {
   list: ListResponse;
@@ -86,18 +86,21 @@ function ScreenshotsStoryContent(props: ScreenshotsStoryProps) {
       links: [
         () =>
           ({ op }) =>
-            observable((observer) => {
-              try {
-                observer.next({ result: { data: resolveOperation(op.path, op.input, props) } });
-                observer.complete();
-              } catch (error) {
-                observer.error(
-                  error instanceof TRPCClientError
-                    ? error
-                    : new TRPCClientError('Story mock failed')
-                );
-              }
-            }),
+            // A loading list never settles, so the story holds the loading state.
+            op.path === 'workspace.listScreenshots' && props.list === 'loading'
+              ? observable(() => undefined)
+              : observable((observer) => {
+                  try {
+                    observer.next({ result: { data: resolveOperation(op.path, op.input, props) } });
+                    observer.complete();
+                  } catch (error) {
+                    observer.error(
+                      error instanceof TRPCClientError
+                        ? error
+                        : new TRPCClientError('Story mock failed')
+                    );
+                  }
+                }),
       ],
     })
   );
@@ -121,7 +124,7 @@ function ScreenshotsStoryContent(props: ScreenshotsStoryProps) {
 
 /** Keyed by the controls so changing them rebuilds the mocked client and cache. */
 function ScreenshotsStory(props: ScreenshotsStoryProps) {
-  const key = `${props.list}:${props.deleteFails ? 'fail' : 'ok'}`;
+  const key = `${props.list}:${props.deleteFails ? 'fail' : 'ok'}:${props.isTakingScreenshots ? 'taking' : 'idle'}`;
   return <ScreenshotsStoryContent key={key} {...props} />;
 }
 
@@ -143,8 +146,48 @@ type Story = StoryObj<typeof meta>;
 
 export const Screenshots: Story = {};
 
+/** The empty state offers the capture action. */
 export const Empty: Story = {
   args: { list: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('No screenshots yet')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Take screenshots' })).toBeEnabled();
+  },
+};
+
+export const EmptyDark: Story = {
+  args: { list: 'empty' },
+  globals: { theme: 'dark' },
+};
+
+export const EmptyPhone: Story = {
+  args: { list: 'empty' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+/** While the agent captures, the action is replaced by a muted spinner. */
+export const TakingScreenshots: Story = {
+  args: { list: 'empty', isTakingScreenshots: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Taking screenshots…')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Take screenshots' })).toBeNull();
+  },
+};
+
+export const Loading: Story = {
+  args: { list: 'loading' },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(
+      'Loading screenshots…'
+    );
+  },
+};
+
+export const LoadingDark: Story = {
+  args: { list: 'loading' },
+  globals: { theme: 'dark' },
 };
 
 /** A failed list query shows the error with Retry instead of "No screenshots yet". */

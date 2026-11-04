@@ -372,13 +372,7 @@ function SidebarInner({
           <SidebarGroupContent>
             {showNewWorkspaceForm && selectedProjectId ? (
               <div className="px-1">
-                <ErrorBoundary
-                  fallback={
-                    <div role="alert" className="p-2 text-sm text-destructive">
-                      Unable to load the new workspace form. Reload the app to try again.
-                    </div>
-                  }
-                >
+                <ErrorBoundary variant="compact" title="Couldn't load the new workspace form">
                   <Suspense
                     fallback={
                       <div role="status" className="p-2 text-sm text-muted-foreground">

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { readSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 
@@ -32,17 +33,6 @@ export default function HomePage() {
     }
   }, [isLoading, projects, error, navigate]);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-destructive">Error loading projects. Redirecting...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
-    </div>
-  );
+  // An error redirects to the projects page, which shows it with Retry.
+  return <Loading message={error ? 'Opening projects…' : 'Loading projects…'} />;
 }

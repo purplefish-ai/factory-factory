@@ -178,7 +178,7 @@ describe('SubagentTranscriptContent', () => {
 
   it.each([
     ['loading', { kind: 'loading' } as const, 'Loading transcript…'],
-    ['empty', { kind: 'empty' } as const, 'No transcript messages yet.'],
+    ['empty', { kind: 'empty' } as const, 'No transcript messages yet'],
   ])('renders the %s transcript state', (_name, state, expectedText) => {
     render(state);
     expect(container.textContent).toContain(expectedText);

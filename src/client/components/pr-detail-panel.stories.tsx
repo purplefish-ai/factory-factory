@@ -203,6 +203,11 @@ export const NoPRSelected: Story = {
   },
 };
 
+export const NoPRSelectedDark: Story = {
+  ...NoPRSelected,
+  globals: { theme: 'dark' },
+};
+
 export const WithApprovedStatus: Story = {
   args: {
     pr: mockApprovedPR,

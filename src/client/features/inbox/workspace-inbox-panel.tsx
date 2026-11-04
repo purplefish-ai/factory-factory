@@ -107,7 +107,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
           </div>
         )}
         {mail.data && items.length === 0 && (
-          <p className="p-4 text-sm text-muted-foreground">No messages yet.</p>
+          <p className="p-4 text-sm text-muted-foreground">No messages yet</p>
         )}
         <ul className="divide-y divide-border/50">
           {items.map((item) => (

@@ -4,6 +4,8 @@ import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure'
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -216,34 +218,25 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
       {/* Content */}
       <div className={cn(!embedded && 'flex-1 overflow-y-auto')}>
         {isLoading && (
-          <div
-            className={cn(
-              'flex items-center justify-center text-sm text-muted-foreground',
-              embedded ? 'px-4 py-8' : 'h-full'
-            )}
-          >
-            Loading...
-          </div>
+          <Loading
+            size="compact"
+            message="Loading child workspaces…"
+            className={embedded ? 'py-8' : undefined}
+          />
         )}
         {!isLoading && children?.length === 0 && (
-          <div
-            className={cn(
-              'flex flex-col items-center justify-center gap-2 px-4 text-center',
-              embedded ? 'py-8' : 'h-full'
-            )}
-          >
-            <TreeStructureIcon className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No child workspaces yet.</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
-              onClick={() => setDialogOpen(true)}
-            >
-              <PlusIcon className="h-3.5 w-3.5 mr-1" />
-              New Child Workspace
-            </Button>
-          </div>
+          <EmptyState
+            size="compact"
+            icon={TreeStructureIcon}
+            title="No child workspaces yet"
+            action={
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+                <PlusIcon aria-hidden="true" />
+                New child workspace
+              </Button>
+            }
+            className={embedded ? 'py-8' : 'h-full'}
+          />
         )}
         {children && children.length > 0 && (
           <ul className="divide-y divide-border/50">

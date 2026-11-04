@@ -273,7 +273,7 @@ export default function LogsPage() {
   };
 
   if (isLoading && !data) {
-    return <Loading message="Loading logs..." />;
+    return <Loading message="Loading logs…" />;
   }
 
   return (

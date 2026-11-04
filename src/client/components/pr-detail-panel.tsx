@@ -1,3 +1,4 @@
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
@@ -22,6 +23,8 @@ import {
 } from '@/lib/diff';
 import { formatDateTimeShort } from '@/lib/formatters';
 import type { GitHubComment, PRWithFullDetails } from '@/shared/github-types';
+import { EmptyState } from './empty-state';
+import { Loading } from './loading';
 import { CIChecksSection, CIStatusBadge, ReviewDecisionBadge } from './pr-status-badges';
 import { StatusChip } from './status-indicators';
 
@@ -242,28 +245,25 @@ interface DiffTabContentProps {
 
 function DiffTabContent({ diffLoading, diff }: DiffTabContentProps) {
   if (diffLoading) {
-    return <div className="p-4 text-center text-muted-foreground text-xs">Loading diff...</div>;
+    return <Loading size="compact" message="Loading diff…" />;
   }
 
   if (diff) {
     return <DiffViewer diff={diff} />;
   }
 
-  return <div className="p-4 text-center text-muted-foreground text-xs">No diff available</div>;
+  return <EmptyState size="compact" title="No diff available" />;
 }
 
-function EmptyState() {
+function NoPRSelected() {
   return (
-    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-      <div className="text-center">
-        <p>No PR selected</p>
-        <div className="mt-2 flex items-center justify-center gap-1">
-          <Kbd>j</Kbd>
-          <Kbd>k</Kbd>
-          <span className="text-xs text-muted-foreground">to navigate</span>
-        </div>
+    <EmptyState icon={GitPullRequestIcon} title="No PR selected" className="h-full">
+      <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+        <Kbd>j</Kbd>
+        <Kbd>k</Kbd>
+        <span>to navigate</span>
       </div>
-    </div>
+    </EmptyState>
   );
 }
 
@@ -367,7 +367,7 @@ export function PRDetailPanel({
   }, [pr]);
 
   if (!pr) {
-    return <EmptyState />;
+    return <NoPRSelected />;
   }
 
   return (

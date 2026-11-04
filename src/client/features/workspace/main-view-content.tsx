@@ -51,11 +51,8 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
       <div className={cn('h-full', !showChat && 'hidden')}>{children}</div>
       <ErrorBoundary
         key={`viewer-${activeTabKey}`}
-        fallback={
-          <div role="alert" className="p-4 text-sm text-destructive">
-            Unable to load viewer. Reload the app to try again.
-          </div>
-        }
+        variant="compact"
+        title="Couldn't load the viewer"
       >
         <Suspense
           fallback={

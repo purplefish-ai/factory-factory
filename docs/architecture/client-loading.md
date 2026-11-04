@@ -48,6 +48,56 @@ including when folded into the entry or a shared chunk. Missing metadata fails
 closed. Dynamic imports are excluded. To measure another production build, pass
 its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
 
+## Loading, empty and error states
+
+Pick the loading pattern by what the user is waiting for:
+
+- **`Skeleton`** (`src/components/ui/skeleton.tsx`) when the content's layout is
+  known: list rows, cards, thumbnails, dashboard columns. It keeps the layout
+  from jumping when data arrives.
+- **`Spinner`** (`src/components/ui/spinner.tsx`) for inline or button pending:
+  a button whose action is running, a tree row that is expanding, a status line
+  next to text. Pass `aria-hidden` when nearby text already says what is
+  pending. Don't use a raw `SpinnerGapIcon` with `animate-spin`.
+- **`Loading`** (`src/client/components/loading.tsx`) for a route or panel with
+  no known layout. Give it a specific message ("Loading diff…");
+  `size="compact"` drops the 200px minimum height for side panels.
+
+Spinners inherit the surrounding text color. `Loading` places them in muted
+text, so a page-level wait reads as muted, and a button spinner matches the
+button's label on every variant. Don't color spinners with `text-brand`: brand
+is the `--running` status color (see `docs/status-colors.md`), and a loading
+spinner is not an agent that is running. Status icons that do mean "running",
+such as the tool-call and session indicators, keep their tone from
+`status-tones.ts`.
+
+Under `prefers-reduced-motion: reduce`, `globals.css` stops `animate-spin`,
+`animate-pulse`, `animate-ping` and `animate-bounce` everywhere. Spinners keep
+their shape and accessible label and skeletons stay as static blocks, so
+components don't need their own `motion-reduce:` classes for these utilities.
+
+Use `EmptyState` (`src/client/components/empty-state.tsx`) when a loaded list or
+panel has nothing to show. It takes an icon, a one-line title with no trailing
+period ("No screenshots yet"), an optional description sentence, and an optional
+action. When the user can create the missing thing, the action is that creation
+button ("Take screenshots", "New child workspace"). Use `size="compact"` in side
+panels and lists.
+
+`QueryState` (`src/client/components/query-state.tsx`) wraps the four branches
+of a query: `Loading` (or a `loading` override such as a skeleton) while there
+is no data, `QueryErrorState` with Retry when the query failed without data,
+`empty` when `isEmpty(data)` is true, and `children(data)` otherwise. Cached
+data still renders when only a background refetch fails. Write branches by hand
+when a panel combines several queries, as `CombinedChangesPanel` does.
+
+Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
+The app root and the routed page area each have one; the page boundary resets
+when the pathname changes and offers Try again. The built-in fallback offers
+Reload and Copy details (message, URL, stack and component trace). Panels and
+lazy chunks use `variant="compact"` with a specific `title`, such as "Couldn't
+load the viewer". Offer `showRetry` only where re-rendering can succeed: a
+failed lazy import stays failed until the app reloads.
+
 ## Query and mutation failures
 
 A failed query must not render its empty state. When a query has an error and no

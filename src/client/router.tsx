@@ -46,7 +46,7 @@ export const router = createBrowserRouter([
         {
           path: '/__mobile-baseline',
           element: (
-            <ErrorBoundary>
+            <ErrorBoundary className="min-h-dvh">
               <ThemeProvider>
                 <TRPCProvider>
                   <Suspense fallback={null}>
@@ -62,7 +62,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: (
-      <ErrorBoundary>
+      <ErrorBoundary className="min-h-dvh">
         <Root />
       </ErrorBoundary>
     ),

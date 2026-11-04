@@ -6,6 +6,7 @@ import { Loading } from '@/client/components/loading';
 import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
 import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { DataImportResultsProvider } from '@/client/features/data-import';
 import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
 import { hasExplicitLegacyProjectOwner } from '@/client/lib/project-navigation';
@@ -46,9 +47,11 @@ function RootLayout() {
       <CLIHealthBanner />
       <ModelCatalogWarning />
       <AppLayout className="flex-1 overflow-hidden">
-        <Suspense fallback={<Loading message="Loading page..." />}>
-          <Outlet />
-        </Suspense>
+        <ErrorBoundary resetKey={pathname} showRetry>
+          <Suspense fallback={<Loading message="Loading page…" />}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </AppLayout>
     </div>
   );

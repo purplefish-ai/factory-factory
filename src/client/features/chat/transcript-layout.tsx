@@ -1,6 +1,6 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
 import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
+import { Spinner } from '@/components/ui/spinner';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
@@ -123,7 +123,7 @@ export function TranscriptTail({
       <CompactingIndicator isCompacting={props.isCompacting ?? false} className="mb-4" />
       {(initializing || loadingSession || starting) && (
         <div className="flex items-center gap-2 text-muted-foreground py-4">
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" />
           <span className="text-sm">{getStartupLabel(props)}</span>
         </div>
       )}

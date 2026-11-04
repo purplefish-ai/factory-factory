@@ -1,5 +1,5 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useMemo } from 'react';
+import { Loading } from '@/client/components/loading';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { QuickActionsMenu } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -115,10 +115,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               transcriptScroll={transcriptScroll}
             />
           ) : workspaceId ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <SpinnerGapIcon className="h-5 w-5 animate-spin mr-2" />
-              Loading sessions...
-            </div>
+            <Loading message="Loading sessions…" />
           ) : null}
         </div>
       </SheetContent>

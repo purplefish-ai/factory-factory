@@ -1,5 +1,8 @@
+import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
+import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { EmptyState } from '@/client/components/empty-state';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
 import {
@@ -9,6 +12,7 @@ import {
 import { runInBackground } from '@/client/lib/background-task';
 import { getReviewShortcut } from '@/client/lib/review-shortcuts';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import {
   Sheet,
   SheetContent,
@@ -224,14 +228,20 @@ function ReviewsHeader({ count, className }: { count: number; className: string 
   );
 }
 
-function ReviewsEmptyState() {
+function ReviewsEmptyState({ onRefresh }: { onRefresh: () => void }) {
   return (
-    <div className="h-full flex items-center justify-center text-muted-foreground">
-      <div className="text-center">
-        <p className="text-sm font-medium">No review requests</p>
-        <p className="text-xs">You have no pending PR reviews</p>
-      </div>
-    </div>
+    <EmptyState
+      icon={GitPullRequestIcon}
+      title="No review requests"
+      description="PRs that request your review appear here."
+      action={
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <ArrowClockwiseIcon aria-hidden="true" />
+          Refresh
+        </Button>
+      }
+      className="h-full"
+    />
   );
 }
 
@@ -484,7 +494,13 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     return isMobile ? <ReviewsDashboardMobileSkeleton /> : <ReviewsDashboardSkeleton />;
   }
   if (prs.length === 0) {
-    return <ReviewsEmptyState />;
+    return (
+      <ReviewsEmptyState
+        onRefresh={() => {
+          void refetch();
+        }}
+      />
+    );
   }
 
   const content = isMobile ? (

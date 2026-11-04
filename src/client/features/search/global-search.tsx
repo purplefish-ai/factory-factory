@@ -165,7 +165,7 @@ export function GlobalSearch() {
               <DialogContent>
                 <DialogTitle>Start Issue</DialogTitle>
                 <DialogDescription role="alert">
-                  Unable to load issue launch options. Reload the app to try again.
+                  Couldn't load issue launch options. Reload the app to try again.
                 </DialogDescription>
                 <Button variant="outline" onClick={() => setSelectedIssue(null)}>
                   Close

@@ -1,4 +1,8 @@
+import { ChatsCircleIcon } from '@phosphor-icons/react/dist/csr/ChatsCircle';
 import { useEffect, useRef } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
+import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,6 +19,8 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     data: transcript,
     isLoading,
     error,
+    isFetching,
+    refetch,
   } = trpc.closedSessions.getTranscriptJson.useQuery(
     { id: sessionId },
     { select: parseClosedSessionReadTranscript, structuralSharing: false }
@@ -31,26 +37,31 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
   }, [transcript]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-muted-foreground">Loading transcript...</div>
-      </div>
-    );
+    return <Loading message="Loading transcript…" />;
   }
 
   if (error && error.data?.code !== 'NOT_FOUND' && !transcript) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-muted-foreground">Failed to load transcript</div>
-      </div>
+      <QueryErrorState
+        title="Couldn't load transcript"
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+        isRetrying={isFetching}
+        className="h-full"
+      />
     );
   }
 
   if (!transcript || error?.data?.code === 'NOT_FOUND') {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-sm text-muted-foreground">Transcript not found</div>
-      </div>
+      <EmptyState
+        icon={ChatsCircleIcon}
+        title="Transcript not found"
+        description="This session's history is no longer available."
+        className="h-full"
+      />
     );
   }
 
@@ -64,9 +75,11 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
     return (
       <div className="flex h-full min-h-0 flex-col">
         {notice}
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <div className="text-sm text-muted-foreground">No messages in this session</div>
-        </div>
+        <EmptyState
+          icon={ChatsCircleIcon}
+          title="No messages in this session"
+          className="min-h-0 flex-1"
+        />
       </div>
     );
   }

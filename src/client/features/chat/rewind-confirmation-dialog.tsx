@@ -1,6 +1,5 @@
 import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
 import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { RewindPreviewState } from './reducer';
 
@@ -58,9 +58,9 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
         <div className="py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-6">
-              <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Spinner className="size-6 text-muted-foreground" aria-hidden="true" />
               <span className="ml-2 text-sm text-muted-foreground">
-                {isExecuting ? 'Reverting files...' : 'Loading preview...'}
+                {isExecuting ? 'Reverting files…' : 'Loading preview…'}
               </span>
             </div>
           ) : hasError ? (

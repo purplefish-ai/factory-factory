@@ -284,7 +284,7 @@ export const ToolTabLabels: Story = {
     await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Sub-agents' }));
     await expect(await canvas.findByText('Child Workspaces')).toBeVisible();
-    await expect(await canvas.findByText('No child workspaces yet.')).toBeVisible();
+    await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
   },
 };
 

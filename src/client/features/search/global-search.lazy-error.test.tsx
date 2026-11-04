@@ -103,7 +103,7 @@ it('contains a failed launch chunk and keeps the app and search usable', async (
     await act(() => chunk.reject(new Error('Failed to fetch launch chunk')));
     await waitForReact(() =>
       expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-        'Unable to load issue launch options'
+        "Couldn't load issue launch options"
       )
     );
     expect(container.querySelector('output')?.textContent).toBe('App shell');
