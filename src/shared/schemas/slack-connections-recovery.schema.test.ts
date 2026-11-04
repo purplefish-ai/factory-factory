@@ -4,7 +4,7 @@ import { exportDataSchema } from './export-data.schema';
 import { slackConnectionsRecoverySchema } from './slack-connections-recovery.schema';
 
 const section = () => structuredClone(fixture.data.recovery.slackConnections);
-it('preserves padded identities, whitespace names and empty or reserved primary IDs without normalization', () => {
+it('preserves padded identities, whitespace names and padded or reserved primary IDs without normalization', () => {
   const input = section();
   input.connections[0] = {
     ...input.connections[0]!,
@@ -14,7 +14,7 @@ it('preserves padded identities, whitespace names and empty or reserved primary 
   };
   input.connections[1] = {
     ...input.connections[1]!,
-    id: '',
+    id: ' padded-primary ',
     externalId: ' T:one ',
     name: ' padded ',
   };
@@ -99,6 +99,25 @@ it.each([
       code: 'custom',
       path: ['connections', 0, 'externalId'],
       message: 'Workspace ID must not be blank',
+    });
+  }
+});
+
+it.each([
+  ['empty', ''],
+  ['space-only', '   '],
+  ['tab/newline-only', '\t\n'],
+  ['Unicode-whitespace-only', '\u2003\u00a0'],
+])('rejects %s blank primary identity at the indexed field', (_name, id) => {
+  const input = section();
+  input.connections[0]!.id = id;
+  const result = slackConnectionsRecoverySchema.safeParse(input);
+  expect(result.success).toBe(false);
+  if (!result.success) {
+    expect(result.error.issues).toContainEqual({
+      code: 'custom',
+      path: ['connections', 0, 'id'],
+      message: 'Connection ID must not be blank',
     });
   }
 });

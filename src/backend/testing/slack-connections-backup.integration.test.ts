@@ -5,6 +5,7 @@ import { discoverProjectAgentSources } from '@/backend/orchestration/agent-sourc
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import * as slackRecovery from '@/backend/services/agent-definition';
 import { SlackConnectionService } from '@/backend/services/agent-definition';
+import { configService } from '@/backend/services/config.service';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';
 import {
   createIntegrationDatabase,
@@ -12,6 +13,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { adminRouter } from '@/backend/trpc/admin.trpc';
+import { slackRouter } from '@/backend/trpc/slack.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { slackConnectionsRecoverySchema } from '@/shared/schemas/slack-connections-recovery.schema';
 import periodicHistoryWire from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
@@ -33,16 +35,17 @@ const crypto = {
 const service = new SlackConnectionService(crypto, request);
 const section = () => slackConnectionsRecoverySchema.parse(slack.data.recovery.slackConnections);
 function identify(team: string) {
-  request.mockResolvedValue(
-    new Response(
-      JSON.stringify({
-        ok: true,
-        team_id: team,
-        team: 'Company',
-        user_id: 'U-bot',
-        bot_id: 'B-bot',
-      })
-    )
+  request.mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          team_id: team,
+          team: 'Company',
+          user_id: 'U-bot',
+          bot_id: 'B-bot',
+        })
+      )
   );
 }
 beforeEach(async () => {
@@ -241,6 +244,24 @@ it.each(
       ],
       ...(
         [
+          ['empty blank primary', ''],
+          ['space-only blank primary', '   '],
+          ['tab/newline-only blank primary', '\t\n'],
+          ['Unicode-whitespace-only blank primary', '\u2003\u00a0'],
+        ] as const
+      ).map(
+        ([name, id]) =>
+          [
+            name,
+            (input: typeof slack) => {
+              input.data.recovery.slackConnections.connections[0]!.id = id;
+            },
+            'Connection ID must not be blank',
+            ['data', 'recovery', 'slackConnections', 'connections', 0, 'id'],
+          ] as const
+      ),
+      ...(
+        [
           ['space-only blank workspace', '   '],
           ['tab/newline-only blank workspace', '\t\n'],
           ['Unicode-whitespace-only blank workspace', '\u2003\u00a0'],
@@ -277,9 +298,10 @@ it.each(
         ]);
         await expect(serviceImport).rejects.toThrow(message);
         if (expectedPath) {
-          expectBlankWorkspaceFailure(
+          expectBlankIdentityFailure(
             await serviceImport.catch((error: unknown) => error),
-            expectedPath
+            expectedPath,
+            message
           );
         }
       } else {
@@ -292,7 +314,7 @@ it.each(
           const error = await routerImport.catch((failure: unknown) => failure);
           expect(error).toBeInstanceOf(TRPCError);
           if (error instanceof TRPCError) {
-            expectBlankWorkspaceFailure(error.cause, expectedPath);
+            expectBlankIdentityFailure(error.cause, expectedPath, message);
           }
         }
       }
@@ -455,7 +477,11 @@ it('preserves inherited periodic links, physical JSON nulls, historical executio
   ]);
 });
 
-function expectBlankWorkspaceFailure(error: unknown, path: readonly (string | number)[]) {
+function expectBlankIdentityFailure(
+  error: unknown,
+  path: readonly (string | number)[],
+  message = 'Workspace ID must not be blank'
+) {
   expect(error).toBeInstanceOf(ZodError);
   if (error instanceof ZodError) {
     const issues = error.issues.flatMap((issue) =>
@@ -464,7 +490,7 @@ function expectBlankWorkspaceFailure(error: unknown, path: readonly (string | nu
     expect(issues).toContainEqual({
       code: 'custom',
       path,
-      message: 'Workspace ID must not be blank',
+      message,
     });
   }
 }
@@ -484,7 +510,7 @@ it('fails current export for a stored blank Slack workspace identity without mut
   });
   const exporting = dataBackupService.exportData('unsupported-blank-identity');
   await expect(exporting).rejects.toThrow('Workspace ID must not be blank');
-  expectBlankWorkspaceFailure(await exporting.catch((error: unknown) => error), [
+  expectBlankIdentityFailure(await exporting.catch((error: unknown) => error), [
     'connections',
     0,
     'externalId',
@@ -503,13 +529,13 @@ it('persists and reexports meaningful padded workspace identities and raw metada
     externalId: ' T:padded-one ',
     name: ' ',
   };
-  const empty = {
+  const padded = {
     ...input.data.recovery.slackConnections.connections[1]!,
-    id: '',
+    id: ' padded-primary ',
     externalId: ' T:padded-two ',
     name: ' padded ',
   };
-  input.data.recovery.slackConnections.connections = [reserved, empty];
+  input.data.recovery.slackConnections.connections = [reserved, padded];
   const imported = await Reflect.apply(dataBackupService.importData, dataBackupService, [input]);
   expect(imported.recovery.slackConnections).toEqual({
     model: 'AgentConnection',
@@ -520,7 +546,7 @@ it('persists and reexports meaningful padded workspace identities and raw metada
     reasons: { EXISTING_IDENTITY: 0 },
   });
   expect(await destination.prisma.agentConnection.findMany({ orderBy: { id: 'asc' } })).toEqual(
-    [empty, reserved].map((row) => ({
+    [padded, reserved].map((row) => ({
       ...row,
       isEnabled: false,
       credentialsEncrypted: null,
@@ -532,9 +558,90 @@ it('persists and reexports meaningful padded workspace identities and raw metada
   expect(reexported.data).toHaveProperty('recovery.slackConnections', {
     version: 1,
     connections: [
-      { ...empty, isEnabled: false },
+      { ...padded, isEnabled: false },
       { ...reserved, isEnabled: false },
     ],
   });
   expect(request).not.toHaveBeenCalled();
 });
+
+it.each([
+  ['empty', ''],
+  ['space-only', '   '],
+  ['tab/newline-only', '\t\n'],
+  ['Unicode-whitespace-only', '\u2003\u00a0'],
+])(
+  'fails current export for a stored %s blank primary identity without mutating the row',
+  async (_name, id) => {
+    const before = await destination.prisma.agentConnection.create({
+      data: {
+        id,
+        provider: 'SLACK',
+        externalId: 'T-stored',
+        name: 'Stored primary identity',
+        isEnabled: true,
+        credentialsEncrypted: 'untouched-local-cipher',
+        createdAt: new Date('2026-11-01T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-02T10:00:00.000Z'),
+      },
+    });
+    const exporting = dataBackupService.exportData('unsupported-primary-identity');
+    await expect(exporting).rejects.toThrow('Connection ID must not be blank');
+    expectBlankIdentityFailure(
+      await exporting.catch((error: unknown) => error),
+      ['connections', 0, 'id'],
+      'Connection ID must not be blank'
+    );
+    expect(await destination.prisma.agentConnection.findUniqueOrThrow({ where: { id } })).toEqual(
+      before
+    );
+    expect(request).not.toHaveBeenCalled();
+  }
+);
+
+it.each([
+  ['padded', ' padded-primary '],
+  ['reserved', '__proto__'],
+  ['long settings-only', 'x'.repeat(300)],
+])(
+  'manages a recovered %s opaque primary ID through public Slack list/connect/test/disconnect',
+  async (_name, id) => {
+    const input = structuredClone(slack);
+    const row = { ...input.data.recovery.slackConnections.connections[0]!, id };
+    input.data.recovery.slackConnections.connections = [row];
+    const admin = adminRouter.createCaller({
+      appContext: { services: { dataBackupService } },
+    } as unknown as Context);
+    await Reflect.apply(admin.importData, admin, [input]);
+    const caller = slackRouter.createCaller({
+      appContext: { services: { slackConnectionService: service, configService } },
+      requestTrust: { isLocal: true, remoteAddress: '127.0.0.1' },
+    } as unknown as Context);
+    expect(await caller.list()).toEqual([
+      expect.objectContaining({ id, isEnabled: false, hasCredentials: false }),
+    ]);
+    expect(request).not.toHaveBeenCalled();
+    identify(row.externalId);
+    expect(await caller.connect({ botToken: 'xoxb-manual' })).toMatchObject({
+      id,
+      isEnabled: true,
+      hasCredentials: true,
+    });
+    expect(await caller.test({ id })).toEqual({ valid: true, workspaceName: 'Company' });
+    expect(await caller.disconnect({ id })).toEqual({ disconnected: true });
+    expect(await caller.list()).toEqual([
+      expect.objectContaining({ id, isEnabled: false, hasCredentials: false }),
+    ]);
+    expect(
+      await destination.prisma.agentConnection.findUniqueOrThrow({ where: { id } })
+    ).toMatchObject({
+      id,
+      externalId: row.externalId,
+      isEnabled: false,
+      credentialsEncrypted: null,
+    });
+    expect(await destination.prisma.agentTrigger.count()).toBe(0);
+    expect(await destination.prisma.agentEvent.count()).toBe(0);
+    expect(await destination.prisma.agentRun.count()).toBe(0);
+  }
+);

@@ -81,10 +81,12 @@ inspect bodies and author complete event configuration where editing is
 available. Archived projects and definitions at their revision limit retain
 ordinary editing restrictions.
 
-Blank Slack workspace identifiers reject on import. A stored blank workspace
-identifier also makes the current export fail visibly, leaving that row
-untouched. Meaningful identity text, including padding, is preserved without
-trimming.
+Blank Slack connection IDs and workspace identifiers reject on import. A stored
+blank connection ID or workspace identifier also makes the current export fail
+visibly, leaving that row untouched. Meaningful opaque identity text, including
+padding, is preserved without trimming. This metadata recovery and manual Slack
+settings management do not restore event bindings or bypass separate agent
+authoring limits.
 
 Before opening the restore transaction, versions 4–8 validate the complete
 source graph after legacy normalization. Duplicate project identities or slugs,

@@ -5,7 +5,9 @@ export const slackConnectionsRecoverySchema = z
     version: z.literal(1),
     connections: z.array(
       z.strictObject({
-        id: z.string(),
+        id: z
+          .string()
+          .refine((value) => value.trim().length > 0, 'Connection ID must not be blank'),
         provider: z.literal('SLACK'),
         externalId: z
           .string()
