@@ -1433,20 +1433,9 @@ describe('configureEventCollector', () => {
       } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
     ]);
     vi.mocked(computePendingRequestType).mockReturnValue('permission_request');
+    const request = { requestId: 'r-1', toolName: 'Bash', toolUseId: 't-1', input: {} };
     vi.mocked(chatEventForwarderService.getAllPendingRequests).mockReturnValueOnce(
-      new Map([
-        [
-          's-1',
-          {
-            requestId: 'req-1',
-            toolName: 'Bash',
-            toolUseId: 'tool-1',
-            input: { command: 'rm -rf build' },
-            planContent: null,
-            timestamp: '2026-11-04T00:00:00.000Z',
-          },
-        ],
-      ])
+      new Map([['s-1', { ...request, planContent: null, timestamp: '2026-11-04' }]])
     );
 
     configureEventCollector();
@@ -1454,28 +1443,17 @@ describe('configureEventCollector', () => {
     const onCall = vi
       .mocked(sessionDomainService.on)
       .mock.calls.find((call) => call[0] === 'pending_request_changed');
-    const handler = onCall![1] as (event: {
-      sessionId: string;
-      requestId: string;
-      hasPending: boolean;
-    }) => void;
+    const handler = onCall![1] as (event: { sessionId: string }) => void;
 
-    handler({ sessionId: 's-1', requestId: 'req-1', hasPending: true });
+    handler({ sessionId: 's-1' });
     await vi.advanceTimersByTimeAsync(150);
 
     expect(computePendingRequestType).toHaveBeenCalledWith(['s-1'], expect.any(Map));
-    // The tab's own pending request travels with the workspace-level type, from the same map.
-    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
-      'ws-1',
-      {
-        pendingRequestType: 'permission_request',
-        sessionSummaries: [
-          expect.objectContaining({ sessionId: 's-1', pendingRequestType: 'permission_request' }),
-        ],
-      },
-      'event:pending_request_changed',
-      expect.any(Number)
-    );
+    // Each tab's own type travels with the workspace-level type, from the same map.
+    const [workspaceId, fields, source] = vi.mocked(workspaceSnapshotStore.upsert).mock.lastCall!;
+    expect([workspaceId, source]).toEqual(['ws-1', 'event:pending_request_changed']);
+    expect(fields.pendingRequestType).toBe('permission_request');
+    expect(fields.sessionSummaries?.[0]?.pendingRequestType).toBe('permission_request');
     expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
   });
 });

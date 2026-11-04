@@ -1,8 +1,5 @@
-import { ChatCircleDotsIcon } from '@phosphor-icons/react/dist/csr/ChatCircleDots';
-import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
-import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
 import { StatusDot, StatusIcon } from './status-indicators';
 
 interface WorkspaceStatusIconProps {
@@ -11,15 +8,12 @@ interface WorkspaceStatusIconProps {
   sessionRuntimeErrorMessage?: string | null;
 }
 
-/** Every pending request is "needs you"; the icon says which kind. */
-const PENDING_REQUEST_ICONS: Record<
-  NonNullable<WorkspaceStatusIconProps['pendingRequestType']>,
-  { icon: Icon; name: string }
-> = {
-  permission_request: { icon: ShieldWarningIcon, name: 'permission-request' },
-  plan_approval: { icon: ClipboardTextIcon, name: 'plan-approval' },
-  user_question: { icon: ChatCircleDotsIcon, name: 'user-question' },
-};
+/** Every pending request is "needs you"; the icon says which kind, as on chat tabs. */
+const PENDING_REQUEST_ICON_NAMES = {
+  permission_request: 'permission-request',
+  plan_approval: 'plan-approval',
+  user_question: 'user-question',
+} as const;
 
 export function WorkspaceStatusIcon({
   pendingRequestType,
@@ -27,10 +21,15 @@ export function WorkspaceStatusIcon({
   sessionRuntimeErrorMessage,
 }: WorkspaceStatusIconProps) {
   if (pendingRequestType) {
-    const { icon, name } = PENDING_REQUEST_ICONS[pendingRequestType];
     return (
-      <span data-icon={name} className="inline-flex shrink-0">
-        <StatusIcon tone="attention" icon={icon} />
+      <span
+        data-icon={PENDING_REQUEST_ICON_NAMES[pendingRequestType]}
+        className="inline-flex shrink-0"
+      >
+        <StatusIcon
+          tone="attention"
+          icon={getPendingRequestPresentation(pendingRequestType).icon}
+        />
       </span>
     );
   }
