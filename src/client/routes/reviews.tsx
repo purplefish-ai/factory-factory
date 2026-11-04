@@ -9,7 +9,7 @@ import { ReviewRouteState } from './reviews/route-state';
 export default function ReviewsPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const project = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
-  if (!project.data && project.isLoading) {
+  if (slug && project.data === undefined && !project.error) {
     return <Loading message="Loading project…" />;
   }
   if (!project.data) {

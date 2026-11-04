@@ -153,7 +153,9 @@ export function WorkspaceMailDetail({
             {body}
           </div>
         )}
-        {read.isPending && <Loading size="compact" message="Loading message…" />}
+        {read.isPending && (
+          <Loading size="compact" message="Loading message…" className="mt-3 h-auto" />
+        )}
         {readError && (
           <div role="alert" className="mt-3 space-y-2 text-sm">
             <p>Could not read message. {readError}</p>
