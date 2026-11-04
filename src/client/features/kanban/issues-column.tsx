@@ -58,7 +58,7 @@ export function IssuesColumn({
 
       {/* Column Content */}
       <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
-        {!isMobile && (
+        {!(isMobile || showInlineForm) && (
           <Button
             variant="outline"
             size="sm"

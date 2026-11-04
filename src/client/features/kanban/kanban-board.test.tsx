@@ -239,6 +239,20 @@ describe('KanbanBoard', () => {
     }
   );
 
+  it('hides the desktop launch button while creating and restores it after closing', () => {
+    mocks.isMobile = false;
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New workspace');
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
+    expect(findButton(container, 'New workspace')).toBeUndefined();
+    click('Cancel creation');
+    expect(findButton(container, 'New workspace')).toBeDefined();
+    click('New workspace');
+    expect(findButton(container, 'New workspace')).toBeUndefined();
+    click('Complete creation');
+    expect(findButton(container, 'New workspace')).toBeDefined();
+  });
+
   it.each([true, false])(
     'keeps the filter without sort or selection controls (mobile=%s)',
     (mobile) => {

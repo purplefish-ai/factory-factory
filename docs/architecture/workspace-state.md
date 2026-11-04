@@ -141,13 +141,14 @@ The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and
 periodic-agent schedules. Cancel clears the draft and restores user defaults for
 the next task. Escape and navigating away preserve the draft; **New workspace**
-at the top of the Todo column (a header shortcut on phones) reopens it. Clear
-instructions by selecting and deleting the text; remove attachments with their
-individual remove controls. Navigation and refresh restore saved inputs. Browser
-storage failures appear in the form while editing remains available; keep the
-tab open when a warning says changes could not be saved. If a saved draft is
-unreadable, **Reset saved draft** appears beside the restore warning to remove
-the invalid stored record and keep the editor open.
+at the top of the Todo column (a header shortcut on phones) reopens it. The
+desktop button is hidden while the creation form is open and returns when the
+form closes. Clear instructions by selecting and deleting the text; remove
+attachments with their individual remove controls. Navigation and refresh
+restore saved inputs. Browser storage failures appear in the form while editing
+remains available; keep the tab open when a warning says changes could not be
+saved. If a saved draft is unreadable, **Reset saved draft** appears beside the
+restore warning to remove the invalid stored record and keep the editor open.
 
 Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
