@@ -33,12 +33,12 @@ beforeEach(async () => {
   calls = [];
   port = {
     getRepositoryIdentity: async () => ({ id: 'repo-1', name: 'org/repo' }),
-    listIssueEvents: async ({ page }) => {
+    listIssueEvents: ({ page }) => {
       calls.push(page);
-      return {
+      return Promise.resolve({
         events: feed.slice((page - 1) * 100, page * 100),
         nextPage: page * 100 < feed.length ? page + 1 : null,
-      };
+      });
     },
     classifyError: () => 'unknown',
   };
