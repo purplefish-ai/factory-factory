@@ -18,6 +18,7 @@ import {
   trimRollingOutput,
 } from '@/client/lib/rolling-output';
 import { cn } from '@/lib/utils';
+import { TerminalDisconnectBanner } from './terminal-disconnect-banner';
 import { TerminalTabBar } from './terminal-tab-bar';
 import {
   claimPendingTerminalTab,
@@ -443,24 +444,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     return (
       <div className={cn('h-full flex flex-col', className)}>
         {/* Input sent while disconnected is dropped, so make the gap visible */}
-        {!connected && (
-          <div className="dark flex items-center justify-between gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/30">
-            <p className="text-xs text-warning">
-              {gaveUp
-                ? 'Terminal disconnected. Input will not be delivered until you reconnect.'
-                : 'Terminal disconnected — reconnecting... Input typed now will not be delivered.'}
-            </p>
-            {gaveUp && (
-              <button
-                type="button"
-                onClick={reconnect}
-                className="shrink-0 px-2 py-0.5 text-xs rounded border border-warning/40 text-warning hover:bg-warning/10"
-              >
-                Reconnect
-              </button>
-            )}
-          </div>
-        )}
+        {!connected && <TerminalDisconnectBanner gaveUp={gaveUp} onReconnect={reconnect} />}
         {/* Terminal tabs row - only show if not hidden */}
         {!hideHeader && (
           <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border-b border-zinc-800">

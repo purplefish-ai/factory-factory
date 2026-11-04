@@ -97,7 +97,9 @@ The remaining exceptions are the rule's `exceptions` option in
   apart. They are not statuses, so they cannot map onto status tokens.
 - `terminal-panel.tsx`, `terminal-tab-bar.tsx`, `init-output-panel.tsx` and
   `workspace-overlays.tsx`: the terminal and terminal-like log surfaces stay
-  dark zinc to match xterm's fixed palette in `terminal-instance.tsx`.
+  dark zinc to match xterm's fixed palette in `terminal-instance.tsx`. Status UI
+  on the terminal, such as `terminal-disconnect-banner.tsx`, lives in separate
+  files that use dark-scoped tokens and stay under the rule.
 - `workspace-header-pwa-preview.tsx`: mock macOS window controls reproduce the
   operating system's red, yellow and green.
 
