@@ -782,8 +782,13 @@ does not enable event subscriptions, change an existing Slack app's webhook, or
 start agents. Slack event intake is still a separate implementation step.
 
 These credentials depend on the server's `encryption.key`; retain it with any
-database-file backup. Logical export/import does not yet include agent
-connections or their credentials.
+database-file backup. Logical export/import includes Slack connection identity,
+name, source enabled state and timestamps. Recovery restores new identities
+disabled with no token; existing connection IDs or Slack workspace identities
+are skipped without updates. Reconnect manually in Slack settings using a new
+bot token. GitHub connections, connection bindings, event configuration and
+automation execution history remain excluded; tokens and encryption keys never
+appear in logical exports.
 
 ## Client query transport
 

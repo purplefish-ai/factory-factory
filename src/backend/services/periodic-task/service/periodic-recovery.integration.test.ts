@@ -213,7 +213,7 @@ it('roundtrips a canonical reserved execution as inert history with exact source
   if (file.meta.schemaVersion !== 8 || !('recovery' in file.data)) {
     throw new Error('Expected current backup');
   }
-  expect(file.meta.recovery.profile).toBe('base-json-automation-definitions-1');
+  expect(file.meta.recovery.profile).toBe('base-json-slack-connections-1');
   expect(file.data.recovery.periodicHistory?.executions).toEqual([
     { ...original, startedAt: original.startedAt.toISOString(), completedAt: null },
   ]);

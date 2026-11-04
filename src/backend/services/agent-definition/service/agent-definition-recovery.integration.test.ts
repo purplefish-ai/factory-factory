@@ -155,7 +155,6 @@ it('roundtrips actual proposal/create/edit bodies then publicly inspects and exp
   ).toEqual(sourceRow);
   for (const count of [
     await destination.prisma.agentTrigger.count(),
-    await destination.prisma.agentConnection.count(),
     await destination.prisma.agentEvent.count(),
     await destination.prisma.agentEvaluation.count(),
     await destination.prisma.agentRun.count(),
@@ -163,6 +162,16 @@ it('roundtrips actual proposal/create/edit bodies then publicly inspects and exp
   ]) {
     expect(count).toBe(0);
   }
+  expect(await destination.prisma.agentConnection.findMany()).toEqual([
+    expect.objectContaining({
+      id: 'credential-source',
+      provider: 'SLACK',
+      externalId: 'workspace-source',
+      name: 'Secret source',
+      isEnabled: false,
+      credentialsEncrypted: null,
+    }),
+  ]);
   const reexport = await dataBackupService.exportData('disabled-truth');
   expect(reexport.data).toHaveProperty('recovery.automationDefinitions.definitions', [
     {

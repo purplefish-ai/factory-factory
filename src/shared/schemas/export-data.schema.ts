@@ -475,6 +475,15 @@ const version8Schema = z
     }),
   })
   .superRefine((backup, ctx) => {
+    const slack = backup.meta.recovery.profile === 'base-json-slack-connections-1';
+    if (
+      slack !== Object.hasOwn(backup.data.recovery, 'slackConnections') ||
+      (slack && !backup.data.recovery.slackConnections)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Slack profile sections do not match' });
+    }
+  })
+  .superRefine((backup, ctx) => {
     const covered = backup.meta.recovery.profile !== 'base-1';
     const section = backup.data.recovery.baseJson;
     if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
@@ -484,7 +493,8 @@ const version8Schema = z
       backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
       backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
       backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-      backup.meta.recovery.profile === 'base-json-automation-definitions-1';
+      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+      backup.meta.recovery.profile === 'base-json-slack-connections-1';
     const config = backup.data.recovery.periodicConfig;
     if (
       periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
@@ -495,7 +505,9 @@ const version8Schema = z
   })
   .superRefine((backup, ctx) => {
     const automation = backup.data.recovery.automationDefinitions;
-    const hasAutomation = backup.meta.recovery.profile === 'base-json-automation-definitions-1';
+    const hasAutomation =
+      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+      backup.meta.recovery.profile === 'base-json-slack-connections-1';
     if (
       hasAutomation !== Object.hasOwn(backup.data.recovery, 'automationDefinitions') ||
       (hasAutomation && !automation)
@@ -518,7 +530,8 @@ const version8Schema = z
     const history = backup.data.recovery.periodicHistory;
     const hasHistory =
       backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-      backup.meta.recovery.profile === 'base-json-automation-definitions-1';
+      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+      backup.meta.recovery.profile === 'base-json-slack-connections-1';
     if (
       hasHistory !== Object.hasOwn(backup.data.recovery, 'periodicHistory') ||
       (hasHistory && !history)
@@ -564,7 +577,8 @@ const version8Schema = z
           backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
           backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
           backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-          backup.meta.recovery.profile === 'base-json-automation-definitions-1',
+          backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+          backup.meta.recovery.profile === 'base-json-slack-connections-1',
         ctx
       );
     }
@@ -598,6 +612,7 @@ const periodicLinksVersion8Schema = version8Schema
           'base-json-periodic-links-1',
           'base-json-periodic-history-1',
           'base-json-automation-definitions-1',
+          'base-json-slack-connections-1',
         ]),
       }),
     }),

@@ -67,3 +67,9 @@ export {
   planAutomationDefinitionsRecovery,
   restoreAutomationDefinitionsRecovery,
 } from './service/agent-definition-recovery';
+
+export {
+  exportSlackConnectionsRecovery,
+  planSlackConnectionsRecovery,
+  restoreSlackConnectionsRecovery,
+} from './service/slack-connection-recovery';
