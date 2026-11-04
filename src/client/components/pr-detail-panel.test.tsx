@@ -74,3 +74,100 @@ describe('PRDetailPanel diff filenames', () => {
     }
   });
 });
+
+describe('PRDetailPanel keyboard shortcuts', () => {
+  beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+  });
+
+  async function renderPanel() {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const onFetchDiff = vi.fn();
+    await act(async () =>
+      root.render(
+        <PRDetailPanel
+          pr={pr}
+          diff={null}
+          diffLoading={false}
+          onFetchDiff={onFetchDiff}
+          onOpenGitHub={vi.fn()}
+          onApprove={vi.fn()}
+        />
+      )
+    );
+    const activeTab = () =>
+      container.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
+    const press = (target: EventTarget, key: string, init: KeyboardEventInit = {}) =>
+      act(() => {
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+        );
+      });
+    return { container, root, activeTab, press, onFetchDiff };
+  }
+
+  it('switches tabs on plain d and i', async () => {
+    const view = await renderPanel();
+    try {
+      await view.press(window, 'd');
+      expect(view.activeTab()).toBe('Diff');
+      await view.press(window, 'i');
+      expect(view.activeTab()).toBe('Info');
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+
+  it.each([
+    ['command', { metaKey: true }],
+    ['control', { ctrlKey: true }],
+    ['alt', { altKey: true }],
+  ])('yields %s+d to the browser', async (_label, init) => {
+    const view = await renderPanel();
+    try {
+      const event = new KeyboardEvent('keydown', { key: 'd', cancelable: true, ...init });
+      await act(() => {
+        window.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+      expect(view.activeTab()).toBe('Info');
+      expect(view.onFetchDiff).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+
+  it('ignores d typed into a contenteditable or select', async () => {
+    const view = await renderPanel();
+    const editor = document.createElement('div');
+    editor.setAttribute('contenteditable', 'true');
+    const select = document.createElement('select');
+    document.body.append(editor, select);
+    try {
+      await view.press(editor, 'd');
+      await view.press(select, 'd');
+      expect(view.activeTab()).toBe('Info');
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+
+  it('advertises Shift+A for approval', async () => {
+    const view = await renderPanel();
+    try {
+      const approve = [...view.container.querySelectorAll('button')].find((button) =>
+        button.textContent?.startsWith('Approve')
+      );
+      expect(approve?.getAttribute('aria-keyshortcuts')).toBe('Shift+A');
+      expect(
+        [...(approve?.querySelectorAll('[data-slot="kbd"]') ?? [])].map((kbd) => kbd.textContent)
+      ).toEqual(['⇧', 'A']);
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+});

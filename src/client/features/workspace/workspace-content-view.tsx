@@ -20,6 +20,8 @@ export interface WorkspaceContentViewProps {
   sessions: Session[] | undefined;
   selectedSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
+  /** Unsent queued messages in the selected session; closing its tab discards them. */
+  selectedSessionQueuedMessageCount?: number;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
@@ -52,6 +54,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   sessions,
   selectedSessionId,
   sessionSummariesById,
+  selectedSessionQueuedMessageCount,
   isCreatingSession,
   isDeletingSession,
   onSelectSession,
@@ -76,6 +79,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
           workspaceId={workspaceId}
           sessions={sessions}
           currentSessionId={selectedSessionId}
+          currentSessionQueuedMessageCount={selectedSessionQueuedMessageCount}
           sessionSummariesById={sessionSummariesById}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}

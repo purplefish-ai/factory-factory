@@ -103,6 +103,16 @@ async function key(
     target.dispatchEvent(event);
   });
 }
+/** Every review shortcut, with approval as its deliberate Shift+A chord. */
+const reviewShortcutPresses: [string, KeyboardEventInit][] = [
+  ['A', { shiftKey: true }],
+  ['o', {}],
+  ['j', {}],
+  ['k', {}],
+];
+async function approveChord(target: EventTarget) {
+  await key(target, 'A', { shiftKey: true });
+}
 function selected(container: HTMLElement) {
   return container.querySelector('button.bg-muted [title^="PR "]')?.textContent;
 }
@@ -112,8 +122,8 @@ it('lets actual project-selector typeahead consume review shortcuts without appr
     await key(view.container.querySelector('[role="combobox"]')!, 'ArrowDown');
     const option = document.querySelector('[role="listbox"] [role="option"]');
     expect(option).not.toBeNull();
-    for (const value of ['a', 'o', 'j', 'k']) {
-      await key(option!, value);
+    for (const [value, options] of reviewShortcutPresses) {
+      await key(option!, value, options);
     }
     expect(mocks.approve).not.toHaveBeenCalled();
     expect(mocks.open).not.toHaveBeenCalled();
@@ -127,12 +137,38 @@ it.each([
   ['control', { ctrlKey: true }, false],
   ['command', { metaKey: true }, false],
   ['alt', { altKey: true }, false],
-  ['shift', { shiftKey: true }, false],
 ])('yields to %s keyboard events', async (_label, options, consumed) => {
   const view = await render();
   try {
-    await key(document.body, 'a', options, consumed);
+    await key(document.body, 'A', { shiftKey: true, ...options }, consumed);
     expect(mocks.approve).not.toHaveBeenCalled();
+  } finally {
+    await view.cleanup();
+  }
+});
+it('does not approve on a plain or caps-lock a, only on Shift+A', async () => {
+  const view = await render();
+  try {
+    await key(document.body, 'a');
+    await key(document.body, 'A');
+    expect(mocks.approve).not.toHaveBeenCalled();
+    await approveChord(document.body);
+    expect(mocks.approve).toHaveBeenCalledExactlyOnceWith({
+      repo: 'o/r',
+      number: 1,
+      action: 'approve',
+    });
+  } finally {
+    await view.cleanup();
+  }
+});
+it('ignores Shift with navigation and open shortcuts', async () => {
+  const view = await render();
+  try {
+    await key(document.body, 'J', { shiftKey: true });
+    await key(document.body, 'O', { shiftKey: true });
+    expect(selected(view.container)).toBe('PR 1');
+    expect(mocks.open).not.toHaveBeenCalled();
   } finally {
     await view.cleanup();
   }
@@ -159,7 +195,7 @@ it.each([
   context.append(target);
   document.body.append(context);
   try {
-    await key(target, 'a');
+    await approveChord(target);
     await key(target, 'j');
     await key(target, 'o');
     expect(mocks.approve).not.toHaveBeenCalled();
@@ -175,7 +211,7 @@ it('preserves deliberate page-level selection, approval, and open shortcuts', as
   try {
     await key(document.body, 'j');
     expect(selected(view.container)).toBe('PR 2');
-    await key(document.body, 'a');
+    await approveChord(document.body);
     expect(mocks.approve).toHaveBeenLastCalledWith({ repo: 'o/r', number: 2, action: 'approve' });
     await key(document.body, 'k');
     await key(document.body, 'o');
@@ -202,7 +238,7 @@ it('preserves review shortcuts after focusing and selecting an actual PRInboxIte
     expect(document.activeElement).toBe(row);
     await key(row!, 'j');
     expect(selected(view.container)).toBe('PR 2');
-    await key(row!, 'a');
+    await approveChord(row!);
     expect(mocks.approve).toHaveBeenLastCalledWith({ repo: 'o/r', number: 2, action: 'approve' });
     await key(row!, 'k');
     await key(row!.querySelector('[title="PR 1"]')!, 'o');
@@ -224,8 +260,8 @@ it.each(['dialog', 'menu'])(
       view.container.setAttribute('role', role);
       const row = view.container.querySelector('[title="PR 1"]')?.closest('button');
       await act(() => row!.focus());
-      for (const value of ['a', 'o', 'j', 'k']) {
-        await key(row!, value);
+      for (const [value, options] of reviewShortcutPresses) {
+        await key(row!, value, options);
       }
       expect(mocks.approve).not.toHaveBeenCalled();
       expect(mocks.open).not.toHaveBeenCalled();
@@ -243,8 +279,8 @@ it('keeps unrelated shared-header buttons outside the review-row exception', asy
     );
     expect(projectButton).not.toBeNull();
     await act(() => projectButton!.focus());
-    for (const value of ['a', 'o', 'j', 'k']) {
-      await key(projectButton!, value);
+    for (const [value, options] of reviewShortcutPresses) {
+      await key(projectButton!, value, options);
     }
     expect(mocks.approve).not.toHaveBeenCalled();
     expect(mocks.open).not.toHaveBeenCalled();

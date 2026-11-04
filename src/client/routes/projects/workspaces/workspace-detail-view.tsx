@@ -46,6 +46,8 @@ interface SessionTabsProps {
   selectedSessionControlId?: string;
   selectedSessionControlRuntimeId?: string;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
+  /** Unsent queued messages in the selected session; closing its tab discards them. */
+  selectedSessionQueuedMessageCount?: number;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
@@ -202,6 +204,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         sessions={sessionTabs.sessions}
         selectedSessionId={sessionTabs.selectedDbSessionId}
         sessionSummariesById={sessionTabs.sessionSummariesById}
+        selectedSessionQueuedMessageCount={sessionTabs.selectedSessionQueuedMessageCount}
         isCreatingSession={header.isCreatingSession}
         isDeletingSession={sessionTabs.isDeletingSession}
         onSelectSession={sessionTabs.handleSelectSession}

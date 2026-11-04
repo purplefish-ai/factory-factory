@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   passiveTransportSessionId: null as string | null,
   transport: {
     messages: [],
+    queuedMessages: [],
     connected: true,
     chatCapabilities: { attachments: { enabled: true, kinds: ['image'] } },
     sessionStatus: { phase: 'ready' },
