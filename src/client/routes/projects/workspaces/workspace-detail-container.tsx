@@ -153,6 +153,8 @@ export function WorkspaceDetailContainer() {
     processStatus.state === 'unknown' &&
     hasUserMessageWithoutAgentMessage(messages);
 
+  // Summaries retain request metadata like snapshots do. Their consumers apply
+  // canonical lifecycle precedence; the chat footer additionally requires a running prompt.
   const livePendingRequestType = getChatPendingRequestType(pendingRequest);
   const sessionSummariesById = useMemo(
     () =>

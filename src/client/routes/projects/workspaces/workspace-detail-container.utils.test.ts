@@ -3,7 +3,10 @@ import {
   getSessionCloseRisk,
   describeSessionCloseRisk,
 } from '@/client/features/workspace/session-close-guard';
-import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
+import {
+  deriveSessionTabRuntime,
+  type WorkspaceSessionRuntimeSummary,
+} from '@/client/features/workspace/session-tab-runtime';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,
@@ -150,6 +153,33 @@ describe('buildSessionSummariesById', () => {
       expect(
         getSessionCloseRisk({ summary: result.get('session-1') })?.awaitingInput ?? false
       ).toBe(livePendingRequestType !== null);
+    }
+  );
+
+  it.each([
+    { phase: 'loading', processState: 'alive', label: 'Loading' },
+    { phase: 'starting', processState: 'alive', label: 'Starting' },
+    { phase: 'stopping', processState: 'alive', label: 'Stopping' },
+    { phase: 'error', processState: 'alive', label: 'Error' },
+    { phase: 'running', processState: 'stopped', label: 'Stopped' },
+    { phase: 'idle', processState: 'stopped', label: 'Stopped' },
+  ] as const)(
+    'keeps retained pending metadata subordinate to $phase/$processState lifecycle',
+    ({ phase, processState, label }) => {
+      const result = buildSessionSummariesById({
+        workspaceSummaries: [makeSummary()],
+        sessions: [makeSession()],
+        selectedSessionId: 'session-1',
+        liveRuntime: makeLiveRuntime({ phase, processState }),
+        livePendingRequestType: 'permission_request',
+        runtimeSessionId: 'session-1',
+        chatConnected: true,
+      });
+      const summary = result.get('session-1');
+      expect(summary?.pendingRequestType).toBe('permission_request');
+      expect(deriveSessionTabRuntime(summary)).toMatchObject({ label });
+      expect(deriveSessionTabRuntime(summary).awaitingInput).not.toBe(true);
+      expect(getSessionCloseRisk({ summary })?.awaitingInput).not.toBe(true);
     }
   );
 
