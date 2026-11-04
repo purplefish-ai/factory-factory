@@ -40,6 +40,10 @@ const mocks = vi.hoisted(() => ({
   assertWorktreePathSafe: vi.fn(),
 }));
 
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: { get: vi.fn(async () => ({ ticketDispatchPrompt: null })) },
+}));
+
 vi.mock('@/backend/services/workspace', () => ({
   assertWorktreePathSafe: mocks.assertWorktreePathSafe,
   workspaceStateMachine: {
