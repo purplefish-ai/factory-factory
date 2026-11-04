@@ -112,8 +112,13 @@ it('shows working and waiting board counts by column, excluding completed worksp
   const view = await render('/admin', { ...navData, serverWorkspaces });
   try {
     const board = view.container.querySelector('a[href="/projects/stale/workspaces"]');
-    expect(board?.textContent).toContain('Working 1');
-    expect(board?.textContent).toContain('Waiting 2');
+    expect([...board!.querySelectorAll('[data-variant]')].map((chip) => chip.textContent)).toEqual([
+      '1',
+      '2',
+    ]);
+    expect(document.getElementById(board!.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Working 1 Waiting 2'
+    );
   } finally {
     await view.dispose();
   }
@@ -135,8 +140,10 @@ it('shows zero board counts when the project has no workspaces', async () => {
   const view = await render('/admin');
   try {
     const board = view.container.querySelector('a[href="/projects/stale/workspaces"]');
-    expect(board?.textContent).toContain('Working 0');
-    expect(board?.textContent).toContain('Waiting 0');
+    expect([...board!.querySelectorAll('[data-variant]')].map((chip) => chip.textContent)).toEqual([
+      '0',
+      '0',
+    ]);
   } finally {
     await view.dispose();
   }
@@ -218,8 +225,10 @@ it('offers Board in the mobile sheet and closes the sheet after navigating to it
       '[role="dialog"] a[href="/projects/alpha/workspaces"]'
     );
     expect(board?.getAttribute('aria-label')).toBe('Board');
-    expect(board?.textContent).toContain('Working 0');
-    expect(board?.textContent).toContain('Waiting 0');
+    expect([...board!.querySelectorAll('[data-variant]')].map((chip) => chip.textContent)).toEqual([
+      '0',
+      '0',
+    ]);
     expect(board?.getAttribute('aria-current')).toBeNull();
     await act(() => board!.click());
     expect(container.querySelector('output')?.textContent).toBe('/projects/alpha/workspaces');

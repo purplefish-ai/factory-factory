@@ -217,6 +217,23 @@ export const BoardCounts: Story = {
   play: async ({ canvasElement }) => {
     const board = await within(canvasElement).findByRole('link', { name: 'Board' });
     await expect(board).toHaveAccessibleDescription('Working 2 Waiting 1');
+    const chips = board.querySelectorAll('[data-variant]');
+    await expect(chips[0]).toHaveTextContent(/^2$/);
+    await expect(chips[1]).toHaveTextContent(/^1$/);
+    await userEvent.hover(board);
+    const page = within(document.body);
+    await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
+    await userEvent.unhover(board);
+    await waitFor(async () => {
+      await expect(page.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
+    board.focus();
+    await expect(board).toHaveFocus();
+    await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(async () => {
+      await expect(page.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
   },
 };
 
