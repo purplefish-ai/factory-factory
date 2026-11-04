@@ -24,7 +24,7 @@ export function checkServePrerequisites(projectRoot: string, dev: boolean): stri
     }
   } else if (
     !(
-      existsSync(join(projectRoot, 'dist', 'client')) &&
+      existsSync(join(projectRoot, 'dist', 'client', 'index.html')) &&
       existsSync(join(projectRoot, 'dist', 'src', 'backend', 'index.js'))
     )
   ) {

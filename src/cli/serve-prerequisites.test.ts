@@ -33,6 +33,7 @@ it('allows production startup without development tools', () => {
   mkdirSync(join(root, 'dist/client'), { recursive: true });
   mkdirSync(join(root, 'dist/src/backend'), { recursive: true });
   writeFileSync(join(root, 'dist/src/backend/index.js'), '');
+  writeFileSync(join(root, 'dist/client/index.html'), '');
   expect(checkServePrerequisites(root, false)).toEqual([]);
 });
 
@@ -60,4 +61,12 @@ it('offers a build command for source checkouts with missing production assets',
     writeFileSync(join(root, file), '');
   }
   expect(checkServePrerequisites(root, false).join('\n')).toContain('pnpm build');
+});
+
+it('rejects an incomplete frontend build with an empty client directory', () => {
+  const root = project();
+  mkdirSync(join(root, 'dist/client'), { recursive: true });
+  mkdirSync(join(root, 'dist/src/backend'), { recursive: true });
+  writeFileSync(join(root, 'dist/src/backend/index.js'), '');
+  expect(checkServePrerequisites(root, false).join('\n')).toContain('Reinstall factory-factory');
 });
