@@ -92,7 +92,6 @@ it('completes direct input while both provider turn and background resume are pe
     return resume.promise;
   });
   const handler = createUserInputHandler({
-    reportInputFailure: vi.fn(),
     acpRuntimeManager: { isSessionRunning: () => true },
     sessionService: { sendSessionMessage },
     backgroundDelivery: { captureResumeGuard: () => guard, userResume },

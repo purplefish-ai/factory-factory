@@ -5,7 +5,6 @@ import type {
 } from '@/backend/services/session/service/chat/session-command.types';
 import type {
   SessionCommandHandler,
-  SessionCommandError,
   SessionCommandOutcome,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
@@ -19,14 +18,11 @@ export function createUserInputHandler(deps: {
   sessionService: SessionCommandPromptService;
   backgroundDelivery: SessionExecutionCommandServices['backgroundDelivery'];
   humanMessageAccepted?: SessionExecutionCommandServices['humanMessageAccepted'];
-  reportInputFailure(
-    error: Extract<SessionCommandError, { kind: 'user_input_failed' }>
-  ): void | Promise<void>;
 }): SessionCommandHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;
   const pendingAdmissions = new Map<string, Promise<void>>();
 
-  return ({ sessionId }, message) => {
+  return ({ sessionId, onAsyncOutcome }, message) => {
     const rawContent = message.content || message.text;
     if (!rawContent) {
       return { replies: [] };
@@ -72,11 +68,18 @@ export function createUserInputHandler(deps: {
           void sessionService.sendSessionMessage(sessionId, messageContent).catch(async (cause) => {
             logger.error('Failed to send message to provider', { sessionId, error: cause });
             try {
-              await deps.reportInputFailure({
-                kind: 'user_input_failed',
-                sessionId,
-                content: messageContent,
-                cause,
+              await onAsyncOutcome?.({
+                replies: [
+                  {
+                    type: 'error',
+                    error: {
+                      kind: 'user_input_failed',
+                      sessionId,
+                      content: messageContent,
+                      cause,
+                    },
+                  },
+                ],
               });
             } catch (error) {
               logger.warn('Failed to publish direct input recovery', { sessionId, error });

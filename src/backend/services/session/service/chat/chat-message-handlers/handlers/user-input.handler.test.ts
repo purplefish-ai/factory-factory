@@ -23,7 +23,6 @@ function createDeps(options?: { isSessionRunning?: boolean }) {
     sendSessionMessage: vi.fn(async () => undefined),
   };
   return {
-    reportInputFailure: vi.fn(),
     acpRuntimeManager,
     sessionService,
     backgroundDelivery: sessionBackgroundDeliveryService,
@@ -38,22 +37,31 @@ it('reports a late provider failure with original content after input submission
   });
   const deps = createDeps({ isSessionRunning: true });
   vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValue(providerTurn);
-  const reportInputFailure = vi.fn();
-  const handler = createUserInputHandler({ ...deps, reportInputFailure });
+  const onAsyncOutcome = vi.fn();
+  const handler = createUserInputHandler(deps);
   const content = [
     { type: 'text', text: 'recover me' },
     { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
   ];
-  expect(await handler(context, { type: 'user_input', content })).toEqual({ replies: [] });
-  expect(reportInputFailure).not.toHaveBeenCalled();
+  expect(await handler({ ...context, onAsyncOutcome }, { type: 'user_input', content })).toEqual({
+    replies: [],
+  });
+  expect(onAsyncOutcome).not.toHaveBeenCalled();
   const cause = new Error('provider disconnected');
   fail(cause);
   await vi.waitFor(() =>
-    expect(reportInputFailure).toHaveBeenCalledExactlyOnceWith({
-      kind: 'user_input_failed',
-      sessionId: 'session-1',
-      content,
-      cause,
+    expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
+      replies: [
+        {
+          type: 'error',
+          error: {
+            kind: 'user_input_failed',
+            sessionId: 'session-1',
+            content,
+            cause,
+          },
+        },
+      ],
     })
   );
   expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
@@ -66,19 +74,22 @@ it.each([false, true])(
     vi.mocked(deps.sessionService.sendSessionMessage).mockRejectedValue(
       new Error('provider failed')
     );
-    const reportInputFailure = vi.fn(() => {
+    const onAsyncOutcome = vi.fn(() => {
       if (asyncFailure) {
         return Promise.reject(new Error('report failed'));
       }
       throw new Error('report failed');
     });
     expect(
-      await createUserInputHandler({ ...deps, reportInputFailure })(context, {
-        type: 'user_input',
-        text: 'recover',
-      })
+      await createUserInputHandler(deps)(
+        { ...context, onAsyncOutcome },
+        {
+          type: 'user_input',
+          text: 'recover',
+        }
+      )
     ).toEqual({ replies: [] });
-    await vi.waitFor(() => expect(reportInputFailure).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(onAsyncOutcome).toHaveBeenCalledOnce());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
   }
 );

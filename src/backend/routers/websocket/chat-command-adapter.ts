@@ -102,7 +102,7 @@ function formatCommandError(error: SessionCommandError): string {
 }
 
 /** Build the same recoverable rejection for immediate and later provider failures. */
-export function buildUserInputRejection(
+function buildUserInputRejection(
   error: Extract<SessionCommandError, { kind: 'user_input_failed' }>
 ): Extract<WebSocketMessage, { type: 'message_state_changed' }> {
   return {

@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sessionCommandFactories } from '@/backend/services/session';
-import { MessageState } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createChatCommandRegistry } from './chat-message-router';
 import { createChatRouterServices } from './chat-message-router.test-helpers';
 
-it('publishes one session recovery when a direct provider send later fails', async () => {
+it('returns later provider failure to the per-request outcome callback', async () => {
   const services = createChatRouterServices(sessionCommandFactories);
   let fail!: (error: Error) => void;
   const turn = new Promise<void>((_resolve, reject) => {
@@ -21,37 +20,27 @@ it('publishes one session recovery when a direct provider send later fails', asy
     { type: 'text', text: 'original text' },
     { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
   ];
+  const onAsyncOutcome = vi.fn();
   expect(
     await registry.user_input(
-      { sessionId: 'recovery-session', workingDir: '/tmp' },
+      { sessionId: 'recovery-session', workingDir: '/tmp', onAsyncOutcome },
       { type: 'user_input', content }
     )
   ).toEqual({ replies: [] });
   expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
-  fail(new Error('provider disconnected'));
+  const cause = new Error('provider disconnected');
+  fail(cause);
   await vi.waitFor(() =>
-    expect(services.eventBus.publishToSession).toHaveBeenCalledExactlyOnceWith('recovery-session', {
-      type: 'message_state_changed',
-      id: expect.any(String),
-      newState: MessageState.REJECTED,
-      errorMessage: 'Could not send message. Try again.',
-      userMessage: {
-        sessionId: 'recovery-session',
-        text: 'original text',
-        timestamp: expect.any(String),
-        attachments: [
-          {
-            id: expect.any(String),
-            name: 'image.png',
-            type: 'image/png',
-            contentType: 'image',
-            data: 'aGVsbG8=',
-            size: 5,
-          },
-        ],
-      },
+    expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
+      replies: [
+        {
+          type: 'error',
+          error: { kind: 'user_input_failed', sessionId: 'recovery-session', content, cause },
+        },
+      ],
     })
   );
+  expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
   expect(sendSessionMessage).toHaveBeenCalledTimes(1);
 });
 

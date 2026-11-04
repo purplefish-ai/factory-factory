@@ -416,9 +416,10 @@ from dispatch and steering until the follow-up persistence completes.
 Cancellation waits for admission to settle so Accepted precedes Cancelled.
 Direct input preserves arrival order through admission, rechecks stop guards
 before submission, and returns unsent text and images through composer recovery
-when admission fails or a later provider submission fails. Persisted PR
-revisions fence older event and reconciliation projections; an archive during a
-follow-up read still wins publication.
+when admission fails or a later provider submission fails. Recovery replies
+return only to the requesting connection. Persisted PR revisions fence older
+event and reconciliation projections; an archive during a follow-up read still
+wins publication.
 
 Codex tasks remain automation-owned between turns. An `active` goal keeps the
 workspace in WORKING even when no prompt is currently in flight; paused,

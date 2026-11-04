@@ -1,6 +1,7 @@
 import type { ApplicationServices } from '@/backend/app-context';
 import type {
   SessionCommandConfigService,
+  SessionCommandContext,
   SessionCommandFactories,
   SessionCommandHandler,
   SessionCommandOutcome,
@@ -12,7 +13,6 @@ import type {
   SessionFileLogger,
 } from '@/backend/services/session';
 import type { ChatMessageInput } from '@/shared/websocket';
-import { buildUserInputRejection } from './chat-command-adapter';
 import { executeSessionLoad } from './chat-load-adapter';
 
 export interface ChatMessageRouterServices {
@@ -65,9 +65,6 @@ export function createChatCommandRegistry(
       backgroundDelivery: services.execution.backgroundDelivery,
     }),
     user_input: createUserInputHandler({
-      reportInputFailure: (error) => {
-        services.eventBus.publishToSession(error.sessionId, buildUserInputRejection(error));
-      },
       humanMessageAccepted: services.execution.humanMessageAccepted,
       acpRuntimeManager: services.runtime,
       sessionService: services.prompt,
@@ -120,7 +117,8 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
     async handleMessage(
       sessionId: string | null,
       workingDir: string,
-      message: ChatMessageInput
+      message: ChatMessageInput,
+      onAsyncOutcome?: SessionCommandContext['onAsyncOutcome']
     ): Promise<SessionCommandOutcome> {
       if (!sessionId) {
         return {
@@ -136,7 +134,7 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
           ],
         };
       }
-      const context = { sessionId, workingDir };
+      const context = { sessionId, workingDir, onAsyncOutcome };
       switch (message.type) {
         case 'start':
           return await registry.start(context, message);

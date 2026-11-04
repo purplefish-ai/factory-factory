@@ -9,6 +9,8 @@ import type { ChatMessageInput } from '@/shared/websocket';
 export interface SessionCommandContext {
   sessionId: string;
   workingDir: string;
+  /** Later requester-only replies remain bound to the connection that submitted this command. */
+  onAsyncOutcome?(outcome: SessionCommandOutcome): void | Promise<void>;
 }
 
 export type SessionCommandError =
