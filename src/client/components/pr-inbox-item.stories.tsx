@@ -161,3 +161,16 @@ export const Interactive: Story = {
     );
   },
 };
+
+export const ReviewStatesDark: Story = {
+  args: Default.args,
+  globals: { theme: 'dark' },
+  render: () => (
+    <div className="w-[420px] space-y-1">
+      <PRInboxItem pr={mockPR} isSelected={false} onSelect={() => undefined} />
+      <PRInboxItem pr={mockApprovedPR} isSelected onSelect={() => undefined} />
+      <PRInboxItem pr={mockDraftPR} isSelected={false} onSelect={() => undefined} />
+      <PRInboxItem pr={mockFailingPR} isSelected={false} onSelect={() => undefined} />
+    </div>
+  ),
+};

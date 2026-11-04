@@ -4,6 +4,11 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
+import {
+  getMergeStatePresentation,
+  getReviewStatePresentation,
+} from '@/client/lib/pr-status-presentation';
+import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
@@ -17,6 +22,7 @@ import {
 import { formatDateTimeShort } from '@/lib/formatters';
 import type { GitHubComment, PRWithFullDetails } from '@/shared/github-types';
 import { CIChecksSection, CIStatusBadge, ReviewDecisionBadge } from './pr-status-badges';
+import { StatusChip } from './status-indicators';
 
 interface PRDetailPanelProps {
   pr: PRWithFullDetails | null;
@@ -29,36 +35,6 @@ interface PRDetailPanelProps {
 }
 
 type Tab = 'info' | 'diff';
-
-// Helper functions for styling logic
-function getMergeStateClassName(status: string): string {
-  switch (status) {
-    case 'CLEAN':
-      return 'bg-green-500/20 text-green-600 border-green-500/30';
-    case 'BLOCKED':
-    case 'DIRTY':
-      return 'bg-red-500/20 text-red-600 border-red-500/30';
-    default:
-      return '';
-  }
-}
-
-function getReviewStateClassName(state: string): string {
-  switch (state) {
-    case 'APPROVED':
-      return 'bg-green-500/20 text-green-600';
-    case 'CHANGES_REQUESTED':
-      return 'bg-red-500/20 text-red-600';
-    default:
-      return 'bg-muted';
-  }
-}
-
-function getApproveButtonClassName(reviewDecision: string | null): string {
-  return reviewDecision === 'APPROVED'
-    ? 'bg-green-800 hover:bg-green-800 cursor-default'
-    : 'bg-green-600 hover:bg-green-700';
-}
 
 function getApproveButtonText(approving: boolean, reviewDecision: string | null): string {
   if (approving) {
@@ -90,13 +66,17 @@ function DiffViewer({ diff }: { diff: string }) {
             <span data-testid="diff-file-name" className="font-medium truncate">
               {file.name}
             </span>
-            {file.additions > 0 && <span className="text-green-600">+{file.additions}</span>}
-            {file.deletions > 0 && <span className="text-red-600">-{file.deletions}</span>}
+            {file.additions > 0 && (
+              <span className={DIFF_STAT_CLASS_NAMES.added}>+{file.additions}</span>
+            )}
+            {file.deletions > 0 && (
+              <span className={DIFF_STAT_CLASS_NAMES.removed}>-{file.deletions}</span>
+            )}
           </div>
           <div className="font-mono text-xs leading-tight overflow-x-auto">
             {file.hunks.map((hunk) => (
               <div key={hunk.header}>
-                <div className="px-3 py-1 bg-blue-500/10 text-blue-600 text-xs">{hunk.header}</div>
+                <div className="px-3 py-1 bg-info/10 text-info text-xs">{hunk.header}</div>
                 {withOccurrenceKeys(hunk.lines, (line) =>
                   JSON.stringify([line.type, line.content])
                 ).map(({ item: line, key }) => (
@@ -151,26 +131,24 @@ interface PRStatsProps {
 }
 
 function PRStats({ pr }: PRStatsProps) {
+  const mergeState = getMergeStatePresentation(pr.mergeStateStatus);
   return (
     <div className="px-4 py-2 border-b flex items-center gap-2 text-xs flex-shrink-0 flex-wrap">
       <span>
         <strong>{pr.changedFiles}</strong> files
       </span>
-      <span className="text-green-600">
+      <span className={DIFF_STAT_CLASS_NAMES.added}>
         <strong>+{pr.additions}</strong>
       </span>
-      <span className="text-red-600">
+      <span className={DIFF_STAT_CLASS_NAMES.removed}>
         <strong>-{pr.deletions}</strong>
       </span>
       <span className="flex-1 min-w-0" />
       <CIStatusBadge checks={pr.statusCheckRollup} />
       <ReviewDecisionBadge decision={pr.reviewDecision} />
-      <Badge
-        variant="outline"
-        className={`text-xs px-1.5 py-0 flex-shrink-0 ${getMergeStateClassName(pr.mergeStateStatus)}`}
-      >
-        {pr.mergeStateStatus}
-      </Badge>
+      <StatusChip tone={mergeState.tone} size="md">
+        {mergeState.label}
+      </StatusChip>
     </div>
   );
 }
@@ -188,14 +166,14 @@ function PRReviews({ pr }: PRReviewsProps) {
     <div className="px-4 py-2 border-b">
       <div className="text-xs text-muted-foreground font-medium mb-1">REVIEWS</div>
       <div className="flex flex-wrap gap-2">
-        {pr.reviews.map((review) => (
-          <span
-            key={review.id}
-            className={`text-xs px-1.5 py-0.5 rounded ${getReviewStateClassName(review.state)}`}
-          >
-            {review.author.login}: {review.state}
-          </span>
-        ))}
+        {pr.reviews.map((review) => {
+          const { tone, label } = getReviewStatePresentation(review.state);
+          return (
+            <StatusChip key={review.id} tone={tone} size="md">
+              {review.author.login}: {label}
+            </StatusChip>
+          );
+        })}
       </div>
     </div>
   );
@@ -328,8 +306,9 @@ function ActionButtons({ pr, approving, onOpenGitHub, onApprove }: ActionButtons
       </Button>
       <Button
         size="sm"
+        variant={pr.reviewDecision === 'APPROVED' ? 'secondary' : 'default'}
         onClick={onApprove}
-        className={`flex-1 h-8 min-w-0 ${getApproveButtonClassName(pr.reviewDecision)}`}
+        className="flex-1 h-8 min-w-0"
         disabled={approving || pr.reviewDecision === 'APPROVED'}
       >
         <span className="truncate">{getApproveButtonText(approving, pr.reviewDecision)}</span>

@@ -392,3 +392,9 @@ export const AgentWorkspace: Story = {
     projectSlug: 'my-project',
   },
 };
+
+/** Draft, open, review, merged and closed PRs each show a distinct state chip. */
+export const AllPRStatesDark: Story = {
+  ...AllPRStates,
+  globals: { theme: 'dark' },
+};

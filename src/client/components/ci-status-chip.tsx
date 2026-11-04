@@ -1,8 +1,11 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
+import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+import { GitMergeIcon } from '@phosphor-icons/react/dist/csr/GitMerge';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { getCiStateTone, getStatusToneStyle } from '@/client/lib/status-tones';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
@@ -20,53 +23,16 @@ interface CiStatusChipProps {
   showTooltip?: boolean;
 }
 
-function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
-  className: string;
-  Icon: Icon;
-} {
-  switch (ciState) {
-    case 'PASSING':
-      return {
-        className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-        Icon: CheckCircleIcon,
-      };
-    case 'FAILING':
-      return {
-        className: 'bg-red-500/15 text-red-700 dark:text-red-300',
-        Icon: XCircleIcon,
-      };
-    case 'RUNNING':
-      return {
-        className: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300',
-        Icon: CircleIcon,
-      };
-    case 'UNKNOWN':
-      return {
-        className: 'bg-muted text-muted-foreground',
-        Icon: CircleIcon,
-      };
-    case 'CLOSED':
-      return {
-        className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-        Icon: XCircleIcon,
-      };
-    case 'MERGED':
-      return {
-        className: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
-        Icon: CheckCircleIcon,
-      };
-    case 'CONFLICT':
-      return {
-        className: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
-        Icon: WarningIcon,
-      };
-    case 'NONE':
-      return {
-        className: 'bg-transparent text-muted-foreground',
-        Icon: CircleIcon,
-      };
-  }
-}
+const CI_STATE_ICONS: Record<WorkspaceSidebarCiState, Icon> = {
+  PASSING: CheckCircleIcon,
+  FAILING: XCircleIcon,
+  RUNNING: ClockIcon,
+  UNKNOWN: CircleIcon,
+  CLOSED: XCircleIcon,
+  MERGED: GitMergeIcon,
+  CONFLICT: WarningIcon,
+  NONE: CircleIcon,
+};
 
 export function CiStatusChip({
   ciState,
@@ -79,8 +45,8 @@ export function CiStatusChip({
     return null;
   }
 
-  const config = getCiStatusConfig(ciState);
-  const { Icon } = config;
+  const Icon = CI_STATE_ICONS[ciState];
+  const toneStyle = getStatusToneStyle(getCiStateTone(ciState));
 
   const sizeClasses = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
   const iconSize = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
@@ -93,11 +59,11 @@ export function CiStatusChip({
       className={cn(
         'inline-flex w-fit items-center gap-1 rounded-sm font-medium uppercase tracking-wide cursor-default',
         sizeClasses,
-        config.className,
+        toneStyle.chip,
         className
       )}
     >
-      <Icon className={cn(iconSize, ciState === 'RUNNING' && 'animate-pulse')} />
+      <Icon aria-hidden="true" className={iconSize} />
       <span>{getWorkspaceCiLabel(ciState)}</span>
     </Tag>
   );

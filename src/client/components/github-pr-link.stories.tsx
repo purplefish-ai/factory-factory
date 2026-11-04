@@ -87,3 +87,15 @@ export const Mobile: Story = {
   parameters: { viewport: { options: INITIAL_VIEWPORTS } },
   globals: { viewport: { value: 'iphonex', isRotated: false } },
 };
+
+export const AllStatesDark: Story = {
+  globals: { theme: 'dark' },
+  render: (args) => (
+    <div className="grid gap-4">
+      <GitHubPRPreviewCard {...args} />
+      <GitHubPRPreviewCard {...args} data={{ ...data, isDraft: true }} />
+      <GitHubPRPreviewCard {...args} data={{ ...data, state: 'MERGED' }} />
+      <GitHubPRPreviewCard {...args} data={{ ...data, state: 'CLOSED' }} />
+    </div>
+  ),
+};

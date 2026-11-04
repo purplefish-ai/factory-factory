@@ -121,10 +121,6 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/client/components/status-indicators.tsx": {
-      "disposition": "maintained-api",
-      "reason": "Shared status dot, icon and chip; adopted by the PR, CI, workspace and board surfaces in the follow-up status migration."
-    },
     "src/client/components/streamdown-markdown.fixtures.ts": {
       "disposition": "test-support",
       "reason": "Streaming Markdown samples consumed only by streamdown-markdown.stories.tsx and streamdown-markdown.bench.tsx."
