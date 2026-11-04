@@ -4,7 +4,7 @@ import { trpc } from '@/client/lib/trpc';
 /**
  * Whether loopback links should open through `/proxy/<port>`: the server runs
  * under `ff tailscale` and this page is not itself on the host's loopback.
- * `undefined` while the server's answer is loading, so callers never offer a
+ * `undefined` while the server's answer is loading or has failed, so callers never offer a
  * link that would point at the viewing device's own localhost.
  */
 export function usePortSharing(): boolean | undefined {
@@ -14,8 +14,8 @@ export function usePortSharing(): boolean | undefined {
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
   });
-  if (!remotePage || isError) {
+  if (!remotePage) {
     return false;
   }
-  return data?.available;
+  return isError ? undefined : data?.available;
 }
