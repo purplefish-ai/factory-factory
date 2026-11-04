@@ -213,11 +213,17 @@ export const MobileSheet: Story = {
   },
 };
 
+/** Assigned issues follow all workspace groups so active work stays at the top. */
 export const TodoLaunch: Story = {
   args: { state: 'issues-ready' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const primary = await canvas.findByRole('button', { name: 'Start Fix login redirect' });
+    await expect(
+      [...canvasElement.querySelectorAll('[data-sidebar="group-label"]')].map(
+        (label) => label.textContent
+      )
+    ).toEqual(['Working', 'Waiting', 'Done', 'Todo']);
     await expect(canvas.getByRole('link', { name: 'Open #42 externally' })).toHaveAttribute(
       'target',
       '_blank'

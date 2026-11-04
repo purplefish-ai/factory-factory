@@ -469,15 +469,6 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <IssueGroup
-          issues={issues}
-          status={issuesStatus}
-          error={issuesError}
-          projectSlug={navData.selectedProjectSlug}
-          onRetry={refetchIssues}
-          isRetrying={isFetchingIssues}
-          onLaunch={setLaunchIssue}
-        />
         <WorkspaceGroup
           label="Working"
           workspaces={working}
@@ -501,6 +492,15 @@ function SidebarInner({
           currentWorkspaceId={navData.currentWorkspaceId}
           unreadMailCounts={navData.unreadMailCounts}
           emptyText="No completed workspaces"
+        />
+        <IssueGroup
+          issues={issues}
+          status={issuesStatus}
+          error={issuesError}
+          projectSlug={navData.selectedProjectSlug}
+          onRetry={refetchIssues}
+          isRetrying={isFetchingIssues}
+          onLaunch={setLaunchIssue}
         />
       </SidebarContent>
 

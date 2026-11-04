@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import type { ProjectIssuesStatus } from '@/client/hooks/use-project-issues';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
@@ -12,7 +13,7 @@ import { AppSidebar } from './app-sidebar';
 
 const rowRenders = vi.hoisted(() => vi.fn());
 const issueState = vi.hoisted(() => ({
-  issues: [] as undefined | [],
+  issues: [] as NormalizedIssue[] | undefined,
   status: 'ready' as ProjectIssuesStatus,
 }));
 vi.mock('@/client/hooks/use-project-issues', () => ({ useProjectIssues: () => issueState }));
@@ -86,6 +87,43 @@ it('re-renders only the workspace row whose snapshot changed', async () => {
   expect(rowRenders.mock.calls).toEqual([['ws-2']]);
   expect(container.textContent).toContain('renamed');
   await act(() => root.unmount());
+});
+
+it('keeps workspace groups above Todo when assigned issues are present', async () => {
+  issueState.issues = [
+    {
+      id: '42',
+      displayId: '#42',
+      title: 'Fix login redirect',
+      body: '',
+      url: 'https://github.com/acme/repo/issues/42',
+      createdAt: '2026-11-01T12:00:00Z',
+      author: 'octocat',
+      provider: 'github',
+      githubIssueNumber: 42,
+    },
+  ];
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <SidebarProvider>
+            <AppSidebar navData={navData} />
+          </SidebarProvider>
+        </MemoryRouter>
+      )
+    );
+    expect(
+      [...container.querySelectorAll('[data-sidebar="group-label"]')].map(
+        (label) => label.textContent
+      )
+    ).toEqual(['Working', 'Waiting', 'Done', 'Todo']);
+  } finally {
+    await act(() => root.unmount());
+  }
 });
 
 it.each<ProjectIssuesStatus>(['ready', 'loading', 'not-connected', 'error', 'no-project'])(
