@@ -11,10 +11,9 @@ import { IssueLaunchSheet } from './issue-launch-sheet';
 interface IssueCardProps {
   issue: NormalizedIssue;
   projectId: string;
-  onClick?: () => void;
 }
 
-export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
+export function IssueCard({ issue, projectId }: IssueCardProps) {
   const [launchSheetOpen, setLaunchSheetOpen] = useState(false);
 
   const handleStart = (e: React.MouseEvent) => {
@@ -24,18 +23,26 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   };
 
   const handleCardClick = () => {
-    onClick?.();
+    setLaunchSheetOpen(true);
   };
 
   return (
     <>
       <Card
-        className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed"
         onClick={handleCardClick}
+        data-testid="issue-card"
+        className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed"
       >
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-            {issue.title}
+            <button
+              type="button"
+              className="text-left hover:underline"
+              onClick={handleCardClick}
+              aria-label={`Start ${issue.title}`}
+            >
+              {issue.title}
+            </button>
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -57,6 +64,16 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
+            <a
+              onClick={(event) => event.stopPropagation()}
+              href={issue.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:underline"
+              aria-label={`Open ${issue.displayId} externally`}
+            >
+              Open issue ↗
+            </a>
             <Button
               size="sm"
               variant="outline"

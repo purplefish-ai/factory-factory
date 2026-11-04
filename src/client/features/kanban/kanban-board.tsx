@@ -1,21 +1,18 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
-import type { NormalizedIssue } from '@/client/lib/issue-normalization';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
-import { InlineWorkspaceForm } from './inline-workspace-form';
-import { IssueCard } from './issue-card';
-import { IssueDetailsSheet } from './issue-details-sheet';
+import { type BoardSort, filterBoardWorkspaces, sortBoardWorkspaces } from './board-view';
+import { BoardViewControls } from './board-view-controls';
+import { IssuesColumn } from './issues-column';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
+import { getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
@@ -100,11 +97,14 @@ function KanbanBoardContent() {
     togglingWorkspaceId,
     renameWorkspace,
     archiveWorkspace,
+    archiveSelectedWorkspaces,
     bulkArchiveColumn,
     archiveGitLockWorkspaceIds,
     dismissArchiveGitLock,
     retryGitLockedArchives,
     isBulkArchiving,
+    isArchiving,
+    requestInlineForm,
     showInlineForm,
     inlineFormRequest,
     quickChatWorkspaceId,
@@ -137,6 +137,30 @@ function KanbanBoardContent() {
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<BoardSort>('default');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSelectionArchiving, setIsSelectionArchiving] = useState(false);
+  const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
+  const toggleSelected = (id: string) =>
+    setSelectedIds((ids) =>
+      ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
+    );
+  const archiveSelected = async () => {
+    setIsSelectionArchiving(true);
+    try {
+      setSelectedIds(await archiveSelectedWorkspaces(selectedIds));
+    } finally {
+      setIsSelectionArchiving(false);
+    }
+  };
+  useEffect(() => {
+    if (!isSelectionArchiving) {
+      setSelectedIds((ids) =>
+        ids.filter((id) => workspaces?.some((workspace) => workspace.id === id))
+      );
+    }
+  }, [workspaces, isSelectionArchiving]);
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
 
@@ -151,8 +175,7 @@ function KanbanBoardContent() {
     }
   };
 
-  // Group workspaces by kanban column (only the 3 database columns),
-  // sorted by createdAt descending (newest first) within each column.
+  // Keep snapshot order untouched; filtering and sorting affect this view only.
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
     const grouped: WorkspacesByColumn = {
       WORKING: [],
@@ -161,7 +184,7 @@ function KanbanBoardContent() {
     };
 
     if (workspaces) {
-      for (const workspace of workspaces) {
+      for (const workspace of filterBoardWorkspaces(workspaces, search)) {
         const column = workspace.kanbanColumn as KanbanColumnType;
         if (column in grouped) {
           grouped[column].push(workspace);
@@ -169,14 +192,12 @@ function KanbanBoardContent() {
       }
     }
 
-    const byNewest = (a: WorkspaceWithKanban, b: WorkspaceWithKanban) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    for (const col of Object.values(grouped)) {
-      col.sort(byNewest);
+    for (const column of Object.keys(grouped) as KanbanColumnType[]) {
+      grouped[column] = sortBoardWorkspaces(grouped[column], sort);
     }
 
     return grouped;
-  }, [workspaces]);
+  }, [workspaces, search, sort]);
 
   useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
 
@@ -189,9 +210,14 @@ function KanbanBoardContent() {
     setActiveColumnId(pickInitialMobileColumn(workspacesByColumn, showInlineForm));
   }, [workspaces, workspacesByColumn, showInlineForm]);
 
+  const visibleIssues = (issues ?? []).filter((issue) =>
+    `${issue.title} ${issue.displayId}`
+      .toLocaleLowerCase()
+      .includes(search.trim().toLocaleLowerCase())
+  );
   const getColumnCount = (columnId: string) => {
     if (columnId === 'ISSUES') {
-      return issues?.length ?? 0;
+      return visibleIssues.length;
     }
     return workspacesByColumn[columnId as KanbanColumnType]?.length ?? 0;
   };
@@ -236,224 +262,114 @@ function KanbanBoardContent() {
     );
   }
 
-  if (isMobile) {
-    const activeColumn = columns.find((c) => c.id === activeColumnId) ?? columns[0];
-    if (!activeColumn) {
-      return null;
-    }
-
-    return (
-      <>
-        <div className="flex flex-col h-full gap-3">
-          {/* Column pills */}
-          <div className="flex gap-1.5 shrink-0">
-            {columns.map((column) => {
-              const count = getColumnCount(column.id);
-              const isActive = column.id === activeColumnId;
-              return (
-                <button
-                  key={column.id}
-                  type="button"
-                  onClick={() => setActiveColumnId(column.id)}
-                  className={cn(
-                    'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {column.shortLabel ?? column.label}
-                  <span
-                    className={cn(
-                      'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
-                      isActive ? 'bg-primary-foreground/20' : 'bg-background/50'
-                    )}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active column content */}
-          <div key={activeColumn.id} className="flex-1 min-h-0 overflow-y-auto">
-            {activeColumn.id === 'ISSUES' ? (
-              <IssuesColumn
-                column={activeColumn}
-                issues={issues ?? []}
-                projectId={projectId}
-                onWorkspaceCreated={() => setActiveColumnId('WORKING')}
-              />
-            ) : (
-              <KanbanColumn
-                column={activeColumn}
-                workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
-                projectSlug={projectSlug}
-                onToggleRatcheting={handleToggleRatcheting}
-                togglingWorkspaceId={togglingWorkspaceId}
-                onArchive={handleArchiveWorkspace}
-                onBulkArchive={() => handleBulkArchive(activeColumn.id)}
-                isBulkArchiving={isBulkArchiving}
-                onOpenQuickChat={openQuickChat}
-                onRename={handleRenameWorkspace}
-              />
-            )}
-          </div>
-
-          <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
-        </div>
-
-        {archiveGitLockDialog}
-      </>
+  const renderColumn = (column: (typeof columns)[number]) =>
+    column.id === 'ISSUES' ? (
+      <IssuesColumn
+        key={column.id}
+        column={column}
+        issues={visibleIssues}
+        filtered={search.trim().length > 0}
+        projectId={projectId}
+        onWorkspaceCreated={() => setActiveColumnId('WORKING')}
+      />
+    ) : (
+      <KanbanColumn
+        key={column.id}
+        column={column}
+        workspaces={workspacesByColumn[column.id] ?? []}
+        projectSlug={projectSlug}
+        onToggleRatcheting={handleToggleRatcheting}
+        togglingWorkspaceId={togglingWorkspaceId}
+        onArchive={handleArchiveWorkspace}
+        onBulkArchive={() => handleBulkArchive(column.id)}
+        isBulkArchiving={isBulkArchiving || isSelectionArchiving}
+        onOpenQuickChat={openQuickChat}
+        onRename={handleRenameWorkspace}
+        selectedIds={selectedIds}
+        onToggleSelected={toggleSelected}
+        selectionDisabled={isSelectionArchiving}
+      />
     );
-  }
-
-  const workspacesInBulkArchiveColumn =
-    bulkArchiveColumnId && bulkArchiveColumnId !== 'ISSUES'
-      ? (workspacesByColumn[bulkArchiveColumnId as KanbanColumnType] ?? [])
-      : [];
+  const columnArchiveCount = bulkArchiveColumnId
+    ? (workspaces ?? []).filter((workspace) => workspace.kanbanColumn === bulkArchiveColumnId)
+        .length
+    : 0;
   return (
-    <>
-      <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
-        {columns.map((column) => {
-          // Special handling for the ISSUES column (UI-only, not from database)
-          if (column.id === 'ISSUES') {
-            return (
-              <IssuesColumn
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      {workspaces?.length === 0 && !showInlineForm && !isArchiving && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
+          <div>
+            <p className="font-medium">Create your first workspace</p>
+            <p className="text-sm text-muted-foreground">
+              Start from an issue in Todo or describe a new task.
+            </p>
+          </div>
+          <Button size="sm" onClick={requestInlineForm}>
+            New workspace
+          </Button>
+        </div>
+      )}
+      <BoardViewControls
+        search={search}
+        onSearchChange={setSearch}
+        sort={sort}
+        onSortChange={setSort}
+        selectedCount={selectedIds.length}
+        isArchiving={isSelectionArchiving || isBulkArchiving}
+        onArchive={() => setSelectionDialogOpen(true)}
+        onClear={() => setSelectedIds([])}
+      />
+      {search &&
+        Object.values(workspacesByColumn).every((rows) => rows.length === 0) &&
+        visibleIssues.length === 0 && (
+          <p className="text-sm text-muted-foreground">No matching issues or workspaces</p>
+        )}
+      {isMobile ? (
+        <>
+          <div className="flex gap-1.5 shrink-0">
+            {columns.map((column) => (
+              <button
                 key={column.id}
-                column={column}
-                issues={issues ?? []}
-                projectId={projectId}
-              />
-            );
-          }
-
-          // Regular workspace columns
-          const columnWorkspaces = workspacesByColumn[column.id as KanbanColumnType] ?? [];
-          return (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              workspaces={columnWorkspaces}
-              projectSlug={projectSlug}
-              onToggleRatcheting={handleToggleRatcheting}
-              togglingWorkspaceId={togglingWorkspaceId}
-              onArchive={handleArchiveWorkspace}
-              onBulkArchive={() => handleBulkArchive(column.id)}
-              isBulkArchiving={isBulkArchiving}
-              onOpenQuickChat={openQuickChat}
-              onRename={handleRenameWorkspace}
-            />
-          );
-        })}
-      </div>
-
+                type="button"
+                onClick={() => setActiveColumnId(column.id)}
+                aria-pressed={column.id === activeColumnId}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium',
+                  column.id === activeColumnId
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {column.shortLabel ?? column.label}
+                <span>{getColumnCount(column.id)}</span>
+              </button>
+            ))}
+          </div>
+          <div key={activeColumnId} className="flex-1 min-h-0 overflow-y-auto">
+            {columns.filter((column) => column.id === activeColumnId).map(renderColumn)}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-row gap-4 pb-4 flex-1 min-h-0 overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
+          {columns.map(renderColumn)}
+        </div>
+      )}
       <ArchiveWorkspaceDialog
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
-        onConfirm={() => {
-          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.");
-        }}
-        description={`This will archive ${workspacesInBulkArchiveColumn.length} ${workspacesInBulkArchiveColumn.length === 1 ? 'workspace' : 'workspaces'} in this column. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+        onConfirm={() =>
+          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.")
+        }
+        description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
-
+      <ArchiveWorkspaceDialog
+        open={selectionDialogOpen}
+        onOpenChange={setSelectionDialogOpen}
+        onConfirm={() => runInBackground(archiveSelected(), "Couldn't archive workspaces.")}
+        description={`Archive ${selectedIds.length} selected ${selectedIds.length === 1 ? 'workspace' : 'workspaces'}? Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
+      />
       {archiveGitLockDialog}
-
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
-    </>
-  );
-}
-
-// Separate component for the Issues column
-interface IssuesColumnProps {
-  column: ColumnConfig;
-  issues: NormalizedIssue[];
-  projectId: string;
-  onWorkspaceCreated?: () => void;
-}
-
-function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesColumnProps) {
-  const { workspaces, showInlineForm, setShowInlineForm, requestInlineForm } = useKanban();
-  const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
-  const isEmpty = issues.length === 0;
-  const isMobile = useIsMobile();
-  const [selectedIssue, setSelectedIssue] = useState<NormalizedIssue | null>(null);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-
-  const handleIssueClick = (issue: NormalizedIssue) => {
-    setSelectedIssue(issue);
-    setIsSheetOpen(true);
-  };
-
-  const handleSheetOpenChange = (open: boolean) => {
-    setIsSheetOpen(open);
-    if (!open) {
-      // Clear selected issue when sheet closes
-      setSelectedIssue(null);
-    }
-  };
-
-  return (
-    <>
-      <div
-        data-todo-column
-        className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
-      >
-        {/* Column Header — hidden on mobile where pills handle this */}
-        <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-sm">{column.label}</h3>
-            <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
-              {issues.length}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Column Content */}
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
-          {!isMobile && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 w-full justify-start"
-              onClick={requestInlineForm}
-            >
-              <PlusIcon className="h-4 w-4" />
-              New workspace
-            </Button>
-          )}
-          {showInlineForm ? (
-            <InlineWorkspaceForm
-              key={projectId}
-              projectId={projectId}
-              existingNames={existingNames}
-              onCancel={() => setShowInlineForm(false)}
-              onCreated={() => {
-                setShowInlineForm(false);
-                onWorkspaceCreated?.();
-              }}
-            />
-          ) : null}
-          {!isEmpty &&
-            issues.map((issue) => (
-              <div key={issue.id} className="shrink-0">
-                <IssueCard
-                  issue={issue}
-                  projectId={projectId}
-                  onClick={() => handleIssueClick(issue)}
-                />
-              </div>
-            ))}
-        </div>
-      </div>
-
-      <IssueDetailsSheet
-        issue={selectedIssue}
-        projectId={projectId}
-        open={isSheetOpen}
-        onOpenChange={handleSheetOpenChange}
-      />
-    </>
+    </div>
   );
 }

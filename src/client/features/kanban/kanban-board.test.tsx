@@ -19,6 +19,7 @@ import {
 const mocks = vi.hoisted(() => ({
   isMobile: true,
   showInlineForm: false,
+  isArchiving: false,
   inlineFormRequest: 0,
   workspaces: [] as WorkspaceWithKanban[],
   dismissArchiveGitLock: vi.fn(),
@@ -61,7 +62,6 @@ vi.mock('./kanban-column', () => ({
   },
 }));
 
-vi.mock('./issue-details-sheet', () => ({ IssueDetailsSheet: () => null }));
 vi.mock('./inline-workspace-form', () => ({
   InlineWorkspaceForm: ({
     onCreated,
@@ -121,6 +121,7 @@ vi.mock('./kanban-context', () => ({
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,
     retryGitLockedArchives: mocks.retryGitLockedArchives,
     isBulkArchiving: false,
+    isArchiving: mocks.isArchiving,
     showInlineForm: mocks.showInlineForm,
     setShowInlineForm: (show: boolean) => {
       mocks.showInlineForm = show;
@@ -168,6 +169,7 @@ describe('KanbanBoard', () => {
     }
     mocks.isMobile = true;
     mocks.showInlineForm = false;
+    mocks.isArchiving = false;
     mocks.inlineFormRequest = 0;
     mocks.workspaces = [
       {
@@ -227,15 +229,25 @@ describe('KanbanBoard', () => {
         prompt: 'Resume this task',
       }).catch(() => undefined);
       act(() => root.render(createElement(BoardWithHeader)));
-      expect(container.querySelector('input')).toBeNull();
+      expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
       click('New workspace');
-      expect(container.querySelector('input')).not.toBeNull();
+      expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
       click('Cancel creation');
       act(() => root.render(createElement(BoardWithHeader)));
-      expect(container.querySelector('input')).toBeNull();
+      expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
       expect(findButton(container, 'New workspace')).toBeDefined();
     }
   );
+
+  it('keeps first-workspace guidance hidden during optimistic archive removal', async () => {
+    mocks.workspaces = [];
+    mocks.isArchiving = true;
+    await act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.textContent).not.toContain('Create your first workspace');
+    mocks.isArchiving = false;
+    await act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.textContent).toContain('Create your first workspace');
+  });
 
   it('shows the created task at the top of Working on mobile', () => {
     mocks.workspaces.push(
@@ -249,8 +261,9 @@ describe('KanbanBoard', () => {
     );
     void act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
-    const oldScrollContainer = container.querySelector('input')!.closest('.overflow-y-auto')!
-      .parentElement!.parentElement!;
+    const oldScrollContainer = container
+      .querySelector('input[aria-label="Task name"]')!
+      .closest('.overflow-y-auto')!.parentElement!.parentElement!;
     oldScrollContainer.scrollTop = 200;
     click('Complete creation');
     expect(
@@ -258,7 +271,7 @@ describe('KanbanBoard', () => {
         (card) => card.textContent
       )
     ).toEqual(['New task', 'Older working task']);
-    expect(container.querySelector('input')).toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
     expect(oldScrollContainer.isConnected).toBe(false);
     expect(container.querySelector('[data-column="WORKING"]')!.parentElement!.scrollTop).toBe(0);
   });
@@ -321,7 +334,7 @@ describe('KanbanBoard', () => {
       'Existing task'
     );
     expect(container.querySelector('[data-column="DONE"]')).not.toBeNull();
-    expect(container.querySelector('input')).toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
   });
 
   it('creates in Todo on desktop and keeps a mobile shortcut', () => {
@@ -342,12 +355,12 @@ describe('KanbanBoard', () => {
   it('reveals an already open form when New Workspace is pressed from another mobile tab', () => {
     act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
-    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
     click('Waiting1');
-    expect(container.querySelector('input')).toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
     expect(mocks.showInlineForm).toBe(true);
     click('New workspace');
-    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
   });
 
   it('keeps a mobile New Workspace request made before workspaces load', () => {
@@ -355,11 +368,11 @@ describe('KanbanBoard', () => {
     mocks.workspaces = undefined as unknown as WorkspaceWithKanban[];
     act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
-    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
     // Loaded data includes a Waiting workspace, which would normally be the first tab.
     mocks.workspaces = loaded;
     act(() => root.render(createElement(BoardWithHeader)));
-    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
     expect(container.querySelector('[data-column="WAITING"]')).toBeNull();
   });
 

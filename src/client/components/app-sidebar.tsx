@@ -1,3 +1,4 @@
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
@@ -20,6 +21,7 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
+import { ProjectIssuesState } from '@/client/components/project-issues-state';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
@@ -27,7 +29,7 @@ import {
   getProjectSlugFromPath,
   type useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
-import { useProjectIssues } from '@/client/hooks/use-project-issues';
+import { type ProjectIssuesStatus, useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import {
   getProjectSection,
@@ -75,6 +77,12 @@ type NavigationData = ReturnType<typeof useAppNavigationData>;
 const InlineWorkspaceForm = lazy(() =>
   import('@/client/features/kanban/inline-workspace-form').then((module) => ({
     default: module.InlineWorkspaceForm,
+  }))
+);
+
+const IssueLaunchSheet = lazy(() =>
+  import('@/client/features/kanban/issue-launch-sheet').then((module) => ({
+    default: module.IssueLaunchSheet,
   }))
 );
 
@@ -130,11 +138,15 @@ const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
 // Issue item component
 // =============================================================================
 
-function SidebarIssueItem({ issue }: { issue: NormalizedIssue }) {
+function SidebarIssueItem({ issue, onLaunch }: { issue: NormalizedIssue; onLaunch: () => void }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild className="h-auto py-1.5 px-2">
-        <a href={issue.url} target="_blank" rel="noopener noreferrer">
+      <div className="flex items-center">
+        <SidebarMenuButton
+          onClick={onLaunch}
+          className="h-auto py-1.5 px-2"
+          aria-label={`Start ${issue.title}`}
+        >
           <div className="flex items-center gap-2 min-w-0">
             <DotOutlineIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="truncate text-sm">{issue.title}</span>
@@ -142,8 +154,17 @@ function SidebarIssueItem({ issue }: { issue: NormalizedIssue }) {
               {issue.displayId}
             </span>
           </div>
+        </SidebarMenuButton>
+        <a
+          href={issue.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${issue.displayId} externally`}
+          className="p-2"
+        >
+          <ArrowSquareOutIcon className="h-3 w-3" />
         </a>
-      </SidebarMenuButton>
+      </div>
     </SidebarMenuItem>
   );
 }
@@ -192,17 +213,40 @@ function WorkspaceGroup({
   );
 }
 
-function IssueGroup({ issues }: { issues: NormalizedIssue[] | undefined }) {
+function IssueGroup({
+  issues,
+  status,
+  error,
+  projectSlug,
+  onRetry,
+  isRetrying,
+  onLaunch,
+}: {
+  issues: NormalizedIssue[] | undefined;
+  status: ProjectIssuesStatus | undefined;
+  error?: string | null;
+  projectSlug: string;
+  onRetry: () => void;
+  isRetrying?: boolean;
+  onLaunch: (issue: NormalizedIssue) => void;
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Todo</SidebarGroupLabel>
       <SidebarGroupContent>
-        {!issues || issues.length === 0 ? (
-          <EmptyPlaceholder text="No issues" />
-        ) : (
+        {(!issues || issues.length === 0 || status === 'error') && (
+          <ProjectIssuesState
+            status={status}
+            error={error}
+            projectSlug={projectSlug}
+            onRetry={onRetry}
+            isRetrying={isRetrying}
+          />
+        )}
+        {issues && issues.length > 0 && (
           <SidebarMenu>
             {issues.map((issue) => (
-              <SidebarIssueItem key={issue.id} issue={issue} />
+              <SidebarIssueItem key={issue.id} issue={issue} onLaunch={() => onLaunch(issue)} />
             ))}
           </SidebarMenu>
         )}
@@ -316,6 +360,10 @@ function ProjectFooterLinks({
 function SidebarInner({
   navData,
   issues,
+  issuesStatus,
+  issuesError,
+  isFetchingIssues,
+  refetchIssues,
   waiting,
   working,
   done,
@@ -329,6 +377,10 @@ function SidebarInner({
 }: {
   navData: NavigationData;
   issues: NormalizedIssue[] | undefined;
+  issuesStatus: ProjectIssuesStatus | undefined;
+  issuesError?: string | null;
+  isFetchingIssues?: boolean;
+  refetchIssues: () => void;
   waiting: ServerWorkspace[];
   working: ServerWorkspace[];
   done: ServerWorkspace[];
@@ -342,6 +394,7 @@ function SidebarInner({
 }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [launchIssue, setLaunchIssue] = useState<NormalizedIssue | null>(null);
 
   return (
     <WorkspaceCreationImageDropZone
@@ -408,12 +461,14 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <WorkspaceGroup
-          label="Waiting"
-          workspaces={waiting}
+        <IssueGroup
+          issues={issues}
+          status={issuesStatus}
+          error={issuesError}
           projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          emptyText="No waiting workspaces"
+          onRetry={refetchIssues}
+          isRetrying={isFetchingIssues}
+          onLaunch={setLaunchIssue}
         />
         <WorkspaceGroup
           label="Working"
@@ -422,7 +477,13 @@ function SidebarInner({
           currentWorkspaceId={navData.currentWorkspaceId}
           emptyText="No active workspaces"
         />
-        <IssueGroup issues={issues} />
+        <WorkspaceGroup
+          label="Waiting"
+          workspaces={waiting}
+          projectSlug={navData.selectedProjectSlug}
+          currentWorkspaceId={navData.currentWorkspaceId}
+          emptyText="No waiting workspaces"
+        />
         <WorkspaceGroup
           label="Done"
           workspaces={done}
@@ -432,6 +493,22 @@ function SidebarInner({
         />
       </SidebarContent>
 
+      {launchIssue && selectedProjectId && (
+        <ErrorBoundary variant="compact" title="Couldn't load the issue launch form">
+          <Suspense fallback={<Loading size="compact" message="Loading issue launch form…" />}>
+            <IssueLaunchSheet
+              issue={launchIssue}
+              projectId={selectedProjectId}
+              open
+              onOpenChange={(open) => {
+                if (!open) {
+                  setLaunchIssue(null);
+                }
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       <SidebarSeparator />
 
       <SidebarFooter>
@@ -512,7 +589,13 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   }, []);
 
   // Fetch issues for the Todo section
-  const { issues } = useProjectIssues(navData.selectedProjectId, navData.issueProvider, {
+  const {
+    issues,
+    status: issuesStatus,
+    error: issuesError,
+    isFetching: isFetchingIssues,
+    refetch: refetchIssues,
+  } = useProjectIssues(navData.selectedProjectId, navData.issueProvider, {
     workspaceIssueLinks: navData.serverWorkspaces,
   });
 
@@ -577,6 +660,12 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const sharedProps = {
     navData,
     issues,
+    issuesStatus,
+    issuesError,
+    isFetchingIssues,
+    refetchIssues: () => {
+      void refetchIssues();
+    },
     waiting,
     working,
     done,

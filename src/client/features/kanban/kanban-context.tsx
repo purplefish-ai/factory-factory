@@ -4,7 +4,7 @@ import {
   useWorkspaceArchiveCommand,
   type WorkspaceArchiveOutcome,
 } from '@/client/features/workspace';
-import { useProjectIssues } from '@/client/hooks/use-project-issues';
+import { type ProjectIssuesStatus, useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { runInBackground } from '@/client/lib/background-task';
@@ -21,6 +21,10 @@ interface KanbanContextValue {
   issueProvider: IssueProvider;
   workspaces: WorkspaceWithKanban[] | undefined;
   issues: NormalizedIssue[] | undefined;
+  issuesStatus: ProjectIssuesStatus;
+  issuesError: string | null;
+  isFetchingIssues: boolean;
+  refetchIssues: () => void;
   isLoading: boolean;
   isError: boolean;
   error: { message: string } | null;
@@ -31,11 +35,13 @@ interface KanbanContextValue {
   togglingWorkspaceId: string | null;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   archiveWorkspace: (workspaceId: string, removeGitIndexLock?: boolean) => Promise<void>;
+  archiveSelectedWorkspaces: (ids: string[]) => Promise<string[]>;
   bulkArchiveColumn: (kanbanColumn: string) => Promise<void>;
   archiveGitLockWorkspaceIds: string[];
   dismissArchiveGitLock: () => void;
   retryGitLockedArchives: (removeGitIndexLock: boolean) => Promise<void>;
   isBulkArchiving: boolean;
+  isArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
   /** Increments on every explicit "New Workspace" request, even if the form is already open. */
@@ -117,7 +123,9 @@ export function KanbanProvider({
   };
   const {
     issues,
-    isLoading: isLoadingIssues,
+    isFetching: isFetchingIssues,
+    status: issuesStatus,
+    error: issuesError,
     refetch: refetchIssues,
   } = useProjectIssues(projectId, issueProvider, {
     // Deliberately the unfiltered list: `workspaces` drops null-column
@@ -224,6 +232,27 @@ export function KanbanProvider({
     }
   };
 
+  const archiveSelectedWorkspaces = async (ids: string[]) => {
+    // Reuse single-workspace archive transactions and their lock recovery.
+    // Limit concurrency so large selections cannot flood Git/worktree cleanup.
+    const failed: string[] = [];
+    for (const id of ids) {
+      const workspace = workspaces?.find((item) => item.id === id);
+      if (!workspace) {
+        continue;
+      }
+      const release = suppressArchiveIssues(new Map([[id, workspace]]));
+      try {
+        const outcomes = await archiveCommand.archiveWorkspace({ projectId, id });
+        handleArchiveOutcomes(outcomes);
+        failed.push(...outcomes.filter((item) => !item.success).map((item) => item.id));
+      } finally {
+        release();
+      }
+    }
+    return failed;
+  };
+
   const bulkArchiveColumn = async (kanbanColumn: string) => {
     const workspacesToArchive = (workspaces ?? []).filter(
       (workspace) => workspace.kanbanColumn === kanbanColumn
@@ -282,7 +311,13 @@ export function KanbanProvider({
         issueProvider,
         workspaces: visibleWorkspaces,
         issues,
-        isLoading: isLoadingWorkspaces || isLoadingIssues,
+        issuesStatus,
+        isFetchingIssues,
+        issuesError,
+        refetchIssues: () => {
+          void refetchIssues();
+        },
+        isLoading: isLoadingWorkspaces,
         isError: isErrorWorkspaces,
         error: errorWorkspaces ? { message: errorWorkspaces.message } : null,
         refetch,
@@ -292,11 +327,16 @@ export function KanbanProvider({
         togglingWorkspaceId,
         renameWorkspace,
         archiveWorkspace,
+        archiveSelectedWorkspaces,
         bulkArchiveColumn,
         archiveGitLockWorkspaceIds,
         dismissArchiveGitLock,
         retryGitLockedArchives,
         isBulkArchiving: archiveCommand.isBulkArchiving,
+        isArchiving:
+          archiveIssueOperations.size > 0 ||
+          archiveCommand.isArchiving ||
+          archiveCommand.isBulkArchiving,
         showInlineForm,
         setShowInlineForm,
         inlineFormRequest,

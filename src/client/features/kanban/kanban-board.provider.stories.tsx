@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, userEvent, within } from 'storybook/test';
+import {
+  IssueRefreshRecoveryFixture,
+  exerciseIssueRefreshRecovery,
+} from '@/client/components/project-issues-recovery.story-fixtures';
 import { STORY_TRPC_PENDING, type StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
 import { IssueProvider } from '@/shared/core/enums';
 import { KanbanBoard } from './kanban-board';
@@ -21,6 +25,7 @@ const workspaces: WorkspaceWithKanban[] = [
     id: 'ws-3',
     kanbanColumn: 'WAITING',
     name: 'Update dependencies',
+    waitingSince: '2026-11-04T12:00:00.000Z',
     prNumber: 42,
     prUrl: '#',
     prState: 'OPEN',
@@ -116,5 +121,140 @@ export const LoadError: Story = {
     await expect(
       await within(canvasElement).findByText("Couldn't load workspaces. Database is locked")
     ).toBeVisible();
+  },
+};
+
+export const FirstWorkspace: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'workspace.listForProject': () => ({ workspaces: [], reviewCount: 0 }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Create your first workspace')).toBeVisible();
+    await expect(await canvas.findByText('Support keyboard shortcuts on the board')).toBeVisible();
+  },
+};
+
+export const IssuesDisconnected: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'github.listIssuesForProject': () => ({
+          issues: [],
+          error: 'Project is not linked to a GitHub repository',
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText('Connect an issue provider to see assigned issues')
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Project settings' })).toHaveAttribute(
+      'href',
+      '/projects/demo/settings'
+    );
+  },
+};
+
+export const IssuesError: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'github.listIssuesForProject': () => ({ issues: [], error: 'GitHub is unavailable' }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(canvas.getByText('Add authentication')).toBeVisible();
+  },
+};
+
+export const IssuesLoading: Story = {
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByRole('status', { name: 'Loading issues' })
+    ).toBeVisible();
+  },
+  parameters: {
+    trpc: { handlers: { ...handlers, 'github.listIssuesForProject': () => STORY_TRPC_PENDING } },
+  },
+};
+
+export const NoAssignedIssues: Story = {
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText('No assigned issues')).toBeVisible();
+  },
+  parameters: {
+    trpc: {
+      handlers: { ...handlers, 'github.listIssuesForProject': () => ({ issues: [], error: null }) },
+    },
+  },
+};
+
+export const ArchiveSelection: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole('checkbox', { name: 'Select Add authentication' })
+    );
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select Update dependencies' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Archive selected' }));
+    const dialog = await within(document.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('Archive 2 selected workspaces?');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('2 selected');
+  },
+};
+
+export const PhoneFilter: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Update dependencies');
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Filter board' }), 'no matching task');
+    await expect(canvas.getByText('No matching issues or workspaces')).toBeVisible();
+    await userEvent.clear(canvas.getByRole('textbox', { name: 'Filter board' }));
+    await expect(canvas.getByText('Update dependencies')).toBeVisible();
+  },
+};
+
+export const IssuesRefreshRecovery: Story = {
+  render: () => (
+    <IssueRefreshRecoveryFixture
+      projectId="proj-1"
+      handlers={{ 'workspace.listForProject': () => ({ workspaces, reviewCount: 0 }) }}
+    >
+      <KanbanProvider projectId="proj-1" projectSlug="demo" issueProvider={IssueProvider.GITHUB}>
+        <div className="h-[640px] p-4">
+          <KanbanBoard />
+        </div>
+      </KanbanProvider>
+    </IssueRefreshRecoveryFixture>
+  ),
+  play: async ({ canvasElement }) => exerciseIssueRefreshRecovery(canvasElement),
+};
+
+export const ArchiveOneWorkspace: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Archive All' }));
+    let dialog = await within(document.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('archive all 1 workspace in this column');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select Add authentication' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Archive selected' }));
+    dialog = await within(document.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('Archive 1 selected workspace?');
   },
 };

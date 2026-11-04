@@ -188,6 +188,38 @@ describe('IssueCard', () => {
     container.remove();
   });
 
+  it('keeps the external issue action separate from launch', () => {
+    const { container, root } = renderCard();
+    const external = container.querySelector('a')!;
+    // Prevent jsdom navigation while exercising event bubbling.
+    external.addEventListener('click', (event) => event.preventDefault());
+    actFlushSync(() =>
+      external.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    );
+    expect(mocks.createWorkspaceMutationOptions).toBeUndefined();
+    actFlushSync(() =>
+      container
+        .querySelector('[data-testid="issue-card"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    );
+    expect(mocks.createWorkspaceMutationOptions).toBeDefined();
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
+
+  it('opens the same launch sheet from the issue title', () => {
+    const { container, root } = renderCard();
+    const title = container.querySelector('[aria-label="Start Fix login redirect"]');
+    expect(title).not.toBeNull();
+    actFlushSync(() => title?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(mocks.createWorkspaceMutationOptions).toBeDefined();
+    expect(
+      container.querySelector('a[href="https://github.com/acme/repo/issues/42"]')
+    ).not.toBeNull();
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
+
   it('invalidates the project workspace list after creating a workspace from an issue', () => {
     const { container, root } = renderCard();
 

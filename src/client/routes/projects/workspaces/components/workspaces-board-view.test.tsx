@@ -61,7 +61,6 @@ vi.mock('@/client/features/kanban', async (importOriginal) => {
     KanbanControls: () => null,
   };
 });
-vi.mock('@/client/features/kanban/issue-details-sheet', () => ({ IssueDetailsSheet: () => null }));
 vi.mock('@/client/features/kanban/kanban-column', () => ({
   getKanbanColumns: () =>
     mocks.isMobile

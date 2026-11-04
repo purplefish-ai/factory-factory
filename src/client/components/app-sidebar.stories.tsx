@@ -1,15 +1,26 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { observable } from '@trpc/server/observable';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
-import { trpc } from '@/client/lib/trpc';
+import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
+import {
+  IssueRefreshRecoveryFixture,
+  exerciseIssueRefreshRecovery,
+} from './project-issues-recovery.story-fixtures';
 
-type State = 'healthy' | 'failed' | 'loading' | 'empty' | 'project-switch';
+type State =
+  | 'healthy'
+  | 'failed'
+  | 'loading'
+  | 'empty'
+  | 'project-switch'
+  | 'issues-ready'
+  | 'issues-error'
+  | 'issues-disconnected'
+  | 'issues-recovery';
 
 /** Moves Storybook's shared MemoryRouter to the story's route before rendering. */
 function AtRoute({ path, children }: { path: string; children: ReactNode }) {
@@ -36,18 +47,6 @@ function SidebarStory({
   path?: string;
   mobileOpen?: boolean;
 }) {
-  const [queryClient] = useState(() => new QueryClient());
-  const [client] = useState(() =>
-    trpc.createClient({
-      links: [
-        () => () =>
-          observable((observer) => {
-            observer.next({ result: { data: { issues: [] } } });
-            observer.complete();
-          }),
-      ],
-    })
-  );
   const [switched, setSwitched] = useState(false);
   const summary =
     state === 'loading' || switched
@@ -71,22 +70,52 @@ function SidebarStory({
     clearAttention: () => undefined,
     currentWorkspaceId: undefined,
   };
-  return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {state === 'project-switch' ? (
-          <button type="button" onClick={() => setSwitched((value) => !value)}>
-            Switch project
-          </button>
-        ) : null}
-        <AtRoute path={path}>
-          <SidebarProvider className="h-[640px] min-h-0">
-            {mobileOpen ? <OpenMobileSheet /> : null}
-            <AppSidebar navData={navData} />
-          </SidebarProvider>
-        </AtRoute>
-      </QueryClientProvider>
-    </trpc.Provider>
+  const content = (
+    <>
+      {state === 'project-switch' ? (
+        <button type="button" onClick={() => setSwitched((value) => !value)}>
+          Switch project
+        </button>
+      ) : null}
+      <AtRoute path={path}>
+        <SidebarProvider className="h-[640px] min-h-0">
+          {mobileOpen ? <OpenMobileSheet /> : null}
+          <AppSidebar navData={navData} />
+        </SidebarProvider>
+      </AtRoute>
+    </>
+  );
+  return state === 'issues-recovery' ? (
+    <IssueRefreshRecoveryFixture projectId="factory">{content}</IssueRefreshRecoveryFixture>
+  ) : (
+    <StoryTrpcProvider
+      handlers={{
+        'github.listIssuesForProject': () => ({
+          issues:
+            state === 'issues-ready'
+              ? [
+                  {
+                    number: 42,
+                    title: 'Fix login redirect',
+                    body: '',
+                    url: 'https://github.com/acme/repo/issues/42',
+                    createdAt: '2026-11-01T12:00:00Z',
+                    author: { login: 'octocat' },
+                  },
+                ]
+              : [],
+          error:
+            state === 'issues-error'
+              ? 'GitHub is unavailable'
+              : state === 'issues-disconnected'
+                ? 'Project is not linked to a GitHub repository'
+                : null,
+        }),
+        'userSettings.get': () => ({ defaultSessionProvider: 'CLAUDE', ratchetEnabled: false }),
+      }}
+    >
+      {content}
+    </StoryTrpcProvider>
   );
 }
 const meta = {
@@ -97,7 +126,17 @@ const meta = {
   argTypes: {
     state: {
       control: 'select',
-      options: ['healthy', 'failed', 'loading', 'empty', 'project-switch'],
+      options: [
+        'healthy',
+        'failed',
+        'loading',
+        'empty',
+        'project-switch',
+        'issues-ready',
+        'issues-error',
+        'issues-disconnected',
+        'issues-recovery',
+      ],
     },
   },
 } satisfies Meta<typeof SidebarStory>;
@@ -156,4 +195,38 @@ export const MobileSheet: Story = {
       boardHref
     );
   },
+};
+
+export const TodoLaunch: Story = {
+  args: { state: 'issues-ready' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const primary = await canvas.findByRole('button', { name: 'Start Fix login redirect' });
+    await expect(canvas.getByRole('link', { name: 'Open #42 externally' })).toHaveAttribute(
+      'target',
+      '_blank'
+    );
+    await userEvent.click(primary);
+    const sheet = await within(document.body).findByRole('dialog');
+    await expect(within(sheet).getByRole('heading', { name: 'Start issue' })).toBeVisible();
+  },
+};
+export const TodoDisconnected: Story = {
+  args: { state: 'issues-disconnected' },
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByRole('link', { name: 'Project settings' })
+    ).toHaveAttribute('href', '/projects/factory/settings');
+  },
+};
+export const TodoError: Story = {
+  args: { state: 'issues-error' },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
+export const TodoRefreshRecovery: Story = {
+  args: { state: 'issues-recovery' },
+  play: async ({ canvasElement }) => exerciseIssueRefreshRecovery(canvasElement),
 };
