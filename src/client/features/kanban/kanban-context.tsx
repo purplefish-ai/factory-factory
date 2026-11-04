@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import {
   useWorkspaceArchiveCommand,
   type WorkspaceArchiveOutcome,
@@ -18,6 +19,7 @@ import type { WorkspaceWithKanban } from './kanban-card';
 interface KanbanContextValue {
   projectId: string;
   projectSlug: string;
+  unreadMailCounts?: Record<string, number>;
   issueProvider: IssueProvider;
   workspaces: WorkspaceWithKanban[] | undefined;
   issues: NormalizedIssue[] | undefined;
@@ -77,6 +79,7 @@ export function KanbanProvider({
   children,
 }: KanbanProviderProps) {
   const utils = trpc.useUtils();
+  const unreadMailCounts = useWorkspaceUnreadCounts(projectId);
   const {
     data: projectWorkspaces,
     isLoading: isLoadingWorkspaces,
@@ -308,6 +311,7 @@ export function KanbanProvider({
       value={{
         projectId,
         projectSlug,
+        unreadMailCounts: unreadMailCounts.data,
         issueProvider,
         workspaces: visibleWorkspaces,
         issues,

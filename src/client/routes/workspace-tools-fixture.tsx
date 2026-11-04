@@ -29,6 +29,7 @@ export function WorkspaceToolsFixture() {
                   periodicTaskId: null,
                   creationSource: 'MANUAL',
                 },
+                'workspace.unreadMailCounts': {},
                 'workspace.getInitStatus': { status: 'READY', initOutput: '' },
                 'workspace.getGitStatus': {
                   files: Array.from({ length: 35 }, (_, i) => ({

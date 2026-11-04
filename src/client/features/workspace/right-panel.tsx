@@ -1,6 +1,7 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
@@ -88,6 +89,8 @@ export const RightPanel = memo(function RightPanel({
   }, []);
 
   const { data: workspace } = useWorkspaceDetailQuery(workspaceId);
+  const unreadCounts = useWorkspaceUnreadCounts(workspace?.projectId);
+  const unreadCount = unreadCounts.data?.[workspaceId];
   const periodicTaskId =
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
   const creationSource =
@@ -218,6 +221,7 @@ export const RightPanel = memo(function RightPanel({
   const topPanel = (
     <TopPanelArea
       compact={isMobile}
+      unreadCount={unreadCount}
       projectId={workspace?.projectId}
       workspaceId={workspaceId}
       activeTopTab={activeTopTab}
@@ -334,6 +338,7 @@ export const RightPanel = memo(function RightPanel({
       workspaceId={workspaceId}
       isMobile={isMobile}
       mobilePanel={mobilePanel}
+      unreadCount={unreadCount}
       periodicTaskId={periodicTaskId}
       onOpenLogs={handleLogsTabChange}
       className={className}

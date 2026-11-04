@@ -33,7 +33,9 @@ function RightPanelStory({
   hasTask = false,
   showChatToolbar = false,
   showActivity = false,
+  showUnread = false,
 }: {
+  showUnread?: boolean;
   hasTask?: boolean;
   showChatToolbar?: boolean;
   showActivity?: boolean;
@@ -60,6 +62,7 @@ function RightPanelStory({
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
                   creationSource: showActivity ? 'CHILD_WORKSPACE' : 'MANUAL',
                 }),
+                'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
                 'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
                 'workspace.getGitStatus': () => ({ files: [] }),
                 'workspace.getDiffVsMain': () => ({
@@ -313,5 +316,30 @@ export const OpenSubagentFromActivity: Story = {
     await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
       'false'
     );
+  },
+};
+
+export const UnreadInbox: Story = {
+  render: () => <RightPanelStory showUnread />,
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByRole('img', { name: '3 unread inbox messages' })
+    ).toBeVisible();
+  },
+};
+
+export const UnreadInboxDark: Story = { ...UnreadInbox, globals: { theme: 'dark' } };
+export const UnreadInboxPhone: Story = {
+  ...UnreadInbox,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('img', { name: '3 unread inbox messages' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: /More tools/ }));
+    const inbox = await within(canvasElement.ownerDocument.body).findByRole('menuitemradio', {
+      name: /Inbox/,
+    });
+    await expect(within(inbox).getByRole('img', { name: '3 unread inbox messages' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
   },
 };

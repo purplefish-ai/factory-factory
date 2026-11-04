@@ -44,6 +44,7 @@ export function WorkspaceMailDetail({
           setNextOffset(item.nextOffset);
           setObservedRevision(result.revision);
           void utils.workspace.listMail.invalidate({ workspaceId });
+          void utils.workspace.unreadMailCounts.invalidate();
         },
         onError: (error) => {
           if (active) {
@@ -72,6 +73,7 @@ export function WorkspaceMailDetail({
           setNextOffset(item.nextOffset);
           setObservedRevision(result.revision);
           void utils.workspace.listMail.invalidate({ workspaceId });
+          void utils.workspace.unreadMailCounts.invalidate();
         },
         onError: (error) => setReadError(error.message),
       }
@@ -124,6 +126,7 @@ export function WorkspaceMailDetail({
                     );
                   }
                   void utils.workspace.listMail.invalidate({ workspaceId });
+                  void utils.workspace.unreadMailCounts.invalidate();
                 },
                 onError: (error) => setAckError(error.message),
               }

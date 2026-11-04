@@ -4,7 +4,7 @@ import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FilesIcon } from '@phosphor-icons/react/dist/csr/Files';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
-import { WorkspaceInboxPanel } from '@/client/features/inbox';
+import { WorkspaceInboxPanel, UnreadMailBadge } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -18,6 +18,7 @@ import { ScreenshotsPanel } from './screenshots-panel';
 
 interface TopPanelAreaProps {
   compact?: boolean;
+  unreadCount?: number;
   workspaceId: string;
   projectId?: string;
   activeTopTab: TopPanelTab;
@@ -36,6 +37,7 @@ interface TopPanelAreaProps {
 
 export function TopPanelArea({
   compact,
+  unreadCount,
   workspaceId,
   projectId,
   activeTopTab,
@@ -105,7 +107,12 @@ export function TopPanelArea({
 
         <TabButton
           label="Inbox"
-          icon={<EnvelopeSimpleIcon className="h-3.5 w-3.5" />}
+          icon={
+            <span className="inline-flex items-center gap-1">
+              <EnvelopeSimpleIcon className="h-3.5 w-3.5" />
+              <UnreadMailBadge count={unreadCount} icon={false} />
+            </span>
+          }
           isActive={showInbox}
           onSelect={() => onTopTabChange('inbox')}
         />

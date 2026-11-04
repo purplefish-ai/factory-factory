@@ -96,7 +96,9 @@ const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
   workspace,
   projectSlug,
   isActive,
+  unreadCount,
 }: {
+  unreadCount?: number;
   workspace: ServerWorkspace;
   projectSlug: string;
   isActive: boolean;
@@ -114,6 +116,7 @@ const SidebarWorkspaceItem = memo(function SidebarWorkspaceItem({
         <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
           <WorkspaceItemContent
             workspace={workspace}
+            unreadCount={unreadCount}
             onOpenPr={() => {
               const pr = getWorkspaceSelectedPR(workspace);
               if (pr) {
@@ -183,7 +186,9 @@ function WorkspaceGroup({
   projectSlug,
   currentWorkspaceId,
   emptyText,
+  unreadMailCounts,
 }: {
+  unreadMailCounts?: Record<string, number>;
   label: string;
   workspaces: ServerWorkspace[];
   projectSlug: string;
@@ -202,6 +207,7 @@ function WorkspaceGroup({
               <SidebarWorkspaceItem
                 key={ws.id}
                 workspace={ws}
+                unreadCount={unreadMailCounts?.[ws.id]}
                 projectSlug={projectSlug}
                 isActive={ws.id === currentWorkspaceId}
               />
@@ -475,6 +481,7 @@ function SidebarInner({
           workspaces={working}
           projectSlug={navData.selectedProjectSlug}
           currentWorkspaceId={navData.currentWorkspaceId}
+          unreadMailCounts={navData.unreadMailCounts}
           emptyText="No active workspaces"
         />
         <WorkspaceGroup
@@ -482,6 +489,7 @@ function SidebarInner({
           workspaces={waiting}
           projectSlug={navData.selectedProjectSlug}
           currentWorkspaceId={navData.currentWorkspaceId}
+          unreadMailCounts={navData.unreadMailCounts}
           emptyText="No waiting workspaces"
         />
         <WorkspaceGroup
@@ -489,6 +497,7 @@ function SidebarInner({
           workspaces={done}
           projectSlug={navData.selectedProjectSlug}
           currentWorkspaceId={navData.currentWorkspaceId}
+          unreadMailCounts={navData.unreadMailCounts}
           emptyText="No completed workspaces"
         />
       </SidebarContent>

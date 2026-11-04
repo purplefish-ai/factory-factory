@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { baseWorkspace } from './kanban-card.story-fixtures';
@@ -442,4 +443,19 @@ export const MixedPullRequests: Story = {
       prSummary: deriveWorkspacePRSummary(mixedPullRequests, mixedWorkspace.ratchetEnabled),
     },
   },
+};
+
+export const UnreadInbox: Story = {
+  args: { workspace: baseWorkspace, projectSlug: 'my-project', unreadCount: 12 },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('img', { name: '12 unread inbox messages' })
+    ).toBeVisible();
+  },
+};
+
+export const UnreadInboxDark: Story = { ...UnreadInbox, globals: { theme: 'dark' } };
+export const UnreadInboxPhone: Story = {
+  ...UnreadInbox,
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };

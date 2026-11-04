@@ -13,6 +13,7 @@ const mockFindParentWorkspace = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
 const mockGetAllPendingRequests = vi.hoisted(() => vi.fn());
 const mockGetRuntimeSnapshot = vi.hoisted(() => vi.fn());
+const mockUnreadMailCounts = vi.hoisted(() => vi.fn());
 const mockListMail = vi.hoisted(() => vi.fn());
 const mockReadMail = vi.hoisted(() => vi.fn());
 const mockAckMail = vi.hoisted(() => vi.fn());
@@ -46,6 +47,7 @@ function createCaller(requestTrust?: {
     },
     recoverWorkspaceMail: (...args: unknown[]) => mockRecoverWorkspaceMail(...args),
     workspaceNotificationService: {
+      unreadCountsForProject: (...args: unknown[]) => mockUnreadMailCounts(...args),
       listMail: (...args: unknown[]) => mockListMail(...args),
       readMail: (...args: unknown[]) => mockReadMail(...args),
       ackMail: (...args: unknown[]) => mockAckMail(...args),
@@ -518,6 +520,35 @@ describe('workspace inbox routes', () => {
       );
     }
   );
+  it('returns project counts only through the trusted-local boundary with validated output', async () => {
+    mockUnreadMailCounts.mockResolvedValue({ recipient: 3 });
+    const trusted = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://localhost:3000',
+      isLocal: true,
+    }).caller;
+    await expect(trusted.unreadMailCounts({ projectId: 'project' })).resolves.toEqual({
+      recipient: 3,
+    });
+    expect(mockUnreadMailCounts).toHaveBeenCalledExactlyOnceWith({ projectId: 'project' });
+    const untrusted = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    }).caller;
+    await expect(untrusted.unreadMailCounts({ projectId: 'project' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockUnreadMailCounts).toHaveBeenCalledTimes(1);
+    await expect(trusted.unreadMailCounts({ projectId: '' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    mockUnreadMailCounts.mockResolvedValue({ recipient: -1 });
+    await expect(trusted.unreadMailCounts({ projectId: 'project' })).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+    });
+  });
+
   it('rejects inbox previews and bodies from an untrusted client', async () => {
     mockListMail.mockClear();
     mockReadMail.mockClear();

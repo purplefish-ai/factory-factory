@@ -18,6 +18,11 @@ export const workspaceMailSendMetadataSchema = z.object({
 export type WorkspaceMailSendMetadata = z.infer<typeof workspaceMailSendMetadataSchema>;
 const workspaceId = z.string().min(1);
 const ids = z.array(z.string().min(1)).min(1).max(20);
+export const unreadMailCountsInputSchema = z.object({ projectId: z.string().min(1) });
+export const unreadMailCountsResultSchema = z.record(z.string(), z.number().int().nonnegative());
+export type UnreadMailCountsInput = z.infer<typeof unreadMailCountsInputSchema>;
+export type WorkspaceUnreadMailCounts = z.infer<typeof unreadMailCountsResultSchema>;
+
 export const listMailInputSchema = z.object({
   workspaceId,
   cursor: z.number().int().positive().optional(),

@@ -74,6 +74,7 @@ vi.mock('@/client/lib/trpc', () => ({
       createFromGithub: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
     workspace: {
+      unreadMailCounts: { useQuery: () => ({ data: {} }) },
       listForProject: { useQuery: () => ({ data: undefined }) },
       syncAllPRStatuses: { useMutation: () => ({ mutate: vi.fn() }) },
     },

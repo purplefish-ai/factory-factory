@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
+import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import { useCombinedAgentSummary } from '@/client/hooks/use-combined-agent-summary';
 import {
   getReviewRepository,
@@ -137,6 +138,7 @@ export function useAppNavigationData() {
 
   const selectedProject = projects?.find((p) => p.slug === selectedProjectSlug);
   const selectedProjectId = selectedProject?.id;
+  const unreadMailCounts = useWorkspaceUnreadCounts(selectedProjectId);
   const issueProvider = selectedProject?.issueProvider ?? 'GITHUB';
 
   const urlSlug = getProjectSlugFromPath(pathname);
@@ -195,6 +197,7 @@ export function useAppNavigationData() {
   }, [currentWorkspaceId, needsAttention, clearAttention]);
 
   return {
+    ...(unreadMailCounts.data ? { unreadMailCounts: unreadMailCounts.data } : {}),
     projects,
     projectsError,
     refetchProjects,

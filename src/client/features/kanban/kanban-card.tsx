@@ -9,6 +9,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, useState } from 'react';
 import { Link } from 'react-router';
+import { UnreadMailBadge } from '@/client/features/inbox';
 import {
   ArchiveWorkspaceDialog,
   ConnectedWorkspacePrMenu,
@@ -42,6 +43,7 @@ export type WorkspaceWithKanban = WorkspaceSummary<Date>;
 export interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
   projectSlug: string;
+  unreadCount?: number;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   isTogglePending?: boolean;
   onArchive?: (workspaceId: string) => void;
@@ -402,6 +404,7 @@ function CardFamilyMetadata({
 export const KanbanCard = memo(function KanbanCard({
   workspace,
   projectSlug,
+  unreadCount,
   onToggleRatcheting,
   isTogglePending = false,
   onArchive,
@@ -491,6 +494,7 @@ export const KanbanCard = memo(function KanbanCard({
               >
                 {workspace.name}
               </Link>
+              <UnreadMailBadge count={unreadCount} />
             </CardTitle>
           )}
           <CardTitleIcons

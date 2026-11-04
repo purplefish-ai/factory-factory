@@ -1,6 +1,7 @@
 import { workspaceNotificationAccessor } from '@/backend/services/workspace/resources/workspace-notification.accessor';
 import type {
   AckMailInput,
+  UnreadMailCountsInput,
   ListMailInput,
   ReadMailInput,
   WorkspaceMailSendMetadata,
@@ -16,6 +17,10 @@ type NotificationInput = WorkspaceMailSendMetadata & {
 };
 
 class WorkspaceNotificationService {
+  unreadCountsForProject(input: UnreadMailCountsInput) {
+    return workspaceNotificationAccessor.unreadCountsForProject(input);
+  }
+
   listMail(input: ListMailInput) {
     return workspaceNotificationAccessor.listMail(input);
   }
