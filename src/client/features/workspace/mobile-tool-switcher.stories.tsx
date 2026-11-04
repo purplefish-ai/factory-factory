@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useState } from 'react';
+import { expect, within } from 'storybook/test';
 import { RightPanelLayout } from './right-panel-layout';
 import type { TopPanelTab } from './right-panel-state';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
@@ -68,6 +69,22 @@ export const Files: Story = { args: { initialTool: 'files' } };
 export const Terminal: Story = { args: { initialTool: 'terminal' } };
 export const Screenshots: Story = { args: { initialTool: 'screenshots' } };
 export const Inbox: Story = { args: { initialTool: 'inbox' } };
-export const Agent: Story = { args: { initialTool: 'periodic-task' } };
+export const Agent: Story = {
+  args: { initialTool: 'periodic-task' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('tab', { name: 'Scheduled agent', selected: true })
+    ).toBeVisible();
+  },
+};
 export const Logs: Story = { args: { initialTool: 'logs' } };
-export const Wide: Story = { args: { initialTool: 'agents', width: 640 } };
+export const Wide: Story = {
+  args: { initialTool: 'agents', width: 640 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('tab', { name: 'Sub-agents', selected: true })
+    ).toBeVisible();
+  },
+};

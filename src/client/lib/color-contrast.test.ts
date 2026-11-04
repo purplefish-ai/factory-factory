@@ -29,6 +29,17 @@ describe('color contrast helpers', () => {
     expect(parseThemeColor('rgb(0 0 0)')).toBeNull();
   });
 
+  it('rejects malformed OKLCH numbers instead of producing NaN', () => {
+    expect(parseThemeColor('oklch(1.2.3 0 0)')).toBeNull();
+    expect(parseThemeColor('oklch(. 0 0)')).toBeNull();
+    expect(parseThemeColor('oklch(.5 0 0)')?.rgb).toEqual(oklchToRgb(0.5, 0, 0));
+  });
+
+  it('clamps alpha like CSS', () => {
+    expect(parseThemeColor('oklch(0.5 0 0 / 150%)')?.alpha).toBe(1);
+    expect(parseThemeColor('oklch(0.5 0 0 / 2)')?.alpha).toBe(1);
+  });
+
   it('computes WCAG contrast ratios', () => {
     expect(contrastRatio([0, 0, 0], [1, 1, 1])).toBeCloseTo(21);
     expect(contrastRatio([1, 1, 1], [1, 1, 1])).toBeCloseTo(1);

@@ -6,8 +6,14 @@ import { PrStateBadge } from './pr-state-badge';
 describe('PrStateBadge', () => {
   it('shows only drafts by default', () => {
     expect(renderToStaticMarkup(<PrStateBadge prState="DRAFT" />)).toContain('>Draft<');
-    expect(renderToStaticMarkup(<PrStateBadge prState="MERGED" />)).toBe('');
   });
+
+  it.each(['OPEN', 'APPROVED', 'CHANGES_REQUESTED', 'MERGED', 'CLOSED'] as const)(
+    'hides %s by default',
+    (state) => {
+      expect(renderToStaticMarkup(<PrStateBadge prState={state} />)).toBe('');
+    }
+  );
 
   it.each([
     ['OPEN', 'Open', 'success'],

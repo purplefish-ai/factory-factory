@@ -1055,10 +1055,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/client/features/kanban/index.ts::exports::useKanban": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/client/features/kanban/index.ts::types::WorkspaceWithKanban": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
@@ -1204,10 +1200,6 @@
       "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
     },
     "src/components/ui/input-group.tsx::exports::InputGroupText": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/kbd.tsx::exports::KbdGroup": {
       "disposition": "maintained-api",
       "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
     },

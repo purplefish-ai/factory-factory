@@ -108,13 +108,19 @@ function ContrastLabel({
 
 type ColorToken = TokenGroup['tokens'][number];
 
+/**
+ * Translucent fills are layered over the page the way `bg-<token>/60` renders
+ * (sRGB alpha compositing), so the swatch matches the measured `mixOver` ratio.
+ */
 function swatchBackground(token: ColorToken, fillAlpha: number | undefined): string {
   if (!token.on) {
     return `var(--${token.name})`;
   }
-  return fillAlpha
-    ? `color-mix(in oklab, var(--${token.on}) ${fillAlpha * 100}%, var(--background))`
-    : `var(--${token.on})`;
+  if (!fillAlpha) {
+    return `var(--${token.on})`;
+  }
+  const fill = `color-mix(in oklab, var(--${token.on}) ${fillAlpha * 100}%, transparent)`;
+  return `linear-gradient(${fill}, ${fill}), var(--background)`;
 }
 
 function TokenSwatch({

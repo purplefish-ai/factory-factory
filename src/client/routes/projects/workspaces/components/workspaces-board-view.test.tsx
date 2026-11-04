@@ -479,3 +479,30 @@ describe('WorkspacesBoardView project lifetime', () => {
     expect(getList('b')?.workspaces.map((workspace) => workspace.id)).toEqual(['b-2']);
   });
 });
+
+describe('WorkspacesBoardView new workspace URL request', () => {
+  it('opens the inline form once and lets the route consume the request', async () => {
+    const onOpened = vi.fn();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <WorkspacesBoardView
+            projectId="a"
+            slug="a"
+            projects={[]}
+            issueProvider="GITHUB"
+            openNewWorkspaceForm
+            onNewWorkspaceFormOpened={onOpened}
+          />
+        </QueryClientProvider>
+      )
+    );
+    expect(mocks.context!.showInlineForm).toBe(true);
+    expect(onOpened).toHaveBeenCalledOnce();
+  });
+
+  it('leaves the form closed without a request', async () => {
+    await render('a');
+    expect(mocks.context!.showInlineForm).toBe(false);
+  });
+});

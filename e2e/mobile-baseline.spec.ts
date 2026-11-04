@@ -132,6 +132,10 @@ for (const viewport of mobileViewports) {
     const sidebar = page.getByRole('dialog', { name: 'Navigation', exact: true });
     await expect(sidebar).toBeVisible();
     const footer = sidebar.locator('[data-sidebar="footer"]');
+    await expect(footer.getByRole('link', { name: 'Board', exact: true })).toHaveAttribute(
+      'href',
+      '/projects/factory-factory/workspaces'
+    );
     await expect(footer.getByRole('link', { name: 'Agents', exact: true })).toHaveAttribute(
       'href',
       '/projects/factory-factory/agents'
@@ -150,7 +154,7 @@ for (const viewport of mobileViewports) {
         .evaluateAll((links) =>
           links.map((link) => link.getAttribute('aria-label') ?? link.textContent)
         )
-    ).toEqual(['Agents', 'Reviews2', 'Settings']);
+    ).toEqual(['Board', 'Agents', 'Reviews2', 'Settings']);
     await expect(
       footer.getByRole('link', { name: 'Agents', exact: true })
     ).toHaveAccessibleDescription('4 agents');

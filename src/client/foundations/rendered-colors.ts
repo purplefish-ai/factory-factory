@@ -52,9 +52,11 @@ export function useRenderedTokens(tokens: readonly string[]) {
     const next = new Map<string, RenderedToken>();
     for (const token of tokenKey.split(',')) {
       probe.style.backgroundColor = `var(--${token})`;
+      const value = getComputedStyle(probe).getPropertyValue(`--${token}`).trim();
+      // An undefined token computes to transparent, which would read as black.
       next.set(token, {
-        value: getComputedStyle(probe).getPropertyValue(`--${token}`).trim(),
-        rgb: cssColorToRgb(getComputedStyle(probe).backgroundColor),
+        value,
+        rgb: value ? cssColorToRgb(getComputedStyle(probe).backgroundColor) : null,
       });
     }
     probe.remove();

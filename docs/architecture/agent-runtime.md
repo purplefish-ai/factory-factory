@@ -1059,26 +1059,26 @@ Replacing a provider's archived history also clears its task snapshot.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Sessions panel through its session-scoped tracker. Clicking a single running
+Sub-agents panel through its session-scoped tracker. Clicking a single running
 sub-agent in the main chat opens its transcript tab directly, without expanding
 a list. With multiple running sub-agents, the count expands an inline list;
 selecting one opens its transcript tab directly. Completed sub-agents remain in
-Sessions. The inline list deduplicates overlapping provider pages and retains
-pagination and Retry controls when later pages are unavailable. The Sessions
+Sub-agents. The inline list deduplicates overlapping provider pages and retains
+pagination and Retry controls when later pages are unavailable. The Sub-agents
 panel's stored key remains `agents`; child-workspace access remains available
 for parent workspaces. The count shows the assigned icons of up to three active
 sub-agents in creation order; larger groups keep the full count without adding
 more icons. Until all summary pages load without errors, the count remains
-visible without placeholder agent icons. The Sessions list, lifecycle rows, and
-sub-agent tabs share twelve nature icons claimed in creation order (with agent
-ID breaking ties). Each sub-agent claims the lowest available icon; completion,
-failure, cancellation, or interruption releases it for later agents. Lifecycle
-timestamps reconstruct claims after reloads so every surface uses the same
-assignments. Provider revisions to lifecycle timestamps or resumed threads can
-change reconstructed assignments. Unknown lifecycle times conservatively retain
-claims. More than twelve overlapping agents use distinct numbered badges; those
-slots can also be reused after completion. Tabs preserve the assigned icon color
-and pulse while starting or running. Unknown creation times sort last. Its
+visible without placeholder agent icons. The Sub-agents list, lifecycle rows,
+and sub-agent tabs share twelve nature icons claimed in creation order (with
+agent ID breaking ties). Each sub-agent claims the lowest available icon;
+completion, failure, cancellation, or interruption releases it for later agents.
+Lifecycle timestamps reconstruct claims after reloads so every surface uses the
+same assignments. Provider revisions to lifecycle timestamps or resumed threads
+can change reconstructed assignments. Unknown lifecycle times conservatively
+retain claims. More than twelve overlapping agents use distinct numbered badges;
+those slots can also be reused after completion. Tabs preserve the assigned icon
+color and pulse while starting or running. Unknown creation times sort last. Its
 header counts active (starting, running, or waiting) sub-agents; terminal agents
 remain under the separate collapsible Completed count. The panel automatically
 loads all summary pages before showing the active count, so children on later
@@ -1229,6 +1229,14 @@ URL. A failed start destroys the loading window before the startup error dialog
 and quit; closing it during startup stops the backend like closing any last
 window, and the app URL is never loaded into a closed window.
 
+The app window never opens child windows. `target="_blank"` links and
+`window.open` calls open in the system browser or mail client, even for app
+URLs, because a child window would inherit the preload bridge. Top-level
+navigation and redirects that leave the loaded app's origin are cancelled and
+opened externally. Only `http`, `https` and `mailto` URLs reach
+`shell.openExternal`; other schemes are blocked
+(`electron/main/external-links.ts`).
+
 On macOS a utility process runs from the Electron Helper binary, so Electron
 main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
 provider CLIs and the child-workspace MCP server launch with
@@ -1252,12 +1260,13 @@ cannot hold the fatal-error path open indefinitely.
 ### Targeted interruption
 
 Expanded background-process rows in chat and controllable sub-agent rows in the
-Sessions panel expose an icon-only Stop action. Each action has its own disabled
-spinner until live provider updates remove the work or withdraw its capability;
-request acknowledgment does not invent completion. Failures use a toast and
-allow retry. Pending attempts and their original deadlines survive list/panel
-remounts, and confirmation waiting is bounded to 15 seconds. Disconnecting hides
-controls, and stopping a row remains separate from selecting its transcript.
+Sub-agents panel expose an icon-only Stop action. Each action has its own
+disabled spinner until live provider updates remove the work or withdraw its
+capability; request acknowledgment does not invent completion. Failures use a
+toast and allow retry. Pending attempts and their original deadlines survive
+list/panel remounts, and confirmation waiting is bounded to 15 seconds.
+Disconnecting hides controls, and stopping a row remains separate from selecting
+its transcript.
 
 The session-scoped `stopTarget` mutation validates an opaque live control ID
 against the current active runtime's native tracker before dispatch. UI

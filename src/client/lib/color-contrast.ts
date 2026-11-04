@@ -44,8 +44,11 @@ export function oklchToRgb(lightness: number, chroma: number, hueDegrees: number
 }
 
 const HEX_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-const OKLCH_PATTERN =
-  /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:deg)?\s*(?:\/\s*([\d.]+)(%?))?\s*\)$/i;
+const NUMBER = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+const OKLCH_PATTERN = new RegExp(
+  String.raw`^oklch\(\s*${NUMBER}(%?)\s+${NUMBER}\s+${NUMBER}(?:deg)?\s*(?:\/\s*${NUMBER}(%?))?\s*\)$`,
+  'i'
+);
 
 /** Parses a theme color literal, or returns null for unsupported syntax. */
 export function parseThemeColor(value: string): ParsedColor | null {
@@ -65,7 +68,8 @@ export function parseThemeColor(value: string): ParsedColor | null {
   const oklch = OKLCH_PATTERN.exec(text);
   if (oklch) {
     const lightness = Number(oklch[1]) / (oklch[2] ? 100 : 1);
-    const alpha = oklch[5] === undefined ? 1 : Number(oklch[5]) / (oklch[6] ? 100 : 1);
+    // CSS clamps alpha to [0, 1].
+    const alpha = oklch[5] === undefined ? 1 : clamp01(Number(oklch[5]) / (oklch[6] ? 100 : 1));
     return { rgb: oklchToRgb(lightness, Number(oklch[3]), Number(oklch[4])), alpha };
   }
   return null;

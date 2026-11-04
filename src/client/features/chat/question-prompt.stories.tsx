@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { useState } from 'react';
+import { expect, fn, userEvent, within } from 'storybook/test';
+import { Textarea } from '@/components/ui/textarea';
 import { createUserQuestion } from '@/lib/claude-fixtures';
 import { QuestionPrompt } from './question-prompt';
 
@@ -336,4 +338,56 @@ export const DeclineAnswer: Story = {
 export const SingleQuestionDark: typeof SingleQuestion = {
   ...SingleQuestion,
   globals: { theme: 'dark' },
+};
+
+/** Shows the question once the user starts typing, as when it arrives mid-message. */
+function ComposerFocusHarness({ question, onAnswer }: React.ComponentProps<typeof QuestionPrompt>) {
+  const [questionVisible, setQuestionVisible] = useState(false);
+  return (
+    <>
+      <QuestionPrompt question={questionVisible ? question : null} onAnswer={onAnswer} />
+      <div className="border-t p-3">
+        <Textarea
+          aria-label="Message composer"
+          placeholder="Type a message..."
+          onChange={() => setQuestionVisible(true)}
+        />
+      </div>
+    </>
+  );
+}
+
+export const ArrivesWhileTyping: Story = {
+  render: (args) => <ComposerFocusHarness {...args} />,
+  args: {
+    question: createUserQuestion([
+      {
+        question: 'Which package manager should I use?',
+        options: [
+          { label: 'pnpm', description: 'Matches the lockfile' },
+          { label: 'npm', description: 'Default Node package manager' },
+        ],
+      },
+    ]),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A question that arrives while the composer has focus leaves focus there instead of moving it to the first option.',
+      },
+    },
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole('textbox', { name: 'Message composer' });
+    await userEvent.click(composer);
+    await userEvent.type(composer, 'Use');
+    await canvas.findByText('Which package manager should I use?');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await expect(composer).toHaveFocus();
+    await userEvent.keyboard(' pnpm ');
+    await expect(composer).toHaveFocus();
+    await expect(args.onAnswer).not.toHaveBeenCalled();
+  },
 };

@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, fn, within } from 'storybook/test';
+import { useState } from 'react';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { Textarea } from '@/components/ui/textarea';
 import {
   createPermissionRequest,
   createPlanApprovalRequest,
@@ -154,6 +156,72 @@ export const NoPermission: Story = {
         story: 'When permission is null, the prompt is hidden and nothing is rendered.',
       },
     },
+  },
+};
+
+type PermissionPromptArgs = React.ComponentProps<typeof PermissionPrompt>;
+
+/** Shows the request once the user starts typing, as when it arrives mid-message. */
+function ComposerFocusHarness({ permission, onApprove }: PermissionPromptArgs) {
+  const [requestVisible, setRequestVisible] = useState(false);
+  return (
+    <>
+      <PermissionPrompt permission={requestVisible ? permission : null} onApprove={onApprove} />
+      <div className="border-t p-3">
+        <Textarea
+          aria-label="Message composer"
+          placeholder="Type a message..."
+          onChange={() => setRequestVisible(true)}
+        />
+      </div>
+    </>
+  );
+}
+
+const waitPastAutoFocusDelay = () => new Promise((resolve) => setTimeout(resolve, 250));
+
+export const ArrivesWhileTyping: Story = {
+  render: (args) => <ComposerFocusHarness {...args} />,
+  args: {
+    permission: createPermissionRequest('Bash', { command: 'rm -rf dist' }),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A request that arrives while the composer has focus leaves focus there, so Space or Enter typed into the message cannot approve the tool call.',
+      },
+    },
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole('textbox', { name: 'Message composer' });
+    await userEvent.click(composer);
+    await userEvent.type(composer, 'Run');
+    await canvas.findByRole('alertdialog');
+    await waitPastAutoFocusDelay();
+    await expect(composer).toHaveFocus();
+    await userEvent.keyboard(' the tests{Enter}');
+    await expect(composer).toHaveFocus();
+    await expect(args.onApprove).not.toHaveBeenCalled();
+  },
+};
+
+export const FocusesAllowWhenNothingFocused: Story = {
+  args: {
+    permission: createPermissionRequest('Bash', { command: 'pnpm test' }),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When nothing else has focus, the prompt focuses Allow so keyboard users can respond immediately.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Allow' })).toHaveFocus());
   },
 };
 

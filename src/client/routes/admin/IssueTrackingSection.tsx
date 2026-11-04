@@ -38,7 +38,9 @@ function LinearConfigFields({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const formGeneration = useRef(0);
 
-  const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation();
+  const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation({
+    meta: { errorToast: false },
+  });
 
   const resetValidation = () => {
     formGeneration.current += 1;
@@ -210,7 +212,7 @@ export function ProjectIssueTrackingCard({
   const providerGeneration = useRef(0);
   const pendingProviderSaves = useRef(0);
   const provider = optimisticProvider ?? currentProvider;
-  const updateProvider = trpc.project.update.useMutation();
+  const updateProvider = trpc.project.update.useMutation({ meta: { errorToast: false } });
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {

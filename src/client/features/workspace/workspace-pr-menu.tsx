@@ -163,7 +163,13 @@ function WorkspacePrMenuRow({
             {pr.url.split('/').slice(3, 5).join('/')} {pr.headRefName && `· ${pr.headRefName}`}
           </span>
         </span>
-        <PrStateBadge prState={pr.state} size="sm" />
+        {/* The CI chip already shows merged and closed; every other state,
+            including review outcomes, is shown here. */}
+        <PrStateBadge
+          prState={pr.state}
+          size="sm"
+          showAllStates={pr.state !== 'MERGED' && pr.state !== 'CLOSED'}
+        />
         <CiStatusChip ciState={getPrCiState(pr)} prState={pr.state} size="sm" showTooltip={false} />
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
