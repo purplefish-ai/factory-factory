@@ -18,7 +18,21 @@ const mocks = vi.hoisted(() => ({
   archivePending: false,
   refetch: vi.fn<(options?: RefetchOptions) => Promise<unknown>>(),
   toastError: vi.fn(),
+  listError: null as Error | null,
+  listFetching: false,
+  listData: undefined as unknown[] | undefined,
 }));
+
+const ALPHA_PROJECT = {
+  id: 'project-1',
+  name: 'Alpha',
+  slug: 'alpha',
+  repoPath: '/repos/alpha',
+  defaultBranch: 'main',
+  startupScriptCommand: null,
+  startupScriptPath: null,
+  _count: { workspaces: 2 },
+};
 
 vi.mock('@phosphor-icons/react/dist/csr/Archive', () => ({
   ArchiveIcon: () => createElement('span', { 'data-testid': 'archive-icon' }),
@@ -40,6 +54,13 @@ vi.mock('@/client/components/app-header-context', () => ({
   useAppHeader: vi.fn(),
 }));
 
+vi.mock('@phosphor-icons/react/dist/csr/ArrowClockwise', () => ({
+  ArrowClockwiseIcon: () => null,
+}));
+vi.mock('@phosphor-icons/react/dist/csr/WarningCircle', () => ({
+  WarningCircleIcon: () => null,
+}));
+
 vi.mock('@/client/features/project/project-settings-dialog', () => ({
   ProjectSettingsDialog: () => null,
 }));
@@ -49,19 +70,10 @@ vi.mock('@/client/lib/trpc', () => ({
     project: {
       list: {
         useQuery: () => ({
-          data: [
-            {
-              id: 'project-1',
-              name: 'Alpha',
-              slug: 'alpha',
-              repoPath: '/repos/alpha',
-              defaultBranch: 'main',
-              startupScriptCommand: null,
-              startupScriptPath: null,
-              _count: { workspaces: 2 },
-            },
-          ],
+          data: mocks.listData,
           isLoading: false,
+          error: mocks.listError,
+          isFetching: mocks.listFetching,
           refetch: mocks.refetch,
         }),
       },
@@ -188,6 +200,9 @@ beforeEach(() => {
   mocks.archivePending = false;
   mocks.refetch.mockReset();
   mocks.toastError.mockReset();
+  mocks.listError = null;
+  mocks.listFetching = false;
+  mocks.listData = [ALPHA_PROJECT];
 });
 
 afterEach(() => {
@@ -282,6 +297,63 @@ describe('ProjectsListPage archive confirmation', () => {
 
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(mocks.refetch).toHaveBeenCalledOnce();
+
+    root.unmount();
+  });
+});
+
+describe('ProjectsListPage load failure', () => {
+  it('shows the error with Retry instead of the first-run empty state', () => {
+    mocks.listData = undefined;
+    mocks.listError = new Error('Backend unavailable');
+    mocks.refetch.mockResolvedValue(undefined);
+    const { container, root } = renderPage();
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load projects");
+    expect(alert?.textContent).toContain('Backend unavailable');
+    expect(container.textContent).not.toContain('No projects found');
+    expect(container.textContent).not.toContain('Create your first project');
+
+    const retry = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retry'
+    );
+    click(retry ?? null);
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+
+    root.unmount();
+  });
+
+  it('disables Retry while the retry is in flight', () => {
+    mocks.listData = undefined;
+    mocks.listError = new Error('Backend unavailable');
+    mocks.listFetching = true;
+    const { container, root } = renderPage();
+
+    const retry = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Retrying')
+    );
+    expect(retry?.disabled).toBe(true);
+
+    root.unmount();
+  });
+
+  it('keeps showing cached projects when a background refetch fails', () => {
+    mocks.listError = new Error('Backend unavailable');
+    const { container, root } = renderPage();
+
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('Alpha');
+
+    root.unmount();
+  });
+
+  it('still shows the empty state when the project list is genuinely empty', () => {
+    mocks.listData = [];
+    const { container, root } = renderPage();
+
+    expect(container.textContent).toContain('No projects found');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
 
     root.unmount();
   });

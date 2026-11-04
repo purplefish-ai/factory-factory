@@ -133,9 +133,9 @@ export function CodexAccountsSettings() {
   const [open, setOpen] = useState(false);
   const [login, setLogin] = useState<CodexLoginState>();
   const [error, setError] = useState<string>();
-  const create = trpc.codexAccounts.create.useMutation();
-  const start = trpc.codexAccounts.startLogin.useMutation();
-  const cancel = trpc.codexAccounts.cancelLogin.useMutation();
+  const create = trpc.codexAccounts.create.useMutation({ meta: { errorToast: false } });
+  const start = trpc.codexAccounts.startLogin.useMutation({ meta: { errorToast: false } });
+  const cancel = trpc.codexAccounts.cancelLogin.useMutation({ meta: { errorToast: false } });
   const mounted = useRef(true);
   const activeLoginId = useRef<string | undefined>(undefined);
   useEffect(() => {

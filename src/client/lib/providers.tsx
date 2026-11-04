@@ -1,5 +1,6 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { createAppQueryClient } from './query-client';
 import { createTrpcClient, trpc } from './trpc';
 
 /** Hook to get non-archived projects list - used for sidebar visibility */
@@ -9,17 +10,7 @@ export function useProjects() {
 }
 
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 5 * 1000, // 5 seconds
-            refetchOnWindowFocus: false,
-          },
-        },
-      })
-  );
+  const [queryClient] = useState(createAppQueryClient);
 
   const [trpcClient] = useState(createTrpcClient);
 

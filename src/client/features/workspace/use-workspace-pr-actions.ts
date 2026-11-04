@@ -14,7 +14,7 @@ export function useWorkspacePrActions(
       ...(projectId ? [utils.workspace.listForProject.invalidate({ projectId })] : []),
     ]);
   };
-  const attach = trpc.workspace.attachPR.useMutation();
+  const attach = trpc.workspace.attachPR.useMutation({ meta: { errorToast: false } });
   const detach = trpc.workspace.detachPR.useMutation({
     onSuccess: refresh,
     onError: (error) => toast.error(error.message),
