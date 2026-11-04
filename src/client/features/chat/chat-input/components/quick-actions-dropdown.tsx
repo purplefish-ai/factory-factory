@@ -10,9 +10,8 @@ import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { useState } from 'react';
-import { trpc } from '@/client/lib/trpc';
 import { ShortcutKeys } from '@/client/features/shortcuts';
-
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -136,7 +135,6 @@ export function QuickActionsDropdownView({
       onRunInThisChat(action.content);
     }
   };
-
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>

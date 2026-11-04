@@ -67,6 +67,15 @@ function getTabIcon(type: MainViewTab['type']) {
   }
 }
 
+function selectedChatLabel(
+  sessions: Session[] | undefined,
+  currentSessionId: string | null | undefined
+) {
+  const index = sessions?.findIndex((session) => session.id === currentSessionId) ?? -1;
+  const current = sessions?.[index];
+  return current ? getSessionDisplayName(current, `Chat ${index + 1}`) : null;
+}
+
 // =============================================================================
 // Status Dot Component
 // =============================================================================
@@ -369,12 +378,7 @@ export function MainViewTabBar({
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
   // New sessions inherit the first session's provider/model, so wait for the list.
   const isButtonDisabled = disabled || isAtLimit || sessions === undefined;
-  const currentSessionIndex =
-    sessions?.findIndex((session) => session.id === currentSessionId) ?? -1;
-  const currentSession = currentSessionIndex >= 0 ? sessions?.[currentSessionIndex] : undefined;
-  const currentSessionLabel = currentSession
-    ? getSessionDisplayName(currentSession, `Chat ${currentSessionIndex + 1}`)
-    : null;
+  const currentSessionLabel = selectedChatLabel(sessions, currentSessionId);
 
   return (
     <div ref={tabBarRef} className={cn('flex items-center bg-muted/50', className)}>
