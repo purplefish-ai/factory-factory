@@ -64,3 +64,24 @@ it('ignores invalid stored values and tolerates unavailable storage', () => {
   expect(blocked.container.textContent).toBe('created');
   blocked.unmount();
 });
+
+it('syncs other-tab changes and storage clears while ignoring unrelated keys', () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const preference = mountPreference();
+  const key = 'kanban-waiting-sort-order';
+  localStorage.setItem(key, 'created');
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }));
+  });
+  expect(preference.container.textContent).toBe('latest-message');
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key }));
+  });
+  expect(preference.container.textContent).toBe('created');
+  localStorage.clear();
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  });
+  expect(preference.container.textContent).toBe('latest-message');
+  preference.unmount();
+});

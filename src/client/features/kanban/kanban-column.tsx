@@ -2,7 +2,6 @@ import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import type { WaitingSortOrder } from './board-view';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
@@ -70,13 +69,8 @@ export function KanbanColumn({
 
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
-      {/* Keep the Waiting header visible on mobile for its sort menu. */}
-      <div
-        className={cn(
-          'items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg',
-          showSortMenu ? 'flex' : 'hidden md:flex'
-        )}
-      >
+      {/* Column headers are replaced by column pills on mobile. */}
+      <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">

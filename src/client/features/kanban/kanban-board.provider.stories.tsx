@@ -325,4 +325,14 @@ export const WaitingSort: Story = {
 export const PhoneWaitingSort: Story = {
   ...WaitingSort,
   globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async (context) => {
+    await WaitingSort.play?.(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Waiting sort order' })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'Waiting' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: /Working/ }));
+    await expect(
+      canvas.queryByRole('button', { name: 'Waiting sort order' })
+    ).not.toBeInTheDocument();
+  },
 };

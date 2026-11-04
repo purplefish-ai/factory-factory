@@ -17,6 +17,7 @@ import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
 import { useWaitingSortOrder } from './use-waiting-sort-order';
+import { WaitingSortMenu } from './waiting-sort-menu';
 
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
@@ -296,7 +297,7 @@ function KanbanBoardContent() {
         )}
       {isMobile ? (
         <>
-          <div className="flex gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {columns.map((column) => (
               <button
                 key={column.id}
@@ -314,6 +315,9 @@ function KanbanBoardContent() {
                 <span>{getColumnCount(column.id)}</span>
               </button>
             ))}
+            {activeColumnId === 'WAITING' && (
+              <WaitingSortMenu value={waitingSortOrder} onChange={setWaitingSortOrder} />
+            )}
           </div>
           <div key={activeColumnId} className="flex-1 min-h-0 overflow-y-auto">
             {columns.filter((column) => column.id === activeColumnId).map(renderColumn)}
