@@ -466,3 +466,15 @@ export const BeginningOfConversation: Story = {
     await expect(within(canvasElement).getByText('Beginning of conversation')).toBeVisible();
   },
 };
+
+export const EarlierMessagesDisconnected: Story = {
+  args: {
+    ...LoadingEarlierMessages.args,
+    history: { status: 'idle', enabled: false, loadOlder: () => undefined },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', { name: 'Load earlier messages' })
+    ).toBeDisabled();
+  },
+};

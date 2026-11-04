@@ -77,7 +77,15 @@ function isAgentMessagePayload(data: unknown): boolean {
   return nested.type !== 'session_lifecycle' || isSessionLifecyclePayload(nested.lifecycle);
 }
 
+const snapshotRemovalSchema = z.object({
+  removedMessageIds: z.array(z.string()).optional(),
+  resetTranscript: z.boolean().optional(),
+});
+
 function hasValidSnapshotLifecycleMessages(data: object): boolean {
+  if (!snapshotRemovalSchema.safeParse(data).success) {
+    return false;
+  }
   const messages = (data as { messages?: unknown }).messages;
   if (!Array.isArray(messages)) {
     return false;

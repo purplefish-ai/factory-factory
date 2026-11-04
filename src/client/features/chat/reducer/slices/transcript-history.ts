@@ -18,7 +18,12 @@ export function reduceTranscriptHistory(state: ChatState, action: ChatAction): C
         ...state.transcriptPageBoundaries,
         action.beforeMessageId,
       ]),
-      transcriptHistory: { status: 'loading', requestId: action.requestId },
+      transcriptHistory: {
+        status: 'loading',
+        requestId: action.requestId,
+        previousLimit: state.rendererTranscriptLimit,
+        previousBoundaries: state.transcriptPageBoundaries,
+      },
     };
   }
   if (action.type !== 'TRANSCRIPT_HISTORY_LOADED' && action.type !== 'TRANSCRIPT_HISTORY_FAILED') {
@@ -31,11 +36,21 @@ export function reduceTranscriptHistory(state: ChatState, action: ChatAction): C
     return state;
   }
   if (action.type === 'TRANSCRIPT_HISTORY_FAILED') {
-    return { ...state, transcriptHistory: { status: 'error', error: action.error } };
+    return {
+      ...state,
+      rendererTranscriptLimit: state.transcriptHistory.previousLimit,
+      transcriptPageBoundaries: state.transcriptHistory.previousBoundaries,
+      transcriptHistory: { status: 'error', error: action.error },
+    };
   }
   // Never replay historical events through live side effects (usage, thinking,
   // tasks, runtime). Existing live entries win overlaps with the fetched page.
-  const messages = new Map(action.messages.map((message) => [message.id, message]));
+  const removedMessageIds = state.transcriptHistory.removedMessageIds;
+  const messages = new Map(
+    action.messages
+      .filter((message) => !removedMessageIds?.has(message.id))
+      .map((message) => [message.id, message])
+  );
   for (const message of state.messages) {
     messages.set(message.id, message);
   }

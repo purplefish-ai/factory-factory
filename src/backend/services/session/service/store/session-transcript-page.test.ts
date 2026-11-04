@@ -44,8 +44,28 @@ describe('transcript history pages', () => {
       message: { type: 'stream_event', event: { type: 'content_block_stop', index: 0 } },
     };
     const page = selectTranscriptPage(transcript, 'm-504');
-    expect(page.messages[0]?.id).toBe('m-5');
+    expect(page.messages.map((entry) => entry.id)).toEqual(
+      transcript.slice(5, 504).map((entry) => entry.id)
+    );
+    expect(page.messages).toHaveLength(499);
+    expect(page.hasMore).toBe(true);
     const earlier = selectTranscriptPage(transcript, 'm-5');
     expect(earlier.messages.map((entry) => entry.id)).toEqual(['m-0', 'm-1', 'm-2', 'm-3', 'm-4']);
   });
+});
+
+it('locates opaque cursor identities after entries are inserted and orders change', () => {
+  const first = { ...message(10), id: 'opaque-alpha' };
+  const second = { ...message(20), id: 'opaque-beta' };
+  const cursor = { ...message(30), id: 'opaque-anchor' };
+  expect(selectTranscriptPage([first, second, cursor], cursor.id).messages).toEqual([
+    first,
+    second,
+  ]);
+  const inserted = { ...message(15), id: 'opaque-inserted' };
+  const transcript = [first, inserted, second, cursor].map((entry) => ({
+    ...entry,
+    order: entry.order + 1000,
+  }));
+  expect(selectTranscriptPage(transcript, cursor.id).messages).toEqual(transcript.slice(0, 3));
 });

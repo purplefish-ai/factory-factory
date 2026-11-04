@@ -136,7 +136,13 @@ export interface RewindPreviewState {
 
 export type TranscriptHistoryState =
   | { status: 'idle' | 'complete' }
-  | { status: 'loading'; requestId: string }
+  | {
+      status: 'loading';
+      requestId: string;
+      previousLimit?: number | null;
+      previousBoundaries: ReadonlySet<string>;
+      removedMessageIds?: ReadonlySet<string>;
+    }
   | { status: 'error'; error: string };
 
 export interface ChatState {
@@ -318,6 +324,8 @@ export type ChatAction =
       type: 'SESSION_SNAPSHOT';
       payload: {
         messages: ChatMessage[];
+        isHydration?: boolean;
+        removedMessageIds?: string[];
         queuedMessages: QueuedMessage[];
         sessionRuntime: SessionRuntimeState;
         acpPlan?: AcpPlanState | null;

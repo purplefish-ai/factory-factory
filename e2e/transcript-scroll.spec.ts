@@ -643,6 +643,9 @@ test('paging adjacent tools preserves the expanded existing group and its anchor
   await page.getByRole('button', { name: 'Resolve tools page', exact: true }).click();
   await expect.poll(relativeTop).toBe(before);
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('button', { name: 'Publish live snapshot', exact: true }).click();
+  await expect.poll(relativeTop).toBe(before);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(
     group.getByRole('button', { name: 'Reading file-100.ts Running', exact: true })
   ).toBeVisible();
@@ -651,4 +654,26 @@ test('paging adjacent tools preserves the expanded existing group and its anchor
   });
   await expect(page.getByText('Beginning of conversation')).toBeVisible();
   await expect(viewport.locator('[data-transcript-key="tool-seq-tool-0"]')).toBeVisible();
+});
+
+test('history fixture keeps paging state separate across sessions', async ({ page }) => {
+  await page.goto('/__transcript-scroll?history=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await page.getByRole('button', { name: 'Resolve history page', exact: true }).click();
+  await page.getByRole('button', { name: 'Switch session', exact: true }).click();
+  await expect(page.getByText('Session B', { exact: true })).toBeVisible();
+  await expect(page.getByText('History requests: 0')).toBeVisible();
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await expect(page.getByText('History requests: 1')).toBeVisible();
+  await page.getByRole('button', { name: 'Switch session', exact: true }).click();
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Beginning of conversation')).toBeVisible();
 });

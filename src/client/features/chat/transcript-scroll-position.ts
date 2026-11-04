@@ -43,7 +43,7 @@ export function createTranscriptPositioner(
   viewport: HTMLDivElement,
   engine: PositionEngine,
   isMeasured: (key: string) => boolean,
-  anchorHeaderToContent = false
+  anchorHeaderToContent: () => boolean = () => false
 ) {
   let target: TranscriptPosition | null = null;
   let mounting: number | null = null;
@@ -116,6 +116,6 @@ export function createTranscriptPositioner(
     cancel,
     scrollToEnd,
     capture: (intent: TranscriptIntent) =>
-      captureTranscriptPosition(viewport, engine, intent, anchorHeaderToContent),
+      captureTranscriptPosition(viewport, engine, intent, anchorHeaderToContent()),
   };
 }

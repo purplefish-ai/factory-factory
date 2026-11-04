@@ -43,6 +43,8 @@ export function useTranscriptScroll(
   options: TranscriptScrollOptions,
   anchorHeaderToContent = false
 ) {
+  const headerAnchoring = useRef(anchorHeaderToContent);
+  headerAnchoring.current = anchorHeaderToContent;
   const latest = useRef(options);
   latest.current = options;
   const controller = useRef<TranscriptScrollController | null>(null);
@@ -88,7 +90,7 @@ export function useTranscriptScroll(
       viewport,
       engine,
       measured,
-      anchorHeaderToContent
+      () => headerAnchoring.current
     );
     const current = createTranscriptScrollController({
       initialIntent: latest.current.initialIntent,
@@ -139,7 +141,7 @@ export function useTranscriptScroll(
       observer.current = null;
       measurements.current = new WeakMap();
     };
-  }, [viewport, anchorHeaderToContent]);
+  }, [viewport]);
 
   // The virtualizer rebuilds every row measurement whenever `getItemKey` or
   // `rangeExtractor` change identity. Tie them to the row key values so

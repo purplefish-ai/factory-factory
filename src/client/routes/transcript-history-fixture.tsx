@@ -87,6 +87,21 @@ export function TranscriptHistoryFixture() {
       >
         Resolve tools page
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          dispatch({
+            type: 'SESSION_SNAPSHOT',
+            payload: {
+              messages: state.messages.filter((message) => message.order >= 100),
+              queuedMessages: [],
+              sessionRuntime: state.sessionRuntime,
+            },
+          })
+        }
+      >
+        Publish live snapshot
+      </button>
       <div style={{ height: 400 }}>
         <ChatTranscript
           messages={messages}

@@ -4,6 +4,7 @@ import type { ChatAction, ChatState } from './reducer';
 
 export interface TranscriptHistoryControls {
   status: ChatState['transcriptHistory']['status'];
+  enabled?: boolean;
   error?: string;
   loadOlder: () => void;
 }
@@ -108,12 +109,20 @@ export function useTranscriptHistory(options: Options): TranscriptHistoryControl
       });
   }, []);
 
+  const canLoad =
+    options.enabled &&
+    options.messages.some(
+      (message) =>
+        (message.message?.type === 'session_lifecycle' || message.order >= 0) &&
+        message.order < QUEUED_MESSAGE_ORDER_BASE
+    );
   return useMemo(
     () => ({
       status: options.history.status,
+      enabled: canLoad,
       error: options.history.status === 'error' ? options.history.error : undefined,
       loadOlder,
     }),
-    [options.history, loadOlder]
+    [options.history, canLoad, loadOlder]
   );
 }

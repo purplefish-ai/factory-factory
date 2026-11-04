@@ -20,13 +20,19 @@ export function TranscriptHistoryHeader({ history }: { history: TranscriptHistor
           <button
             type="button"
             onClick={history.loadOlder}
+            disabled={history.enabled === false}
             className="underline underline-offset-2"
           >
             Retry
           </button>
         </>
       ) : (
-        <button type="button" onClick={history.loadOlder} className="underline underline-offset-2">
+        <button
+          type="button"
+          onClick={history.loadOlder}
+          disabled={history.enabled === false}
+          className="underline underline-offset-2"
+        >
           Load earlier messages
         </button>
       )}

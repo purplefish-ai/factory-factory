@@ -47,10 +47,23 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const [headerHeight, setHeaderHeight] = useState(24);
   const [draft, setDraft] = useState('');
   const historyMode = new URLSearchParams(location.search).get('history') === '1';
-  const [historyStatus, setHistoryStatus] = useState<'idle' | 'loading' | 'complete' | 'error'>(
-    'idle'
-  );
-  const [historyRequests, setHistoryRequests] = useState(0);
+  const [historyBySession, setHistoryBySession] = useState<
+    Record<'A' | 'B', { status: 'idle' | 'loading' | 'complete' | 'error'; requests: number }>
+  >({
+    A: { status: 'idle', requests: 0 },
+    B: { status: 'idle', requests: 0 },
+  });
+  const { status: historyStatus, requests: historyRequests } = historyBySession[session];
+  const setHistoryStatus = (status: typeof historyStatus) =>
+    setHistoryBySession((previous) => ({
+      ...previous,
+      [session]: { ...previous[session], status },
+    }));
+  const setHistoryRequests = (updateRequests: (count: number) => number) =>
+    setHistoryBySession((previous) => ({
+      ...previous,
+      [session]: { ...previous[session], requests: updateRequests(previous[session].requests) },
+    }));
   const currentHistoryStatus = useRef(historyStatus);
   currentHistoryStatus.current = historyStatus;
   const composer = new URLSearchParams(location.search).get('composer') === '1';

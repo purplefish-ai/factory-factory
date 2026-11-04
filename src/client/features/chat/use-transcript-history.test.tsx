@@ -85,6 +85,7 @@ it('retains visible messages on failure and retries the same cursor', async () =
   expect(state.messages).toEqual([first]);
   await act(() => history.loadOlder());
   expect(fetchPage).toHaveBeenCalledTimes(2);
+  expect(fetchPage.mock.calls[1]?.[0]).toEqual({ sessionId: 's', beforeMessageId: 'first' });
   await act(async () => resolvePage({ messages: [], hasMore: false }));
 });
 
@@ -103,6 +104,7 @@ it('cancels in-flight work on a session switch and ignores late completion', asy
 
 it('does not fetch while hydration or the connection is unavailable', async () => {
   await act(() => root.render(<Probe enabled={false} />));
+  expect(history.enabled).toBe(false);
   await act(() => history.loadOlder());
   expect(fetchPage).not.toHaveBeenCalled();
 });

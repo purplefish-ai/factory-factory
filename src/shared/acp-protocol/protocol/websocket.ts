@@ -79,6 +79,10 @@ interface WebSocketMessagePayloadByType {
     taskPlan?: AcpPlanNotification | null;
     pendingInteractiveRequest?: PendingInteractiveRequest | null;
     loadRequestId?: string;
+    /** Explicit removals also invalidate entries retained before the snapshot window. */
+    removedMessageIds?: string[];
+    /** Provider identity replacement invalidates the complete retained history. */
+    resetTranscript?: boolean;
   };
   session_delta: {
     data: SessionDeltaEvent;

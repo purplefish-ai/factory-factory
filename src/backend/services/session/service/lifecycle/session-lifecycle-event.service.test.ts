@@ -307,6 +307,9 @@ describe('SessionLifecycleEventService', () => {
     expect(snapshots[0]?.messages?.map((message) => message.id)).toEqual([
       'session-lifecycle:transient:session-1:prompt-timeout',
     ]);
+    expect(snapshots[1]?.removedMessageIds).toEqual([
+      'session-lifecycle:transient:session-1:prompt-timeout',
+    ]);
     expect(snapshots[1]?.messages?.map((message) => message.id)).toEqual([
       'session-lifecycle:event-1',
     ]);

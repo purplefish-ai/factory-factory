@@ -63,6 +63,7 @@ function TranscriptInstance({
     if (
       !(viewport && history) ||
       history.status !== 'idle' ||
+      history.enabled === false ||
       state.intent !== 'reading' ||
       state.phase !== 'ready' ||
       !scroll.active ||

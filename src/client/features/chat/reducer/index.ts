@@ -282,6 +282,8 @@ function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
     type: 'SESSION_SNAPSHOT',
     payload: {
       messages: data.messages,
+      isHydration: Boolean(data.loadRequestId || data.resetTranscript),
+      removedMessageIds: data.removedMessageIds,
       queuedMessages: data.queuedMessages,
       sessionRuntime: data.sessionRuntime,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,

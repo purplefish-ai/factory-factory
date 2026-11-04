@@ -416,3 +416,27 @@ it('keeps a previously visible result at a page boundary when older text duplica
     grouper.group([assistant('older-response', 'Done', 1), current]).map((item) => item.id)
   ).toEqual(['older-response', 'current-result']);
 });
+
+it('preserves a visible result anchor when its raw page boundary is hidden reasoning', () => {
+  const hidden: ChatMessage = {
+    id: 'hidden-boundary',
+    source: 'agent',
+    order: 1,
+    timestamp,
+    message: {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Reasoning' }] },
+    },
+  };
+  const current = result('visible-result', 'Done', 2);
+  const grouper = createIncrementalChatGrouper({
+    filterDuplicateResults: true,
+    groupBoundaries: new Set([hidden.id]),
+  });
+  expect(grouper.group([hidden, current]).map((entry) => entry.id)).toEqual(['visible-result']);
+  expect(
+    grouper
+      .group([assistant('older-response', 'Done', 0), hidden, current])
+      .map((entry) => entry.id)
+  ).toEqual(['older-response', 'visible-result']);
+});

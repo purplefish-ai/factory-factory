@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ChatMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
@@ -44,7 +44,7 @@ function setup() {
       finishLoad: () => {
         calls.push('runtime');
       },
-      getTranscriptSnapshot: () => transcript,
+      getTranscriptSnapshot: vi.fn(() => transcript),
       replaceTranscript: (_id, next) => {
         calls.push('recover');
         transcript = next;
@@ -139,6 +139,7 @@ describe('SessionLoadService', () => {
     await expect(
       test.service.readTranscriptPage({ sessionId: 'missing', beforeMessageId: 'cursor' })
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(test.deps.domain.getTranscriptSnapshot).not.toHaveBeenCalled();
     expect(test.calls).toEqual([]);
   });
 
