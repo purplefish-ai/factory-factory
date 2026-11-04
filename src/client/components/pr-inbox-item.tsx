@@ -1,8 +1,9 @@
 import { forwardRef } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { formatRelativeTime } from '@/lib/utils';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { CIStatusDot } from './pr-status-badges';
+import { StatusChip } from './status-indicators';
 
 function formatRelativeTimeWithAgo(dateString: string): string {
   const relative = formatRelativeTime(dateString);
@@ -50,19 +51,19 @@ export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(funct
               #{pr.number}
             </span>
             {pr.isDraft && (
-              <Badge variant="outline" className="text-xs">
+              <StatusChip tone="neutral" size="md">
                 Draft
-              </Badge>
+              </StatusChip>
             )}
             {needsReview && (
-              <Badge className="bg-orange-500/10 text-orange-700 border-orange-500/20 text-xs">
+              <StatusChip tone="attention" size="md">
                 Review
-              </Badge>
+              </StatusChip>
             )}
             {isApproved && (
-              <Badge className="bg-green-500/10 text-green-700 border-green-500/20 text-xs">
+              <StatusChip tone="success" size="md">
                 Approved
-              </Badge>
+              </StatusChip>
             )}
             <span className="flex-1" />
             <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -76,8 +77,12 @@ export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(funct
 
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="truncate max-w-[80px]">{pr.author.login}</span>
-            <span className="text-green-600 whitespace-nowrap">+{pr.additions}</span>
-            <span className="text-red-600 whitespace-nowrap">-{pr.deletions}</span>
+            <span className={`whitespace-nowrap ${DIFF_STAT_CLASS_NAMES.added}`}>
+              +{pr.additions}
+            </span>
+            <span className={`whitespace-nowrap ${DIFF_STAT_CLASS_NAMES.removed}`}>
+              -{pr.deletions}
+            </span>
             {pr.comments.length > 0 && (
               <span className="whitespace-nowrap">{pr.comments.length} comments</span>
             )}

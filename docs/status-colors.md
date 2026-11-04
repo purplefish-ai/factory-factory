@@ -68,8 +68,11 @@ tone to a token, classes for text, dot, chip, banner and border, and an icon:
 distinct hues are taken by running, danger, success, waiting and merged. Icons
 and labels distinguish them. Pull request states follow GitHub (open green,
 draft neutral, merged purple, closed red) through `getPrStatePresentation`;
-`getCiStateTone` maps the combined CI state. Diff statistics use
-`DIFF_STAT_CLASS_NAMES` (success and destructive text).
+`getCiStateTone` maps the combined CI state.
+[`pr-status-presentation.ts`](../src/client/lib/pr-status-presentation.ts) adds
+readable labels and tones for review decisions, reviews, merge states and
+individual checks, so review surfaces never show raw GitHub enums. Diff
+statistics use `DIFF_STAT_CLASS_NAMES` (success and destructive text).
 
 Render statuses with `StatusDot`, `StatusIcon` and `StatusChip` from
 [`status-indicators.tsx`](../src/client/components/status-indicators.tsx), or

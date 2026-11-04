@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
 import type { ComponentPropsWithoutRef, ReactElement } from 'react';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { type GitHubIssuePreview, parseGitHubIssueLink } from '@/shared/github-issue-preview';
 import {
@@ -9,9 +10,10 @@ import {
   githubPreviewQueryOptions,
 } from './github-link-preview';
 
+// GitHub shows open issues in green and closed (completed) issues in purple.
 const ISSUE_STATES = {
-  OPEN: { label: 'Open', color: 'bg-green-500/15 text-green-600 dark:text-green-400' },
-  CLOSED: { label: 'Closed', color: 'bg-purple-500/15 text-purple-600 dark:text-purple-400' },
+  OPEN: { label: 'Open', color: getStatusToneStyle('success').chip },
+  CLOSED: { label: 'Closed', color: getStatusToneStyle('merged').chip },
 };
 
 export function GitHubIssuePreviewCard({

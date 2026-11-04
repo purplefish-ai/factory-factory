@@ -324,6 +324,60 @@ export const Interactive: Story = {
   },
 };
 
+const mockMixedStatusPR: PRWithFullDetails = {
+  ...mockPR,
+  reviewDecision: 'CHANGES_REQUESTED',
+  mergeStateStatus: 'DIRTY',
+  statusCheckRollup: [
+    { __typename: 'CheckRun', name: 'Build', status: 'COMPLETED', conclusion: 'SUCCESS' },
+    { __typename: 'CheckRun', name: 'E2E', status: 'IN_PROGRESS', conclusion: null },
+    { __typename: 'CheckRun', name: 'Deploy preview', status: 'QUEUED', conclusion: null },
+    { __typename: 'CheckRun', name: 'Test', status: 'COMPLETED', conclusion: 'FAILURE' },
+    { __typename: 'CheckRun', name: 'Benchmarks', status: 'COMPLETED', conclusion: 'TIMED_OUT' },
+    { __typename: 'CheckRun', name: 'Docs', status: 'COMPLETED', conclusion: 'SKIPPED' },
+  ],
+  reviews: [
+    {
+      id: '1',
+      author: { login: 'alice' },
+      state: 'CHANGES_REQUESTED',
+      submittedAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+    },
+    {
+      id: '2',
+      author: { login: 'bob' },
+      state: 'APPROVED',
+      submittedAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+    },
+    {
+      id: '3',
+      author: { login: 'carol' },
+      state: 'COMMENTED',
+      submittedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+    },
+  ],
+};
+
+/** Every check, review and merge state uses the shared status tones and readable labels. */
+export const MixedStatuses: Story = {
+  args: { ...Default.args, pr: mockMixedStatusPR },
+};
+
+export const MixedStatusesDark: Story = {
+  ...MixedStatuses,
+  globals: { theme: 'dark' },
+};
+
+export const WithApprovedStatusDark: Story = {
+  ...WithApprovedStatus,
+  globals: { theme: 'dark' },
+};
+
+export const WithDiffDark: Story = {
+  ...WithDiff,
+  globals: { theme: 'dark' },
+};
+
 export const KeyboardShortcuts: Story = {
   args: {
     pr: mockPR,

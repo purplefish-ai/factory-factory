@@ -273,3 +273,20 @@ export const ChecksSectionMixed: StoryObj<typeof CIChecksSection> = {
     );
   },
 };
+
+export const AllStatesDark: StoryDot = { ...AllStates, globals: { theme: 'dark' } };
+
+export const AllBadgeStatesDark: StoryObj<typeof CIStatusBadge> = {
+  ...AllBadgeStates,
+  globals: { theme: 'dark' },
+};
+
+export const AllReviewStatesDark: StoryObj<typeof ReviewDecisionBadge> = {
+  ...AllReviewStates,
+  globals: { theme: 'dark' },
+};
+
+export const ChecksSectionMixedDark: StoryObj<typeof CIChecksSection> = {
+  ...ChecksSectionMixed,
+  globals: { theme: 'dark' },
+};

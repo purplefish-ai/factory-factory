@@ -1,24 +1,25 @@
-import { Badge } from '@/components/ui/badge';
+import { StatusChip } from '@/client/components/status-indicators';
+import { getPrStatePresentation } from '@/client/lib/status-tones';
 import type { PRState } from '@/shared/core';
 
 interface PrStateBadgeProps {
   prState?: PRState | null;
   size?: 'sm' | 'md';
+  /**
+   * Show every PR state (open, draft, merged, closed...). By default only Draft
+   * is shown, for rows that already show terminal states through the CI chip.
+   */
+  showAllStates?: boolean;
 }
 
-export function PrStateBadge({ prState, size = 'sm' }: PrStateBadgeProps) {
-  if (prState !== 'DRAFT') {
+export function PrStateBadge({ prState, size = 'sm', showAllStates = false }: PrStateBadgeProps) {
+  const presentation = getPrStatePresentation(prState);
+  if (!(presentation && (showAllStates || prState === 'DRAFT'))) {
     return null;
   }
-
-  const sizeClasses = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
-
   return (
-    <Badge
-      variant="outline"
-      className={`${sizeClasses} border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300`}
-    >
-      Draft
-    </Badge>
+    <StatusChip tone={presentation.tone} size={size} className="rounded-md">
+      {presentation.label}
+    </StatusChip>
   );
 }
