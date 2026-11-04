@@ -37,7 +37,6 @@ interface KanbanContextValue {
   togglingWorkspaceId: string | null;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   archiveWorkspace: (workspaceId: string, removeGitIndexLock?: boolean) => Promise<void>;
-  archiveSelectedWorkspaces: (ids: string[]) => Promise<string[]>;
   bulkArchiveColumn: (kanbanColumn: string) => Promise<void>;
   archiveGitLockWorkspaceIds: string[];
   dismissArchiveGitLock: () => void;
@@ -235,27 +234,6 @@ export function KanbanProvider({
     }
   };
 
-  const archiveSelectedWorkspaces = async (ids: string[]) => {
-    // Reuse single-workspace archive transactions and their lock recovery.
-    // Limit concurrency so large selections cannot flood Git/worktree cleanup.
-    const failed: string[] = [];
-    for (const id of ids) {
-      const workspace = workspaces?.find((item) => item.id === id);
-      if (!workspace) {
-        continue;
-      }
-      const release = suppressArchiveIssues(new Map([[id, workspace]]));
-      try {
-        const outcomes = await archiveCommand.archiveWorkspace({ projectId, id });
-        handleArchiveOutcomes(outcomes);
-        failed.push(...outcomes.filter((item) => !item.success).map((item) => item.id));
-      } finally {
-        release();
-      }
-    }
-    return failed;
-  };
-
   const bulkArchiveColumn = async (kanbanColumn: string) => {
     const workspacesToArchive = (workspaces ?? []).filter(
       (workspace) => workspace.kanbanColumn === kanbanColumn
@@ -331,7 +309,6 @@ export function KanbanProvider({
         togglingWorkspaceId,
         renameWorkspace,
         archiveWorkspace,
-        archiveSelectedWorkspaces,
         bulkArchiveColumn,
         archiveGitLockWorkspaceIds,
         dismissArchiveGitLock,

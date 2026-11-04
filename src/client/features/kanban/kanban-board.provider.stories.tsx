@@ -202,18 +202,24 @@ export const NoAssignedIssues: Story = {
   },
 };
 
-export const ArchiveSelection: Story = {
+export const FilterOnly: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole('checkbox', { name: 'Select Add authentication' })
-    );
-    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select Update dependencies' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Archive selected' }));
-    const dialog = await within(document.body).findByRole('alertdialog');
-    await expect(dialog).toHaveTextContent('Archive 2 selected workspaces?');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await expect(canvas.getByRole('status')).toHaveTextContent('2 selected');
+    await canvas.findByText('Add authentication');
+    await expect(
+      canvas.queryByRole('combobox', { name: 'Sort workspaces' })
+    ).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('checkbox', { name: /^Select / })).not.toBeInTheDocument();
+    const filter = canvas.getByRole('textbox', { name: 'Filter board' });
+    await userEvent.type(filter, 'authentication');
+    await expect(canvas.getByText('Add authentication')).toBeVisible();
+    await expect(canvas.queryByText('Fix login bug')).not.toBeInTheDocument();
+    await userEvent.clear(filter);
+    await userEvent.type(filter, 'keyboard');
+    await expect(canvas.getByText('Support keyboard shortcuts on the board')).toBeVisible();
+    await expect(canvas.queryByText('Add authentication')).not.toBeInTheDocument();
+    await userEvent.clear(filter);
+    await expect(canvas.getByText('Add authentication')).toBeVisible();
   },
 };
 
@@ -245,16 +251,12 @@ export const IssuesRefreshRecovery: Story = {
   play: async ({ canvasElement }) => exerciseIssueRefreshRecovery(canvasElement),
 };
 
-export const ArchiveOneWorkspace: Story = {
+export const ArchiveDoneColumn: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Archive All' }));
-    let dialog = await within(document.body).findByRole('alertdialog');
+    const dialog = await within(document.body).findByRole('alertdialog');
     await expect(dialog).toHaveTextContent('archive all 1 workspace in this column');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select Add authentication' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Archive selected' }));
-    dialog = await within(document.body).findByRole('alertdialog');
-    await expect(dialog).toHaveTextContent('Archive 1 selected workspace?');
   },
 };

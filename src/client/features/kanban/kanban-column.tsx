@@ -2,7 +2,6 @@ import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { formatDateTime } from '@/client/lib/date-time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
@@ -42,9 +41,6 @@ interface KanbanColumnProps {
   onArchive?: (workspaceId: string) => void;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
-  selectedIds?: string[];
-  onToggleSelected?: (id: string) => void;
-  selectionDisabled?: boolean;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
@@ -59,9 +55,6 @@ export function KanbanColumn({
   onArchive,
   onBulkArchive,
   isBulkArchiving,
-  selectedIds,
-  onToggleSelected,
-  selectionDisabled,
   onOpenQuickChat,
   onRename,
 }: KanbanColumnProps) {
@@ -106,26 +99,15 @@ export function KanbanColumn({
         ) : (
           workspaces.map((workspace) => (
             <div key={workspace.id} className="shrink-0 space-y-1">
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                {onToggleSelected && (
-                  <label className="flex items-center gap-2">
-                    <Checkbox
-                      aria-label={`Select ${workspace.name}`}
-                      checked={selectedIds?.includes(workspace.id) ?? false}
-                      disabled={selectionDisabled}
-                      onCheckedChange={() => onToggleSelected(workspace.id)}
-                    />
-                    Select
-                  </label>
-                )}
-                {column.id === 'WAITING' && (
+              {column.id === 'WAITING' && (
+                <div className="text-xs text-muted-foreground">
                   <span title="Waiting intervals are measured from server-observed transitions; existing Waiting workspaces have unknown start times.">
                     {workspace.waitingSince
                       ? `Waiting since ${formatDateTime(workspace.waitingSince)}`
                       : 'Waiting duration unknown'}
                   </span>
-                )}
-              </div>
+                </div>
+              )}
               <KanbanCard
                 workspace={workspace}
                 projectSlug={projectSlug}
