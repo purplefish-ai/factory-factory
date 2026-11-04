@@ -43,6 +43,19 @@ const reportSchema = z.object({
 
 describe('Oxlint project guardrails', () => {
   const rejectedSources: [string, string][] = [
+    ['icon-button-name', 'const x = <Button size="icon" aria-label={""}><XIcon /></Button>;'],
+    ['icon-button-name', 'const x = <Button size="icon" aria-label={``}><XIcon /></Button>;'],
+    ['icon-button-name', 'const x = <button><span><XIcon /></span></button>;'],
+    ['icon-button-name', 'const x = <button><Icons.Close /></button>;'],
+    ['icon-button-name', 'const x = <button><Toolkit.CloseIcon /></button>;'],
+    [
+      'icon-button-name',
+      'const x = <Button size="icon"><XIcon /><span aria-hidden>Close</span></Button>;',
+    ],
+    [
+      'icon-button-name',
+      'const x = <Button asChild size="icon"><a aria-label=""><XIcon /></a></Button>;',
+    ],
     ['icon-button-name', 'const x = <Button size="icon"><PlusIcon /></Button>;'],
     ['icon-button-name', 'const x = <button><XIcon /></button>;'],
     ['icon-button-name', 'const x = <Button size="icon" />;'],
@@ -80,6 +93,10 @@ describe('Oxlint project guardrails', () => {
   }));
 
   const acceptedFixtures = [
+    'const x = <Button size="icon"><><XIcon /><span className="sr-only">Close</span></></Button>;',
+    'const x = <button><span><XIcon /></span>Close</button>;',
+    'const x = <Button asChild size="icon"><a aria-label="Close"><XIcon /></a></Button>;',
+
     'const x = <Button size="icon" aria-label="Add workspace"><PlusIcon /></Button>;',
     'const x = <button title="Close"><XIcon /></button>;',
     'const x = <Button size="icon"><PlusIcon /><span className="sr-only">Add workspace</span></Button>;',

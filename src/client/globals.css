@@ -418,7 +418,3 @@
     min-height: 44px;
   }
 }
-
-[data-slot='sheet-content'][data-side='bottom'] {
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-}

@@ -49,7 +49,8 @@ block also matches `.dark` descendants, so a nested dark preview inside a light
 page uses the selected scheme's dark palette; the test also requires dark blocks
 to redeclare every light-block token. Presets keep their own focus ring, which
 follows their accent color. Preset gray text (`muted-foreground`) follows the
-source themes; Solarized's grays fall slightly below AA on cards.
+source themes with lightness adjusted to meet AA on page, card and muted
+surfaces.
 
 ## Tones
 

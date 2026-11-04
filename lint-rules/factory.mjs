@@ -59,6 +59,9 @@ function hasButtonText(node) {
       Boolean(node.expression.value.trim())
     );
   }
+  if (node.type === 'JSXFragment') {
+    return node.children.some(hasButtonText);
+  }
   if (node.type !== 'JSXElement') {
     return false;
   }
@@ -66,9 +69,58 @@ function hasButtonText(node) {
     (attribute) =>
       attribute.type === 'JSXAttribute' &&
       attribute.name.name === 'aria-hidden' &&
-      (attribute.value?.value === 'true' || attribute.value?.expression?.value === true)
+      (attribute.value === null ||
+        attribute.value?.value === 'true' ||
+        attribute.value?.expression?.value === true)
   );
   return !hidden && node.children.some(hasButtonText);
+}
+
+function hasButtonName(attribute) {
+  if (
+    !['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) ||
+    !attribute.value
+  ) {
+    return false;
+  }
+  const value =
+    attribute.value.type === 'JSXExpressionContainer'
+      ? attribute.value.expression
+      : attribute.value;
+  if (value.type === 'Literal') {
+    return typeof value.value === 'string' && Boolean(value.value.trim());
+  }
+  if (value.type === 'TemplateLiteral' && value.expressions.length === 0) {
+    return value.quasis.some((part) => (part.value.cooked ?? part.value.raw).trim());
+  }
+  return !(value.type === 'Identifier' && value.name === 'undefined');
+}
+
+function jsxTagName(node) {
+  return node.type === 'JSXMemberExpression'
+    ? `${jsxTagName(node.object)}.${node.property.name}`
+    : node.name;
+}
+
+function isButtonIcon(node) {
+  if (node.type === 'JSXText') {
+    return !node.value.trim();
+  }
+  if (node.type === 'JSXFragment') {
+    return node.children.length > 0 && node.children.every(isButtonIcon);
+  }
+  if (node.type !== 'JSXElement') {
+    return false;
+  }
+  const name = jsxTagName(node.openingElement.name);
+  if (name === 'svg' || /Icon$/.test(name) || /(?:^|\.)Icons?\./.test(name)) {
+    return true;
+  }
+  return (
+    ['span', 'div', 'i'].includes(name) &&
+    node.children.length > 0 &&
+    node.children.every(isButtonIcon)
+  );
 }
 
 const rules = {
@@ -83,12 +135,7 @@ const rules = {
           const attributes = opening.attributes.filter(
             (attribute) => attribute.type === 'JSXAttribute'
           );
-          const hasName = attributes.some(
-            (attribute) =>
-              ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) &&
-              attribute.value &&
-              !(attribute.value.type === 'Literal' && !attribute.value.value?.trim())
-          );
+          const hasName = attributes.some(hasButtonName);
           if (hasName) {
             return;
           }
@@ -100,14 +147,7 @@ const rules = {
                 child.expression.type === 'JSXEmptyExpression'
               )
           );
-          const iconOnly =
-            children.length > 0 &&
-            children.every(
-              (child) =>
-                child.type === 'JSXElement' &&
-                (child.openingElement.name.name === 'svg' ||
-                  /Icon$/.test(child.openingElement.name.name))
-            );
+          const iconOnly = children.length > 0 && children.every(isButtonIcon);
           const iconSize = attributes.some(
             (attribute) =>
               attribute.name.name === 'size' &&
@@ -124,9 +164,7 @@ const rules = {
               (child) =>
                 child.type === 'JSXElement' &&
                 child.openingElement.attributes.some(
-                  (attribute) =>
-                    attribute.type === 'JSXAttribute' &&
-                    ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name)
+                  (attribute) => attribute.type === 'JSXAttribute' && hasButtonName(attribute)
                 )
             );
           if (
