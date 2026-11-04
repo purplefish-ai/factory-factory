@@ -16,6 +16,10 @@ function createCheck(
   };
 }
 
+// Same utilities and palettes as factory/no-raw-palette-classes (lint-rules/factory.mjs).
+const RAW_PALETTE_CLASS =
+  /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
+
 describe('CIChecksSection', () => {
   // Render each check on its own so a tone or label cannot be credited to the
   // wrong check (e.g. swapped skipped and cancelled presentations).
@@ -55,7 +59,7 @@ describe('CIChecksSection', () => {
     expect(markup.match(/data-status-tone="(\w+)"/)?.[1]).toBe(tone);
     expect(markup).toContain(`class="text-xs ${textClass}">${label}<`);
     expect(markup).not.toContain(check.conclusion ?? check.status);
-    expect(markup).not.toMatch(/\b(?:text|bg)-(?:gray|red|green|yellow)-\d/);
+    expect(markup).not.toMatch(RAW_PALETTE_CLASS);
   });
 
   it('counts cancelled as failed and neutral as passed in section summary', () => {
