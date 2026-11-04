@@ -3,6 +3,7 @@ import {
   HeaderLeftExtraSlot,
   HeaderLeftStartSlot,
   HeaderRightSlot,
+  HeaderRightEndSlot,
   useAppHeader,
 } from '@/client/components/app-header-context';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
@@ -165,7 +166,6 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               openInIde={openInIde}
             />
           </div>
-          <ToggleRightPanelButton />
           <WorkspaceHeaderOverflowMenu
             isArchived={isArchived}
             workspace={workspace}
@@ -186,6 +186,9 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
           />
         </div>
       </HeaderRightSlot>
+      <HeaderRightEndSlot>
+        <ToggleRightPanelButton />
+      </HeaderRightEndSlot>
     </>
   );
 });

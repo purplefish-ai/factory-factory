@@ -16,6 +16,9 @@ interface AppHeaderContextValue {
   /** Portal target element for right-side header content */
   rightSlot: HTMLElement | null;
   setRightSlot: (el: HTMLElement | null) => void;
+  /** Portal target element after search for the right sidebar toggle */
+  rightEndSlot: HTMLElement | null;
+  setRightEndSlot: (el: HTMLElement | null) => void;
   /** Portal target element for left-start header content (right of sidebar toggle) */
   leftStartSlot: HTMLElement | null;
   setLeftStartSlot: (el: HTMLElement | null) => void;
@@ -29,6 +32,7 @@ const AppHeaderContext = createContext<AppHeaderContextValue | null>(null);
 export function AppHeaderProvider({ children }: { children: ReactNode }) {
   const [title, setTitle] = useState<ReactNode>('');
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
+  const [rightEndSlot, setRightEndSlot] = useState<HTMLElement | null>(null);
   const [leftStartSlot, setLeftStartSlot] = useState<HTMLElement | null>(null);
   const [leftExtraSlot, setLeftExtraSlot] = useState<HTMLElement | null>(null);
 
@@ -38,12 +42,14 @@ export function AppHeaderProvider({ children }: { children: ReactNode }) {
       setTitle,
       rightSlot,
       setRightSlot,
+      rightEndSlot,
+      setRightEndSlot,
       leftStartSlot,
       setLeftStartSlot,
       leftExtraSlot,
       setLeftExtraSlot,
     }),
-    [title, rightSlot, leftStartSlot, leftExtraSlot]
+    [title, rightSlot, rightEndSlot, leftStartSlot, leftExtraSlot]
   );
 
   return <AppHeaderContext.Provider value={value}>{children}</AppHeaderContext.Provider>;
@@ -93,6 +99,15 @@ export function HeaderRightSlot({ children }: { children: ReactNode }) {
     return null;
   }
   return createPortal(children, rightSlot);
+}
+
+/** Portal component for the right sidebar control, after search. */
+export function HeaderRightEndSlot({ children }: { children: ReactNode }) {
+  const { rightEndSlot } = useAppHeaderContext();
+  if (!rightEndSlot) {
+    return null;
+  }
+  return createPortal(children, rightEndSlot);
 }
 
 /**

@@ -25,7 +25,19 @@ const meta = {
 } satisfies Meta<typeof WorkspaceHeaderFixture>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Workspace: Story = {};
+export const Workspace: Story = {
+  play: async ({ canvas }) => {
+    const search = canvas.getByRole('button', { name: 'Search' });
+    const toggle = canvas.getByRole('button', { name: 'Hide right panel' });
+    await expect(toggle.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      search.getBoundingClientRect().right
+    );
+    await userEvent.click(toggle);
+    await expect(canvas.getByRole('button', { name: 'Show right panel' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show right panel' }));
+    await expect(canvas.getByRole('button', { name: 'Hide right panel' })).toBeVisible();
+  },
+};
 export const WorkspaceFamily: Story = { args: { variant: 'family' } };
 export const TabletWorkspace: Story = {
   globals: { viewport: { value: 'tablet', isRotated: false } },

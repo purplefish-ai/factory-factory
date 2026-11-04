@@ -9,6 +9,7 @@ import {
   HeaderLeftExtraSlot,
   HeaderLeftStartSlot,
   HeaderRightSlot,
+  HeaderRightEndSlot,
   useAppHeader,
 } from './app-header-context';
 
@@ -44,6 +45,9 @@ function Page({
       <HeaderRightSlot>
         <ContextAction onAction={onAction} />
       </HeaderRightSlot>
+      <HeaderRightEndSlot>
+        <button>Toggle right sidebar</button>
+      </HeaderRightEndSlot>
     </NestedContext.Provider>
   ) : null;
 }
@@ -68,6 +72,11 @@ it('preserves context and interaction across all portal slots and restores a gen
     const header = container.querySelector('header');
     expect(header?.textContent).toContain('Project / Workspace');
     expect(header?.textContent).toContain('Merged');
+    expect(
+      [...header!.querySelectorAll('button')].map(
+        (button) => button.getAttribute('aria-label') ?? button.textContent
+      )
+    ).toEqual(['Toggle sidebar', 'Workspace action', 'Search', 'Toggle right sidebar']);
     const action = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Workspace action'
     );
@@ -78,6 +87,7 @@ it('preserves context and interaction across all portal slots and restores a gen
     expect(header?.textContent).not.toContain('Project / Workspace');
     expect(header?.textContent).not.toContain('Merged');
     expect(header?.textContent).not.toContain('Workspace action');
+    expect(header?.textContent).not.toContain('Toggle right sidebar');
     expect(header?.textContent).toContain('Search');
   } finally {
     actFlushSync(() => root.unmount());
