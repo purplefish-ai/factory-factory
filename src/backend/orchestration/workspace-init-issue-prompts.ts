@@ -5,6 +5,18 @@ import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 
 type Logger = ReturnType<typeof createLogger>;
 
+async function buildConfiguredIssuePrompt(url: string, logger: Logger): Promise<string> {
+  try {
+    const settings = await userSettingsService.get();
+    return buildIssueStartPrompt({ url, prompt: settings.ticketDispatchPrompt });
+  } catch (error) {
+    logger.warn('Could not read ticket dispatch settings; using default prompt', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return buildIssueStartPrompt({ url });
+  }
+}
+
 export async function buildInitialPromptFromGitHubIssue(
   workspaceId: string,
   logger: Logger
@@ -24,8 +36,7 @@ export async function buildInitialPromptFromGitHubIssue(
     if (!url) {
       return '';
     }
-    const settings = await userSettingsService.get();
-    return buildIssueStartPrompt({ url, prompt: settings.ticketDispatchPrompt });
+    return await buildConfiguredIssuePrompt(url, logger);
   } catch (error) {
     logger.warn('Error building initial prompt from GitHub issue', {
       workspaceId,
@@ -44,11 +55,7 @@ export async function buildInitialPromptFromLinearIssue(
     if (!(workspace?.linearIssueId && workspace.linearIssueUrl)) {
       return '';
     }
-    const settings = await userSettingsService.get();
-    return buildIssueStartPrompt({
-      url: workspace.linearIssueUrl,
-      prompt: settings.ticketDispatchPrompt,
-    });
+    return await buildConfiguredIssuePrompt(workspace.linearIssueUrl, logger);
   } catch (error) {
     logger.warn('Error building initial prompt from Linear issue', {
       workspaceId,

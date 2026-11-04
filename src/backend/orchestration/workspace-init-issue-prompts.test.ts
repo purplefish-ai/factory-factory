@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 vi.mock('@/backend/services/settings', () => ({
@@ -42,6 +43,24 @@ beforeEach(() => {
 });
 
 describe('issue prompt fallbacks', () => {
+  it.each([buildInitialPromptFromGitHubIssue, buildInitialPromptFromLinearIssue])(
+    'keeps the default prompt when settings cannot be read',
+    async (buildPrompt) => {
+      vi.mocked(userSettingsService.get).mockRejectedValueOnce(new Error('Settings unavailable'));
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
+        unsafeCoerce({
+          githubIssueNumber: 42,
+          githubIssueUrl: 'https://example.com/42',
+          linearIssueId: 'id',
+          linearIssueUrl: 'https://example.com/42',
+          project: {},
+        })
+      );
+      expect(await buildPrompt('workspace-1', logger)).toBe(
+        buildIssueStartPrompt({ url: 'https://example.com/42' })
+      );
+    }
+  );
   it.each([buildInitialPromptFromGitHubIssue, buildInitialPromptFromLinearIssue])(
     'uses configured instructions',
     async (buildPrompt) => {

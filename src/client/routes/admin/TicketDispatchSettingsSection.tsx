@@ -17,7 +17,8 @@ export function TicketDispatchSettingsSection() {
       setDraft(null);
       toast.success('Ticket dispatch prompt saved.');
     },
-    onError: (error) => toast.error(`Couldn't save ticket dispatch prompt. ${error.message}`),
+    onError: (error) =>
+      toast.error(`Couldn't save ticket dispatch prompt. ${error.message.replace(/[.!?]+$/, '')}.`),
   });
   const saved = settings?.ticketDispatchPrompt ?? DEFAULT_TICKET_DISPATCH_PROMPT;
   const value = draft ?? saved;

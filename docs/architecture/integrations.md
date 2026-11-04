@@ -71,7 +71,7 @@ the new status displayed in the UI.
 
 ## Ticket dispatch prompt
 
-Settings > General Settings > Ticket dispatch prompt configures the instructions
+Settings > General settings > Ticket dispatch prompt configures the instructions
 used when starting GitHub and Linear tickets. The default retains the existing
 instructions to fetch and address the issue, follow repository instructions, and
 create a PR with a closing reference. The quoted ticket URL is appended after
