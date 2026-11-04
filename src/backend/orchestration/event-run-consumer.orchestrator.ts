@@ -333,6 +333,7 @@ export function createEventRunConsumer() {
         await finishRecovery(reservation, context.claim, abandoned);
       }
     },
+    hasWork: () => tasks.size > 0,
     canClaim: () => !closing && tasks.size < configService.getAgentRuntimeLimits().activeGlobal,
     async maintain(signal: AbortSignal) {
       await Promise.all([...tasks.values()].map(maintainOwned));

@@ -1,17 +1,5 @@
-import mermaid from 'mermaid';
 import { useEffect, useRef, useState } from 'react';
-
-// Keep the existing appearance when Mermaid changes its diagram defaults.
-if (typeof window !== 'undefined') {
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    look: 'classic',
-    layout: 'dagre',
-    securityLevel: 'strict',
-    suppressErrorRendering: true,
-  });
-}
+import { renderThemedMermaid } from '@/client/lib/mermaid-renderer';
 
 // Component to render Mermaid diagrams
 export default function MermaidDiagram({ chart }: { chart: string }) {
@@ -19,20 +7,23 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!(ref.current && chart)) {
+    const element = ref.current;
+    if (!(element && chart)) {
       return;
     }
     let cancelled = false;
+    let revision = 0;
     const renderDiagram = async () => {
+      const current = ++revision;
+      const isStale = () => cancelled || current !== revision;
       try {
-        setError(null);
-        const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-        const { svg } = await mermaid.render(id, chart);
-        if (!cancelled && ref.current) {
+        const svg = await renderThemedMermaid(chart, element, isStale);
+        if (!isStale() && ref.current && svg) {
           ref.current.innerHTML = svg;
+          setError(null);
         }
       } catch (err) {
-        if (cancelled) {
+        if (isStale()) {
           return;
         }
         // Capture the actual error message for debugging
@@ -40,8 +31,16 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
         setError(errorMessage);
       }
     };
+    const observer = new MutationObserver(() => {
+      void renderDiagram();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-color-scheme'],
+    });
     void renderDiagram();
     return () => {
+      observer.disconnect();
       cancelled = true;
     };
   }, [chart]);

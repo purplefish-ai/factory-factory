@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { factoryReleaseChecker } from '@/backend/lib/factory-update';
 import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 
+const mockCheckUpdates = vi.hoisted(() => vi.fn());
+const mockRequestUpdate = vi.hoisted(() => vi.fn());
+const mockCancelUpdate = vi.hoisted(() => vi.fn());
 const mockExportData = vi.hoisted(() => vi.fn());
 const mockImportData = vi.hoisted(() => vi.fn());
 const mockRemoveOrphanedWorktrees = vi.hoisted(() => vi.fn());
@@ -121,6 +124,11 @@ function createCaller(requestTrust?: Context['requestTrust']) {
     requestTrust,
     appContext: {
       services: {
+        applicationUpdateService: {
+          checkUpdates: mockCheckUpdates,
+          requestUpdate: mockRequestUpdate,
+          cancelUpdate: mockCancelUpdate,
+        },
         configService: {
           getSystemConfig: () => ({
             nodeEnv: 'test',
@@ -625,3 +633,34 @@ it.each(['periodicTaskId', 'workspaceId', 'launchSnapshot', 'undefined', 'marker
     expect(mockImportData).not.toHaveBeenCalled();
   }
 );
+
+describe('application update trust boundary', () => {
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+    { remoteAddress: '127.0.0.1', isLocal: true, hasForwardedClientAddressHeaders: true },
+  ])('rejects update mutations from untrusted clients: %j', async (trust) => {
+    const { caller } = createCaller(trust);
+    mockRequestUpdate.mockClear();
+    mockCancelUpdate.mockClear();
+    await expect(caller.requestUpdate({ version: '1.2.3' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await expect(caller.cancelUpdate()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockRequestUpdate).not.toHaveBeenCalled();
+    expect(mockCancelUpdate).not.toHaveBeenCalled();
+  });
+  it('allows trusted local requests and public release checks', async () => {
+    const { caller } = createCaller({ remoteAddress: '127.0.0.1', isLocal: true });
+    mockRequestUpdate.mockResolvedValue({ phase: 'waiting', targetVersion: '1.2.3' });
+    await expect(caller.requestUpdate({ version: '1.2.3' })).resolves.toEqual({
+      phase: 'waiting',
+      targetVersion: '1.2.3',
+    });
+    mockCancelUpdate.mockResolvedValue({ phase: 'idle' });
+    await expect(caller.cancelUpdate()).resolves.toEqual({ phase: 'idle' });
+    mockCheckUpdates.mockResolvedValue({ notices: [] });
+    const { caller: remote } = createCaller({ remoteAddress: '203.0.113.10', isLocal: false });
+    await expect(remote.checkUpdates()).resolves.toEqual({ notices: [] });
+  });
+});

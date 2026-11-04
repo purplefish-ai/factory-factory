@@ -496,6 +496,10 @@ export function createServer(application: Application, requestedPort?: number): 
       // may outlast the stop budget, and new agent sessions fail fast once
       // clients are stopped.
       const jobDrains = {
+        applicationUpdates: beginJobStop(
+          'application-update-idle',
+          () => services.applicationUpdateService?.stop() ?? Promise.resolve()
+        ),
         reconciliation: beginJobStop('reconciliation-cleanup', () =>
           reconciliationService.stopPeriodicCleanup()
         ),
@@ -536,6 +540,7 @@ export function createServer(application: Application, requestedPort?: number): 
       // Every drain is already under way, so awaiting them one at a time costs
       // only the slowest; the order below just keeps the edges that matter.
       // The event collector keeps projecting until the PR sync has settled.
+      await jobDrains.applicationUpdates;
       await jobDrains.prSync;
       eventCollector.stop();
       // Snapshot reconciliation's Git-stats pass must settle before the Git

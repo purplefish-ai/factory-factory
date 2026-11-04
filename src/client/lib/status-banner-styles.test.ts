@@ -3,9 +3,18 @@ import { getStatusBannerClassName } from './status-banner-styles';
 
 describe('getStatusBannerClassName', () => {
   it.each([
-    ['error', 'border-destructive/30 bg-destructive/10 text-destructive'],
-    ['warning', 'border-warning/30 bg-warning/10 text-warning'],
-    ['info', 'border-info/30 bg-info/10 text-info'],
+    [
+      'error',
+      'border-destructive-accent/50 bg-destructive-accent/15 dark:border-destructive/30 text-destructive dark:bg-destructive/10',
+    ],
+    [
+      'warning',
+      'border-warning-accent/50 bg-warning-accent/15 dark:border-warning/30 text-warning dark:bg-warning/10',
+    ],
+    [
+      'info',
+      'border-info-accent/50 bg-info-accent/15 dark:border-info/30 text-info dark:bg-info/10',
+    ],
   ] as const)('maps %s banners to theme-aware semantic colors', (kind, expected) => {
     expect(getStatusBannerClassName(kind)).toBe(expected);
   });

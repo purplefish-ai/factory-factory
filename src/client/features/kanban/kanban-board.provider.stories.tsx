@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { STORY_TRPC_PENDING, type StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
 import { IssueProvider } from '@/shared/core/enums';
 import { KanbanBoard } from './kanban-board';
@@ -75,6 +75,12 @@ export const Desktop: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('Update dependencies')).toBeVisible();
     await expect(canvas.getByText('Add authentication')).toBeVisible();
+    const todo = canvasElement.querySelector('[data-todo-column]');
+    if (!(todo instanceof HTMLElement)) {
+      throw new Error('Todo column is missing');
+    }
+    await userEvent.click(within(todo).getByRole('button', { name: 'New workspace' }));
+    await expect(within(todo).getByPlaceholderText('What should the agent work on?')).toBeVisible();
   },
 };
 

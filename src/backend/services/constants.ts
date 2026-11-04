@@ -22,6 +22,7 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
 } as const);
 
 export const SERVICE_INTERVAL_MS = Object.freeze({
+  applicationUpdateIdle: 1000,
   agentSourcePoll: 60_000,
   agentEventEvaluation: 5000,
   workspaceMetadata: 10_000,

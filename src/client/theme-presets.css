@@ -67,6 +67,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #ffffff;
   --merged-foreground: #ffffff;
+  --running-accent: #d29922;
+  --success-accent: #3fb950;
+  --warning-accent: #db6d28;
+  --destructive-accent: #f85149;
+  --info-accent: #4493f8;
+  --merged-accent: #ab7df8;
 }
 
 :root[data-color-scheme='github'].dark,
@@ -112,6 +118,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #0d1117;
   --merged-foreground: #0d1117;
+  --running-accent: var(--running);
+  --success-accent: var(--success);
+  --warning-accent: var(--warning);
+  --destructive-accent: var(--destructive);
+  --info-accent: var(--info);
+  --merged-accent: var(--merged);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -160,6 +172,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #ffffff;
   --merged-foreground: #ffffff;
+  --running-accent: #e5c07b;
+  --success-accent: #98c379;
+  --warning-accent: #d19a66;
+  --destructive-accent: #ef8a92;
+  --info-accent: #61afef;
+  --merged-accent: #d293e6;
 }
 
 :root[data-color-scheme='one'].dark,
@@ -205,6 +223,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #282c34;
   --merged-foreground: #282c34;
+  --running-accent: var(--running);
+  --success-accent: var(--success);
+  --warning-accent: var(--warning);
+  --destructive-accent: var(--destructive);
+  --info-accent: var(--info);
+  --merged-accent: var(--merged);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -253,6 +277,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #ffffff;
   --merged-foreground: #ffffff;
+  --running-accent: #e0aa1a;
+  --success-accent: #a8bb10;
+  --warning-accent: #f58a5c;
+  --destructive-accent: #ff8580;
+  --info-accent: #6ab8f4;
+  --merged-accent: #aaaef0;
 }
 
 :root[data-color-scheme='solarized'].dark,
@@ -298,6 +328,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #002b36;
   --merged-foreground: #002b36;
+  --running-accent: var(--running);
+  --success-accent: var(--success);
+  --warning-accent: var(--warning);
+  --destructive-accent: var(--destructive);
+  --info-accent: var(--info);
+  --merged-accent: var(--merged);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -346,6 +382,12 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #ffffff;
   --merged-foreground: #ffffff;
+  --running-accent: #ffff00;
+  --success-accent: #4dff88;
+  --warning-accent: #ffa94d;
+  --destructive-accent: #ff6666;
+  --info-accent: #7ab8ff;
+  --merged-accent: #d6a8ff;
 }
 
 :root[data-color-scheme='high-contrast'].dark,
@@ -391,4 +433,10 @@
   --destructive-foreground: #ffffff;
   --info-foreground: #000000;
   --merged-foreground: #000000;
+  --running-accent: var(--running);
+  --success-accent: var(--success);
+  --warning-accent: var(--warning);
+  --destructive-accent: var(--destructive);
+  --info-accent: var(--info);
+  --merged-accent: var(--merged);
 }

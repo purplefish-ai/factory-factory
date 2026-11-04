@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { sessionRouter } from './session.trpc';
@@ -67,4 +68,33 @@ describe('account-bound session creation trust', () => {
     ).resolves.toEqual({ id: 'created' });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ codexAccountId: 'managed' }));
   });
+});
+
+it('counts pending session inserts and rejects new session creation while preparing an update', async () => {
+  const { caller, create } = setup({ isLocal: true, remoteAddress: '127.0.0.1' });
+  const input = { workspaceId: 'w', workflow: 'followup' };
+  let finish!: (value: unknown) => void;
+  create.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const creating = caller.createSession(input);
+  await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(applicationUpdateAdmission.tryClose(() => false)).toBe(false);
+  finish({ outcome: 'created', session: { id: 'created' } });
+  await creating;
+  expect(applicationUpdateAdmission.tryClose(() => false)).toBe(true);
+  try {
+    await expect(caller.createSession(input)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.createAndStartSession(input)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(create).toHaveBeenCalledOnce();
+  } finally {
+    applicationUpdateAdmission.release();
+  }
 });

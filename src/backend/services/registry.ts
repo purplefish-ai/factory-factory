@@ -47,6 +47,10 @@ export type PrismaModelName = (typeof prismaModelNames)[number];
  * services must live under their owning `src/backend/services/<name>/` capsule.
  */
 export const infrastructureServiceRegistry = {
+  'application-update-admission.service': {
+    fileName: 'application-update-admission.service.ts',
+    description: 'Process-wide agent work admission during application updates',
+  },
   'config.service': {
     fileName: 'config.service.ts',
     description: 'Environment and application configuration',
@@ -92,6 +96,7 @@ export const infrastructureServiceRegistry = {
 export type InfrastructureServiceName = keyof typeof infrastructureServiceRegistry;
 
 export const serviceNames = [
+  'application-update',
   'codex-accounts',
   'session',
   'workspace',
@@ -116,6 +121,7 @@ type ServiceDefinition = {
 };
 
 export const serviceRegistry = {
+  'application-update': { dependsOn: [], ownsModels: [] },
   'agent-definition': {
     dependsOn: [],
     ownsModels: [

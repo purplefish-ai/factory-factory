@@ -1,6 +1,13 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -13,7 +20,7 @@ export interface KanbanControlsViewProps {
   onRefresh: () => void;
 }
 
-/** Board header actions. "New Workspace" matches the sidebar action of the same name. */
+/** Board overflow actions and a mobile shortcut to the Todo composer. */
 export function KanbanControlsView({
   isMobile,
   isSyncing,
@@ -34,33 +41,34 @@ export function KanbanControlsView({
 
   return (
     <>
-      {isMobile ? (
+      {isMobile && (
         <Tooltip>
           <TooltipTrigger asChild>{newWorkspaceButton}</TooltipTrigger>
           <TooltipContent>New workspace</TooltipContent>
         </Tooltip>
-      ) : (
-        newWorkspaceButton
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onRefresh}
-            disabled={isSyncing}
-            aria-label="Refresh workspaces"
-          >
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Board actions">
+                <DotsThreeIcon className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Board actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={onRefresh} disabled={isSyncing}>
             {isSyncing ? (
               <Spinner className="h-4 w-4" aria-hidden="true" />
             ) : (
               <ArrowsClockwiseIcon className="h-4 w-4" />
             )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Refresh workspaces</TooltipContent>
-      </Tooltip>
+            {isSyncing ? 'Syncing…' : 'Sync now'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   );
 }

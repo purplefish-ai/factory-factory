@@ -44,7 +44,7 @@ export interface StatusToneStyle {
   text: string;
   /** Solid fill for small dots. */
   dot: string;
-  /** Tinted chip or badge (text on a 10% tint). */
+  /** Tinted chip or badge (text on a bright accent tint). */
   chip: string;
   /** Tinted panel or banner with a matching border. */
   surface: string;
@@ -78,9 +78,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'running',
     text: 'text-running',
     dot: 'bg-running',
-    chip: 'border-transparent bg-running/10 text-running',
-    surface: 'border-running/30 bg-running/10 text-running',
-    border: 'border-running/40',
+    chip: 'border-transparent bg-running-accent/15 text-running dark:bg-running/10',
+    surface:
+      'border-running-accent/50 bg-running-accent/15 dark:border-running/30 text-running dark:bg-running/10',
+    border: 'border-running-accent/70 dark:border-running/40',
     icon: PulseIcon,
     pulse: true,
   },
@@ -89,9 +90,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'info',
     text: 'text-info',
     dot: 'bg-info',
-    chip: 'border-transparent bg-info/10 text-info',
-    surface: 'border-info/30 bg-info/10 text-info',
-    border: 'border-info/40',
+    chip: 'border-transparent bg-info-accent/15 text-info dark:bg-info/10',
+    surface:
+      'border-info-accent/50 bg-info-accent/15 dark:border-info/30 text-info dark:bg-info/10',
+    border: 'border-info-accent/70 dark:border-info/40',
     icon: ClockIcon,
     pulse: false,
   },
@@ -100,9 +102,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'warning',
     text: 'text-warning',
     dot: 'bg-warning',
-    chip: 'border-transparent bg-warning/10 text-warning',
-    surface: 'border-warning/30 bg-warning/10 text-warning',
-    border: 'border-warning/40',
+    chip: 'border-transparent bg-warning-accent/15 text-warning dark:bg-warning/10',
+    surface:
+      'border-warning-accent/50 bg-warning-accent/15 dark:border-warning/30 text-warning dark:bg-warning/10',
+    border: 'border-warning-accent/70 dark:border-warning/40',
     icon: BellRingingIcon,
     pulse: false,
   },
@@ -111,9 +114,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'success',
     text: 'text-success',
     dot: 'bg-success',
-    chip: 'border-transparent bg-success/10 text-success',
-    surface: 'border-success/30 bg-success/10 text-success',
-    border: 'border-success/40',
+    chip: 'border-transparent bg-success-accent/15 text-success dark:bg-success/10',
+    surface:
+      'border-success-accent/50 bg-success-accent/15 dark:border-success/30 text-success dark:bg-success/10',
+    border: 'border-success-accent/70 dark:border-success/40',
     icon: CheckCircleIcon,
     pulse: false,
   },
@@ -122,9 +126,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'warning',
     text: 'text-warning',
     dot: 'bg-warning',
-    chip: 'border-transparent bg-warning/10 text-warning',
-    surface: 'border-warning/30 bg-warning/10 text-warning',
-    border: 'border-warning/40',
+    chip: 'border-transparent bg-warning-accent/15 text-warning dark:bg-warning/10',
+    surface:
+      'border-warning-accent/50 bg-warning-accent/15 dark:border-warning/30 text-warning dark:bg-warning/10',
+    border: 'border-warning-accent/70 dark:border-warning/40',
     icon: WarningIcon,
     pulse: false,
   },
@@ -133,9 +138,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'destructive',
     text: 'text-destructive',
     dot: 'bg-destructive',
-    chip: 'border-transparent bg-destructive/10 text-destructive',
-    surface: 'border-destructive/30 bg-destructive/10 text-destructive',
-    border: 'border-destructive/40',
+    chip: 'border-transparent bg-destructive-accent/15 text-destructive dark:bg-destructive/10',
+    surface:
+      'border-destructive-accent/50 bg-destructive-accent/15 dark:border-destructive/30 text-destructive dark:bg-destructive/10',
+    border: 'border-destructive-accent/70 dark:border-destructive/40',
     icon: XCircleIcon,
     pulse: false,
   },
@@ -144,9 +150,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'info',
     text: 'text-info',
     dot: 'bg-info',
-    chip: 'border-transparent bg-info/10 text-info',
-    surface: 'border-info/30 bg-info/10 text-info',
-    border: 'border-info/40',
+    chip: 'border-transparent bg-info-accent/15 text-info dark:bg-info/10',
+    surface:
+      'border-info-accent/50 bg-info-accent/15 dark:border-info/30 text-info dark:bg-info/10',
+    border: 'border-info-accent/70 dark:border-info/40',
     icon: InfoIcon,
     pulse: false,
   },
@@ -155,9 +162,10 @@ const STATUS_TONE_STYLES: Record<StatusTone, StatusToneStyle> = {
     token: 'merged',
     text: 'text-merged',
     dot: 'bg-merged',
-    chip: 'border-transparent bg-merged/10 text-merged',
-    surface: 'border-merged/30 bg-merged/10 text-merged',
-    border: 'border-merged/40',
+    chip: 'border-transparent bg-merged-accent/15 text-merged dark:bg-merged/10',
+    surface:
+      'border-merged-accent/50 bg-merged-accent/15 dark:border-merged/30 text-merged dark:bg-merged/10',
+    border: 'border-merged-accent/70 dark:border-merged/40',
     icon: GitMergeIcon,
     pulse: false,
   },

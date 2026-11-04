@@ -1,9 +1,15 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orchestrator';
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
 import { createAgentManagement } from './orchestration/agent-management.orchestrator';
+import {
+  ApplicationUpdateService,
+  createProcessUpdateSupervisor,
+} from './orchestration/application-update.service';
 import { cliHealthService } from './orchestration/cli-health.service';
 import { dataBackupService } from './orchestration/data-backup.service';
 import {
@@ -53,6 +59,8 @@ import {
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { agentManagementService, type AgentManagementService } from './services/agent-definition';
 import { agentProposalService, slackConnectionService } from './services/agent-definition';
+import { applicationReleaseService } from './services/application-update';
+import { applicationUpdateAdmission } from './services/application-update-admission.service';
 import { codexAccountService } from './services/codex-accounts';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
@@ -64,6 +72,7 @@ import {
   prSnapshotService,
   prObservationService,
 } from './services/github';
+import { jobRunner } from './services/job-runner.service';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
@@ -141,6 +150,11 @@ import {
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
+  applicationUpdateAdmission: Pick<typeof applicationUpdateAdmission, 'run' | 'assertOpen'>;
+  applicationUpdateService: Pick<
+    ApplicationUpdateService,
+    'start' | 'stop' | 'checkUpdates' | 'requestUpdate' | 'cancelUpdate'
+  >;
   agentRuntime: ReturnType<typeof createAgentRuntime>;
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   agentManagement: ReturnType<typeof createAgentManagement>;
@@ -284,7 +298,26 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     publishAcceptedName: (id, name, updatedAt) =>
       services.workspaceSnapshotStore.publishAcceptedName(id, name, updatedAt),
   });
+  const applicationUpdateService = new ApplicationUpdateService({
+    release: applicationReleaseService,
+    admission: applicationUpdateAdmission,
+    jobs: jobRunner,
+    supervisor: createProcessUpdateSupervisor(),
+    manualCommand: process.versions.electron
+      ? 'Download the latest Factory Factory desktop release.'
+      : existsSync(join(applicationReleaseService.getPackageRoot(), 'src/cli/index.ts'))
+        ? 'Update this checkout with git pull and pnpm install, then restart Factory Factory.'
+        : 'npm install -g factory-factory@latest',
+    hasWork: () =>
+      services.sessionDomainService.hasPendingUpdateWork() ||
+      [...services.acpRuntimeManager.getAllClients()].some(([id]) =>
+        services.acpRuntimeManager.isSessionWorking(id)
+      ) ||
+      services.agentRuntime.hasWork(),
+  });
   const services: ApplicationServices = {
+    applicationUpdateAdmission,
+    applicationUpdateService,
     listVisibleReviewRequests: (repository) => listVisibleReviewRequests(services, repository),
     acpRuntimeManager,
     acpTraceLogger,
@@ -578,11 +611,13 @@ export function createApplication(
   services.acpRuntimeManager.setAcpStartupTimeoutMs?.(
     services.configService.getAcpStartupTimeoutMs()
   );
+  services.acpRuntimeManager.configureAdmission?.(services.applicationUpdateAdmission);
   services.acpRuntimeManager.configureEnvironment?.({
     childProcessEnvProvider: () => services.configService.getChildProcessEnv(),
   });
   lifecycle.wireDomainBridges(services);
   lifecycle.eventCollector.start();
+  services.applicationUpdateService?.start();
 
   return Object.freeze({
     services: Object.freeze(services),
@@ -595,6 +630,7 @@ export async function disposeApplication(application: Application): Promise<void
   // Preserve dependency order while retaining failures from every independent cleanup attempt.
   const failures: unknown[] = [];
   const cleanup = [
+    () => application.services.applicationUpdateService?.stop(),
     () => application.services.agentRuntime?.stop(),
     () => application.services.workspaceMetadata?.stop(),
     () => application.services.sessionLifecycleService.stopAllClients(),
