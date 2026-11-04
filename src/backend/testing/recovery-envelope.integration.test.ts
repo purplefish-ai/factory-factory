@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';
 import v6 from '@/backend/testing/fixtures/published-v6.json';
@@ -275,20 +275,32 @@ it('imports the frozen workspace-only profile with historical PR/session null no
   ).toEqual([{ storage: 'null', kind: null }]);
 });
 
-it.each([
-  fixed,
-  workspaceJson,
-  fullJson,
-  periodicConfig,
-  periodicLinks,
-  periodicHistory,
-  definitions,
-])(
-  'imports genuine $meta.recovery.profile with its exact manifest and definition authority',
-  async (raw) => {
-    const isolated = await createIntegrationDatabase();
-    database.prisma = isolated.prisma;
-    try {
+describe('cold profile recovery imports', () => {
+  let ownedDatabase: IntegrationDatabase | undefined;
+  beforeEach(async () => {
+    ownedDatabase = await createIntegrationDatabase();
+    database.prisma = ownedDatabase.prisma;
+  }, 30_000);
+  afterEach(async () => {
+    database.prisma = destination.prisma;
+    const owned = ownedDatabase;
+    ownedDatabase = undefined;
+    if (owned) {
+      await destroyIntegrationDatabase(owned);
+    }
+  }, 30_000);
+  it.each([
+    fixed,
+    workspaceJson,
+    fullJson,
+    periodicConfig,
+    periodicLinks,
+    periodicHistory,
+    definitions,
+  ])(
+    'imports genuine $meta.recovery.profile with its exact manifest and definition authority',
+    async (raw) => {
+      const isolated = ownedDatabase!;
       const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [raw]);
       expect(raw.data.projects.length).toBeGreaterThan(0);
       expect(result.projects).toEqual({ imported: raw.data.projects.length, skipped: 0 });
@@ -322,9 +334,6 @@ it.each([
         expect(result.recovery).not.toHaveProperty('automationDefinitions');
         expect(await isolated.prisma.agentDefinition.count()).toBe(0);
       }
-    } finally {
-      database.prisma = destination.prisma;
-      await destroyIntegrationDatabase(isolated);
     }
-  }
-);
+  );
+});
