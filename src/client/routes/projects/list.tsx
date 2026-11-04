@@ -54,6 +54,7 @@ function ProjectActions({
           <Button
             variant="ghost"
             size="icon"
+            aria-label={`Archive ${projectName}`}
             onClick={onArchive}
             disabled={archivePending}
             className="hover:bg-destructive/10 hover:text-destructive"

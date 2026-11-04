@@ -203,7 +203,7 @@ function GeneralMobileBaselinePage() {
               <SelectItem value="done">Done</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" aria-label="Board view">
             <ListIcon className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm">
