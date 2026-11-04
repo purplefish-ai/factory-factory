@@ -25,6 +25,7 @@ const CONTENT = [
   '| Column | Value |',
   '| --- | --- |',
   '| Theme | Active |',
+  '| Mode | Current |',
 ].join('\n');
 
 function Typography() {
@@ -116,6 +117,13 @@ async function assertSectionColors(section: Element, tokenColor: TokenColor) {
   await assertColor(section, 'blockquote', 'border', tokenColor, 'border-inline-start-color');
   await assertColor(section, 'pre', 'muted', tokenColor, 'background-color');
   await assertColor(section, 'hr', 'border', tokenColor, 'border-top-color');
+  for (const selector of ['thead', 'tbody tr:first-child']) {
+    await assertColor(section, selector, 'border', tokenColor, 'border-bottom-color');
+    await expect(getComputedStyle(section.querySelector(selector)!).borderBottomWidth).toBe('1px');
+  }
+  await expect(
+    getComputedStyle(section.querySelector('tbody tr:last-child')!).borderBottomWidth
+  ).toBe('0px');
 }
 
 async function assertPlainProseColors(plain: Element, tokenColor: TokenColor) {
