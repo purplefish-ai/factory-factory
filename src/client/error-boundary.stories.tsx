@@ -4,6 +4,7 @@ import { ErrorBoundary, ErrorFallback } from './error-boundary';
 
 const onReload = fn();
 const onReset = fn();
+const reportError = fn();
 
 function sampleError() {
   const error = new TypeError("Cannot read properties of undefined (reading 'sessions')");
@@ -120,10 +121,19 @@ export const CaughtByBoundary: Story = {
   ),
   beforeEach: () => {
     crashControl.shouldCrash = true;
+    // The boundary reports caught errors through `reportError`, which the test
+    // runner would treat as an uncaught page error. Capture it for this story.
+    const original = globalThis.reportError;
+    globalThis.reportError = reportError;
+    reportError.mockReset();
+    return () => {
+      globalThis.reportError = original;
+    };
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Panel failed to render');
+    await expect(reportError).toHaveBeenCalled();
     crashControl.shouldCrash = false;
     await userEvent.click(canvas.getByRole('button', { name: 'Try again' }));
     await expect(await canvas.findByText('Panel recovered')).toBeVisible();
