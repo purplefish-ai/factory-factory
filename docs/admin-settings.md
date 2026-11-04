@@ -60,6 +60,12 @@ leaves the picker; sliders save when you finish the interaction.
 it does not change Mode. The last applied appearance is cached in the browser so
 a reload does not flash the defaults before the saved settings load.
 
+The title bar, sidebar, and pane/tab headers share a theme-relative surface,
+while content keeps its own background. Dark mode raises the navigation surface
+and strengthens pane boundaries. High Contrast retains its black/white surfaces.
+The installed-app title bar keeps a visible separator when navigation is
+collapsed.
+
 In the installed desktop PWA, the browser-owned corner backgrounds follow the
 page color and dim with search and other dialog backdrops. Closing a dialog
 restores the current page color; the browser still draws the window buttons. The
