@@ -104,7 +104,7 @@ test('More tools render their fixtures and Logs reopens the last source', async 
   await expect(
     page.getByRole('menuitemradio', { name: 'Screenshots', exact: true })
   ).toHaveAttribute('aria-checked', 'true');
-  await page.getByRole('menuitemradio', { name: 'Sessions', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Sub-agents', exact: true }).click();
   await expect(drawer.getByText('No child workspaces yet.', { exact: true })).toBeVisible();
   await drawer.getByRole('button', { name: /more tools/i }).click();
   await page.getByRole('menuitemradio', { name: 'Logs', exact: true }).click();

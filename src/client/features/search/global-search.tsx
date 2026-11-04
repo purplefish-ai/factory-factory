@@ -213,7 +213,7 @@ export function GlobalSearch() {
           <p className="text-sm text-muted-foreground">
             This{' '}
             {archivePreview?.kind === 'session'
-              ? 'conversation belongs to an archived workspace or project'
+              ? 'chat belongs to an archived workspace or project'
               : `${archivePreview?.kind} is archived`}
             . Search shows its saved metadata; live chat is unavailable.
           </p>

@@ -126,7 +126,12 @@ it('keeps the project selector in the navbar and section links in the real mobil
   const footer = document.querySelector('[role="dialog"] [data-sidebar="footer"]');
   expect(
     [...(footer?.querySelectorAll('a') ?? [])].map((link) => link.getAttribute('href'))
-  ).toEqual(['/projects/factory-factory/agents', '/projects/factory-factory/reviews', '/admin']);
+  ).toEqual([
+    '/projects/factory-factory/workspaces',
+    '/projects/factory-factory/agents',
+    '/projects/factory-factory/reviews',
+    '/admin',
+  ]);
   expect(footer?.textContent).toContain('Reviews2');
 });
 

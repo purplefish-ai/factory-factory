@@ -17,7 +17,8 @@ const NewProjectPage = lazy(() => import('./routes/projects/new'));
 const ProjectRedirectPage = lazy(() => import('./routes/projects/redirect'));
 const WorkspaceDetailPage = lazy(() => import('./routes/projects/workspaces/detail'));
 const WorkspacesListPage = lazy(() => import('./routes/projects/workspaces/list'));
-const NewWorkspacePage = lazy(() => import('./routes/projects/workspaces/new'));
+// Retired standalone form; redirects to the board's inline new workspace form.
+const NewWorkspaceRedirectPage = lazy(() => import('./routes/projects/workspaces/new'));
 const ReviewsPage = lazy(() => import('./routes/reviews'));
 const LegacyReviewsPage = lazy(() => import('./routes/reviews/legacy'));
 
@@ -100,7 +101,7 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: 'new',
-                    element: <NewWorkspacePage />,
+                    element: <NewWorkspaceRedirectPage />,
                   },
                   {
                     path: ':id',

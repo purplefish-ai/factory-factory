@@ -13,7 +13,7 @@ const resultKinds = {
   github_issue: { label: 'Start issue', Icon: GithubLogoIcon },
   project: { label: 'Project', Icon: FolderSimpleIcon },
   workspace: { label: 'Workspace', Icon: StackSimpleIcon },
-  session: { label: 'Conversation', Icon: ChatCircleIcon },
+  session: { label: 'Chat', Icon: ChatCircleIcon },
 };
 
 export interface SearchGroupState {

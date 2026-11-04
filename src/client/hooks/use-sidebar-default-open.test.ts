@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { clearTransientOverrideOnCategoryChange } from './use-sidebar-default-open';
+import {
+  clearTransientOverrideOnCategoryChange,
+  getRouteCategory,
+} from './use-sidebar-default-open';
 
 describe('clearTransientOverrideOnCategoryChange', () => {
   it('clears board override when leaving board routes', () => {
@@ -23,5 +26,19 @@ describe('clearTransientOverrideOnCategoryChange', () => {
     ).toEqual({
       default: false,
     });
+  });
+});
+
+describe('getRouteCategory', () => {
+  it.each([
+    ['/projects/a/workspaces', 'board'],
+    ['/projects/a/workspaces/', 'board'],
+    // Matches the Board nav item, which treats project URLs case-insensitively.
+    ['/PROJECTS/a/WORKSPACES', 'board'],
+    ['/projects/a/workspaces/ws-1', 'workspace_detail'],
+    ['/Projects/a/Workspaces/ws-1', 'workspace_detail'],
+    ['/projects/a/agents', 'default'],
+  ] as const)('classifies %s as %s', (pathname, category) => {
+    expect(getRouteCategory(pathname)).toBe(category);
   });
 });
