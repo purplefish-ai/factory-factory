@@ -90,37 +90,44 @@ describe('TerminalInstance', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    flushSync(() =>
-      root.render(
-        createElement(TerminalInstance, {
-          onData: vi.fn(),
-          onResize: vi.fn(),
-          output: 'session output',
-        })
-      )
-    );
-    const instance = vi.mocked(Terminal).mock.results[0]?.value as {
-      options: { theme: { background: string; foreground: string }; minimumContrastRatio: number };
-    };
-    expect(instance.options.theme.background).toBe('#ffffff');
-    expect(instance.options.theme.foreground).toBe('#111111');
-    document.documentElement.setAttribute('data-color-scheme', 'high-contrast');
-    document.documentElement.style.setProperty('--background', '#101010');
-    document.documentElement.style.setProperty('--foreground', '#eeeeee');
-    await vi.waitFor(() => expect(instance.options.theme.background).toBe('#101010'));
-    expect(instance.options.theme.foreground).toBe('#eeeeee');
-    expect(instance.options.minimumContrastRatio).toBe(7);
-    expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
-    expect(mocks.write.mock.calls).toEqual([['session output']]);
-    expect(mocks.clear).not.toHaveBeenCalled();
-    expect(mocks.dispose).not.toHaveBeenCalled();
-    root.unmount();
-    const lastTheme = instance.options.theme;
-    document.documentElement.style.setProperty('--background', '#222222');
-    await Promise.resolve();
-    expect(instance.options.theme).toBe(lastTheme);
-    document.documentElement.removeAttribute('style');
-    document.documentElement.removeAttribute('data-color-scheme');
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(TerminalInstance, {
+            onData: vi.fn(),
+            onResize: vi.fn(),
+            output: 'session output',
+          })
+        )
+      );
+      const instance = vi.mocked(Terminal).mock.results[0]?.value as {
+        options: {
+          theme: { background: string; foreground: string };
+          minimumContrastRatio: number;
+        };
+      };
+      expect(instance.options.theme.background).toBe('#ffffff');
+      expect(instance.options.theme.foreground).toBe('#111111');
+      document.documentElement.setAttribute('data-color-scheme', 'high-contrast');
+      document.documentElement.style.setProperty('--background', '#101010');
+      document.documentElement.style.setProperty('--foreground', '#eeeeee');
+      await vi.waitFor(() => expect(instance.options.theme.background).toBe('#101010'));
+      expect(instance.options.theme.foreground).toBe('#eeeeee');
+      expect(instance.options.minimumContrastRatio).toBe(7);
+      expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
+      expect(mocks.write.mock.calls).toEqual([['session output']]);
+      expect(mocks.clear).not.toHaveBeenCalled();
+      expect(mocks.dispose).not.toHaveBeenCalled();
+      root.unmount();
+      const lastTheme = instance.options.theme;
+      document.documentElement.style.setProperty('--background', '#222222');
+      await Promise.resolve();
+      expect(instance.options.theme).toBe(lastTheme);
+    } finally {
+      root.unmount();
+      document.documentElement.removeAttribute('style');
+      document.documentElement.removeAttribute('data-color-scheme');
+    }
   });
 
   it('tracks mode and preset changes applied through root attributes', async () => {

@@ -421,8 +421,8 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           )}
         >
           <TerminalIcon className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No terminal open</p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-sm font-medium text-foreground">No terminal open</p>
+          <p className="text-xs text-foreground mt-1">
             {connected ? 'Click + to open a new terminal' : gaveUp ? 'Disconnected' : 'Connecting…'}
           </p>
           {gaveUp && (

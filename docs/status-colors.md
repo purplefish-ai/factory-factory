@@ -41,12 +41,11 @@ Each preset declares all status tokens in both its light and dark blocks, using
 its source palette's own hues (Primer, One, Solarized) adjusted where needed for
 contrast. A light-block declaration outranks `.dark`, so a preset must redeclare
 every status token in its dark block; the palette test checks this. Each dark
-block also matches `.dark` descendants, so an always-dark surface inside a light
-page (the terminal disconnect banner) uses the selected scheme's dark palette;
-the test also requires dark blocks to redeclare every light-block token. Presets
-keep their own focus ring, which follows their accent color. Preset gray text
-(`muted-foreground`) follows the source themes; Solarized's grays fall slightly
-below AA on cards.
+block also matches `.dark` descendants, so a nested dark preview inside a light
+page uses the selected scheme's dark palette; the test also requires dark blocks
+to redeclare every light-block token. Presets keep their own focus ring, which
+follows their accent color. Preset gray text (`muted-foreground`) follows the
+source themes; Solarized's grays fall slightly below AA on cards.
 
 ## Tones
 

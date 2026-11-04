@@ -23,7 +23,7 @@ describe('TerminalDisconnectBanner', () => {
     const markup = renderToStaticMarkup(
       <TerminalDisconnectBanner gaveUp onReconnect={() => undefined} />
     );
-    expect(markup).not.toContain('dark ');
+    expect(markup).not.toMatch(/\bdark\b/);
     expect(markup).toContain('text-warning');
     expect(markup).not.toMatch(/\b(?:bg|text|border)-amber-\d/);
   });

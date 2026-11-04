@@ -23,7 +23,7 @@ export function InitOutputPanel({
   return (
     <ScrollArea viewportRef={scrollRef} className={className}>
       <pre className="p-2 text-xs font-mono text-foreground whitespace-pre-wrap break-words">
-        {output || <span className="text-muted-foreground italic">{emptyMessage}</span>}
+        {output || <span className="text-foreground italic">{emptyMessage}</span>}
       </pre>
     </ScrollArea>
   );

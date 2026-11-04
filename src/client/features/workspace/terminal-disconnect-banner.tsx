@@ -1,18 +1,10 @@
 interface TerminalDisconnectBannerProps {
-  /** Announces dropped input while disconnected, using the active theme's warning colors. */
+  /** The transport stopped retrying; offer a manual reconnect. */
   gaveUp: boolean;
   onReconnect: () => void;
 }
 
-/**
- * Shown above the terminal while its transport is disconnected, because input
- * typed during the gap is dropped. The terminal is always dark, so the `dark`
- * class scopes the selected scheme's dark tokens (theme-presets.css matches
- * `.dark` descendants) and the banner paints its own dark background. The
- * palette test covers warning on its tint over each dark background. This lives outside
- * terminal-panel.tsx so it stays under the raw-palette lint rule, which exempts
- * that file only for its fixed zinc terminal surface.
- */
+/** Announces dropped input during a disconnect using the active theme's warning colors. */
 export function TerminalDisconnectBanner({ gaveUp, onReconnect }: TerminalDisconnectBannerProps) {
   return (
     <div className="border-b border-warning/30 bg-background">
