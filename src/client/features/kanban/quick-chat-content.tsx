@@ -6,6 +6,7 @@ import {
   QuestionPrompt,
   type UseChatWebSocketReturn,
   useGroupedChatMessages,
+  useTranscriptSend,
   ChatTranscript,
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
@@ -26,6 +27,10 @@ export function QuickChatContent({
   chatState,
   transcriptScroll,
 }: QuickChatContentProps) {
+  const { sendMessage, transcriptScroll: scroll } = useTranscriptSend(
+    chatState.sendMessage,
+    transcriptScroll
+  );
   const timeline = useSubagentTimelineMessages(
     chatState.messages,
     chatState.runtimeSessionId,
@@ -78,7 +83,7 @@ export function QuickChatContent({
         startingSession={startingSession}
         loadingSession={loadingSession}
         latestThinking={chatState.latestThinking}
-        scroll={transcriptScroll}
+        scroll={scroll}
         isCompacting={chatState.isCompacting}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={chatState.removeQueuedMessage}
@@ -103,7 +108,7 @@ export function QuickChatContent({
           onAnswer={chatState.answerQuestion}
         />
         <ChatInput
-          onSend={chatState.sendMessage}
+          onSend={sendMessage}
           onStop={chatState.stopChat}
           disabled={!chatState.connected || loadingSession}
           running={running}

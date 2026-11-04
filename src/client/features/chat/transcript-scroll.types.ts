@@ -14,6 +14,8 @@ export interface TranscriptScrollOptions {
   ready: boolean;
   initialIntent: TranscriptIntent;
   initialPosition: TranscriptPosition | null;
+  /** A new token resumes following after a local message submission. */
+  followRequest?: object;
   onPositionChange?: (position: TranscriptPosition) => void;
 }
 

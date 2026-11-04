@@ -4,6 +4,7 @@ import { act, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createTranscriptPositioner } from './transcript-scroll-position';
+import type { TranscriptScrollState } from './transcript-scroll.types';
 import { useTranscriptScroll } from './use-transcript-scroll';
 
 // Keep the real engine's options and element cache, without mounting its own
@@ -213,4 +214,34 @@ it('keeps virtualizer key callbacks stable until the row keys change', async () 
   expect(
     engine.options.rangeExtractor({ startIndex: 1, endIndex: 1, overscan: 0, count: 2 })
   ).toEqual([1]);
+});
+
+let state: TranscriptScrollState | undefined;
+function SendProbe({ request }: { request?: object }) {
+  ({ state } = useTranscriptScroll(viewport, ['row'], {
+    identity: 'send',
+    active: true,
+    ready: true,
+    initialIntent: 'reading',
+    initialPosition: null,
+    followRequest: request,
+  }));
+  return null;
+}
+
+it('resumes following on a send request, but preserves reading on ordinary renders', async () => {
+  Object.defineProperty(viewport, 'clientHeight', { get: () => 400 });
+  await act(() => root.render(<SendProbe />));
+  expect(state?.intent).toBe('reading');
+  await act(() => root.render(<SendProbe />));
+  expect(state?.intent).toBe('reading');
+  const request = {};
+  await act(() => root.render(<SendProbe request={request} />));
+  expect(state?.intent).toBe('following');
+  await act(() => viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })));
+  expect(state?.intent).toBe('reading');
+  await act(() => root.render(<SendProbe request={request} />));
+  expect(state?.intent).toBe('reading');
+  await act(() => root.render(<SendProbe request={{}} />));
+  expect(state?.intent).toBe('following');
 });

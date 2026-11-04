@@ -11,12 +11,13 @@ import { QuickChatContent } from './quick-chat-content';
 const input = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatInput>) => null));
 const list = vi.hoisted(() => vi.fn((_props: ComponentProps<typeof ChatTranscript>) => null));
 vi.mock('@/client/features/chat', async (importOriginal) => {
-  const { getChatPendingRequestType, useGroupedChatMessages } =
+  const { getChatPendingRequestType, useGroupedChatMessages, useTranscriptSend } =
     await importOriginal<typeof import('@/client/features/chat')>();
   return {
     ChatTranscript: list,
     getChatPendingRequestType,
     useGroupedChatMessages,
+    useTranscriptSend,
     ChatInput: input,
     PermissionPrompt: () => null,
     QuestionPrompt: () => null,
@@ -336,6 +337,7 @@ describe('QuickChatContent composer and queue controls', () => {
 
   it('connects queue controls and composer attachments to shared chat state', () => {
     const removeQueuedMessage = vi.fn();
+    const sendMessage = vi.fn();
     const attachments = [
       {
         id: 'attachment-1',
@@ -357,17 +359,18 @@ describe('QuickChatContent composer and queue controls', () => {
       sessionStatus: { phase: 'running' },
       sessionRuntime: createInitialSessionRuntimeState(),
       removeQueuedMessage,
+      sendMessage,
     } as unknown as UseChatWebSocketReturn;
     const container = document.createElement('div');
     const root = createRoot(container);
-    const render = () =>
+    const render = (identity = 'quick-story') =>
       flushSync(() =>
         root.render(
           <QuickChatContent
             workspaceId="workspace-1"
             chatState={chatState}
             transcriptScroll={{
-              identity: 'quick-story',
+              identity,
               active: true,
               ready: true,
               initialIntent: 'following',
@@ -382,6 +385,11 @@ describe('QuickChatContent composer and queue controls', () => {
         queuedMessageIds: new Set(['queued-1']),
         onRemoveQueuedMessage: removeQueuedMessage,
       });
+      expect(list.mock.lastCall?.[0].scroll.followRequest).toBeUndefined();
+      flushSync(() => input.mock.lastCall?.[0].onSend('Continue'));
+      expect(sendMessage).toHaveBeenCalledWith('Continue', undefined);
+      const request = list.mock.lastCall?.[0].scroll.followRequest;
+      expect(request).toBeDefined();
       expect(input.mock.lastCall?.[0].attachments).toBe(attachments);
       input.mock.lastCall?.[0].onAttachmentsChange?.([]);
       expect(setInputAttachments).toHaveBeenCalledWith([]);
@@ -390,6 +398,9 @@ describe('QuickChatContent composer and queue controls', () => {
       render();
       expect(list.mock.lastCall?.[0]?.queuedMessageIds).toEqual(new Set());
       expect(input.mock.lastCall?.[0].attachments).toEqual([]);
+      expect(list.mock.lastCall?.[0].scroll.followRequest).toBe(request);
+      render('another-session');
+      expect(list.mock.lastCall?.[0].scroll.followRequest).toBeUndefined();
     } finally {
       flushSync(() => root.unmount());
     }

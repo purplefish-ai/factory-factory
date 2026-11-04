@@ -378,8 +378,12 @@ that cap is reached.
 The scroll controller separates following from reading and from the suspended,
 restoring and ready lifecycle. Layout changes cannot change intent. Upward input
 yields immediately; downward movement within 24 pixels of the end or the jump
-control resumes following. A held touch/scrollbar gesture inhibits positioning
-until release, even if an older scroll operation emits `scrollend`.
+control resumes following. Sending a message in main chat or quick chat also
+returns to the bottom and follows subsequent output. `useTranscriptSend` passes
+a session-scoped request token to the controller, including for queued messages,
+voice submissions and retries; ordinary incoming messages preserve reading
+intent. A held touch/scrollbar gesture inhibits positioning until release, even
+if an older scroll operation emits `scrollend`.
 
 The virtualizer uses start anchoring with native append-follow disabled. One
 controller frame coalesces committed content/viewport changes; TanStack performs

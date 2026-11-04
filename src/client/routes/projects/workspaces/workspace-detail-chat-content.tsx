@@ -8,6 +8,7 @@ import {
   QuestionPrompt,
   RewindConfirmationDialog,
   useGroupedChatMessages,
+  useTranscriptSend,
   ChatTranscript,
   type TranscriptScrollOptions,
 } from '@/client/features/chat';
@@ -212,7 +213,10 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     () => new Set(props.queuedMessages.map((msg) => msg.id)),
     [props.queuedMessages]
   );
-  const { sendMessage } = props;
+  const { sendMessage, transcriptScroll } = useTranscriptSend(
+    props.sendMessage,
+    props.transcriptScroll
+  );
   const handleCompact = useCallback(
     () => sendMessage('/compact', { preserveInput: true }),
     [sendMessage]
@@ -260,7 +264,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     queuedMessageIds,
     connected: props.connected,
     hasPendingMessages: props.pendingMessages.size > 0,
-    sendMessage: props.sendMessage,
+    sendMessage,
     restartSession: props.restartSession,
   });
   const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
@@ -299,7 +303,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         startingSession={displayStartingState}
         loadingSession={loadingSession}
         latestThinking={props.latestThinking ?? null}
-        scroll={props.transcriptScroll}
+        scroll={transcriptScroll}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={props.removeQueuedMessage}
         onSteerQueuedMessage={
@@ -335,13 +339,13 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         <div className="flex items-center gap-2 shrink-0">
           <VoiceModeToggle
             sessionId={props.sessionId}
-            onFinalTranscript={props.sendMessage}
+            onFinalTranscript={sendMessage}
             running={running}
             disabled={!props.connected || loadingSession}
           />
           <ChatInput
             className="flex-1 min-w-0"
-            onSend={props.sendMessage}
+            onSend={sendMessage}
             onCompact={handleCompact}
             onStop={props.stopChat}
             disabled={!props.connected || loadingSession}
