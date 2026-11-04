@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
 interface FactoryConfigScriptsProps {
@@ -82,9 +83,18 @@ export function FactoryConfigScripts({
       {factoryConfig.scripts.setup && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Setup Script</p>
-          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-            {factoryConfig.scripts.setup}
-          </code>
+          <ScrollArea
+            scrollbars="horizontal"
+            viewportProps={{
+              role: 'region',
+              'aria-label': 'Setup script command',
+              tabIndex: 0,
+              className: 'whitespace-nowrap',
+            }}
+            className="max-w-full rounded bg-muted"
+          >
+            <code className="block px-3 py-2 font-mono text-xs">{factoryConfig.scripts.setup}</code>
+          </ScrollArea>
           <p className="text-xs text-muted-foreground">
             Runs automatically when a new workspace is created
           </p>
@@ -94,9 +104,18 @@ export function FactoryConfigScripts({
       {factoryConfig.scripts.run && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Run Script</p>
-          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-            {factoryConfig.scripts.run}
-          </code>
+          <ScrollArea
+            scrollbars="horizontal"
+            viewportProps={{
+              role: 'region',
+              'aria-label': 'Run script command',
+              tabIndex: 0,
+              className: 'whitespace-nowrap',
+            }}
+            className="max-w-full rounded bg-muted"
+          >
+            <code className="block px-3 py-2 font-mono text-xs">{factoryConfig.scripts.run}</code>
+          </ScrollArea>
           <p className="text-xs text-muted-foreground">
             Available via the play button in each workspace
           </p>
@@ -106,9 +125,20 @@ export function FactoryConfigScripts({
       {factoryConfig.scripts.postRun && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Post-Run Script</p>
-          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-            {factoryConfig.scripts.postRun}
-          </code>
+          <ScrollArea
+            scrollbars="horizontal"
+            viewportProps={{
+              role: 'region',
+              'aria-label': 'Post-run script command',
+              tabIndex: 0,
+              className: 'whitespace-nowrap',
+            }}
+            className="max-w-full rounded bg-muted"
+          >
+            <code className="block px-3 py-2 font-mono text-xs">
+              {factoryConfig.scripts.postRun}
+            </code>
+          </ScrollArea>
           <p className="text-xs text-muted-foreground">
             Runs automatically after the dev server starts
           </p>
@@ -118,9 +148,20 @@ export function FactoryConfigScripts({
       {factoryConfig.scripts.cleanup && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Cleanup Script</p>
-          <code className="block max-w-full overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-            {factoryConfig.scripts.cleanup}
-          </code>
+          <ScrollArea
+            scrollbars="horizontal"
+            viewportProps={{
+              role: 'region',
+              'aria-label': 'Cleanup script command',
+              tabIndex: 0,
+              className: 'whitespace-nowrap',
+            }}
+            className="max-w-full rounded bg-muted"
+          >
+            <code className="block px-3 py-2 font-mono text-xs">
+              {factoryConfig.scripts.cleanup}
+            </code>
+          </ScrollArea>
           <p className="text-xs text-muted-foreground">Runs when stopping the dev server</p>
         </div>
       )}

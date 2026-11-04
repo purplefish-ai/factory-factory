@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Navigate, Route, Routes } from 'react-router';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import ProjectSettingsPage from './settings';
 
@@ -129,6 +129,53 @@ export const UnbrokenNamesOnPhone: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { name: `${'factory'.repeat(20)} settings` });
     await canvas.findByText(`scripts/${'development/'.repeat(20)}start.sh`);
+    const script = canvas.getByRole('region', { name: 'Run script command' });
+    await expect(script.scrollWidth).toBeGreaterThan(script.clientWidth);
+    await expect(getComputedStyle(script).overflowX).toMatch(/^(auto|scroll)$/);
+    const page = canvasElement.querySelector('.overflow-y-auto');
+    if (!page) {
+      throw new Error('Settings page is missing');
+    }
+    await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth);
+  },
+};
+
+const longCommand = `pnpm exec build ${'--filter workspace-package '.repeat(20)}`;
+export const LongCommandsOnPhone: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.getFactoryConfig': () => ({
+          scripts: {
+            setup: longCommand,
+            run: longCommand,
+            postRun: longCommand,
+            cleanup: longCommand,
+          },
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('region', { name: 'Setup script command' });
+    canvas.getByRole('button', { name: 'Refresh Workspaces' }).focus();
+    for (const label of [
+      'Setup script command',
+      'Run script command',
+      'Post-run script command',
+      'Cleanup script command',
+    ]) {
+      const command = await canvas.findByRole('region', { name: label });
+      await expect(command.scrollWidth).toBeGreaterThan(command.clientWidth);
+      await expect(getComputedStyle(command).overflowX).toMatch(/^(auto|scroll)$/);
+      await expect(getComputedStyle(command).whiteSpace).toBe('nowrap');
+      await userEvent.tab();
+      await expect(command).toHaveFocus();
+      command.scrollLeft = command.scrollWidth;
+      await expect(command.scrollLeft).toBeGreaterThan(0);
+    }
     const page = canvasElement.querySelector('.overflow-y-auto');
     if (!page) {
       throw new Error('Settings page is missing');

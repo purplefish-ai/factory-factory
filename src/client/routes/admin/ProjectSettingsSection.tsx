@@ -14,12 +14,12 @@ export function ProjectSettingsSection({ project: selectedProject }: { project: 
   return (
     <div className="space-y-6">
       <ProjectFactoryConfigCard
-        key={selectedProject.id}
+        key={`factory-${selectedProject.id}`}
         projectId={selectedProject.id}
         projectName={selectedProject.name}
       />
       <ProjectIssueTrackingCard
-        key={selectedProject.id}
+        key={`issues-${selectedProject.id}`}
         projectId={selectedProject.id}
         projectName={selectedProject.name}
         currentProvider={selectedProject.issueProvider}
