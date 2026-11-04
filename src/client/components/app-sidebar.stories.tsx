@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
@@ -17,6 +17,7 @@ type State =
   | 'loading'
   | 'empty'
   | 'project-switch'
+  | 'issues-empty'
   | 'issues-ready'
   | 'issues-error'
   | 'issues-disconnected'
@@ -132,6 +133,7 @@ const meta = {
         'loading',
         'empty',
         'project-switch',
+        'issues-empty',
         'issues-ready',
         'issues-error',
         'issues-disconnected',
@@ -211,19 +213,26 @@ export const TodoLaunch: Story = {
     await expect(within(sheet).getByRole('heading', { name: 'Start issue' })).toBeVisible();
   },
 };
+async function expectTodoHidden(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await canvas.findByText('Working');
+  await waitFor(async () => {
+    await expect(canvas.queryByText('Todo')).not.toBeInTheDocument();
+    await expect(canvas.queryByText('No assigned issues')).not.toBeInTheDocument();
+  });
+}
+
+export const TodoEmpty: Story = {
+  args: { state: 'issues-empty' },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
+};
 export const TodoDisconnected: Story = {
   args: { state: 'issues-disconnected' },
-  play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByRole('link', { name: 'Project settings' })
-    ).toHaveAttribute('href', '/projects/factory/settings');
-  },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
 };
 export const TodoError: Story = {
   args: { state: 'issues-error' },
-  play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByRole('button', { name: 'Retry' })).toBeVisible();
-  },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
 };
 
 export const TodoRefreshRecovery: Story = {
