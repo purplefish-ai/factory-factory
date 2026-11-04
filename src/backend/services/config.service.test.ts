@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readAppVersion } from '@/backend/lib/app-version';
+import { z } from 'zod';
 import { configService } from './config.service';
+
+const packageInfo = z
+  .object({ version: z.string() })
+  .parse(JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')));
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -280,7 +285,7 @@ describe('configService environment accessors', () => {
     expect(configService.isWsLogsEnabled()).toBe(true);
     expect(configService.getWebConcurrency()).toBe(3);
     // A launcher's npm_package_version must not override the installed app's version.
-    expect(configService.getAppVersion()).toBe(readAppVersion());
+    expect(configService.getAppVersion()).toBe(packageInfo.version);
     expect(configService.getDatabasePath()).toBe('/tmp/custom.db');
     expect(configService.getDatabasePathFromEnv()).toBe('/tmp/custom.db');
 
