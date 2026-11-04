@@ -109,7 +109,9 @@ const preview: Preview = {
             React.createElement(TooltipProvider, null, React.createElement(Story)),
             // The app's toaster, following the toolbar theme. Stories that
             // render their own Toaster opt out with `parameters.toaster: false`.
-            context.parameters.toaster === false
+            // Docs pages render every story at once, and one Toaster per story
+            // would show each toast several times, so docs get none.
+            context.parameters.toaster === false || context.viewMode === 'docs'
               ? null
               : React.createElement(Toaster, { theme: theme === 'dark' ? 'dark' : 'light' })
           )

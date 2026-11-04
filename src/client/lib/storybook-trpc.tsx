@@ -1,6 +1,9 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
+import { TRPCError } from '@trpc/server';
+import { getHTTPStatusCodeFromError } from '@trpc/server/http';
 import { observable } from '@trpc/server/observable';
+import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import { type ReactNode, useState } from 'react';
 import { createAppQueryClient } from './query-client';
 import { trpc } from './trpc';
@@ -30,11 +33,27 @@ export interface StoryTrpcOptions {
   onRequest?: (path: string, input: unknown) => void;
 }
 
+/**
+ * Converts a handler failure to what the real link would produce. Throw a
+ * `TRPCError` to give the client an error code (`error.data.code`), as the
+ * server would.
+ */
 function toClientError(error: unknown) {
   if (error instanceof TRPCClientError) {
     return error;
   }
-  return new TRPCClientError(error instanceof Error ? error.message : String(error));
+  if (error instanceof TRPCError) {
+    return TRPCClientError.from({
+      error: {
+        message: error.message,
+        code: TRPC_ERROR_CODES_BY_KEY[error.code],
+        data: { code: error.code, httpStatus: getHTTPStatusCodeFromError(error) },
+      },
+    });
+  }
+  return new TRPCClientError(error instanceof Error ? error.message : String(error), {
+    cause: error instanceof Error ? error : undefined,
+  });
 }
 
 export function createStoryTrpcClient({ handlers = {}, onRequest }: StoryTrpcOptions = {}) {
@@ -44,7 +63,7 @@ export function createStoryTrpcClient({ handlers = {}, onRequest }: StoryTrpcOpt
         ({ op }) =>
           observable((observer) => {
             onRequest?.(op.path, op.input);
-            const handler = handlers[op.path];
+            const handler = Object.hasOwn(handlers, op.path) ? handlers[op.path] : undefined;
             if (!handler) {
               return;
             }
@@ -111,18 +130,30 @@ function isHandlerRecord(value: unknown): value is StoryTrpcHandlers {
   );
 }
 
-/** Reads `parameters.trpc.handlers` from a story context, ignoring malformed values. */
+/**
+ * Reads `parameters.trpc.handlers` from a story context. Throws on a malformed
+ * value so a typo fails the story instead of silently leaving every request
+ * pending.
+ */
 export function storyTrpcHandlersFrom(parameters: unknown): StoryTrpcHandlers | undefined {
   if (typeof parameters !== 'object' || parameters === null || !('trpc' in parameters)) {
     return undefined;
   }
   const { trpc: trpcParameters } = parameters;
-  if (
-    typeof trpcParameters !== 'object' ||
-    trpcParameters === null ||
-    !('handlers' in trpcParameters)
-  ) {
+  if (trpcParameters === undefined) {
     return undefined;
   }
-  return isHandlerRecord(trpcParameters.handlers) ? trpcParameters.handlers : undefined;
+  if (typeof trpcParameters !== 'object' || trpcParameters === null) {
+    throw new Error('parameters.trpc must be an object with a `handlers` record.');
+  }
+  if (!('handlers' in trpcParameters) || trpcParameters.handlers === undefined) {
+    return undefined;
+  }
+  if (!isHandlerRecord(trpcParameters.handlers)) {
+    throw new Error(
+      'parameters.trpc.handlers must map procedure paths to functions, for example ' +
+        "{ 'userSettings.get': () => settings }."
+    );
+  }
+  return trpcParameters.handlers;
 }

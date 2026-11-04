@@ -220,19 +220,10 @@ export const ResumedConversation = story(
 export const CompletedDesktop = story(selection('completed'), readyState, desktop);
 export const CompletedNarrow = story(selection('completed'), readyState, narrow);
 
-// Known gap (#2940): a ready transcript doesn't show the failed status or result
-// preview; only the tab icon and sub-agent list do. These stories show the
-// current UI rather than an indicator that doesn't exist yet.
-export const FailedDesktop = story(
-  selection('failed', { resultPreview: 'One authorization path returned an invalid response.' }),
-  readyState,
-  desktop
-);
-export const FailedNarrow = story(
-  selection('failed', { resultPreview: 'One authorization path returned an invalid response.' }),
-  readyState,
-  narrow
-);
+// No failed-ready stories: a ready transcript doesn't show a failed status or
+// result preview yet (only the tab icon and sub-agent list do), so such a story
+// would look identical to CompletedDesktop. A failed sub-agent whose transcript
+// is gone is covered by TranscriptUnavailable* below. See #2940.
 
 export const EmptyDesktop = story(selection('running'), { kind: 'empty' }, desktop);
 export const EmptyNarrow = story(selection('running'), { kind: 'empty' }, narrow);

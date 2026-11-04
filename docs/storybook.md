@@ -103,13 +103,14 @@ export const LoadError: Story = {
 ```
 
 A handler receives the procedure input and returns its output (or a promise of
-it), throws to fail the request, or returns `STORY_TRPC_PENDING` to stay
-loading. Story parameters merge with the meta's, so spread shared handlers when
-a story overrides one. `kanban-board.provider.stories.tsx` is a worked example.
-Render a component that needs its own client (for example to count requests with
-`fn()`) inside a local `StoryTrpcProvider` with `onRequest`. Older stories seed
-a local `QueryClient` or build their own `trpc.Provider`; move them to this
-helper when you touch them.
+it), throws to fail the request (throw a `TRPCError` to set `error.data.code`),
+or returns `STORY_TRPC_PENDING` to stay loading. Story parameters merge with the
+meta's, so spread shared handlers when a story overrides one.
+`kanban-board.provider.stories.tsx` is a worked example. Render a component that
+needs its own client (for example to count requests with `fn()`) inside a local
+`StoryTrpcProvider` with `onRequest`. Older stories seed a local `QueryClient`
+or build their own `trpc.Provider`; move them to this helper when you touch
+them.
 
 Prefer presentational components with props where they exist. Mocks return fixed
 data and must not depend on the current time unless the story pins it. Use the
@@ -118,9 +119,10 @@ app's providers rather than raw library equivalents (for example the app
 themes.
 
 A story that renders its own `Toaster` sets `parameters: { toaster: false }` so
-toasts don't appear twice. The story query client is the app's
-(`createAppQueryClient`) without retries, so a failing mutation without its own
-error handling shows the app's fallback error toast.
+toasts don't appear twice. Docs pages have no global Toaster, because they
+render every story at once; open the story itself to see its toasts. The story
+query client is the app's (`createAppQueryClient`) without retries, so a failing
+mutation without its own error handling shows the app's fallback error toast.
 
 ## Play functions
 
