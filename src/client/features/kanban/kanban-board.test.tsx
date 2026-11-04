@@ -4,8 +4,10 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
+import { KanbanControls } from './kanban-controls';
 import {
   clearWorkspaceCreationDraft,
   createWorkspaceCreationDraft,
@@ -17,6 +19,7 @@ import {
 const mocks = vi.hoisted(() => ({
   isMobile: true,
   showInlineForm: false,
+  inlineFormRequest: 0,
   workspaces: [] as WorkspaceWithKanban[],
   dismissArchiveGitLock: vi.fn(),
   retryGitLockedArchives: vi.fn(),
@@ -122,11 +125,35 @@ vi.mock('./kanban-context', () => ({
     setShowInlineForm: (show: boolean) => {
       mocks.showInlineForm = show;
     },
+    inlineFormRequest: mocks.inlineFormRequest,
+    requestInlineForm: () => {
+      mocks.showInlineForm = true;
+      mocks.inlineFormRequest += 1;
+    },
+    syncAndRefetch: vi.fn(),
+    isSyncing: false,
     quickChatWorkspaceId: null,
     openQuickChat: vi.fn(),
     closeQuickChat: vi.fn(),
   }),
 }));
+
+// The board's "New Workspace" action lives in the header controls rendered
+// beside the board by WorkspacesBoardView.
+function BoardWithHeader() {
+  return (
+    <TooltipProvider>
+      <KanbanControls />
+      <KanbanBoard />
+    </TooltipProvider>
+  );
+}
+
+function findButton(container: HTMLElement, label: string) {
+  return [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === label || candidate.getAttribute('aria-label') === label
+  );
+}
 
 describe('KanbanBoard', () => {
   let container: HTMLDivElement;
@@ -141,6 +168,7 @@ describe('KanbanBoard', () => {
     }
     mocks.isMobile = true;
     mocks.showInlineForm = false;
+    mocks.inlineFormRequest = 0;
     mocks.workspaces = [
       {
         ...createOptimisticWorkspaceSummary({
@@ -184,12 +212,10 @@ describe('KanbanBoard', () => {
   });
 
   function click(label: string) {
-    const button = [...container.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent === label
-    );
+    const button = findButton(container, label);
     expect(button).toBeDefined();
     void act(() => button!.click());
-    void act(() => root.render(createElement(KanbanBoard)));
+    void act(() => root.render(createElement(BoardWithHeader)));
   }
 
   it.each([true, false])(
@@ -200,14 +226,14 @@ describe('KanbanBoard', () => {
         ...createWorkspaceCreationDraft(),
         prompt: 'Resume this task',
       }).catch(() => undefined);
-      act(() => root.render(createElement(KanbanBoard)));
+      act(() => root.render(createElement(BoardWithHeader)));
       expect(container.querySelector('input')).toBeNull();
-      click('New Task');
+      click('New Workspace');
       expect(container.querySelector('input')).not.toBeNull();
       click('Cancel creation');
-      act(() => root.render(createElement(KanbanBoard)));
+      act(() => root.render(createElement(BoardWithHeader)));
       expect(container.querySelector('input')).toBeNull();
-      expect(container.textContent).toContain('New Task');
+      expect(findButton(container, 'New Workspace')).toBeDefined();
     }
   );
 
@@ -221,8 +247,8 @@ describe('KanbanBoard', () => {
         createdAt: new Date(Date.now() - 60_000),
       })
     );
-    void act(() => root.render(createElement(KanbanBoard)));
-    click('New Task');
+    void act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
     const oldScrollContainer = container.querySelector('input')!.closest('.overflow-y-auto')!
       .parentElement!.parentElement!;
     oldScrollContainer.scrollTop = 200;
@@ -239,8 +265,8 @@ describe('KanbanBoard', () => {
 
   it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
     mocks.isMobile = mobile;
-    act(() => root.render(createElement(KanbanBoard)));
-    click('New Task');
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
     click('Complete creation');
     mocks.workspaces = mocks.workspaces.map((workspace) =>
       workspace.id === 'new-task'
@@ -259,7 +285,7 @@ describe('KanbanBoard', () => {
           }
         : workspace
     );
-    act(() => root.render(createElement(KanbanBoard)));
+    act(() => root.render(createElement(BoardWithHeader)));
     expect(container.querySelector('[data-column="WORKING"]')?.textContent).not.toContain(
       'New task'
     );
@@ -270,13 +296,13 @@ describe('KanbanBoard', () => {
     // Remounting the board keeps the failed task supplied by its query visible.
     act(() => root.unmount());
     root = createRoot(container);
-    act(() => root.render(createElement(KanbanBoard)));
+    act(() => root.render(createElement(BoardWithHeader)));
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
   });
 
   it('stays on To Do when task creation is cancelled', () => {
-    void act(() => root.render(createElement(KanbanBoard)));
-    click('New Task');
+    void act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
     click('Cancel creation');
     expect(container.querySelector('[data-column="WORKING"]')).toBeNull();
     expect(
@@ -287,8 +313,8 @@ describe('KanbanBoard', () => {
 
   it('keeps the desktop board visible after creation', () => {
     mocks.isMobile = false;
-    void act(() => root.render(createElement(KanbanBoard)));
-    click('New Task');
+    void act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
     click('Complete creation');
     expect(container.querySelector('[data-column="WORKING"]')?.textContent).toContain('New task');
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
@@ -298,9 +324,47 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('input')).toBeNull();
   });
 
+  it('creates from the header only, labelled like the sidebar action', () => {
+    mocks.isMobile = false;
+    act(() => root.render(createElement(BoardWithHeader)));
+    const buttons = [...container.querySelectorAll('button')];
+    expect(buttons.filter((button) => button.textContent === 'New Workspace')).toHaveLength(1);
+    expect(buttons.some((button) => button.textContent === 'New Task')).toBe(false);
+
+    mocks.isMobile = true;
+    act(() => root.render(createElement(BoardWithHeader)));
+    const mobileButton = findButton(container, 'New Workspace');
+    expect(mobileButton?.textContent).toBe('');
+    expect(mobileButton?.getAttribute('aria-label')).toBe('New Workspace');
+  });
+
+  it('reveals an already open form when New Workspace is pressed from another mobile tab', () => {
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
+    expect(container.querySelector('input')).not.toBeNull();
+    click('Waiting1');
+    expect(container.querySelector('input')).toBeNull();
+    expect(mocks.showInlineForm).toBe(true);
+    click('New Workspace');
+    expect(container.querySelector('input')).not.toBeNull();
+  });
+
+  it('keeps a mobile New Workspace request made before workspaces load', () => {
+    const loaded = mocks.workspaces;
+    mocks.workspaces = undefined as unknown as WorkspaceWithKanban[];
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New Workspace');
+    expect(container.querySelector('input')).not.toBeNull();
+    // Loaded data includes a Waiting workspace, which would normally be the first tab.
+    mocks.workspaces = loaded;
+    act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.querySelector('input')).not.toBeNull();
+    expect(container.querySelector('[data-column="WAITING"]')).toBeNull();
+  });
+
   it('renders Git index-lock recovery on mobile', () => {
     void act(() => {
-      root.render(createElement(KanbanBoard));
+      root.render(createElement(BoardWithHeader));
     });
 
     expect(document.body.textContent).toContain('Git is locked');
@@ -310,10 +374,10 @@ describe('KanbanBoard', () => {
   it('passes card handlers with stable identities so memoized cards can skip renders', () => {
     mocks.columnProps.length = 0;
     void act(() => {
-      root.render(createElement(KanbanBoard));
+      root.render(createElement(BoardWithHeader));
     });
     void act(() => {
-      root.render(createElement(KanbanBoard));
+      root.render(createElement(BoardWithHeader));
     });
 
     const [first, last] = [mocks.columnProps[0], mocks.columnProps.at(-1)];

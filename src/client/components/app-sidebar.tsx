@@ -1,6 +1,7 @@
 import { DotOutlineIcon } from '@phosphor-icons/react/dist/csr/DotOutline';
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
+import { KanbanIcon } from '@phosphor-icons/react/dist/csr/Kanban';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
@@ -9,6 +10,7 @@ import {
   lazy,
   memo,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   Suspense,
   useEffect,
   useId,
@@ -26,7 +28,12 @@ import {
 } from '@/client/hooks/use-app-navigation-data';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
-import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
+import {
+  getProjectSection,
+  getProjectSectionPath,
+  isProjectBoardPath,
+  type ProjectSection,
+} from '@/client/lib/project-navigation';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -254,40 +261,46 @@ function ProjectFooterLinks({
   const descriptionId = useId();
   const summary = projectSlug ? navData.agentsSummary : undefined;
 
+  // Board is active only on the board itself; on workspace detail routes the
+  // workspace row carries the active state instead.
+  const isActive = (section: ProjectSection) =>
+    section === 'workspaces' ? isProjectBoardPath(pathname) : activeSection === section;
+  const badges: Partial<Record<ProjectSection, ReactNode>> = {
+    agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
+    reviews:
+      projectSlug && navData.reviewCount > 0 ? (
+        <Badge
+          variant="secondary"
+          className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
+        >
+          {navData.reviewCount}
+        </Badge>
+      ) : null,
+  };
+
   return (
     [
+      { section: 'workspaces', label: 'Board', Icon: KanbanIcon },
       { section: 'agents', label: 'Agents', Icon: RobotIcon },
       { section: 'reviews', label: 'Reviews', Icon: GitPullRequestIcon },
     ] as const
   ).map(({ section, label, Icon }) => {
+    const active = isActive(section);
     const content = (
       <>
         <Icon className="h-4 w-4" />
         <span>{label}</span>
-        {section === 'agents' ? (
-          <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />
-        ) : null}
-        {projectSlug && section === 'reviews' && navData.reviewCount > 0 ? (
-          <Badge
-            variant="secondary"
-            className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-          >
-            {navData.reviewCount}
-          </Badge>
-        ) : null}
+        {badges[section]}
       </>
     );
     return (
       <SidebarMenuItem key={section}>
-        <SidebarMenuButton
-          asChild={!!projectSlug}
-          disabled={!projectSlug}
-          isActive={activeSection === section}
-        >
+        <SidebarMenuButton asChild={!!projectSlug} disabled={!projectSlug} isActive={active}>
           {projectSlug ? (
             <Link
               to={getProjectSectionPath(projectSlug, section)}
               onClick={onNavigate}
+              aria-current={active ? 'page' : undefined}
               aria-label={section === 'agents' ? 'Agents' : undefined}
               aria-describedby={section === 'agents' && summary ? descriptionId : undefined}
             >

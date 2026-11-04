@@ -292,6 +292,10 @@ describe('RightPanel Agents tab', () => {
     render();
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+    // "Agent" alone read as the chat's coding agent; name the Agents-section concept.
+    expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toContain(
+      'Scheduled agent'
+    );
   });
 
   it('falls back when an open workspace loses its periodic task', () => {
@@ -319,12 +323,12 @@ describe('RightPanel Agents tab', () => {
   it.each([
     ['parent', 'MANUAL', 'true'],
     ['child', 'CHILD_WORKSPACE', 'false'],
-  ])('always labels the tab Sessions for a %s workspace', (_kind, creationSource, isParent) => {
+  ])('always labels the tab Sub-agents for a %s workspace', (_kind, creationSource, isParent) => {
     mocks.workspaceData = { periodicTaskId: null, creationSource };
     render();
 
     const agentsTab = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Sessions'
+      (button) => button.textContent === 'Sub-agents'
     );
     expect(agentsTab).not.toBeUndefined();
     expect(container.textContent).not.toContain('Children');

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { HeaderRightSlot } from '@/client/components/app-header-context';
 import { ProjectHeader } from '@/client/components/project-header';
 import {
@@ -5,6 +6,7 @@ import {
   KanbanControls,
   KanbanImageDropZone,
   KanbanProvider,
+  useKanban,
 } from '@/client/features/kanban';
 import type { IssueProvider } from '@/shared/core';
 
@@ -19,18 +21,32 @@ function BoardHeaderSlot({ project }: { project: { id: string; slug: string; nam
   );
 }
 
+/** Opens the inline form for a URL request (e.g. the retired `/workspaces/new` route). */
+function OpenNewWorkspaceFormRequest({ onOpened }: { onOpened?: () => void }) {
+  const { requestInlineForm } = useKanban();
+  useEffect(() => {
+    requestInlineForm();
+    onOpened?.();
+  }, [requestInlineForm, onOpened]);
+  return null;
+}
+
 export function WorkspacesBoardView({
   projectId,
   projects,
   projectName,
   slug,
   issueProvider,
+  openNewWorkspaceForm = false,
+  onNewWorkspaceFormOpened,
 }: {
   projectId: string;
   projectName?: string;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
   slug: string;
   issueProvider: IssueProvider;
+  openNewWorkspaceForm?: boolean;
+  onNewWorkspaceFormOpened?: () => void;
 }) {
   return (
     <KanbanProvider
@@ -48,6 +64,9 @@ export function WorkspacesBoardView({
           }
         }
       />
+      {openNewWorkspaceForm ? (
+        <OpenNewWorkspaceFormRequest onOpened={onNewWorkspaceFormOpened} />
+      ) : null}
       <KanbanImageDropZone>
         <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
           <div className="flex-1 min-h-0">

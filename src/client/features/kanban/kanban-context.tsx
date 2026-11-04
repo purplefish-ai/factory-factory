@@ -38,6 +38,10 @@ interface KanbanContextValue {
   isBulkArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
+  /** Increments on every explicit "New Workspace" request, even if the form is already open. */
+  inlineFormRequest: number;
+  /** Opens the new workspace form and asks the board to reveal it (e.g. switch the mobile tab). */
+  requestInlineForm: () => void;
   quickChatWorkspaceId: string | null;
   openQuickChat: (workspaceId: string) => void;
   closeQuickChat: () => void;
@@ -123,6 +127,11 @@ export function KanbanProvider({
     optimisticWorkspaceIssueLinks: archivingWorkspaceIssueLinks,
   });
   const [showInlineForm, setShowInlineForm] = useState(false);
+  const [inlineFormRequest, setInlineFormRequest] = useState(0);
+  const requestInlineForm = useCallback(() => {
+    setShowInlineForm(true);
+    setInlineFormRequest((count) => count + 1);
+  }, []);
   const [quickChatWorkspaceId, setQuickChatWorkspaceId] = useState<string | null>(null);
   const openQuickChat = useCallback(
     (workspaceId: string) => setQuickChatWorkspaceId(workspaceId),
@@ -290,6 +299,8 @@ export function KanbanProvider({
         isBulkArchiving: archiveCommand.isBulkArchiving,
         showInlineForm,
         setShowInlineForm,
+        inlineFormRequest,
+        requestInlineForm,
         quickChatWorkspaceId,
         openQuickChat,
         closeQuickChat,
