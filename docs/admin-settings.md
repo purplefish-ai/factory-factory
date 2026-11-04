@@ -275,8 +275,14 @@ open so you can correct the configuration or retry.
 
 ## Server logs
 
-Open **Server logs** at `/admin/logs`; the legacy `/logs` URL still works. Use
-**Back to settings** or the breadcrumb to return to settings.
+Open **Server logs** at `/admin/logs`; the legacy `/logs` URL still works. The
+page shares the settings breadcrumb and section navigation. Use the section
+links to switch settings without returning to the general page.
+
+Search messages or components, filter by log level or time range, and expand a
+row to inspect its raw JSON. **Download log file** saves up to the most recent
+10 MB of the server log. Navigation and filters remain available while entries
+load; if loading fails, use **Retry** to request the logs again.
 
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not
