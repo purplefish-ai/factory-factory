@@ -1,9 +1,11 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { Link } from 'react-router';
+import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { AgentRun } from './types';
 
 export interface AgentRunHistoryProps {
@@ -44,7 +46,7 @@ export function AgentRunHistory({
       </div>
       {error && (
         <div role="alert" className="space-y-2 text-sm">
-          <p className="text-destructive">Could not load run history: {error}</p>
+          <p className="text-destructive">Couldn't load run history. {error}</p>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry}>
               Retry run history
@@ -53,9 +55,11 @@ export function AgentRunHistory({
         </div>
       )}
       {isLoading && !runs && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading run history…
-        </p>
+        <div role="status" className="space-y-2">
+          <span className="sr-only">Loading run history…</span>
+          <Skeleton className="h-28 rounded-lg" />
+          <Skeleton className="h-28 rounded-lg" />
+        </div>
       )}
       {!(error || isLoading) && runs?.length === 0 && (
         <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
@@ -71,10 +75,11 @@ export function AgentRunHistory({
                   {STATUS_LABELS[run.status]}
                 </Badge>
                 <time
-                  dateTime={new Date(run.startedAt).toISOString()}
+                  dateTime={toDateTimeIso(run.startedAt)}
+                  title={formatDateTime(run.startedAt, { precision: 'second' })}
                   className="text-muted-foreground"
                 >
-                  {new Date(run.startedAt).toLocaleString()}
+                  {formatDateTime(run.startedAt)}
                 </time>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

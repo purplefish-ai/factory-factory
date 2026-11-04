@@ -6,7 +6,6 @@ import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { keepPreviousData } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAppHeader } from '@/client/components/app-header-context';
@@ -14,6 +13,7 @@ import { Loading } from '@/client/components/loading';
 import { PageHeader } from '@/client/components/page-header';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { runInBackground } from '@/client/lib/background-task';
+import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,7 @@ function formatDateLabel(date: Date | undefined): string {
   if (!date) {
     return '';
   }
-  return format(date, 'MMM d, yyyy');
+  return formatDate(date);
 }
 
 function DatePicker({
@@ -279,7 +279,7 @@ export default function LogsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-4 p-3 md:p-6">
-        <PageHeader title="Server Logs" description={data?.filePath}>
+        <PageHeader title="Server logs" description={data?.filePath}>
           <Link to="/admin">
             <Button variant="ghost" size="sm">
               <ArrowLeftIcon className="w-4 h-4 mr-1" />
@@ -293,7 +293,7 @@ export default function LogsPage() {
           <div className="relative w-full sm:min-w-[200px] sm:max-w-sm sm:flex-1">
             <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search messages or components..."
+              placeholder="Search messages or components…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -304,7 +304,7 @@ export default function LogsPage() {
               <SelectValue placeholder="Level" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Levels</SelectItem>
+              <SelectItem value="all">All levels</SelectItem>
               <SelectItem value="error">Error</SelectItem>
               <SelectItem value="warn">Warn</SelectItem>
               <SelectItem value="info">Info</SelectItem>
@@ -316,26 +316,26 @@ export default function LogsPage() {
               <SelectValue placeholder="Time range" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="all">All time</SelectItem>
               <SelectItem value="5">Last 5 minutes</SelectItem>
               <SelectItem value="15">Last 15 minutes</SelectItem>
               <SelectItem value="60">Last hour</SelectItem>
               <SelectItem value="360">Last 6 hours</SelectItem>
               <SelectItem value="1440">Last 24 hours</SelectItem>
-              <SelectItem value="custom">Custom Range</SelectItem>
+              <SelectItem value="custom">Custom range</SelectItem>
             </SelectContent>
           </Select>
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              runInBackground(download(), 'Could not download logs');
+              runInBackground(download(), "Couldn't download logs.");
             }}
             disabled={isDownloading}
             className="w-full sm:w-auto"
           >
             <DownloadIcon className="w-4 h-4 mr-1" />
-            {isDownloading ? 'Downloading...' : 'Download'}
+            {isDownloading ? 'Downloading…' : 'Download'}
           </Button>
         </div>
 
@@ -424,7 +424,9 @@ export default function LogsPage() {
                           ) : (
                             <CaretRightIcon className="w-3.5 h-3.5 shrink-0" />
                           )}
-                          {new Date(entry.timestamp).toLocaleString()}
+                          <time dateTime={toDateTimeIso(entry.timestamp)} title={entry.timestamp}>
+                            {formatDateTime(entry.timestamp, { precision: 'second' })}
+                          </time>
                         </div>
                       </TableCell>
                       <TableCell>

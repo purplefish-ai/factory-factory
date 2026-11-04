@@ -1,3 +1,4 @@
+import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { cn } from '@/lib/utils';
 import type { WorkspaceMailKind, WorkspaceMailSummary } from '@/shared/workspace-mail';
 
@@ -19,13 +20,11 @@ export function MailMetadata({ mail }: { mail: WorkspaceMailSummary }) {
       <span className="break-words">
         {mail.sourceWorkspaceName} · {mail.sourceProjectName}
       </span>
-      <time dateTime={mail.createdAt.toISOString()} title={mail.createdAt.toLocaleString()}>
-        {mail.createdAt.toLocaleString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })}
+      <time
+        dateTime={toDateTimeIso(mail.createdAt)}
+        title={formatDateTime(mail.createdAt, { precision: 'second' })}
+      >
+        {formatDateTime(mail.createdAt)}
       </time>
     </span>
   );

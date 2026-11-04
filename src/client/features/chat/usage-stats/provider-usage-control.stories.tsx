@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { fn, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { ChatInput } from '@/client/features/chat/chat-input/chat-input';
 import { trpc } from '@/client/lib/trpc';
 import { createEmptyTokenStats } from '@/lib/chat-protocol';
@@ -145,3 +145,14 @@ export const ConnectedComposer: Story = {
   render: () => <ConnectedComposerPreview />,
   play: Details.play,
 };
+
+export const Refreshing: Story = {
+  args: { refreshing: true },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /Usage/ }));
+    await expect(
+      within(canvasElement.ownerDocument.body).getByRole('button', { name: 'Refresh usage' })
+    ).toBeDisabled();
+  },
+};
+export const RefreshingDark: Story = { ...Refreshing, globals: { theme: 'dark' } };

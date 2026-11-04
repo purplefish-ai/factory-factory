@@ -1,4 +1,3 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -6,6 +5,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { canResumePRMonitoring, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 
@@ -33,7 +33,7 @@ export function PRMonitoringMenuItems({
     <>
       <DropdownMenuItem disabled={pending} onSelect={() => onToggle(!enabled)}>
         {pending ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" className="h-4 w-4" />
         ) : (
           <RatchetWrenchIcon enabled={enabled} className="size-4" />
         )}

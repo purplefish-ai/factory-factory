@@ -3,7 +3,6 @@ import { ImageIcon } from '@phosphor-icons/react/dist/csr/Image';
 import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
 import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHorizontal';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useState } from 'react';
 import { getConfigPresentation } from '@/client/components/acp-config-presentation';
@@ -22,6 +21,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
@@ -278,7 +278,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
         data-testid="chat-options-sheet"
       >
         <SheetHeader>
-          <SheetTitle>Chat Options</SheetTitle>
+          <SheetTitle>Chat options</SheetTitle>
           <SheetDescription>Settings apply to the next turn.</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 py-4">
@@ -380,8 +380,8 @@ export const RightControls = memo(function RightControls({
       {children}
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <SpinnerGapIcon className="h-3 w-3 animate-spin" />
-          <span>Sending...</span>
+          <Spinner aria-hidden="true" className="h-3 w-3" />
+          <span>Sending…</span>
         </div>
       )}
       {running && (
@@ -391,10 +391,10 @@ export const RightControls = memo(function RightControls({
           onClick={onStop}
           disabled={stopping}
           className="h-7 w-7"
-          aria-label={stopping ? 'Stopping...' : 'Stop agent'}
+          aria-label={stopping ? 'Stopping…' : 'Stop agent'}
         >
           {stopping ? (
-            <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
+            <Spinner aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
           ) : (
             <SquareIcon className="h-3 w-3" weight="fill" />
           )}

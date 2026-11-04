@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
@@ -26,6 +27,9 @@ type Story = StoryObj<typeof meta>;
 
 export const Archiving: Story = {
   render: () => <ArchivingOverlay />,
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('status')).toHaveTextContent('Archiving…');
+  },
 };
 
 export const ScriptFailedLongMessage: Story = {
@@ -112,3 +116,5 @@ export const UnknownRetryAuthority: Story = {
     />
   ),
 };
+
+export const ArchivingDark: Story = { ...Archiving, globals: { theme: 'dark' } };

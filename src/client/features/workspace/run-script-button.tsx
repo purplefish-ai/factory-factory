@@ -1,6 +1,5 @@
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
@@ -12,6 +11,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
@@ -42,7 +42,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const startScript = trpc.workspace.startRunScript.useMutation({
     meta: { errorToast: "Couldn't start dev server" },
     onSuccess: () => {
-      runInBackground(refetch(), 'Could not refresh data');
+      runInBackground(refetch(), "Couldn't refresh data.");
       setActiveBottomTab('dev-logs');
       setRightPanelVisible(true);
     },
@@ -51,7 +51,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const stopScript = trpc.workspace.stopRunScript.useMutation({
     meta: { errorToast: "Couldn't stop dev server" },
     onSuccess: () => {
-      runInBackground(refetch(), 'Could not refresh data');
+      runInBackground(refetch(), "Couldn't refresh data.");
     },
   });
 
@@ -61,7 +61,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     onSuccess: () => {
       runInBackground(
         utils.workspace.getRunScriptStatus.invalidate({ workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       setSetupPanelOpen(false);
     },
@@ -113,7 +113,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
 
   const tooltipText = (() => {
     if (isLoading) {
-      return 'Processing...';
+      return 'Processing…';
     }
     if (isRunning) {
       return status.port ? `Stop dev server (port ${status.port})` : 'Stop dev server';
@@ -147,7 +147,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <SpinnerGapIcon className="h-3 w-3 animate-spin md:h-4 md:w-4" />
+                    <Spinner aria-hidden="true" className="h-3 w-3 md:h-4 md:w-4" />
                   ) : isRunning ? (
                     <SquareIcon className="h-3 w-3 text-destructive md:h-4 md:w-4" weight="fill" />
                   ) : (

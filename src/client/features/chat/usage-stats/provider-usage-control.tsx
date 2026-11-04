@@ -1,9 +1,9 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Spinner } from '@/components/ui/spinner';
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ProviderPlanUsage, UsageProvider } from '@/shared/provider-usage';
@@ -91,7 +91,7 @@ export function UsageControl({
           className={cn('h-7 shrink-0 gap-1.5 px-1.5 text-xs tabular-nums', usageColor(percent))}
         >
           {compacting ? (
-            <SpinnerGapIcon className="h-3.5 w-3.5 animate-spin" />
+            <Spinner aria-hidden="true" className="h-3.5 w-3.5" />
           ) : (
             <svg
               aria-hidden="true"
@@ -185,7 +185,11 @@ export function UsageControl({
               onClick={onRefresh}
               className="h-6 w-6"
             >
-              <ArrowClockwiseIcon className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+              {refreshing ? (
+                <Spinner aria-hidden="true" className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowClockwiseIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              )}
             </Button>
           </div>
         </div>
@@ -209,7 +213,7 @@ function PlanWindows({
     <>
       {' '}
       {error ? (
-        <p className="text-muted-foreground">Unable to refresh plan limits. Try again.</p>
+        <p className="text-muted-foreground">Couldn't refresh plan limits. Try again.</p>
       ) : windows.length > 0 ? (
         windows.map((window) => (
           <div key={window.id} className="space-y-1.5">
