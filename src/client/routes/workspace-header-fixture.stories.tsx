@@ -80,7 +80,9 @@ export const DesktopMoreActions: Story = {
       await canvas.findByRole('button', { name: /^Pull requests and updates: #2643 Merged/ })
     ).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Create PR' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Open in VS Code' })).toBeVisible();
+    await expect(
+      canvas.queryByRole('button', { name: 'Open in VS Code', hidden: true })
+    ).not.toBeInTheDocument();
     const items = await openMoreActions(canvasElement);
     for (const name of ALWAYS_IN_MORE_ACTIONS) {
       await expect(items).toContain(name);
@@ -251,19 +253,19 @@ export const PendingActions: Story = {
   args: { pendingActions: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const inlineIde = canvas.queryByRole('button', { name: 'Opening in VS Code…' });
+    await expect(
+      canvas.queryByRole('button', { name: /Open(ing)? in VS Code/, hidden: true })
+    ).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
     const body = within(canvasElement.ownerDocument.body);
     await expect(await body.findByRole('menuitem', { name: 'Archiving…' })).toHaveAttribute(
       'aria-disabled',
       'true'
     );
-    const ide = body.queryByRole('menuitem', { name: 'Open in VS Code' });
-    if (ide) {
-      await expect(ide).toHaveAttribute('aria-disabled', 'true');
-    } else {
-      await expect(inlineIde).toBeDisabled();
-    }
+    await expect(await body.findByRole('menuitem', { name: 'Open in VS Code' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
     await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
