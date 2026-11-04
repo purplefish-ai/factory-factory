@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test';
 
+test('task composer retains its 240px cap with a larger root font', async ({ page }) => {
+  await page.goto(
+    '/iframe.html?id=kanban-inlineworkspaceform--saved-codex-defaults&viewMode=story'
+  );
+  const input = page.getByRole('textbox');
+  await expect(input).toBeEnabled({ timeout: 40_000 });
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '24px';
+  });
+  await input.fill('A task instruction on each line.\n'.repeat(30));
+  await expect
+    .poll(() => input.evaluate((element) => element.getBoundingClientRect().height))
+    .toBe(240);
+});
+
 test('task composer keeps the caret visible after reaching its height cap', async ({ page }) => {
   await page.goto(
     '/iframe.html?id=kanban-inlineworkspaceform--saved-codex-defaults&viewMode=story'

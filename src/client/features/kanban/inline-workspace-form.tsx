@@ -487,7 +487,7 @@ export function InlineWorkspaceForm({
             onDragLeave={pasteDropHandler.handleDragLeave}
             rows={2}
             className={cn(
-              'min-h-16 max-h-60 overflow-y-auto resize-none text-sm focus-visible:ring-1',
+              'min-h-16 max-h-[240px] overflow-y-auto resize-none text-sm focus-visible:ring-1',
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus
