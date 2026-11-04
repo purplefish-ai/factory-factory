@@ -29,7 +29,7 @@ export function SessionLifecycleMessageRenderer({
         'my-2 flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
         isError
           ? 'border-destructive/30 bg-destructive/5 text-destructive'
-          : 'border-amber-500/30 bg-amber-500/5 text-muted-foreground',
+          : 'border-warning/30 bg-warning/5 text-muted-foreground',
         className
       )}
     >

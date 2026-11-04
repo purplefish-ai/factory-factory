@@ -87,8 +87,10 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
           )}
           {!connected && (showTerminal || gaveUp) && (
             <output
-              className={`absolute top-2 right-2 flex items-center gap-2 rounded px-2 py-0.5 text-xs text-white ${
-                gaveUp ? 'bg-red-600/90' : 'bg-yellow-600/90'
+              className={`absolute top-2 right-2 flex items-center gap-2 rounded px-2 py-0.5 text-xs ${
+                gaveUp
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-warning text-warning-foreground'
               }`}
             >
               {gaveUp ? (

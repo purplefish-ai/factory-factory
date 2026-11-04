@@ -100,10 +100,10 @@ function VoiceStatusBadge({ phase }: { phase: VoiceBadgePhase }) {
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          phase === 'connecting' && 'animate-pulse bg-amber-500',
-          phase === 'speaking' && 'animate-pulse bg-blue-500',
-          phase === 'thinking' && 'animate-pulse bg-purple-500',
-          phase === 'listening' && 'bg-green-500'
+          phase === 'connecting' && 'animate-pulse bg-muted-foreground',
+          phase === 'speaking' && 'animate-pulse bg-info',
+          phase === 'thinking' && 'animate-pulse bg-running',
+          phase === 'listening' && 'bg-success'
         )}
       />
       {VOICE_PHASE_LABELS[phase]}

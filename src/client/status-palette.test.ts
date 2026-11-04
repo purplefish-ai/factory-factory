@@ -111,6 +111,21 @@ describe('status palette', () => {
   });
 
   it.each(COLOR_SCHEME_IDS.filter((scheme) => scheme !== 'factory'))(
+    'gives always-dark %s surfaces (nested .dark) the same palette as dark mode',
+    (scheme) => {
+      // The dark block also matches `.dark` descendants. A nested `.dark` sits
+      // under the light block only through inheritance, so it resolves like
+      // dark mode only if the dark block redeclares every light-block token.
+      const light = readThemeDeclarations(CSS, `:root[data-color-scheme='${scheme}']`);
+      const dark = readThemeDeclarations(CSS, `:root[data-color-scheme='${scheme}'].dark`);
+      expect(readThemeDeclarations(CSS, `:root[data-color-scheme='${scheme}'] .dark`)).toEqual(
+        dark
+      );
+      expect([...light.keys()].filter((name) => !dark.has(name))).toEqual([]);
+    }
+  );
+
+  it.each(COLOR_SCHEME_IDS.filter((scheme) => scheme !== 'factory'))(
     'declares %s status overrides in both modes so light values cannot leak into dark',
     (scheme) => {
       const light = readThemeDeclarations(CSS, `:root[data-color-scheme='${scheme}']`);

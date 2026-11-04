@@ -23,7 +23,7 @@ export interface UsageControlProps {
 }
 
 function usageColor(percent: number | null) {
-  return getUsageColorClass(percent, 'text-amber-600 dark:text-amber-400');
+  return getUsageColorClass(percent);
 }
 
 function timestamp(value: number | string) {
@@ -125,7 +125,7 @@ export function UsageControl({
             </svg>
           )}
           <span>{percent === null ? 'Usage' : `${Math.round(percent)}%`}</span>
-          {planWarning && <span aria-hidden="true" className="h-1 w-1 rounded-full bg-amber-500" />}
+          {planWarning && <span aria-hidden="true" className="h-1 w-1 rounded-full bg-warning" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent

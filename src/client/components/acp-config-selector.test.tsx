@@ -211,14 +211,14 @@ it.each([
   );
   try {
     const trigger = container.querySelector('button');
-    expect(trigger?.className).toContain('text-orange-600');
+    expect(trigger?.className).toContain('text-warning');
     flushSync(() =>
       trigger?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' }))
     );
     const selected = document.body.querySelector('[role="menuitemradio"][aria-checked="true"]');
-    expect(selected?.className).toContain('text-orange-600');
+    expect(selected?.className).toContain('text-warning');
     const manual = document.body.querySelector('[role="menuitemradio"][aria-checked="false"]');
-    expect(manual?.className).not.toContain('text-orange-600');
+    expect(manual?.className).not.toContain('text-warning');
   } finally {
     flushSync(() => root.unmount());
   }

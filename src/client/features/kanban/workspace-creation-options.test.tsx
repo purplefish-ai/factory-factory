@@ -139,7 +139,7 @@ it.each([
 ])('keeps the %s access warning visible when settings are closed', async (access) => {
   const { container, root } = await mount(false, access);
   try {
-    expect(button('Workspace settings').className).toMatch(/text-orange-/);
+    expect(button('Workspace settings').className).toMatch(/\btext-warning\b/);
     expect(button('Workspace settings').getAttribute('aria-description')).toContain(
       'Warning: Full access'
     );

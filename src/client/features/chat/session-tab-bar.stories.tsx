@@ -299,3 +299,10 @@ export const EmptyCodexWorkspace: Story = {
     ),
   ],
 };
+
+export const MixedStatusesDark: typeof MixedStatuses = {
+  ...MixedStatuses,
+  globals: { theme: 'dark' },
+};
+
+export const AgentStatesDark: typeof AgentStates = { ...AgentStates, globals: { theme: 'dark' } };

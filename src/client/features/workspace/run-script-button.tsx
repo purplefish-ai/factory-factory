@@ -91,7 +91,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
               aria-label="Setup dev server"
               onClick={() => setSetupPanelOpen(true)}
             >
-              <PlayIcon className="h-3 w-3 text-green-600 md:h-4 md:w-4" weight="fill" />
+              <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Setup dev server</TooltipContent>
@@ -151,7 +151,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   ) : isRunning ? (
                     <SquareIcon className="h-3 w-3 text-destructive md:h-4 md:w-4" weight="fill" />
                   ) : (
-                    <PlayIcon className="h-3 w-3 text-green-600 md:h-4 md:w-4" weight="fill" />
+                    <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
                   )}
                 </Button>
               </TooltipTrigger>

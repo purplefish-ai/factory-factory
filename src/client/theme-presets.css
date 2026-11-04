@@ -6,6 +6,10 @@
  * next-themes `.dark` class, for dark mode. Charts are inherited from the base
  * palette unless a preset needs a different accent.
  *
+ * Each dark block also matches `.dark` descendants, so an always-dark surface
+ * (for example the terminal's disconnect banner) gets the selected scheme's
+ * dark palette rather than the base Factory one.
+ *
  * Status colors (running, success, warning, destructive, info, merged) use
  * each palette's own hues, adjusted where needed so that text meets WCAG AA
  * on the preset's backgrounds and tints. Declare them in both the light and
@@ -65,7 +69,8 @@
   --merged-foreground: #ffffff;
 }
 
-:root[data-color-scheme='github'].dark {
+:root[data-color-scheme='github'].dark,
+:root[data-color-scheme='github'] .dark {
   --background: #0d1117;
   --foreground: #e6edf3;
   --card: #161b22;
@@ -157,7 +162,8 @@
   --merged-foreground: #ffffff;
 }
 
-:root[data-color-scheme='one'].dark {
+:root[data-color-scheme='one'].dark,
+:root[data-color-scheme='one'] .dark {
   --background: #282c34;
   --foreground: #abb2bf;
   --card: #21252b;
@@ -249,7 +255,8 @@
   --merged-foreground: #ffffff;
 }
 
-:root[data-color-scheme='solarized'].dark {
+:root[data-color-scheme='solarized'].dark,
+:root[data-color-scheme='solarized'] .dark {
   --background: #002b36;
   --foreground: #93a1a1;
   --card: #073642;
@@ -341,7 +348,8 @@
   --merged-foreground: #ffffff;
 }
 
-:root[data-color-scheme='high-contrast'].dark {
+:root[data-color-scheme='high-contrast'].dark,
+:root[data-color-scheme='high-contrast'] .dark {
   --background: #000000;
   --foreground: #ffffff;
   --card: #000000;

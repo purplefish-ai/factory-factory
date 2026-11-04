@@ -28,9 +28,14 @@ preservation. To hide the import-only conversion from blame, run
 plugin API. That API remains alpha: keep exact tool pins and real-binary
 fixtures when upgrading it. The rules reject awaited dynamic imports, native
 browser dialogs, Next.js directives, `z.any()`/`zod.any()`, assertions on
-`JSON.parse` results, and casts of promise resolvers to function types accepting
-`unknown`. Regression tests invoke the real Oxlint binary against accepted and
-rejected fixtures.
+`JSON.parse` results, casts of promise resolvers to function types accepting
+`unknown`, and fixed Tailwind palette color classes (`bg-red-500`,
+`dark:text-emerald-300`) in `src/client`, `src/components` and `src/lib`, which
+must use theme tokens instead ([status colors](../docs/status-colors.md)). The
+palette rule's file exceptions are its `exceptions` option, a map from path to
+reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
+Regression tests invoke the real Oxlint binary against accepted and rejected
+fixtures.
 
 ## Remaining Biome checks
 

@@ -28,6 +28,13 @@ describe('theme palette parsing', () => {
     expect(resolveThemeVariables(CSS, 'github', 'dark').get('--running')).toBe('#d29922');
   });
 
+  it('matches a selector inside a selector list', () => {
+    const css = `\n.a.dark,\n.a .dark {\n  --warning: #ffaa00;\n}\n`;
+    expect(readThemeDeclarations(css, '.a .dark').get('--warning')).toBe('#ffaa00');
+    expect(readThemeDeclarations(css, '.a.dark').get('--warning')).toBe('#ffaa00');
+    expect(() => readThemeDeclarations(css, '.a')).toThrow('Theme block not found');
+  });
+
   it('throws when a block is missing instead of reading nothing', () => {
     expect(() => readThemeDeclarations(CSS, ':root[data-color-scheme="github"]')).toThrow(
       'Theme block not found'
