@@ -21,8 +21,9 @@ bookmark it and use the browser's Back button:
 
 Toggles and preset selects save immediately. Text and secrets use explicit Save
 or Connect actions; custom IDE commands and custom font families also submit
-with Enter. Failed saves preserve text for retry. Native color pickers and
-sliders save when you finish the interaction. Linear credentials and their
+with Enter. Failed saves preserve text for retry. Sliders save when you finish
+the interaction. Color pickers save when focus leaves the picker, so click or
+tab to another control after choosing a color. Linear credentials and their
 validated team are submitted together with Save.
 
 Scheduled agents are managed from **Agents** in the sidebar or the Agents link
@@ -35,8 +36,8 @@ for schedule and run behavior.
 Color scheme, color overrides, font size, and fonts are saved with the other
 user settings and apply on every device that opens this server. Mode is saved in
 the browser and does not sync across devices. Presets save immediately; custom
-font-family text requires **Save** or Enter. Color pickers and sliders save when
-you finish the interaction.
+font-family text requires **Save** or Enter. Color pickers save when focus
+leaves the picker; sliders save when you finish the interaction.
 
 - **Color scheme** picks a palette. Factory is the default; GitHub, One,
   Solarized, and High contrast are inspired by the corresponding editor themes.
