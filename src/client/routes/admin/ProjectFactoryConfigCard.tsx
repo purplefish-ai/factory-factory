@@ -11,6 +11,7 @@ import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 
 export function ProjectFactoryConfigCard({
@@ -70,7 +71,7 @@ export function ProjectFactoryConfigCard({
   };
 
   return (
-    <div className="rounded-lg border bg-card">
+    <Card>
       {isSuccess && (
         <DevServerSetupPanel
           open={editPanelOpen}
@@ -85,10 +86,18 @@ export function ProjectFactoryConfigCard({
           error={saveConfig.error}
         />
       )}
-      <div className="border-b bg-muted/50 px-4 py-3">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileCodeIcon className="h-5 w-5" />
+          Factory configuration
+        </CardTitle>
+        <CardDescription className="[overflow-wrap:anywhere]">
+          Workspace setup and run scripts for {projectName} (factory-factory.json)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {isSuccess &&
               (factoryConfig ? (
                 <Badge variant="success">
@@ -127,34 +136,44 @@ export function ProjectFactoryConfigCard({
             Refresh Workspaces
           </Button>
         </div>
-      </div>
 
-      <div className="p-4">
-        {isPending && <Loading size="compact" message="Loading configuration…" />}
-        {isError && (
-          <div role="alert" className="space-y-3">
-            <p className="text-sm text-destructive">
-              Couldn't load configuration. {configError.message}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              Retry
-            </Button>
-          </div>
-        )}
-        {isSuccess &&
-          (factoryConfig ? (
-            <div className="space-y-4">
-              <FactoryConfigScripts factoryConfig={factoryConfig} variant="card" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                No factory-factory.json found in this repository. Click the edit button above to
-                configure workspace setup and run scripts.
+        <div>
+          {isPending && <Loading size="compact" message="Loading configuration…" />}
+          {isError && (
+            <div role="alert" className="space-y-3">
+              <p className="text-sm text-destructive">
+                Couldn't load configuration. {configError.message}
               </p>
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                Retry
+              </Button>
             </div>
-          ))}
-      </div>
-    </div>
+          )}
+          {isSuccess &&
+            (factoryConfig ? (
+              <div className="space-y-4">
+                <FactoryConfigScripts factoryConfig={factoryConfig} variant="card" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No factory-factory.json found in this repository. Click the edit button above to
+                  configure workspace setup and run scripts.
+                </p>
+              </div>
+            ))}
+        </div>
+        <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+          <p>
+            <strong>Port allocation:</strong> Use{' '}
+            <code className="rounded bg-muted px-1">{'{port}'}</code> in run scripts for automatic
+            port allocation.
+          </p>
+          <p>
+            <strong>Location:</strong> factory-factory.json in repository root
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

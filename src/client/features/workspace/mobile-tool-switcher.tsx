@@ -68,7 +68,10 @@ export function MobileToolSwitcher({
 
   return (
     <Tabs value={activeTool} onValueChange={selectTool} className="h-full min-h-0 gap-0">
-      <nav aria-label="Workspace tools" className="flex h-11 shrink-0 items-center border-b">
+      <nav
+        aria-label="Workspace tools"
+        className="flex h-11 shrink-0 items-center border-b bg-shell"
+      >
         <div className="min-w-0 flex-1 overflow-x-auto">
           <TabsList variant="line" aria-label="Workspace tools" className="h-11 gap-0 p-0">
             <TabsTrigger value="changes" className={tabClassName}>

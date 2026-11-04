@@ -289,7 +289,7 @@ export function SessionTabBar({
   return (
     <div
       ref={tabBarRef}
-      className={cn('flex items-center gap-1 bg-muted rounded-lg p-1', className)}
+      className={cn('flex items-center gap-1 bg-shell rounded-lg p-1', className)}
     >
       {/* Left scroll arrow */}
       {showLeftArrow && (

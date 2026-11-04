@@ -28,7 +28,7 @@ export function captureTranscriptPosition(
   // The history header stays at index zero during a prepend. Anchoring it
   // would jump straight into the new page instead of keeping the old content.
   if (anchorHeaderToContent && row?.key === 'transcript:header') {
-    row = engine.getVirtualItems().find((item) => item.index === 1) ?? row;
+    row = engine.getVirtualItems().find((item) => item.index > 0 && item.size > 0) ?? row;
   }
   return {
     intent,

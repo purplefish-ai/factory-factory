@@ -17,6 +17,7 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,
+  rollbackStoppedDispatchMessage,
   prepareBackgroundForDispatch,
   collectDispatchBatch,
   dispatchCollectedBatch,
@@ -461,10 +462,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): void {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-      sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
-        emitSnapshot: false,
-        preservePRUpdateOutcome: true,
-      });
+      rollbackStoppedDispatchMessage(dbSessionId, msg, this.notificationDeliveryService, error);
       return;
     }
 

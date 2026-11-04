@@ -243,7 +243,7 @@ export const RightPanel = memo(function RightPanel({
       {/* Unified tab bar with terminal tabs inline */}
       <div
         className={cn(
-          'flex items-center gap-0.5 p-1 bg-muted/50 min-w-0 overflow-x-auto',
+          'flex items-center gap-0.5 p-1 bg-shell min-w-0 overflow-x-auto',
           isMobile && 'min-h-11 [&_button]:min-h-11 [&_button]:min-w-11',
           !isLogsActive && 'border-b'
         )}
@@ -267,7 +267,7 @@ export const RightPanel = memo(function RightPanel({
       {isLogsActive && (
         <div
           className={cn(
-            'flex items-center gap-2 px-2 py-1 bg-muted/40 border-b min-w-0',
+            'flex items-center gap-2 px-2 py-1 bg-shell border-b min-w-0',
             isMobile && '[&_button]:min-h-11 [&_button]:min-w-11'
           )}
         >

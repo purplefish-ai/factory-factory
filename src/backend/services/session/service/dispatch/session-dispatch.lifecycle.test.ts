@@ -376,6 +376,32 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.emitSessionSnapshot).not.toHaveBeenCalled();
   });
 
+  it('keeps a dispatched prompt when stopping interrupts the first turn', async () => {
+    let rejectPrompt!: (error: Error) => void;
+    mockSessionService.getSessionClient.mockReturnValue(createIdleClient());
+    mockSessionService.sendSessionMessage.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        rejectPrompt = reject;
+      })
+    );
+    const dispatch = sessionDispatchService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
+        's1',
+        queuedMessage,
+        0
+      );
+    });
+    mockSessionService.isGenerationCurrent.mockReturnValue(false);
+    rejectPrompt(new Error('Connection closed'));
+    await dispatch;
+
+    expect(mockSessionDomainService.removeTranscriptMessageById).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).not.toHaveBeenCalled();
+  });
+
   it('fails a message once when ACP reports an internal error', async () => {
     const client = createIdleClient();
     const internalError = {

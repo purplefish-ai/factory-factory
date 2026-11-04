@@ -259,3 +259,66 @@ it.each([
     expect(host.textContent?.includes('Scroll to bottom')).toBe(showsButton);
   }
 );
+
+it('automatically loads earlier messages in a short conversation while following', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80);
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 600,
+    height: 80,
+    top: 0,
+    left: 0,
+    bottom: 80,
+    right: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(200);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = mountRoot(host);
+  const loadOlder = vi.fn();
+  flushSync(() =>
+    root.render(
+      <ChatTranscript
+        {...display}
+        loadingSession={false}
+        history={{ status: 'idle', enabled: true, loadOlder }}
+        scroll={{
+          identity: 'auto-history',
+          active: true,
+          ready: true,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
+      />
+    )
+  );
+  await vi.waitFor(() => expect(loadOlder).toHaveBeenCalled());
+  expect(host.querySelector('[data-transcript-key="transcript:header"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Load earlier messages');
+});
+
+it.each(['idle', 'complete'] as const)('hides the history header when %s', (status) => {
+  const host = document.createElement('div');
+  const root = mountRoot(host);
+  flushSync(() =>
+    root.render(
+      <ChatTranscript
+        {...display}
+        history={{ status, enabled: false, loadOlder: vi.fn() }}
+        scroll={{
+          identity: 'hidden-history',
+          active: true,
+          ready: false,
+          initialIntent: 'following',
+          initialPosition: null,
+        }}
+      />
+    )
+  );
+  expect(host.textContent).not.toContain('Load earlier messages');
+  expect(host.textContent).not.toContain('Beginning of conversation');
+});

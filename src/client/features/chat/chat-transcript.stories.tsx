@@ -43,6 +43,7 @@ type Story = StoryObj<typeof meta>;
 
 export const WorkspaceCreation: Story = {
   args: {
+    history: { status: 'idle', enabled: false, loadOlder: () => undefined },
     initBanner: {
       kind: 'info',
       message: 'Creating worktree...',
@@ -457,13 +458,15 @@ export const EarlierMessagesFailed: Story = {
   },
 };
 
-export const BeginningOfConversation: Story = {
+export const CompleteHistory: Story = {
   args: {
     ...LoadingEarlierMessages.args,
     history: { status: 'complete', loadOlder: () => undefined },
   },
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByText('Beginning of conversation')).toBeVisible();
+    await expect(
+      within(canvasElement).queryByText('Beginning of conversation')
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -474,7 +477,34 @@ export const EarlierMessagesDisconnected: Story = {
   },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole('button', { name: 'Load earlier messages' })
-    ).toBeDisabled();
+      within(canvasElement).queryByRole('button', { name: 'Load earlier messages' })
+    ).not.toBeInTheDocument();
+  },
+};
+
+export const EarlierMessagesLoadAutomatically: Story = {
+  render: (args) => {
+    const [status, setStatus] = useState<'idle' | 'complete'>('idle');
+    return (
+      <ChatTranscript
+        {...args}
+        history={{ status, enabled: true, loadOlder: () => setStatus('complete') }}
+        messages={
+          status === 'complete'
+            ? [createUserMessage('Earlier message'), startupMessage]
+            : [startupMessage]
+        }
+      />
+    );
+  },
+  args: {
+    loadingSession: false,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Earlier message')).toBeVisible();
+    await expect(
+      canvas.queryByRole('button', { name: 'Load earlier messages' })
+    ).not.toBeInTheDocument();
   },
 };

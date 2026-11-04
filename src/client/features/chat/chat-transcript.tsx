@@ -44,6 +44,7 @@ function TranscriptInstance({
     !display.loadingSession &&
     (props.running || autonomousTurn) &&
     (props.work?.promptInFlight !== false || autonomousTurn);
+  // Keep the row identity stable while paging; only its contents change.
   const header = history ? (
     <>
       {banner}
@@ -64,7 +65,6 @@ function TranscriptInstance({
       !(viewport && history) ||
       history.status !== 'idle' ||
       history.enabled === false ||
-      state.intent !== 'reading' ||
       state.phase !== 'ready' ||
       !scroll.active ||
       display.loadingSession
@@ -79,7 +79,7 @@ function TranscriptInstance({
     loadNearTop();
     viewport.addEventListener('scroll', loadNearTop, { passive: true });
     return () => viewport.removeEventListener('scroll', loadNearTop);
-  }, [viewport, history, state.intent, state.phase, scroll.active, display.loadingSession]);
+  }, [viewport, history, state.phase, scroll.active, display.loadingSession]);
   return (
     <div className="flex flex-1 min-h-24 h-full min-w-0 flex-col">
       <div className="relative flex-1 min-h-0">

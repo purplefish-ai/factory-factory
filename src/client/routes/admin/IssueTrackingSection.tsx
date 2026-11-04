@@ -1,10 +1,12 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -111,8 +113,8 @@ function LinearConfigFields({
 
   return (
     <>
-      <div className="flex items-end gap-2">
-        <div className="space-y-1.5">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+        <div className="min-w-0 space-y-1.5">
           <div className="flex items-center gap-2">
             <Label htmlFor={`api-key-${projectId}`}>API key</Label>
             {isValidated && (
@@ -128,7 +130,7 @@ function LinearConfigFields({
             value={apiKey}
             onChange={(e) => handleApiKeyChange(e.target.value)}
             placeholder={hasStoredKey ? '••••••••••••••••••••' : 'lin_api_...'}
-            className="font-mono text-sm w-[280px]"
+            className="w-full font-mono text-sm sm:w-[280px]"
           />
         </div>
         <Button
@@ -144,7 +146,7 @@ function LinearConfigFields({
 
       {isValidated && hasTeamChoices && (
         <>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label>Team</Label>
             <Select
               value={selectedTeamId ?? ''}
@@ -153,7 +155,7 @@ function LinearConfigFields({
                 setSelectedTeamId(value);
               }}
             >
-              <SelectTrigger className="w-[220px]">
+              <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue placeholder="Select a team" />
               </SelectTrigger>
               <SelectContent>
@@ -277,10 +279,18 @@ export function ProjectIssueTrackingCard({
   const isConfigured = !isLinear || issueTrackerConfig?.linear != null;
 
   return (
-    <div className="rounded-lg border bg-card">
-      <div className="border-b bg-muted/50 px-4 py-3">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <LinkIcon className="h-5 w-5" />
+          Issue tracking
+        </CardTitle>
+        <CardDescription className="[overflow-wrap:anywhere]">
+          Configure GitHub Issues or Linear for {projectName}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-sm">{projectName}</h3>
           {isConfigured && (
             <Badge variant="success">
               <CheckCircleIcon className="w-3 h-3 mr-1" />
@@ -288,12 +298,10 @@ export function ProjectIssueTrackingCard({
             </Badge>
           )}
         </div>
-      </div>
 
-      <div className="p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <Label>Issue Provider</Label>
+          <div className="min-w-0 space-y-1.5">
+            <Label htmlFor={`issue-provider-${projectId}`}>Issue provider</Label>
             <Select
               value={provider}
               onValueChange={(value) => {
@@ -301,7 +309,7 @@ export function ProjectIssueTrackingCard({
               }}
               disabled={updateProvider.isPending || updateProject.isPending}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger id={`issue-provider-${projectId}`} className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -320,7 +328,7 @@ export function ProjectIssueTrackingCard({
             />
           )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

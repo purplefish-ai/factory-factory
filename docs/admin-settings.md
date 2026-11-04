@@ -17,7 +17,9 @@ bookmark it and use the browser's Back button:
 - **Project settings** (`/admin/project`): links to each project's settings at
   `/projects/:slug/settings`, including factory configuration and issue
   tracking. Opening a project's settings does not change the selected project
-  elsewhere.
+  elsewhere. Individual project pages keep the settings section navigation, with
+  **Project settings** selected. Use the **Projects** breadcrumb to return to
+  the project list.
 
 Settings keeps the project picker in the top navigation, followed by
 **Settings**. Use it to return to a project board, switch projects, or create a
@@ -63,6 +65,12 @@ leaves the picker; sliders save when you finish the interaction.
 **Reset appearance** returns every saved appearance preference to its default;
 it does not change Mode. The last applied appearance is cached in the browser so
 a reload does not flash the defaults before the saved settings load.
+
+The title bar, sidebar, and pane/tab headers share a theme-relative surface,
+while content keeps its own background. Dark mode raises the navigation surface
+and strengthens pane boundaries. High Contrast retains its black/white surfaces.
+The installed-app title bar keeps a visible separator when navigation is
+collapsed.
 
 In the installed desktop PWA, the browser-owned corner backgrounds follow the
 page color and dim with search and other dialog backdrops. Closing a dialog

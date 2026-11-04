@@ -73,7 +73,7 @@ export function TopPanelArea({
       <div
         hidden={compact}
         className={cn(
-          'flex items-center gap-0.5 p-1 bg-muted/50 border-b overflow-x-auto shrink-0 [&>button]:shrink-0',
+          'flex items-center gap-0.5 p-1 bg-shell border-b overflow-x-auto shrink-0 [&>button]:shrink-0',
           compact && 'hidden'
         )}
         data-testid="workspace-tools-toolbar"

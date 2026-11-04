@@ -25,7 +25,13 @@ const projectDefaults = {
   _count: { workspaces: 0 },
 };
 
-export function SettingsStoryLayout({ children }: { children: ReactNode }) {
+export function SettingsStoryLayout({
+  children,
+  selectedProjectSlug = 'factory-factory',
+}: {
+  children: ReactNode;
+  selectedProjectSlug?: string;
+}) {
   return (
     <AppNavigationDataProvider
       value={{
@@ -35,7 +41,7 @@ export function SettingsStoryLayout({ children }: { children: ReactNode }) {
         ],
         projectsError: null,
         refetchProjects: fn(),
-        selectedProjectSlug: 'factory-factory',
+        selectedProjectSlug,
         selectProjectSlug: fn(),
         selectedProjectId: 'factory',
         issueProvider: 'GITHUB',

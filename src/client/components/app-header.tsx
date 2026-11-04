@@ -40,7 +40,7 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
   const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
 
   return (
-    <header className="app-header flex shrink-0 items-stretch border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
+    <header className="app-header flex shrink-0 items-stretch border-b bg-shell px-2 min-h-12 pt-[env(safe-area-inset-top)]">
       <div className="app-header-controls @container/header flex min-w-0 flex-1 items-center gap-1 md:gap-x-2">
         {showSidebarToggle ? <SidebarToggleButton /> : null}
         <div data-slot="header-context" className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
