@@ -32,10 +32,11 @@
   "main": "dist/src/cli/index.js",
   "packageManager": "pnpm@12.15.0",
   "bin": {
-    "ff": "./dist/src/cli/index.js",
-    "factory-factory": "./dist/src/cli/index.js"
+    "ff": "./dist/src/cli/bootstrap.mjs",
+    "factory-factory": "./dist/src/cli/bootstrap.mjs"
   },
   "files": [
+    ".node-version",
     "dist",
     "prisma/migrations",
     "prisma/schema.prisma",
@@ -43,12 +44,12 @@
     "scripts/postinstall.mjs"
   ],
   "scripts": {
-    "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
+    "dev": "node src/cli/bootstrap.mjs serve --dev",
     "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && node scripts/copy-prompts.mjs && vite build && pnpm check:client-chunks",
     "build:storybook": "storybook build",
     "brand:generate": "node scripts/generate-brand-assets.mjs",
     "brand:generate:social-preview": "node scripts/generate-social-preview.mjs",
-    "start": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
+    "start": "node src/cli/bootstrap.mjs serve",
     "tailscale": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts tailscale",
     "proxy": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts proxy --private",
     "test": "node scripts/ensure-native-modules.mjs node && vitest run",

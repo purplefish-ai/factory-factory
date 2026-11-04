@@ -1,6 +1,9 @@
 import type { ApplicationUpdateStatus } from '@/shared/application-updates';
 import { releaseVersionSchema } from '@/shared/application-updates';
-import type { PreparedApplicationUpdate } from './application-update-installer';
+import {
+  ApplicationUpdateActivationRecoveryError,
+  type PreparedApplicationUpdate,
+} from './application-update-installer';
 
 interface Options {
   automaticUpdate: boolean;
@@ -101,6 +104,15 @@ export class ApplicationUpdateSupervisor {
 
   private async recover(error: unknown, stopped: boolean) {
     const version = this.status.targetVersion;
+    if (error instanceof ApplicationUpdateActivationRecoveryError) {
+      this.setStatus({
+        phase: 'failed',
+        targetVersion: version,
+        error: `Activation recovery failed. Previous installation retained at ${this.prepared?.recoveryPath}. ${error.message}`,
+      });
+      await this.persistence;
+      throw error;
+    }
     if (this.activated) {
       try {
         await this.restoreDatabase?.();

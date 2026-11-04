@@ -52,7 +52,10 @@ export function IssueLaunchSheet({
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
-  const promptPreview = useMemo(() => buildIssueStartPrompt({ url: issue.url }), [issue.url]);
+  const promptPreview = useMemo(
+    () => buildIssueStartPrompt({ url: issue.url, prompt: userSettings?.ticketDispatchPrompt }),
+    [issue.url, userSettings?.ticketDispatchPrompt]
+  );
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');

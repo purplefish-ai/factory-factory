@@ -66,6 +66,7 @@ describe('sessionProviderResolverService', () => {
       preferredIde: 'cursor',
       customIdeCommand: null,
       playSoundOnComplete: true,
+      ticketDispatchPrompt: null,
       childWorkspacesEnabled: true,
       notificationSoundPath: null,
       workspaceOrder: null,

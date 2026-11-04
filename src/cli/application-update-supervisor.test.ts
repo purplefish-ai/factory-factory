@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ApplicationUpdateActivationRecoveryError } from './application-update-installer';
 import { ApplicationUpdateSupervisor } from './application-update-supervisor';
 function fixture() {
   const prepared = {
@@ -147,4 +148,20 @@ it('disposes an unactivated replacement after shutdown failure without needing a
   expect(prepared.activate).not.toHaveBeenCalled();
   expect(prepared.dispose).toHaveBeenCalledOnce();
   expect(supervisor.recoveryPath).toBeUndefined();
+});
+
+it('retains recovery files when activation cannot restore the previous installation', async () => {
+  const { options, prepared } = fixture();
+  prepared.activate.mockRejectedValue(
+    new ApplicationUpdateActivationRecoveryError('Activation recovery failed')
+  );
+  const supervisor = new ApplicationUpdateSupervisor(options);
+  supervisor.request('0.5.4');
+  await expect(supervisor.ready()).rejects.toThrow('Activation recovery failed');
+  expect(prepared.dispose).not.toHaveBeenCalled();
+  expect(supervisor.recoveryPath).toBe('/backup');
+  expect(supervisor.status).toMatchObject({
+    phase: 'failed',
+    error: expect.stringContaining('/backup'),
+  });
 });

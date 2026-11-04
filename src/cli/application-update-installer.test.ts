@@ -1,9 +1,12 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ApplicationUpdateInstaller } from './application-update-installer';
+import {
+  ApplicationUpdateInstaller,
+  ApplicationUpdateActivationRecoveryError,
+} from './application-update-installer';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -130,3 +133,29 @@ it.each(['freebsd', 'openbsd', 'aix', 'sunos'] as const)(
     expect(run).not.toHaveBeenCalled();
   }
 );
+
+it('retains the previous package when activation and its compensation both fail', async () => {
+  const { root, run } = await fixture();
+  let moves = 0;
+  const installer = new ApplicationUpdateInstaller({
+    packageRoot: root,
+    env: {},
+    run,
+    platform: 'darwin',
+    move: (...args) => {
+      moves += 1;
+      if (moves === 2 || moves === 3) {
+        return Promise.reject(new Error('rename permission denied'));
+      }
+      return rename(...args);
+    },
+  });
+  const prepared = await installer.prepare('0.5.4', new AbortController().signal);
+  await expect(prepared.activate()).rejects.toThrow(ApplicationUpdateActivationRecoveryError);
+  expect(
+    JSON.parse(await readFile(join(prepared.recoveryPath, 'package.json'), 'utf8')).version
+  ).toBe('0.5.3');
+  await expect(readFile(join(root, 'package.json'), 'utf8')).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
+});

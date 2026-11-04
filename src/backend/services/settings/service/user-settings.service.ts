@@ -11,6 +11,7 @@ export interface UpdateUserSettingsInput {
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
   childWorkspacesEnabled?: boolean;
+  ticketDispatchPrompt?: string | null;
   notificationSoundPath?: string | null;
   ratchetEnabled?: boolean;
   ratchetReplyToPrComments?: boolean;

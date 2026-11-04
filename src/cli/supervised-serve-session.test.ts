@@ -21,7 +21,8 @@ vi.mock('node:child_process', async (original) => ({
   execFile: vi.fn(),
 }));
 vi.mock('./serve-session', () => ({ runServeSession: vi.fn() }));
-vi.mock('./application-update-installer', () => ({
+vi.mock('./application-update-installer', async (original) => ({
+  ...(await original<typeof import('./application-update-installer')>()),
   ApplicationUpdateInstaller: class {
     constructor(options: unknown) {
       mocks.constructed(options);

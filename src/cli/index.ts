@@ -23,6 +23,7 @@ import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { checkServePrerequisites } from './serve-prerequisites';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
+import { ensureServeTools } from './setup-prerequisites.mjs';
 import { registerStudioCommand } from './studio';
 import { runSupervisedServeSession } from './supervised-serve-session';
 import { registerTailscaleCommand } from './tailscale';
@@ -210,6 +211,10 @@ program
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
 
+    if (!(await ensureServeTools())) {
+      process.exitCode = 1;
+      return;
+    }
     if (!requireServePrerequisites(!!options.dev)) {
       return;
     }

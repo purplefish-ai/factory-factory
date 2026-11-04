@@ -12,6 +12,9 @@ export const mockLogger: Record<'debug' | 'info' | 'warn' | 'error', Mock> = {
 };
 
 // --- Module mocks (before imports) ---
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: { get: vi.fn(async () => ({ ticketDispatchPrompt: null })) },
+}));
 
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {

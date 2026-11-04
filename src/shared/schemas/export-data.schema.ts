@@ -196,6 +196,7 @@ const exportedUserSettingsSchema = z.object({
   customIdeCommand: z.string().nullable(),
   playSoundOnComplete: z.boolean(),
   childWorkspacesEnabled: z.boolean().default(true),
+  ticketDispatchPrompt: z.string().nullable().optional().default(null),
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
   ratchetReplyToPrComments: z.boolean().optional().default(true),

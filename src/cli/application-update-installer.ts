@@ -22,6 +22,7 @@ interface Options {
   packageRoot: string;
   env: NodeJS.ProcessEnv;
   run?: Run;
+  move?: typeof rename;
   platform?: NodeJS.Platform;
   onStage?: (recoveryPath: string) => Promise<void>;
   ownedProcessIds?: () => number[];
@@ -49,6 +50,9 @@ export async function hasOtherApplicationServers(
     }
   });
 }
+
+/** Activation failed after moving the live package, and compensation also failed. */
+export class ApplicationUpdateActivationRecoveryError extends Error {}
 
 /** Owns a replacement on the installation's volume; never mutates the live app during preparation. */
 export class ApplicationUpdateInstaller {
@@ -111,6 +115,7 @@ export class ApplicationUpdateInstaller {
     }
     const candidate = join(stage, 'lib/node_modules/factory-factory');
     const backup = join(stage, 'previous');
+    const move = this.options.move ?? rename;
     let activated = false;
     try {
       await this.options.onStage?.(backup);
@@ -171,12 +176,19 @@ export class ApplicationUpdateInstaller {
         packageRoot: root,
         async activate() {
           signal.throwIfAborted();
-          await rename(root, backup);
+          await move(root, backup);
           try {
-            await rename(candidate, root);
+            await move(candidate, root);
             activated = true;
           } catch (error) {
-            await rename(backup, root);
+            try {
+              await move(backup, root);
+            } catch (recoveryError) {
+              throw new ApplicationUpdateActivationRecoveryError(
+                'Activation recovery failed; the previous installation must be restored from the retained backup.',
+                { cause: recoveryError }
+              );
+            }
             throw error;
           }
         },
@@ -184,12 +196,12 @@ export class ApplicationUpdateInstaller {
           if (!activated) {
             return;
           }
-          await rename(root, candidate);
+          await move(root, candidate);
           try {
-            await rename(backup, root);
+            await move(backup, root);
             activated = false;
           } catch (error) {
-            await rename(candidate, root);
+            await move(candidate, root);
             throw error;
           }
         },

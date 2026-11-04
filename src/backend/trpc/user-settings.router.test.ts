@@ -63,6 +63,14 @@ describe('userSettingsRouter', () => {
     expect(mockUpdate).toHaveBeenCalledWith({ childWorkspacesEnabled: false });
   });
 
+  it.each(['Custom instructions', null])('saves ticket prompt %s', async (prompt) => {
+    await createCaller().update({ ticketDispatchPrompt: prompt });
+    expect(mockUpdate).toHaveBeenCalledWith({ ticketDispatchPrompt: prompt });
+  });
+  it.each(['', '   ', 'a'.repeat(20_001)])('rejects invalid ticket prompts', async (prompt) => {
+    await expect(createCaller().update({ ticketDispatchPrompt: prompt })).rejects.toThrow();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
   it('gets and updates settings', async () => {
     mockGet.mockResolvedValue({
       preferredIde: 'cursor',

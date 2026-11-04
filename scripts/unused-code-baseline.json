@@ -5,6 +5,10 @@
       "disposition": "review-required",
       "reason": "Only mutex tests currently import this implementation; investigate lock ownership before removal."
     },
+    "src/backend/orchestration/data-backup.settings.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "User settings fixture for backup export/import and ticket prompt round-trip tests; no runtime consumers are expected."
+    },
     "src/backend/orchestration/pr-event-flow.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
