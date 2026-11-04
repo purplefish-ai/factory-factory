@@ -12,7 +12,7 @@ const health = {
 };
 
 const meta = {
-  title: 'Components/CLIHealthBanner',
+  title: 'Shared/CLIHealthBanner',
   component: CLIHealthBannerContent,
   parameters: { layout: 'fullscreen' },
   args: {

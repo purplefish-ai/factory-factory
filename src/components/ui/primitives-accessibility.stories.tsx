@@ -24,7 +24,7 @@ import { Slider } from './slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 
 const meta = {
-  title: 'UI/Primitives Accessibility',
+  title: 'UI/PrimitivesAccessibility',
   parameters: { layout: 'padded' },
 } satisfies Meta;
 export default meta;

@@ -19,7 +19,7 @@ function lifecycleMessage(
 }
 
 const meta = {
-  title: 'AgentActivity/SessionLifecycleMessageRenderer',
+  title: 'Chat/Transcript/SessionLifecycleMessageRenderer',
   component: SessionLifecycleMessageRenderer,
   parameters: { layout: 'padded' },
   tags: ['autodocs'],

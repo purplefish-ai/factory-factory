@@ -126,7 +126,7 @@ function Comparison({ content, chunks, snapshotMs }: ComparisonProps) {
 }
 
 const meta = {
-  title: 'Chat/Streaming Markdown comparison',
+  title: 'Chat/Transcript/StreamdownMarkdown',
   component: Comparison,
   parameters: { layout: 'padded' },
   args: { content: STREAMING_PROSE, chunks: STEADY_CHUNKS, snapshotMs: 100 },

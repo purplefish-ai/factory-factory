@@ -36,7 +36,7 @@ function HeaderStory({
   );
 }
 const meta = {
-  title: 'Navigation/Project Header',
+  title: 'Navigation/ProjectHeader',
   component: HeaderStory,
   parameters: { layout: 'fullscreen' },
   args: { project: { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' } },

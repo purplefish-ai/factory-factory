@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { PRRecipientPicker } from './pr-recipient-picker';
 
 const meta = {
-  title: 'Workspace/PR recipient picker',
+  title: 'Workspace/PRRecipientPicker',
   component: PRRecipientPicker,
   args: {
     candidates: [

@@ -105,7 +105,7 @@ function MockKanbanBoard({ workspaces }: { workspaces: WorkspaceWithKanban[] }) 
 // =============================================================================
 
 const meta = {
-  title: 'Kanban/KanbanBoard',
+  title: 'Board/KanbanBoard',
   component: MockKanbanBoard,
   parameters: {
     layout: 'fullscreen',

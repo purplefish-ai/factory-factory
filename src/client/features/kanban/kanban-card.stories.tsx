@@ -8,7 +8,7 @@ import type { WorkspaceWithKanban } from './kanban-card';
 import { KanbanCard } from './kanban-card';
 
 const meta = {
-  title: 'Kanban/KanbanCard',
+  title: 'Board/KanbanCard',
   component: KanbanCard,
   parameters: {
     layout: 'centered',

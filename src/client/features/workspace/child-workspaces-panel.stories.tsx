@@ -49,7 +49,7 @@ function StoryProvider({ children }: { children: ReactNode }) {
 }
 
 const meta = {
-  title: 'Workspace/Child Workspaces',
+  title: 'Workspace/ChildWorkspacesPanel',
   component: ChildWorkspacesPanel,
   parameters: { layout: 'centered' },
   decorators: [

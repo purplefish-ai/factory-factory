@@ -3,7 +3,7 @@ import type React from 'react';
 import { Logo, LogoIcon, LogoText } from './logo';
 
 const meta = {
-  title: 'Components/Logo',
+  title: 'Shared/Logo',
   component: Logo,
   parameters: {
     layout: 'centered',

@@ -4,7 +4,7 @@ import { createUserQuestion } from '@/lib/claude-fixtures';
 import { QuestionPrompt } from './question-prompt';
 
 const meta = {
-  title: 'Chat/QuestionPrompt',
+  title: 'Chat/Prompts/QuestionPrompt',
   component: QuestionPrompt,
   parameters: {
     layout: 'padded',

@@ -8,7 +8,7 @@ import type { SessionData } from './session-tab-bar';
 import { SessionTabBar } from './session-tab-bar';
 
 const meta = {
-  title: 'Chat/SessionTabBar',
+  title: 'Chat/Sessions/SessionTabBar',
   component: SessionTabBar,
   parameters: {
     layout: 'centered',

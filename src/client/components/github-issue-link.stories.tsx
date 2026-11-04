@@ -12,7 +12,7 @@ const data = {
 };
 
 const meta = {
-  title: 'Chat/GitHub issue preview',
+  title: 'Chat/Transcript/GitHubIssueLink',
   component: GitHubIssuePreviewCard,
   args: { repo: 'purplefish-ai/iron-fillet', number: 12_675, data },
   decorators: [

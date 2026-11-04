@@ -77,7 +77,7 @@ function RatchetingDropdown({
   return <RatchetingToggle workspace={displayedWorkspace} workspaceId={workspace.id} />;
 }
 const meta = {
-  title: 'Workspaces/RatchetingToggle',
+  title: 'Workspace/RatchetingToggle',
   component: RatchetingDropdown,
   parameters: { layout: 'centered' },
   decorators: [

@@ -268,7 +268,7 @@ function WorkspaceCreationPreview(props: {
 }
 
 const meta = {
-  title: 'Kanban/InlineWorkspaceForm',
+  title: 'Board/InlineWorkspaceForm',
   component: WorkspaceCreationPreview,
   parameters: { layout: 'centered' },
 } satisfies Meta<typeof WorkspaceCreationPreview>;

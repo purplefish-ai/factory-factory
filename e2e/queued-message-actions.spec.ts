@@ -3,9 +3,12 @@ import { expect, test } from '@playwright/test';
 test('queued action focus rings fit inside the clipping wrapper', async ({ page }) => {
   // A cold Storybook server compiles the chat dependency graph on first load.
   test.setTimeout(120_000);
-  await page.goto('/iframe.html?id=chat-chattranscript--queued-message-handoff&viewMode=story', {
-    waitUntil: 'domcontentloaded',
-  });
+  await page.goto(
+    '/iframe.html?id=chat-transcript-chattranscript--queued-message-handoff&viewMode=story',
+    {
+      waitUntil: 'domcontentloaded',
+    }
+  );
   const dequeue = page.getByRole('button', { name: 'Dequeue message', exact: true });
   await expect(dequeue).toBeVisible({ timeout: 110_000 });
   await dequeue.focus();

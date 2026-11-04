@@ -4,7 +4,7 @@ import type { ChatMessage, GroupedMessageItem, PairedToolCall } from '@/lib/chat
 import { GroupedMessageItemRenderer } from './agent-activity';
 
 const meta = {
-  title: 'AgentActivity/ActivityTimeline',
+  title: 'Chat/Tools/ActivityTimeline',
   component: GroupedMessageItemRenderer,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof GroupedMessageItemRenderer>;

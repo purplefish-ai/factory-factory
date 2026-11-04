@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { WorkspaceSwitcherDropdown } from './workspace-switcher-dropdown';
 
 const meta = {
-  title: 'Workspaces/WorkspaceSwitcherDropdown',
+  title: 'Navigation/WorkspaceSwitcherDropdown',
   component: WorkspaceSwitcherDropdown,
   parameters: {
     layout: 'centered',

@@ -93,7 +93,7 @@ function LinearSettingsStory({
 }
 
 const meta = {
-  title: 'Pages/Admin/IssueTracking',
+  title: 'Settings/IssueTrackingSection',
   parameters: { layout: 'padded' },
   beforeEach: () => onSave.mockClear(),
 } satisfies Meta;

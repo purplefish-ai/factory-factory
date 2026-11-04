@@ -3,7 +3,7 @@ import { fn } from 'storybook/test';
 import { ApiUsageSection } from './ApiUsageSection';
 
 const meta = {
-  title: 'Pages/Admin/ApiUsageSection',
+  title: 'Settings/ApiUsageSection',
   component: ApiUsageSection,
   parameters: {
     layout: 'padded',

@@ -21,7 +21,7 @@ const fixture: Partial<WorkspaceHeaderWorkspace> = {
 const workspace = fixture as WorkspaceHeaderWorkspace;
 
 const meta = {
-  title: 'Workspaces/AdversarialReviewButton',
+  title: 'Workspace/AdversarialReviewButton',
   component: AdversarialReviewButton,
   args: { workspace, workspaceId: workspace.id },
   decorators: [

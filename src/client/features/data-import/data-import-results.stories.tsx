@@ -70,7 +70,7 @@ function ResultsStory({ result }: { result: ImportResult }) {
   );
 }
 const meta = {
-  title: 'Data import/Results',
+  title: 'Settings/DataImportResults',
   component: ResultsStory,
   parameters: { layout: 'fullscreen' },
   args: { result: created },

@@ -105,7 +105,7 @@ function createSampleCodexFileChangeInput(): Record<string, unknown> {
 // =============================================================================
 
 const meta = {
-  title: 'AgentActivity/ToolRenderers',
+  title: 'Chat/Tools/ToolRenderers',
   component: ToolInfoRenderer,
   parameters: {
     layout: 'padded',

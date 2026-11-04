@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { HoverActionsFixture } from './hover-actions-fixture';
 
 const meta = {
-  title: 'Responsive/HoverActions',
+  title: 'Shared/HoverActions',
   component: HoverActionsFixture,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof HoverActionsFixture>;

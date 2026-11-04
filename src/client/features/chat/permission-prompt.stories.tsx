@@ -8,7 +8,7 @@ import {
 import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
 const meta = {
-  title: 'Chat/PermissionPrompt',
+  title: 'Chat/Prompts/PermissionPrompt',
   component: PermissionPrompt,
   parameters: {
     layout: 'padded',

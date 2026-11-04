@@ -9,7 +9,7 @@ permission and question prompts scroll within the available composer height,
 keeping the input and its controls reachable on narrow screens. Clicking it
 returns to the latest messages and hides the row.
 
-For local UI checks, open **Workspaces / ChatContent / Composer Height Changes**
+For local UI checks, open **Workspace / ChatContent / Composer Height Changes**
 in `pnpm storybook`. This story uses mock conversation messages and local
 callbacks; it never sends messages or starts a session. Use its controls to add
 attachments and show permission or question prompts, then enter a multiline

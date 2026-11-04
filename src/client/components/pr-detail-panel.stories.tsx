@@ -4,7 +4,7 @@ import type { PRWithFullDetails } from '@/shared/github-types';
 import { PRDetailPanel } from './pr-detail-panel';
 
 const meta = {
-  title: 'PR Review/PRDetailPanel',
+  title: 'Reviews/PRDetailPanel',
   component: PRDetailPanel,
   parameters: {
     layout: 'fullscreen',

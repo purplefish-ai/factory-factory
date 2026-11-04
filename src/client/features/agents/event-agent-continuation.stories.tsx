@@ -117,7 +117,7 @@ function ContinuationStory(props: { surface?: 'slack' | 'retained'; failOnce?: b
   return <ContinuationSession key={`${props.surface}:${props.failOnce}`} {...props} />;
 }
 const meta = {
-  title: 'Agents/Event continuation',
+  title: 'Agents/EventAgentContinuation',
   component: ContinuationStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ContinuationStory>;

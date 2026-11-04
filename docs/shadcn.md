@@ -59,7 +59,7 @@ follows the same rule. Use this for card, message, screenshot and tab actions
 rather than unconditional `opacity-0` or width-only hover rules. Named sidebar
 and scrollbar groups use equivalent pointer media queries.
 
-The `Responsive/HoverActions` Storybook story and
+The `Shared/HoverActions` Storybook story and
 `pnpm test:e2e:mobile e2e/hover-actions.spec.ts` exercise these states.
 
 ## CSS and dependencies
@@ -88,7 +88,7 @@ Next.js client/server directives.
 
 Run the root AGENTS.md checks, `pnpm knip`, `pnpm build`, and
 `pnpm build:storybook`. The `UI/Primitives`, `UI/Button`, `UI/Badge`, and
-`UI/Dialog` stories cover the refreshed controls. `UI/Primitives Accessibility`
+`UI/Dialog` stories cover the refreshed controls. `UI/PrimitivesAccessibility`
 adds browser regressions for menu padding, keyboard focus, themed sliders, and
 sheet headings. Check light/dark themes, narrow screens, keyboard interaction,
 overlays, and reduced motion. The co-located primitive and persistence tests

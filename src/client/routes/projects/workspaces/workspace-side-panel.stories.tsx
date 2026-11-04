@@ -27,7 +27,7 @@ function WorkspaceSidePanelDemo() {
 }
 
 const meta = {
-  title: 'Workspace/SidePanel',
+  title: 'Workspace/WorkspaceSidePanel',
   component: WorkspaceSidePanelDemo,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof WorkspaceSidePanelDemo>;

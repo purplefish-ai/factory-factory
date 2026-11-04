@@ -50,7 +50,7 @@ function runningList(indices: number[]) {
 }
 
 const meta = {
-  title: 'Chat/SessionActivityIndicator',
+  title: 'Chat/Sessions/SessionActivityIndicator',
   component: SessionActivityIndicator,
   parameters: { layout: 'padded' },
   decorators: [

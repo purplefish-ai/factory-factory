@@ -103,7 +103,7 @@ const longTextAttachment: MessageAttachment = {
 };
 
 const meta: Meta<typeof AttachmentViewerDialog> = {
-  title: 'Chat/AttachmentViewerDialog',
+  title: 'Chat/Input/AttachmentViewerDialog',
   component: AttachmentViewerDialog,
   parameters: {
     layout: 'centered',

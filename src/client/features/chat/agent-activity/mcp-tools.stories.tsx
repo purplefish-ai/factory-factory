@@ -49,7 +49,7 @@ const calls: PairedToolCall[] = [
 ];
 
 const meta = {
-  title: 'AgentActivity/McpTools',
+  title: 'Chat/Tools/McpTools',
   component: ToolSequenceGroup,
   parameters: { layout: 'padded' },
   args: { sequence: { type: 'tool_sequence', id: 'mcp-example', pairedCalls: calls } },

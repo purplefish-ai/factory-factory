@@ -34,7 +34,7 @@ function InteractiveForm(args: StoryArgs) {
 }
 
 const meta = {
-  title: 'Pages/Projects/ProjectRepoForm',
+  title: 'Projects/ProjectRepoForm',
   component: ProjectRepoForm,
   parameters: {
     layout: 'fullscreen',

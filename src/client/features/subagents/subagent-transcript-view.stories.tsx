@@ -68,7 +68,7 @@ const narrow: Decorator = (Story) => (
 );
 
 const meta = {
-  title: 'Subagents/SubagentTranscriptView',
+  title: 'Chat/Subagents/SubagentTranscriptView',
   component: SubagentTranscriptContent,
   args: {
     workspaceId: 'workspace-1',

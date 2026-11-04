@@ -20,7 +20,7 @@ const plan: ProviderPlanUsage = {
   ],
 };
 const meta: Meta<typeof UsageControl> = {
-  title: 'Chat/UsageStats/Combined',
+  title: 'Chat/UsageStats/ProviderUsageControl',
   component: UsageControl,
   tags: ['autodocs'],
   parameters: { layout: 'centered' },

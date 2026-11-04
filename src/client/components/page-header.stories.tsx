@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from './page-header';
 
 const meta = {
-  title: 'Common/PageHeader',
+  title: 'Shared/PageHeader',
   component: PageHeader,
   parameters: {
     layout: 'padded',

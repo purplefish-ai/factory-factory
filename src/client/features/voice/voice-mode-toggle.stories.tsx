@@ -8,7 +8,7 @@ import { trpc } from '@/client/lib/trpc';
 import { VoiceModeToggle } from './voice-mode-toggle';
 
 const meta: Meta<typeof VoiceModeToggle> = {
-  title: 'Voice/VoiceModeToggle',
+  title: 'Chat/Input/VoiceModeToggle',
   component: VoiceModeToggle,
   args: { onFinalTranscript: fn() },
   decorators: [

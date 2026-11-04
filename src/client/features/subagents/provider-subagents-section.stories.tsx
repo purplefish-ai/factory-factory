@@ -100,7 +100,7 @@ function SectionStory({
 }
 
 const meta = {
-  title: 'Subagents/ProviderSubagentsSection',
+  title: 'Chat/Subagents/ProviderSubagentsSection',
   component: SectionStory,
   render: (args) => (
     <SectionStory

@@ -12,7 +12,7 @@ import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import { QuickChatContent } from './quick-chat-content';
 
 const meta: Meta<typeof QuickChatContent> = {
-  title: 'Kanban/QuickChatContent',
+  title: 'Board/QuickChatContent',
   component: QuickChatContent,
   parameters: { layout: 'padded' },
 };

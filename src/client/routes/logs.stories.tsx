@@ -49,7 +49,7 @@ function LogsStory() {
   );
 }
 const meta = {
-  title: 'Pages/Logs',
+  title: 'Settings/LogsPage',
   component: LogsStory,
   parameters: { layout: 'fullscreen' },
   beforeEach: () => {
