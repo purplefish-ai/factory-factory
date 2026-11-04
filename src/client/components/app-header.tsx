@@ -37,7 +37,8 @@ function SidebarToggleButton() {
 }
 
 export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: boolean }) {
-  const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
+  const { title, setRightSlot, setRightEndSlot, setLeftStartSlot, setLeftExtraSlot } =
+    useAppHeaderContext();
 
   return (
     <header className="app-header flex shrink-0 items-stretch border-b bg-shell px-2 min-h-12 pt-[env(safe-area-inset-top)]">
@@ -52,6 +53,7 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
         </div>
         <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1 empty:hidden" />
         <GlobalSearch />
+        <div ref={setRightEndSlot} className="flex shrink-0 items-center empty:hidden" />
       </div>
     </header>
   );
