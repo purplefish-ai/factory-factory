@@ -32,6 +32,11 @@ it('keeps a fast history check invisible throughout loading and completion', () 
   flushSync(() => {
     vi.advanceTimersByTime(100);
   });
+  expect(host.querySelector('[role="status"]')).toBeNull();
+  flushSync(() => {
+    vi.advanceTimersByTime(149);
+  });
+  expect(host.querySelector('[role="status"]')).toBeNull();
   render('complete');
   flushSync(() => {
     vi.advanceTimersByTime(1000);
@@ -42,7 +47,11 @@ it('keeps a fast history check invisible throughout loading and completion', () 
 it('shows feedback for a slow request and hides it as soon as the request finishes', () => {
   render('loading');
   flushSync(() => {
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(249);
+  });
+  expect(host.querySelector('[role="status"]')).toBeNull();
+  flushSync(() => {
+    vi.advanceTimersByTime(1);
   });
   expect(host.textContent).toContain('Loading earlier messages');
   render('idle');
