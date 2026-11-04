@@ -34,8 +34,10 @@ workspace also shows **Archive** inline as its next step.
 Provider settings, Open branch on GitHub, Open dev app and Archive workspace,
 plus whichever of Create PR, the issue link and Open in IDE the header is not
 showing inline. Inline wrappers carry `data-header-inline`, and the menu checks
-which are visible when it opens, so it never repeats a control on screen. Every
-icon-only control has an accessible name and a tooltip.
+which are visible when it opens, so Create PR, the issue and IDE actions do not
+repeat. Archive deliberately remains in the menu even when a finished workspace
+also offers it inline. Every icon-only control has an accessible name and a
+tooltip.
 
 The chat tab bar holds the chat tabs, closed chats, **New session** and a **Chat
 actions** (⋮) menu with **Restart agent** for the selected chat. Quick actions

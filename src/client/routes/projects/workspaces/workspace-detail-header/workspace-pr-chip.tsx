@@ -90,7 +90,7 @@ export function WorkspacePrChip({
                   {others > 0 && <span className="text-muted-foreground">+{others}</span>}
                 </>
               ) : (
-                <span className="hidden text-muted-foreground @[48rem]/header:inline">No PR</span>
+                <span className="text-muted-foreground">No PR</span>
               )}
               <CaretDownIcon className="hidden size-3 shrink-0 text-muted-foreground @[48rem]/header:block" />
             </Button>

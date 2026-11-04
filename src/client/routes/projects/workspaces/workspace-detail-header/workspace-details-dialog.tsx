@@ -11,10 +11,14 @@ export function WorkspaceDetailsDialog({
   onOpenChange: (open: boolean) => void;
   workspace: Pick<WorkspaceHeaderWorkspace, 'description' | 'initialPrompt'>;
 }) {
-  const { description, initialPrompt } = workspace;
+  const description = workspace.description?.trim();
+  const initialPrompt = workspace.initialPrompt?.trim();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Workspace details</DialogTitle>
         </DialogHeader>
@@ -39,7 +43,7 @@ function DetailSection({ label, text }: { label: string; text: string }) {
       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         {label}
       </span>
-      <p className="text-sm whitespace-pre-wrap">{text}</p>
+      <p className="text-sm whitespace-pre-wrap break-words">{text}</p>
     </div>
   );
 }

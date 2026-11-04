@@ -38,9 +38,15 @@ export const PhoneWorkspaceDark: Story = {
   globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
 };
 
-const openMoreActions = async (canvasElement: HTMLElement) => {
+const openMoreActions = async (
+  canvasElement: HTMLElement,
+  expected: string[] = ALWAYS_IN_MORE_ACTIONS
+) => {
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
   const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
+  for (const name of expected) {
+    await within(menu).findByRole('menuitem', { name });
+  }
   return [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
 };
 const ALWAYS_IN_MORE_ACTIONS = [
@@ -80,7 +86,12 @@ export const PhoneMoreActions: Story = {
     await expect(
       await canvas.findByRole('button', { name: /^Pull requests and updates/ })
     ).toBeVisible();
-    const items = await openMoreActions(canvasElement);
+    const items = await openMoreActions(canvasElement, [
+      ...ALWAYS_IN_MORE_ACTIONS,
+      'Create PR',
+      'Open in VS Code',
+      '#3456',
+    ]);
     for (const name of [...ALWAYS_IN_MORE_ACTIONS, 'Create PR', 'Open in VS Code', '#3456']) {
       await expect(items).toContain(name);
     }

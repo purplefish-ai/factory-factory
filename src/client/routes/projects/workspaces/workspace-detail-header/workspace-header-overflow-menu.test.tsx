@@ -1,17 +1,33 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { userEvent, within } from 'storybook/test';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { WorkspaceHeaderOverflowMenu } from './workspace-header-overflow-menu';
 
+const mocks = vi.hoisted(() => ({
+  rename: vi.fn(),
+  get: vi.fn(),
+  list: vi.fn(),
+  error: vi.fn(),
+  onError: null as null | ((error: Error) => void),
+}));
+vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      workspace: { get: { invalidate: vi.fn() }, listForProject: { invalidate: vi.fn() } },
+      workspace: { get: { invalidate: mocks.get }, listForProject: { invalidate: mocks.list } },
     }),
-    workspace: { rename: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) } },
+    workspace: {
+      rename: {
+        useMutation: (options: { onError: (error: Error) => void }) => {
+          mocks.onError = options.onError;
+          return { mutateAsync: mocks.rename, isPending: false };
+        },
+      },
+    },
   },
 }));
 vi.mock('./workspace-provider-settings', () => ({ WorkspaceProviderSettings: () => null }));
@@ -27,6 +43,10 @@ vi.mock('./open-in-ide-action', () => ({
 vi.mock('./archive-action-button', () => ({ ArchiveActionButton: () => null }));
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  mocks.rename.mockReset().mockResolvedValue({});
+  mocks.get.mockReset().mockResolvedValue(undefined);
+  mocks.list.mockReset().mockResolvedValue(undefined);
+  mocks.error.mockClear();
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
     value: vi.fn(),
@@ -193,3 +213,82 @@ it('leaves out controls the header shows inline, and keeps the rest', async () =
     container.remove();
   }
 });
+
+it.each([false, true])(
+  'saves the trimmed rename and refreshes both caches (failure=%s)',
+  async (fails) => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    if (fails) {
+      mocks.rename.mockImplementation(() => {
+        const error = new Error('Offline');
+        mocks.onError?.(error);
+        return Promise.reject(error);
+      });
+    }
+    try {
+      await act(() =>
+        root.render(
+          <TooltipProvider>
+            <WorkspaceHeaderOverflowMenu
+              workspace={
+                {
+                  id: 'w',
+                  projectId: 'p',
+                  name: 'Workspace',
+                  status: 'READY',
+                } as WorkspaceHeaderWorkspace
+              }
+              workspaceId="w"
+              availableIdes={[]}
+              preferredIde="vscode"
+              openInIde={{ mutate: vi.fn(), isPending: false }}
+              archivePending={false}
+              onArchiveRequest={vi.fn()}
+              isArchived={false}
+            />
+          </TooltipProvider>
+        )
+      );
+      await act(() => {
+        container
+          .querySelector('[aria-label="More actions"]')!
+          .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      await act(() => {
+        [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+          .find((item) => item.textContent === 'Rename workspace')!
+          .click();
+      });
+      const input = document.querySelector<HTMLInputElement>(
+        'input[placeholder="Workspace name"]'
+      )!;
+      await act(async () => {
+        await userEvent.clear(input);
+        await userEvent.type(input, '  New name  ');
+      });
+      await act(async () =>
+        userEvent.click(within(document.body).getByRole('button', { name: 'Rename' }))
+      );
+      expect(mocks.rename).toHaveBeenCalledWith({ id: 'w', name: 'New name' });
+      if (fails) {
+        expect(mocks.error).toHaveBeenCalledWith("Couldn't rename workspace. Offline");
+        expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull();
+        expect(mocks.get).not.toHaveBeenCalled();
+        expect(mocks.list).not.toHaveBeenCalled();
+      } else {
+        expect(document.querySelector('input[placeholder="Workspace name"]')).toBeNull();
+        expect(mocks.get).toHaveBeenCalledWith({ id: 'w' });
+        expect(mocks.list).toHaveBeenCalledWith({ projectId: 'p' });
+      }
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);

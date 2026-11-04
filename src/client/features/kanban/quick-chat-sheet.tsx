@@ -82,6 +82,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     enabled: !!workspaceId && !explicitWorkspaceProvider,
     staleTime: 30_000,
   });
+  const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery(undefined, {
+    enabled: !!workspaceId,
+  });
   const workspaceProvider = explicitWorkspaceProvider ?? settings.data?.defaultSessionProvider;
 
   const {
@@ -158,7 +161,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               transcriptScroll={transcriptScroll}
               onRunQuickActionInNewChat={handleQuickAction}
               newChatUnavailableReason={getNewChatUnavailableReason({
-                sessions: sessionsLoaded ? sessions : undefined,
+                sessions: sessionsLoaded && maxSessions !== undefined ? sessions : undefined,
+                maxSessions,
+                hasWorktreePath: Boolean(workspace?.worktreePath),
                 isCreatingSession,
               })}
             />

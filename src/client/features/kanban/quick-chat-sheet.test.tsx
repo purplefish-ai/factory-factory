@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
   content: vi.fn(),
+  maxSessions: 2,
+  worktreePath: '/tmp/worktree' as string | null,
 }));
 vi.mock('./kanban-context', () => ({
   useKanban: () => ({
@@ -23,6 +25,7 @@ vi.mock('./kanban-context', () => ({
       {
         id: 'workspace',
         name: 'Review workspace',
+        worktreePath: mocks.worktreePath,
         defaultSessionProvider: mocks.workspaceProvider,
       },
     ],
@@ -36,6 +39,7 @@ vi.mock('./quick-chat-content', () => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    session: { getMaxSessionsPerWorkspace: { useQuery: () => ({ data: mocks.maxSessions }) } },
     userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CODEX' } }) } },
     codexAccounts: {
       list: {
@@ -49,11 +53,12 @@ vi.mock('@/client/lib/trpc', () => ({
     },
   },
 }));
-// session-limit.test.ts covers the real reasons; the sheet only forwards them.
-vi.mock('@/client/features/workspace', () => ({
-  getNewChatUnavailableReason: ({ sessions }: { sessions?: unknown[] }) =>
-    sessions === undefined ? 'Loading chats…' : null,
-}));
+vi.mock('@/client/features/workspace', async () => {
+  const actual = await vi.importActual<typeof import('@/client/features/workspace/session-limit')>(
+    '@/client/features/workspace/session-limit'
+  );
+  return { getNewChatUnavailableReason: actual.getNewChatUnavailableReason };
+});
 vi.mock('./use-quick-chat', () => ({
   useQuickChat: () => ({
     sessions: mocks.empty
@@ -84,6 +89,8 @@ beforeEach(() => {
   mocks.error = null;
   mocks.fetching = false;
   mocks.workspaceProvider = 'CLAUDE';
+  mocks.maxSessions = 10;
+  mocks.worktreePath = '/tmp/worktree';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -131,7 +138,9 @@ it.each([false, true])(
       }
       expect(document.body.querySelector('[aria-label="Quick actions"]')).toBeNull();
       const create = empty
-        ? [...document.body.querySelectorAll('button')].find((button) => button.textContent === 'New chat')
+        ? [...document.body.querySelectorAll('button')].find(
+            (button) => button.textContent === 'New chat'
+          )
         : document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]');
       expect(create?.disabled).toBe(false);
       await act(() => create?.click());
@@ -244,3 +253,34 @@ it('offers session-list Retry after failure and disables only Retry while refetc
     container.remove();
   }
 });
+
+it.each([
+  {
+    maxSessions: 2,
+    worktreePath: '/tmp/worktree',
+    reason: 'This workspace already has the maximum of 2 active chats.',
+  },
+  {
+    maxSessions: 10,
+    worktreePath: null,
+    reason: 'New chats can start once the workspace is set up.',
+  },
+])(
+  'disables new-chat actions when unavailable: $reason',
+  async ({ maxSessions, worktreePath, reason }) => {
+    mocks.maxSessions = maxSessions;
+    mocks.worktreePath = worktreePath;
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+      expect(mocks.content).toHaveBeenLastCalledWith(
+        expect.objectContaining({ newChatUnavailableReason: reason })
+      );
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);

@@ -47,7 +47,10 @@ vi.mock('@/client/features/workspace', () => ({ getNewChatUnavailableReason: () 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CLAUDE' } }) } },
-    session: { listSessions: { useQuery: () => ({ data: sessions }) } },
+    session: {
+      getMaxSessionsPerWorkspace: { useQuery: () => ({ data: 10 }) },
+      listSessions: { useQuery: () => ({ data: sessions }) },
+    },
   },
 }));
 vi.mock('@/client/features/chat', async (importOriginal) => ({

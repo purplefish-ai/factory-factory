@@ -162,6 +162,14 @@ export const PhoneCompact: Story = {
 export const PhoneRecipientSelection: Story = {
   args: { headerWidth: '22rem' },
   globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(chip(canvasElement));
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await body.findByRole('menuitem', { name: /Turn on PR updates/ }));
+    await expect(
+      await body.findByRole('dialog', { name: 'Choose the main conversation' })
+    ).toBeVisible();
+  },
 };
 
 export const DedicatedDestination: Story = {

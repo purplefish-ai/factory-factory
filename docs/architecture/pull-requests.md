@@ -79,11 +79,13 @@ The workspace header's PR chip is one dropdown button on desktop and mobile. It
 shows the selected PR's number ("#123"), a count of any other attached PRs, and
 the one state that most needs attention: merged, closed, conflicts and failing
 CI first, then requested changes, running CI, approval or draft, then passing CI
-(`getPrChipStatus` in `src/client/features/workspace/workspace-pr-status.ts`).
-Labels and tones match the sidebar and board chips; below the header's 48rem
-breakpoint the label collapses to a status dot, and the accessible name keeps
-the full text. The wrench inside the chip retains its enabled and activity
-states. Without a PR the chip reads "No PR".
+An unsynced PR reads "Syncing"; unknown CI falls back to the review state,
+including "Open" (`getPrChipStatus` in
+`src/client/features/workspace/workspace-pr-status.ts`). Labels and tones match
+the sidebar and board chips; below the header's 48rem breakpoint the label
+collapses to a status dot, and the accessible name keeps the full text. The
+wrench inside the chip retains its enabled and activity states. Without a PR the
+chip reads "No PR".
 
 Opening the chip shows attached PRs, review and attachment actions, and PR
 update settings, including the updates toggle; opening it does not toggle
