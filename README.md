@@ -81,9 +81,10 @@ Factory keeps working and retains any previously discovered update.
   then reopen Factory Factory.
 - **CLI:** Stop the running server, then launch the latest release with
   `pnpm dlx factory-factory@latest serve`. If you installed globally, update
-  with `pnpm add -g factory-factory@latest`, then restart `ff serve`.
+  `factory-factory@latest` using the same package manager you used to install
+  it, then restart `ff serve`.
 - **Source checkout:** Pull the latest release, run `pnpm install` and
-  `pnpm build`, then restart the server.
+  `pnpm exec tsx src/cli/index.ts build`, then restart the server.
 
 Updating requires a restart. The banner does not install software or interrupt
 active sessions automatically. Your database remains in the configured data

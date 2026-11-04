@@ -27,32 +27,33 @@ export class FactoryReleaseChecker {
   private expiresAt = 0;
   private pending: Promise<string | null> | null = null;
 
-  getLatestVersion(): Promise<string | null> {
+  getLatestVersion(onError?: (error: unknown) => void): Promise<string | null> {
     if (this.pending !== null) {
       return this.pending;
     }
     if (Date.now() < this.expiresAt) {
       return Promise.resolve(this.latest);
     }
-    this.pending = this.fetchLatest().finally(() => {
+    this.pending = this.fetchLatest(onError).finally(() => {
       this.pending = null;
     });
     return this.pending;
   }
 
-  private async fetchLatest(): Promise<string | null> {
+  private async fetchLatest(onError?: (error: unknown) => void): Promise<string | null> {
     try {
       const response = await fetch('https://registry.npmjs.org/factory-factory/latest', {
         signal: AbortSignal.timeout(3000),
         headers: { Accept: 'application/json' },
       });
       if (!response.ok) {
-        throw new Error('Registry unavailable');
+        throw new Error(`Registry unavailable (HTTP ${response.status})`);
       }
       const release = releaseSchema.parse(await response.json());
       this.latest = release.version;
       this.expiresAt = Date.now() + 60 * 60 * 1000;
-    } catch {
+    } catch (error) {
+      onError?.(error);
       // An optional update check must never block use of Factory or discard known data.
       this.expiresAt = Date.now() + 5 * 60 * 1000;
     }

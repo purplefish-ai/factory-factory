@@ -21,7 +21,11 @@ const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerN
 export const adminRouter = router({
   checkFactoryUpdate: publicProcedure.query(async ({ ctx }) => {
     const currentVersion = ctx.appContext.services.configService.getAppVersion();
-    const latestVersion = await factoryReleaseChecker.getLatestVersion();
+    const latestVersion = await factoryReleaseChecker.getLatestVersion((error) => {
+      getLogger(ctx).debug('Factory release check failed; backing off', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     return {
       currentVersion,
       latestVersion,

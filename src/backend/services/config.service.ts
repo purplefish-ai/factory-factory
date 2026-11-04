@@ -345,7 +345,7 @@ function loadSystemConfig(): SystemConfig {
     },
 
     // App version
-    appVersion: readAppVersion() ?? env.npm_package_version ?? '0.0.0',
+    appVersion: readAppVersion() ?? 'unknown',
   };
 
   return config;

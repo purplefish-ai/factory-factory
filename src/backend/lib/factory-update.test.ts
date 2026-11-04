@@ -23,7 +23,8 @@ it.each([
 });
 
 it('coalesces requests and caches registry responses for an hour', async () => {
-  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: '0.6.0' })));
+  let version = '0.6.0';
+  const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version }))));
   vi.stubGlobal('fetch', fetcher);
   const checker = new FactoryReleaseChecker();
   expect(await Promise.all([checker.getLatestVersion(), checker.getLatestVersion()])).toEqual([
@@ -36,8 +37,10 @@ it('coalesces requests and caches registry responses for an hour', async () => {
     'https://registry.npmjs.org/factory-factory/latest',
     expect.objectContaining({ signal: expect.any(AbortSignal) })
   );
+  version = '0.7.0';
   vi.advanceTimersByTime(60 * 60 * 1000);
-  await checker.getLatestVersion();
+  expect(await checker.getLatestVersion()).toBe('0.7.0');
+  expect(await checker.getLatestVersion()).toBe('0.7.0');
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
@@ -93,4 +96,12 @@ it('bounds a hung registry request with a three-second timeout', async () => {
   } finally {
     timeout.mockRestore();
   }
+});
+
+it('reports a registry failure to the caller for diagnostics', async () => {
+  const error = new Error('registry offline');
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(error));
+  const onError = vi.fn();
+  expect(await new FactoryReleaseChecker().getLatestVersion(onError)).toBeNull();
+  expect(onError).toHaveBeenCalledWith(error);
 });
