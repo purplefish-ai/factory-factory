@@ -107,10 +107,9 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
             onClick={onConfirm}
             disabled={isLoading || hasError || !hasFiles}
-            className="bg-warning text-warning-foreground hover:bg-warning/90"
+            className="bg-warning text-warning-foreground hover:bg-warning/90 focus-visible:ring-warning/40"
           >
             <ArrowCounterClockwiseIcon className="mr-2 h-4 w-4" />
             Rewind Files

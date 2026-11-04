@@ -32,15 +32,15 @@ export function FactoryConfigScripts({
               <CheckCircleIcon className="h-4 w-4 text-success" />
               <span className="font-medium text-success">factory-factory.json detected</span>
             </div>
-            <p className="text-sm text-foreground">
+            <p className="text-sm text-success">
               This project has a factory-factory.json configuration file. New workspaces will
               automatically:
             </p>
-            <ul className="text-sm text-foreground space-y-1 ml-4">
+            <ul className="text-sm text-success space-y-1 ml-4">
               {factoryConfig.scripts.setup && (
                 <li className="list-disc">
                   Run setup script:{' '}
-                  <code className="bg-success/15 px-1 rounded text-xs">
+                  <code className="bg-background px-1 rounded text-xs">
                     {factoryConfig.scripts.setup}
                   </code>
                 </li>
@@ -48,7 +48,7 @@ export function FactoryConfigScripts({
               {factoryConfig.scripts.run && (
                 <li className="list-disc">
                   Have a dev server available via the play button:{' '}
-                  <code className="bg-success/15 px-1 rounded text-xs">
+                  <code className="bg-background px-1 rounded text-xs">
                     {factoryConfig.scripts.run}
                   </code>
                 </li>
@@ -56,7 +56,7 @@ export function FactoryConfigScripts({
               {factoryConfig.scripts.postRun && (
                 <li className="list-disc">
                   Run after dev server starts:{' '}
-                  <code className="bg-success/15 px-1 rounded text-xs">
+                  <code className="bg-background px-1 rounded text-xs">
                     {factoryConfig.scripts.postRun}
                   </code>
                 </li>
@@ -64,7 +64,7 @@ export function FactoryConfigScripts({
               {factoryConfig.scripts.cleanup && (
                 <li className="list-disc">
                   Run cleanup on stop:{' '}
-                  <code className="bg-success/15 px-1 rounded text-xs">
+                  <code className="bg-background px-1 rounded text-xs">
                     {factoryConfig.scripts.cleanup}
                   </code>
                 </li>

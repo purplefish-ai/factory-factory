@@ -444,8 +444,8 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       <div className={cn('h-full flex flex-col', className)}>
         {/* Input sent while disconnected is dropped, so make the gap visible */}
         {!connected && (
-          <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-amber-950/70 border-b border-amber-900">
-            <p className="text-xs text-amber-200">
+          <div className="dark flex items-center justify-between gap-2 px-3 py-1.5 bg-warning/10 border-b border-warning/30">
+            <p className="text-xs text-warning">
               {gaveUp
                 ? 'Terminal disconnected. Input will not be delivered until you reconnect.'
                 : 'Terminal disconnected — reconnecting... Input typed now will not be delivered.'}
@@ -454,7 +454,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
               <button
                 type="button"
                 onClick={reconnect}
-                className="shrink-0 px-2 py-0.5 text-xs rounded border border-amber-700 text-amber-200 hover:bg-amber-900"
+                className="shrink-0 px-2 py-0.5 text-xs rounded border border-warning/40 text-warning hover:bg-warning/10"
               >
                 Reconnect
               </button>

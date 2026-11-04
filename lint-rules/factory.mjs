@@ -33,7 +33,7 @@ function containsUnknownType(node, visitorKeys) {
 // shade (e.g. `bg-red-500`, `dark:text-emerald-300`, `hover:border-sky-500/40`).
 // Theme tokens (`text-success`, `bg-running/10`) and `white`/`black` pass.
 const RAW_PALETTE_CLASS =
-  /(?<![\w-])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|outline|fill|stroke|from|via|to|decoration|divide|shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
+  /(?<![\w-])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
 
 function reportRawPaletteClass(context, node, text) {
   const match = typeof text === 'string' ? RAW_PALETTE_CLASS.exec(text) : null;

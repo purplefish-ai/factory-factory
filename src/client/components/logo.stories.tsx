@@ -52,7 +52,7 @@ export const OnDarkBackground: Story = {
   },
   decorators: [
     (Story: () => React.ReactNode) => (
-      <div className="dark bg-background p-8 rounded-lg">
+      <div className="bg-background p-8 rounded-lg">
         <div className="text-white">
           <Story />
         </div>
