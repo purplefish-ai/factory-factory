@@ -16,9 +16,10 @@ function createCheck(
   };
 }
 
-// Same utilities and palettes as factory/no-raw-palette-classes (lint-rules/factory.mjs).
+// Same utilities and palettes as factory/no-raw-palette-classes (lint-rules/factory.mjs),
+// plus white and black, which status UI should not use either.
 const RAW_PALETTE_CLASS =
-  /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
+  /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)|white|black)(?![\w-])/;
 
 describe('CIChecksSection', () => {
   // Render each check on its own so a tone or label cannot be credited to the
