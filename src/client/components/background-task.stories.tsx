@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { Toaster } from 'sonner';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 
@@ -12,7 +11,6 @@ function BackgroundRefreshExample() {
     <div className="flex gap-2 p-4">
       <Button onClick={() => refresh('Network unavailable')}>Refresh</Button>
       <Button onClick={() => refresh('Still offline')}>Retry refresh</Button>
-      <Toaster />
     </div>
   );
 }
@@ -28,9 +26,13 @@ export const RepeatedRefreshFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: /^Refresh$/ }));
-    await expect(await canvas.findByText('Network unavailable')).toBeVisible();
+    // Toasts fade in, so wait for them to become visible. The app Toaster comes
+    // from .storybook/preview.ts.
+    const first = await canvas.findByText('Network unavailable');
+    await waitFor(() => expect(first).toBeVisible());
     await userEvent.click(canvas.getByRole('button', { name: 'Retry refresh' }));
-    await expect(await canvas.findByText('Still offline')).toBeVisible();
+    const second = await canvas.findByText('Still offline');
+    await waitFor(() => expect(second).toBeVisible());
     await expect(canvas.getAllByText('Could not refresh data')).toHaveLength(1);
   },
 };

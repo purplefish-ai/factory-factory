@@ -149,6 +149,10 @@
       "disposition": "review-required",
       "reason": "Only its regression tests import applyRatchetToggleState; review current workspace cache update path."
     },
+    "src/client/lib/storybook-trpc.tsx": {
+      "disposition": "test-support",
+      "reason": "Storybook's preview decorator and stories mock tRPC through this provider; production uses providers.tsx."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
 import type { MessageAttachment } from '@/lib/chat-protocol';
-import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input/chat-input';
 
 // Action handler for Storybook
@@ -31,6 +31,24 @@ const sampleTextAttachment: MessageAttachment = {
   contentType: 'text',
 };
 
+// Resolved Claude capabilities, as the session runtime reports them once the
+// agent is ready. Without them the composer shows its loading state.
+const CLAUDE_CAPABILITIES: ChatBarCapabilities = {
+  ...EMPTY_CHAT_BAR_CAPABILITIES,
+  provider: 'CLAUDE',
+  model: {
+    enabled: true,
+    selected: 'sonnet',
+    options: [
+      { value: 'sonnet', label: 'Sonnet 5' },
+      { value: 'opus', label: 'Opus 4.8' },
+    ],
+  },
+  planMode: { enabled: true },
+  attachments: { enabled: true, kinds: ['image', 'text'] },
+  slashCommands: { enabled: true },
+};
+
 // No-op function for composite stories
 function noop(_text: string): void {
   // Intentionally empty - used for visual-only stories
@@ -43,6 +61,9 @@ const meta: Meta<typeof ChatInput> = {
     layout: 'padded',
   },
   tags: ['autodocs'],
+  args: {
+    capabilities: CLAUDE_CAPABILITIES,
+  },
   argTypes: {
     disabled: {
       control: 'boolean',
@@ -100,16 +121,20 @@ export const Disabled: Story = {
   },
 };
 
+/** Before the agent reports its capabilities, model controls show a loading state. */
+export const LoadingCapabilities: Story = {
+  args: {
+    onSend: onSendAction,
+    capabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+  },
+};
+
 export const Running: Story = {
   args: {
     onSend: onSendAction,
     running: true,
     promptInFlight: true,
     placeholder: 'Message will be queued...',
-    capabilities: {
-      ...EMPTY_CHAT_BAR_CAPABILITIES,
-      attachments: { enabled: true, kinds: ['image', 'text'] },
-    },
   },
 };
 
@@ -141,20 +166,31 @@ export const AllStates: Story = {
       <div className="flex flex-col gap-6 w-full max-w-2xl">
         <div>
           <h3 className="text-sm font-medium mb-2">Default</h3>
-          <ChatInput onSend={noop} inputRef={defaultRef} />
+          <ChatInput onSend={noop} capabilities={CLAUDE_CAPABILITIES} inputRef={defaultRef} />
         </div>
         <div>
           <h3 className="text-sm font-medium mb-2">Disabled (Connecting)</h3>
-          <ChatInput onSend={noop} disabled inputRef={disabledRef} />
+          <ChatInput
+            onSend={noop}
+            capabilities={CLAUDE_CAPABILITIES}
+            disabled
+            inputRef={disabledRef}
+          />
         </div>
         <div>
           <h3 className="text-sm font-medium mb-2">Running (Loading)</h3>
-          <ChatInput onSend={noop} running inputRef={runningRef} />
+          <ChatInput
+            onSend={noop}
+            capabilities={CLAUDE_CAPABILITIES}
+            running
+            inputRef={runningRef}
+          />
         </div>
         <div>
           <h3 className="text-sm font-medium mb-2">Custom Placeholder</h3>
           <ChatInput
             onSend={noop}
+            capabilities={CLAUDE_CAPABILITIES}
             placeholder="Ask me anything about your code..."
             inputRef={useRef<HTMLTextAreaElement>(null)}
           />
@@ -217,10 +253,7 @@ export const InteractivePasteDrop: Story = {
           inputRef={inputRef}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
-          capabilities={{
-            ...EMPTY_CHAT_BAR_CAPABILITIES,
-            attachments: { enabled: true, kinds: ['image', 'text'] },
-          }}
+          capabilities={CLAUDE_CAPABILITIES}
           placeholder="Try pasting or dropping files here..."
         />
         {attachments.length > 0 && (
@@ -243,10 +276,6 @@ export const RuntimeError: Story = {
 export const AcpWithImageUpload: Story = {
   args: {
     onSend: onSendAction,
-    capabilities: {
-      ...EMPTY_CHAT_BAR_CAPABILITIES,
-      attachments: { enabled: true, kinds: ['image', 'text'] },
-    },
     acpConfigOptions: [
       {
         id: 'mode',

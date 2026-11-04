@@ -78,7 +78,10 @@ export const PartialAcpDark: Story = { ...PartialAcp, globals: { theme: 'dark' }
 export const Loading: Story = {
   args: { capabilities: EMPTY_CHAT_BAR_CAPABILITIES, capabilitiesLoaded: false },
 };
-export const Narrow: Story = { ...PartialAcp, parameters: { viewport: { value: 'mobile1' } } };
+export const Narrow: Story = {
+  ...PartialAcp,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+};
 
 export const PendingNativeAcknowledgement: Story = {
   args: {
@@ -129,7 +132,10 @@ export const BeforeRuntimeConfiguration: Story = {
 };
 
 export const Running: Story = { ...PartialAcp, args: { ...PartialAcp.args, running: true } };
-export const RunningMobile: Story = { ...Running, parameters: { viewport: { value: 'mobile1' } } };
+export const RunningMobile: Story = {
+  ...Running,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
+};
 
 export const CodexToolbar: Story = {
   args: {
