@@ -50,11 +50,11 @@ function getStatusIcon(kind: FileChangeKind) {
 function getStatusColorClass(kind: FileChangeKind): string {
   switch (kind) {
     case 'modified':
-      return 'text-yellow-500';
+      return 'text-warning';
     case 'added':
-      return 'text-green-500';
+      return 'text-success';
     case 'deleted':
-      return 'text-red-500';
+      return 'text-destructive';
     case 'untracked':
       return 'text-muted-foreground';
   }
@@ -115,7 +115,7 @@ export const FileChangeItem = memo(function FileChangeItem({
       }
     >
       {showIndicatorDot && (
-        <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" title={indicatorLabel} />
+        <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" title={indicatorLabel} />
       )}
       {statusCode && (
         <span className={cn('text-xs font-mono uppercase', statusColor)}>{statusCode}</span>

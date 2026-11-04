@@ -173,6 +173,8 @@ export const AgentStates: Story = {
   ),
 };
 
+export const AgentStatesDark: typeof AgentStates = { ...AgentStates, globals: { theme: 'dark' } };
+
 const closeSession = fn();
 
 const workingSummary: WorkspaceSessionRuntimeSummary = {

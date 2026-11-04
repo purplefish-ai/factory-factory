@@ -76,3 +76,8 @@ export const ActiveProjectPicker: Story = {
     await expect(body.queryByRole('option', { name: 'Archived project' })).toBeNull();
   },
 };
+
+export const ActiveProjectPickerDark: typeof ActiveProjectPicker = {
+  ...ActiveProjectPicker,
+  globals: { theme: 'dark' },
+};

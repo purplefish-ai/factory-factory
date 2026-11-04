@@ -6,7 +6,7 @@
  * panels, and follows the selected color scheme. See docs/status-colors.md.
  *
  * Tones extend `WorkspaceStatusReasonTone` (`@/shared/workspace-status-reason`) with
- * presentation-only tones for messages (`warning`, `info`) and PRs (`merged`).
+ * presentation-only tones for messages (`warning`, `info`).
  */
 
 import { BellRingingIcon } from '@phosphor-icons/react/dist/csr/BellRinging';

@@ -166,3 +166,13 @@ export const NoContextWindow: Story = {
     }),
   },
 };
+
+export const WarningUsageDark: typeof WarningUsage = {
+  ...WarningUsage,
+  globals: { theme: 'dark' },
+};
+
+export const CriticalUsageDark: typeof CriticalUsage = {
+  ...CriticalUsage,
+  globals: { theme: 'dark' },
+};

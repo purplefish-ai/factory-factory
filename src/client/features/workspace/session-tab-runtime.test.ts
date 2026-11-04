@@ -30,7 +30,7 @@ describe('session-tab-runtime', () => {
     const result = deriveSessionTabRuntime(undefined, 'RUNNING');
 
     expect(result.label).toBe('Running');
-    expect(result.color).toBe('text-brand');
+    expect(result.color).toBe('text-running');
     expect(result.pulse).toBe(true);
     expect(result.isRunning).toBe(true);
   });

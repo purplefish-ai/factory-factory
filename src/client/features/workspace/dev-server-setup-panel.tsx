@@ -71,7 +71,7 @@ export function DevServerSetupPanel({
       <SheetContent className="w-full sm:max-w-2xl flex flex-col overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <PlayIcon className="h-5 w-5 text-green-600" />
+            <PlayIcon className="h-5 w-5 text-success" />
             {isEditing ? 'Edit Dev Server' : 'Setup Dev Server'}
           </SheetTitle>
           <SheetDescription>

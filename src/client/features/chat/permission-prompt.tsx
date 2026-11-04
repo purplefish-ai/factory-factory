@@ -285,7 +285,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <FileTextIcon className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
+            <FileTextIcon className="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
             <span className="text-sm font-medium">Review Plan</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">

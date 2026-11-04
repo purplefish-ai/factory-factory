@@ -358,9 +358,9 @@ function StatusDot({ status }: StatusDotProps) {
     <span
       className={cn(
         'w-1.5 h-1.5 rounded-full',
-        status === 'success' && 'bg-green-500',
-        status === 'pending' && 'bg-yellow-500 animate-pulse',
-        status === 'error' && 'bg-red-500'
+        status === 'success' && 'bg-success',
+        status === 'pending' && 'bg-running animate-pulse motion-reduce:animate-none',
+        status === 'error' && 'bg-destructive'
       )}
     />
   );

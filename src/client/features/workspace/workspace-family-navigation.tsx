@@ -40,7 +40,7 @@ export function WorkspaceParentLink({
       aria-label={`Parent workspace: ${parent.name}`}
       title={`${parent.projectName} / ${parent.name}`}
       className={cn(
-        'pointer-events-auto relative z-10 inline-flex min-w-0 items-center gap-1 text-violet-600 hover:underline focus-visible:underline dark:text-violet-400',
+        'pointer-events-auto relative z-10 inline-flex min-w-0 items-center gap-1 text-info hover:underline focus-visible:underline',
         breadcrumb ? 'max-w-[25%] text-[11px] md:text-xs' : 'max-w-full text-[11px]'
       )}
     >
@@ -85,7 +85,7 @@ function FamilyMember({
         className="flex min-w-0 gap-2"
       >
         <TreeStructureIcon
-          className={cn('h-3.5 w-3.5 shrink-0 text-violet-500', !parent && 'ml-3')}
+          className={cn('h-3.5 w-3.5 shrink-0 text-info', !parent && 'ml-3')}
           aria-hidden
         />
         <span className="min-w-0 flex-1">
@@ -234,7 +234,7 @@ export function WorkspaceFamilyMenu({
           aria-label="Navigate workspace family"
           title="Navigate parent and child workspaces"
           className={cn(
-            'pointer-events-auto relative z-10 h-6 shrink-0 gap-1 px-1.5 text-xs text-violet-600 dark:text-violet-400',
+            'pointer-events-auto relative z-10 h-6 shrink-0 gap-1 px-1.5 text-xs text-info',
             compact && 'h-5 text-[11px]'
           )}
         >

@@ -29,7 +29,7 @@ export interface SessionTabRuntimeInfo {
 }
 
 const IDLE_STATUS: SessionTabRuntimeInfo = {
-  color: 'text-emerald-500',
+  color: 'text-muted-foreground',
   pulse: false,
   spin: false,
   label: 'Idle',
@@ -41,7 +41,7 @@ const IDLE_STATUS: SessionTabRuntimeInfo = {
 function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRuntimeInfo {
   if (persistedStatus === 'RUNNING') {
     return {
-      color: 'text-brand',
+      color: 'text-running',
       pulse: true,
       spin: false,
       label: 'Running',
@@ -65,7 +65,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
 
   if (persistedStatus === 'COMPLETED') {
     return {
-      color: 'text-blue-500',
+      color: 'text-success',
       pulse: false,
       spin: false,
       label: 'Completed',
@@ -123,7 +123,7 @@ export function deriveSessionTabRuntime(
 
     case 'stopping':
       return {
-        color: 'text-brand',
+        color: 'text-running',
         pulse: false,
         spin: true,
         label: 'Stopping',
@@ -186,7 +186,7 @@ export function deriveSessionTabRuntime(
 
     case 'working':
       return {
-        color: 'text-brand',
+        color: 'text-running',
         pulse: true,
         spin: false,
         label: 'Running',
