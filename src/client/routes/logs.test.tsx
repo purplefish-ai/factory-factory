@@ -9,7 +9,18 @@ const mocks = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: { admin: { getLogs: { useQuery: (input: unknown) => mocks.query(input) } } },
 }));
-vi.mock('@/client/components/app-header-context', () => ({ useAppHeader: vi.fn() }));
+vi.mock('@/client/components/app-header-context', () => ({
+  useAppHeader: vi.fn(),
+  HeaderLeftStartSlot: () => null,
+}));
+vi.mock('@/client/hooks/use-project-header-navigation', () => ({
+  useProjectHeaderNavigation: () => ({
+    selectedProjectSlug: '',
+    projects: [],
+    handleProjectChange: vi.fn(),
+    handleCurrentProjectSelect: vi.fn(),
+  }),
+}));
 vi.mock('@/client/hooks/use-download-server-log', () => ({
   useDownloadServerLog: () => ({ download: vi.fn(), isDownloading: false }),
 }));

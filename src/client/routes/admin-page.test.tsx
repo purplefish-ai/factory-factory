@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
+
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }));
 
 vi.mock('@/client/features/slack', () => ({
@@ -33,9 +35,21 @@ vi.mock('@/client/features/codex-accounts', () => ({
 }));
 
 vi.mock('@/client/components/app-header-context', () => ({
+  HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => <header>{children}</header>,
   HeaderLeftExtraSlot: ({ children }: { children: ReactNode }) =>
     createElement('div', null, children),
   useAppHeader: vi.fn(),
+}));
+
+vi.mock('@/client/hooks/use-project-header-navigation', () => ({
+  useProjectHeaderNavigation: () => ({
+    projectsError: mocks.projectsError,
+    refetchProjects: mocks.refetchProjects,
+    selectedProjectSlug: 'alpha',
+    projects: [{ id: 'project-1', slug: 'alpha', name: 'Alpha' }],
+    handleProjectChange: vi.fn(),
+    handleCurrentProjectSelect: vi.fn(),
+  }),
 }));
 
 vi.mock('@/client/components/loading', () => ({
@@ -287,14 +301,32 @@ describe('settings URL sections', () => {
     root.unmount();
   });
 
-  it('shows project-list errors with retry instead of a false empty state', () => {
+  it('shows project-list errors with header and page retry instead of a false empty state', async () => {
     mocks.projectsError = new Error('Projects unavailable');
     const { container, root } = renderAdmin('/admin/project');
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Couldn't load projects"
     );
-    clickButton(container, 'Retry');
+    expect(container.querySelector('header [role="alert"]')?.textContent).toContain(
+      'Projects unavailable'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    await act(() =>
+      container
+        .querySelector('[aria-label="Open project menu"]')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    );
+    const retryItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === 'Retry projects'
+    );
+    expect(retryItem).toBeDefined();
+    await act(() => retryItem?.click());
     expect(mocks.refetchProjects).toHaveBeenCalledOnce();
+    clickButton(container, 'Retry');
+    expect(mocks.refetchProjects).toHaveBeenCalledTimes(2);
     root.unmount();
   });
 

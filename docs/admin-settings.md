@@ -21,6 +21,10 @@ bookmark it and use the browser's Back button:
   **Project settings** selected. Use the **Projects** breadcrumb to return to
   the project list.
 
+Settings keeps the project picker in the top navigation, followed by
+**Settings**. Use it to return to a project board, switch projects, or create a
+project. Settings still apply globally.
+
 Toggles and preset selects save immediately. Text and secrets use explicit Save
 or Connect actions; custom IDE commands and custom font families also submit
 with Enter. Failed saves preserve text for retry. Sliders save when you finish
