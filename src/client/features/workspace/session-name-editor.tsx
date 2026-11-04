@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 
-/** Replaces a chat tab while its name is being edited. */
+/** Edits a chat name beside the tabs, preserving their selection semantics. */
 export function SessionNameEditor({
   sessionId,
   workspaceId,
@@ -15,9 +16,14 @@ export function SessionNameEditor({
   onDone: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const mounted = useRef(false);
   useLayoutEffect(() => {
+    mounted.current = true;
     inputRef.current?.focus();
     inputRef.current?.select();
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   const [value, setValue] = useState(name);
   const [error, setError] = useState(false);
@@ -25,7 +31,12 @@ export function SessionNameEditor({
   const inFlight = useRef(false);
   const cancelled = useRef(false);
   const utils = trpc.useUtils();
-  const update = trpc.session.updateSession.useMutation();
+  const update = trpc.session.updateSession.useMutation({ meta: { errorToast: false } });
+  const runIfMounted = (action: () => void) => {
+    if (mounted.current) {
+      action();
+    }
+  };
   const save = async () => {
     if (inFlight.current || cancelled.current) {
       return;
@@ -41,50 +52,57 @@ export function SessionNameEditor({
     try {
       await update.mutateAsync({ id: sessionId, name: trimmed });
       await utils.session.listSessions.invalidate({ workspaceId });
-      onDone();
+      runIfMounted(onDone);
     } catch {
-      setError(true);
+      runIfMounted(() => setError(true));
     } finally {
       inFlight.current = false;
-      setSaving(false);
+      runIfMounted(() => setSaving(false));
     }
   };
   return (
-    <div className="relative shrink-0 p-1">
-      <Input
-        aria-label="Chat name"
-        value={value}
-        readOnly={saving}
-        aria-busy={saving}
-        aria-invalid={error}
-        ref={inputRef}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => {
-          if (!error) {
-            void save();
-          }
-        }}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            void save();
-          } else if (event.key === 'Escape' && !saving) {
-            event.preventDefault();
-            cancelled.current = true;
-            onDone();
-          }
-        }}
-        className="h-7 w-40 text-sm"
-      />
-      {error && (
-        <p
-          role="alert"
-          className="absolute left-0 top-full z-30 rounded border bg-background p-2 text-xs text-destructive shadow"
-        >
-          Couldn't rename chat. Press Enter to retry or Escape to cancel.
-        </p>
-      )}
-    </div>
+    <Popover open={error}>
+      <PopoverAnchor asChild>
+        <div className="relative shrink-0 p-1">
+          <Input
+            aria-label="Chat name"
+            value={value}
+            readOnly={saving}
+            aria-busy={saving}
+            aria-invalid={error}
+            ref={inputRef}
+            onChange={(event) => setValue(event.target.value)}
+            onBlur={() => {
+              if (!error) {
+                void save();
+              }
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void save();
+              } else if (event.key === 'Escape' && !event.nativeEvent.isComposing && !saving) {
+                event.preventDefault();
+                cancelled.current = true;
+                onDone();
+              }
+            }}
+            className="h-7 w-40 text-sm"
+          />
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        role="alert"
+        aria-label="Chat rename error"
+        side="bottom"
+        align="end"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        className="p-2 text-xs text-destructive"
+      >
+        Couldn't rename chat. Press Enter to retry or Escape to cancel.
+      </PopoverContent>
+    </Popover>
   );
 }

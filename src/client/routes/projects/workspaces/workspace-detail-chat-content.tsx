@@ -342,14 +342,16 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <VoiceModeToggle
-            sessionId={props.sessionId}
-            onFinalTranscript={sendMessage}
-            running={running}
-            disabled={!props.connected || loadingSession}
-          />
+        <div className="flex min-h-0 shrink items-stretch gap-2">
           <ChatInput
+            leadingControls={
+              <VoiceModeToggle
+                sessionId={props.sessionId}
+                onFinalTranscript={sendMessage}
+                running={running}
+                disabled={!props.connected || loadingSession}
+              />
+            }
             className="mx-auto w-full max-w-4xl flex-1 min-w-0"
             onSend={sendMessage}
             onCompact={handleCompact}

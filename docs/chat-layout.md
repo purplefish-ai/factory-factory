@@ -42,9 +42,10 @@ also offers it inline. Every icon-only control has an accessible name and a
 tooltip.
 
 The chat tab bar holds the chat tabs, closed chats, **New session** and a **Chat
-actions** (⋮) menu with **Restart agent** for the selected chat. Quick actions
-live only in the composer's ⚡ menu, which can run an action in this chat or a
-new one; see [quick actions](architecture/agent-runtime.md#quick-actions).
+actions** (⋮) menu with **Rename chat** and **Restart agent** for the selected
+chat. Quick actions live only in the composer's ⚡ menu, which can run an action
+in this chat or a new one; see
+[quick actions](architecture/agent-runtime.md#quick-actions).
 
 Check these in Storybook under **Navigation / AppHeader** (desktop, tablet,
 phone, dark, and the More actions stories), **Workspace / WorkspacePrChip**,
@@ -52,8 +53,8 @@ phone, dark, and the More actions stories), **Workspace / WorkspacePrChip**,
 
 ## Chat names, setup and composer
 
-Choose **Chat actions → Rename chat** to edit the selected chat's name in its
-tab. Enter or leaving the input saves a trimmed name; Escape cancels. Empty
+Choose **Chat actions → Rename chat** to edit the selected chat's name beside
+the tabs. Enter or leaving the input saves a trimmed name; Escape cancels. Empty
 names retain the existing name. A failed save keeps the draft and exposes Retry
 through Enter.
 

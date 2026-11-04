@@ -46,7 +46,7 @@ export const AttachmentSection = memo(function AttachmentSection({
   }
 
   return (
-    <div className="px-3 pt-2 pb-1">
+    <div className="shrink-0 px-3 pt-2 pb-1">
       <AttachmentPreview attachments={attachments} onRemove={onRemove} />
     </div>
   );

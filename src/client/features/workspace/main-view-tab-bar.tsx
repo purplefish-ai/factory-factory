@@ -349,19 +349,6 @@ export function MainViewTabBar({
         {sessions?.map((session, index) => {
           const isSelected = session.id === currentSessionId;
           const baseLabel = getSessionDisplayName(session, `Chat ${index + 1}`);
-          if (renamingSessionId === session.id) {
-            return (
-              <SessionNameEditor
-                key={session.id}
-                sessionId={session.id}
-                workspaceId={workspaceId}
-                name={baseLabel}
-                onDone={() =>
-                  setRenamingSessionId((current) => (current === session.id ? null : current))
-                }
-              />
-            );
-          }
           return (
             <SessionTabItem
               key={session.id}
@@ -418,6 +405,20 @@ export function MainViewTabBar({
           )
         )}
       </div>
+
+      {sessions
+        ?.filter((session) => session.id === renamingSessionId)
+        .map((session) => (
+          <SessionNameEditor
+            key={session.id}
+            sessionId={session.id}
+            workspaceId={workspaceId}
+            name={getSessionDisplayName(session, `Chat ${sessions.indexOf(session) + 1}`)}
+            onDone={() =>
+              setRenamingSessionId((current) => (current === session.id ? null : current))
+            }
+          />
+        ))}
 
       {/* New session button: inherits the workspace's provider and model */}
       {onCreateSession && (

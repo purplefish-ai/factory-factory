@@ -42,7 +42,7 @@ test.beforeAll(async ({ browser, baseURL }, testInfo) => {
     { waitUntil: 'domcontentloaded' }
   );
   await expect(
-    page.getByTestId('mock-conversation').getByPlaceholder('Type a message...')
+    page.getByTestId('mock-conversation').getByPlaceholder('Type a message…')
   ).toBeVisible({ timeout: 110_000 });
   await page.close();
 });
@@ -94,7 +94,7 @@ for (const viewport of [
       '/iframe.html?id=workspace-chatcontent--composer-height-changes&viewMode=story'
     );
     const chat = page.getByTestId('mock-conversation');
-    const input = chat.getByPlaceholder('Type a message...');
+    const input = chat.getByPlaceholder('Type a message…');
     // A cold Storybook server compiles the chat dependency tree on first load.
     await expect(input).toBeVisible({ timeout: 40_000 });
     const messageViewport = chat.locator('.overflow-y-auto').first();

@@ -26,6 +26,7 @@ export interface ChatInputProps {
   // Sends /compact while preserving the current draft and attachments.
   onCompact?: () => void;
   onStop?: () => void;
+  leadingControls?: React.ReactNode;
   disabled?: boolean;
   running?: boolean;
   // Prompt ownership controls queue wording independently of background activity.
@@ -85,6 +86,7 @@ export const ChatInput = memo(function ChatInput({
   onSend,
   onCompact,
   onStop,
+  leadingControls,
   disabled = false,
   running = false,
   promptInFlight = running,
@@ -244,7 +246,7 @@ export const ChatInput = memo(function ChatInput({
   const isDisabled = disabled;
 
   return (
-    <div className={cn('px-4 py-3 relative', className)}>
+    <div className={cn('relative flex min-h-0 flex-col px-4 py-3', className)}>
       {/* Slash command palette */}
       <SlashCommandPalette
         commands={slashCommands}
@@ -269,7 +271,7 @@ export const ChatInput = memo(function ChatInput({
         paletteRef={fileMentions.paletteRef}
       />
 
-      <InputGroup className="flex-col">
+      <InputGroup className="min-h-0 flex-1 flex-col">
         {/* Attachment preview (above text input) */}
         <AttachmentSection attachments={attachments} onRemove={actions.handleRemoveAttachment} />
 
@@ -299,9 +301,10 @@ export const ChatInput = memo(function ChatInput({
         {/* Controls row */}
         <InputGroupAddon
           align="block-end"
-          className="flex items-center gap-1 border-t !pt-1 !pb-1"
+          className="flex shrink-0 items-center gap-1 border-t !pt-1 !pb-1"
           data-testid="chat-input-controls"
         >
+          {leadingControls}
           {/* Left side: Model selector and toggles */}
           <LeftControls
             settings={settings}

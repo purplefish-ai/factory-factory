@@ -129,7 +129,7 @@ export function TranscriptTail({
             <button
               type="button"
               onClick={props.onViewSetupOutput}
-              className="rounded-sm text-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-sm text-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               View setup output
             </button>

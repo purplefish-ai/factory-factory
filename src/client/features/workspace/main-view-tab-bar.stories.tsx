@@ -376,8 +376,9 @@ export const AwaitingInputDark: Story = {
   globals: { theme: 'dark' },
 };
 
+const renameChat = fn((input: unknown) => input);
 export const RenameChatInline: Story = {
-  parameters: { trpc: { handlers: { 'session.updateSession': () => ({}) } } },
+  parameters: { trpc: { handlers: { 'session.updateSession': renameChat } } },
   render: () => (
     <WorkspacePanelProvider workspaceId="rename-chat-story">
       <MainViewTabBar
@@ -389,6 +390,7 @@ export const RenameChatInline: Story = {
     </WorkspacePanelProvider>
   ),
   play: async ({ canvasElement }) => {
+    renameChat.mockClear();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Chat actions' }));
     await userEvent.click(
@@ -396,9 +398,49 @@ export const RenameChatInline: Story = {
     );
     const input = await canvas.findByRole('textbox', { name: 'Chat name' });
     await expect(input).toHaveFocus();
+    await expect(canvas.getByRole('tab', { name: /Chat 1/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(input.closest('[role="tablist"]')).toBeNull();
     await userEvent.clear(input);
     await userEvent.type(input, 'Review API{Enter}');
     await waitFor(() => expect(canvas.queryByRole('textbox')).not.toBeInTheDocument());
-    await expect(canvas.getByRole('tab', { name: /Chat 1/ })).toBeVisible();
+    await waitFor(() =>
+      expect(renameChat).toHaveBeenCalledWith({ id: 'session-rename', name: 'Review API' })
+    );
+  },
+};
+
+export const RenameChatSaveError: Story = {
+  ...RenameChatInline,
+  parameters: {
+    trpc: {
+      handlers: {
+        'session.updateSession': () => {
+          throw new Error('Offline');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: 'Chat actions' }));
+    await userEvent.click(await body.findByRole('menuitem', { name: 'Rename chat' }));
+    const input = await canvas.findByRole('textbox', { name: 'Chat name' });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Review API{Enter}');
+    const alert = await body.findByRole('alert', { name: 'Chat rename error' });
+    await expect(alert).toBeVisible();
+    await waitFor(async () => {
+      const bounds = alert.getBoundingClientRect();
+      const point = alert.ownerDocument.elementFromPoint(
+        bounds.x + bounds.width / 2,
+        bounds.y + bounds.height / 2
+      );
+      await expect(alert.contains(point)).toBe(true);
+    });
+    await expect(input).toHaveValue('Review API');
   },
 };
