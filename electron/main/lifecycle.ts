@@ -5,6 +5,9 @@ import type {
   OpenDialogOptions,
   OpenDialogReturnValue,
 } from 'electron';
+import { z } from 'zod';
+import type { DesktopCommand } from '../../src/types/electron.js';
+import type { DesktopShell, DesktopShellWindow } from './desktop-shell.js';
 import { classifyNavigation, getAppOrigin } from './external-links.js';
 import { LOADING_PAGE_URL } from './loading-page.js';
 
@@ -29,13 +32,17 @@ interface NavigationEventLike extends PreventableEventLike {
   isMainFrame: boolean;
 }
 
-interface BrowserWindowLike {
+interface BrowserWindowLike extends Omit<DesktopShellWindow, 'on'> {
   loadURL(url: string): Promise<void>;
-  on(event: 'focus' | 'blur' | 'closed', listener: () => void): void;
+  on(event: 'focus' | 'blur' | 'close' | 'closed', listener: () => void): void;
   webContents: {
-    send(channel: string, focused: boolean): void;
+    send(channel: string, payload: boolean | DesktopCommand): void;
     mainFrame: WebFrameLike;
     setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void;
+    on(
+      event: 'did-start-navigation',
+      listener: (event: { isMainFrame: boolean; isSameDocument: boolean }) => void
+    ): void;
     on(event: 'will-navigate', listener: (event: NavigationEventLike) => void): void;
     on(event: 'will-redirect', listener: (event: NavigationEventLike) => void): void;
   };
@@ -104,6 +111,7 @@ interface LoggerLike {
 
 export interface ElectronLifecycleDependencies {
   app: AppLike;
+  desktopShell: DesktopShell;
   browserWindow: BrowserWindowConstructorLike;
   clipboard: ClipboardLike;
   nativeImage: NativeImageFactoryLike;
@@ -118,6 +126,7 @@ export interface ElectronLifecycleDependencies {
 
 export interface ElectronLifecycleController {
   registerIpcHandlers(): void;
+  dispatchAppCommand(command: DesktopCommand): Promise<void>;
   registerAppHandlers(): void;
   start(): void;
   createWindow(): Promise<BrowserWindowLike | null>;
@@ -168,6 +177,7 @@ async function readClipboardPng(
 
 export function createElectronLifecycle({
   app,
+  desktopShell,
   browserWindow,
   clipboard,
   nativeImage,
@@ -183,6 +193,8 @@ export function createElectronLifecycle({
   // Origin of the app URL last loaded into the window; null until then, so the
   // loading page treats every web URL as external.
   let appOrigin: string | null = null;
+  let rendererReadyFrame: WebFrameLike | null = null;
+  const pendingCommands: DesktopCommand[] = [];
   let createWindowPromise: Promise<BrowserWindowLike | null> | null = null;
   let stopServerPromise: Promise<void> | null = null;
   // Set once quitting starts: the backend is being stopped for good.
@@ -275,12 +287,17 @@ export function createElectronLifecycle({
   };
 
   const loadApp = (window: BrowserWindowLike, url: string): Promise<void> => {
+    rendererReadyFrame = null;
     appOrigin = getAppOrigin(url);
     return window.loadURL(url);
   };
 
   const registerWindowHandlers = (window: BrowserWindowLike): void => {
     registerNavigationHandlers(window);
+    window.webContents.on('did-start-navigation', (event) => {
+      // A full reload replaces preload listeners; SPA route changes do not.
+      if (event.isMainFrame && !event.isSameDocument) rendererReadyFrame = null;
+    });
 
     window.on('focus', () => {
       window.webContents.send('window-focus-changed', true);
@@ -292,6 +309,8 @@ export function createElectronLifecycle({
 
     window.on('closed', () => {
       if (mainWindow === window) {
+        rendererReadyFrame = null;
+        pendingCommands.length = 0;
         mainWindow = null;
       }
     });
@@ -306,6 +325,7 @@ export function createElectronLifecycle({
     const window = new browserWindow({
       width: 1400,
       height: 900,
+      ...desktopShell.getWindowOptions(),
       title: 'Factory Factory',
       webPreferences: {
         preload: preloadPath,
@@ -315,6 +335,7 @@ export function createElectronLifecycle({
     });
     mainWindow = window;
     registerWindowHandlers(window);
+    desktopShell.registerWindow(window);
 
     // The loading page is cosmetic: a failure to show it must not block startup.
     const loadingPageLoaded = window.loadURL(LOADING_PAGE_URL).catch((error: unknown) => {
@@ -434,6 +455,27 @@ export function createElectronLifecycle({
     return createWindowPromise;
   };
 
+  const flushAppCommands = (): void => {
+    const window = resolveMainWindow();
+    if (!(window && appOrigin) || rendererReadyFrame !== window.webContents.mainFrame) {
+      return;
+    }
+    for (const command of pendingCommands.splice(0)) {
+      window.webContents.send('app:command', command);
+    }
+  };
+
+  const dispatchAppCommand = async (command: DesktopCommand): Promise<void> => {
+    // A cold window or renderer remount must subscribe before a native command
+    // can be delivered. Keep a bounded queue rather than silently dropping it.
+    if (pendingCommands.length >= 32) {
+      pendingCommands.shift();
+    }
+    pendingCommands.push(command);
+    await createWindow();
+    flushAppCommands();
+  };
+
   const handleActivate = async (): Promise<void> => {
     if (quitting || browserWindow.getAllWindows().length > 0) {
       return;
@@ -518,6 +560,33 @@ export function createElectronLifecycle({
   };
 
   const registerIpcHandlers = (): void => {
+    ipcMain.handle('app:commands-ready', (event, ready: unknown) => {
+      const window = resolveMainWindow();
+      if (
+        !(window && appOrigin) ||
+        event.senderFrame !== window.webContents.mainFrame ||
+        typeof ready !== 'boolean'
+      ) {
+        return;
+      }
+      rendererReadyFrame = ready ? event.senderFrame : null;
+      if (ready) {
+        flushAppCommands();
+      }
+    });
+    ipcMain.handle('window:background-color', (event, color: unknown) => {
+      const window = resolveMainWindow();
+      if (!(window && appOrigin) || event.senderFrame !== window.webContents.mainFrame) {
+        return;
+      }
+      const parsed = z
+        .string()
+        .regex(/^#[0-9a-f]{6}$/i)
+        .safeParse(color);
+      if (parsed.success) {
+        desktopShell.setBackgroundColor(parsed.data);
+      }
+    });
     // Only the app's trusted top-level frame may raise the desktop window.
     ipcMain.handle('window:focus', (event: IpcMainInvokeEventLike): void => {
       const currentWindow = resolveMainWindow();
@@ -595,6 +664,7 @@ export function createElectronLifecycle({
     void app
       .whenReady()
       .then(async () => {
+        desktopShell.installMenu();
         logger.log('[electron] App ready, creating window...');
         await createWindow();
       })
@@ -610,6 +680,7 @@ export function createElectronLifecycle({
 
   return {
     registerIpcHandlers,
+    dispatchAppCommand,
     registerAppHandlers,
     start,
     createWindow,

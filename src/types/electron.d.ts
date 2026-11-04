@@ -20,8 +20,18 @@ export interface OpenDialogResult {
   filePaths: string[];
 }
 
+export type DesktopCommand =
+  | 'nav.settings'
+  | 'nav.newWorkspace'
+  | 'app.search'
+  | 'app.toggleSidebar';
+
 export interface ElectronAPI {
   isElectron: true;
+  /** Subscribe to native menu commands; cleanup removes only this listener. */
+  onAppCommand?: (listener: (command: DesktopCommand) => void) => () => void;
+  /** Sync the resolved application background to the native window. */
+  setBackgroundColor?: (color: string) => Promise<void>;
   /** Restore and focus the trusted desktop window after a notification click. */
   focusWindow?: () => Promise<void>;
   showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;
