@@ -11,13 +11,14 @@ existing names, shown in parentheses where they differ.
 - **Project**: a repository Factory Factory manages. Each project has one board.
 - **Board**: the project's landing page (`/projects/:slug/workspaces`), with
   Todo, Working, Waiting and Done columns. Open it from **Board** in the sidebar
-  or the project name in the header. The sidebar lists the same workspaces, so
-  it starts collapsed on the board to leave room for the columns.
+  or the project name in the header. The sidebar lists the same workspaces and
+  preserves its open/closed preference across navigation.
 - **Workspace**: one isolated Git worktree and branch, with its chats, terminals
   and pull requests. A workspace is what moves across the board. **New
-  workspace** in the sidebar opens the new workspace; **New workspace** in the
-  board header stays on the board so several can be launched in a row. The
-  retired `/projects/:slug/workspaces/new` URL opens the board's form.
+  workspace** in the sidebar opens the new workspace; **New workspace** at the
+  top of the board's Todo column (a header shortcut on phones) stays on the
+  board so several can be launched in a row. The retired
+  `/projects/:slug/workspaces/new` URL opens the board's form.
 - **Chat** (`session`): one conversation with a coding agent inside a workspace,
   shown as a tab such as "Chat 1". A workspace can have several. Search lists
   chats as **Chat** results.
