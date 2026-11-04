@@ -48,19 +48,31 @@ export function resumeScan(scan: AgentSourceScan): AgentSourceScan {
   return scan;
 }
 
+function rewindCaptureOverlap(scan: AgentSourceScan, actual: string, offset: number) {
+  // Only page boundaries can replay a prefix after a head insertion.
+  if (offset !== 0) {
+    discontinuity();
+  }
+  const earlier = scan.resumeIds.slice(0, scan.overlapOffset ?? 0).lastIndexOf(actual);
+  scan.overlapOffset = Math.max(0, earlier);
+  // Unknown head identities require seeking the first window identity again,
+  // then re-proving every member. A known prefix can be re-consumed directly.
+  return earlier >= 0;
+}
+
 function consumeOverlap(scan: AgentSourceScan, ids: string[]): number {
   if (scan.overlapOffset === null) {
     return 0;
   }
   let offset = 0;
   for (; offset < ids.length; offset++) {
-    const actual = ids[offset];
+    const actual = ids[offset] ?? discontinuity();
     const expected = scan.resumeIds[scan.overlapOffset];
     if (scan.overlapOffset === 0 && actual !== expected) {
       continue;
     }
-    if (actual !== expected) {
-      discontinuity();
+    if (actual !== expected && !rewindCaptureOverlap(scan, actual, offset)) {
+      continue;
     }
     scan.overlapOffset++;
     if (scan.overlapOffset === scan.resumeIds.length) {
@@ -111,6 +123,7 @@ export function capturePage(
   page: AgentIssueEventPage
 ) {
   const ids = page.events.map((event) => event.providerEventId);
+  const hadOverlap = scan.overlapOffset !== null;
   const start = consumeOverlap(scan, ids);
   const result = captureEntries(scan, captured, page.events.slice(start));
   const fresh = result.fresh;
@@ -124,6 +137,11 @@ export function capturePage(
   if (fresh.length) {
     scan.resumePage = scan.nextPage;
     scan.resumeIds = fresh.map((item) => item.providerEventId);
+  } else if (hadOverlap && scan.overlapOffset === null) {
+    // The overlap was proved without extending capture. Re-arming the same
+    // window next cycle would spend the entire budget replaying it forever.
+    // Continue from nextPage; fresh capture will establish the next window.
+    scan.resumeIds = [];
   }
   if (complete) {
     scan.phase = 'VERIFY';
