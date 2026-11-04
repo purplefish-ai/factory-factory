@@ -926,11 +926,14 @@ describe('links leaving the app window', () => {
 
   it('logs a failure to open a link without logging the URL', async () => {
     const { window, shell, logger } = await createAppWindow();
-    vi.mocked(shell.openExternal).mockRejectedValueOnce(new Error('no handler'));
+    const url = 'https://example.com/?token=secret';
+    vi.mocked(shell.openExternal).mockRejectedValueOnce(new Error(`No handler for ${url}`));
 
-    window.windowOpenHandler?.({ url: 'https://example.com/?token=secret' });
+    window.windowOpenHandler?.({ url });
     await vi.waitFor(() => expect(logger.error).toHaveBeenCalled());
 
-    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('secret');
+    const logged = vi.mocked(logger.error).mock.calls.flat().map(String).join('\n');
+    expect(logged).toContain('No handler for <url>');
+    expect(logged).not.toContain('secret');
   });
 });

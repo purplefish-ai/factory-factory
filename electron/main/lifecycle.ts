@@ -227,8 +227,13 @@ export function createElectronLifecycle({
 
   const openExternally = (url: string): void => {
     shell.openExternal(url).catch((error: unknown) => {
-      // The URL is untrusted and may carry tokens, so it is not logged.
-      logger.error('[electron] Failed to open a link in the system browser:', error);
+      // The URL is untrusted and may carry tokens, so it is not logged, even
+      // when the platform error message repeats it.
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        '[electron] Failed to open a link in the system browser:',
+        message.split(url).join('<url>')
+      );
     });
   };
 
