@@ -24,10 +24,14 @@
   .app-header {
     --app-header-control-size: max(24px, 1.5rem);
     --app-header-shoulder: 16px;
-    --app-header-surface: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
+    --app-header-surface: var(--shell);
 
     position: relative;
     min-height: 0;
+    /* Native-control corners keep the page color; the central surface matches
+     * the sidebar and pane headers. The full-width separator is drawn below.
+     */
+    background: var(--background);
     border-bottom: 0;
     padding-top: env(titlebar-area-y, 0px);
     padding-left: env(titlebar-area-x, 0px);
@@ -91,7 +95,7 @@
     position: absolute;
     inset: auto 0 0;
     height: 1px;
-    background: var(--app-header-surface);
+    background: var(--border);
     pointer-events: none;
   }
 

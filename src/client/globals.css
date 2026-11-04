@@ -53,6 +53,8 @@
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
   --radius: 0.375rem;
+  /* Shared navigation surface: title bar, sidebar and pane headers. */
+  --shell: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
   /* Light mode: #FAFAFA background, #0A0A0A foreground */
   --background: oklch(0.98 0 0);
   --foreground: oklch(0.145 0 0);
@@ -106,13 +108,13 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.646 0.222 41.116);
-  --sidebar: oklch(0.98 0 0);
+  --sidebar: var(--shell);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.145 0 0);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent: color-mix(in oklab, var(--shell) 95%, var(--foreground) 5%);
   --sidebar-accent-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-border: var(--border);
   --sidebar-ring: oklch(0.55 0 0);
 }
 
@@ -144,6 +146,7 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --color-background: var(--background);
+  --color-shell: var(--shell);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -216,6 +219,7 @@
 }
 
 .dark {
+  --shell: color-mix(in oklab, var(--background) 92%, var(--foreground) 8%);
   /* Dark mode: #0A0A0A background, #FAFAFA foreground */
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.98 0 0);
@@ -234,7 +238,7 @@
   /* Factory Yellow: #FFE500 */
   --brand: oklch(0.93 0.21 102);
   --brand-foreground: oklch(0.145 0 0);
-  --border: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 22%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.7 0 0);
   /* Warning is amber, a distinct hue from the yellow brand/running color. */
@@ -265,13 +269,13 @@
   --chart-3: oklch(0.623 0.194 259.1);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.145 0 0);
+  --sidebar: var(--shell);
   --sidebar-foreground: oklch(0.98 0 0);
   --sidebar-primary: oklch(0.93 0.21 102);
   --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.22 0 0);
+  --sidebar-accent: color-mix(in oklab, var(--shell) 94%, var(--foreground) 6%);
   --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: var(--border);
   --sidebar-ring: oklch(0.7 0 0);
 }
 

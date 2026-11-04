@@ -381,7 +381,7 @@ export function MainViewTabBar({
   const currentSessionLabel = selectedChatLabel(sessions, currentSessionId);
 
   return (
-    <div ref={tabBarRef} className={cn('flex items-center bg-muted/50', className)}>
+    <div ref={tabBarRef} className={cn('flex items-center bg-shell', className)}>
       {/* Scrollable tab area. Chats and open files are separate tablists, each
           one Tab stop with arrow-key navigation; the menus between them are
           ordinary buttons, which a tablist may not contain. */}
