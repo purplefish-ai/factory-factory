@@ -1,15 +1,20 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
 // Types
 // =============================================================================
+
+type Screenshot = { name: string; path: string; size: number };
 
 interface ScreenshotsPanelProps {
   workspaceId: string;
@@ -29,13 +34,23 @@ export function ScreenshotsPanel({
   const { openTab } = useWorkspacePanel();
   const utils = trpc.useUtils();
 
+  // Deleting unlinks the file from the worktree, so it is confirmed first. The
+  // target outlives the open flag so the dialog text stays put while closing.
+  const [deleteTarget, setDeleteTarget] = useState<Screenshot | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   const deleteMutation = trpc.workspace.deleteScreenshot.useMutation({
     onSuccess: () => {
+      setDeleteDialogOpen(false);
       void utils.workspace.listScreenshots.invalidate({ workspaceId });
+    },
+    onError: (error) => {
+      // Keep the dialog open so the delete can be retried.
+      toast.error("Couldn't delete screenshot", { description: error.message });
     },
   });
 
-  const { data, isLoading } = trpc.workspace.listScreenshots.useQuery(
+  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.listScreenshots.useQuery(
     { workspaceId },
     {
       refetchInterval: isTakingScreenshots ? 3000 : 10_000,
@@ -54,6 +69,20 @@ export function ScreenshotsPanel({
       <div className="flex items-center justify-center h-full">
         <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <QueryErrorState
+        title="Couldn't load screenshots"
+        error={error}
+        onRetry={() => {
+          void refetch();
+        }}
+        isRetrying={isFetching}
+        className="h-full"
+      />
     );
   }
 
@@ -101,10 +130,31 @@ export function ScreenshotsPanel({
             workspaceId={workspaceId}
             screenshot={screenshot}
             onClick={() => openTab('screenshot', screenshot.path, screenshot.name)}
-            onDelete={() => deleteMutation.mutate({ workspaceId, path: screenshot.path })}
+            onDelete={() => {
+              setDeleteTarget(screenshot);
+              setDeleteDialogOpen(true);
+            }}
           />
         ))}
       </div>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!(open || deleteMutation.isPending)) {
+            setDeleteDialogOpen(false);
+          }
+        }}
+        title="Delete screenshot?"
+        description={`"${deleteTarget?.name ?? ''}" will be permanently deleted from this workspace. This can't be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        isPending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate({ workspaceId, path: deleteTarget.path });
+          }
+        }}
+      />
     </ScrollArea>
   );
 }
@@ -115,7 +165,7 @@ export function ScreenshotsPanel({
 
 interface ScreenshotThumbnailProps {
   workspaceId: string;
-  screenshot: { name: string; path: string; size: number };
+  screenshot: Screenshot;
   onClick: () => void;
   onDelete: () => void;
 }

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { StatCard } from './StatCard';
 
 export interface ApiUsageData {
@@ -12,19 +14,51 @@ export interface ApiUsageData {
 
 export interface ApiUsageSectionProps {
   apiUsage?: ApiUsageData;
-  onReset: () => void;
+  /**
+   * Resets the counters. Resolve on success to close the confirmation; reject
+   * on failure (after reporting it) to keep the dialog open for a retry.
+   */
+  onReset: () => Promise<unknown>;
   isResetting: boolean;
 }
 
 export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSectionProps) {
+  // The counters cannot be restored after a reset, so it is confirmed first.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle>API Usage</CardTitle>
-        <Button variant="link" onClick={onReset} disabled={isResetting} className="h-auto p-0">
+        <Button
+          variant="link"
+          onClick={() => setConfirmOpen(true)}
+          disabled={isResetting}
+          className="h-auto p-0"
+        >
           Reset Stats
         </Button>
       </CardHeader>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!(open || isResetting)) {
+            setConfirmOpen(false);
+          }
+        }}
+        title="Reset API usage stats?"
+        description="Request counts go back to zero. The previous numbers can't be recovered."
+        confirmText="Reset"
+        variant="destructive"
+        isPending={isResetting}
+        onConfirm={() => {
+          onReset().then(
+            () => setConfirmOpen(false),
+            // The caller reports the failure; keep the dialog open for a retry.
+            () => undefined
+          );
+        }}
+      />
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -73,6 +74,8 @@ export default function ProjectsListPage() {
   const {
     data: projects,
     isLoading,
+    error,
+    isFetching,
     refetch,
   } = trpc.project.list.useQuery({ isArchived: false }, { refetchInterval: 10_000 });
 
@@ -112,7 +115,16 @@ export default function ProjectsListPage() {
 
       {/* Project List */}
       <div className="bg-card rounded-lg shadow-sm overflow-hidden border">
-        {!projects || projects.length === 0 ? (
+        {error && !projects ? (
+          <QueryErrorState
+            title="Couldn't load projects"
+            error={error}
+            onRetry={() => {
+              void refetch();
+            }}
+            isRetrying={isFetching}
+          />
+        ) : !projects || projects.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <p>No projects found.</p>
             <Link

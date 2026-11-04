@@ -47,3 +47,30 @@ that manifest and rejects file/diff viewer sources anywhere in the static graph,
 including when folded into the entry or a shared chunk. Missing metadata fails
 closed. Dynamic imports are excluded. To measure another production build, pass
 its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
+
+## Query and mutation failures
+
+A failed query must not render its empty state. When a query has an error and no
+cached data, render `QueryErrorState` (`src/client/components/`) with the error
+message and a Retry that calls `refetch`. Keep showing cached data when only a
+background refetch fails.
+
+`createAppQueryClient` (`src/client/lib/query-client.ts`) installs a
+`MutationCache.onError` fallback so that no mutation fails silently. The cache
+only sees options passed to `useMutation(...)`: per-call
+`mutate(vars, { onError })` callbacks live on the observer, and a `mutateAsync`
+rejection goes to its caller. The rule is therefore:
+
+- A mutation with an options-level `onError` handles its own errors; the
+  fallback stays quiet.
+- A mutation that reports errors per call, through a `mutateAsync` try/catch, or
+  with inline error UI sets `meta: { errorToast: false }`.
+- Otherwise a failure shows an error toast. Set
+  `meta: { errorToast: "Couldn't {verb} {object}" }` for a specific title; the
+  server message becomes the description.
+
+Error toasts stay for 10 seconds and have a close button. `toast.error` gets
+these defaults from `src/components/ui/sonner.tsx`, because sonner has no
+per-type duration. Other toast types keep sonner's 4-second default. Prefer
+`toast.error(title, { description: error.message })` over raw server text as the
+title.

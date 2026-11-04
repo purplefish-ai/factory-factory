@@ -50,6 +50,8 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   // Sync PR status from GitHub on page load (if workspace has a PR)
   const syncPRStatus = trpc.workspace.syncPRStatus.useMutation({
+    // Background sync on page load; the PR badge already reflects stale state.
+    meta: { errorToast: false },
     onSuccess: () => {
       // Refresh workspace data after PR sync
       runInBackground(

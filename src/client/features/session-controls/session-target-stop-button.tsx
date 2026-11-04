@@ -21,7 +21,7 @@ export function SessionTargetStopButton({
   target: SessionStopTarget;
   itemLabel: string;
 }) {
-  const mutation = trpc.session.stopTarget.useMutation();
+  const mutation = trpc.session.stopTarget.useMutation({ meta: { errorToast: false } });
   const pending = useSyncExternalStore(
     subscribePendingStops,
     () => isSessionTargetStopPending(sessionId, target),
