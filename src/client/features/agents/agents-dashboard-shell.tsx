@@ -53,6 +53,7 @@ function CreateAgentMenu({
   disabled?: boolean;
   outline?: boolean;
 }) {
+  const pendingCreation = useRef<'scheduled' | 'event' | null>(null);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -61,9 +62,32 @@ function CreateAgentMenu({
           Create agent
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onCreate('scheduled')}>Scheduled agent</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onCreate('event')}>Event agent</DropdownMenuItem>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          const kind = pendingCreation.current;
+          pendingCreation.current = null;
+          if (kind) {
+            // Let the new form own focus after the menu's focus scope has closed.
+            event.preventDefault();
+            onCreate(kind);
+          }
+        }}
+      >
+        <DropdownMenuItem
+          onSelect={() => {
+            pendingCreation.current = 'scheduled';
+          }}
+        >
+          Scheduled agent
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => {
+            pendingCreation.current = 'event';
+          }}
+        >
+          Event agent
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -162,7 +186,9 @@ export function AgentsDashboardShell({
     if (getComputedStyle(contentRef.current).flexDirection !== 'column') {
       return;
     }
-    editorRef.current.focus({ preventScroll: true });
+    if (!editorRef.current.contains(document.activeElement)) {
+      editorRef.current.focus({ preventScroll: true });
+    }
     editorRef.current.scrollIntoView({ block: 'start', behavior: 'auto' });
   }, [revealRequest, selectedAgentId]);
   const selectAgent = (id: string) => {
@@ -184,9 +210,15 @@ export function AgentsDashboardShell({
         </div>
         <CreateAgentMenu onCreate={createAgent} disabled={createDisabled} />
       </header>
-      <div ref={contentRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto @[48rem]/agents:flex-row @[48rem]/agents:overflow-hidden">
+      <div
+        ref={contentRef}
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto @[48rem]/agents:flex-row @[48rem]/agents:overflow-hidden"
+      >
         <aside className="flex shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
-          <nav aria-label="Agents" className="min-h-0 overflow-visible p-2 @[48rem]/agents:overflow-y-auto">
+          <nav
+            aria-label="Agents"
+            className="min-h-0 overflow-visible p-2 @[48rem]/agents:overflow-y-auto"
+          >
             {error && (
               <div role="alert" className="space-y-2 p-2 text-xs">
                 <p className="break-words text-destructive">{error}</p>
@@ -204,7 +236,9 @@ export function AgentsDashboardShell({
                 icon={RobotIcon}
                 title="No agents yet"
                 description="Schedule recurring work or prepare an event agent."
-                action={<CreateAgentMenu onCreate={createAgent} disabled={createDisabled} outline />}
+                action={
+                  <CreateAgentMenu onCreate={createAgent} disabled={createDisabled} outline />
+                }
               />
             )}
             {(!!agents?.length || continuation) &&
@@ -233,7 +267,12 @@ export function AgentsDashboardShell({
               ))}
           </nav>
         </aside>
-        <main ref={editorRef} tabIndex={-1} aria-label="Agent details" className="min-h-0 min-w-0 flex-none overflow-visible @[48rem]/agents:flex-1 @[48rem]/agents:overflow-y-auto">
+        <main
+          ref={editorRef}
+          tabIndex={-1}
+          aria-label="Agent details"
+          className="min-h-0 min-w-0 flex-none overflow-visible @[48rem]/agents:flex-1 @[48rem]/agents:overflow-y-auto"
+        >
           <div className="mx-auto w-full max-w-4xl space-y-7 p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>

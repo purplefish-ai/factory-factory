@@ -48,6 +48,16 @@
     gap: 4px;
   }
 
+  .app-header-controls:has([data-workspace-header]) {
+    flex-wrap: nowrap;
+  }
+
+  .app-header-controls:has([data-workspace-header]) > [data-slot='header-context'] {
+    order: 0;
+    flex-basis: auto;
+    min-height: 0;
+  }
+
   .app-header-controls::before {
     content: '';
     position: absolute;

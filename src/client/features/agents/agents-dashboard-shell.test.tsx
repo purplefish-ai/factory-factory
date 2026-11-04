@@ -99,11 +99,13 @@ it('groups both kinds and keeps event continuation inside the event section', ()
   }
 });
 
-it('offers the same explicit creation choices from header and empty state', () => {
+it('offers the same explicit creation choices after the menu closes', async () => {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const onCreate = vi.fn();
+  const onCreate = vi.fn(() => {
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
   actFlushSync(() =>
     root.render(
       <MemoryRouter>
@@ -126,7 +128,9 @@ it('offers the same explicit creation choices from header and empty state', () =
       expect(items.map((item) => item.textContent)).toEqual(['Scheduled agent', 'Event agent']);
       expect(onCreate).toHaveBeenCalledTimes(index);
       actFlushSync(() => items[index]?.click());
-      expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event');
+      await vi.waitFor(() =>
+        expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event')
+      );
     }
   } finally {
     actFlushSync(() => root.unmount());

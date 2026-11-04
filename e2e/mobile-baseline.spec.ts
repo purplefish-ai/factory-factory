@@ -6,6 +6,7 @@ import superjson from 'superjson';
 const fixture = initTRPC.create({ transformer: superjson });
 const usageRouter = fixture.router({
   session: fixture.router({
+    listQuickActions: fixture.procedure.query(() => []),
     getProviderUsage: fixture.procedure.query(() => ({
       provider: 'CLAUDE',
       status: 'available',
@@ -27,7 +28,7 @@ for (const viewport of mobileViewports) {
   test(`mobile baseline layout - ${viewport.name}`, async ({ page }) => {
     // PR fixture timestamps are fixed; keep relative-age labels stable in screenshots.
     await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
-    await page.route('**/api/trpc/session.getProviderUsage*', async (route) => {
+    await page.route('**/api/trpc/**', async (route) => {
       const response = await fetchRequestHandler({
         endpoint: '/api/trpc',
         req: new Request(route.request().url(), { headers: route.request().headers() }),

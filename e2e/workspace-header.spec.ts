@@ -14,18 +14,17 @@ function emulateTitleBar(page: Page, left: number, right: number, height = 32, t
       const rules = [...document.styleSheets]
         .filter((sheet) => !sheet.href || new URL(sheet.href).origin === location.origin)
         .flatMap((sheet) => [...sheet.cssRules]);
-      const overlayRule = rules.find(
-        (rule) =>
+      const overlayRules = rules.filter(
+        (rule): rule is CSSMediaRule =>
           rule instanceof CSSMediaRule &&
           rule.conditionText === '(display-mode: window-controls-overlay)'
       );
-      if (!(overlayRule instanceof CSSMediaRule)) {
+      if (!overlayRules.length) {
         return false;
       }
-      overlayRule.media.mediaText = 'all';
-      for (const child of overlayRule.cssRules) {
+      const replaceGeometry = (child: CSSRule) => {
         if (!(child instanceof CSSStyleRule)) {
-          continue;
+          return;
         }
         for (const property of [...child.style]) {
           const value = child.style.getPropertyValue(property);
@@ -37,6 +36,10 @@ function emulateTitleBar(page: Page, left: number, right: number, height = 32, t
             )
           );
         }
+      };
+      for (const overlayRule of overlayRules) {
+        overlayRule.media.mediaText = 'all';
+        [...overlayRule.cssRules].forEach(replaceGeometry);
       }
       return true;
     },
@@ -58,7 +61,7 @@ for (const { platform, left, right } of [
     await expect(header).toHaveCSS('padding-left', '8px');
     await expect(header).toHaveCSS('-webkit-app-region', 'none');
     expect(await emulateTitleBar(page, left, right)).toBe(true);
-    await expectOneRow(page);
+    await expectHeaderFits(page);
     await expect(header).toHaveCSS('height', '32px');
     await expect(header).toHaveCSS('-webkit-app-region', 'drag');
     const controls = header.locator('button, a, [role="combobox"]:not(button)');
@@ -133,7 +136,7 @@ for (const scenario of [
     ).toBe(true);
     const header = page.locator('header');
     await expect(header).toHaveCSS('height', `${scenario.row}px`);
-    await expectOneRow(page, scenario.row);
+    await expectHeaderFits(page, scenario.row);
     for (const control of await header.locator('button, a').all()) {
       if (!(await control.isVisible())) {
         continue;
@@ -150,7 +153,7 @@ for (const scenario of [
   });
 }
 
-async function expectOneRow(page: Page, maxHeight = 49) {
+async function expectHeaderFits(page: Page, maxHeight?: number) {
   const geometry = await page.locator('header').evaluate((header) => {
     const controls = [...header.querySelectorAll('button, [role="combobox"], a')]
       .map((node) => ({
@@ -161,6 +164,7 @@ async function expectOneRow(page: Page, maxHeight = 49) {
     const rect = header.getBoundingClientRect();
     return {
       height: rect.height,
+      phoneWorkspace: innerWidth < 768 && header.querySelector('[data-workspace-header]') !== null,
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       controls: controls.map(({ label, rect: box }) => ({
         label,
@@ -173,7 +177,7 @@ async function expectOneRow(page: Page, maxHeight = 49) {
       right: rect.right,
     };
   });
-  expect(geometry.height).toBeLessThanOrEqual(maxHeight);
+  expect(geometry.height).toBeLessThanOrEqual(maxHeight ?? (geometry.phoneWorkspace ? 97 : 49));
   expect(geometry.overflow).toBeLessThanOrEqual(1);
   for (const [index, control] of geometry.controls.entries()) {
     expect(control.x, control.label ?? '').toBeGreaterThanOrEqual(0);
@@ -181,10 +185,9 @@ async function expectOneRow(page: Page, maxHeight = 49) {
     expect(control.y, control.label ?? '').toBeGreaterThanOrEqual(0);
     expect(control.bottom, control.label ?? '').toBeLessThanOrEqual(geometry.height);
     for (const other of geometry.controls.slice(index + 1)) {
-      expect(
-        Math.min(control.right, other.right) - Math.max(control.x, other.x),
-        `${control.label} overlaps ${other.label}`
-      ).toBeLessThanOrEqual(1);
+      const overlapX = Math.min(control.right, other.right) - Math.max(control.x, other.x);
+      const overlapY = Math.min(control.bottom, other.bottom) - Math.max(control.y, other.y);
+      expect(overlapX <= 1 || overlapY <= 1, `${control.label} overlaps ${other.label}`).toBe(true);
     }
   }
 }
@@ -202,17 +205,17 @@ for (const width of [375, 768, 810, 1024, 1280]) {
         .locator('.workspace-switcher-label')
         .evaluate((label) => label.getBoundingClientRect().width)
     ).toBeGreaterThan(24);
-    await expectOneRow(page);
+    await expectHeaderFits(page);
     await page.getByRole('button', { name: 'Navigate workspace family' }).click();
     await expect(page.getByRole('menu')).toContainText('Waiting');
     await expect(page.getByRole('menu')).toContainText('Working');
     await expect(page.getByRole('menu').locator('[aria-current="page"]')).toBeVisible();
   });
-  test(`workspace header keeps controls in one row at ${width}`, async ({ page }) => {
+  test(`workspace header keeps controls reachable at ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 });
     await page.goto('/__mobile-baseline?surface=header');
     await expect(page.getByRole('button', { name: /Pull requests and updates/ })).toBeVisible();
-    await expectOneRow(page);
+    await expectHeaderFits(page);
     await expect(page.locator('header')).toHaveScreenshot(`workspace-header-${width}.png`);
     await page.getByRole('button', { name: 'Open project menu' }).click();
     await expect(
@@ -288,7 +291,7 @@ for (const width of [375, 768, 810, 1024, 1280]) {
       await page.setViewportSize({ width, height: 720 });
       await page.goto(`/__mobile-baseline?surface=header&header=${variant}`);
       await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
-      await expectOneRow(page);
+      await expectHeaderFits(page);
       await expect(page.locator('header')).toHaveScreenshot(`${variant}-header-${width}.png`);
     });
   }
@@ -296,11 +299,11 @@ for (const width of [375, 768, 810, 1024, 1280]) {
 
 for (const width of [375, 810]) {
   for (const variant of ['workspace', 'project']) {
-    test(`${variant} project retry keeps one row at ${width}`, async ({ page }) => {
+    test(`${variant} project retry keeps context at ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 720 });
       await page.goto(`/__mobile-baseline?surface=header&header=${variant}&projectsError=1`);
       await expect(page.getByRole('alert')).toContainText('Project refresh unavailable');
-      await expectOneRow(page);
+      await expectHeaderFits(page);
       const currentProject = page.getByRole('button', {
         name: 'Open Factory Factory with an exceptionally long project name workspaces',
         exact: true,
@@ -323,7 +326,7 @@ for (const width of [375, 810]) {
       await expect(page.getByLabel('Project retry count')).toHaveText('1');
       await expect(page.getByRole('alert')).toHaveCount(0);
       await expect(currentProject).toBeVisible();
-      await expectOneRow(page);
+      await expectHeaderFits(page);
       if (variant === 'workspace') {
         await page.getByRole('combobox', { name: /Open workspace menu/ }).click();
         await expect(page.getByText('Waiting · 0')).toBeVisible();

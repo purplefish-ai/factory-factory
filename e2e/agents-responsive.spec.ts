@@ -3,8 +3,11 @@ import { expect, test, type Page } from '@playwright/test';
 async function assertEditorBounds(page: Page) {
   const main = page.locator('main');
   await expect(main).not.toContainText('Factory Factory');
-  const editor = await main.boundingBox();
-  const rail = await page.getByRole('navigation', { name: 'Agents', exact: true }).boundingBox();
+  // Read both boxes in one layout snapshot while form autofocus scrolls the shared surface.
+  const { editor, rail } = await main.evaluate((element) => ({
+    editor: element.getBoundingClientRect().toJSON(),
+    rail: document.querySelector('nav[aria-label="Agents"]')?.getBoundingClientRect().toJSON(),
+  }));
   expect(editor).not.toBeNull();
   expect(rail).not.toBeNull();
   if (!(editor && rail)) {

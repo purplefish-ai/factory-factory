@@ -85,3 +85,14 @@ test('selecting from a long phone Agents rail reveals the editor', async ({ page
   await expect(editor).toBeFocused();
   await expect(editor).toContainText('Keep dependencies current');
 });
+
+test('creating from a long phone Agents rail reveals the form and retains its input focus', async ({
+  page,
+}) => {
+  await page.goto('/__mobile-baseline?surface=agents&many-agents');
+  await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await expect(name).toBeInViewport();
+  await expect(name).toBeFocused();
+});
