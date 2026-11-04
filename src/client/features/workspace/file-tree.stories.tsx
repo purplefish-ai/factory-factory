@@ -164,6 +164,12 @@ export const LoadingDirectory: Story = {
 
 export const DirectoryError: Story = {
   args: { directoryState: 'error' },
-  play: async ({ canvasElement }) =>
-    checkPlaceholder(canvasElement, "Couldn't load directory contents"),
+  play: async ({ canvasElement }) => {
+    await checkPlaceholder(canvasElement, "Couldn't load directory contents");
+    const files = within(within(canvasElement).getByTestId('files'));
+    await expect(await files.findByRole('alert')).toHaveTextContent('Directory unavailable');
+    await expect(files.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    await userEvent.click(files.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(files.getByRole('button', { name: 'Retry' })).toBeEnabled());
+  },
 };

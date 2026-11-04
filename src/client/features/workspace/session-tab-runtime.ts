@@ -5,6 +5,8 @@ import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   getSessionSummaryErrorMessage,
@@ -22,6 +24,8 @@ export interface SessionTabRuntimeInfo {
   description: string;
   icon: Icon;
   isRunning: boolean;
+  /** Blocked on a permission request, question or plan approval. */
+  awaitingInput?: boolean;
 }
 
 const IDLE_STATUS: SessionTabRuntimeInfo = {
@@ -162,6 +166,23 @@ export function deriveSessionTabRuntime(
         icon: ProhibitIcon,
         isRunning: false,
       };
+
+    case 'awaiting-input': {
+      // The derivation only returns awaiting-input when a type is present.
+      const request = getPendingRequestPresentation(
+        summary.pendingRequestType ?? 'permission_request'
+      );
+      return {
+        color: getStatusToneStyle('attention').text,
+        pulse: false,
+        spin: false,
+        label: request.label,
+        description: request.description,
+        icon: request.icon,
+        isRunning: false,
+        awaitingInput: true,
+      };
+    }
 
     case 'working':
       return {

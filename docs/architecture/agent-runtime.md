@@ -270,9 +270,12 @@ choices toggle directly without opening a menu, with their state exposed through
 shown when provider-supplied. Ultracode uses a sparkle icon. Active toggles are
 highlighted; unrestricted access uses an orange warning icon. Native effort
 options replace the legacy thinking/reasoning controls, and a native mode menu
-offering Plan replaces the legacy planning toggle. Menus show provider-supplied
-descriptions for settings and choices. On mobile, the options sheet retains text
-labels.
+offering Plan replaces the legacy planning toggle. Mod+Shift+P updates that
+native option in both directions, choosing only an advertised `default` when
+leaving planning. Without that choice the exit shortcut does nothing; it never
+guesses a permission mode or queues a hidden legacy planning setting. Menus show
+provider-supplied descriptions for settings and choices. On mobile, the options
+sheet retains text labels.
 
 ### Provider and model selection
 
@@ -912,6 +915,12 @@ reserved IDs and PENDING delivery identity, then stores immutable effective
 execution without changing admitted snapshots. The original reserved message ID
 stays fixed; a later explicit retry can rotate the delivery's message ID and
 send-attempt ID. Generation checks fence earlier callers.
+
+New event runs freeze access from the saved workspace permission preset for both
+providers. Non-interactive execution does not grant extra permissions; explicit
+YOLO remains honored. Recovery reuses the frozen access intent rather than
+reading newer defaults. Startup validates that the provider supports and applies
+that intent, including Claude’s `auto` / `acceptEdits` compatibility.
 
 Launch orchestration selects a Codex account under `withAccountReservation`,
 freezes its ID before session insertion, and uses that same ID on recovery or

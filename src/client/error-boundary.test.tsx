@@ -45,6 +45,26 @@ function buttonNamed(name: string) {
 }
 
 describe('ErrorBoundary', () => {
+  it('reports a first crash only once when navigation also changes the reset key', () => {
+    shouldThrow = false;
+    act(() =>
+      root.render(
+        <ErrorBoundary resetKey="healthy">
+          <Crashy />
+        </ErrorBoundary>
+      )
+    );
+    shouldThrow = true;
+    act(() =>
+      root.render(
+        <ErrorBoundary resetKey="broken">
+          <Crashy />
+        </ErrorBoundary>
+      )
+    );
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(globalThis.reportError).toHaveBeenCalledOnce();
+  });
   it.each(['a thrown string', { reason: 'a thrown object' }, null, undefined])(
     'keeps recovery actions available for a non-Error throw: %s',
     async (thrown) => {

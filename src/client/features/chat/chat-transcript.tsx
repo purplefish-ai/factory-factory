@@ -1,6 +1,7 @@
 import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
 import { memo, type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import type { PendingRequestType } from '@/shared/pending-request-types';
 import { ThinkingFooter } from './thinking-footer';
 import type { TranscriptDisplayProps } from './transcript-display.types';
 import { useTranscriptLayout } from './transcript-layout';
@@ -12,6 +13,8 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
   scroll: TranscriptScrollOptions;
   /** Reserve a thinking preview outside the scroller, directly above the composer. */
   thinkingInFooter?: boolean;
+  /** A request blocking the agent on the user; the footer says so instead of "working". */
+  pendingRequestType?: PendingRequestType | null;
   header?: ReactNode;
   label?: string;
   contentClassName?: string;
@@ -20,6 +23,7 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
 function TranscriptInstance({
   scroll,
   thinkingInFooter = false,
+  pendingRequestType = null,
   header,
   label = 'Conversation',
   contentClassName,
@@ -77,7 +81,11 @@ function TranscriptInstance({
         )}
       </div>
       {thinkingInFooter && (
-        <ThinkingFooter active={thinkingActive} latestThinking={props.latestThinking} />
+        <ThinkingFooter
+          active={thinkingActive}
+          latestThinking={props.latestThinking}
+          waitingFor={pendingRequestType}
+        />
       )}
     </div>
   );

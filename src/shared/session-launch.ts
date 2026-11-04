@@ -18,17 +18,25 @@ export interface SessionLaunchOptions {
   accessMode?: { options: ChatReasoningOption[]; selected?: string };
 }
 
-/** Saved permission presets map to provider-native access choices. */
+/** Canonical access intent, frozen before provider capabilities are available. */
+export function resolvePermissionPresetAccessMode(
+  provider: string,
+  preset: SessionPermissionPreset
+): string {
+  const targets =
+    provider === 'CODEX'
+      ? { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' }
+      : { STRICT: 'default', RELAXED: 'auto', YOLO: 'bypassPermissions' };
+  return targets[preset];
+}
+
+/** Saved permission presets map to supported provider-native access choices. */
 export function resolveLaunchAccessMode(
   provider: string,
   preset: SessionPermissionPreset,
   values: readonly string[]
 ): string | undefined {
-  const targets =
-    provider === 'CODEX'
-      ? { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' }
-      : { STRICT: 'default', RELAXED: 'auto', YOLO: 'bypassPermissions' };
-  const target = targets[preset];
+  const target = resolvePermissionPresetAccessMode(provider, preset);
   if (values.includes(target)) {
     return target;
   }

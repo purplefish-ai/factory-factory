@@ -53,6 +53,7 @@ describe('permission question classification', () => {
         'session',
         expect.objectContaining({
           type: 'permission_request',
+          rawToolName: 'mcp__survey__poll',
           toolInput: { questions },
         })
       );

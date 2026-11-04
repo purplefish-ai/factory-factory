@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -187,7 +188,13 @@ interface ChildWorkspacesPanelProps {
 export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWorkspacesPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const { data: children, isLoading } = trpc.workspace.listChildren.useQuery(
+  const {
+    data: children,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: workspaceId },
     { refetchInterval: 15_000 }
   );
@@ -218,7 +225,17 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
 
       {/* Content */}
       <div className={cn(!embedded && 'flex-1 overflow-y-auto')}>
-        {isLoading && (
+        {error && !children && (
+          <QueryErrorState
+            title="Couldn't load child workspaces"
+            error={error}
+            onRetry={() => {
+              void refetch();
+            }}
+            isRetrying={isFetching}
+          />
+        )}
+        {!(children || error) && (
           <Loading
             size="compact"
             message="Loading child workspaces…"

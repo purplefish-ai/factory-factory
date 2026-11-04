@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
-import { ChatTranscript } from '@/client/features/chat';
+import { ChatInput, ChatTranscript } from '@/client/features/chat';
 import { WorkspacePanelProvider, useChatTranscriptPersistence } from '@/client/features/workspace';
+import { TRPCProvider } from '@/client/lib/providers';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
 import { TranscriptEngineFixture } from './transcript-engine-fixture';
 
@@ -42,6 +44,8 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const [height, setHeight] = useState(360);
   const [narrow, setNarrow] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(24);
+  const [draft, setDraft] = useState('');
+  const composer = new URLSearchParams(location.search).get('composer') === '1';
   const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: session });
   const update = (change: (messages: GroupedMessageItem[]) => GroupedMessageItem[]) =>
     setData((previous) => ({ ...previous, [session]: change(previous[session]) }));
@@ -116,44 +120,56 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         </button>
         <output>Session {session}</output>
       </div>
-      <div style={{ height, width: narrow ? '80%' : '100%', display: hidden ? 'none' : 'block' }}>
-        <ChatTranscript
-          thinkingInFooter={new URLSearchParams(location.search).get('footer') === '1'}
-          messages={data[session]}
-          running={running}
-          acpPlan={
-            showTasks
-              ? {
-                  updatedAt: '2026-10-30T00:00:00Z',
-                  entries: Array.from({ length: 4 }, (_, index) => ({
-                    content: `Task ${index + 1}: Verify the transcript follows measured task-list changes.`,
-                    status: 'pending' as const,
-                    priority: 'medium' as const,
-                  })),
-                }
-              : null
-          }
-          latestThinking={
-            longThinking
-              ? 'Inspecting output and checking the detailed implementation across the entire workspace. '.repeat(
-                  8
-                )
-              : 'Inspecting output'
-          }
-          startingSession={false}
-          loadingSession={false}
-          header={
-            <div role="img" style={{ height: headerHeight }} aria-label="Measured image header" />
-          }
-          scroll={{
-            identity: `${workspaceId}/main/${session}`,
-            active: !hidden,
-            ready: ready && persistence.ready,
-            initialIntent: 'following',
-            initialPosition: persistence.initialPosition,
-            onPositionChange: persistence.onPositionChange,
-          }}
-        />
+      <div
+        style={{ height, width: narrow ? '80%' : '100%', display: hidden ? 'none' : 'flex' }}
+        className="flex-col"
+      >
+        <div className="flex-1 min-h-0">
+          <ChatTranscript
+            thinkingInFooter={new URLSearchParams(location.search).get('footer') === '1'}
+            messages={data[session]}
+            running={running}
+            acpPlan={
+              showTasks
+                ? {
+                    updatedAt: '2026-10-30T00:00:00Z',
+                    entries: Array.from({ length: 4 }, (_, index) => ({
+                      content: `Task ${index + 1}: Verify the transcript follows measured task-list changes.`,
+                      status: 'pending' as const,
+                      priority: 'medium' as const,
+                    })),
+                  }
+                : null
+            }
+            latestThinking={
+              longThinking
+                ? 'Inspecting output and checking the detailed implementation across the entire workspace. '.repeat(
+                    8
+                  )
+                : 'Inspecting output'
+            }
+            startingSession={false}
+            loadingSession={false}
+            header={
+              <div role="img" style={{ height: headerHeight }} aria-label="Measured image header" />
+            }
+            scroll={{
+              identity: `${workspaceId}/main/${session}`,
+              active: !hidden,
+              ready: ready && persistence.ready,
+              initialIntent: 'following',
+              initialPosition: persistence.initialPosition,
+              onPositionChange: persistence.onPositionChange,
+            }}
+          />
+        </div>
+        {composer && (
+          <TRPCProvider>
+            <TooltipProvider>
+              <ChatInput onSend={() => undefined} value={draft} onChange={setDraft} />
+            </TooltipProvider>
+          </TRPCProvider>
+        )}
       </div>
     </main>
   );

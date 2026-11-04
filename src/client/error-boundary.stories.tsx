@@ -62,8 +62,8 @@ export const PageDark: Story = {
   globals: { theme: 'dark' },
 };
 
-/** The routed page boundary also offers Try again; it resets on navigation too. */
-export const PageWithRetry: Story = {
+/** Opt-in fallback for recoverable render errors; lazy route imports use Reload. */
+export const FallbackWithRetry: Story = {
   args: { onReset },
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Try again' }));
@@ -72,7 +72,6 @@ export const PageWithRetry: Story = {
 };
 
 export const PagePhone: Story = {
-  args: { onReset },
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
 

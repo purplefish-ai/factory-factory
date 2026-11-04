@@ -1,21 +1,54 @@
 import { useState } from 'react';
+import { StatusIcon } from '@/client/components/status-indicators';
+import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import type { PendingRequestType } from '@/shared/pending-request-types';
 import { LoadingIndicator } from './agent-activity';
 import { formatThinkingText, getLatestThinkingParagraph } from './thinking-preview';
+
+/** Replaces the spinner while the agent is blocked on the user. */
+function WaitingForUser({ type }: { type: PendingRequestType }) {
+  const request = getPendingRequestPresentation(type);
+  return (
+    <div
+      data-testid="thinking-footer"
+      data-waiting-for={type}
+      className="h-8 shrink-0 min-w-0 px-4 py-1.5"
+    >
+      <div
+        role="status"
+        className={cn(
+          'flex min-w-0 items-center gap-2 text-sm leading-normal',
+          getStatusToneStyle('attention').text
+        )}
+      >
+        <StatusIcon tone="attention" icon={request.icon} className="h-4 w-4" />
+        <span className="truncate">{request.waitingText}</span>
+      </div>
+    </div>
+  );
+}
 
 /** Always occupies one line; activity changes cannot resize the transcript viewport. */
 export function ThinkingFooter({
   active,
   latestThinking,
+  waitingFor = null,
 }: {
   active: boolean;
   latestThinking?: string | null;
+  /** The request the agent is blocked on; shown instead of "Agent is working". */
+  waitingFor?: PendingRequestType | null;
 }) {
   const [open, setOpen] = useState(false);
   const latestParagraph = getLatestThinkingParagraph(latestThinking);
-  if (!active && open) {
+  if ((!active || waitingFor) && open) {
     setOpen(false);
+  }
+  if (active && waitingFor) {
+    return <WaitingForUser type={waitingFor} />;
   }
   return (
     <div data-testid="thinking-footer" className="h-8 shrink-0 min-w-0 px-4 py-1.5">

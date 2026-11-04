@@ -80,17 +80,12 @@ describe('InlineWorkspaceForm', () => {
     container.remove();
   });
 
-  it('auto-resizes the textarea while typing normally', () => {
+  it('updates the draft while leaving textarea sizing to the browser', () => {
     const { container, root, textarea } = renderForm();
     const setTextareaValue = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       'value'
     )?.set;
-
-    Object.defineProperty(textarea, 'scrollHeight', {
-      configurable: true,
-      value: 180,
-    });
 
     if (!setTextareaValue) {
       throw new Error('Expected textarea value setter');
@@ -102,11 +97,33 @@ describe('InlineWorkspaceForm', () => {
     });
 
     expect(mocks.detectFileMentionMock).toHaveBeenCalledWith('Investigate clipping');
-    expect(textarea.style.height).toBe('180px');
-    expect(textarea.style.overflowY).toBe('hidden');
+    expect(getWorkspaceCreationDraftSnapshot(getTestProjectId()).draft?.prompt).toBe(
+      'Investigate clipping'
+    );
+    expect(textarea.style.height).toBe('');
 
     actFlushSync(() => root.unmount());
     container.remove();
+  });
+
+  it('preserves internal scrolling when sizing a prompt without native content sizing', () => {
+    vi.stubGlobal('CSS', { supports: () => false });
+    const { textarea } = renderForm();
+    textarea.scrollTop = 180;
+    Object.defineProperty(textarea, 'scrollHeight', {
+      get: () => {
+        // Measuring at auto height expands the field and clamps its internal scroll.
+        textarea.scrollTop = 0;
+        return 600;
+      },
+    });
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    actFlushSync(() => {
+      setValue?.call(textarea, 'Long prompt\n'.repeat(30));
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(textarea.style.height).toBe('240px');
+    expect(textarea.scrollTop).toBe(180);
   });
 
   it('drops only the optimistic row when workspace creation fails', async () => {
@@ -397,8 +414,13 @@ it('preserves an in-memory draft and allows clearing its text while disk storage
   actFlushSync(() => third.root.unmount());
 });
 
-it('restores textarea height and provider choices after reopening', () => {
+it('restores prompt and provider choices after reopening', () => {
   const first = renderForm();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  actFlushSync(() => {
+    setValue?.call(first.textarea, 'Retain this task\nand its second line');
+    first.textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   actFlushSync(() =>
     first.container.querySelector<HTMLButtonElement>('[aria-label="Choose Codex"]')?.click()
   );
@@ -406,20 +428,10 @@ it('restores textarea height and provider choices after reopening', () => {
     first.container.querySelector<HTMLButtonElement>('[aria-label="Choose model"]')?.click()
   );
   actFlushSync(() => first.root.unmount());
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight');
-  Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
-    configurable: true,
-    get: () => 180,
-  });
   const second = renderForm();
   expect(second.container.textContent).toContain('CODEX chosen-model');
-  expect(second.textarea.style.height).toBe('180px');
+  expect(second.textarea.value).toBe('Retain this task\nand its second line');
   actFlushSync(() => second.root.unmount());
-  if (descriptor) {
-    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', descriptor);
-  } else {
-    Reflect.deleteProperty(HTMLTextAreaElement.prototype, 'scrollHeight');
-  }
 });
 
 it('keeps late attachment conversion in its original project after switching', async () => {

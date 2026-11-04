@@ -182,7 +182,8 @@ class WorkspaceQueryService {
         // about a session that is alive between prompts.
         const sessionSummaries = buildWorkspaceSessionSummaries(
           workspace.agentSessions ?? [],
-          (sessionId) => this.session.getRuntimeSnapshot(sessionId)
+          (sessionId) => this.session.getRuntimeSnapshot(sessionId),
+          allPendingRequests
         );
         const runtimeState = deriveWorkspaceRuntimeState(workspace, () =>
           hasWorkingSessionSummary(sessionSummaries)

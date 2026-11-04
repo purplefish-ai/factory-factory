@@ -366,6 +366,15 @@ and virtualizer. Callers supply a workspace/session/surface identity,
 visibility, hydration readiness, and optional committed-position persistence.
 They must not add message-count scroll effects or composer-height scroll writes.
 
+The chat composer reserves one line of its current font plus vertical padding as
+its minimum height. With native `field-sizing: content`, a smaller minimum lets
+Chromium briefly shrink an empty textarea, clamping the transcript's scroll
+position even when its final viewport height is unchanged. Task creation also
+uses native content sizing, capped at 240 pixels. Browsers without native
+content sizing use one resize after the draft commits and restore internal
+scrolling after measurement; repeated height resets otherwise cause jumps once
+that cap is reached.
+
 The scroll controller separates following from reading and from the suspended,
 restoring and ready lifecycle. Layout changes cannot change intent. Upward input
 yields immediately; downward movement within 24 pixels of the end or the jump

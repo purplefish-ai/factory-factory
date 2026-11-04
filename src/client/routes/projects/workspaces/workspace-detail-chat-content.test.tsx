@@ -14,6 +14,11 @@ const subagentState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/client/features/chat', async () => ({
+  getChatPendingRequestType: (
+    await vi.importActual<typeof import('@/client/features/chat/pending-request-type')>(
+      '@/client/features/chat/pending-request-type'
+    )
+  ).getChatPendingRequestType,
   AgentErrorStrip: (
     await vi.importActual<typeof import('@/client/features/chat/agent-error-strip')>(
       '@/client/features/chat/agent-error-strip'
@@ -294,6 +299,95 @@ describe('ChatContent message queue wording', () => {
       }
     }
   );
+});
+
+describe('ChatContent pending request wording', () => {
+  it.each([
+    {
+      pendingRequest: {
+        type: 'permission',
+        request: { requestId: 'r-1', toolName: 'Bash', toolInput: { command: 'ls' } },
+      },
+      pendingRequestType: 'permission_request',
+      placeholder: 'Respond to the request above, or queue a message…',
+    },
+    {
+      pendingRequest: {
+        type: 'permission',
+        request: { requestId: 'r-2', toolName: 'ExitPlanMode', toolInput: {} },
+      },
+      pendingRequestType: 'plan_approval',
+      placeholder: 'Approve the plan or keep planning…',
+    },
+    {
+      pendingRequest: {
+        type: 'question',
+        request: { requestId: 'r-3', toolName: 'AskUserQuestion', questions: [] },
+      },
+      pendingRequestType: 'user_question',
+      placeholder: 'Answer the question above, or queue a message…',
+    },
+  ])('says the agent waits on a $pendingRequestType', (testCase) => {
+    const props = {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      messages: [],
+      queuedMessages: [],
+      sessionStatus: { phase: 'running' },
+      sessionRuntime: {
+        ...createInitialSessionRuntimeState(),
+        phase: 'running',
+        activity: 'WORKING',
+        processState: 'alive',
+      },
+      chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+      pendingRequest: testCase.pendingRequest,
+      pendingMessages: new Map(),
+      inputRef: createRef(),
+    } as unknown as ChatContentProps;
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      expect(input.mock.lastCall?.[0].placeholder).toBe(testCase.placeholder);
+      expect(transcript.mock.lastCall?.[0]).toMatchObject({
+        pendingRequestType: testCase.pendingRequestType,
+      });
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, processState: 'stopped' }}
+          />
+        )
+      );
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
+      expect(input.mock.lastCall?.[0].placeholder).not.toBe(testCase.placeholder);
+
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, phase: 'stopping' }}
+            sessionStatus={{ phase: 'stopping' }}
+          />
+        )
+      );
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, phase: 'idle' }}
+            sessionStatus={{ phase: 'ready' }}
+          />
+        )
+      );
+      expect(input.mock.lastCall?.[0].placeholder).toBe('Type a message to start the agent…');
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
 });
 
 describe('ChatContent transcript ownership', () => {

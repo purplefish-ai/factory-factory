@@ -257,6 +257,7 @@ function ReviewsMobileLayout({
   selectedDetails,
   selectedDiff,
   diffLoading,
+  diffError,
   onFetchDiff,
   onOpenGitHub,
   onApprove,
@@ -273,6 +274,7 @@ function ReviewsMobileLayout({
   selectedDetails: PRWithFullDetails | null;
   selectedDiff: string | null;
   diffLoading: boolean;
+  diffError: string | null;
   onFetchDiff: () => Promise<void>;
   onOpenGitHub: () => void;
   onApprove: () => void;
@@ -299,6 +301,7 @@ function ReviewsMobileLayout({
             pr={selectedDetails ?? null}
             diff={selectedDiff ?? null}
             diffLoading={diffLoading}
+            diffError={diffError}
             onFetchDiff={() => {
               runInBackground(onFetchDiff(), "Couldn't load pull request diff");
             }}
@@ -321,6 +324,7 @@ function ReviewsDesktopLayout({
   selectedDetails,
   selectedDiff,
   diffLoading,
+  diffError,
   onFetchDiff,
   onOpenGitHub,
   onApprove,
@@ -334,6 +338,7 @@ function ReviewsDesktopLayout({
   selectedDetails: PRWithFullDetails | null;
   selectedDiff: string | null;
   diffLoading: boolean;
+  diffError: string | null;
   onFetchDiff: () => Promise<void>;
   onOpenGitHub: () => void;
   onApprove: () => void;
@@ -357,6 +362,7 @@ function ReviewsDesktopLayout({
           pr={selectedDetails ?? null}
           diff={selectedDiff ?? null}
           diffLoading={diffLoading}
+          diffError={diffError}
           onFetchDiff={() => {
             runInBackground(onFetchDiff(), "Couldn't load pull request diff");
           }}
@@ -452,7 +458,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     },
     [markUserSelection]
   );
-  const { fetchDiff, handleApprove, handleOpenGitHub, approving } = useReviewActions({
+  const { diffError, fetchDiff, handleApprove, handleOpenGitHub, approving } = useReviewActions({
     selectedPR,
     selectedKey,
     diffs,
@@ -519,6 +525,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       selectedDetails={selectedDetails}
       selectedDiff={selectedDiff}
       diffLoading={diffLoading}
+      diffError={diffError}
       onFetchDiff={fetchDiff}
       onOpenGitHub={handleOpenGitHub}
       onApprove={handleApprove}
@@ -534,6 +541,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       selectedDetails={selectedDetails}
       selectedDiff={selectedDiff}
       diffLoading={diffLoading}
+      diffError={diffError}
       onFetchDiff={fetchDiff}
       onOpenGitHub={handleOpenGitHub}
       onApprove={handleApprove}

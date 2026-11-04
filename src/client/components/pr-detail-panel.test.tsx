@@ -82,7 +82,7 @@ describe('PRDetailPanel keyboard shortcuts', () => {
     document.body.innerHTML = '';
   });
 
-  async function renderPanel() {
+  async function renderPanel(diffError?: string) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -93,6 +93,7 @@ describe('PRDetailPanel keyboard shortcuts', () => {
           pr={pr}
           diff={null}
           diffLoading={false}
+          diffError={diffError}
           onFetchDiff={onFetchDiff}
           onOpenGitHub={vi.fn()}
           onApprove={vi.fn()}
@@ -109,6 +110,22 @@ describe('PRDetailPanel keyboard shortcuts', () => {
       });
     return { container, root, activeTab, press, onFetchDiff };
   }
+
+  it('shows a retained diff error with explicit Retry instead of automatically fetching again', async () => {
+    const view = await renderPanel('Offline');
+    try {
+      await view.press(window, 'd');
+      expect(view.container.querySelector('[role="alert"]')?.textContent).toContain('Offline');
+      expect(view.onFetchDiff).not.toHaveBeenCalled();
+      const retry = [...view.container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Retry'
+      );
+      await act(() => retry?.click());
+      expect(view.onFetchDiff).toHaveBeenCalledOnce();
+    } finally {
+      await act(() => view.root.unmount());
+    }
+  });
 
   it('keeps d and i working after clicking a tab trigger', async () => {
     const view = await renderPanel();

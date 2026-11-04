@@ -142,6 +142,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
       replayEvents.push({
         type: 'user_question',
         requestId: store.pendingInteractiveRequest.requestId,
+        toolName: store.pendingInteractiveRequest.toolName,
         questions: getAskUserQuestions(store.pendingInteractiveRequest.input),
         acpOptions: store.pendingInteractiveRequest.acpOptions,
       });
@@ -150,6 +151,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
         type: 'permission_request',
         requestId: store.pendingInteractiveRequest.requestId,
         toolName: store.pendingInteractiveRequest.toolName,
+        rawToolName: store.pendingInteractiveRequest.rawToolName,
         toolInput: store.pendingInteractiveRequest.input,
         ...(store.pendingInteractiveRequest.elicitation
           ? { elicitation: store.pendingInteractiveRequest.elicitation }

@@ -17,6 +17,11 @@ and this project adheres to
 
 - `ff tailscale` no longer starts public cloudflared tunnels for run scripts
 
+### Fixed
+
+- Withhold remote localhost links when port-sharing status fails, including
+  failed refreshes with cached status (#2955)
+
 ## [0.5.3] - 2026-11-03
 
 ### Added

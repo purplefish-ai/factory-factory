@@ -13,6 +13,7 @@ import {
   applyAppearance,
   COLOR_SCHEME_ATTRIBUTE,
 } from '@/client/lib/appearance';
+import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
 import { trpc } from '@/client/lib/trpc';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
@@ -204,7 +205,43 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const onPermissionRequest = fn<() => Promise<NotificationPermission>>();
+function mockNotificationPermission(
+  permission: NotificationPermission | 'unsupported',
+  enabled = false
+) {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'Notification');
+  const preference = localStorage.getItem(BROWSER_NOTIFICATIONS_KEY);
+  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
+  const api = {
+    permission,
+    requestPermission: () => onPermissionRequest(),
+  };
+  onPermissionRequest.mockReset();
+  onPermissionRequest.mockImplementation(() => {
+    api.permission = 'granted';
+    return Promise.resolve('granted');
+  });
+  Object.defineProperty(window, 'Notification', {
+    configurable: true,
+    value: permission === 'unsupported' ? undefined : api,
+  });
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(window, 'Notification', descriptor);
+    } else {
+      Reflect.deleteProperty(window, 'Notification');
+    }
+    if (preference === null) {
+      localStorage.removeItem(BROWSER_NOTIFICATIONS_KEY);
+    } else {
+      localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, preference);
+    }
+  };
+}
+
 export const Notifications: Story = {
+  beforeEach: () => mockNotificationPermission('default'),
   render: () => (
     <SettingsStoryProvider>
       <NotificationSettingsSection />
@@ -219,6 +256,74 @@ export const Notifications: Story = {
       expect(onRequest).toHaveBeenCalledWith('userSettings.update', { playSoundOnComplete: false })
     );
     await waitFor(() => expect(toggle).not.toBeChecked());
+    const desktop = canvas.getByRole('switch', { name: 'Desktop notifications' });
+    await expect(desktop).not.toBeChecked();
+    await expect(onPermissionRequest).not.toHaveBeenCalled();
+    await userEvent.click(desktop);
+    await waitFor(() => expect(desktop).toBeChecked());
+    await expect(onPermissionRequest).toHaveBeenCalledOnce();
+    await userEvent.click(desktop);
+    await expect(desktop).not.toBeChecked();
+  },
+};
+
+export const NotificationsDark: Story = { ...Notifications, globals: { theme: 'dark' } };
+export const NotificationsPhone: Story = {
+  ...Notifications,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const NotificationsEnabled: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('granted', true),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeChecked();
+    await expect(
+      canvas.getByText('On for this browser. Select a notification to open its workspace.')
+    ).toBeVisible();
+  },
+};
+export const NotificationsBlocked: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('denied'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeDisabled();
+    await expect(canvas.getByText(/Allow them in your browser settings/)).toBeVisible();
+  },
+};
+export const NotificationsUnsupported: Story = {
+  ...Notifications,
+  beforeEach: () => mockNotificationPermission('unsupported'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('switch', { name: 'Desktop notifications' })
+    ).toBeDisabled();
+    await expect(
+      canvas.getByText("This browser doesn't support desktop notifications.")
+    ).toBeVisible();
+  },
+};
+export const NotificationsPermissionError: Story = {
+  ...Notifications,
+  beforeEach: () => {
+    const restore = mockNotificationPermission('default');
+    onPermissionRequest.mockRejectedValue(new Error('Permission API failed'));
+    return restore;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const desktop = await canvas.findByRole('switch', { name: 'Desktop notifications' });
+    await userEvent.click(desktop);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't enable notifications"
+    );
+    await expect(desktop).not.toBeChecked();
   },
 };
 

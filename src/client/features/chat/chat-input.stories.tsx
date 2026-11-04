@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input/chat-input';
@@ -306,5 +306,46 @@ export const SavedCodexAccount: Story = {
         options: [{ value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }],
       },
     },
+  },
+};
+
+export const NativePlanningShortcut: Story = {
+  args: {
+    onSend: onSendAction,
+    onSettingsChange: fn(),
+    onSetConfigOption: fn(),
+  },
+  render: (args) => {
+    const [mode, setMode] = useState('default');
+    return (
+      <ChatInput
+        {...args}
+        acpConfigOptions={[
+          {
+            id: 'mode',
+            name: 'Mode',
+            type: 'select',
+            currentValue: mode,
+            options: [
+              { value: 'default', name: 'Default' },
+              { value: 'plan', name: 'Plan' },
+            ],
+          },
+        ]}
+        onSetConfigOption={(id, value) => {
+          args.onSetConfigOption?.(id, value);
+          setMode(value);
+        }}
+      />
+    );
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('textbox'));
+    await userEvent.keyboard('{Control>}{Shift>}P{/Shift}{/Control}');
+    await expect(args.onSetConfigOption).toHaveBeenLastCalledWith('mode', 'plan');
+    await userEvent.keyboard('{Control>}{Shift>}P{/Shift}{/Control}');
+    await expect(args.onSetConfigOption).toHaveBeenLastCalledWith('mode', 'default');
+    await expect(args.onSettingsChange).not.toHaveBeenCalled();
   },
 };

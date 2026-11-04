@@ -16,7 +16,11 @@ it('preserves startup while a live provider is being configured, then reports id
   });
 
   const summaries = () =>
-    buildWorkspaceSessionSummaries([h.session], (id) => h.service.getRuntimeSnapshot(id));
+    buildWorkspaceSessionSummaries(
+      [h.session],
+      (id) => h.service.getRuntimeSnapshot(id),
+      new Map()
+    );
   expect(hasStartingSessionSummary(summaries())).toBe(true);
   expect(h.service.getRuntimeSnapshot(h.session.id)).toMatchObject({
     phase: 'starting',

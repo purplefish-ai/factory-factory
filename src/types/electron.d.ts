@@ -22,6 +22,8 @@ export interface OpenDialogResult {
 
 export interface ElectronAPI {
   isElectron: true;
+  /** Restore and focus the trusted desktop window after a notification click. */
+  focusWindow?: () => Promise<void>;
   showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;
   /**
    * Read the current OS clipboard image as base64-encoded PNG, or null when the

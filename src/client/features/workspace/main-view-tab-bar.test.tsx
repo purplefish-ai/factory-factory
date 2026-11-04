@@ -376,3 +376,69 @@ it.each([
     }
   }
 );
+
+describe('sessions awaiting input', () => {
+  function summary(
+    sessionId: string,
+    overrides: Partial<WorkspaceSessionRuntimeSummary> = {}
+  ): WorkspaceSessionRuntimeSummary {
+    return {
+      sessionId,
+      name: sessionId,
+      workflow: null,
+      model: 'sonnet',
+      persistedStatus: 'RUNNING',
+      runtimePhase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: '2026-11-04T00:00:00Z',
+      lastExit: null,
+      ...overrides,
+    };
+  }
+
+  it('names each tab status and marks a blocked session in the attention tone', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      await act(() =>
+        root.render(
+          <TooltipProvider>
+            <WorkspacePanelProvider workspaceId="awaiting-input">
+              <MainViewTabBar
+                workspaceId="awaiting-input"
+                sessions={[
+                  { id: 'blocked', name: 'Migrate schema', status: 'RUNNING' },
+                  { id: 'working', name: 'Write docs', status: 'RUNNING' },
+                  { id: 'ci', name: 'Fix CI', workflow: 'ci-fix', status: 'RUNNING' },
+                ]}
+                sessionSummariesById={
+                  new Map([
+                    ['blocked', summary('blocked', { pendingRequestType: 'permission_request' })],
+                    ['working', summary('working')],
+                    ['ci', summary('ci', { pendingRequestType: 'user_question' })],
+                  ])
+                }
+              />
+            </WorkspacePanelProvider>
+          </TooltipProvider>
+        )
+      );
+      const view = within(container);
+      const blocked = view.getByRole('img', { name: 'Needs approval' });
+      expect(blocked.classList.contains('text-warning')).toBe(true);
+      expect(blocked.classList.contains('animate-pulse')).toBe(false);
+      expect(view.getByRole('img', { name: 'Running' }).classList.contains('animate-pulse')).toBe(
+        true
+      );
+      // A blocked CI-fix session swaps its wrench for the request icon.
+      expect(view.getByRole('img', { name: 'Needs answer' })).toBeTruthy();
+      const tabs = container.querySelectorAll('[role="tab"]');
+      expect(tabs[0]?.textContent).toBe('Migrate schema');
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
