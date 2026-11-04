@@ -419,3 +419,24 @@ export const KeyboardShortcuts: Story = {
     );
   },
 };
+
+const retryDiff = fn();
+export const DiffError: Story = {
+  args: { ...Default.args, diffError: 'GitHub is unavailable', onFetchDiff: retryDiff },
+  beforeEach: () => {
+    retryDiff.mockClear();
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('tab', { name: 'Diff' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('GitHub is unavailable');
+    await expect(retryDiff).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry' }));
+    await expect(retryDiff).toHaveBeenCalledOnce();
+  },
+};
+export const DiffErrorDark: Story = { ...DiffError, globals: { theme: 'dark' } };
+export const DiffErrorPhone: Story = {
+  ...DiffError,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};

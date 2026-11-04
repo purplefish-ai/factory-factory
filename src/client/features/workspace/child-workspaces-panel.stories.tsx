@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { type ReactNode, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -13,7 +14,16 @@ const projects = [
   { id: 'archived', name: 'Archived project', isArchived: true },
 ];
 
-function StoryProvider({ children }: { children: ReactNode }) {
+function StoryProvider({
+  children,
+  failChildren = false,
+}: {
+  children: ReactNode;
+  failChildren?: boolean;
+}) {
+  const [failed] = useState({ value: false });
+  const shouldFailChildren = (path: string) =>
+    failChildren && path === 'workspace.listChildren' && !failed.value;
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -26,6 +36,11 @@ function StoryProvider({ children }: { children: ReactNode }) {
         () =>
           ({ op }) =>
             observable((observer) => {
+              if (shouldFailChildren(op.path)) {
+                failed.value = true;
+                observer.error(new TRPCClientError('Offline'));
+                return;
+              }
               const filter =
                 op.path === 'project.list' ? projectFilters.parse(op.input) : undefined;
               const data =
@@ -53,9 +68,9 @@ const meta = {
   component: ChildWorkspacesPanel,
   parameters: { layout: 'centered' },
   decorators: [
-    (Story) => (
-      <StoryProvider>
-        <div className="h-80 w-[420px]">
+    (Story, context) => (
+      <StoryProvider failChildren={context.parameters.failChildren === true}>
+        <div className="h-80 w-[420px] max-w-[calc(100vw-2rem)]">
           <Story />
         </div>
       </StoryProvider>
@@ -95,4 +110,24 @@ export const EmptyDark: Story = {
 export const ActiveProjectPickerDark: typeof ActiveProjectPicker = {
   ...ActiveProjectPicker,
   globals: { theme: 'dark' },
+};
+
+export const RecoverableError: Story = {
+  parameters: { failChildren: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Offline');
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry' }));
+    await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+export const RecoverableErrorDark: Story = { ...RecoverableError, globals: { theme: 'dark' } };
+export const RecoverableErrorPhone: Story = {
+  ...RecoverableError,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async (context) => {
+    await RecoverableError.play?.(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
 };

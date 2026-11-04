@@ -94,8 +94,13 @@ panels and lists.
 of a query: `Loading` (or a `loading` override such as a skeleton) while there
 is no data, `QueryErrorState` with Retry when the query failed without data,
 `empty` when `isEmpty(data)` is true, and `children(data)` otherwise. Cached
-data still renders when only a background refetch fails. Write branches by hand
-when a panel combines several queries, as `CombinedChangesPanel` does.
+data still renders when only a background refetch fails. Render this wrapper
+only when the request is enabled; a disabled query belongs in the caller's
+conditional UI. Without data or an error, the request is unresolved, including
+when paused offline. `empty` may deliberately be `null`; supply an `EmptyState`
+alongside `isEmpty` when the user needs an empty message or next action. Write
+branches by hand when a panel combines several queries, as
+`CombinedChangesPanel` does.
 
 Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
 The app root and the routed page area each have one. The page boundary resets

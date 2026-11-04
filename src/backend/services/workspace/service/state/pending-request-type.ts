@@ -1,4 +1,7 @@
-import { isExitPlanModeRequest, isUserQuestionRequest } from '@/shared/pending-request-types';
+import {
+  getPendingRequestType,
+  type PendingRequestClassificationInput,
+} from '@/shared/pending-request-types';
 
 export type WorkspacePendingRequestType =
   | 'plan_approval'
@@ -8,17 +11,14 @@ export type WorkspacePendingRequestType =
 
 /**
  * Determine the pending request type for a workspace based on its active sessions.
- * Returns 'plan_approval' if any session has a pending ExitPlanMode request,
+ * Returns 'plan_approval' if any session has a pending non-MCP ExitPlanMode request,
  * 'user_question' if any session has a pending non-MCP request with usable questions,
  * 'permission_request' for any other pending modal permission request,
  * or null if no pending requests.
  */
 export function computePendingRequestType(
   sessionIds: string[],
-  pendingRequests: Map<
-    string,
-    { toolName: string; rawToolName?: string; input?: Record<string, unknown> }
-  >
+  pendingRequests: ReadonlyMap<string, PendingRequestClassificationInput>
 ): WorkspacePendingRequestType {
   let hasUserQuestion = false;
   let hasPermissionRequest = false;
@@ -29,14 +29,15 @@ export function computePendingRequestType(
       continue;
     }
 
-    if (isExitPlanModeRequest({ toolName: request.toolName, input: request.input })) {
-      return 'plan_approval';
+    const type = getPendingRequestType(request);
+    if (type === 'plan_approval') {
+      return type;
     }
-    if (isUserQuestionRequest(request)) {
+    if (type === 'user_question') {
       hasUserQuestion = true;
-      continue;
+    } else {
+      hasPermissionRequest = true;
     }
-    hasPermissionRequest = true;
   }
 
   if (hasUserQuestion) {

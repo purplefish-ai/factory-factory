@@ -19,33 +19,67 @@ function parseDate(value: DateInput): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+type DatePrecision = 'date' | 'minute' | 'second';
+const MAX_FORMATTERS = 16;
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function createFormatter(
+  options: DateDisplayOptions,
+  precision: DatePrecision
+): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat(options.locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    ...(precision !== 'date' ? ({ hour: 'numeric', minute: '2-digit' } as const) : {}),
+    ...(precision === 'second' ? ({ second: '2-digit' } as const) : {}),
+    timeZone: options.timeZone,
+  });
+}
+
+/** Cache explicit configurations, leaving browser defaults live when either option is omitted. */
+function getFormatter(options: DateDisplayOptions, precision: DatePrecision): Intl.DateTimeFormat {
+  const locale = options.locale;
+  const localeStrings =
+    locale === undefined ? [] : Array.isArray(locale) ? locale.map(String) : [String(locale)];
+  if (localeStrings.length === 0 || options.timeZone === undefined) {
+    return createFormatter(options, precision);
+  }
+  const locales = Intl.getCanonicalLocales(localeStrings);
+  const key = JSON.stringify({
+    locales,
+    timeZone: options.timeZone,
+    precision,
+  });
+  const cached = formatters.get(key);
+  if (cached) {
+    return cached;
+  }
+  // Unsupported preferences also fall back to the browser's current locale.
+  if (Intl.DateTimeFormat.supportedLocalesOf(locales).length === 0) {
+    return createFormatter(options, precision);
+  }
+  const formatter = createFormatter(options, precision);
+  if (formatters.size >= MAX_FORMATTERS) {
+    const oldest = formatters.keys().next().value;
+    if (oldest !== undefined) {
+      formatters.delete(oldest);
+    }
+  }
+  formatters.set(key, formatter);
+  return formatter;
+}
+
 /** The same calendar date for pickers, metadata and history, in the user's locale. */
 export function formatDate(value: DateInput, options: DateDisplayOptions = {}): string {
   const date = parseDate(value);
-  return date
-    ? new Intl.DateTimeFormat(options.locale, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: options.timeZone,
-      }).format(date)
-    : 'Unknown date';
+  return date ? getFormatter(options, 'date').format(date) : 'Unknown date';
 }
 
 /** Browser locale and time zone by default; explicit options make tests deterministic. */
 export function formatDateTime(value: DateInput, options: DateTimeDisplayOptions = {}): string {
   const date = parseDate(value);
-  return date
-    ? new Intl.DateTimeFormat(options.locale, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        ...(options.precision === 'second' ? { second: '2-digit' } : {}),
-        timeZone: options.timeZone,
-      }).format(date)
-    : 'Unknown date';
+  return date ? getFormatter(options, options.precision ?? 'minute').format(date) : 'Unknown date';
 }
 
 /** Valid machine-readable time, including milliseconds; invalid dates omit the attribute. */

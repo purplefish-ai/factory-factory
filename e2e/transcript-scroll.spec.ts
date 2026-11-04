@@ -6,6 +6,22 @@ function gap(viewport: Locator) {
   );
 }
 
+test('typing and clearing a composer keeps the transcript at latest', async ({ page }) => {
+  await page.goto('/__transcript-scroll?composer=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  const input = page.getByRole('textbox');
+  const jump = page.getByRole('button', { name: 'Scroll to bottom', exact: true });
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  for (const draft of ['hello', 'A longer draft\n'.repeat(12)]) {
+    await input.fill(draft);
+    await expect(input).toHaveValue(draft);
+    await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+    await input.fill('');
+    await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+    await expect(jump).toBeHidden();
+  }
+});
+
 test('new transcript starts at latest and follows viewport resizing', async ({ page }) => {
   await page.goto('/__transcript-scroll');
   const viewport = page.getByTestId('transcript-viewport');

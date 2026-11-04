@@ -3,7 +3,11 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   outputDir: 'test-results/chat',
-  testMatch: ['scroll-button-occlusion.spec.ts', 'queued-message-actions.spec.ts'],
+  testMatch: [
+    'scroll-button-occlusion.spec.ts',
+    'queued-message-actions.spec.ts',
+    'composer-scroll.spec.ts',
+  ],
   workers: 1,
   timeout: 60_000,
   retries: process.env.CI ? 2 : 0,

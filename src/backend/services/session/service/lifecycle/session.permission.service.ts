@@ -123,6 +123,7 @@ export class SessionPermissionService {
           type: 'permission_request',
           requestId,
           toolName,
+          ...(rawToolName ? { rawToolName } : {}),
           toolUseId: params.toolCall.toolCallId,
           toolInput,
           ...(event.elicitation ? { elicitation: event.elicitation } : {}),

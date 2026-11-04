@@ -1,3 +1,6 @@
+import { ChatCircleDotsIcon } from '@phosphor-icons/react/dist/csr/ChatCircleDots';
+import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
+import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { describe, expect, it } from 'vitest';
 import {
   deriveSessionTabRuntime,
@@ -38,6 +41,30 @@ describe('session-tab-runtime', () => {
 
     expect(result.label).toBe('Idle');
     expect(result.isRunning).toBe(false);
+  });
+
+  it.each([
+    ['permission_request', 'Needs approval', ShieldWarningIcon],
+    ['user_question', 'Needs answer', ChatCircleDotsIcon],
+    ['plan_approval', 'Needs plan review', ClipboardTextIcon],
+  ] as const)('shows a working session blocked on a %s as needing you', (type, label, icon) => {
+    const summary = createSummary({
+      runtimePhase: 'running',
+      activity: 'WORKING',
+      pendingRequestType: type,
+    });
+
+    const result = deriveSessionTabRuntime(summary, 'RUNNING');
+
+    expect(result).toMatchObject({
+      label,
+      icon,
+      color: 'text-warning',
+      pulse: false,
+      spin: false,
+      isRunning: false,
+      awaitingInput: true,
+    });
   });
 
   it('shows runtime error details when available', () => {

@@ -3,11 +3,23 @@
  * Used by both frontend and backend for session restore functionality.
  */
 
+import { isMcpToolRequest, isUserQuestionRequest } from './acp-protocol/question-input';
+
 export {
   getAskUserQuestions,
   hasAskUserQuestionInput,
   isUserQuestionRequest,
 } from './acp-protocol/question-input';
+
+export type { PendingRequestType } from './pending-request-constants';
+import type { PendingRequestType } from './pending-request-constants';
+
+/** The fields that classify a pending request; both stored and wire shapes have them. */
+export interface PendingRequestClassificationInput {
+  toolName: string;
+  rawToolName?: string;
+  input?: Record<string, unknown>;
+}
 
 /**
  * Returns true when the tool input identifies an ACP ExitPlanMode request.
@@ -50,4 +62,21 @@ export interface PendingInteractiveRequest {
     kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
   }>;
   timestamp: string;
+}
+
+/**
+ * Classifies one pending request: ExitPlanMode is plan approval, a non-MCP
+ * request with usable questions is a user question, and anything else is a
+ * permission request.
+ */
+export function getPendingRequestType(
+  request: PendingRequestClassificationInput
+): PendingRequestType {
+  if (!isMcpToolRequest(request) && isExitPlanModeRequest(request)) {
+    return 'plan_approval';
+  }
+  if (isUserQuestionRequest(request)) {
+    return 'user_question';
+  }
+  return 'permission_request';
 }

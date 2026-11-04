@@ -676,6 +676,33 @@ snapshot synchronization aligned with the URL.
 Global Reviews and Settings headers return to the persisted selected project
 when it still exists, falling back to the first available project otherwise.
 
+## Session needs-input status
+
+Each `SessionSummary` carries `pendingRequestType` (`permission_request`,
+`user_question`, `plan_approval` or null). `buildWorkspaceSessionSummaries`
+classifies it from the live pending interactive request map through the shared
+`getPendingRequestType`. The workspace-level `pendingRequestType` uses the same
+classifier. A `pending_request_changed` event refreshes the workspace type and
+the session summaries together, from one copy of the map.
+
+`deriveSessionUiStatusKind` returns `awaiting-input` when a request is pending,
+ahead of `working`. A blocked prompt still reports `WORKING` activity. Loading,
+starting, stopping, error and exited states still take precedence. Chat tabs
+show awaiting-input in the `attention` tone with one icon per request kind
+(`src/client/lib/pending-request-presentation.ts`), and they do not pulse. While
+the open chat has a pending request, the thinking footer and the composer
+placeholder say what the agent is waiting for instead of "Agent is working".
+Closing an awaiting-input tab still asks for confirmation, because closing it
+stops the prompt.
+
+The sidebar glow (`useWorkspaceAttention`) still fades after 30 seconds, even
+while a request is pending. Pending-request transitions in
+`useProjectSnapshotSync` dispatch attention events without playing the
+completion sound; `useWorkspaceAttention` consumes those events and expires the
+glow. The workspace's pending-request icon stays in the sidebar and the tab
+status stays on the tab until the request resolves. A glow that never stopped
+would keep animating for every blocked workspace.
+
 ## Completion notifications
 
 Desktop completion alerts use the renderer’s browser `Notification` API in both

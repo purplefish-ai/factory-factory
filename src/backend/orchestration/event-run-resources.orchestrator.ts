@@ -7,8 +7,10 @@ import {
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
+import { userSettingsService } from '@/backend/services/settings';
 import { WorkspaceCreationService } from '@/backend/services/workspace';
 import { eventAgentExecutionSchema, type EventAgentExecution } from '@/shared/event-agent-launch';
+import { resolvePermissionPresetAccessMode } from '@/shared/session-launch';
 
 const creation = new WorkspaceCreationService({ logger: createLogger('event-launch') });
 type Run = Awaited<ReturnType<typeof eventRunLaunch.read>>;
@@ -55,20 +57,24 @@ export async function createEventLaunchResources(
   } else if (run.execution.provider === 'CODEX') {
     await codexAccountService.withAccountReservation(
       { model: run.execution.model, reasoningEffort: run.execution.reasoningEffort },
-      (id) => create(resolveExecution(run, id))
+      async (id) => create(await resolveExecution(run, id))
     );
   } else {
-    await create(resolveExecution(run, null));
+    await create(await resolveExecution(run, null));
   }
   return binding;
 }
-function resolveExecution(run: Run, codexAccountId: string | null) {
+async function resolveExecution(run: Run, codexAccountId: string | null) {
+  const { defaultWorkspacePermissions } = await userSettingsService.get();
   return eventAgentExecutionSchema.parse({
     ...run.execution,
     reasoningEffort: run.execution.reasoningEffort ?? null,
     codexAccountId,
     startupModePreset: 'non_interactive',
-    accessMode: run.execution.provider === 'CLAUDE' ? 'bypassPermissions' : 'workspace-write',
+    accessMode: resolvePermissionPresetAccessMode(
+      run.execution.provider,
+      defaultWorkspacePermissions
+    ),
     planModeEnabled: false,
   });
 }

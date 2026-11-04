@@ -22,6 +22,7 @@ interface WebSocketMessageCommon {
   agentMetadata?: AgentMetadata;
   requestId?: string;
   toolName?: string;
+  rawToolName?: string;
   toolUseId?: string;
   toolInput?: Record<string, unknown>;
   elicitation?: 'form' | 'url';
@@ -136,6 +137,7 @@ interface WebSocketMessagePayloadByType {
   permission_request: {
     requestId?: string;
     toolName?: string;
+    rawToolName?: string;
     toolUseId?: string;
     toolInput?: Record<string, unknown>;
     elicitation?: 'form' | 'url';
@@ -150,6 +152,7 @@ interface WebSocketMessagePayloadByType {
   user_question: {
     requestId?: string;
     toolName?: string;
+    rawToolName?: string;
     questions?: AskUserQuestion[];
     /** ACP permission options for mapping selected answer labels to option IDs. */
     acpOptions?: Array<{
