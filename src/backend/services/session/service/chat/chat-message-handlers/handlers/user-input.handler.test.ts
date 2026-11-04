@@ -6,6 +6,14 @@ import type {
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { createUserInputHandler } from './user-input.handler';
 
+function pendingInput() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function createDeps(options?: { isSessionRunning?: boolean }) {
   const acpRuntimeManager: SessionCommandRuntimeManager = {
     isSessionRunning: vi.fn(() => options?.isSessionRunning ?? false),
@@ -148,8 +156,8 @@ it('returns recoverable original content when human admission fails', async () =
 });
 
 it('serializes durable admission and submission without awaiting a full provider turn', async () => {
-  const admission = Promise.withResolvers<void>();
-  const providerTurn = Promise.withResolvers<void>();
+  const admission = pendingInput();
+  const providerTurn = pendingInput();
   const deps = createDeps({ isSessionRunning: true });
   vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValueOnce(providerTurn.promise);
   const humanMessageAccepted = vi
@@ -172,7 +180,7 @@ it('serializes durable admission and submission without awaiting a full provider
 });
 
 it('rejects inputs captured before stop even if the session is running again after admission', async () => {
-  const admission = Promise.withResolvers<void>();
+  const admission = pendingInput();
   let current = true;
   const deps = createDeps({ isSessionRunning: true });
   const handler = createUserInputHandler({
