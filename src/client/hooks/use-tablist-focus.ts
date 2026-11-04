@@ -59,13 +59,21 @@ export function useTablistFocus() {
     };
     const observer = new MutationObserver(() => {
       const nextTabs = [...root.querySelectorAll<HTMLElement>(TABS)];
-      if (focused && !root.contains(focused)) {
+      if (focused && !(root.contains(focused) && focused.matches(TABS))) {
+        const previous = focused;
         const index = tabs.indexOf(focused);
         const target = nextTabs[Math.min(Math.max(index, 0), nextTabs.length - 1)];
         // Dialog close autofocus can settle after the tab is removed. Wait one
         // task, and never take focus from another control or a newer dialog.
         restoreTimer = window.setTimeout(() => {
-          if (root.isConnected && target?.isConnected && document.activeElement === document.body) {
+          const active = document.activeElement;
+          const disabledFocus = active === previous && !previous.matches(TABS);
+          if (
+            root.isConnected &&
+            target?.isConnected &&
+            target.matches(TABS) &&
+            (active === document.body || disabledFocus)
+          ) {
             target.focus();
           }
         }, 0);

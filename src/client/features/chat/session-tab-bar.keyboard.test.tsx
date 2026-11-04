@@ -104,3 +104,25 @@ it('keeps keyboard focus in the chat bar after deleting the focused tab', async 
     vi.unstubAllGlobals();
   }
 });
+
+it('moves focus to an enabled neighbor when the focused tab becomes disabled', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<ClosingChats />));
+    const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
+    tabs[1]!.focus();
+    await act(() => {
+      tabs[1]!.setAttribute('aria-disabled', 'true');
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(document.activeElement).toBe(tabs[0]);
+    expect(tabs[0]?.tabIndex).toBe(0);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});

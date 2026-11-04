@@ -2,7 +2,7 @@
 
 Press `?` outside a text field to open the keyboard reference. Search (`⌘K` on
 macOS, `Ctrl+K` elsewhere) also lists commands available on the current screen.
-Commands share handlers with keyboard shortcuts and the desktop app menu.
+Commands share handlers with keyboard shortcuts.
 
 - `⌘B` / `Ctrl+B`: toggle the sidebar.
 - `Alt+↑` / `Alt+↓`: previous / next workspace in sidebar order.
@@ -15,8 +15,6 @@ Commands share handlers with keyboard shortcuts and the desktop app menu.
 The browser keeps `Mod+Shift+P`, `Mod+Shift+T`, `Mod+Shift+A` and `Ctrl+Tab`
 (`Mod` means Command on macOS and Ctrl elsewhere). The desktop app additionally
 retains its original composer shortcuts and uses `Ctrl+Tab` for chat switching.
-Its native menu supplies Settings (`⌘,` / `Ctrl+,`) and New workspace (`⌘N` /
-`Ctrl+N`).
 
 Tab bars have one Tab stop. Left/Right and Home/End move focus; Enter/Space
 select the focused tab. Delete (the Mac Backspace key) closes a focused tab when
