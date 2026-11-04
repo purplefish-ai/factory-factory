@@ -16,6 +16,8 @@ import { getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
+import { useWaitingSortOrder } from './use-waiting-sort-order';
+import { WaitingSortMenu } from './waiting-sort-menu';
 
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
@@ -138,6 +140,7 @@ function KanbanBoardContent() {
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
   const [search, setSearch] = useState('');
+  const [waitingSortOrder, setWaitingSortOrder] = useWaitingSortOrder();
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
 
@@ -170,11 +173,11 @@ function KanbanBoardContent() {
     }
 
     for (const column of Object.keys(grouped) as KanbanColumnType[]) {
-      grouped[column] = sortBoardWorkspaces(grouped[column]);
+      grouped[column] = sortBoardWorkspaces(grouped[column], waitingSortOrder);
     }
 
     return grouped;
-  }, [workspaces, search]);
+  }, [workspaces, search, waitingSortOrder]);
 
   useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
 
@@ -255,6 +258,8 @@ function KanbanBoardContent() {
         column={column}
         workspaces={workspacesByColumn[column.id] ?? []}
         projectSlug={projectSlug}
+        waitingSortOrder={waitingSortOrder}
+        onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
         onToggleRatcheting={handleToggleRatcheting}
         togglingWorkspaceId={togglingWorkspaceId}
@@ -292,7 +297,7 @@ function KanbanBoardContent() {
         )}
       {isMobile ? (
         <>
-          <div className="flex gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {columns.map((column) => (
               <button
                 key={column.id}
@@ -310,6 +315,9 @@ function KanbanBoardContent() {
                 <span>{getColumnCount(column.id)}</span>
               </button>
             ))}
+            {activeColumnId === 'WAITING' && (
+              <WaitingSortMenu value={waitingSortOrder} onChange={setWaitingSortOrder} />
+            )}
           </div>
           <div key={activeColumnId} className="flex-1 min-h-0 overflow-y-auto">
             {columns.filter((column) => column.id === activeColumnId).map(renderColumn)}

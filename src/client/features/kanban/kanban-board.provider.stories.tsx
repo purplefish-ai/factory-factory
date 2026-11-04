@@ -260,3 +260,111 @@ export const ArchiveDoneColumn: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
   },
 };
+
+export const WaitingSort: Story = {
+  beforeEach: () => {
+    localStorage.removeItem('kanban-waiting-sort-order');
+    return () => localStorage.removeItem('kanban-waiting-sort-order');
+  },
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'workspace.listForProject': () => ({
+          workspaces: [
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'WAITING',
+              id: 'older-created',
+              name: 'Recent message',
+              createdAt: new Date('2026-11-01'),
+              lastActivityAt: '2026-11-04T12:00:00Z',
+            },
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'WAITING',
+              id: 'newer-created',
+              name: 'Recent creation',
+              createdAt: new Date('2026-11-03'),
+              lastActivityAt: '2026-11-03T12:00:00Z',
+            },
+          ],
+          reviewCount: 0,
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Recent message');
+    const ids = () =>
+      [...canvasElement.querySelectorAll('[data-workspace-id]')].map((el) =>
+        el.getAttribute('data-workspace-id')
+      );
+    await expect(ids()).toEqual(['older-created', 'newer-created']);
+    await expect(canvas.queryByText(/Waiting since/)).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(body.getByRole('menuitemradio', { name: 'Latest message' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await userEvent.click(body.getByRole('menuitemradio', { name: 'Created' }));
+    await expect(ids()).toEqual(['newer-created', 'older-created']);
+    await expect(localStorage.getItem('kanban-waiting-sort-order')).toBe('created');
+    await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
+    await expect(body.getByRole('menuitemradio', { name: 'Created' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await userEvent.click(body.getByRole('menuitemradio', { name: 'Latest message' }));
+    await expect(ids()).toEqual(['older-created', 'newer-created']);
+  },
+};
+
+export const PhoneWaitingSort: Story = {
+  ...WaitingSort,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async (context) => {
+    await WaitingSort.play?.(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Waiting sort order' })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'Waiting' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: /Working/ }));
+    await expect(
+      canvas.queryByRole('button', { name: 'Waiting sort order' })
+    ).not.toBeInTheDocument();
+  },
+};
+
+/** Leave room for app padding on a 320px phone. */
+export const NarrowPhoneWaitingSort: Story = {
+  ...WaitingSort,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  render: () => (
+    <div style={{ width: 280, height: '100%' }}>
+      <KanbanBoard />
+    </div>
+  ),
+  play: async (context) => {
+    await WaitingSort.play?.(context);
+    const canvas = within(context.canvasElement);
+    const sort = canvas.getByRole('button', { name: 'Waiting sort order' });
+    const row = sort.parentElement!;
+    const bounds = row.getBoundingClientRect();
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+    for (const button of within(row).getAllByRole('button')) {
+      const rect = button.getBoundingClientRect();
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      await expect(rect.width).toBeGreaterThan(0);
+    }
+    await userEvent.click(sort);
+    await expect(
+      within(context.canvasElement.ownerDocument.body).getByRole('menuitemradio', {
+        name: 'Created',
+      })
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  },
+};

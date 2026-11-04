@@ -1,10 +1,11 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
-import { formatDateTime } from '@/client/lib/date-time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
+import type { WaitingSortOrder } from './board-view';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
+import { WaitingSortMenu } from './waiting-sort-menu';
 
 // UI column IDs include ISSUES (UI-only) plus the database enum values
 export type UIKanbanColumnId = 'ISSUES' | KanbanColumnType;
@@ -35,6 +36,8 @@ interface KanbanColumnProps {
   column: ColumnConfig;
   workspaces: WorkspaceWithKanban[];
   projectSlug: string;
+  waitingSortOrder?: WaitingSortOrder;
+  onWaitingSortOrderChange?: (order: WaitingSortOrder) => void;
   unreadMailCounts?: Record<string, number>;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   togglingWorkspaceId?: string | null;
@@ -49,6 +52,8 @@ export function KanbanColumn({
   column,
   workspaces,
   projectSlug,
+  waitingSortOrder,
+  onWaitingSortOrderChange,
   unreadMailCounts,
   onToggleRatcheting,
   togglingWorkspaceId,
@@ -58,12 +63,13 @@ export function KanbanColumn({
   onOpenQuickChat,
   onRename,
 }: KanbanColumnProps) {
+  const showSortMenu = column.id === 'WAITING' && waitingSortOrder && onWaitingSortOrderChange;
   const isEmpty = workspaces.length === 0;
   const showBulkArchiveButton = column.id === 'DONE' && !isEmpty;
 
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
-      {/* Column Header — hidden on mobile where pills handle this */}
+      {/* Column headers are replaced by column pills on mobile. */}
       <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
@@ -71,6 +77,9 @@ export function KanbanColumn({
             {workspaces.length}
           </Badge>
         </div>
+        {showSortMenu && (
+          <WaitingSortMenu value={waitingSortOrder} onChange={onWaitingSortOrderChange} />
+        )}
         {showBulkArchiveButton && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -99,15 +108,6 @@ export function KanbanColumn({
         ) : (
           workspaces.map((workspace) => (
             <div key={workspace.id} className="shrink-0 space-y-1">
-              {column.id === 'WAITING' && (
-                <div className="text-xs text-muted-foreground">
-                  <span title="Waiting intervals are measured from server-observed transitions; existing Waiting workspaces have unknown start times.">
-                    {workspace.waitingSince
-                      ? `Waiting since ${formatDateTime(workspace.waitingSince)}`
-                      : 'Waiting duration unknown'}
-                  </span>
-                </div>
-              )}
               <KanbanCard
                 workspace={workspace}
                 projectSlug={projectSlug}
