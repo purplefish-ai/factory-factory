@@ -220,20 +220,17 @@ export const BoardCounts: Story = {
     const chips = board.querySelectorAll('[data-variant]');
     await expect(chips[0]).toHaveTextContent(/^2$/);
     await expect(chips[1]).toHaveTextContent(/^1$/);
-    await userEvent.hover(chips[0]!);
+    await userEvent.hover(board);
+    const page = within(document.body);
+    await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
+    await userEvent.unhover(board);
+    board.focus();
+    await expect(board).toHaveFocus();
+    await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
+    await userEvent.keyboard('{Escape}');
     await waitFor(async () => {
-      const tooltip = document.querySelector('[role="tooltip"]');
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toHaveTextContent('Working');
+      await expect(page.queryByRole('tooltip')).not.toBeInTheDocument();
     });
-    await userEvent.unhover(chips[0]!);
-    await userEvent.hover(chips[1]!);
-    await waitFor(async () => {
-      const tooltip = document.querySelector('[role="tooltip"]');
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toHaveTextContent('Waiting');
-    });
-    await userEvent.unhover(chips[1]!);
   },
 };
 

@@ -332,30 +332,20 @@ function ProjectFooterLinks({
     workspaces: showBoardCounts ? (
       <>
         <span className="ml-auto flex shrink-0 gap-1">
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <Badge
-                aria-hidden="true"
-                variant="secondary"
-                className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-              >
-                {workingCount}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>Working</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <Badge
-                aria-hidden="true"
-                variant="warning"
-                className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-              >
-                {waitingCount}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>Waiting</TooltipContent>
-          </Tooltip>
+          <Badge
+            aria-hidden="true"
+            variant="secondary"
+            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+          >
+            {workingCount}
+          </Badge>
+          <Badge
+            aria-hidden="true"
+            variant="warning"
+            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+          >
+            {waitingCount}
+          </Badge>
         </span>
         <span id={boardDescriptionId} className="sr-only">
           Working {workingCount} Waiting {waitingCount}
@@ -391,23 +381,35 @@ function ProjectFooterLinks({
         {badges[section]}
       </>
     );
+    const button = (
+      <SidebarMenuButton asChild={!!projectSlug} disabled={!projectSlug} isActive={active}>
+        {projectSlug ? (
+          <Link
+            to={getProjectSectionPath(projectSlug, section)}
+            onClick={onNavigate}
+            aria-current={active ? 'page' : undefined}
+            aria-label={section === 'agents' || section === 'workspaces' ? label : undefined}
+            aria-describedby={descriptions[section]}
+          >
+            {content}
+          </Link>
+        ) : (
+          content
+        )}
+      </SidebarMenuButton>
+    );
     return (
       <SidebarMenuItem key={section}>
-        <SidebarMenuButton asChild={!!projectSlug} disabled={!projectSlug} isActive={active}>
-          {projectSlug ? (
-            <Link
-              to={getProjectSectionPath(projectSlug, section)}
-              onClick={onNavigate}
-              aria-current={active ? 'page' : undefined}
-              aria-label={section === 'agents' || section === 'workspaces' ? label : undefined}
-              aria-describedby={descriptions[section]}
-            >
-              {content}
-            </Link>
-          ) : (
-            content
-          )}
-        </SidebarMenuButton>
+        {section === 'workspaces' && showBoardCounts ? (
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent>
+              Working {workingCount} · Waiting {waitingCount}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          button
+        )}
       </SidebarMenuItem>
     );
   });
