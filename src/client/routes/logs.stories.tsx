@@ -14,7 +14,7 @@ function LogsStory() {
     const data = {
       entries: [
         {
-          timestamp: new Date().toISOString(),
+          timestamp: '2026-11-04T10:23:45.678Z',
           level: 'info',
           component: 'story',
           message: 'Story log entry',
@@ -62,7 +62,11 @@ export const RelativeRange: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Story log entry');
-    const timeRange = canvas.getByText('All Time').closest('button');
+    const time = canvasElement.querySelector('time');
+    await expect(time).toHaveAttribute('datetime', '2026-11-04T10:23:45.678Z');
+    await expect(time).toHaveAttribute('title', '2026-11-04T10:23:45.678Z');
+    await expect(time).toHaveTextContent(':45');
+    const timeRange = canvas.getByText('All time').closest('button');
     if (!timeRange) {
       throw new Error('Time range trigger is missing');
     }
@@ -77,3 +81,5 @@ export const RelativeRange: Story = {
     await expect(onRequest).toHaveBeenCalledTimes(2);
   },
 };
+
+export const DatesDark: Story = { ...RelativeRange, globals: { theme: 'dark' } };

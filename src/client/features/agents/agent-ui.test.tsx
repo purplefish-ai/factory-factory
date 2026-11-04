@@ -46,6 +46,21 @@ function renderHistory(runs: AgentRun[] | undefined, extra = {}) {
 }
 
 describe('AgentRunHistory', () => {
+  it('keeps precise machine dates and detail tooltips while displaying readable minutes', () => {
+    renderHistory([run({ startedAt: new Date('2026-11-04T10:23:45.678Z') })]);
+    const time = container.querySelector('time');
+    expect(time?.dateTime).toBe('2026-11-04T10:23:45.678Z');
+    expect(time?.title).toContain(':45');
+    expect(time?.textContent).toContain('2026');
+    expect(time?.textContent).not.toContain(':45');
+  });
+
+  it('shows an invalid-date fallback without crashing the run history', () => {
+    renderHistory([run({ startedAt: new Date(Number.NaN) })]);
+    expect(container.querySelector('time')?.textContent).toBe('Unknown date');
+    expect(container.querySelector('time')?.hasAttribute('datetime')).toBe(false);
+  });
+
   it('links every non-null workspace ID using the owning project, including archived workspaces', () => {
     renderHistory([
       run({

@@ -259,7 +259,17 @@ const meta = {
 } satisfies Meta<typeof InboxStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const UnreadMessages: Story = {};
+export const UnreadMessages: Story = {
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText('Authentication needs a decision');
+    const times = canvasElement.querySelectorAll('time');
+    await expect(times.length).toBeGreaterThan(0);
+    for (const time of times) {
+      await expect(time).toHaveTextContent('2026');
+      await expect(time).toHaveAttribute('datetime', receivedAt.toISOString());
+    }
+  },
+};
 export const NarrowInbox: Story = { args: { width: 320 } };
 export const MailNotification: Story = { args: { notification: true, width: 720 } };
 export const QueuedMailNotification: Story = {

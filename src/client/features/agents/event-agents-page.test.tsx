@@ -622,7 +622,7 @@ it('keeps same-ID rail highlights and drafts distinct between kinds', async () =
   expect(container.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
     '/projects/owner/agents/same'
   );
-  await click('Edit Agent');
+  await click('Edit agent');
   expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
     'Scheduled control'
   );
@@ -686,7 +686,7 @@ it.each(['preview', 'sources'])(
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
     );
-    await click('Edit Agent');
+    await click('Edit agent');
     await edit('input[name="name"]', 'New scheduled session');
     await act(() => gate.resolve());
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
@@ -840,7 +840,7 @@ it('seeds the captured event owner after delayed save without replacing the same
   await waitForReact(() =>
     expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
   );
-  await click('Edit Agent');
+  await click('Edit agent');
   await edit('input[name="name"]', 'Keep scheduled draft');
   const form = container.querySelector('form');
   fail = 'agent.get';

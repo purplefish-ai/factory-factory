@@ -414,7 +414,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit Agent').click());
+    actFlushSync(() => button('Edit agent').click());
     const form = container.querySelector('form');
     const instructions = container.querySelector<HTMLTextAreaElement>('textarea');
     const draft = 'Unsaved instructions with specific changes.\nKeep this second line too.';
@@ -454,7 +454,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit Agent').click());
+    actFlushSync(() => button('Edit agent').click());
     const name = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -540,7 +540,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit Agent').click());
+    actFlushSync(() => button('Edit agent').click());
     const originalForm = container.querySelector('form');
     const name = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {
