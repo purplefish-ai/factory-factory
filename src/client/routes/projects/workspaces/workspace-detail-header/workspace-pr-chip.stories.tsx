@@ -1,11 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { z } from 'zod';
-import { trpc } from '@/client/lib/trpc';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { PRDeliveryMode } from '@/shared/pr-monitoring';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { WorkspacePrChip } from './workspace-pr-chip';
@@ -84,53 +79,30 @@ const meta = {
           'The workspace header PR control. It shows "#123" with the state that most needs attention, in the shared status tones, and the wrench shows whether PR updates are on. The menu lists every PR and holds the updates toggle, delivery options and Add PR.',
       },
     },
-  },
-  decorators: [
-    (Story) => {
-      const [queryClient] = useState(() => new QueryClient());
-      const [client] = useState(() =>
-        trpc.createClient({
-          links: [
-            () =>
-              ({ op }) =>
-                observable((observer) => {
-                  const input = z
-                    .object({ recipientSessionId: z.string().nullable().optional() })
-                    .passthrough()
-                    .parse(op.input);
-                  observer.next({
-                    result: {
-                      data:
-                        input.recipientSessionId || input.deliveryMode === PRDeliveryMode.DEDICATED
-                          ? {
-                              status: 'enabled',
-                            }
-                          : {
-                              status: 'recipient_required',
-                              bindingRevision: 1,
-                              candidates: [
-                                { id: 'main', name: 'Implementation', provider: 'claude' },
-                                { id: 'other', name: 'Follow-up', provider: 'codex' },
-                              ],
-                            },
-                    },
-                  });
-                  observer.complete();
-                }),
-          ],
-        })
-      );
-      return (
-        <trpc.Provider client={client} queryClient={queryClient}>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <Story />
-            </TooltipProvider>
-          </QueryClientProvider>
-        </trpc.Provider>
-      );
+    trpc: {
+      handlers: {
+        // Turning updates on in the main conversation asks which chat receives them.
+        'workspace.toggleRatcheting': (input: unknown) => {
+          const { recipientSessionId, deliveryMode } = z
+            .object({
+              recipientSessionId: z.string().nullable().optional(),
+              deliveryMode: z.string().optional(),
+            })
+            .parse(input);
+          return recipientSessionId || deliveryMode === PRDeliveryMode.DEDICATED
+            ? { status: 'enabled' }
+            : {
+                status: 'recipient_required',
+                bindingRevision: 1,
+                candidates: [
+                  { id: 'main', name: 'Implementation', provider: 'claude' },
+                  { id: 'other', name: 'Follow-up', provider: 'codex' },
+                ],
+              };
+        },
+      },
     },
-  ],
+  },
 } satisfies Meta<typeof PrChipStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
