@@ -150,9 +150,12 @@ preserves its open/closed preference across navigation.
 ## Accessibility and offline defaults
 
 Muted text meets WCAG AA (4.5:1) against page, card and muted surfaces in all
-presets and both modes. The status palette test guards these combinations.
-Compact CI and child workspace indicators use distinct status icons with
-accessible labels, so their meaning survives monochrome display.
+presets and both modes, including labels using `text-muted-foreground/80`. The
+status palette test guards these combinations. Factory muted fills also separate
+selected terminals, table rows and hover states from pane headers; use the
+shared tokens rather than adjusting contrast per component. Compact CI and child
+workspace indicators use distinct status icons with accessible labels, so their
+meaning survives monochrome display.
 
 Geist and Geist Mono variable fonts are served locally, including in Storybook,
 so default text remains available offline. The assets and SIL Open Font License

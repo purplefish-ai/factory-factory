@@ -46,7 +46,7 @@ export function TerminalTabBar({
           <div
             key={tab.id}
             className={cn(
-              'flex items-center rounded-md transition-colors group flex-shrink-0',
+              'flex items-center rounded-md border border-transparent text-sm font-medium transition-colors group flex-shrink-0',
               activeTabId === tab.id
                 ? 'bg-muted text-foreground'
                 : 'text-foreground hover:bg-muted/50'
@@ -54,10 +54,10 @@ export function TerminalTabBar({
           >
             <button
               type="button"
-              className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1 px-2 py-1 cursor-pointer whitespace-nowrap"
               onClick={() => onSelectTab(tab.id)}
             >
-              <TerminalIcon className="h-3 w-3 flex-shrink-0" />
+              <TerminalIcon className="h-3.5 w-3.5 flex-shrink-0" />
               <span>{tab.label}</span>
             </button>
             <button

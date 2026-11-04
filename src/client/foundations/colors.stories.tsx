@@ -18,6 +18,7 @@ const TOKEN_GROUPS: TokenGroup[] = [
     description: 'Page, card and control surfaces with their text colors.',
     tokens: [
       { name: 'background' },
+      { name: 'shell' },
       { name: 'foreground', on: 'background' },
       { name: 'card' },
       { name: 'card-foreground', on: 'card' },
@@ -170,6 +171,33 @@ function ColorTokens({ dark = false }: { dark?: boolean }) {
   const { ref, resolved } = useRenderedTokens(ALL_TOKENS);
   return (
     <div ref={ref} className="max-w-5xl space-y-8 bg-background p-6 text-foreground">
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Secondary labels at 80% opacity</h2>
+        <p className="text-sm text-muted-foreground">
+          Shared muted text in pane headers, cards, tables and control surfaces.
+        </p>
+        <div className="grid grid-cols-5 gap-3">
+          {['background', 'shell', 'card', 'muted', 'accent'].map((surface) => {
+            const background = resolved.get(surface)?.rgb;
+            const foreground = resolved.get('muted-foreground')?.rgb;
+            return (
+              <div
+                key={surface}
+                className="rounded border p-3"
+                style={{ background: `var(--${surface})` }}
+              >
+                <p className="text-sm text-muted-foreground/80">Log source / {surface}</p>
+                <ContrastLabel
+                  foreground={
+                    foreground && background ? mixOver(foreground, background, 0.8) : null
+                  }
+                  background={background}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </section>
       {TOKEN_GROUPS.map((group) => (
         <section key={group.title} className="space-y-3">
           <div>

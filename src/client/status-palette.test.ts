@@ -121,13 +121,22 @@ describe('status palette', () => {
     expect(new Set(values).size).toBe(STATUS_TOKENS.length);
   });
 
-  it.each(CASES)('%s %s neutral status text is legible', (scheme, mode) => {
+  it.each(CASES)('%s %s neutral text remains legible at 80% opacity', (scheme, mode) => {
     const { color } = palette(scheme, mode);
     for (const surface of ['background', 'card', 'muted']) {
       expect
-        .soft(contrastRatio(color('muted-foreground'), color(surface)), `on ${surface}`)
+        .soft(
+          contrastRatio(mixOver(color('muted-foreground'), color(surface), 0.8), color(surface)),
+          `at 80% on ${surface}`
+        )
         .toBeGreaterThanOrEqual(AA);
     }
+  });
+
+  it.each(MODES)('keeps factory muted selections distinct from the page in %s', (mode) => {
+    const { color } = palette('factory', mode);
+    // A subtle surface distinction, separate from WCAG's text contrast rule.
+    expect(contrastRatio(color('muted'), color('background'))).toBeGreaterThanOrEqual(1.25);
   });
 
   it.each(MODES)('keeps factory warning and focus rings separate from the brand in %s', (mode) => {

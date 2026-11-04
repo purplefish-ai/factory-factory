@@ -66,8 +66,10 @@
   --primary-foreground: oklch(0.98 0 0);
   --secondary: oklch(0.96 0 0);
   --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.5 0 0);
+  /* Muted fills must remain distinct from pane headers (--shell). */
+  --muted: oklch(0.9 0 0);
+  /* Keep secondary labels readable, including text-muted-foreground/80. */
+  --muted-foreground: oklch(0.38 0 0);
   --accent: oklch(0.96 0 0);
   --accent-foreground: oklch(0.145 0 0);
   /*
@@ -231,8 +233,8 @@
   --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.22 0 0);
   --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.65 0 0);
+  --muted: oklch(0.3 0 0);
+  --muted-foreground: oklch(0.76 0 0);
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(0.98 0 0);
   /* Factory Yellow: #FFE500 */
