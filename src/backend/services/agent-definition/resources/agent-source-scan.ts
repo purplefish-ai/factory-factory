@@ -54,13 +54,19 @@ function consumeOverlap(scan: AgentSourceScan, ids: string[]): number {
   }
   let offset = 0;
   for (; offset < ids.length; offset++) {
-    const actual = ids[offset];
+    const actual = ids[offset] ?? discontinuity();
     const expected = scan.resumeIds[scan.overlapOffset];
     if (scan.overlapOffset === 0 && actual !== expected) {
       continue;
     }
     if (actual !== expected) {
-      discontinuity();
+      const earlier = scan.resumeIds.slice(0, scan.overlapOffset).lastIndexOf(actual);
+      // A prepend can replay a consumed prefix at the next page boundary.
+      // Within a page the overlap must still be one contiguous ordered run.
+      if (offset !== 0 || earlier < 0) {
+        discontinuity();
+      }
+      scan.overlapOffset = earlier;
     }
     scan.overlapOffset++;
     if (scan.overlapOffset === scan.resumeIds.length) {
@@ -124,6 +130,11 @@ export function capturePage(
   if (fresh.length) {
     scan.resumePage = scan.nextPage;
     scan.resumeIds = fresh.map((item) => item.providerEventId);
+  } else if (scan.overlapOffset === null) {
+    // The overlap was proved without extending capture. Re-arming the same
+    // window next cycle would spend the entire budget replaying it forever.
+    // Continue from nextPage; fresh capture will establish the next window.
+    scan.resumeIds = [];
   }
   if (complete) {
     scan.phase = 'VERIFY';
