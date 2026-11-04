@@ -6,6 +6,10 @@ import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
+import {
+  IssueRefreshRecoveryFixture,
+  exerciseIssueRefreshRecovery,
+} from './project-issues-recovery.story-fixtures';
 
 type State =
   | 'healthy'
@@ -15,7 +19,8 @@ type State =
   | 'project-switch'
   | 'issues-ready'
   | 'issues-error'
-  | 'issues-disconnected';
+  | 'issues-disconnected'
+  | 'issues-recovery';
 
 /** Moves Storybook's shared MemoryRouter to the story's route before rendering. */
 function AtRoute({ path, children }: { path: string; children: ReactNode }) {
@@ -65,7 +70,24 @@ function SidebarStory({
     clearAttention: () => undefined,
     currentWorkspaceId: undefined,
   };
-  return (
+  const content = (
+    <>
+      {state === 'project-switch' ? (
+        <button type="button" onClick={() => setSwitched((value) => !value)}>
+          Switch project
+        </button>
+      ) : null}
+      <AtRoute path={path}>
+        <SidebarProvider className="h-[640px] min-h-0">
+          {mobileOpen ? <OpenMobileSheet /> : null}
+          <AppSidebar navData={navData} />
+        </SidebarProvider>
+      </AtRoute>
+    </>
+  );
+  return state === 'issues-recovery' ? (
+    <IssueRefreshRecoveryFixture projectId="factory">{content}</IssueRefreshRecoveryFixture>
+  ) : (
     <StoryTrpcProvider
       handlers={{
         'github.listIssuesForProject': () => ({
@@ -92,17 +114,7 @@ function SidebarStory({
         'userSettings.get': () => ({ defaultSessionProvider: 'CLAUDE', ratchetEnabled: false }),
       }}
     >
-      {state === 'project-switch' ? (
-        <button type="button" onClick={() => setSwitched((value) => !value)}>
-          Switch project
-        </button>
-      ) : null}
-      <AtRoute path={path}>
-        <SidebarProvider className="h-[640px] min-h-0">
-          {mobileOpen ? <OpenMobileSheet /> : null}
-          <AppSidebar navData={navData} />
-        </SidebarProvider>
-      </AtRoute>
+      {content}
     </StoryTrpcProvider>
   );
 }
@@ -114,7 +126,17 @@ const meta = {
   argTypes: {
     state: {
       control: 'select',
-      options: ['healthy', 'failed', 'loading', 'empty', 'project-switch'],
+      options: [
+        'healthy',
+        'failed',
+        'loading',
+        'empty',
+        'project-switch',
+        'issues-ready',
+        'issues-error',
+        'issues-disconnected',
+        'issues-recovery',
+      ],
     },
   },
 } satisfies Meta<typeof SidebarStory>;
@@ -202,4 +224,9 @@ export const TodoError: Story = {
   play: async ({ canvasElement }) => {
     await expect(await within(canvasElement).findByRole('button', { name: 'Retry' })).toBeVisible();
   },
+};
+
+export const TodoRefreshRecovery: Story = {
+  args: { state: 'issues-recovery' },
+  play: async ({ canvasElement }) => exerciseIssueRefreshRecovery(canvasElement),
 };

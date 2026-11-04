@@ -103,6 +103,7 @@ function KanbanBoardContent() {
     dismissArchiveGitLock,
     retryGitLockedArchives,
     isBulkArchiving,
+    isArchiving,
     requestInlineForm,
     showInlineForm,
     inlineFormRequest,
@@ -295,7 +296,7 @@ function KanbanBoardContent() {
     : 0;
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
-      {workspaces?.length === 0 && !showInlineForm && (
+      {workspaces?.length === 0 && !showInlineForm && !isArchiving && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
           <div>
             <p className="font-medium">Create your first workspace</p>
@@ -359,13 +360,13 @@ function KanbanBoardContent() {
         onConfirm={() =>
           runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.")
         }
-        description={`This will archive all ${columnArchiveCount} workspaces in this column, including any hidden by filters. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+        description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
       <ArchiveWorkspaceDialog
         open={selectionDialogOpen}
         onOpenChange={setSelectionDialogOpen}
         onConfirm={() => runInBackground(archiveSelected(), "Couldn't archive workspaces.")}
-        description={`Archive ${selectedIds.length} selected workspaces? Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
+        description={`Archive ${selectedIds.length} selected ${selectedIds.length === 1 ? 'workspace' : 'workspaces'}? Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
       />
       {archiveGitLockDialog}
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />

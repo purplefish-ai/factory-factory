@@ -20,6 +20,20 @@ export function ProjectIssuesState({
   isRetrying?: boolean;
   filtered?: boolean;
 }) {
+  if (status === 'no-project') {
+    return (
+      <EmptyState
+        size="compact"
+        title="Choose a project"
+        description="Select or create a project to see assigned issues."
+        action={
+          <Link className="text-xs underline" to="/projects/new">
+            New project
+          </Link>
+        }
+      />
+    );
+  }
   if (status === 'loading') {
     return (
       <div role="status" aria-label="Loading issues" className="space-y-2 p-2">

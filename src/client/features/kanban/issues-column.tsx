@@ -2,9 +2,9 @@ import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useMemo } from 'react';
 import { ProjectIssuesState } from '@/client/components/project-issues-state';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Badge } from '@/components/ui/badge';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 import { IssueCard } from './issue-card';
 import type { ColumnConfig } from './kanban-column';
@@ -42,7 +42,10 @@ export function IssuesColumn({
   const isMobile = useIsMobile();
 
   return (
-    <div data-todo-column className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
+    <div
+      data-todo-column
+      className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
+    >
       {/* Column Header — hidden on mobile where pills handle this */}
       <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
@@ -56,7 +59,12 @@ export function IssuesColumn({
       {/* Column Content */}
       <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
         {!isMobile && (
-          <Button variant="outline" size="sm" className="shrink-0 w-full justify-start" onClick={requestInlineForm}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 w-full justify-start"
+            onClick={requestInlineForm}
+          >
             <PlusIcon className="h-4 w-4" />
             New workspace
           </Button>
@@ -73,7 +81,7 @@ export function IssuesColumn({
             }}
           />
         ) : null}
-        {isEmpty && (
+        {(isEmpty || issuesStatus === 'error') && (
           <ProjectIssuesState
             status={issuesStatus}
             isRetrying={isFetchingIssues}

@@ -234,7 +234,7 @@ function IssueGroup({
     <SidebarGroup>
       <SidebarGroupLabel>Todo</SidebarGroupLabel>
       <SidebarGroupContent>
-        {!issues || issues.length === 0 ? (
+        {(!issues || issues.length === 0 || status === 'error') && (
           <ProjectIssuesState
             status={status}
             error={error}
@@ -242,7 +242,8 @@ function IssueGroup({
             onRetry={onRetry}
             isRetrying={isRetrying}
           />
-        ) : (
+        )}
+        {issues && issues.length > 0 && (
           <SidebarMenu>
             {issues.map((issue) => (
               <SidebarIssueItem key={issue.id} issue={issue} onLaunch={() => onLaunch(issue)} />

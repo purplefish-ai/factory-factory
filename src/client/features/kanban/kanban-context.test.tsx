@@ -76,7 +76,7 @@ vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
 }));
 
 function rejectingMutation(
-  getError: () => ArchiveError | undefined,
+  getError: (input: unknown) => ArchiveError | undefined,
   getSuccessData: () => unknown = () => undefined,
   recordInput: (input: unknown) => void = () => undefined
 ) {
@@ -84,7 +84,7 @@ function rejectingMutation(
     useMutation: (options: MutationOptions = {}) => ({
       mutateAsync: vi.fn((input: unknown) => {
         recordInput(input);
-        const error = getError();
+        const error = getError(input);
         if (!error) {
           return Promise.resolve(getSuccessData());
         }
@@ -160,18 +160,15 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({ mutateAsync: vi.fn() }),
       },
       archive: rejectingMutation(
-        () => mocks.archiveError,
+        (input) =>
+          typeof input === 'object' &&
+          input !== null &&
+          'id' in input &&
+          input.id === mocks.failArchiveId
+            ? { message: 'Selected archive failed', data: { code: 'INTERNAL_SERVER_ERROR' } }
+            : mocks.archiveError,
         () => mocks.archiveResponse,
-        (input) => {
-          mocks.archiveInputs.push(input);
-          mocks.archiveError =
-            typeof input === 'object' &&
-            input !== null &&
-            'id' in input &&
-            input.id === mocks.failArchiveId
-              ? { message: 'Selected archive failed', data: { code: 'INTERNAL_SERVER_ERROR' } }
-              : mocks.archiveError;
-        }
+        (input) => mocks.archiveInputs.push(input)
       ),
       bulkArchive: rejectingMutation(
         () => mocks.bulkArchiveError,
@@ -311,10 +308,10 @@ describe('KanbanProvider archive failure handling', () => {
     mocks.failArchiveId = 'workspace-2';
     let failed: string[] = [];
     await act(async () => {
-      failed = await kanban.archiveSelectedWorkspaces(['workspace-1', 'workspace-2']);
+      failed = await kanban.archiveSelectedWorkspaces(['workspace-2', 'workspace-1']);
     });
     expect(failed).toEqual(['workspace-2']);
-    expect(mocks.archiveInputs).toEqual([{ id: 'workspace-1' }, { id: 'workspace-2' }]);
+    expect(mocks.archiveInputs).toEqual([{ id: 'workspace-2' }, { id: 'workspace-1' }]);
     expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
       'workspace-2',
     ]);

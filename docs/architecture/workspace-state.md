@@ -832,8 +832,10 @@ unchanged.
 The board and sidebar use Todo, Working, Waiting, Done order. Todo opens the
 in-app issue launch sheet; external issue links remain explicit. Issue loading,
 provider configuration and fetch failures have separate states, with retry and
-project settings actions. An empty project offers its first workspace while
-keeping assigned issues available.
+project settings actions. A failed refresh keeps cached issues visible alongside
+its error and retry control. Without a selected project, Todo offers project
+selection/creation rather than loading a disabled query. An empty project offers
+its first workspace while keeping assigned issues available.
 
 Board filters search workspace names, branches and conversation summaries plus
 issue titles/identifiers. Sorting affects only the view, preserving snapshot

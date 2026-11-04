@@ -23,7 +23,21 @@ describe('board view', () => {
     expect(rows[0]?.id).toBe('unknown');
   });
   it('filters names, branches and summary text case insensitively', () => {
-    const row = { ...workspace('Login', null, '2020-01-01'), branchName: 'fix/auth' };
+    const row = {
+      ...workspace('Login', null, '2020-01-01'),
+      branchName: 'fix/auth',
+      conversationSummary: {
+        title: 'Login',
+        branch: 'fix-auth',
+        summary: 'Rotate credentials',
+        sidebarSummary: 'Rotate credentials',
+        generatedAt: '2026-11-04T12:00:00Z',
+        sourceSessionId: 's',
+        sourceMessageId: 'm',
+      },
+    };
+    expect(filterBoardWorkspaces([row], 'LOGIN')).toEqual([row]);
+    expect(filterBoardWorkspaces([row], 'CREDENTIALS')).toEqual([row]);
     expect(filterBoardWorkspaces([row], 'AUTH')).toEqual([row]);
     expect(filterBoardWorkspaces([row], 'missing')).toEqual([]);
   });

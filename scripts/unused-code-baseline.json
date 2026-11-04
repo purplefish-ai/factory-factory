@@ -125,6 +125,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/client/components/project-issues-recovery.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Shared Board and sidebar Storybook transport fixture verifies cached issue retention, failure notice and pending retry recovery; no production caller is expected."
+    },
     "src/client/components/streamdown-markdown.fixtures.ts": {
       "disposition": "test-support",
       "reason": "Streaming Markdown samples consumed only by streamdown-markdown.stories.tsx and streamdown-markdown.bench.tsx."

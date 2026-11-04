@@ -41,6 +41,7 @@ interface KanbanContextValue {
   dismissArchiveGitLock: () => void;
   retryGitLockedArchives: (removeGitIndexLock: boolean) => Promise<void>;
   isBulkArchiving: boolean;
+  isArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
   /** Increments on every explicit "New Workspace" request, even if the form is already open. */
@@ -332,6 +333,10 @@ export function KanbanProvider({
         dismissArchiveGitLock,
         retryGitLockedArchives,
         isBulkArchiving: archiveCommand.isBulkArchiving,
+        isArchiving:
+          archiveIssueOperations.size > 0 ||
+          archiveCommand.isArchiving ||
+          archiveCommand.isBulkArchiving,
         showInlineForm,
         setShowInlineForm,
         inlineFormRequest,

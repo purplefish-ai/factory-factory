@@ -97,19 +97,21 @@ export function useProjectIssues(
     : responseError === 'Project is not linked to a GitHub repository' ||
       Boolean(health && !(health.isInstalled && health.isAuthenticated));
   const error = query.error?.message ?? responseError ?? null;
-  const status = getIssuesStatus(notConnected, error, query.isLoading || !query.data);
+  const status = projectId
+    ? getIssuesStatus(notConnected, error, query.isLoading || !query.data)
+    : 'no-project';
 
   return {
-    issues,
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
+    issues: projectId ? issues : undefined,
+    isLoading: Boolean(projectId) && query.isLoading,
+    isFetching: Boolean(projectId) && query.isFetching,
     status,
     error,
     refetch: query.refetch,
   };
 }
 
-export type ProjectIssuesStatus = 'loading' | 'not-connected' | 'error' | 'ready';
+export type ProjectIssuesStatus = 'loading' | 'not-connected' | 'error' | 'ready' | 'no-project';
 
 function getIssuesStatus(
   notConnected: boolean,

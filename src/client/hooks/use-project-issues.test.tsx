@@ -221,6 +221,11 @@ describe('useProjectIssues', () => {
     );
     expect(mocks.shouldSyncHealth).not.toHaveBeenCalled();
     expect(mocks.syncHealth).not.toHaveBeenCalled();
+    expect(resultRef.current).toMatchObject({
+      status: 'no-project',
+      isLoading: false,
+      issues: undefined,
+    });
   });
 
   it('does not overwrite GitHub health when the response is not eligible', () => {

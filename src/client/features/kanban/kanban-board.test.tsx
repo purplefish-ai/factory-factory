@@ -19,6 +19,7 @@ import {
 const mocks = vi.hoisted(() => ({
   isMobile: true,
   showInlineForm: false,
+  isArchiving: false,
   inlineFormRequest: 0,
   workspaces: [] as WorkspaceWithKanban[],
   dismissArchiveGitLock: vi.fn(),
@@ -120,6 +121,7 @@ vi.mock('./kanban-context', () => ({
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,
     retryGitLockedArchives: mocks.retryGitLockedArchives,
     isBulkArchiving: false,
+    isArchiving: mocks.isArchiving,
     showInlineForm: mocks.showInlineForm,
     setShowInlineForm: (show: boolean) => {
       mocks.showInlineForm = show;
@@ -167,6 +169,7 @@ describe('KanbanBoard', () => {
     }
     mocks.isMobile = true;
     mocks.showInlineForm = false;
+    mocks.isArchiving = false;
     mocks.inlineFormRequest = 0;
     mocks.workspaces = [
       {
@@ -235,6 +238,16 @@ describe('KanbanBoard', () => {
       expect(findButton(container, 'New workspace')).toBeDefined();
     }
   );
+
+  it('keeps first-workspace guidance hidden during optimistic archive removal', async () => {
+    mocks.workspaces = [];
+    mocks.isArchiving = true;
+    await act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.textContent).not.toContain('Create your first workspace');
+    mocks.isArchiving = false;
+    await act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.textContent).toContain('Create your first workspace');
+  });
 
   it('shows the created task at the top of Working on mobile', () => {
     mocks.workspaces.push(

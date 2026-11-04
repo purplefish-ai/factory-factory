@@ -2,6 +2,7 @@ import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { formatDateTime } from '@/client/lib/date-time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
@@ -106,12 +107,11 @@ export function KanbanColumn({
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 {onToggleSelected && (
                   <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`Select ${workspace.name}`}
                       checked={selectedIds?.includes(workspace.id) ?? false}
                       disabled={selectionDisabled}
-                      onChange={() => onToggleSelected(workspace.id)}
+                      onCheckedChange={() => onToggleSelected(workspace.id)}
                     />
                     Select
                   </label>
