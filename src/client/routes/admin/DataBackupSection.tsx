@@ -66,10 +66,11 @@ export function DataBackupSection() {
           Automation definition bodies and execution preferences restore disabled; connections,
           event configuration, proposal provenance and automation history are excluded. Inspect
           recovered bodies and author new complete event configuration where editing is available;
-          archived projects and exhausted revisions retain their ordinary editing restrictions.
-          Provider-session identities may remain metadata. Workspace.creationMetadata,
-          WorkspacePR.observation on actual included PR rows, AgentSession.providerMetadata and
-          PeriodicTaskExecution.launchSnapshot preserve SQL NULL versus top-level JSON null.
+          archived projects and definitions that have reached their revision limit retain their
+          ordinary editing restrictions. Provider-session identities may remain metadata.
+          Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows,
+          AgentSession.providerMetadata and PeriodicTaskExecution.launchSnapshot preserve SQL NULL
+          versus top-level JSON null.
         </p>
       </CardContent>
     </Card>

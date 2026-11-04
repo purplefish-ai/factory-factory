@@ -4,6 +4,10 @@ import {
   agentExecutionConfigSchema,
 } from './agent-definition.schema';
 
+const definitionText = z
+  .string()
+  .refine((value) => value.trim().length > 0, 'Definition text must not be blank');
+
 const executionConfig = z.unknown().transform((raw, ctx) => {
   const parsed = agentExecutionConfigSchema.safeParse(raw);
   if (!parsed.success) {
@@ -31,8 +35,8 @@ export const automationDefinitionsRecoverySchema = z
       z.strictObject({
         id: z.string(),
         projectId: z.string(),
-        name: z.string(),
-        instructions: z.string(),
+        name: definitionText,
+        instructions: definitionText,
         isEnabled: z.boolean(),
         executionConfig,
         definitionRevision: agentDefinitionRevisionSchema,

@@ -184,11 +184,4 @@ it('reports exact definition-body scope and retains every cumulative history/nul
     'Automation definition bodies restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing definition ID: 1; project not created by this import: 2. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.'
   );
   expect(report.manifest).toEqual(definitions.meta.recovery);
-  for (const file of [fixed, workspace, full, periodic, links, history]) {
-    if ('meta' in file) {
-      expect(
-        createRecoveryImportReport(recoveryMetadataSchema.parse(file.meta.recovery))
-      ).not.toHaveProperty('automationDefinitions');
-    }
-  }
 });

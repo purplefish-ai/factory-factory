@@ -495,3 +495,27 @@ it('keeps imported definitions absent from source/evaluation/claim work while he
     await destination.prisma.agentDefinition.findUniqueOrThrow({ where: { id: imported.id } })
   ).toEqual(imported);
 });
+
+it.each(['name', 'instructions'] as const)(
+  'fails public export visibly for unsupported stored blank %s without mutation',
+  async (field) => {
+    await dataBackupService.importData(exportDataSchema.parse(fixed));
+    const row = await destination.prisma.agentDefinition.update({
+      where: { id: 'body-definition' },
+      data: { [field]: ' \n\t' },
+    });
+    await expect(dataBackupService.exportData('unsupported-blank')).rejects.toMatchObject({
+      name: 'ZodError',
+      issues: [
+        {
+          code: 'custom',
+          path: ['definitions', 0, field],
+          message: 'Definition text must not be blank',
+        },
+      ],
+    });
+    expect(
+      await destination.prisma.agentDefinition.findUniqueOrThrow({ where: { id: row.id } })
+    ).toEqual(row);
+  }
+);

@@ -17,9 +17,13 @@ import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
 import definitions from '@/shared/testing/recovery-automation-definitions-v8.fixture.json';
+import fullJson from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import workspaceJson from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixture';
+import periodicConfig from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
+import periodicHistory from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
+import periodicLinks from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -270,3 +274,57 @@ it('imports the frozen workspace-only profile with historical PR/session null no
       .$queryRaw`SELECT typeof("providerMetadata") AS storage, json_type("providerMetadata") AS kind FROM "AgentSession" WHERE id = 'session'`
   ).toEqual([{ storage: 'null', kind: null }]);
 });
+
+it.each([
+  fixed,
+  workspaceJson,
+  fullJson,
+  periodicConfig,
+  periodicLinks,
+  periodicHistory,
+  definitions,
+])(
+  'imports genuine $meta.recovery.profile with its exact manifest and definition authority',
+  async (raw) => {
+    const isolated = await createIntegrationDatabase();
+    database.prisma = isolated.prisma;
+    try {
+      const result = await Reflect.apply(dataBackupService.importData, dataBackupService, [raw]);
+      expect(raw.data.projects.length).toBeGreaterThan(0);
+      expect(result.projects).toEqual({ imported: raw.data.projects.length, skipped: 0 });
+      expect(result.workspaces).toEqual({ imported: raw.data.workspaces.length, skipped: 0 });
+      expect(result.agentSessions).toEqual({ imported: raw.data.agentSessions.length, skipped: 0 });
+      expect(result.terminalSessions).toEqual({
+        imported: raw.data.terminalSessions.length,
+        skipped: 0,
+      });
+      expect(await isolated.prisma.project.count()).toBe(raw.data.projects.length);
+      expect(await isolated.prisma.workspace.count()).toBe(raw.data.workspaces.length);
+      expect(result.recovery.manifest).toEqual(raw.meta.recovery);
+      if (raw === definitions) {
+        expect(result.recovery.automationDefinitions).toEqual({
+          model: 'AgentDefinition',
+          imported: 1,
+          skipped: 0,
+          sourceEnabled: 1,
+          restoredDisabled: 1,
+          reasons: { EXISTING_IDENTITY: 0, INCOMPLETE_DEPENDENCY: 0 },
+        });
+        expect(await isolated.prisma.agentDefinition.findMany()).toMatchObject([
+          {
+            id: 'body-definition',
+            isEnabled: false,
+            instructions:
+              definitions.data.recovery.automationDefinitions.definitions[0]!.instructions,
+          },
+        ]);
+      } else {
+        expect(result.recovery).not.toHaveProperty('automationDefinitions');
+        expect(await isolated.prisma.agentDefinition.count()).toBe(0);
+      }
+    } finally {
+      database.prisma = destination.prisma;
+      await destroyIntegrationDatabase(isolated);
+    }
+  }
+);

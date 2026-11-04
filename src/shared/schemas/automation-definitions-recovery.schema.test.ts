@@ -149,3 +149,23 @@ describe('strict definition body boundary', () => {
     }
   });
 });
+
+it.each(['name', 'instructions'] as const)(
+  'rejects blank %s without rewriting meaningful raw text',
+  (field) => {
+    for (const value of ['', ' ', '\n\t']) {
+      const input = section();
+      input.definitions[0]![field] = value;
+      expect(automationDefinitionsRecoverySchema.safeParse(input).error?.issues).toEqual([
+        {
+          code: 'custom',
+          path: ['definitions', 0, field],
+          message: 'Definition text must not be blank',
+        },
+      ]);
+    }
+    const input = section();
+    input.definitions[0]![field] = '  Meaningful raw text.\n';
+    expect(automationDefinitionsRecoverySchema.parse(input)).toEqual(input);
+  }
+);

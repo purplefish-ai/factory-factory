@@ -745,21 +745,37 @@ const invalidRawInputs: [string, (input: typeof history) => void][] = [
       });
     },
   ]),
-  ...[
-    null,
-    [],
-    { version: 2 },
-    { version: 1, provider: 'CLAUDE', model: 'gpt-5' },
-    { version: 1, provider: 'CODEX', model: ' custom-model' },
-    { version: 1, provider: undefined },
-    { version: 1, model: undefined },
-    { version: 1, reasoningEffort: undefined },
-  ].map((executionConfig): [string, (input: typeof history) => void] => [
-    JSON.stringify(executionConfig),
+  ...(
+    [
+      ['null configuration', null],
+      ['array configuration', []],
+      ['unsupported configuration version', { version: 2 }],
+      ['incompatible provider/model', { version: 1, provider: 'CLAUDE', model: 'gpt-5' }],
+      ['padded model', { version: 1, provider: 'CODEX', model: ' custom-model' }],
+      ['own undefined provider', { version: 1, provider: undefined }],
+      ['own undefined model', { version: 1, model: undefined }],
+      ['own undefined reasoning effort', { version: 1, reasoningEffort: undefined }],
+    ] satisfies [string, unknown][]
+  ).map(([caseName, executionConfig]): [string, (input: typeof history) => void] => [
+    caseName,
     (input) => {
       Object.assign(input.data.recovery.automationDefinitions.definitions[0]!, { executionConfig });
     },
   ]),
+  ...(['name', 'instructions'] as const).flatMap((field) =>
+    [
+      ['empty', ''],
+      ['spaces', '  '],
+      ['line whitespace', '\n\t'],
+    ].map(([label, value]): [string, (input: typeof history) => void] => [
+      `${field} ${label}`,
+      (input) => {
+        Object.assign(input.data.recovery.automationDefinitions.definitions[0]!, {
+          [field]: value,
+        });
+      },
+    ])
+  ),
   ...Object.keys(history.data.recovery.automationDefinitions.definitions[0]!).map(
     (key): [string, (input: typeof history) => void] => [
       `missing ${key}`,
