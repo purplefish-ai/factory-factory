@@ -81,6 +81,11 @@ inspect bodies and author complete event configuration where editing is
 available. Archived projects and definitions at their revision limit retain
 ordinary editing restrictions.
 
+Blank Slack workspace identifiers reject on import. A stored blank workspace
+identifier also makes the current export fail visibly, leaving that row
+untouched. Meaningful identity text, including padding, is preserved without
+trimming.
+
 Before opening the restore transaction, versions 4–8 validate the complete
 source graph after legacy normalization. Duplicate project identities or slugs,
 workspace/session/terminal/PR/event IDs, event deduplication keys, contradictory

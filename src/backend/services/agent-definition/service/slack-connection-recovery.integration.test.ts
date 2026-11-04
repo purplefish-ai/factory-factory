@@ -137,7 +137,7 @@ describe('global occupied identities', () => {
         { ...base, id: 'occupied-4', externalId: 'T-1' },
         { ...base, id: '__proto__', externalId: 'T-3' },
         { ...base, id: 'free-enabled', externalId: ' T:free ' },
-        { ...base, id: 'free-disabled', externalId: ' ', isEnabled: false },
+        { ...base, id: 'free-disabled', externalId: ' T:free-disabled ', isEnabled: false },
       ],
     });
     const read = vi.spyOn(db.prisma.agentConnection, 'findMany');
@@ -165,6 +165,13 @@ describe('global occupied identities', () => {
     expect(
       await db.prisma.agentConnection.findUniqueOrThrow({ where: { id: '__proto__' } })
     ).toMatchObject({ externalId: 'T-3', credentialsEncrypted: null, isEnabled: false });
+    expect(
+      await db.prisma.agentConnection.findUniqueOrThrow({ where: { id: 'free-disabled' } })
+    ).toMatchObject({
+      externalId: ' T:free-disabled ',
+      isEnabled: false,
+      credentialsEncrypted: null,
+    });
     expect(request).not.toHaveBeenCalled();
     expect(crypto.encrypt).not.toHaveBeenCalled();
   });

@@ -1,4 +1,6 @@
+import { TRPCError } from '@trpc/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { discoverProjectAgentSources } from '@/backend/orchestration/agent-sources.orchestrator';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import * as slackRecovery from '@/backend/services/agent-definition';
@@ -210,44 +212,90 @@ it('observes a successful Slack insert in the writer transaction before a later 
     await destination.prisma.$executeRawUnsafe('DROP TRIGGER fail_second_slack');
   }
 });
-it.each([
-  [
-    'missing section',
-    (input: typeof slack) => Reflect.deleteProperty(input.data.recovery, 'slackConnections'),
-    'Slack profile sections do not match',
-  ],
-  [
-    'credential property',
-    (input: typeof slack) =>
-      Object.assign(input.data.recovery.slackConnections.connections[0]!, {
-        credentialsEncrypted: undefined,
-      }),
-    'credentialsEncrypted',
-  ],
-  [
-    'duplicate workspace',
-    (input: typeof slack) => {
-      input.data.recovery.slackConnections.connections[1]!.externalId =
-        input.data.recovery.slackConnections.connections[0]!.externalId;
-    },
-    'Duplicate Slack connection identity',
-  ],
-] as const)(
-  'rejects malformed Slack %s at both public boundaries before opening the writer',
-  async (_name, mutate, message) => {
+it.each(
+  (
+    [
+      [
+        'missing section',
+        (input: typeof slack) => Reflect.deleteProperty(input.data.recovery, 'slackConnections'),
+        'Slack profile sections do not match',
+        undefined,
+      ],
+      [
+        'credential property',
+        (input: typeof slack) =>
+          Object.assign(input.data.recovery.slackConnections.connections[0]!, {
+            credentialsEncrypted: undefined,
+          }),
+        'credentialsEncrypted',
+        undefined,
+      ],
+      [
+        'duplicate workspace',
+        (input: typeof slack) => {
+          input.data.recovery.slackConnections.connections[1]!.externalId =
+            input.data.recovery.slackConnections.connections[0]!.externalId;
+        },
+        'Duplicate Slack connection identity',
+        undefined,
+      ],
+      ...(
+        [
+          ['space-only blank workspace', '   '],
+          ['tab/newline-only blank workspace', '\t\n'],
+          ['Unicode-whitespace-only blank workspace', '\u2003\u00a0'],
+        ] as const
+      ).map(
+        ([name, externalId]) =>
+          [
+            name,
+            (input: typeof slack) => {
+              input.data.recovery.slackConnections.connections[0]!.externalId = externalId;
+            },
+            'Workspace ID must not be blank',
+            ['data', 'recovery', 'slackConnections', 'connections', 0, 'externalId'],
+          ] as const
+      ),
+    ] as const
+  ).flatMap(([name, mutate, message, expectedPath]) =>
+    (['service', 'router'] as const).map(
+      (boundary) => [name, boundary, mutate, message, expectedPath] as const
+    )
+  )
+)(
+  'rejects malformed Slack %s via %s before opening the writer',
+  async (_name, boundary, mutate, message, expectedPath) => {
     const input = structuredClone(slack);
     mutate(input);
     const caller = adminRouter.createCaller({
       appContext: { services: { dataBackupService } },
     } as unknown as Context);
     await expectBackupWriterUnopened(async () => {
-      await expect(
-        Reflect.apply(dataBackupService.importData, dataBackupService, [input])
-      ).rejects.toThrow(message);
-      await expect(Reflect.apply(caller.importData, caller, [input])).rejects.toMatchObject({
-        code: 'BAD_REQUEST',
-        message: expect.stringContaining(message),
-      });
+      if (boundary === 'service') {
+        const serviceImport = Reflect.apply(dataBackupService.importData, dataBackupService, [
+          input,
+        ]);
+        await expect(serviceImport).rejects.toThrow(message);
+        if (expectedPath) {
+          expectBlankWorkspaceFailure(
+            await serviceImport.catch((error: unknown) => error),
+            expectedPath
+          );
+        }
+      } else {
+        const routerImport = Reflect.apply(caller.importData, caller, [input]);
+        await expect(routerImport).rejects.toMatchObject({
+          code: 'BAD_REQUEST',
+          message: expect.stringContaining(message),
+        });
+        if (expectedPath) {
+          const error = await routerImport.catch((failure: unknown) => failure);
+          expect(error).toBeInstanceOf(TRPCError);
+          if (error instanceof TRPCError) {
+            expectBlankWorkspaceFailure(error.cause, expectedPath);
+          }
+        }
+      }
     });
   }
 );
@@ -405,4 +453,88 @@ it('preserves inherited periodic links, physical JSON nulls, historical executio
     expect.objectContaining({ id: 'slack-recovered-disabled', isEnabled: false }),
     expect.objectContaining({ id: 'slack-recovered-enabled', isEnabled: false }),
   ]);
+});
+
+function expectBlankWorkspaceFailure(error: unknown, path: readonly (string | number)[]) {
+  expect(error).toBeInstanceOf(ZodError);
+  if (error instanceof ZodError) {
+    const issues = error.issues.flatMap((issue) =>
+      issue.code === 'invalid_union' ? issue.errors.flat() : [issue]
+    );
+    expect(issues).toContainEqual({
+      code: 'custom',
+      path,
+      message: 'Workspace ID must not be blank',
+    });
+  }
+}
+
+it('fails current export for a stored blank Slack workspace identity without mutating the row', async () => {
+  const before = await destination.prisma.agentConnection.create({
+    data: {
+      id: 'unsupported-blank-workspace',
+      provider: 'SLACK',
+      externalId: '\t \n',
+      name: 'Stored blank identity',
+      isEnabled: false,
+      credentialsEncrypted: null,
+      createdAt: new Date('2026-11-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-11-02T10:00:00.000Z'),
+    },
+  });
+  const exporting = dataBackupService.exportData('unsupported-blank-identity');
+  await expect(exporting).rejects.toThrow('Workspace ID must not be blank');
+  expectBlankWorkspaceFailure(await exporting.catch((error: unknown) => error), [
+    'connections',
+    0,
+    'externalId',
+  ]);
+  expect(
+    await destination.prisma.agentConnection.findUniqueOrThrow({ where: { id: before.id } })
+  ).toEqual(before);
+  expect(request).not.toHaveBeenCalled();
+});
+
+it('persists and reexports meaningful padded workspace identities and raw metadata without normalization', async () => {
+  const input = structuredClone(slack);
+  const reserved = {
+    ...input.data.recovery.slackConnections.connections[0]!,
+    id: '__proto__',
+    externalId: ' T:padded-one ',
+    name: ' ',
+  };
+  const empty = {
+    ...input.data.recovery.slackConnections.connections[1]!,
+    id: '',
+    externalId: ' T:padded-two ',
+    name: ' padded ',
+  };
+  input.data.recovery.slackConnections.connections = [reserved, empty];
+  const imported = await Reflect.apply(dataBackupService.importData, dataBackupService, [input]);
+  expect(imported.recovery.slackConnections).toEqual({
+    model: 'AgentConnection',
+    imported: 2,
+    skipped: 0,
+    sourceEnabled: 1,
+    restoredDisabled: 2,
+    reasons: { EXISTING_IDENTITY: 0 },
+  });
+  expect(await destination.prisma.agentConnection.findMany({ orderBy: { id: 'asc' } })).toEqual(
+    [empty, reserved].map((row) => ({
+      ...row,
+      isEnabled: false,
+      credentialsEncrypted: null,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    }))
+  );
+  const reexported = await dataBackupService.exportData('preserve-padded-identity');
+  expect(reexported.data).toHaveProperty('recovery.slackConnections', {
+    version: 1,
+    connections: [
+      { ...empty, isEnabled: false },
+      { ...reserved, isEnabled: false },
+    ],
+  });
+  expect(request).not.toHaveBeenCalled();
 });

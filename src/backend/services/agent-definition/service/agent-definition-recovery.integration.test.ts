@@ -165,6 +165,9 @@ it('roundtrips actual proposal/create/edit bodies then publicly inspects and exp
   expect(await destination.prisma.agentConnection.findMany()).toEqual([
     expect.objectContaining({
       id: 'credential-source',
+      provider: 'SLACK',
+      externalId: 'workspace-source',
+      name: 'Secret source',
       isEnabled: false,
       credentialsEncrypted: null,
     }),

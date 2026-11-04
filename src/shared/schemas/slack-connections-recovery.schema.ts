@@ -7,7 +7,9 @@ export const slackConnectionsRecoverySchema = z
       z.strictObject({
         id: z.string(),
         provider: z.literal('SLACK'),
-        externalId: z.string().min(1),
+        externalId: z
+          .string()
+          .refine((value) => value.trim().length > 0, 'Workspace ID must not be blank'),
         name: z.string().min(1),
         isEnabled: z.boolean(),
         createdAt: z.iso.datetime(),
