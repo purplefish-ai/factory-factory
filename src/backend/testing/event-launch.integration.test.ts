@@ -133,7 +133,13 @@ it.each([false, true])(
     }
     provider.response.resolve({ stopReason: 'end_turn' });
     await task;
-    expect(await h.read()).toMatchObject({ state: 'FINISHED', execution: h.execution });
+    expect(await h.read()).toMatchObject({
+      state: 'FINISHED',
+      execution: { ...h.execution, accessMode: 'default' },
+    });
+    expect(provider.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+      'default'
+    );
     expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
       status: 'RUNNING',
       launchPhase: 'ACTIVE',
