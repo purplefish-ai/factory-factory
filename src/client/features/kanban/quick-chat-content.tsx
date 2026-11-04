@@ -45,7 +45,10 @@ export function QuickChatContent({
   const stopping = chatState.sessionStatus.phase === 'stopping';
   const loadingSession = chatState.sessionStatus.phase === 'loading';
   const startingSession = chatState.sessionStatus.phase === 'starting';
-  const pendingRequestType = getChatPendingRequestType(chatState.pendingRequest);
+  const pendingRequestType = getChatPendingRequestType(
+    chatState.pendingRequest,
+    chatState.sessionRuntime
+  );
   let placeholder = promptInFlight ? 'Message will be queued...' : 'Type a message...';
   if (stopping) {
     placeholder = 'Stopping...';

@@ -3,7 +3,7 @@
  * Used by both frontend and backend for session restore functionality.
  */
 
-import { isUserQuestionRequest } from './acp-protocol/question-input';
+import { isMcpToolRequest, isUserQuestionRequest } from './acp-protocol/question-input';
 
 export {
   getAskUserQuestions,
@@ -72,10 +72,7 @@ export interface PendingInteractiveRequest {
 export function getPendingRequestType(
   request: PendingRequestClassificationInput
 ): PendingRequestType {
-  if (
-    !(request.rawToolName?.startsWith('mcp__') || request.toolName.startsWith('mcp__')) &&
-    isExitPlanModeRequest(request)
-  ) {
+  if (!isMcpToolRequest(request) && isExitPlanModeRequest(request)) {
     return 'plan_approval';
   }
   if (isUserQuestionRequest(request)) {

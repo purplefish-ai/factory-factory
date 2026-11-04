@@ -121,3 +121,16 @@ export const WaitingForApprovalDark: Story = {
   args: { waitingFor: 'permission_request' },
   globals: { theme: 'dark' },
 };
+
+export const InactiveWithRetainedRequest: Story = {
+  args: { active: false, waitingFor: 'permission_request' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('Waiting for your approval')).toBeNull();
+    await expect(canvas.getByTestId('thinking-footer')).toBeVisible();
+  },
+};
+export const InactiveWithRetainedRequestDark: Story = {
+  ...InactiveWithRetainedRequest,
+  globals: { theme: 'dark' },
+};

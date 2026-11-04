@@ -227,7 +227,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
   const permissionRequestId =
     props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
-  const pendingRequestType = getChatPendingRequestType(props.pendingRequest);
+  const pendingRequestType = getChatPendingRequestType(props.pendingRequest, props.sessionRuntime);
   const isPlanApproval = pendingRequestType === 'plan_approval';
 
   useEffect(() => {

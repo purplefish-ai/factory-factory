@@ -356,6 +356,17 @@ describe('ChatContent pending request wording', () => {
         root.render(
           <ChatContent
             {...props}
+            sessionRuntime={{ ...props.sessionRuntime, processState: 'stopped' }}
+          />
+        )
+      );
+      expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
+      expect(input.mock.lastCall?.[0].placeholder).not.toBe(testCase.placeholder);
+
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
             sessionRuntime={{ ...props.sessionRuntime, phase: 'stopping' }}
             sessionStatus={{ phase: 'stopping' }}
           />

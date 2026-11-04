@@ -47,7 +47,7 @@ export function ThinkingFooter({
   if ((!active || waitingFor) && open) {
     setOpen(false);
   }
-  if (waitingFor) {
+  if (active && waitingFor) {
     return <WaitingForUser type={waitingFor} />;
   }
   return (

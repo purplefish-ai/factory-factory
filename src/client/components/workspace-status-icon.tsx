@@ -22,10 +22,15 @@ export function WorkspaceStatusIcon({
 }: WorkspaceStatusIconProps) {
   if (pendingRequestType) {
     const presentation = getPendingRequestPresentation(pendingRequestType);
-    const icon = presentation?.icon ?? WarningIcon;
+    const icon = presentation.icon;
     const name = PENDING_REQUEST_ICON_NAMES[pendingRequestType] ?? 'pending-request';
     return (
-      <span data-icon={name} className="inline-flex shrink-0">
+      <span
+        role="img"
+        aria-label={presentation.label}
+        data-icon={name}
+        className="inline-flex shrink-0"
+      >
         <StatusIcon tone="attention" icon={icon} />
       </span>
     );

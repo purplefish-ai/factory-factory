@@ -9,6 +9,7 @@
 import { ChatCircleDotsIcon } from '@phosphor-icons/react/dist/csr/ChatCircleDots';
 import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import type { PendingRequestType } from '@/shared/pending-request-types';
 
@@ -48,8 +49,18 @@ const PENDING_REQUEST_PRESENTATIONS: Record<PendingRequestType, PendingRequestPr
   },
 };
 
-export function getPendingRequestPresentation(
-  type: PendingRequestType
-): PendingRequestPresentation {
-  return PENDING_REQUEST_PRESENTATIONS[type];
+const GENERIC_PENDING_REQUEST: PendingRequestPresentation = {
+  icon: WarningIcon,
+  label: 'Needs input',
+  description: 'Waiting for your input to continue',
+  waitingText: 'Waiting for your input',
+  composerPlaceholder: 'Respond to the request above, or queue a message...',
+};
+
+function hasPresentation(type: string): type is PendingRequestType {
+  return Object.hasOwn(PENDING_REQUEST_PRESENTATIONS, type);
+}
+
+export function getPendingRequestPresentation(type: string): PendingRequestPresentation {
+  return hasPresentation(type) ? PENDING_REQUEST_PRESENTATIONS[type] : GENERIC_PENDING_REQUEST;
 }

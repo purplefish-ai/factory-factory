@@ -150,6 +150,26 @@ describe('QuickChatContent composer and queue controls', () => {
               workspaceId="workspace-1"
               chatState={{
                 ...chatState,
+                sessionRuntime: { ...chatState.sessionRuntime, processState: 'stopped' },
+              }}
+              transcriptScroll={{
+                identity: 'quick-story',
+                active: true,
+                ready: true,
+                initialIntent: 'following',
+                initialPosition: null,
+              }}
+            />
+          )
+        );
+        expect(list.mock.lastCall?.[0].pendingRequestType).toBeNull();
+        expect(input.mock.lastCall?.[0].placeholder).not.toBe(placeholder);
+        flushSync(() =>
+          root.render(
+            <QuickChatContent
+              workspaceId="workspace-1"
+              chatState={{
+                ...chatState,
                 sessionStatus: { phase: 'stopping' },
                 sessionRuntime: { ...chatState.sessionRuntime, phase: 'stopping' },
               }}

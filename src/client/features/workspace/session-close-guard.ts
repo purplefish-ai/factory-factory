@@ -15,6 +15,7 @@ export interface SessionQueuedMessageCount {
 /** Work that closing a session tab would interrupt or discard. */
 export interface SessionCloseRisk {
   running: boolean;
+  awaitingInput?: boolean;
   queuedMessageCount: number;
 }
 
@@ -50,7 +51,13 @@ export function getSessionCloseRisk({
   if (!running && queuedMessageCount <= 0) {
     return null;
   }
-  return { running, queuedMessageCount: Math.max(0, queuedMessageCount) };
+  return {
+    running,
+    ...(summary && sessionUiStatusKindFromSummary(summary) === 'awaiting-input'
+      ? { awaitingInput: true }
+      : {}),
+    queuedMessageCount: Math.max(0, queuedMessageCount),
+  };
 }
 
 function formatQueuedMessages(count: number): string {
@@ -63,17 +70,18 @@ export function describeSessionCloseRisk(
 ): { title: string; description: string; confirmText: string } {
   const outcome = 'its transcript moves to Closed sessions.';
   const queued = formatQueuedMessages(risk.queuedMessageCount);
+  const activity = risk.awaitingInput ? 'is waiting for your input' : 'is still working';
   if (risk.running && risk.queuedMessageCount > 0) {
     return {
       title: `Stop and close ${label}?`,
-      description: `${label} is still working and has ${queued}. Closing the tab stops the agent, discards the queued messages, and ${outcome}`,
+      description: `${label} ${activity} and has ${queued}. Closing the tab stops the agent, discards the queued messages, and ${outcome}`,
       confirmText: 'Stop and close',
     };
   }
   if (risk.running) {
     return {
       title: `Stop and close ${label}?`,
-      description: `${label} is still working. Closing the tab stops the agent and ${outcome}`,
+      description: `${label} ${activity}. Closing the tab stops the agent and ${outcome}`,
       confirmText: 'Stop and close',
     };
   }

@@ -12,6 +12,8 @@ describe('WorkspaceStatusIcon', () => {
     );
 
     expect(markup).toContain('data-icon="permission-request"');
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('aria-label="Needs approval"');
     expect(markup).not.toContain('data-icon="runtime-error"');
   });
 

@@ -5,6 +5,21 @@ import { describe, expect, it } from 'vitest';
 import { ThinkingFooter } from './thinking-footer';
 
 describe('ThinkingFooter', () => {
+  it('does not announce a retained request when activity is inactive', () => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    try {
+      flushSync(() =>
+        root.render(<ThinkingFooter active={false} waitingFor="permission_request" />)
+      );
+      expect(host.querySelector('[data-waiting-for]')).toBeNull();
+      expect(host.querySelector('[role="status"]')?.textContent).toBe('');
+      expect(host.querySelector('[inert]')).not.toBeNull();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it.each([
     ['permission_request', 'Waiting for your approval'],
     ['user_question', 'Waiting for your answer'],
