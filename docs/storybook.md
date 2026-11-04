@@ -71,7 +71,7 @@ Cover each state a user can reach, not just the happy path:
   story to one with `globals: { theme: 'dark' }` or
   `globals: { colorScheme: '<preset id>' }` when the theme is the point of the
   story.
-- **Phone.** Layout-heavy components need a phone story at about 390px, for
+- **Phone.** Layout-heavy components need a phone story at about 390px:
   `globals: { viewport: { value: 'phone', isRotated: false } }`. The `phone`
   preset is defined in `.storybook/preview.ts`. Storybook 10 ignores
   `parameters.viewport.value`; use `globals`.
