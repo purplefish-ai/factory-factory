@@ -1,11 +1,18 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { type MouseEvent, useState } from 'react';
+import { Link, useLocation } from 'react-router';
+import { getProjectSection, getProjectSectionPath } from '@/client/lib/project-navigation';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
-const CURRENT_PROJECT_VALUE = '__current_project__';
-const RETRY_PROJECTS_VALUE = '__retry_projects__';
 const DEFAULT_PROJECT_BUTTON_CLASS =
   'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1';
 
@@ -55,25 +62,30 @@ export function ProjectSelectorDropdown({
   trailingSeparatorType?: 'chevron' | 'slash';
 }) {
   const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
   const selectedProjectName = selectedProject?.name ?? 'Select a project';
   const projectButtonLabel =
     isMobile && selectedProject ? getProjectInitials(selectedProject.name) : selectedProjectName;
-  const shouldRenderCurrentProjectItem = Boolean(selectedProject && onCurrentProjectSelect);
-  const selectableProjects = shouldRenderCurrentProjectItem
-    ? projects?.filter((project) => project.slug !== selectedProjectSlug)
-    : projects;
+  const { pathname } = useLocation();
+  const section = getProjectSection(pathname) ?? 'workspaces';
 
-  const handleValueChange = (value: string) => {
-    if (value === RETRY_PROJECTS_VALUE) {
-      onRetryProjects?.();
+  // Keep browser link behavior for new tabs/windows and middle clicks. Only
+  // ordinary activation changes this tab's persisted project selection.
+  const activateLink = (event: MouseEvent<HTMLAnchorElement>, action: () => void) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
       return;
     }
-    if (value === CURRENT_PROJECT_VALUE) {
-      onCurrentProjectSelect?.();
-      return;
-    }
-    onProjectChange(value);
+    event.preventDefault();
+    setOpen(false);
+    action();
   };
 
   const handleCurrentProjectClick = () => {
@@ -104,8 +116,8 @@ export function ProjectSelectorDropdown({
       >
         {projectButtonLabel}
       </button>
-      <Select value={selectedProjectSlug} onValueChange={handleValueChange}>
-        <SelectTrigger
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger
           id={triggerId}
           aria-label="Open project menu"
           className={cn(
@@ -117,34 +129,56 @@ export function ProjectSelectorDropdown({
           <span className="inline-flex items-center text-current" aria-hidden>
             <CaretUpDownIcon className="h-3 w-3 opacity-70 md:h-3.5 md:w-3.5" />
           </span>
-        </SelectTrigger>
-        <SelectContent>
-          {shouldRenderCurrentProjectItem && selectedProject ? (
-            <SelectItem value={selectedProject.slug} className="hidden" aria-hidden>
-              {selectedProject.name}
-            </SelectItem>
-          ) : null}
-          {shouldRenderCurrentProjectItem && selectedProject ? (
-            <SelectItem value={CURRENT_PROJECT_VALUE}>{selectedProject.name}</SelectItem>
-          ) : null}
-          {selectableProjects?.map((project) => (
-            <SelectItem key={project.id} value={project.slug}>
-              {project.name}
-            </SelectItem>
-          ))}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-w-[calc(100vw-2rem)]">
+          {projects?.map((project) => {
+            const isCurrent = project.slug === selectedProjectSlug;
+            const openCurrent = isCurrent && onCurrentProjectSelect;
+            return (
+              <DropdownMenuItem key={project.id} asChild>
+                <Link
+                  to={getProjectSectionPath(project.slug, openCurrent ? 'workspaces' : section)}
+                  aria-current={isCurrent ? 'true' : undefined}
+                  onClick={(event) =>
+                    activateLink(event, () => {
+                      if (openCurrent) {
+                        onCurrentProjectSelect();
+                      } else {
+                        onProjectChange(project.slug);
+                      }
+                    })
+                  }
+                  className="break-words"
+                >
+                  {project.name}
+                </Link>
+              </DropdownMenuItem>
+            );
+          })}
           {onRetryProjects ? (
-            <SelectItem value={RETRY_PROJECTS_VALUE} className="text-destructive">
+            <DropdownMenuItem onSelect={onRetryProjects} className="text-destructive">
               Retry projects
-            </SelectItem>
+            </DropdownMenuItem>
           ) : null}
-          <SelectItem value="__create__" className="text-muted-foreground">
-            + Create project
-          </SelectItem>
-          <SelectItem value="__manage__" className="text-muted-foreground">
-            Manage projects…
-          </SelectItem>
-        </SelectContent>
-      </Select>
+          {projects?.length || onRetryProjects ? <DropdownMenuSeparator /> : null}
+          <DropdownMenuItem asChild>
+            <Link
+              to="/projects/new"
+              onClick={(event) => activateLink(event, () => onProjectChange('__create__'))}
+            >
+              + Create project
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link
+              to="/projects"
+              onClick={(event) => activateLink(event, () => onProjectChange('__manage__'))}
+            >
+              Manage projects…
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {showTrailingSlash ? (
         <span className="-ml-0.5 shrink-0 text-muted-foreground" aria-hidden>
           {trailingSeparatorType === 'slash' ? (

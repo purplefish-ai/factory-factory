@@ -119,8 +119,8 @@ function selected(container: HTMLElement) {
 it('lets actual project-selector typeahead consume review shortcuts without approving, opening, or changing selection', async () => {
   const view = await render();
   try {
-    await key(view.container.querySelector('[role="combobox"]')!, 'ArrowDown');
-    const option = document.querySelector('[role="listbox"] [role="option"]');
+    await key(view.container.querySelector('[aria-label="Open project menu"]')!, 'ArrowDown');
+    const option = document.querySelector('[role="menu"] [role="menuitem"]');
     expect(option).not.toBeNull();
     for (const [value, options] of reviewShortcutPresses) {
       await key(option!, value, options);

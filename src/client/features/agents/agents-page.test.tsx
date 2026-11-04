@@ -560,7 +560,7 @@ describe('AgentsPage coordination', () => {
           .querySelector('[aria-label="Open project menu"]')
           ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
       );
-      const retry = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      const retry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
         (option) => option.textContent === 'Retry projects'
       );
       expect(retry).toBeDefined();

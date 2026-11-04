@@ -26,7 +26,9 @@ type ProjectSource = 'local' | 'github';
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
-  const [source, setSource] = useState<ProjectSource>('github');
+  const [source, setSource] = useState<ProjectSource>(() =>
+    window.electronAPI?.isElectron ? 'local' : 'github'
+  );
   const {
     selectedProjectSlug,
     projects,

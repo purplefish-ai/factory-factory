@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
-import { readSelectedProjectSlug } from '@/client/lib/project-selection';
+import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 
 // Redirect root to project-scoped page
@@ -21,9 +21,8 @@ export default function HomePage() {
     }
 
     if (projects && projects.length > 0) {
-      // Get stored project or use first one
-      const stored = readSelectedProjectSlug();
-      const slug = stored || projects[0]?.slug;
+      // Restore a saved project only if it still belongs to the active list.
+      const slug = resolveSelectedProjectSlug(projects);
       if (!slug) {
         return;
       }

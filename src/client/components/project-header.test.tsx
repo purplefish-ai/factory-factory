@@ -44,10 +44,10 @@ it('shows the explicit archived project alongside active project choices without
     expect(container.querySelector('a')).toBeNull();
     await act(() =>
       container
-        .querySelector('[role="combobox"]')
+        .querySelector('[aria-label="Open project menu"]')
         ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     );
-    const options = [...document.querySelectorAll('[role="option"]')].map(
+    const options = [...document.querySelectorAll('[role="menuitem"]')].map(
       (option) => option.textContent
     );
     expect(options).toContain('Archived owner');
