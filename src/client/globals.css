@@ -67,11 +67,10 @@
   --accent: oklch(0.96 0 0);
   --accent-foreground: oklch(0.145 0 0);
   /*
-   * Light mode brand: a darker gold near Factory Yellow's hue (95 vs 102, see
-   * .dark) that reads as text on the light background (5.7:1). Bright yellow
-   * cannot.
+   * Light mode brand: a deep amber for readable text. The separate running accent
+   * carries bright Factory Yellow on borders, dots and tinted surfaces.
    */
-  --brand: oklch(0.5 0.105 95);
+  --brand: oklch(0.48 0.11 75);
   --brand-foreground: oklch(0.98 0 0);
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
@@ -94,6 +93,12 @@
   --info-foreground: oklch(0.98 0 0);
   --merged: oklch(0.5 0.2 300);
   --merged-foreground: oklch(0.98 0 0);
+  --running-accent: #f4c430;
+  --success-accent: #22c55e;
+  --warning-accent: #f97316;
+  --destructive-accent: #ef4444;
+  --info-accent: #3b82f6;
+  --merged-accent: #a855f7;
   --chart-1: oklch(0.5 0.105 95);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -153,19 +158,25 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-accent: var(--destructive-accent);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-running: var(--running);
+  --color-running-accent: var(--running-accent);
   --color-running-foreground: var(--running-foreground);
   --color-merged: var(--merged);
+  --color-merged-accent: var(--merged-accent);
   --color-merged-foreground: var(--merged-foreground);
   --color-success: var(--success);
+  --color-success-accent: var(--success-accent);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
+  --color-warning-accent: var(--warning-accent);
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
+  --color-info-accent: var(--info-accent);
   --color-info-foreground: var(--info-foreground);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -241,6 +252,12 @@
   --info-foreground: oklch(0.145 0 0);
   --merged: oklch(0.72 0.15 300);
   --merged-foreground: oklch(0.145 0 0);
+  --running-accent: var(--running);
+  --success-accent: var(--success);
+  --warning-accent: var(--warning);
+  --destructive-accent: var(--destructive);
+  --info-accent: var(--info);
+  --merged-accent: var(--merged);
   --chart-1: oklch(0.93 0.21 102);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.623 0.194 259.1);

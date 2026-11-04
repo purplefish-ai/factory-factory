@@ -238,6 +238,12 @@ export const Working: Story = {
     workspace: withPR({
       name: 'Active coding session',
       isWorking: true,
+      statusReason: {
+        code: 'AGENT_WORKING',
+        label: 'Agent working',
+        tone: 'working',
+        needsUser: false,
+      },
       prState: 'OPEN',
       prUrl: 'https://github.com/example/repo/pull/48',
       prNumber: 48,
@@ -409,3 +415,38 @@ export const RatchetReviewPendingDark: typeof RatchetReviewPending = {
 };
 
 export const MergedDark: typeof Merged = { ...Merged, globals: { theme: 'dark' } };
+
+export const WorkingLight: Story = {
+  ...Working,
+  globals: { theme: 'light', colorScheme: 'factory' },
+};
+
+export const MixedPullRequests: Story = {
+  args: {
+    projectSlug: 'demo',
+    workspace: {
+      ...withPR({
+        prState: 'OPEN',
+        prNumber: 12,
+        prUrl: 'https://github.com/example/repo/pull/12',
+      }),
+      prs: [
+        ...withPR({
+          prState: 'OPEN',
+          prNumber: 12,
+          prUrl: 'https://github.com/example/repo/pull/12',
+        }).prs!,
+        ...withPR({
+          prState: 'MERGED',
+          prNumber: 13,
+          prUrl: 'https://github.com/example/repo/pull/13',
+        }).prs!,
+        ...withPR({
+          prState: 'OPEN',
+          prNumber: 14,
+          prUrl: 'https://github.com/example/repo/pull/14',
+        }).prs!,
+      ],
+    },
+  },
+};

@@ -33,7 +33,12 @@ const TONE_USAGE: Record<StatusTone, string> = {
 const MEASURED_TOKENS = [
   'background',
   'card',
-  ...new Set(STATUS_TONES.map((tone) => getStatusToneStyle(tone).token)),
+  ...new Set(
+    STATUS_TONES.flatMap((tone) => {
+      const token = getStatusToneStyle(tone).token;
+      return [token, `${token}-accent`];
+    })
+  ),
 ];
 
 function Ratio({ value }: { value: number | null }) {
@@ -52,6 +57,8 @@ function ToneTable() {
   const rgb = (token: string): Rgb | null => resolved.get(token)?.rgb ?? null;
   const background = rgb('background');
   const card = rgb('card');
+  const isDark =
+    ref.current?.closest('.dark') !== null && ref.current?.closest('.dark') !== undefined;
 
   return (
     <div ref={ref} className="overflow-x-auto">
@@ -73,6 +80,7 @@ function ToneTable() {
           {STATUS_TONES.map((tone) => {
             const style = getStatusToneStyle(tone);
             const color = rgb(style.token);
+            const accent = rgb(`${style.token}-accent`) ?? color;
             const ratio = (surface: Rgb | null) =>
               color && surface ? contrastRatio(color, surface) : null;
             return (
@@ -107,7 +115,11 @@ function ToneTable() {
                 <td className="py-2 pr-3 font-mono whitespace-nowrap">
                   <Ratio value={ratio(background)} /> · <Ratio value={ratio(card)} /> ·{' '}
                   <Ratio
-                    value={color && background ? ratio(mixOver(color, background, 0.1)) : null}
+                    value={
+                      accent && background
+                        ? ratio(mixOver(accent, background, isDark ? 0.1 : 0.15))
+                        : null
+                    }
                   />
                 </td>
               </tr>
