@@ -200,8 +200,13 @@ export function useTranscriptScroll(
     },
   });
   engineRef.current = engine;
+  // Reading anchors skip the history header, even while it overlaps the viewport.
+  // Compensate its collapse after paging so the anchored content stays in place.
   engine.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    item.end <= (instance.scrollOffset ?? 0) + 1;
+    item.end <= (instance.scrollOffset ?? 0) + 1 ||
+    (headerAnchoring.current &&
+      item.key === 'transcript:header' &&
+      stateRef.current.intent === 'reading');
   const totalSize = engine.getTotalSize();
 
   useLayoutEffect(() => {
