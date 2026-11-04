@@ -21,7 +21,7 @@ export function RatchetSettingsSection() {
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data");
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error) => {
       toast.error(`Couldn't update settings. ${error.message}`);

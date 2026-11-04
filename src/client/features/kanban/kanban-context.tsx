@@ -169,8 +169,8 @@ export function KanbanProvider({
   const syncAndRefetch = () => {
     // An explicit Sync click bypasses the automatic refresh throttles.
     syncMutation.mutate({ projectId, force: true });
-    runInBackground(refetchWorkspaces(), "Couldn't refresh data");
-    runInBackground(refetchIssues(), "Couldn't refresh data");
+    runInBackground(refetchWorkspaces(), "Couldn't refresh data.");
+    runInBackground(refetchIssues(), "Couldn't refresh data.");
   };
 
   const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
@@ -265,8 +265,8 @@ export function KanbanProvider({
   };
 
   const refetch = () => {
-    runInBackground(refetchWorkspaces(), "Couldn't refresh data");
-    runInBackground(refetchIssues(), "Couldn't refresh data");
+    runInBackground(refetchWorkspaces(), "Couldn't refresh data.");
+    runInBackground(refetchIssues(), "Couldn't refresh data.");
   };
 
   const visibleWorkspaces = useMemo(

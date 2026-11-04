@@ -281,7 +281,7 @@ export function VoiceModeSection() {
     onSuccess: (result) => {
       // Show the confirmed settings immediately while fetching any newer changes.
       utils.voice.getConfig.setData(undefined, result);
-      runInBackground(utils.voice.getConfig.invalidate(), "Couldn't refresh data");
+      runInBackground(utils.voice.getConfig.invalidate(), "Couldn't refresh data.");
     },
     onError: (error) => toast.error(`Couldn't save voice settings. ${error.message}`),
   });

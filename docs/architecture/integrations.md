@@ -309,8 +309,8 @@ slug and remain available for non-null IDs, including archived workspaces. A
 running run without a workspace ID says no workspace yet; a terminal run without
 one says workspace unavailable. The origin panel links back to agent management.
 
-The workspace's provider sub-agent/child-workspace tab is **Sub-agents**. Stored
-panel keys remain `agents` for Sub-agents and `periodic-task` for Scheduled
+The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
+panel keys remain `agents` for Subagents and `periodic-task` for Scheduled
 agent. Once workspace data loads, an unavailable origin tab falls back to
 Changes, as does a retired auto-iteration preference. Deleting a definition
 therefore cannot leave that panel blank.

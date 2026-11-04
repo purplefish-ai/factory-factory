@@ -1059,26 +1059,26 @@ Replacing a provider's archived history also clears its task snapshot.
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
 Factory Factory projects their native ACP metadata and transcripts into the
-Sub-agents panel through its session-scoped tracker. Clicking a single running
+Subagents panel through its session-scoped tracker. Clicking a single running
 sub-agent in the main chat opens its transcript tab directly, without expanding
 a list. With multiple running sub-agents, the count expands an inline list;
 selecting one opens its transcript tab directly. Completed sub-agents remain in
-Sub-agents. The inline list deduplicates overlapping provider pages and retains
-pagination and Retry controls when later pages are unavailable. The Sub-agents
+Subagents. The inline list deduplicates overlapping provider pages and retains
+pagination and Retry controls when later pages are unavailable. The Subagents
 panel's stored key remains `agents`; child-workspace access remains available
 for parent workspaces. The count shows the assigned icons of up to three active
 sub-agents in creation order; larger groups keep the full count without adding
 more icons. Until all summary pages load without errors, the count remains
-visible without placeholder agent icons. The Sub-agents list, lifecycle rows,
-and sub-agent tabs share twelve nature icons claimed in creation order (with
-agent ID breaking ties). Each sub-agent claims the lowest available icon;
-completion, failure, cancellation, or interruption releases it for later agents.
-Lifecycle timestamps reconstruct claims after reloads so every surface uses the
-same assignments. Provider revisions to lifecycle timestamps or resumed threads
-can change reconstructed assignments. Unknown lifecycle times conservatively
-retain claims. More than twelve overlapping agents use distinct numbered badges;
-those slots can also be reused after completion. Tabs preserve the assigned icon
-color and pulse while starting or running. Unknown creation times sort last. Its
+visible without placeholder agent icons. The Subagents list, lifecycle rows, and
+sub-agent tabs share twelve nature icons claimed in creation order (with agent
+ID breaking ties). Each sub-agent claims the lowest available icon; completion,
+failure, cancellation, or interruption releases it for later agents. Lifecycle
+timestamps reconstruct claims after reloads so every surface uses the same
+assignments. Provider revisions to lifecycle timestamps or resumed threads can
+change reconstructed assignments. Unknown lifecycle times conservatively retain
+claims. More than twelve overlapping agents use distinct numbered badges; those
+slots can also be reused after completion. Tabs preserve the assigned icon color
+and pulse while starting or running. Unknown creation times sort last. Its
 header counts active (starting, running, or waiting) sub-agents; terminal agents
 remain under the separate collapsible Completed count. The panel automatically
 loads all summary pages before showing the active count, so children on later
@@ -1260,7 +1260,7 @@ cannot hold the fatal-error path open indefinitely.
 ### Targeted interruption
 
 Expanded background-process rows in chat and controllable sub-agent rows in the
-Sub-agents panel expose an icon-only Stop action. Each action has its own
+Subagents panel expose an icon-only Stop action. Each action has its own
 disabled spinner until live provider updates remove the work or withdraw its
 capability; request acknowledgment does not invent completion. Failures use a
 toast and allow retry. Pending attempts and their original deadlines survive

@@ -425,7 +425,7 @@ export function AppearanceSettingsSection() {
       // Seed the cache so the AppearanceProvider applies the change before
       // the refetch lands, then refetch to stay authoritative.
       utils.userSettings.get.setData(undefined, result);
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data");
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error) => {
       toast.error(`Couldn't update appearance. ${error.message}`);

@@ -57,8 +57,11 @@ User-facing dates use the browser's locale and local timezone consistently:
 year, abbreviated month and day, with hour and minute for timestamps. Respect
 the locale's hour convention. Logs and detailed timestamp tooltips include
 seconds; calendar filter labels show the same date without a time. Use the
-shared client date/time helpers rather than independent `toLocaleString`
-options.
+shared client helpers `formatDate`, `formatDateTime` and `toDateTimeIso` in
+`src/client/lib/date-time.ts` rather than independent `toLocaleString` options.
+[The date migration (#2968)](https://github.com/purplefish-ai/factory-factory/pull/2968)
+implements these helpers and migrates agents, inbox and logs; this guide and
+that change share the same contract.
 
 Keep ISO `dateTime` attributes and raw log timestamps for diagnostic precision.
 An invalid value displays “Unknown date” and omits an invalid ISO attribute.

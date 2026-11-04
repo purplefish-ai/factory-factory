@@ -26,7 +26,7 @@ export function AdversarialReviewSection() {
   const [localCodexModel, setLocalCodexModel] = useState('default');
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data");
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error, variables) => {
       // Roll back only the selector this failed mutation touched, and only if

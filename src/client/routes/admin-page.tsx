@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data");
+      runInBackground(refetch(), "Couldn't refresh data.");
     },
     onError: (error) => {
       toast.error("Couldn't reset API usage stats", { description: error.message });

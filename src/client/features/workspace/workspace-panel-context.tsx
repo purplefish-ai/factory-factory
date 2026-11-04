@@ -148,7 +148,18 @@ function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
     if (!validated.success) {
       return [CHAT_TAB];
     }
-    const tabs = validated.data;
+    const tabs = validated.data.map((tab) => {
+      const selection = tab.subagentSelection;
+      if (
+        tab.type === 'subagent' &&
+        selection &&
+        !selection.subagent.name?.trim() &&
+        tab.label === `Sub-agent ${selection.subagent.id.slice(0, 8)}`
+      ) {
+        return { ...tab, label: getSubagentTabLabel(selection) };
+      }
+      return tab;
+    });
     // Ensure chat tab is always first
     const hasChat = tabs.some((tab) => tab.id === 'chat');
     if (!hasChat) {

@@ -15,7 +15,7 @@ existing names, shown in parentheses where they differ.
   it starts collapsed on the board to leave room for the columns.
 - **Workspace**: one isolated Git worktree and branch, with its chats, terminals
   and pull requests. A workspace is what moves across the board. **New
-  Workspace** in the sidebar opens the new workspace; **New Workspace** in the
+  workspace** in the sidebar opens the new workspace; **New workspace** in the
   board header stays on the board so several can be launched in a row. The
   retired `/projects/:slug/workspaces/new` URL opens the board's form.
 - **Chat** (`session`): one conversation with a coding agent inside a workspace,
@@ -37,7 +37,7 @@ existing names, shown in parentheses where they differ.
   column and the sidebar's Todo group. Starting an issue creates a linked
   workspace.
 - **Task**: not a separate object, so avoid it as a label. The board's former
-  **New Task** button is **New Workspace**; `PeriodicTask` in code is a
+  **New Task** button is **New workspace**; `PeriodicTask` in code is a
   scheduled agent.
 
 ## Historical progression model

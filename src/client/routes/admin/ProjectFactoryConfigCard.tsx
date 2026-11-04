@@ -39,7 +39,7 @@ export function ProjectFactoryConfigCard({
     onSuccess: () => {
       runInBackground(
         utils.workspace.getFactoryConfig.invalidate({ projectId }),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
       setEditPanelOpen(false);
     },

@@ -54,10 +54,13 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
     meta: { errorToast: "Couldn't save provider settings" },
     onSuccess: () => {
-      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data");
+      runInBackground(
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        "Couldn't refresh data."
+      );
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
       setDialogOpen(false);
     },

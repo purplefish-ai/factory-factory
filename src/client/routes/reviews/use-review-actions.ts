@@ -31,7 +31,7 @@ export function useReviewActions({
 
   const { mutate: submitApproval, isPending: approving } = trpc.prReview.submitReview.useMutation({
     onSuccess: (_data, variables) => {
-      runInBackground(utils.prReview.listReviewRequests.invalidate(), "Couldn't refresh data");
+      runInBackground(utils.prReview.listReviewRequests.invalidate(), "Couldn't refresh data.");
       if (!mounted.current) {
         return;
       }

@@ -194,7 +194,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         } else {
           toast.info('Session was already stopped');
         }
-        runInBackground(utils.admin.getActiveProcesses.invalidate(), "Couldn't refresh data");
+        runInBackground(utils.admin.getActiveProcesses.invalidate(), "Couldn't refresh data.");
       } catch (error) {
         toast.error(
           `Couldn't stop session. ${error instanceof Error ? error.message : String(error)}`

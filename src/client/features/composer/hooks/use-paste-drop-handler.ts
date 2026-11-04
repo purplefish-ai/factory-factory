@@ -81,7 +81,7 @@ async function handleFileDrop(
     const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
     const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
     toast.error(
-      `Couldn't add ${errors.length} file(s): ${formattedErrors.join(
+      `Couldn't add ${errors.length} ${errors.length === 1 ? 'file' : 'files'}. ${formattedErrors.join(
         '; '
       )}\n\nSupported text files: ${supportedExts}`
     );

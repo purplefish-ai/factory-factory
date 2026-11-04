@@ -354,7 +354,7 @@ function KanbanBoardContent() {
         onConfirm={() => {
           runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces");
         }}
-        description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+        description={`This will archive ${workspacesInBulkArchiveColumn.length} ${workspacesInBulkArchiveColumn.length === 1 ? 'workspace' : 'workspaces'} in this column. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
 
       {archiveGitLockDialog}

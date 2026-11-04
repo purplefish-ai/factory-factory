@@ -259,7 +259,7 @@ for (const viewport of mobileViewports) {
     await expect(
       page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
     await instructions.fill('Phone draft stays during resize');
     await instructions.focus();
@@ -295,7 +295,7 @@ for (const viewport of mobileViewports) {
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
     ).toBeLessThanOrEqual(1);
     await page.locator('a[href$="replacement-agent?kind=event"]').click();
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
     const replacement = page.getByRole('textbox', {
       name: 'Full saved specification JSON',

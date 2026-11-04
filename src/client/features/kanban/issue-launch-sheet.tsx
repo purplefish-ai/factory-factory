@@ -119,7 +119,7 @@ export function IssueLaunchSheet({
 
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId }),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
       onOpenChange(false);
       onStarted?.();

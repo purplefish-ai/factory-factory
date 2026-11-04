@@ -271,8 +271,8 @@ export const DeleteWhileOpen: Story = {
 /**
  * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-agent
  * origin panel is "Scheduled agent" (not the chat's coding agent), and the
- * sub-agent/child-workspace panel is "Sub-agents" (not chat sessions). With no
- * chat selected, that panel shows only Child Workspaces.
+ * subagent/child-workspace panel is "Subagents" (not chat sessions). With no
+ * chat selected, that panel shows only Child workspaces.
  */
 export const ToolTabLabels: Story = {
   args: { hasTask: true },

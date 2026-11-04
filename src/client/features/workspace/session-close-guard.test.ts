@@ -57,7 +57,7 @@ describe('describeSessionCloseRisk', () => {
     expect(describeSessionCloseRisk('Chat 1', { running: true, queuedMessageCount: 0 })).toEqual({
       title: 'Stop and close Chat 1?',
       description:
-        'Chat 1 is still working. Closing the tab stops the agent and its transcript moves to Closed sessions. You can read it there; discarded queued messages cannot be recovered.',
+        'Chat 1 is still working. Closing the tab stops the agent and its transcript moves to Closed sessions. You can read it there.',
       confirmText: 'Stop and close',
     });
     expect(describeSessionCloseRisk('Chat 1', { running: true, queuedMessageCount: 2 })).toEqual({

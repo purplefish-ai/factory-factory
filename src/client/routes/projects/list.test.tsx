@@ -223,7 +223,7 @@ describe('ProjectsListPage archive confirmation', () => {
       flushSync(() => mocks.archiveMutationOptions?.onSuccess?.());
       await vi.waitFor(() => {
         expect(mocks.toastError).toHaveBeenCalledWith(
-          "Couldn't refresh data",
+          "Couldn't refresh data.",
           expect.objectContaining({ description: 'Refresh failed' })
         );
       });

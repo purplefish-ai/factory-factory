@@ -61,7 +61,9 @@ export function describeSessionCloseRisk(
   risk: SessionCloseRisk
 ): { title: string; description: string; confirmText: string } {
   const outcome =
-    'its transcript moves to Closed sessions. You can read it there; discarded queued messages cannot be recovered.';
+    risk.queuedMessageCount > 0
+      ? 'its transcript moves to Closed sessions. You can read it there; discarded queued messages cannot be recovered.'
+      : 'its transcript moves to Closed sessions. You can read it there.';
   const queued = formatQueuedMessages(risk.queuedMessageCount);
   if (risk.running && risk.queuedMessageCount > 0) {
     return {

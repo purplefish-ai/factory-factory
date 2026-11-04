@@ -19,10 +19,7 @@ export function IdeSettingsSection() {
   const utils = trpc.useUtils();
   const [isConfiguringCustomIde, setIsConfiguringCustomIde] = useState(false);
   const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: async (_settings, variables) => {
-      if (variables.customIdeCommand !== undefined) {
-        toast.success('IDE command saved');
-      }
+    onSuccess: async () => {
       await Promise.all([
         utils.userSettings.get.invalidate(),
         utils.workspace.getAvailableIdes.invalidate(),

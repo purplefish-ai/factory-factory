@@ -40,8 +40,11 @@ export function ProjectSettingsDialog({
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data");
-      runInBackground(utils.project.getById.invalidate({ id: projectId }), "Couldn't refresh data");
+      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(
+        utils.project.getById.invalidate({ id: projectId }),
+        "Couldn't refresh data."
+      );
       setOpen(false);
     },
     onError: (err) => {

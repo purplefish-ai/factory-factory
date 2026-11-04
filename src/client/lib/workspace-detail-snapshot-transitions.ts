@@ -39,7 +39,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
             queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
             exact: true,
           }),
-          "Couldn't refresh data"
+          "Couldn't refresh data."
         );
       };
       return {
@@ -73,7 +73,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
           };
           if (reintroduced) {
             // Cancellation takes effect synchronously; do not await before merging.
-            runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data");
+            runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
           }
           queryClient.setQueryData<WorkspaceDetail>(filter.queryKey, (prev) =>
             mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
@@ -82,7 +82,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
             // Reset may have cleared full detail, which a summary cannot recreate.
             runInBackground(
               queryClient.refetchQueries({ ...filter, type: 'active' }),
-              "Couldn't refresh data"
+              "Couldn't refresh data."
             );
           }
         },

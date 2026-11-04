@@ -45,7 +45,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   // Expose invalidate function for external triggers (e.g., when session stops running)
   const invalidateWorkspace = useCallback(() => {
-    runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data");
+    runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data.");
   }, [utils, workspaceId]);
 
   // Sync PR status from GitHub on page load (if workspace has a PR)
@@ -55,7 +55,10 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     meta: { errorToast: "Couldn't sync pull request status" },
     onSuccess: () => {
       // Refresh workspace data after PR sync
-      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data");
+      runInBackground(
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        "Couldn't refresh data."
+      );
     },
   });
 

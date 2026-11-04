@@ -74,7 +74,7 @@ export function useSessionCollectionCommands({
     onSuccess: (_session, variables) => {
       runInBackground(
         utils.session.listSessions.invalidate({ workspaceId: variables.workspaceId }),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
     },
     onError: (error) => {
@@ -104,7 +104,7 @@ export function useSessionCollectionCommands({
       if (context?.workspaceId) {
         runInBackground(
           utils.session.listSessions.invalidate({ workspaceId: context.workspaceId }),
-          "Couldn't refresh data"
+          "Couldn't refresh data."
         );
       }
     },

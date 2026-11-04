@@ -106,7 +106,9 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
   });
   if (errors.length > 0) {
     const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
-    toast.error(`Couldn't add ${errors.length} file(s): ${formattedErrors.join('; ')}`);
+    toast.error(
+      `Couldn't add ${errors.length} ${errors.length === 1 ? 'file' : 'files'}. ${formattedErrors.join('; ')}`
+    );
   }
   event.target.value = '';
   return { newAttachments };
@@ -300,7 +302,7 @@ export function InlineWorkspaceForm({
       seedCreatedWorkspaceDetail(queryClient, workspace);
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
       completeCreation(context?.submission ?? submitted.current, () => onCreated(workspace.id));
     },
@@ -329,7 +331,7 @@ export function InlineWorkspaceForm({
       toast.success(`Agent "${task.name}" created`);
       runInBackground(
         invalidateAgentProjectQueries(utils, task.projectId),
-        "Couldn't refresh data"
+        "Couldn't refresh data."
       );
       completeCreation(context?.submission ?? submitted.current, onCancel);
     },
