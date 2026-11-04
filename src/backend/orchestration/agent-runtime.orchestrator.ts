@@ -8,6 +8,7 @@ import {
   type AgentClaimResult,
   type AgentExecutionConfig,
 } from '@/backend/services/agent-definition';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { classifyGitHubCLIError, type githubCLIService } from '@/backend/services/github';
 import { jobRunner } from '@/backend/services/job-runner.service';
@@ -80,8 +81,13 @@ export function createAgentRuntime(
   );
   return {
     ...lifecycle,
+    hasWork: () => launcher?.hasWork() ?? false,
     recovery: launcher
-      ? { inspectRun: launcher.inspectRun, resolveAmbiguousRun: launcher.resolveAmbiguousRun }
+      ? {
+          inspectRun: launcher.inspectRun,
+          resolveAmbiguousRun: (input: Parameters<typeof launcher.resolveAmbiguousRun>[0]) =>
+            applicationUpdateAdmission.run(() => launcher.resolveAmbiguousRun(input)),
+        }
       : undefined,
   };
 }
@@ -96,7 +102,10 @@ export function createAgentRuntimeLifecycle(
       name: LAUNCH_JOB,
       intervalMs: SERVICE_INTERVAL_MS.agentEventEvaluation,
       runImmediately: true,
-      run: (signal) => launcher.maintain(signal),
+      run: (signal) =>
+        applicationUpdateAdmission.isClosed()
+          ? Promise.resolve()
+          : applicationUpdateAdmission.run(() => launcher.maintain(signal)),
     });
   }
   jobRunner.register({
@@ -120,14 +129,21 @@ export function createAgentRuntimeLifecycle(
           return;
         }
         await worker.evaluatePendingEvents(signal);
-        if (signal.aborted || !worker.consumeClaim || worker.canClaim?.() === false) {
+        if (
+          signal.aborted ||
+          applicationUpdateAdmission.isClosed() ||
+          !worker.consumeClaim ||
+          worker.canClaim?.() === false
+        ) {
           return;
         }
-        const claim = await worker.claimNextRun();
-        // Once committed, the consumer owns settlement even if shutdown raced the claim.
-        if (claim.status === 'CLAIMED') {
-          await worker.consumeClaim(claim, signal);
-        }
+        await applicationUpdateAdmission.run(async () => {
+          const claim = await worker.claimNextRun();
+          // Once committed, the consumer owns settlement even if shutdown raced the claim.
+          if (claim.status === 'CLAIMED') {
+            await worker.consumeClaim?.(claim, signal);
+          }
+        });
       },
     });
   }

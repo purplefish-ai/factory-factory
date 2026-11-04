@@ -1,84 +1,305 @@
+import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import type { ApplicationUpdates, ApplicationUpdateStatus } from '@/shared/application-updates';
 
-const DISMISSED_RELEASE_KEY = 'ff_dismissed_factory_release';
+const STORAGE_PREFIX = 'ff_update_dismissed:';
+const LEGACY_FACTORY_DISMISSAL_KEY = 'ff_dismissed_factory_release';
+const PENDING_TARGET_KEY = 'ff_update_pending_target';
+const RELOADED_TARGET_KEY = 'ff_update_reloaded_target';
+const reloadedWithoutStorage = new Set<string>();
 
-function readDismissedRelease(): string | null {
+function readStorage(kind: 'localStorage' | 'sessionStorage', key: string): string | null {
   try {
-    return window.localStorage.getItem(DISMISSED_RELEASE_KEY);
+    return window[kind].getItem(key);
   } catch {
     return null;
   }
 }
 
-export function FactoryUpdateBannerContent({
-  currentVersion,
-  latestVersion,
-  onDismiss,
-}: {
-  currentVersion: string;
-  latestVersion: string;
-  onDismiss: () => void;
-}) {
+function writeStorage(kind: 'localStorage' | 'sessionStorage', key: string, value: string) {
+  try {
+    window[kind].setItem(key, value);
+  } catch {
+    // Updates and dismissal remain usable when browser storage is unavailable.
+  }
+}
+
+function removeStorage(kind: 'localStorage' | 'sessionStorage', key: string) {
+  try {
+    window[kind].removeItem(key);
+  } catch {
+    // A previous dismissal must not prevent another update attempt.
+  }
+}
+
+function resetUpdateReload(targetVersion: string) {
+  reloadedWithoutStorage.delete(targetVersion);
+  if (readStorage('sessionStorage', RELOADED_TARGET_KEY) === targetVersion) {
+    removeStorage('sessionStorage', RELOADED_TARGET_KEY);
+  }
+}
+
+export function claimUpdateReload(currentVersion: string, targetVersion: string): boolean {
+  if (currentVersion !== targetVersion) {
+    resetUpdateReload(targetVersion);
+    return false;
+  }
+  if (reloadedWithoutStorage.has(targetVersion)) {
+    return false;
+  }
+  if (readStorage('sessionStorage', RELOADED_TARGET_KEY) === targetVersion) {
+    return false;
+  }
+  writeStorage('sessionStorage', RELOADED_TARGET_KEY, targetVersion);
+  if (readStorage('sessionStorage', RELOADED_TARGET_KEY) !== targetVersion) {
+    return false;
+  }
+  reloadedWithoutStorage.add(targetVersion);
+  return true;
+}
+
+function dismissalKey(id: string, version: string): string {
+  return `${STORAGE_PREFIX}${id}:${version}`;
+}
+
+function isActive(status: ApplicationUpdateStatus): boolean {
+  return ['waiting', 'preparing', 'restarting'].includes(status.phase);
+}
+
+interface Props {
+  updates: ApplicationUpdates;
+  isPending?: boolean;
+  onUpdate: () => void;
+  onCancel: () => void;
+  onDismiss: (id: string, version: string) => void;
+}
+
+function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Props) {
+  const { status, automaticUpdate } = updates;
+  const active = isActive(status);
+  const progressLabel = status.phase === 'restarting' ? 'Restarting…' : 'Updating…';
+  const updateLabel = status.phase === 'failed' ? 'Retry update' : 'Update';
   return (
-    <div
-      role="status"
-      className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-3 py-2 text-xs sm:px-4"
-    >
-      <p className="min-w-0 flex-1 basis-full [overflow-wrap:anywhere] sm:basis-0">
-        <span className="font-medium">Factory Factory {latestVersion} is available.</span>{' '}
-        <span className="text-muted-foreground">You’re running {currentVersion}.</span>
-      </p>
-      <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" size="sm" asChild>
-          <a
-            href="https://github.com/purplefish-ai/factory-factory#updating"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View upgrade instructions
-          </a>
+    <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      {active && <Spinner className="size-3.5" aria-hidden="true" />}
+      {status.phase === 'waiting' ? (
+        <Button variant="ghost" size="sm" disabled={isPending} onClick={onCancel}>
+          Cancel update
         </Button>
+      ) : active ? (
+        <Button variant="ghost" size="sm" disabled>
+          {progressLabel}
+        </Button>
+      ) : automaticUpdate ? (
+        <Button variant="outline" size="sm" disabled={isPending} onClick={onUpdate}>
+          {isPending && <Spinner className="size-3.5" aria-hidden="true" />}
+          {updateLabel}
+        </Button>
+      ) : null}
+      {status.phase === 'failed' && (
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Dismiss update notification"
-          onClick={onDismiss}
+          aria-label="Dismiss update error"
+          onClick={() => onDismiss('update-error', status.targetVersion ?? updates.currentVersion)}
         >
-          <XIcon className="size-4" aria-hidden="true" />
+          <XIcon className="size-4" />
         </Button>
-      </div>
+      )}
     </div>
   );
 }
 
-export function FactoryUpdateBanner() {
-  const [dismissedVersion, setDismissedVersion] = useState(readDismissedRelease);
-  const { data } = trpc.admin.checkFactoryUpdate.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 60 * 60 * 1000,
-    refetchOnWindowFocus: true,
-    retry: false,
-  });
-  if (!(data?.updateAvailable && data.latestVersion) || data.latestVersion === dismissedVersion) {
+export function FactoryUpdateBannerContent({
+  updates,
+  isPending = false,
+  onUpdate,
+  onCancel,
+  onDismiss,
+}: Props) {
+  const { notices, status, automaticUpdate, manualCommand } = updates;
+  const active = isActive(status);
+  if (notices.length === 0 && !active && status.phase !== 'failed') {
     return null;
   }
-  const latestVersion = data.latestVersion;
-  const dismiss = () => {
-    setDismissedVersion(latestVersion);
-    try {
-      window.localStorage.setItem(DISMISSED_RELEASE_KEY, latestVersion);
-    } catch {
-      // Dismissal still works for this session when storage is blocked.
+  const progress = {
+    idle: '',
+    waiting: 'Waiting for active agent work to finish before updating.',
+    preparing: 'Preparing the update. Factory Factory will restart shortly.',
+    restarting: 'Restarting Factory Factory. Reconnecting automatically…',
+    failed: status.error?.slice(0, 240) || 'The update could not finish. Please try again.',
+  }[status.phase];
+
+  return (
+    <section
+      aria-label="Application updates"
+      className="shrink-0 border-b border-border bg-muted/30 px-3 py-2 sm:px-4"
+    >
+      <ul className="space-y-2">
+        {notices.map((notice) => (
+          <li key={notice.id} className="flex items-start gap-2 text-xs">
+            <ArrowCircleUpIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1 space-y-0.5 [overflow-wrap:anywhere]">
+              <p className="font-medium">
+                {notice.label} update available: {notice.currentVersion} → {notice.latestVersion}
+              </p>
+              {notice.id !== 'factory-factory' && (
+                <p className="text-muted-foreground">Updates with Factory Factory.</p>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onDismiss(notice.id, notice.latestVersion)}
+              className="shrink-0 text-muted-foreground"
+              aria-label={`Dismiss ${notice.label} update`}
+            >
+              <XIcon className="size-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-0">
+          {progress && (
+            <p
+              role={status.phase === 'failed' ? 'alert' : 'status'}
+              className={status.phase === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
+            >
+              {progress}
+            </p>
+          )}
+          {!active && automaticUpdate && (
+            <p className="text-muted-foreground">
+              Waits for active agent work to finish. Restart stops terminals and run scripts.
+            </p>
+          )}
+          {!(active || automaticUpdate) && (
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">
+              Update this installation manually: <code>{manualCommand}</code>. Restart Factory
+              Factory after updating. This stops terminals and run scripts.
+            </p>
+          )}
+        </div>
+        <UpdateActions
+          updates={updates}
+          isPending={isPending}
+          onUpdate={onUpdate}
+          onCancel={onCancel}
+          onDismiss={onDismiss}
+        />
+      </div>
+    </section>
+  );
+}
+
+export function FactoryUpdateBanner() {
+  const [lastConfirmed, setLastConfirmed] = useState<ApplicationUpdates>();
+  const [localStatus, setLocalStatus] = useState<ApplicationUpdateStatus>();
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const query = trpc.admin.checkUpdates.useQuery(undefined, {
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: (state) =>
+      isActive(
+        localStatus ?? state.state.data?.status ?? lastConfirmed?.status ?? { phase: 'idle' }
+      )
+        ? 5000
+        : 3_600_000,
+  });
+  const confirmed = query.data ?? lastConfirmed;
+  const acceptStatus = (status: ApplicationUpdateStatus) => {
+    setLocalStatus(status);
+    if (status.targetVersion && isActive(status)) {
+      writeStorage('sessionStorage', PENDING_TARGET_KEY, status.targetVersion);
+    } else if (status.phase === 'idle') {
+      removeStorage('sessionStorage', PENDING_TARGET_KEY);
     }
+    void query.refetch();
+  };
+  const reportError = (error: { message: string }) => {
+    setLocalStatus({
+      phase: 'failed',
+      targetVersion:
+        localStatus?.targetVersion ??
+        confirmed?.status.targetVersion ??
+        confirmed?.notices.find((notice) => notice.id === 'factory-factory')?.latestVersion,
+      error: error.message,
+    });
+  };
+  const request = trpc.admin.requestUpdate.useMutation({
+    onSuccess: acceptStatus,
+    onError: reportError,
+  });
+  const cancel = trpc.admin.cancelUpdate.useMutation({
+    onSuccess: acceptStatus,
+    onError: reportError,
+  });
+
+  useEffect(() => {
+    if (!query.data) {
+      return;
+    }
+    setLastConfirmed(query.data);
+    setLocalStatus(undefined);
+    const { status, currentVersion } = query.data;
+    if (status.targetVersion && isActive(status)) {
+      writeStorage('sessionStorage', PENDING_TARGET_KEY, status.targetVersion);
+    }
+    const target = readStorage('sessionStorage', PENDING_TARGET_KEY);
+    if (target && claimUpdateReload(currentVersion, target)) {
+      window.location.reload();
+    }
+  }, [query.data]);
+
+  if (!confirmed) {
+    return null;
+  }
+  const isDismissed = (id: string, version: string) => {
+    const key = dismissalKey(id, version);
+    return (
+      dismissed.has(key) ||
+      readStorage('localStorage', key) === '1' ||
+      (id === 'factory-factory' &&
+        readStorage('localStorage', LEGACY_FACTORY_DISMISSAL_KEY) === version)
+    );
+  };
+  const status = localStatus ?? confirmed.status;
+  const updates = {
+    ...confirmed,
+    notices: confirmed.notices.filter((notice) => !isDismissed(notice.id, notice.latestVersion)),
+    status:
+      status.phase === 'failed' &&
+      isDismissed('update-error', status.targetVersion ?? confirmed.currentVersion)
+        ? { phase: 'idle' as const }
+        : status,
   };
   return (
     <FactoryUpdateBannerContent
-      currentVersion={data.currentVersion}
-      latestVersion={latestVersion}
-      onDismiss={dismiss}
+      updates={updates}
+      isPending={request.isPending || cancel.isPending}
+      onUpdate={() => {
+        const version =
+          confirmed.notices.find((notice) => notice.id === 'factory-factory')?.latestVersion ??
+          status.targetVersion;
+        if (version) {
+          resetUpdateReload(version);
+          const errorKey = dismissalKey('update-error', version);
+          removeStorage('localStorage', errorKey);
+          setDismissed((previous) => new Set([...previous].filter((key) => key !== errorKey)));
+          request.mutate({ version });
+        }
+      }}
+      onCancel={() => cancel.mutate()}
+      onDismiss={(id, version) => {
+        const key = dismissalKey(id, version);
+        writeStorage('localStorage', key, '1');
+        setDismissed((previous) => new Set([...previous, key]));
+      }}
     />
   );
 }

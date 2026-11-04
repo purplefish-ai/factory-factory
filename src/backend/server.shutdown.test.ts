@@ -24,11 +24,20 @@ vi.mock('@trpc/server/adapters/express', () => ({
 }));
 
 import { createServer } from './server';
-import { createTestHarness } from './server.test-helpers';
+import { createTestHarness as createBaseTestHarness } from './server.test-helpers';
+
+function createTestHarness() {
+  const harness = createBaseTestHarness();
+  const services = Object.assign(harness.services, {
+    applicationUpdateService: { stop: vi.fn(async () => undefined) },
+  });
+  return { ...harness, services };
+}
 
 type Harness = ReturnType<typeof createTestHarness>;
 
 const jobStops = ({ services, lifecycle }: Harness) => ({
+  applicationUpdates: vi.mocked(services.applicationUpdateService.stop),
   reconciliation: vi.mocked(services.reconciliationService.stopPeriodicCleanup),
   prSync: vi.mocked(services.schedulerService.stop),
   snapshotReconciliation: vi.mocked(lifecycle.snapshotReconciliation.stop),
@@ -88,6 +97,7 @@ describe('server background job shutdown', () => {
   it('waits for the slowest drain rather than the sum of them', async () => {
     const harness = createTestHarness();
     const durations = {
+      applicationUpdates: 3500,
       reconciliation: 1000,
       prSync: 2000,
       snapshotReconciliation: 4200,

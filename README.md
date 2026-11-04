@@ -90,11 +90,25 @@ Then:
 
 ## Updating
 
-Factory Factory shows a dismissible banner when a newer stable release is
-available. **View upgrade instructions** opens this section. Dismissal is saved
-for that release in your browser; a later release can prompt again. Checks run
-in the background with a short timeout and caching. If npmjs is unavailable,
-Factory keeps working and retains any previously discovered update.
+When a newer stable release is available, the app shows a release notice.
+Supported installations include an **Update** button; other installations show
+manual guidance. Each notice can be dismissed independently; a later version
+appears again. Registry outages do not block startup or normal use.
+
+Automatic updates support writable global npm installations on macOS and Linux
+started with `ff serve`. The update waits for active agent work and queued
+messages to finish, prepares the replacement, and restarts at the same address.
+Restarting stops terminals and run scripts. If another Factory Factory server
+was using the same installation when this server started, close the other
+servers and restart this `ff serve` server to enable automatic updates.
+Eligibility is checked at startup. The browser reconnects and reloads after the
+replacement is ready. Failed preparation keeps the current app running; failed
+migration or startup restores the previous package and database.
+
+Claude and Codex are bundled with Factory Factory. When a release includes newer
+runtime packages, their notices appear together and share the application
+update. Installing an unrelated global provider CLI does not update these
+bundled runtimes. Other installation methods show manual update guidance.
 
 - **Desktop app:** Download and install the latest package from
   [GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases/latest),
@@ -106,8 +120,7 @@ Factory keeps working and retains any previously discovered update.
 - **Source checkout:** Pull the latest release, run `pnpm install` and
   `pnpm exec tsx src/cli/index.ts build`, then restart the server.
 
-Updating requires a restart. The banner does not install software or interrupt
-active sessions automatically. Your database remains in the configured data
+Manual updates require a restart. Your database remains in the configured data
 directory.
 
 ## What it does

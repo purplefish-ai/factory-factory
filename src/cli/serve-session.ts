@@ -17,6 +17,8 @@ interface ServeSessionOptions {
   verbose?: boolean;
   signal: AbortSignal;
   onReady: () => Promise<void>;
+  onBackend?: (child: ChildProcess) => void;
+  isExpectedBackendExit?: () => boolean;
 }
 
 // Setup stdout/stderr forwarding for a child process in non-verbose mode
@@ -47,10 +49,10 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
   const children: ChildProcess[] = [];
   const watchers: ReturnType<typeof watchChild>[] = [];
   const startup = new AbortController();
-  let failed = (_error: Error) => {
+  let failed = (_error: Error | undefined) => {
     /* Replaced synchronously by the failure promise resolver. */
   };
-  const failure = new Promise<Error>((resolve) => {
+  const failure = new Promise<Error | undefined>((resolve) => {
     failed = resolve;
   });
   let onAbort = () => {
@@ -71,7 +73,7 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
     const watcher = watchChild(child, name);
     watchers.push(watcher);
     void watcher.exited.then((error) => {
-      failed(error);
+      failed(options.isExpectedBackendExit?.() ? undefined : error);
       startup.abort();
     });
     if (!options.verbose) {
@@ -82,6 +84,30 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
     await waitForPort(port, options.host, undefined, undefined, startup.signal);
     startup.signal.throwIfAborted();
     console.log(chalk.green(`  ✓ ${name} ready on port ${port}`));
+  };
+  const startProduction = async (stdio: 'inherit' | 'pipe') => {
+    const { projectRoot, env, backendPort } = options;
+    const frontendDist = join(projectRoot, 'dist', 'client');
+    const backendDist = join(projectRoot, 'dist', 'src', 'backend', 'index.js');
+    if (!existsSync(frontendDist)) {
+      throw new Error(
+        `Frontend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+      );
+    }
+    if (!existsSync(backendDist)) {
+      throw new Error(
+        `Backend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
+      );
+    }
+    console.log(chalk.blue('  🔧 Starting server (production mode)...'));
+    const backend = spawn('node', [backendDist], {
+      cwd: projectRoot,
+      env: { ...env, FRONTEND_STATIC_PATH: frontendDist },
+      stdio: options.onBackend ? [stdio, stdio, stdio, 'ipc'] : stdio,
+    });
+    track(backend, 'Server');
+    options.onBackend?.(backend);
+    await ready(backendPort, 'Server');
   };
   const start = async () => {
     startup.signal.throwIfAborted();
@@ -115,28 +141,7 @@ export async function runServeSession(options: ServeSessionOptions): Promise<voi
       );
       await ready(frontendPort, 'Frontend');
     } else {
-      const frontendDist = join(projectRoot, 'dist', 'client');
-      const backendDist = join(projectRoot, 'dist', 'src', 'backend', 'index.js');
-      if (!existsSync(frontendDist)) {
-        throw new Error(
-          `Frontend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
-        );
-      }
-      if (!existsSync(backendDist)) {
-        throw new Error(
-          `Backend not built. ${getBuildRecoveryGuidance(projectRoot, { supportsDevMode: true })}`
-        );
-      }
-      console.log(chalk.blue('  🔧 Starting server (production mode)...'));
-      track(
-        spawn('node', [backendDist], {
-          cwd: projectRoot,
-          env: { ...env, FRONTEND_STATIC_PATH: frontendDist },
-          stdio,
-        }),
-        'Server'
-      );
-      await ready(backendPort, 'Server');
+      await startProduction(stdio);
     }
     startup.signal.throwIfAborted();
     await options.onReady();

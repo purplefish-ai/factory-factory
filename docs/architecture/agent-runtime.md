@@ -1,5 +1,50 @@
 # Agent Runtime
 
+Application updates use a process-wide admission gate shared by session input,
+dispatch, runtime creation, workspace provisioning and background agent
+launches. The update job waits for active operations, pending initial/queued
+messages and active agent turns, then closes admission synchronously before
+notifying the CLI supervisor. Idle ACP processes do not hold the update. A
+rejected input remains available to retry after reconnecting. Failed preparation
+reopens admission. Cancellation before readiness also reopens it. After
+`update-ready` has been sent, cancellation keeps the gate closed until the CLI
+supervisor acknowledges an idle status, because preparation may already have
+started. Shutdown keeps admission closed until the process exits.
+
+The production CLI owns installation, recovery state and backend restart. It
+stages a pinned npm release before stopping the backend, backs up the database
+before migrations, and keeps the previous package until the replacement reports
+full startup readiness over IPC. Interrupted recovery runs before migrations and
+relaunches the restored CLI. The supervisor retains durable update status
+outside the replaced package, including errors after the backend has stopped.
+
+Automatic installation supports writable global npm installations on macOS and
+Linux launched through supervised `ff serve`. Eligibility is fixed at startup;
+if another server already uses the installation, close those servers and restart
+this server to reevaluate eligibility. Unsupported modes show manual guidance.
+Update and cancellation mutations require a trusted local client and validated
+IPC. The supervisor serializes installation of a pinned advertised release.
+
+Provider update notices compare adapter-resolved runtime package versions,
+published as `factoryFactoryRuntimeVersions` by the `prepack` script. Version
+discovery resolves exported runtime entrypoints when package manifests are
+hidden by exports; dependency ranges alone do not establish installed versions.
+Claude and Codex share the Factory Factory update action rather than updating an
+unrelated global provider CLI.
+
+The nonblocking banner shows independent release rows with one shared update
+state. Dismissals persist per provider and available version; the previous
+Factory Factory dismissal key remains a fallback for older clients. Registry
+failures preserve confirmed data without blocking normal use. Recovery errors
+remain visible even without release rows, and retries retain the failed target
+when registry metadata is unavailable. A new request clears that target's reload
+guard; after reconnecting, the browser reloads once when the server reports the
+target version, only if the guard can be persisted. Seeing a different running
+version also clears the old target's guard. Dismissing a row does not cancel an
+accepted update. The legacy `checkFactoryUpdate` query supports older clients.
+
+ACP admission is injected by composition to preserve dependency isolation.
+
 Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.

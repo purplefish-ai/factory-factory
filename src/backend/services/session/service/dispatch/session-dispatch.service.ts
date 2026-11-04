@@ -1,4 +1,5 @@
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 /** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
@@ -162,7 +163,11 @@ export class SessionDispatchService {
   }
 
   /** Keep messages queued during preparation so refresh cannot lose them. */
-  async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
+  tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
+    return applicationUpdateAdmission.run(() => this.dispatchAdmitted(dbSessionId, options));
+  }
+
+  private async dispatchAdmitted(dbSessionId: string, options: DispatchOptions): Promise<void> {
     const stopGeneration = this.lifecycle.gate.getGeneration(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;

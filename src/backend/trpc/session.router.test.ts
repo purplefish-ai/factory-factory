@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 import { SessionProvider } from '@prisma-gen/client';
@@ -66,6 +67,7 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
     caller: sessionRouter.createCaller({
       appContext: {
         services: {
+          applicationUpdateAdmission,
           configService: {
             getMaxSessionsPerWorkspace: () => 2,
           },

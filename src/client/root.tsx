@@ -45,6 +45,7 @@ function RootLayout() {
       className="flex flex-col overflow-hidden"
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
+      {/* One banner shares application and bundled runtime update progress. */}
       <FactoryUpdateBanner />
       <CLIHealthBanner />
       <ModelCatalogWarning />

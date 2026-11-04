@@ -18,7 +18,34 @@ vi.mock('@/client/components/appearance-provider', () => ({
 vi.mock('@/client/components/resizable-layout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock('@/client/components/factory-update-banner', () => ({ FactoryUpdateBanner: () => null }));
+vi.mock('@/client/components/factory-update-banner', async (original) => {
+  const { FactoryUpdateBannerContent } =
+    await original<typeof import('@/client/components/factory-update-banner')>();
+  return {
+    FactoryUpdateBanner: () => (
+      <FactoryUpdateBannerContent
+        updates={{
+          currentVersion: '0.5.3',
+          automaticUpdate: true,
+          manualCommand: 'Use the original installation method.',
+          status: { phase: 'idle' },
+          notices: [
+            {
+              id: 'factory-factory',
+              label: 'Factory Factory',
+              currentVersion: '0.5.3',
+              latestVersion: '0.5.4',
+            },
+            { id: 'claude', label: 'Claude', currentVersion: '0.3.315', latestVersion: '0.3.316' },
+          ],
+        }}
+        onUpdate={() => undefined}
+        onCancel={() => undefined}
+        onDismiss={() => undefined}
+      />
+    ),
+  };
+});
 vi.mock('@/client/components/cli-health-banner', () => ({ CLIHealthBanner: () => null }));
 vi.mock('@/client/components/model-catalog-warning', () => ({ ModelCatalogWarning: () => null }));
 vi.mock('@/client/features/workspace/WorkspaceNotificationManager', () => ({
@@ -98,6 +125,37 @@ it('offers reload rather than an ineffective retry for a rejected route chunk', 
     expect(labels).toContain('Reload');
     expect(labels).toContain('Copy details');
     expect(labels).not.toContain('Try again');
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it('renders one shared update prompt for application and bundled runtime releases', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter initialEntries={['/projects/demo']}>
+          <Routes>
+            <Route path="/" element={<Root />}>
+              <Route path="*" element={<Location />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      )
+    );
+    const banners = container.querySelectorAll('[aria-label="Application updates"]');
+    expect(banners).toHaveLength(1);
+    expect(banners[0]?.textContent).toContain('Factory Factory update available');
+    expect(banners[0]?.textContent).toContain('Claude update available');
+    expect(
+      [...banners[0]!.querySelectorAll('button')].filter(
+        (button) => button.textContent === 'Update'
+      )
+    ).toHaveLength(1);
   } finally {
     await act(() => root.unmount());
     vi.unstubAllGlobals();

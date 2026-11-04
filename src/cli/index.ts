@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import './serve-node-check';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,10 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
-import { getLogFilePath } from '@/backend/services/logger.service';
+import { getCurrentProcessEnv, getLogFilePath } from '@/backend/services/logger.service';
+import { registerApplicationServerMarker } from './application-server-marker';
+import { ApplicationUpdateInstaller } from './application-update-installer';
+import { recoverInterruptedApplicationUpdate } from './application-update-recovery';
 import { registerBuildCommand } from './build-command';
 import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
@@ -18,10 +22,10 @@ import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { checkServePrerequisites } from './serve-prerequisites';
-import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { ensureServeTools } from './setup-prerequisites.mjs';
 import { registerStudioCommand } from './studio';
+import { runSupervisedServeSession } from './supervised-serve-session';
 import { registerTailscaleCommand } from './tailscale';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -166,6 +170,19 @@ function printReadyBanner(opts: {
   console.log(chalk.gray('  ─────────────────────────────────────'));
 }
 
+function requireServePrerequisites(dev: boolean): boolean {
+  const issues = checkServePrerequisites(PROJECT_ROOT, dev);
+  if (issues.length === 0) {
+    return true;
+  }
+  console.error(chalk.red('  Cannot start Factory Factory. Fix the following prerequisites:\n'));
+  for (const issue of issues) {
+    console.error(`  • ${issue}\n`);
+  }
+  process.exitCode = 1;
+  return false;
+}
+
 program
   .name('ff')
   .description('FACTORY FACTORY - Workspace-based coding environment')
@@ -198,16 +215,7 @@ program
       process.exitCode = 1;
       return;
     }
-
-    const prerequisiteIssues = checkServePrerequisites(PROJECT_ROOT, !!options.dev);
-    if (prerequisiteIssues.length) {
-      console.error(
-        chalk.red('  Cannot start Factory Factory. Fix the following prerequisites:\n')
-      );
-      for (const issue of prerequisiteIssues) {
-        console.error(`  • ${issue}\n`);
-      }
-      process.exitCode = 1;
+    if (!requireServePrerequisites(!!options.dev)) {
       return;
     }
 
@@ -218,7 +226,31 @@ program
     ensureDataDir(databasePath);
 
     const { frontendPort, backendPort } = await resolvePortsOrExit(options, verbose);
-    await runMigrationsOrExit(databasePath, verbose);
+    let releaseRunningMarker: (() => void) | undefined;
+    if (
+      !options.dev &&
+      (await new ApplicationUpdateInstaller({
+        packageRoot: PROJECT_ROOT,
+        env: getCurrentProcessEnv(),
+      }).isSupported())
+    ) {
+      releaseRunningMarker = registerApplicationServerMarker(
+        join(dirname(PROJECT_ROOT), `.factory-factory-running-${process.pid}`)
+      );
+    }
+    try {
+      if (!options.dev && (await recoverInterruptedApplicationUpdate(PROJECT_ROOT, databasePath))) {
+        releaseRunningMarker?.();
+        const restarted = spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit' });
+        process.exit(restarted.status ?? 1);
+      }
+      await runMigrationsOrExit(databasePath, verbose);
+    } catch (error) {
+      releaseRunningMarker?.();
+      console.error(chalk.red(`\n  ✗ ${error instanceof Error ? error.message : String(error)}`));
+      process.exitCode = 1;
+      return;
+    }
 
     const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
 
@@ -253,7 +285,8 @@ program
     };
 
     try {
-      await runServeSession({
+      await runSupervisedServeSession({
+        databasePath,
         projectRoot: PROJECT_ROOT,
         env,
         host: options.host,
@@ -270,6 +303,7 @@ program
     } finally {
       unregisterShutdownHandlers();
       removeServePortFile(portFilePath);
+      releaseRunningMarker?.();
     }
   });
 

@@ -1,4 +1,5 @@
 import { toError } from '@/backend/lib/error-utils';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { githubCLIService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
@@ -903,6 +904,10 @@ export function enqueueWorkspaceInitializationTask<T>(
   workspaceId: string,
   task: () => Promise<T>
 ): Promise<T> {
+  return applicationUpdateAdmission.run(() => enqueueAdmittedInitialization(workspaceId, task));
+}
+
+function enqueueAdmittedInitialization<T>(workspaceId: string, task: () => Promise<T>): Promise<T> {
   const previousInitialization = workspaceInitializationTails.get(workspaceId) ?? Promise.resolve();
   const initialization = previousInitialization.catch(() => undefined).then(task);
 
@@ -920,7 +925,7 @@ export function recoverStaleProvisioningWorkspace(
   reason: string
 ): Promise<boolean> {
   // A live initializer owns the path until it settles; the next poll can re-check it.
-  if (workspaceInitializationTails.has(workspaceId)) {
+  if (applicationUpdateAdmission.isClosed() || workspaceInitializationTails.has(workspaceId)) {
     return Promise.resolve(false);
   }
 
