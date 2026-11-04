@@ -28,6 +28,16 @@ interface ErrorBoundaryState {
   componentStack: string | null;
 }
 
+/** React can catch any thrown value, including null and undefined. */
+function normalizeThrownError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(typeof error === 'string' ? error : 'An unexpected error occurred.', {
+    cause: error,
+  });
+}
+
 /** Report a caught render error with its component trace, without console methods. */
 export function reportBoundaryError(error: Error, errorInfo: React.ErrorInfo) {
   const componentStack = errorInfo.componentStack ?? '';
@@ -217,12 +227,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.state = { error: null, componentStack: null };
   }
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { error };
+  static getDerivedStateFromError(error: unknown): Partial<ErrorBoundaryState> {
+    return { error: normalizeThrownError(error) };
   }
 
-  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    reportBoundaryError(error, errorInfo);
+  override componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
+    reportBoundaryError(this.state.error ?? normalizeThrownError(error), errorInfo);
     this.setState({ componentStack: errorInfo.componentStack ?? null });
   }
 

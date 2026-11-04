@@ -6,6 +6,10 @@ import { ErrorBoundary, ErrorFallback, formatErrorDetails } from './error-bounda
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+function ThrowUnknown({ value }: { value: unknown }): never {
+  throw value;
+}
+
 let shouldThrow = true;
 function Crashy({ label = 'content' }: { label?: string }) {
   if (shouldThrow) {
@@ -41,6 +45,25 @@ function buttonNamed(name: string) {
 }
 
 describe('ErrorBoundary', () => {
+  it.each(['a thrown string', { reason: 'a thrown object' }, null, undefined])(
+    'keeps recovery actions available for a non-Error throw: %s',
+    async (thrown) => {
+      await act(async () =>
+        root.render(
+          <ErrorBoundary>
+            <ThrowUnknown value={thrown} />
+          </ErrorBoundary>
+        )
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Couldn't show this page"
+      );
+      expect(buttonNamed('Reload')).toBeDefined();
+      expect(buttonNamed('Copy details')).toBeDefined();
+      expect(globalThis.reportError).toHaveBeenCalledOnce();
+    }
+  );
+
   it('shows a page fallback with Reload and Copy details but no retry by default', () => {
     act(() =>
       root.render(
