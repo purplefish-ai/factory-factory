@@ -454,4 +454,49 @@ describe('QuestionPrompt', () => {
 
     root.unmount();
   });
+
+  it('keeps focus in a focused composer when a question arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const composer = document.createElement('textarea');
+      document.body.appendChild(composer);
+      composer.focus();
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const question: UserQuestionRequest = {
+        requestId: 'focus-guard',
+        timestamp: '2026-10-18T00:00:00Z',
+        questions: [
+          {
+            question: 'Pick one',
+            options: [
+              { label: 'A', description: '' },
+              { label: 'B', description: '' },
+            ],
+          },
+        ],
+      };
+      flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(document.activeElement).toBe(composer);
+
+      composer.blur();
+      flushSync(() =>
+        root.render(
+          createElement(QuestionPrompt, {
+            question: { ...question, requestId: 'focus-guard-2' },
+            onAnswer: vi.fn(),
+          })
+        )
+      );
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(container.contains(document.activeElement)).toBe(true);
+      root.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -294,4 +294,112 @@ describe('PermissionPrompt', () => {
 
     root.unmount();
   });
+
+  describe('focus guard', () => {
+    const variants: [string, Partial<PermissionRequest>, string][] = [
+      ['legacy', { toolName: 'Bash' }, 'Allow'],
+      [
+        'acp',
+        {
+          toolName: 'Bash',
+          acpOptions: [{ optionId: 'allow', kind: 'allow_once', name: 'Allow once' }],
+        },
+        'Allow once',
+      ],
+      [
+        'plan',
+        {
+          toolName: 'ExitPlanMode',
+          planContent: 'Plan',
+          acpOptions: [{ optionId: 'default', kind: 'allow_once', name: 'Approve Plan' }],
+        },
+        'Approve Plan',
+      ],
+    ];
+
+    function renderPrompt(overrides: Partial<PermissionRequest>, expanded = false) {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const permission: PermissionRequest = {
+        requestId: 'req-focus-guard',
+        toolName: 'Bash',
+        toolInput: { command: 'rm -rf build' },
+        timestamp: '2026-05-20T00:00:00.000Z',
+        ...overrides,
+      };
+      flushSync(() => {
+        root.render(
+          createElement(expanded ? PermissionPromptExpanded : PermissionPrompt, {
+            permission,
+            onApprove: vi.fn(),
+          })
+        );
+      });
+      return { container, root };
+    }
+
+    it.each(variants)(
+      'keeps focus in a focused composer textarea for %s requests',
+      async (_name, overrides) => {
+        vi.useFakeTimers();
+        const composer = document.createElement('textarea');
+        document.body.appendChild(composer);
+        composer.focus();
+
+        const { root } = renderPrompt(overrides);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(document.activeElement).toBe(composer);
+        root.unmount();
+      }
+    );
+
+    it('keeps focus in a focused contenteditable or input', async () => {
+      vi.useFakeTimers();
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.tabIndex = 0;
+      document.body.appendChild(editor);
+      editor.focus();
+
+      const { root } = renderPrompt({}, true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(document.activeElement).toBe(editor);
+      root.unmount();
+
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      input.focus();
+      const second = renderPrompt({ requestId: 'req-focus-guard-2' });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(document.activeElement).toBe(input);
+      second.root.unmount();
+    });
+
+    it('does not take focus when the user focuses the composer during the delay', async () => {
+      vi.useFakeTimers();
+      const composer = document.createElement('textarea');
+      document.body.appendChild(composer);
+
+      const { root } = renderPrompt({});
+      composer.focus();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(document.activeElement).toBe(composer);
+      root.unmount();
+    });
+
+    it.each(variants)(
+      'focuses the primary action for %s requests when nothing has focus',
+      async (_name, overrides, buttonText) => {
+        vi.useFakeTimers();
+        const { container, root } = renderPrompt(overrides);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(document.activeElement).toBe(findButtonByText(container, buttonText));
+        root.unmount();
+      }
+    );
+  });
 });

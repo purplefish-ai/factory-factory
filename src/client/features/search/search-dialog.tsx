@@ -64,8 +64,8 @@ export function SearchDialog({
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">
-          Find projects, workspaces, conversations, pull requests, and GitHub issues. Select an
-          issue to start a workspace.
+          Find projects, workspaces, chats, pull requests, and GitHub issues. Select an issue to
+          start a workspace.
         </DialogDescription>
         <Command
           shouldFilter={false}

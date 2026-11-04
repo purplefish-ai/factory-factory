@@ -2,8 +2,10 @@ import { expect, it } from 'vitest';
 import {
   getProjectAgentPath,
   getProjectSection,
+  getProjectNewWorkspacePath,
   getProjectSectionPath,
   hasExplicitLegacyProjectOwner,
+  isProjectBoardPath,
 } from './project-navigation';
 
 it('encodes path segments and recognizes only complete canonical sections', () => {
@@ -34,4 +36,16 @@ it('keeps scheduled URLs stable and encodes saved event selections', () => {
     '/projects/a%2Fb/agents/c%2Fd?kind=event'
   );
   expect(getProjectAgentPath('a/b', 'c/d', 'scheduled')).toBe('/projects/a%2Fb/agents/c%2Fd');
+});
+it('recognizes only the board itself, not workspace detail or creation routes', () => {
+  expect(isProjectBoardPath('/projects/a/workspaces')).toBe(true);
+  expect(isProjectBoardPath('/projects/a/workspaces/')).toBe(true);
+  expect(isProjectBoardPath('/PROJECTS/a/WORKSPACES')).toBe(true);
+  expect(isProjectBoardPath('/projects/a/workspaces/ws-1')).toBe(false);
+  expect(isProjectBoardPath('/projects/a/workspaces/new')).toBe(false);
+  expect(isProjectBoardPath('/projects/a/agents')).toBe(false);
+  expect(isProjectBoardPath('/projects/a')).toBe(false);
+});
+it('builds the board URL that opens the new workspace form', () => {
+  expect(getProjectNewWorkspacePath('a/b')).toBe('/projects/a%2Fb/workspaces?new=1');
 });

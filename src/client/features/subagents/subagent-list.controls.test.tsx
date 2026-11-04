@@ -41,7 +41,9 @@ async function render(controlSessionId: string | undefined, subagents = rows) {
   );
 }
 function stops() {
-  return [...container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Stop subagent:"]')];
+  return [
+    ...container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Stop sub-agent:"]'),
+  ];
 }
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -87,7 +89,7 @@ it('removes controls on completion and on disconnected cached rows', async () =>
   expect(stops()).toHaveLength(0);
 });
 
-it('retains pending child interruption when the Sessions list remounts', async () => {
+it('retains pending child interruption when the Sub-agents list remounts', async () => {
   await render('parent');
   await act(() => stops()[0]!.click());
   await act(() => root.render(null));

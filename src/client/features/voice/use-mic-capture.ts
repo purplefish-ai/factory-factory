@@ -517,7 +517,7 @@ export function useMicCapture({
   const [isCapturing, setIsCapturing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mintGrantToken = trpc.voice.mintGrantToken.useMutation();
+  const mintGrantToken = trpc.voice.mintGrantToken.useMutation({ meta: { errorToast: false } });
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);

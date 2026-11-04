@@ -19,6 +19,8 @@ export function WorkspaceInboxPanel({ workspaceId }: { workspaceId: string }) {
 function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
   const utils = trpc.useUtils();
   const retryWake = trpc.workspace.retryMailWake.useMutation({
+    // Failures render inline below the retry button.
+    meta: { errorToast: false },
     onSuccess: () => {
       void utils.workspace.listMail.invalidate({ workspaceId });
     },

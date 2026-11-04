@@ -340,7 +340,9 @@ describe('project reviews', () => {
       expect(reviewMocks.detailsQuery.mock.calls.every(([, options]) => !options.enabled)).toBe(
         true
       );
-      actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+      actFlushSync(() =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+      );
       expect(reviewMocks.submitReviewMutate).not.toHaveBeenCalled();
       view.unmount();
     }
@@ -520,15 +522,21 @@ describe('project reviews', () => {
 describe('ReviewsPage approval', () => {
   it('ignores repeated approve shortcuts while a review submission is pending', () => {
     const view = mountReviews();
-    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    actFlushSync(() =>
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+    );
     expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(1);
     reviewMocks.approvalPending = true;
     view.render();
-    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    actFlushSync(() =>
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+    );
     expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(1);
     reviewMocks.approvalPending = false;
     view.render();
-    actFlushSync(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' })));
+    actFlushSync(() =>
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+    );
     expect(reviewMocks.submitReviewMutate).toHaveBeenCalledTimes(2);
     view.unmount();
   });

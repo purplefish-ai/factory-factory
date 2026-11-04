@@ -92,14 +92,11 @@ const preview: Preview = {
           ? context.globals.colorScheme
           : DEFAULT_COLOR_SCHEME
       );
+      // The wrapper must not repeat the `dark` class: `.dark` re-declares the
+      // Factory tokens, which would override a preset's dark palette on <html>.
       return React.createElement(
         'div',
-        {
-          className:
-            theme === 'dark'
-              ? 'dark bg-background text-foreground'
-              : 'bg-background text-foreground',
-        },
+        { className: 'bg-background text-foreground' },
         React.createElement(
           MemoryRouter,
           null,

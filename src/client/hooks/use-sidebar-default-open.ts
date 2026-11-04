@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
+import { isProjectBoardPath } from '@/client/lib/project-navigation';
 
 type RouteCategory = 'workspace_detail' | 'board' | 'default';
 
@@ -17,14 +18,15 @@ const STORAGE_KEYS: Record<RouteCategory, string> = {
   default: 'sidebar_state_default',
 };
 
-function getRouteCategory(pathname: string): RouteCategory {
-  // /projects/:slug/workspaces/:id — workspace detail
-  if (/^\/projects\/[^/]+\/workspaces\/[^/]+/.test(pathname)) {
-    return 'workspace_detail';
-  }
-  // /projects/:slug/workspaces — board view
-  if (/^\/projects\/[^/]+\/workspaces\/?$/.test(pathname)) {
+export function getRouteCategory(pathname: string): RouteCategory {
+  // /projects/:slug/workspaces — board view. Shares the Board nav item's
+  // matcher so both agree on which URLs are the board.
+  if (isProjectBoardPath(pathname)) {
     return 'board';
+  }
+  // /projects/:slug/workspaces/:id — workspace detail
+  if (/^\/projects\/[^/]+\/workspaces\/[^/]+/i.test(pathname)) {
+    return 'workspace_detail';
   }
   return 'default';
 }

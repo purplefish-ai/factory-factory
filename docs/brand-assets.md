@@ -1,11 +1,14 @@
 # Brand assets
 
 Factory Factory's logo is a black six-tooth gear with a circular bore on safety
-yellow (`#FFE500`). The vector follows the approved concept's individual tooth
-proportions and curved recesses. Its silhouette has 99.8%
-intersection-over-union with the concept at the original 1254-pixel size; the
-center opening is a true circle. There are no fonts or embedded bitmaps in the
-symbol.
+yellow (`#FFE500`). The default Factory color scheme uses this yellow as its
+dark-mode brand color; its light mode uses a darker gold near the same hue
+(OKLCH hue 95 instead of 102) that reads as text (see
+[status colors](status-colors.md)). Other color schemes set their own brand. The
+vector follows the approved concept's individual tooth proportions and curved
+recesses. Its silhouette has 99.8% intersection-over-union with the concept at
+the original 1254-pixel size; the center opening is a true circle. There are no
+fonts or embedded bitmaps in the symbol.
 
 The editable source is
 [`src/client/assets/logo.svg`](../src/client/assets/logo.svg). The React

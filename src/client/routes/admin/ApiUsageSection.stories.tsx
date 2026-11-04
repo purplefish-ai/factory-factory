@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { ApiUsageSection } from './ApiUsageSection';
 
 const meta = {
@@ -17,7 +17,7 @@ const meta = {
     ),
   ],
   args: {
-    onReset: fn(),
+    onReset: fn(() => Promise.resolve()),
     isResetting: false,
   },
 } satisfies Meta<typeof ApiUsageSection>;
@@ -71,5 +71,16 @@ export const Resetting: Story = {
       queueDepth: 0,
       isRateLimited: false,
     },
+  },
+};
+
+/** Reset Stats asks first because the counters can't be restored. */
+export const ResetConfirmation: Story = {
+  args: NormalTraffic.args,
+  play: async ({ args, canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reset Stats' }));
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('Reset API usage stats?');
+    await expect(args.onReset).not.toHaveBeenCalled();
   },
 };
