@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COLOR_SCHEME_IDS, type ColorSchemeId } from '@/shared/appearance';
-import { contrastRatio, mixOver, parseThemeColor, type Rgb } from './lib/color-contrast';
+import { contrastRatio, mixOver, parseThemeColor, type Rgb, rgbToHex } from './lib/color-contrast';
 import { readThemeDeclarations, resolveThemeVariables, type ThemeMode } from './lib/theme-palette';
 
 /*
@@ -68,19 +68,26 @@ describe('status palette', () => {
   it.each(CASES)('%s %s foregrounds are legible on solid status fills', (scheme, mode) => {
     const { color } = palette(scheme, mode);
     for (const token of STATUS_TOKENS) {
-      const fill =
+      // Translucent dark destructive fills composite over whichever surface
+      // holds them, so check both the page and cards.
+      const fills =
         token === 'destructive' && mode === 'dark'
-          ? mixOver(color(token), color('background'), DARK_DESTRUCTIVE_FILL_ALPHA)
-          : color(token);
-      expect
-        .soft(contrastRatio(color(`${token}-foreground`), fill), `${token}-foreground`)
-        .toBeGreaterThanOrEqual(AA);
+          ? [color('background'), color('card')].map((surface) =>
+              mixOver(color(token), surface, DARK_DESTRUCTIVE_FILL_ALPHA)
+            )
+          : [color(token)];
+      for (const fill of fills) {
+        expect
+          .soft(contrastRatio(color(`${token}-foreground`), fill), `${token}-foreground`)
+          .toBeGreaterThanOrEqual(AA);
+      }
     }
   });
 
   it.each(CASES)('%s %s status tokens are distinct from each other', (scheme, mode) => {
-    const { raw } = palette(scheme, mode);
-    const values = STATUS_TOKENS.map((token) => raw(token));
+    const { color } = palette(scheme, mode);
+    // Compare rendered colors so equivalent syntaxes cannot pass as distinct.
+    const values = STATUS_TOKENS.map((token) => rgbToHex(color(token)));
     expect(new Set(values).size).toBe(STATUS_TOKENS.length);
   });
 

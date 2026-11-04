@@ -14,7 +14,7 @@ import {
 } from './status-tones';
 
 const RAW_PALETTE_CLASS =
-  /\b(?:bg|text|border|ring|fill|stroke)-(?:red|green|amber|yellow|orange|emerald|blue|sky|violet|purple|zinc|slate|gray)-\d/;
+  /\b(?:bg|text|border|ring|fill|stroke|outline)-(?:(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d|(?:white|black)\b)/;
 
 describe('status tones', () => {
   it('covers every workspace status reason tone', () => {
