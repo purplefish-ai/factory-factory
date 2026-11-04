@@ -43,7 +43,10 @@ export function ProjectIssuesState({
     );
   }
   const settings = projectSlug ? (
-    <Link className="block text-xs text-center underline" to={`/projects/${projectSlug}/settings`}>
+    <Link
+      className="block text-xs text-center underline"
+      to={`/admin/project?${new URLSearchParams({ project: projectSlug })}`}
+    >
       Project settings
     </Link>
   ) : null;

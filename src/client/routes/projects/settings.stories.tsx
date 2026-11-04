@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Navigate, Route, Routes } from 'react-router';
 import { expect, userEvent, within } from 'storybook/test';
-import { AppHeaderProvider } from '@/client/components/app-header-context';
-import ProjectSettingsPage from './settings';
+import AdminDashboardPage from '../admin-page';
+import { SettingsStoryLayout } from '../admin/settings-page-layout.story-fixtures';
+import ProjectSettingsRedirect from './settings';
 
 const project = {
   id: 'project-beta',
@@ -12,8 +13,8 @@ const project = {
   issueTrackerConfig: null,
 };
 const meta = {
-  title: 'Projects/ProjectSettingsPage',
-  component: ProjectSettingsPage,
+  title: 'Settings/InlineProjectSettings',
+  component: AdminDashboardPage,
   parameters: {
     layout: 'fullscreen',
     trpc: {
@@ -26,16 +27,17 @@ const meta = {
     },
   },
   render: () => (
-    <AppHeaderProvider>
+    <SettingsStoryLayout>
       <div className="h-screen">
         <Routes>
           <Route path="/" element={<Navigate to="/projects/beta/settings" replace />} />
-          <Route path="/projects/:slug/settings" element={<ProjectSettingsPage />} />
+          <Route path="/projects/:slug/settings" element={<ProjectSettingsRedirect />} />
+          <Route path="/admin/:section?" element={<AdminDashboardPage />} />
         </Routes>
       </div>
-    </AppHeaderProvider>
+    </SettingsStoryLayout>
   ),
-} satisfies Meta<typeof ProjectSettingsPage>;
+} satisfies Meta<typeof AdminDashboardPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ScopedProject: Story = {
@@ -45,11 +47,11 @@ export const ScopedProject: Story = {
     await expect(
       within(navigation).getByRole('link', { name: 'Project settings' })
     ).toHaveAttribute('aria-current', 'page');
-    await expect(await canvas.findByRole('heading', { name: 'Beta settings' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Back to Board' })).toHaveAttribute(
-      'href',
-      '/projects/beta/workspaces'
+    await expect(await canvas.findByRole('button', { name: 'Beta' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
     );
+    await expect(canvas.getByText('Factory configuration')).toBeVisible();
   },
 };
 export const Phone: Story = {
@@ -59,9 +61,7 @@ export const Phone: Story = {
 export const NotFound: Story = {
   parameters: { trpc: { handlers: { 'project.list': () => [] } } },
   play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent(
-      'Project not found'
-    );
+    await expect(await within(canvasElement).findByText(/No projects yet/)).toBeVisible();
   },
 };
 export const LoadError: Story = {
@@ -75,15 +75,13 @@ export const LoadError: Story = {
     },
   },
   play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByText("Couldn't load project settings")
-    ).toBeVisible();
+    await expect(await within(canvasElement).findByText("Couldn't load projects")).toBeVisible();
   },
 };
 export const Loading: Story = {
   parameters: { trpc: { handlers: { 'project.list': () => new Promise(() => undefined) } } },
   play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByText('Loading project settings…')).toBeVisible();
+    await expect(await within(canvasElement).findByText('Loading projects…')).toBeVisible();
   },
 };
 
@@ -127,7 +125,7 @@ export const UnbrokenNamesOnPhone: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole('heading', { name: `${'factory'.repeat(20)} settings` });
+    await canvas.findByRole('button', { name: 'factory'.repeat(20) });
     await canvas.findByText(`scripts/${'development/'.repeat(20)}start.sh`);
     const script = canvas.getByRole('region', { name: 'Run script command' });
     await expect(script.scrollWidth).toBeGreaterThan(script.clientWidth);

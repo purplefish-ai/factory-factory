@@ -116,12 +116,21 @@ export const Projects: Story = {
   parameters: {
     trpc: {
       handlers: {
+        'workspace.getFactoryConfig': () => null,
         'project.list': () => [
-          { id: 'alpha', slug: 'alpha', name: 'Alpha' },
+          {
+            id: 'alpha',
+            slug: 'alpha',
+            name: 'Alpha',
+            issueProvider: 'GITHUB',
+            issueTrackerConfig: null,
+          },
           {
             id: 'beta',
             slug: 'beta',
             name: 'Factory Factory workspace management and developer tooling',
+            issueProvider: 'GITHUB',
+            issueTrackerConfig: null,
           },
         ],
       },
@@ -130,10 +139,14 @@ export const Projects: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('link', { name: 'Project settings' }));
-    await expect(await canvas.findByRole('link', { name: 'Alpha' })).toHaveAttribute(
-      'href',
-      '/projects/alpha/settings'
-    );
+    const alpha = await canvas.findByRole('button', { name: 'Alpha' });
+    await expect(alpha).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(alpha);
+    await expect(alpha).toHaveAttribute('aria-expanded', 'true');
+    await expect(await canvas.findByText('Factory configuration')).toBeVisible();
+    await expect(canvas.getByText('Issue tracking')).toBeVisible();
+    await userEvent.click(alpha);
+    await expect(canvas.queryByText('Factory configuration')).not.toBeInTheDocument();
   },
 };
 export const ProjectsOnPhone: Story = {
