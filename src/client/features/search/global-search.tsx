@@ -6,6 +6,7 @@ import { normalizeGitHubIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import type { SearchResult } from '@/shared/search';
 import { SearchDialog } from './search-dialog';
 import { getSearchResultUrl } from './search-navigation';
@@ -179,7 +180,10 @@ export function GlobalSearch() {
               <Dialog open onOpenChange={() => setSelectedIssue(null)}>
                 <DialogContent>
                   <DialogTitle>Start Issue</DialogTitle>
-                  <DialogDescription>Loading issue launch options…</DialogDescription>
+                  <DialogDescription className="flex items-center gap-2">
+                    <Spinner className="size-4" aria-hidden="true" />
+                    Loading issue launch options…
+                  </DialogDescription>
                 </DialogContent>
               </Dialog>
             }

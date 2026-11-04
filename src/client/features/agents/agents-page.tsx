@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { getAgentRouteKind, type AgentKind } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -28,13 +29,6 @@ function RequestError({
         {label}
       </Button>
     </div>
-  );
-}
-function Loading({ children }: { children: ReactNode }) {
-  return (
-    <p role="status" className="text-sm text-muted-foreground">
-      {children}
-    </p>
   );
 }
 function AgentRequestError({
@@ -88,7 +82,7 @@ function AgentSelectionContent({ controller }: { controller: Controller }) {
       return <p className="text-sm">Select an available agent or retry the failed list.</p>;
     }
     if (controller.list.isLoading || controller.events.isLoading) {
-      return <Loading>Loading agents…</Loading>;
+      return <Loading size="compact" message="Loading agents…" />;
     }
   }
   if (controller.kind === 'event') {
@@ -117,7 +111,7 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
     return <AgentRequestError task={task} />;
   }
   if (id && task.isLoading) {
-    return <Loading>Loading agent…</Loading>;
+    return <Loading size="compact" message="Loading agent…" />;
   }
   if (task.data && project) {
     return (

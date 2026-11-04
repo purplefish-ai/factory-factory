@@ -1,4 +1,5 @@
 import { Navigate, useLocation, useSearchParams } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { useAppNavigationDataContext } from '@/client/hooks/use-app-navigation-data';
 import { getReviewRepository } from '@/client/hooks/use-project-review-requests';
 import { getProjectSectionPath } from '@/client/lib/project-navigation';
@@ -24,7 +25,7 @@ export default function LegacyReviewsRoute() {
     );
   }
   if (!navigation.projects) {
-    return <ReviewRouteState message="Loading projects…" />;
+    return <Loading message="Loading projects…" />;
   }
   if (repo !== null) {
     return <LegacyRepositoryReviews repo={repo} />;
@@ -70,7 +71,7 @@ function LegacyRepositoryReviews({ repo }: { repo: string }) {
     );
   }
   if (needsArchived && !archived.data) {
-    return <ReviewRouteState message="Loading review project…" />;
+    return <Loading message="Loading review project…" />;
   }
   const owner =
     activeOwner ?? archived.data?.find((project) => getReviewRepository(project) === repository);

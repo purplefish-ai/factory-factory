@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 const CLI_HEALTH_WARNING_DISMISSED_KEY = 'ff_cli_health_warning_dismissed';
 
@@ -175,7 +176,11 @@ export function CLIHealthBannerContent({
               disabled={isBusy}
               className="text-muted-foreground"
             >
-              <ArrowsClockwiseIcon className={`size-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+              {isRefetching ? (
+                <Spinner className="size-3.5" aria-hidden="true" />
+              ) : (
+                <ArrowsClockwiseIcon className="size-3.5" />
+              )}
               Recheck
             </Button>
           )}

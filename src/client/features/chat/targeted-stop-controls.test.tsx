@@ -86,9 +86,7 @@ describe('background process stop controls', () => {
     });
     expect(buttons()[0]?.disabled).toBe(false);
     expect(buttons()[1]?.disabled).toBe(true);
-    expect(buttons()[1]?.querySelector('svg')?.classList.contains('motion-safe:animate-spin')).toBe(
-      true
-    );
+    expect(buttons()[1]?.querySelector('svg')?.classList.contains('animate-spin')).toBe(true);
     await render(true, {
       ...work,
       backgroundTasks: work.backgroundTasks.filter((task) => task.id !== 'two'),

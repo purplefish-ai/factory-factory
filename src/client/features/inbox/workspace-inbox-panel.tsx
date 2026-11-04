@@ -1,7 +1,9 @@
 import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimple';
 import { useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
 import { WorkspaceMailDetail } from './workspace-mail-detail';
@@ -78,7 +80,14 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
               disabled={retryWake.isPending}
               onClick={() => retryWake.mutate({ workspaceId })}
             >
-              {retryWake.isPending ? 'Retrying notification…' : 'Retry mail notification'}
+              {retryWake.isPending ? (
+                <>
+                  <Spinner className="size-3" aria-hidden="true" />
+                  Retrying notification…
+                </>
+              ) : (
+                'Retry mail notification'
+              )}
             </Button>
             {retryWake.isError && (
               <p role="alert" className="text-destructive">
@@ -87,11 +96,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
             )}
           </div>
         )}
-        {mail.isLoading && (
-          <p role="status" className="p-4 text-sm text-muted-foreground">
-            Loading inbox…
-          </p>
-        )}
+        {mail.isLoading && <Loading size="compact" message="Loading inbox…" />}
         {mail.isError && (
           <div role="alert" className="space-y-2 p-4 text-sm">
             <p>Could not load inbox. {mail.error.message}</p>
@@ -147,6 +152,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
               disabled={mail.isFetching}
               onClick={() => void mail.fetchNextPage()}
             >
+              {mail.isFetchingNextPage && <Spinner className="size-3" aria-hidden="true" />}
               {mail.isFetchingNextPage ? 'Loading messages…' : 'Load older messages'}
             </Button>
           </div>

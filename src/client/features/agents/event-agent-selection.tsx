@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { EventAgentDetail, TriggerInspection } from './event-agent-detail';
 import { SavedEventEditor } from './saved-event-editor';
 import type { EventAgent } from './types';
@@ -58,7 +60,8 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
         </section>
       )}
       {cursor && page.isFetching && (
-        <p role="status" className="text-sm">
+        <p role="status" className="inline-flex items-center gap-2 text-sm">
+          <Spinner className="size-3" aria-hidden="true" />
           Loading retained triggers…
         </p>
       )}
@@ -137,11 +140,7 @@ export function EventAgentSelection({
     );
   }
   if (event.isLoading) {
-    return (
-      <p role="status" className="text-sm">
-        Loading event agent…
-      </p>
-    );
+    return <Loading size="compact" message="Loading event agent…" />;
   }
   if (!event.data) {
     return <p className="text-sm">Select an agent from the project list.</p>;

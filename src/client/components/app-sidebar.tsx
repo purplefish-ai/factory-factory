@@ -19,6 +19,7 @@ import {
   useState,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
@@ -371,11 +372,7 @@ function SidebarInner({
               <div className="px-1">
                 <ErrorBoundary variant="compact" title="Couldn't load the new workspace form">
                   <Suspense
-                    fallback={
-                      <div role="status" className="p-2 text-sm text-muted-foreground">
-                        Loading new workspace form…
-                      </div>
-                    }
+                    fallback={<Loading size="compact" message="Loading new workspace form…" />}
                   >
                     <InlineWorkspaceForm
                       projectId={selectedProjectId}

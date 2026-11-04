@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceParent } from '@/shared/workspace-summary';
@@ -121,7 +122,11 @@ function FamilyChildren({
   );
   if (children.isPending) {
     return (
-      <p className="px-2 py-1 text-xs text-muted-foreground" role="status">
+      <p
+        className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+        role="status"
+      >
+        <Spinner className="size-3" aria-hidden="true" />
         Loading children…
       </p>
     );
@@ -188,7 +193,11 @@ function FamilyMenuContent({
         />
       )}
       {parent && root.isPending && (
-        <p className="px-2 py-1 text-xs text-muted-foreground" role="status">
+        <p
+          className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+          role="status"
+        >
+          <Spinner className="size-3" aria-hidden="true" />
           Loading parent…
         </p>
       )}

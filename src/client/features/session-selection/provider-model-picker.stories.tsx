@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { ProviderModelPicker } from './provider-model-picker';
 
@@ -31,7 +31,17 @@ export const CurrentConversation: Story = {};
 export const ClaudeConversation: Story = {
   args: { provider: 'CLAUDE', model: 'sonnet', models: providerOptions.CLAUDE.models },
 };
-export const ApplyingModelSelection: Story = { args: { model: 'six-luna', updating: true } };
+export const ApplyingModelSelection: Story = {
+  args: { model: 'six-luna', updating: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status', { name: 'Applying model selection' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /6 Luna/ })).toHaveAttribute(
+      'aria-busy',
+      'true'
+    );
+  },
+};
 export const Dark: Story = { globals: { theme: 'dark' } };
 export const Loading: Story = {
   args: { provider: null, model: undefined, models: [], loading: true },
@@ -48,6 +58,10 @@ export const Running: Story = {
 export const UnknownModel: Story = { args: { model: 'custom-provider-model' } };
 export const CatalogLoading: Story = {
   args: { models: [], modelsLoading: true, onProviderChange: fn() },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button'));
+    await expect(within(document.body).getByRole('status')).toHaveTextContent('Loading models…');
+  },
 };
 export const Narrow: Story = {
   decorators: [
