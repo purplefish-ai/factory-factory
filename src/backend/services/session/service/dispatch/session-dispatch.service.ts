@@ -462,7 +462,7 @@ export class SessionDispatchService {
     guard?: SessionCallerGuard
   ): void {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-      rollbackStoppedDispatchMessage(dbSessionId, msg, this.notificationDeliveryService);
+      rollbackStoppedDispatchMessage(dbSessionId, msg, this.notificationDeliveryService, error);
       return;
     }
 

@@ -1,6 +1,10 @@
 import { afterEach, expect, it } from 'vitest';
+import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
+import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
+import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { rollbackStoppedDispatchMessage } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
+import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
@@ -25,13 +29,16 @@ function createPRMessage(): QueuedMessage {
   };
 }
 
-function rollBackStoppedDispatch(message: QueuedMessage): void {
+function rollBackStoppedDispatch(
+  message: QueuedMessage,
+  error: unknown = new Error('Provider unavailable')
+): void {
   const handler = createTestSessionDispatcher();
   Object.defineProperty(handler, 'isDispatchGenerationCurrent', { value: () => false });
   Reflect.apply(Reflect.get(handler, 'handleDispatchError'), handler, [
     'session',
     message,
-    new Error('Provider unavailable'),
+    error,
     0,
   ]);
 }
@@ -81,15 +88,37 @@ it('retains the initial user prompt in stop snapshots when the interrupted turn 
   expect(beforeStop).toEqual([expect.objectContaining({ id: message.id, text: message.text })]);
 });
 
+it.each([
+  new AcpSteeringNotSentError('Caller authority changed'),
+  new WorkspaceInitFenceError(),
+  new EventSessionFenceError(),
+  new Error('A turn is already in progress for this session'),
+  new PermanentAttachmentError('Missing attachment data'),
+])('removes a proven-unsent human prompt after stop: %s', (error) => {
+  const message = createPRMessage();
+  message.id = 'unsent-user-prompt';
+  message.source = undefined;
+  sessionDomainService.commitSentUserMessage('session', message);
+
+  rollBackStoppedDispatch(message, error);
+  sessionDomainService.clearQueuedWork('session', { emitSnapshot: true });
+
+  expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+  expect(sessionDomainService.getQueueSnapshot('session')).toEqual([]);
+});
+
 it('still rolls back a stopped workspace notification rather than proving delivery', () => {
   const message = createPRMessage();
   message.id = 'workspace-notification-pending';
   message.source = undefined;
   sessionDomainService.commitSentUserMessage('session', message);
 
-  rollbackStoppedDispatchMessage('session', message, {
-    isNotificationMessage: (id) => id === message.id,
-  });
+  rollbackStoppedDispatchMessage(
+    'session',
+    message,
+    { isNotificationMessage: (id) => id === message.id },
+    new Error('Connection closed')
+  );
 
   expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
 });

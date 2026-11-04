@@ -8,16 +8,23 @@ import type {
   SessionDispatchDependencies,
   SessionDispatchNotificationDeliveryService,
 } from './session-dispatch.types';
+import { isKnownUnsentDispatchFailure } from './session-mail-signal-dispatch';
 
 const logger = createLogger('session-dispatch-batch');
 
-/** A stopped RPC can reject after delivery; only background evidence must roll back. */
+/** Retain interrupted human prompts unless rejection proves they were never sent. */
 export function rollbackStoppedDispatchMessage(
   sessionId: string,
   message: QueuedMessage,
-  notifications: Pick<SessionDispatchNotificationDeliveryService, 'isNotificationMessage'> | null
+  notifications: Pick<SessionDispatchNotificationDeliveryService, 'isNotificationMessage'> | null,
+  error: unknown
 ): void {
-  if (message.source || notifications?.isNotificationMessage(message.id)) {
+  if (
+    message.source ||
+    notifications?.isNotificationMessage(message.id) ||
+    isKnownUnsentDispatchFailure(error) ||
+    error instanceof PermanentAttachmentError
+  ) {
     sessionDomainService.removeTranscriptMessageById(sessionId, message.id, {
       emitSnapshot: false,
       preservePRUpdateOutcome: true,

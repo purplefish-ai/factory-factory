@@ -104,7 +104,7 @@ export async function sendArmedWorkspaceMailBatch(input: {
     await input.send();
   } catch (error) {
     for (const receipt of receipts) {
-      if (!attempted || isKnownUnsentMailFailure(error)) {
+      if (!attempted || isKnownUnsentDispatchFailure(error)) {
         await disarmUnsentMailReceipt(input.sessionId, receipt);
       } else {
         receipt.quarantine();
@@ -143,7 +143,7 @@ async function armBatchMailReceipts(
   }
 }
 
-function isKnownUnsentMailFailure(error: unknown): boolean {
+export function isKnownUnsentDispatchFailure(error: unknown): boolean {
   return (
     error instanceof AcpSteeringNotSentError ||
     error instanceof WorkspaceInitFenceError ||
@@ -153,7 +153,7 @@ function isKnownUnsentMailFailure(error: unknown): boolean {
 }
 
 function classifyProvenUnsentFailure(error: unknown): unknown {
-  return isKnownUnsentMailFailure(error)
+  return isKnownUnsentDispatchFailure(error)
     ? error
     : new AcpSteeringNotSentError(toErrorMessage(error), { cause: error });
 }
