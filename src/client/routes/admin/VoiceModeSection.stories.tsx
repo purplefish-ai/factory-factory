@@ -72,3 +72,41 @@ export const StaleTabIndependentSave: Story = {
     await waitFor(() => expect(enabled).not.toBeChecked());
   },
 };
+
+export const NarrowPhone: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  render: () => (
+    <div className="w-[320px] max-w-full p-3">
+      <VoiceModeSection />
+    </div>
+  ),
+  parameters: {
+    layout: 'fullscreen',
+    trpc: {
+      handlers: {
+        'voice.getConfig': () => ({
+          enabled: true,
+          hasApiKey: true,
+          ttsSpeed: 1,
+          ttsModel: 'flux-haley-en',
+          utteranceEndMs: 1000,
+          bargeInSustainedMs: 16,
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByLabelText('Deepgram API Key');
+    const content = canvasElement.querySelector('[data-slot="card-content"]');
+    if (!content) {
+      throw new Error('Voice settings content is missing');
+    }
+    const right = content.getBoundingClientRect().right - 12;
+    for (const control of canvas
+      .getAllByRole('slider')
+      .concat(canvas.getAllByRole('combobox'), [canvas.getByLabelText('Deepgram API Key')])) {
+      await expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(right + 1);
+    }
+  },
+};

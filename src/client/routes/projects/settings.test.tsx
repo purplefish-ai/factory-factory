@@ -101,3 +101,13 @@ it('keeps unresolved project settings loading without mounting editors', async (
   expect(container.textContent).toContain('Loading project settings…');
   expect(container.querySelector('[data-project]')).toBeNull();
 });
+
+it('keeps settings navigation available with the project section active', async () => {
+  const container = await render('beta');
+  const navigation = container.querySelector('nav[aria-label="Settings sections"]');
+  expect(navigation).not.toBeNull();
+  expect(navigation?.querySelector('a[href="/admin/project"]')?.getAttribute('aria-current')).toBe(
+    'page'
+  );
+  expect(navigation?.querySelector('a[href="/admin"]')).not.toBeNull();
+});

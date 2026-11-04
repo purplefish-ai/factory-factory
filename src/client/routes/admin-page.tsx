@@ -1,3 +1,5 @@
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { Link, Navigate, useParams } from 'react-router';
 import { useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
@@ -5,6 +7,7 @@ import { QueryErrorState } from '@/client/components/query-error-state';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
 import { SlackSettings } from '@/client/features/slack';
 import { trpc } from '@/client/lib/trpc';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AdversarialReviewSection,
   AppearanceSettingsSection,
@@ -35,30 +38,44 @@ function ProjectSettingsLinks() {
     );
   }
   return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Project settings</h2>
-      <p className="text-sm text-muted-foreground">
-        Choose a project to configure its scripts and issue tracking.
-      </p>
-      {query.data.length ? (
-        <ul className="space-y-2">
-          {query.data.map((project) => (
-            <li key={project.id}>
-              <Link className="underline" to={`/projects/${project.slug}/settings`}>
-                {project.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          No projects yet.{' '}
-          <Link className="underline" to="/projects/new">
-            Add a project
-          </Link>
-        </p>
-      )}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FolderIcon className="h-5 w-5" />
+          Project settings
+        </CardTitle>
+        <CardDescription>
+          Choose a project to configure its scripts and issue tracking.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {query.data.length ? (
+          <ul className="divide-y rounded-md border">
+            {query.data.map((project) => (
+              <li key={project.id}>
+                <Link
+                  className="flex items-center justify-between gap-3 px-3 py-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-ring"
+                  to={`/projects/${project.slug}/settings`}
+                >
+                  <span className="min-w-0 break-words">{project.name}</span>
+                  <CaretRightIcon
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No projects yet.{' '}
+            <Link className="underline" to="/projects/new">
+              Add a project
+            </Link>
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

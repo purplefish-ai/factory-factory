@@ -17,7 +17,9 @@ bookmark it and use the browser's Back button:
 - **Project settings** (`/admin/project`): links to each project's settings at
   `/projects/:slug/settings`, including factory configuration and issue
   tracking. Opening a project's settings does not change the selected project
-  elsewhere.
+  elsewhere. Individual project pages keep the settings section navigation, with
+  **Project settings** selected. Use the **Projects** breadcrumb to return to
+  the project list.
 
 Toggles and preset selects save immediately. Text and secrets use explicit Save
 or Connect actions; custom IDE commands and custom font families also submit
