@@ -54,8 +54,8 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 vi.mock('@/client/features/workspace', async () => {
-  const actual = await vi.importActual<typeof import('@/client/features/workspace/session-limit')>(
-    '@/client/features/workspace/session-limit'
+  const actual = await vi.importActual<typeof import('@/client/features/workspace')>(
+    '@/client/features/workspace'
   );
   return { getNewChatUnavailableReason: actual.getNewChatUnavailableReason };
 });
