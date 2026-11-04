@@ -92,14 +92,12 @@ when a panel combines several queries, as `CombinedChangesPanel` does.
 
 Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
 The app root and the routed page area each have one. The page boundary resets
-when the URL changes and offers Try again, which helps when a page crashed on
-data that has since changed; a page whose route chunk failed to load needs
-Reload, which is the primary action. The built-in fallback offers Reload and
-Copy details (message, URL, stack and component trace). Panels and lazy chunks
-use `variant="compact"` with a specific `title`, such as "Couldn't load the
-viewer". Offer `showRetry` only where re-rendering can succeed: a failed lazy
-import stays failed until the app reloads, so the viewer and form boundaries
-omit it.
+when the URL changes. Both offer Reload and Copy details (message, URL, stack
+and component trace). The page boundary wraps lazy route imports, so it uses
+Reload rather than Try again: a rejected lazy import stays rejected until the
+app reloads. Panels and lazy chunks use `variant="compact"` with a specific
+`title`, such as "Couldn't load the viewer". Offer `showRetry` only where
+re-rendering can succeed; the route, viewer and form boundaries omit it.
 
 ## Query and mutation failures
 
