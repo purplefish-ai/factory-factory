@@ -117,3 +117,8 @@ export const LegacyPullRequest: Story = {
 export const AgentOrigin: Story = {
   args: { workspace: { ...meta.args.workspace, creationSource: 'PERIODIC_TASK' } },
 };
+
+export const PullRequestWithChangeCountsDark: typeof PullRequestWithChangeCounts = {
+  ...PullRequestWithChangeCounts,
+  globals: { theme: 'dark' },
+};

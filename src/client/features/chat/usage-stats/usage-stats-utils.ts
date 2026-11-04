@@ -21,13 +21,13 @@ export function calculateContextUsagePercentage(stats: TokenStats): number {
  */
 export function getUsageColorClass(
   percentage: number | null,
-  warningClass = 'text-yellow-500'
+  warningClass = 'text-warning'
 ): string {
   if (percentage === null) {
     return 'text-muted-foreground';
   }
   if (percentage >= CONTEXT_CRITICAL_THRESHOLD * 100) {
-    return 'text-red-500';
+    return 'text-destructive';
   }
   if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
     return warningClass;
@@ -40,10 +40,10 @@ export function getUsageColorClass(
  */
 export function getProgressColorClass(percentage: number): string {
   if (percentage >= CONTEXT_CRITICAL_THRESHOLD * 100) {
-    return '[&>div]:bg-red-500';
+    return '[&>div]:bg-destructive';
   }
   if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
-    return '[&>div]:bg-yellow-500';
+    return '[&>div]:bg-warning';
   }
-  return '[&>div]:bg-green-500';
+  return '[&>div]:bg-success';
 }

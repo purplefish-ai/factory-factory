@@ -2,6 +2,8 @@ import { ChatCircleDotsIcon } from '@phosphor-icons/react/dist/csr/ChatCircleDot
 import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import type { Icon } from '@phosphor-icons/react/dist/lib/types';
+import { StatusDot, StatusIcon } from './status-indicators';
 
 interface WorkspaceStatusIconProps {
   pendingRequestType?: 'permission_request' | 'plan_approval' | 'user_question' | null;
@@ -9,46 +11,41 @@ interface WorkspaceStatusIconProps {
   sessionRuntimeErrorMessage?: string | null;
 }
 
+/** Every pending request is "needs you"; the icon says which kind. */
+const PENDING_REQUEST_ICONS: Record<
+  NonNullable<WorkspaceStatusIconProps['pendingRequestType']>,
+  { icon: Icon; name: string }
+> = {
+  permission_request: { icon: ShieldWarningIcon, name: 'permission-request' },
+  plan_approval: { icon: ClipboardTextIcon, name: 'plan-approval' },
+  user_question: { icon: ChatCircleDotsIcon, name: 'user-question' },
+};
+
 export function WorkspaceStatusIcon({
   pendingRequestType,
   isWorking,
   sessionRuntimeErrorMessage,
 }: WorkspaceStatusIconProps) {
   if (pendingRequestType) {
-    switch (pendingRequestType) {
-      case 'permission_request':
-        return (
-          <ShieldWarningIcon
-            data-icon="permission-request"
-            className="h-3.5 w-3.5 shrink-0 text-orange-500"
-          />
-        );
-      case 'plan_approval':
-        return (
-          <ClipboardTextIcon
-            data-icon="plan-approval"
-            className="h-3.5 w-3.5 shrink-0 text-amber-500"
-          />
-        );
-      case 'user_question':
-        return (
-          <ChatCircleDotsIcon
-            data-icon="user-question"
-            className="h-3.5 w-3.5 shrink-0 text-blue-500"
-          />
-        );
-    }
+    // Server data: fall back to a generic "needs you" icon for unknown types.
+    const { icon, name } = PENDING_REQUEST_ICONS[pendingRequestType] ?? {
+      icon: WarningIcon,
+      name: 'pending-request',
+    };
+    return (
+      <span data-icon={name} className="inline-flex shrink-0">
+        <StatusIcon tone="attention" icon={icon} />
+      </span>
+    );
   }
 
   if (sessionRuntimeErrorMessage) {
     return (
-      <WarningIcon data-icon="runtime-error" className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <span data-icon="runtime-error" className="inline-flex shrink-0">
+        <StatusIcon tone="danger" icon={WarningIcon} />
+      </span>
     );
   }
 
-  if (isWorking) {
-    return <span className="h-2 w-2 shrink-0 rounded-full bg-brand animate-pulse" />;
-  }
-
-  return <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/30" />;
+  return <StatusDot tone={isWorking ? 'working' : 'neutral'} />;
 }

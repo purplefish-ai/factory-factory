@@ -89,7 +89,7 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
               animated={status.isRunning}
               className="h-3.5 w-3.5 rounded-[4px] shrink-0"
               iconClassName={cn(
-                status.isRunning && 'animate-pulse text-brand',
+                status.isRunning && 'animate-pulse text-running',
                 !status.isRunning && 'text-warning'
               )}
             />

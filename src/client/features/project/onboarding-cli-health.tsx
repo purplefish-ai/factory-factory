@@ -22,10 +22,10 @@ interface StatusItem {
 
 function StatusIcon({ status }: { status: ItemStatus }) {
   if (status === 'ok') {
-    return <CheckCircleIcon className="h-4 w-4 text-green-600 dark:text-green-400" />;
+    return <CheckCircleIcon className="h-4 w-4 text-success" />;
   }
   if (status === 'warning') {
-    return <WarningIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
+    return <WarningIcon className="h-4 w-4 text-warning" />;
   }
   return <CircleDashedIcon className="h-4 w-4 text-muted-foreground" />;
 }

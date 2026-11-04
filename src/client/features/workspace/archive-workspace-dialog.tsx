@@ -42,7 +42,7 @@ export function ArchiveWorkspaceDialog({
         </AlertDialogHeader>
         <div className="space-y-3">
           {activeChildCount > 0 && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+            <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
               This workspace has {activeChildCount} active child workspace
               {activeChildCount !== 1 ? 's' : ''}. Archiving will not automatically archive them.
             </div>

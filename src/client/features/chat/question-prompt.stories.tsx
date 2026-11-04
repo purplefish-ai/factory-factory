@@ -335,6 +335,11 @@ export const DeclineAnswer: Story = {
   },
 };
 
+export const SingleQuestionDark: typeof SingleQuestion = {
+  ...SingleQuestion,
+  globals: { theme: 'dark' },
+};
+
 /** Shows the question once the user starts typing, as when it arrives mid-message. */
 function ComposerFocusHarness({ question, onAnswer }: React.ComponentProps<typeof QuestionPrompt>) {
   const [questionVisible, setQuestionVisible] = useState(false);

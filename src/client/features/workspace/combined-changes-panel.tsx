@@ -130,7 +130,7 @@ function ChangesDecorators({
       )}
       {hasIndicatorEntries && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
+          <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" />
           <span>{indicatorLabel}</span>
         </div>
       )}

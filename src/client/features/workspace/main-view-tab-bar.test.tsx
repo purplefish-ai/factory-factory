@@ -292,7 +292,7 @@ it('labels only legacy agent defaults and keeps agent identity with runtime stat
     expect(tabs[1]?.textContent).toBe('Dependency review');
     expect(tabs[2]?.textContent).toBe('Periodic task');
     expect(
-      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-brand')
+      tabs[0]?.querySelector('[aria-label="Agent: Running"]')?.classList.contains('text-running')
     ).toBe(true);
     expect(
       tabs[1]?.querySelector('[aria-label="Agent: Failed"]')?.classList.contains('text-destructive')

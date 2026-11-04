@@ -185,8 +185,8 @@ export const MessageItem = memo(function MessageItem({
                 onMouseDown={(e) => e.preventDefault()}
                 className={cn(
                   'p-1.5 rounded-md',
-                  'bg-background/90 hover:bg-amber-50 dark:hover:bg-amber-900/20',
-                  'border border-border hover:border-amber-500/50',
+                  'bg-background/90 hover:bg-warning/10',
+                  'border border-border hover:border-warning/50',
                   'shadow-sm',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                 )}
@@ -194,7 +194,7 @@ export const MessageItem = memo(function MessageItem({
                 type="button"
                 aria-label="Rewind files to before this message"
               >
-                <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
+                <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-warning" />
               </button>
             )}
           </div>

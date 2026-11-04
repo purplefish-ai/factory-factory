@@ -294,7 +294,7 @@ function CardTitleIcons({
             >
               <ChatIcon className="h-3 w-3" />
               {workspace.pendingRequestType && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning" />
               )}
             </Button>
           </TooltipTrigger>
@@ -316,7 +316,10 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <PlayIcon className="h-3 w-3 text-green-500 animate-pulse" weight="fill" />
+              <PlayIcon
+                className="h-3 w-3 text-running animate-pulse motion-reduce:animate-none"
+                weight="fill"
+              />
             </span>
           </TooltipTrigger>
           <TooltipContent>Dev server running</TooltipContent>
@@ -326,7 +329,7 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <WarningIcon className="h-3 w-3 text-amber-500" />
+              <WarningIcon className="h-3 w-3 text-destructive" />
             </span>
           </TooltipTrigger>
           <TooltipContent>{sessionRuntimeError}</TooltipContent>
@@ -442,12 +445,11 @@ export const KanbanCard = memo(function KanbanCard({
       data-family-highlighted={highlighted || undefined}
       className={cn(
         'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
-        sessionRuntimeError && 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
-        workspace.isWorking && 'border-brand/50 bg-brand/5',
-        workspace.pendingRequestType &&
-          'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
+        sessionRuntimeError && 'border-destructive/40 bg-destructive/5 hover:border-destructive/60',
+        workspace.isWorking && 'border-running/50 bg-running/5',
+        workspace.pendingRequestType && 'border-warning/40 bg-warning/5 hover:border-warning/60',
         isArchived && 'opacity-60 border-dashed',
-        highlighted && 'ring-2 ring-violet-500/70 ring-inset'
+        highlighted && 'ring-2 ring-info/70 ring-inset'
       )}
     >
       <CardHeader className="pb-2">
@@ -526,7 +528,7 @@ export const KanbanCard = memo(function KanbanCard({
           )}
           <CardFamilyMetadata workspace={workspace} projectSlug={projectSlug} />
           {sessionRuntimeError && (
-            <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
+            <div className="flex items-center gap-2 text-[11px] text-destructive min-w-0">
               <WarningIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{sessionRuntimeError}</span>
             </div>

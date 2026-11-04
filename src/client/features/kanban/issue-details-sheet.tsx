@@ -98,7 +98,7 @@ function IssueDetailsContent({
               <SheetTitle className="text-xl leading-tight pr-8">{issue.title}</SheetTitle>
               <SheetDescription className="flex items-center gap-2 text-xs mt-2">
                 <span className="inline-flex items-center gap-1">
-                  <DotOutlineIcon className="h-3 w-3 text-green-500" />
+                  <DotOutlineIcon className="h-3 w-3 text-success" />
                   <span>{issue.displayId}</span>
                 </span>
                 <span>•</span>
