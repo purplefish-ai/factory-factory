@@ -97,10 +97,20 @@ const meta: Meta<typeof ChatInput> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const checkCompactToolbar: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  const send = canvas.getByRole('button', { name: /^(Send|Queue) message$/ });
+  await expect(send.getBoundingClientRect().height).toBe(28);
+  await expect(
+    canvas.getByTestId('chat-input-controls').getBoundingClientRect().height
+  ).toBeLessThanOrEqual(37);
+};
+
 export const Default: Story = {
   args: {
     onSend: onSendAction,
   },
+  play: checkCompactToolbar,
 };
 
 export const RestoredDraft: Story = {
@@ -136,6 +146,7 @@ export const Running: Story = {
     promptInFlight: true,
     placeholder: 'Message will be queued…',
   },
+  play: checkCompactToolbar,
 };
 
 export const BackgroundProcessRunning: Story = {
