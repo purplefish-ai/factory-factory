@@ -11,7 +11,7 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 
 const defaultDescription =
-  'Uncommitted changes will be committed before the worktree is removed. Chat history and the branch are kept. Worktree removal cannot be undone in the app.';
+  'Running agents and processes will stop. Uncommitted changes will be committed before the worktree is removed. Chat history and the branch are kept. Worktree removal cannot be undone in the app.';
 
 export type ArchiveWorkspaceDialogProps = {
   open: boolean;

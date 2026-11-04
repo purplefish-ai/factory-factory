@@ -34,7 +34,11 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function openMenu(props: { chatLabel: string | null; disabled?: boolean }) {
+async function openMenu(props: {
+  chatLabel: string | null;
+  disabled?: boolean;
+  onRename?: () => void;
+}) {
   const onRestartSession = vi.fn();
   await act(() =>
     root.render(
@@ -68,3 +72,17 @@ it.each([{ chatLabel: null }, { chatLabel: 'Chat 1', disabled: true }])(
     expect(restart.getAttribute('aria-disabled')).toBe('true');
   }
 );
+
+it('starts rename after the menu closes so its focus return cannot dismiss the editor', async () => {
+  let menuPresentOnRename = true;
+  const onRename = vi.fn(() => {
+    menuPresentOnRename = Boolean(document.querySelector('[role="menu"]'));
+  });
+  await openMenu({ chatLabel: 'Chat 1', onRename });
+  const rename = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    item.textContent?.includes('Rename chat')
+  )!;
+  await act(() => rename.click());
+  await vi.waitFor(() => expect(onRename).toHaveBeenCalledOnce());
+  expect(menuPresentOnRename).toBe(false);
+});

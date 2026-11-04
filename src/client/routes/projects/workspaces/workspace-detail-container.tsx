@@ -46,6 +46,7 @@ export function WorkspaceDetailContainer() {
   const {
     rightPanelVisible,
     setRightPanelVisible,
+    setActiveBottomTab,
     activeTabId,
     selectTab,
     tabs,
@@ -326,7 +327,12 @@ export function WorkspaceDetailContainer() {
 
   // A fresh object per render is fine: ChatContent is memoized on these fields,
   // and only the context consumer re-renders when it changes.
+  const viewSetupOutput = useCallback(() => {
+    setActiveBottomTab('setup-logs');
+    setRightPanelVisible(true);
+  }, [setActiveBottomTab, setRightPanelVisible]);
   const chatViewModel: ChatContentProps = {
+    onViewSetupOutput: viewSetupOutput,
     retryAvailability: workspaceInitStatus?.retryAvailability,
     workspaceId,
     sessionId: selectedDbSessionId,

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { createRef } from 'react';
-import { expect, fn, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { RightControls } from './input-controls';
 
 const meta = {
@@ -33,3 +33,16 @@ export const SendingAndStopping: Story = {
   },
 };
 export const SendingAndStoppingDark: Story = { ...SendingAndStopping, globals: { theme: 'dark' } };
+
+export const StopShortcut: Story = {
+  args: { stopping: false, disabled: false, pendingMessageCount: 0, modLabel: '⌘' },
+  play: async ({ canvasElement }) => {
+    await userEvent.hover(within(canvasElement).getByRole('button', { name: 'Stop agent' }));
+    await expect(
+      await within(canvasElement.ownerDocument.body).findByRole('tooltip')
+    ).toHaveTextContent('Stop agent (⌘+.)');
+  },
+};
+export const ReadyToSend: Story = {
+  args: { running: false, stopping: false, disabled: false, pendingMessageCount: 0 },
+};

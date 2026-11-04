@@ -32,6 +32,7 @@ import { InitStatusBanner, type InitStatusBannerProps } from './workspace-init-s
 export interface ChatContentProps {
   retryAvailability?: WorkspaceRetryAvailability;
   workspaceId: string;
+  onViewSetupOutput?: () => void;
   sessionId: string | null;
   codexAccountId?: string | null;
   resolveWorkspaceFileLink?: (href: string) => string | null;
@@ -286,6 +287,8 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
+        contentClassName="mx-auto w-full max-w-4xl"
+        onViewSetupOutput={props.onViewSetupOutput}
         sessionId={props.sessionId}
         thinkingInFooter
         pendingRequestType={props.sessionRuntime.phase === 'running' ? pendingRequestType : null}
@@ -339,15 +342,17 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <VoiceModeToggle
-            sessionId={props.sessionId}
-            onFinalTranscript={sendMessage}
-            running={running}
-            disabled={!props.connected || loadingSession}
-          />
+        <div className="flex min-h-0 shrink items-stretch gap-2">
           <ChatInput
-            className="flex-1 min-w-0"
+            leadingControls={
+              <VoiceModeToggle
+                sessionId={props.sessionId}
+                onFinalTranscript={sendMessage}
+                running={running}
+                disabled={!props.connected || loadingSession}
+              />
+            }
+            className="mx-auto w-full max-w-4xl flex-1 min-w-0"
             onSend={sendMessage}
             onCompact={handleCompact}
             onStop={props.stopChat}

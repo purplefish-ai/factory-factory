@@ -47,7 +47,7 @@ function TranscriptInstance({
     scroll
   );
   return (
-    <div className="flex flex-1 min-h-12 h-full min-w-0 flex-col">
+    <div className="flex flex-1 min-h-24 h-full min-w-0 flex-col">
       <div className="relative flex-1 min-h-0">
         <div
           ref={setViewport}
@@ -66,20 +66,15 @@ function TranscriptInstance({
             contentClassName={contentClassName}
           />
         </div>
-        {state.intent === 'reading' && scroll.ready && hasContentBelow && (
-          <div className="absolute bottom-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={jumpToLatest}
-              className="rounded-full pointer-events-auto"
-            >
-              <ArrowDownIcon className="h-4 w-4 mr-1" />
-              Scroll to bottom
-            </Button>
-          </div>
-        )}
       </div>
+      {state.intent === 'reading' && scroll.ready && hasContentBelow && (
+        <div className="z-10 flex shrink-0 justify-center py-1">
+          <Button variant="secondary" size="sm" onClick={jumpToLatest} className="rounded-full">
+            <ArrowDownIcon className="h-4 w-4 mr-1" />
+            Scroll to bottom
+          </Button>
+        </div>
+      )}
       {thinkingInFooter && (
         <ThinkingFooter
           active={thinkingActive}

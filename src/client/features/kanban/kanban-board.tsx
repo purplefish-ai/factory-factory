@@ -362,13 +362,13 @@ function KanbanBoardContent() {
         onConfirm={() =>
           runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.")
         }
-        description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+        description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
       <ArchiveWorkspaceDialog
         open={selectionDialogOpen}
         onOpenChange={setSelectionDialogOpen}
         onConfirm={() => runInBackground(archiveSelected(), "Couldn't archive workspaces.")}
-        description={`Archive ${selectedIds.length} selected ${selectedIds.length === 1 ? 'workspace' : 'workspaces'}? Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
+        description={`Archive ${selectedIds.length} selected ${selectedIds.length === 1 ? 'workspace' : 'workspaces'}? Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
       />
       {archiveGitLockDialog}
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />

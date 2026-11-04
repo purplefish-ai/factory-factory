@@ -24,6 +24,7 @@ import {
   type SessionQueuedMessageCount,
 } from './session-close-guard';
 import { isWorkspaceSessionLimitReached } from './session-limit';
+import { SessionNameEditor } from './session-name-editor';
 import {
   deriveSessionTabRuntime,
   type WorkspaceSessionRuntimeSummary,
@@ -302,6 +303,7 @@ export function MainViewTabBar({
     risk: SessionCloseRisk;
   } | null>(null);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
 
   const requestCloseSession = (session: Session, label: string) => {
     const risk = getSessionCloseRisk({
@@ -404,6 +406,20 @@ export function MainViewTabBar({
         )}
       </div>
 
+      {sessions
+        ?.filter((session) => session.id === renamingSessionId)
+        .map((session) => (
+          <SessionNameEditor
+            key={session.id}
+            sessionId={session.id}
+            workspaceId={workspaceId}
+            name={getSessionDisplayName(session, `Chat ${sessions.indexOf(session) + 1}`)}
+            onDone={() =>
+              setRenamingSessionId((current) => (current === session.id ? null : current))
+            }
+          />
+        ))}
+
       {/* New session button: inherits the workspace's provider and model */}
       {onCreateSession && (
         <div className="mx-1 flex shrink-0 items-center py-1">
@@ -429,6 +445,7 @@ export function MainViewTabBar({
         <div className="shrink-0 pr-1">
           <ChatActionsMenu
             chatLabel={currentSessionLabel}
+            onRename={() => setRenamingSessionId(currentSessionId ?? null)}
             onRestartSession={onRestartSession}
             disabled={disabled}
           />

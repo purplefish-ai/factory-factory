@@ -125,6 +125,15 @@ export function TranscriptTail({
         <div className="flex items-center gap-2 text-muted-foreground py-4">
           <Spinner aria-hidden="true" />
           <span className="text-sm">{getStartupLabel(props)}</span>
+          {initializing && props.onViewSetupOutput && (
+            <button
+              type="button"
+              onClick={props.onViewSetupOutput}
+              className="rounded-sm text-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              View setup output
+            </button>
+          )}
         </div>
       )}
       {(running || background) && (
