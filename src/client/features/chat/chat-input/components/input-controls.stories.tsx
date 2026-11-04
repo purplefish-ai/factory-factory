@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { createRef } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import { LeftControls } from './input-controls';
+import { LeftControls, RightControls } from './input-controls';
 
 const meta = {
   title: 'Chat/Input/SelectionControls',
@@ -330,3 +330,22 @@ export const ClaudeUnrestrictedAlias: Story = {
     ),
   },
 };
+
+export const SendingAndStopping: Story = {
+  render: () => (
+    <RightControls
+      pendingMessageCount={1}
+      running
+      stopping
+      disabled
+      onSendClick={fn()}
+      inputRef={createRef<HTMLTextAreaElement>()}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Sending…')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+  },
+};
+export const SendingAndStoppingDark: Story = { ...SendingAndStopping, globals: { theme: 'dark' } };

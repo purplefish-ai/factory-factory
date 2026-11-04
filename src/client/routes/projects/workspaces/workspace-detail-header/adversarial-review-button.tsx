@@ -1,11 +1,11 @@
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { getWorkspacePRReviewTarget } from '@/client/lib/workspace-selected-pr';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { isWorkspaceClosed, isWorkspaceMerged } from './utils';
@@ -24,7 +24,7 @@ export function AdversarialReviewButton({
     onSuccess: (result) => {
       runInBackground(
         utils.session.listSessions.invalidate({ workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       toast.success(
         result.status === 'already_active'
@@ -33,7 +33,7 @@ export function AdversarialReviewButton({
       );
     },
     onError: (error) => {
-      toast.error(`Failed to start adversarial review: ${error.message}`);
+      toast.error("Couldn't start adversarial review.", { description: error.message });
     },
   });
 
@@ -57,7 +57,7 @@ export function AdversarialReviewButton({
     return (
       <DropdownMenuItem onSelect={startReview} disabled={trigger.isPending}>
         {trigger.isPending ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" className="h-4 w-4" />
         ) : (
           <ShieldWarningIcon className="h-4 w-4" />
         )}
@@ -78,13 +78,13 @@ export function AdversarialReviewButton({
           onClick={startReview}
         >
           {trigger.isPending ? (
-            <SpinnerGapIcon className="h-3 w-3 animate-spin md:h-4 md:w-4" />
+            <Spinner aria-hidden="true" className="h-3 w-3 md:h-4 md:w-4" />
           ) : (
             <ShieldWarningIcon className="h-3 w-3 md:h-4 md:w-4" />
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Adversarial Review</TooltipContent>
+      <TooltipContent>Adversarial review</TooltipContent>
     </Tooltip>
   );
 }

@@ -166,3 +166,17 @@ export const InstalledPwaToolsDrawer: Story = {
     });
   },
 };
+
+export const PendingActions: Story = {
+  args: { pendingActions: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('button', { name: 'Archiving workspace…' })
+    ).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Opening in VS Code…' })).toBeDisabled();
+    await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
+    await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
+  },
+};
+export const PendingActionsDark: Story = { ...PendingActions, globals: { theme: 'dark' } };

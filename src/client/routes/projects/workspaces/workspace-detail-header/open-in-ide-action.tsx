@@ -1,7 +1,7 @@
 import { AppWindowIcon } from '@phosphor-icons/react/dist/csr/AppWindow';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceSessionManagement } from './types';
 
@@ -36,7 +36,7 @@ export function OpenInIdeAction({
         disabled={disabled}
       >
         {openInIde.isPending ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" className="h-4 w-4" />
         ) : (
           <AppWindowIcon className="h-4 w-4" />
         )}
@@ -54,9 +54,12 @@ export function OpenInIdeAction({
           className="h-9 w-9 md:h-8 md:w-8"
           onClick={() => openInIde.mutate({ id: workspaceId })}
           disabled={disabled}
+          aria-label={
+            openInIde.isPending ? `Opening in ${preferredIdeName}…` : `Open in ${preferredIdeName}`
+          }
         >
           {openInIde.isPending ? (
-            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+            <Spinner aria-hidden="true" className="h-4 w-4" />
           ) : (
             <AppWindowIcon className="h-4 w-4" />
           )}

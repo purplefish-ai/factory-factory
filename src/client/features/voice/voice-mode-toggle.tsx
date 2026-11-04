@@ -1,11 +1,11 @@
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { MicrophoneSlashIcon } from '@phosphor-icons/react/dist/csr/MicrophoneSlash';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { useMicCapture } from './use-mic-capture';
 import { useVoicePlayback } from './use-voice-playback';
@@ -58,7 +58,7 @@ function getVoiceStatus(
   error: string | null
 ): VoiceStatus {
   if (error) {
-    const label = isCapturing ? 'Voice On' : 'Voice Off';
+    const label = isCapturing ? 'Voice on' : 'Voice off';
     return { label, title: error };
   }
   if (isConnecting) {
@@ -68,9 +68,9 @@ function getVoiceStatus(
     };
   }
   if (isCapturing) {
-    return { label: 'Voice On', title: 'Exit voice mode' };
+    return { label: 'Voice on', title: 'Exit voice mode' };
   }
-  return { label: 'Voice Off', title: 'Enter voice mode' };
+  return { label: 'Voice off', title: 'Enter voice mode' };
 }
 
 /**
@@ -256,7 +256,7 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
         onClick={handleClick}
       >
         {isConnecting ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" className="h-4 w-4" />
         ) : isCapturing ? (
           <MicrophoneIcon className={isSpeaking ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
         ) : (

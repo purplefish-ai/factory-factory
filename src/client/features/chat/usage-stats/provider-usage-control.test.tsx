@@ -109,7 +109,9 @@ describe('Combined usage control', () => {
     click(button('Usage: 20% context, plan limit nearly reached'));
     expect(button(state === 'compacting' ? 'Compacting…' : 'Compact').disabled).toBe(true);
     if (state === 'compacting') {
-      expect(document.querySelector('[role="status"]')?.textContent).toContain('Compacting');
+      expect(
+        document.querySelector('[role="status"]:not([aria-hidden="true"])')?.textContent
+      ).toContain('Compacting');
     }
   });
   it('shows missing plan readings as unavailable and supports refresh', () => {

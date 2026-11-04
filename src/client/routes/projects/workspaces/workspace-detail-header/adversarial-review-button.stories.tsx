@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
+import { expect, userEvent, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import { DropdownMenu, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { AdversarialReviewButton } from './adversarial-review-button';
@@ -35,6 +36,9 @@ const meta = {
                 observable((observer) => {
                   if (op.path !== 'adversarialReview.trigger') {
                     observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
+                    return;
+                  }
+                  if (context.parameters.pending) {
                     return;
                   }
                   observer.next({
@@ -122,3 +126,13 @@ export const OpposingPrFacts: Story = {
     },
   },
 };
+
+export const StartingReview: Story = {
+  parameters: { pending: true },
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole('button', { name: 'Start adversarial review' });
+    await userEvent.click(button);
+    await expect(button).toBeDisabled();
+  },
+};
+export const StartingReviewDark: Story = { ...StartingReview, globals: { theme: 'dark' } };

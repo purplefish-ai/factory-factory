@@ -128,7 +128,13 @@ function GenericHeader() {
   useAppHeader({ title: 'Application settings with an exceptionally long page title' });
   return null;
 }
-function FixtureHeader({ variant }: { variant: string | null }) {
+function FixtureHeader({
+  variant,
+  pendingActions,
+}: {
+  variant: string | null;
+  pendingActions: boolean;
+}) {
   if (variant === 'generic') {
     return <GenericHeader />;
   }
@@ -146,8 +152,8 @@ function FixtureHeader({ variant }: { variant: string | null }) {
       workspaceId={workspace.id}
       availableIdes={[{ id: 'vscode', name: 'VS Code' }]}
       preferredIde="vscode"
-      openInIde={{ mutate: () => undefined, isPending: false }}
-      archivePending={false}
+      openInIde={{ mutate: () => undefined, isPending: pendingActions }}
+      archivePending={pendingActions}
       onArchiveRequest={() => undefined}
       handleQuickAction={async () => undefined}
       running={false}
@@ -161,7 +167,8 @@ function FixtureHeader({ variant }: { variant: string | null }) {
 export function WorkspaceHeaderFixture({
   variant: storyVariant,
   projectsError = false,
-}: { variant?: string; projectsError?: boolean } = {}) {
+  pendingActions = false,
+}: { variant?: string; projectsError?: boolean; pendingActions?: boolean } = {}) {
   const [params] = useSearchParams();
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
@@ -173,6 +180,9 @@ export function WorkspaceHeaderFixture({
           ({ op }) =>
             observable((observer) => {
               if (op.type !== 'query') {
+                if (pendingActions) {
+                  return;
+                }
                 observer.error(
                   TRPCClientError.from(
                     new Error('Header fixture does not execute workspace actions.')
@@ -235,7 +245,10 @@ export function WorkspaceHeaderFixture({
               <AppHeaderProvider>
                 <AppHeader />
                 <WorkspacePanelProvider workspaceId={workspace.id}>
-                  <FixtureHeader variant={storyVariant ?? params.get('header')} />
+                  <FixtureHeader
+                    variant={storyVariant ?? params.get('header')}
+                    pendingActions={pendingActions}
+                  />
                 </WorkspacePanelProvider>
                 <main className="p-4 text-sm text-muted-foreground">Responsive header fixture</main>
               </AppHeaderProvider>
