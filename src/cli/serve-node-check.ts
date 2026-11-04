@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getNodeRuntimeIssue } from './node-runtime';
 
 // This side-effect module must be imported before the CLI's application imports.
-// Read the published package metadata: .node-version is not shipped to users.
+// Use package metadata so direct CLI invocations follow the declared engine range.
 if (process.argv[2] === 'serve') {
   let root = dirname(fileURLToPath(import.meta.url));
   while (!existsSync(join(root, 'package.json')) && root !== dirname(root)) {
