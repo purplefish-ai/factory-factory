@@ -71,6 +71,17 @@ function seedDetail(listed: ProjectWorkspace): WorkspaceDetail {
 }
 
 describe('workspace snapshot cache projections', () => {
+  it('carries observed Waiting start times through snapshot projection', () => {
+    const waitingSince = '2026-11-04T12:00:00.000Z';
+    expect(projectSnapshotToWorkspace({ ...makeEntry(), waitingSince }).waitingSince).toBe(
+      waitingSince
+    );
+    const previous = projectSnapshotToWorkspace({ ...makeEntry(), waitingSince });
+    expect(
+      projectSnapshotToWorkspace({ ...makeEntry(), waitingSince: null }, previous).waitingSince
+    ).toBeNull();
+  });
+
   it('reuses an unchanged creation date but replaces changed or invalid date values', () => {
     const snapshot = makeEntry();
     const before = projectSnapshotToWorkspace(snapshot);

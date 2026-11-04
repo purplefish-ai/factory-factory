@@ -237,4 +237,52 @@ describe('useProjectIssues', () => {
 
     expect(resultRef.current?.issues).toEqual([]);
   });
+  it('distinguishes a disconnected integration from an empty assigned list', () => {
+    mocks.githubUseQuery.mockReturnValue({
+      ...githubQueryResult(),
+      isLoading: false,
+      data: { issues: [], health: { isInstalled: false, isAuthenticated: false }, error: null },
+    });
+    render('project-1', IssueProvider.GITHUB);
+    expect(resultRef.current?.status).toBe('not-connected');
+    mocks.githubUseQuery.mockReturnValue({
+      ...githubQueryResult(),
+      isLoading: false,
+      data: { issues: [], health: githubHealth, error: null },
+    });
+    render('project-1', IssueProvider.GITHUB);
+    expect(resultRef.current?.status).toBe('ready');
+  });
+
+  it('surfaces API and transport errors rather than an empty list', () => {
+    mocks.linearUseQuery.mockReturnValue({
+      ...linearQueryResult(),
+      data: { issues: [], error: 'Linear is unavailable' },
+    });
+    render('project-1', IssueProvider.LINEAR);
+    expect(resultRef.current).toMatchObject({ status: 'error', error: 'Linear is unavailable' });
+    mocks.githubUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('Network offline'),
+      refetch: githubRefetch,
+    });
+    render('project-1', IssueProvider.GITHUB);
+    expect(resultRef.current).toMatchObject({ status: 'error', error: 'Network offline' });
+  });
+
+  it('recognizes Linear project configuration errors and GitHub repository configuration errors', () => {
+    mocks.linearUseQuery.mockReturnValue({
+      ...linearQueryResult(),
+      data: { issues: [], error: 'Linear not configured for this project' },
+    });
+    render('project-1', IssueProvider.LINEAR);
+    expect(resultRef.current?.status).toBe('not-connected');
+    mocks.githubUseQuery.mockReturnValue({
+      ...githubQueryResult(),
+      data: { issues: [], error: 'Project is not linked to a GitHub repository' },
+    });
+    render('project-1', IssueProvider.GITHUB);
+    expect(resultRef.current?.status).toBe('not-connected');
+  });
 });

@@ -553,6 +553,18 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     projectSet.add(workspaceId);
   }
 
+  private updateWaitingSince(
+    entry: WorkspaceSnapshotEntry,
+    previousColumn: WorkspaceSnapshotEntry['kanbanColumn'],
+    isNewEntry: boolean,
+    timestamp: number
+  ): void {
+    if (isNewEntry || entry.kanbanColumn !== previousColumn) {
+      entry.waitingSince =
+        !isNewEntry && entry.kanbanColumn === 'WAITING' ? new Date(timestamp).toISOString() : null;
+    }
+  }
+
   /**
    * Insert or update a workspace snapshot entry.
    *
@@ -615,7 +627,9 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     // on every upsert because it writes the entry's derived fields as a side
     // effect (not just this boolean); `derivedChanged` stays in the guard
     // below as a defensive fallback rather than a load-bearing case.
+    const previousColumn = entry.kanbanColumn;
     const derivedChanged = this.recomputeDerivedState(entry);
+    this.updateWaitingSince(entry, previousColumn, isNewEntry, ts);
     const summaryChanged = this.updateSummaryCompleteness(entry);
     if (!(isNewEntry || mergeResult.rawChanged || derivedChanged || summaryChanged)) {
       logger.debug('Snapshot update accepted without value changes', { workspaceId, source });

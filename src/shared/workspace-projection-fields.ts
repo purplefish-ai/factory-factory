@@ -20,6 +20,7 @@ export type SnapshotUpdateInput = Partial<
     | 'selectedPrId'
     | 'selectedPr'
     | 'kanbanColumn'
+    | 'waitingSince'
     | 'sidebarStatus'
     | 'ratchetButtonAnimated'
     | 'flowPhase'

@@ -178,6 +178,7 @@ function projectSnapshotToLiveFields(
     pendingRequestType: entry.pendingRequestType,
     isWorking: entry.isWorking,
     kanbanColumn: entry.kanbanColumn,
+    ...(entry.waitingSince !== undefined ? { waitingSince: entry.waitingSince } : {}),
     sidebarStatus: entry.sidebarStatus,
     ratchetButtonAnimated: entry.ratchetButtonAnimated,
     flowPhase: entry.flowPhase,

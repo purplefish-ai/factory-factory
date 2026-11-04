@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
-import type { ReactNode } from 'react';
+import { act, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,6 +57,7 @@ const mocks = vi.hoisted(() => ({
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
   archiveInputs: [] as unknown[],
+  failArchiveId: undefined as string | undefined,
   bulkArchiveInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
@@ -161,7 +162,16 @@ vi.mock('@/client/lib/trpc', () => ({
       archive: rejectingMutation(
         () => mocks.archiveError,
         () => mocks.archiveResponse,
-        (input) => mocks.archiveInputs.push(input)
+        (input) => {
+          mocks.archiveInputs.push(input);
+          mocks.archiveError =
+            typeof input === 'object' &&
+            input !== null &&
+            'id' in input &&
+            input.id === mocks.failArchiveId
+              ? { message: 'Selected archive failed', data: { code: 'INTERNAL_SERVER_ERROR' } }
+              : mocks.archiveError;
+        }
       ),
       bulkArchive: rejectingMutation(
         () => mocks.bulkArchiveError,
@@ -239,6 +249,7 @@ beforeEach(() => {
   mocks.archiveResponse = undefined;
   mocks.bulkArchiveError = undefined;
   mocks.archiveInputs = [];
+  mocks.failArchiveId = undefined;
   mocks.bulkArchiveInputs = [];
   mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
@@ -295,6 +306,21 @@ describe('KanbanProvider PR sync', () => {
 });
 
 describe('KanbanProvider archive failure handling', () => {
+  it('keeps failed selected archives visible and returns their IDs for retry', async () => {
+    const kanban = renderProvider();
+    mocks.failArchiveId = 'workspace-2';
+    let failed: string[] = [];
+    await act(async () => {
+      failed = await kanban.archiveSelectedWorkspaces(['workspace-1', 'workspace-2']);
+    });
+    expect(failed).toEqual(['workspace-2']);
+    expect(mocks.archiveInputs).toEqual([{ id: 'workspace-1' }, { id: 'workspace-2' }]);
+    expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
+      'workspace-2',
+    ]);
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Selected archive failed');
+  });
+
   it('handles an archive service failure and rolls back the optimistic removal', async () => {
     mocks.archiveError = {
       data: { code: 'INTERNAL_SERVER_ERROR' },

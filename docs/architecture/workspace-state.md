@@ -826,3 +826,27 @@ independent clock or hydration requirement. Name and branch provenance remain
 private and use their existing ordered-write fences. Reconciliation poll-start
 fencing and client connection epochs and optimistic archive fencing are
 unchanged.
+
+## Board views and Waiting intervals
+
+The board and sidebar use Todo, Working, Waiting, Done order. Todo opens the
+in-app issue launch sheet; external issue links remain explicit. Issue loading,
+provider configuration and fetch failures have separate states, with retry and
+project settings actions. An empty project offers its first workspace while
+keeping assigned issues available.
+
+Board filters search workspace names, branches and conversation summaries plus
+issue titles/identifiers. Sorting affects only the view, preserving snapshot
+order. Default Waiting order is oldest known `waitingSince` first, with unknown
+starts last; other columns keep newest-created order. The snapshot store records
+`waitingSince` when an accepted update changes an existing workspace into
+Waiting, retains it across same-status updates and clears it on exit. Initial
+Waiting hydration (including after server restart) has an unknown start;
+creation and last-activity times never substitute for it. No past interval is
+inferred.
+
+Card checkboxes select workspaces across columns and filters. Archive selected
+uses existing archive confirmation, cache transactions and Git-lock recovery.
+Successful archives clear their selection; partial failures stay visible and
+selected for retry. Archive all in Done still targets the entire column,
+including workspaces hidden by the current filter.

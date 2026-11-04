@@ -1,4 +1,5 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
+import { formatDateTime } from '@/client/lib/date-time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -39,6 +40,9 @@ interface KanbanColumnProps {
   onArchive?: (workspaceId: string) => void;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
+  selectedIds?: string[];
+  onToggleSelected?: (id: string) => void;
+  selectionDisabled?: boolean;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
@@ -52,6 +56,9 @@ export function KanbanColumn({
   onArchive,
   onBulkArchive,
   isBulkArchiving,
+  selectedIds,
+  onToggleSelected,
+  selectionDisabled,
   onOpenQuickChat,
   onRename,
 }: KanbanColumnProps) {
@@ -95,7 +102,28 @@ export function KanbanColumn({
           </div>
         ) : (
           workspaces.map((workspace) => (
-            <div key={workspace.id} className="shrink-0">
+            <div key={workspace.id} className="shrink-0 space-y-1">
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                {onToggleSelected && (
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${workspace.name}`}
+                      checked={selectedIds?.includes(workspace.id) ?? false}
+                      disabled={selectionDisabled}
+                      onChange={() => onToggleSelected(workspace.id)}
+                    />
+                    Select
+                  </label>
+                )}
+                {column.id === 'WAITING' && (
+                  <span title="Waiting intervals are measured from server-observed transitions; existing Waiting workspaces have unknown start times.">
+                    {workspace.waitingSince
+                      ? `Waiting since ${formatDateTime(workspace.waitingSince)}`
+                      : 'Waiting duration unknown'}
+                  </span>
+                )}
+              </div>
               <KanbanCard
                 workspace={workspace}
                 projectSlug={projectSlug}

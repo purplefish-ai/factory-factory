@@ -89,17 +89,38 @@ export function useProjectIssues(
     ]
   );
 
-  if (isLinear) {
-    return {
-      issues,
-      isLoading: linearQuery.isLoading,
-      refetch: linearQuery.refetch,
-    };
-  }
+  const query = isLinear ? linearQuery : githubQuery;
+  const responseError = query.data?.error;
+  const health = githubQuery.data?.health;
+  const notConnected = isLinear
+    ? responseError === 'Linear not configured for this project'
+    : responseError === 'Project is not linked to a GitHub repository' ||
+      Boolean(health && !(health.isInstalled && health.isAuthenticated));
+  const error = query.error?.message ?? responseError ?? null;
+  const status = getIssuesStatus(notConnected, error, query.isLoading || !query.data);
 
   return {
     issues,
-    isLoading: githubQuery.isLoading,
-    refetch: githubQuery.refetch,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    status,
+    error,
+    refetch: query.refetch,
   };
+}
+
+export type ProjectIssuesStatus = 'loading' | 'not-connected' | 'error' | 'ready';
+
+function getIssuesStatus(
+  notConnected: boolean,
+  error: string | null,
+  loading: boolean
+): ProjectIssuesStatus {
+  if (notConnected) {
+    return 'not-connected';
+  }
+  if (error) {
+    return 'error';
+  }
+  return loading ? 'loading' : 'ready';
 }

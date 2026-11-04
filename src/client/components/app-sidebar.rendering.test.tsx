@@ -64,6 +64,11 @@ it('re-renders only the workspace row whose snapshot changed', async () => {
 
   await render(navData);
   expect(rowRenders).toHaveBeenCalledTimes(3);
+  expect(
+    [...container.querySelectorAll('[data-sidebar="group-label"]')].map(
+      (label) => label.textContent
+    )
+  ).toEqual(['Todo', 'Working', 'Waiting', 'Done']);
   rowRenders.mockClear();
 
   // A workspace snapshot replaces one row object and keeps the others.

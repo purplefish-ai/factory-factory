@@ -123,6 +123,8 @@ export const WorkspaceSummarySchema = z.object({
   pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
   gitStats: WorkspaceGitStatsSchema.nullable(),
   lastActivityAt: z.string().nullable(),
+  /** Observed WAITING transition; unknown on server hydration/restart. */
+  waitingSince: z.string().datetime({ offset: true }).nullable().optional(),
   isWorking: z.boolean(),
   kanbanColumn: z.nativeEnum(KanbanColumn).nullable(),
   sidebarStatus: WorkspaceSidebarStatusSchema,
