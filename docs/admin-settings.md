@@ -47,6 +47,28 @@ Tooltips, menus, popovers, dialogs, and sheets treat the bottom of the native
 title bar as the top edge of their usable area. Tooltips for title-bar controls
 open into the page below it, including the side-panel toggles.
 
+## Notifications
+
+**Desktop notifications** starts off on each browser or desktop-app profile.
+Turning it on requests browser permission directly from the switch. Completion
+events never request permission in the background. Permission and the opt-in are
+local to this browser; they do not change another device's notifications.
+Blocked browsers show instructions to allow notifications in browser settings.
+Unsupported browsers keep the switch disabled. Turning it off stops desktop
+alerts without changing completion sounds.
+
+Selecting a completion notification closes it, focuses the app, and opens the
+workspace using its current project. The desktop app also restores a minimized
+window. Deleted workspaces show an error instead of navigating to a stale link.
+Notification tags use workspace IDs, so workspaces sharing a name remain
+separate. Replayed completion events do not repeat sounds or alerts.
+
+**Play completion sound** saves to the server and applies across devices. Voice
+mode suppresses the completion chime while its spoken response is active.
+Desktop alerts and sounds can be enabled independently. App badges are deferred
+because completion attention currently has no reliable unread/acknowledgement
+lifecycle; a badge count could stay stale after a workspace is viewed.
+
 ## Backup imports
 
 New exports use schema version 8 with the frozen `base-json-1` partial coverage

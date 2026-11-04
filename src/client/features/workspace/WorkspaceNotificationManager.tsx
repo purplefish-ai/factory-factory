@@ -1,122 +1,127 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
+import { z } from 'zod';
 import { runInBackground } from '@/client/lib/background-task';
+import {
+  readBrowserNotificationsEnabled,
+  readNotificationPermission,
+} from '@/client/lib/browser-notifications';
+import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 
-interface NotificationRequest {
-  workspaceId: string;
-  workspaceName: string;
-  sessionCount: number;
-  finishedAt: string;
-}
+const notificationRequestSchema = z.object({
+  workspaceId: z.string().min(1),
+  workspaceName: z.string().min(1),
+  sessionCount: z.number().int().positive(),
+  finishedAt: z.iso.datetime(),
+});
 
-/**
- * Manages workspace completion notifications.
- * Plays a sound and shows a browser notification when a workspace completes.
- */
-export function WorkspaceNotificationManager() {
-  const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
-  // Set by VoiceModeToggle (mounted separately, per open workspace chat) —
-  // the completion chime is redundant, jarring noise on top of the agent's
-  // spoken response while voice mode is active.
-  const voiceModeActiveRef = useRef(false);
+type NotificationRequest = z.infer<typeof notificationRequestSchema>;
 
-  useEffect(() => {
-    const handleVoiceModeChanged = (event: CustomEvent<{ active: boolean }>) => {
-      voiceModeActiveRef.current = event.detail.active;
-    };
-    window.addEventListener('voice-mode-changed', handleVoiceModeChanged as EventListener);
-    return () => {
-      window.removeEventListener('voice-mode-changed', handleVoiceModeChanged as EventListener);
-    };
-  }, []);
-
-  const handleWorkspaceNotification = useCallback(
-    (request: NotificationRequest) => {
-      const { workspaceId, workspaceName, sessionCount } = request;
-
-      // Only play sound if settings have loaded and user has it enabled
-      // Default to true once settings are available, but don't play while loading
-      // to avoid playing sound when user may have disabled it
-      const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
-      sendWorkspaceNotification(
-        workspaceName,
-        sessionCount,
-        playSoundOnComplete && !voiceModeActiveRef.current
-      );
-
-      // Dispatch attention event for red glow animation
-      window.dispatchEvent(
-        new CustomEvent('workspace-attention-required', {
-          detail: { workspaceId },
-        })
-      );
-    },
-    [settings?.playSoundOnComplete, isSuccess]
-  );
-
-  useEffect(() => {
-    // Listen for notification requests from backend
-    const handleNotificationRequest = (event: CustomEvent<NotificationRequest>) => {
-      const request = event.detail;
-      handleWorkspaceNotification(request);
-    };
-
-    window.addEventListener(
-      'workspace-notification-request',
-      handleNotificationRequest as EventListener
-    );
-
-    return () => {
-      window.removeEventListener(
-        'workspace-notification-request',
-        handleNotificationRequest as EventListener
-      );
-    };
-  }, [handleWorkspaceNotification]);
-
-  return null; // No UI, just notification logic
-}
-
-function sendWorkspaceNotification(
-  workspaceName: string,
-  sessionCount: number,
-  playSoundOnComplete: boolean
-): void {
-  // Play sound notification if enabled
-  if (playSoundOnComplete) {
-    playSound('sounds/workspace-complete.mp3', { volume: 0.5 });
+function rememberCompletion(seen: Set<string>, request: NotificationRequest): boolean {
+  const identity = JSON.stringify([request.workspaceId, request.finishedAt]);
+  if (seen.has(identity)) {
+    return false;
   }
+  seen.add(identity);
+  if (seen.size > 1000) {
+    const oldest = seen.values().next().value;
+    if (oldest !== undefined) {
+      seen.delete(oldest);
+    }
+  }
+  return true;
+}
 
-  if (!('Notification' in window)) {
+function focusApp(): void {
+  window.focus();
+  const focus = window.electronAPI?.focusWindow?.();
+  if (focus) {
+    runInBackground(focus, "Couldn't focus the app window.");
+  }
+}
+
+function showDesktopNotification(request: NotificationRequest, onOpen: () => Promise<void>): void {
+  if (!readBrowserNotificationsEnabled() || readNotificationPermission() !== 'granted') {
     return;
   }
-
-  // Request permission if needed
-  if (Notification.permission === 'default') {
-    runInBackground(
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          showNotification(workspaceName, sessionCount);
-        }
-      }),
-      'Could not enable workspace notifications'
-    );
-  } else if (Notification.permission === 'granted') {
-    showNotification(workspaceName, sessionCount);
+  try {
+    const notification = new Notification(`Workspace ready: ${request.workspaceName}`, {
+      body:
+        request.sessionCount === 1
+          ? 'Agent finished and is ready for your attention.'
+          : `All ${request.sessionCount} agents finished and are ready for your attention.`,
+      icon: `${import.meta.env.BASE_URL}favicon.svg`,
+      tag: `workspace-complete-${request.workspaceId}`,
+      requireInteraction: false,
+    });
+    notification.onclick = () => {
+      // Keep focus inside the OS/browser click gesture, ahead of network reads.
+      notification.close();
+      focusApp();
+      runInBackground(onOpen(), "Couldn't open the workspace.");
+    };
+  } catch {
+    toast.error("Couldn't show the workspace notification.");
   }
 }
 
-function showNotification(workspaceName: string, sessionCount: number): void {
-  const message =
-    sessionCount === 1
-      ? 'Agent finished and is ready for your attention'
-      : `All ${sessionCount} agents finished and ready for your attention`;
+/** Workspace completion sound, attention and explicitly enabled desktop alerts. */
+export function WorkspaceNotificationManager() {
+  const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const navigate = useNavigate();
+  const voiceModeActiveRef = useRef(false);
+  // Bound remembered completion identities while suppressing replay duplicates.
+  const completedRef = useRef(new Set<string>());
 
-  new Notification(`Workspace Ready: ${workspaceName}`, {
-    body: message,
-    icon: `${import.meta.env.BASE_URL}favicon.svg`,
-    tag: `workspace-complete-${workspaceName}`, // Prevents duplicates
-    requireInteraction: false,
-  });
+  useEffect(() => {
+    const onVoiceChanged = (event: Event) => {
+      const parsed = z
+        .object({ active: z.boolean() })
+        .safeParse(event instanceof CustomEvent ? event.detail : undefined);
+      if (parsed.success) {
+        voiceModeActiveRef.current = parsed.data.active;
+      }
+    };
+    window.addEventListener('voice-mode-changed', onVoiceChanged);
+    return () => window.removeEventListener('voice-mode-changed', onVoiceChanged);
+  }, []);
+
+  useEffect(() => {
+    const openWorkspace = async (workspaceId: string) => {
+      const workspace = await utils.workspace.get.fetch({ id: workspaceId });
+      const project = await utils.project.getById.fetch({ id: workspace.projectId });
+      if (!project) {
+        throw new Error('The workspace project is no longer available.');
+      }
+      await navigate(
+        `${getProjectSectionPath(project.slug, 'workspaces')}/${encodeURIComponent(workspace.id)}`
+      );
+    };
+    const onCompletion = (event: Event) => {
+      const parsed = notificationRequestSchema.safeParse(
+        event instanceof CustomEvent ? event.detail : undefined
+      );
+      if (!parsed.success) {
+        return;
+      }
+      const { workspaceId } = parsed.data;
+      if (!rememberCompletion(completedRef.current, parsed.data)) {
+        return;
+      }
+      if (isSuccess && (settings?.playSoundOnComplete ?? true) && !voiceModeActiveRef.current) {
+        playSound('sounds/workspace-complete.mp3', { volume: 0.5 });
+      }
+      window.dispatchEvent(
+        new CustomEvent('workspace-attention-required', { detail: { workspaceId } })
+      );
+      showDesktopNotification(parsed.data, () => openWorkspace(workspaceId));
+    };
+    window.addEventListener('workspace-notification-request', onCompletion);
+    return () => window.removeEventListener('workspace-notification-request', onCompletion);
+  }, [isSuccess, settings?.playSoundOnComplete, utils, navigate]);
+  return null;
 }
