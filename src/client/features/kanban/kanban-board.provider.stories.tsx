@@ -336,3 +336,35 @@ export const PhoneWaitingSort: Story = {
     ).not.toBeInTheDocument();
   },
 };
+
+/** Leave room for app padding on a 320px phone. */
+export const NarrowPhoneWaitingSort: Story = {
+  ...WaitingSort,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  render: () => (
+    <div style={{ width: 280, height: '100%' }}>
+      <KanbanBoard />
+    </div>
+  ),
+  play: async (context) => {
+    await WaitingSort.play?.(context);
+    const canvas = within(context.canvasElement);
+    const sort = canvas.getByRole('button', { name: 'Waiting sort order' });
+    const row = sort.parentElement!;
+    const bounds = row.getBoundingClientRect();
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+    for (const button of within(row).getAllByRole('button')) {
+      const rect = button.getBoundingClientRect();
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      await expect(rect.width).toBeGreaterThan(0);
+    }
+    await userEvent.click(sort);
+    await expect(
+      within(context.canvasElement.ownerDocument.body).getByRole('menuitemradio', {
+        name: 'Created',
+      })
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  },
+};

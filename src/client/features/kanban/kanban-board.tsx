@@ -297,7 +297,7 @@ function KanbanBoardContent() {
         )}
       {isMobile ? (
         <>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {columns.map((column) => (
               <button
                 key={column.id}
