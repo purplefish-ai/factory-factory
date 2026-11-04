@@ -444,9 +444,7 @@ export function MainViewTabBar({
         <div className="shrink-0 pr-1">
           <ChatActionsMenu
             chatLabel={currentSessionLabel}
-            onRename={() =>
-              requestAnimationFrame(() => setRenamingSessionId(currentSessionId ?? null))
-            }
+            onRename={() => setRenamingSessionId(currentSessionId ?? null)}
             onRestartSession={onRestartSession}
             disabled={disabled}
           />

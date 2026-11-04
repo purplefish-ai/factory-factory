@@ -1,6 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { DotsThreeVerticalIcon } from '@phosphor-icons/react/dist/csr/DotsThreeVertical';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
+import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -28,6 +29,7 @@ export function ChatActionsMenu({
   disabled?: boolean;
   onRename?: () => void;
 }) {
+  const renameRequested = useRef(false);
   return (
     <DropdownMenu>
       <Tooltip>
@@ -40,12 +42,27 @@ export function ChatActionsMenu({
         </TooltipTrigger>
         <TooltipContent side="bottom">Chat actions</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent
+        align="end"
+        className="w-64"
+        onCloseAutoFocus={(event) => {
+          if (renameRequested.current) {
+            renameRequested.current = false;
+            event.preventDefault();
+            onRename?.();
+          }
+        }}
+      >
         <DropdownMenuLabel className="truncate">
           {chatLabel ?? 'No chat selected'}
         </DropdownMenuLabel>
         {onRename && (
-          <DropdownMenuItem disabled={disabled || chatLabel === null} onSelect={onRename}>
+          <DropdownMenuItem
+            disabled={disabled || chatLabel === null}
+            onSelect={() => {
+              renameRequested.current = true;
+            }}
+          >
             <PencilIcon className="h-4 w-4" /> Rename chat
           </DropdownMenuItem>
         )}
