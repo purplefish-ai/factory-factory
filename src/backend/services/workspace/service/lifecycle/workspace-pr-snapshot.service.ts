@@ -6,6 +6,9 @@ import { workspaceAccessor } from '@/backend/services/workspace/resources/worksp
 import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
 
 class WorkspacePrSnapshotService {
+  dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
+    return workspacePrAccessor.dismissCompletedPRs(workspaceId, acceptedAt);
+  }
   projectCollection(prs: Awaited<ReturnType<typeof workspacePrAccessor.list>>, enabled: boolean) {
     return projectWorkspacePRCollection(prs, enabled);
   }

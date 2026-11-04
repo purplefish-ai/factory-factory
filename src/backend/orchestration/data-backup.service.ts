@@ -255,6 +255,7 @@ function importedPRs(workspace: ExportedWorkspace, jsonNullIds: JsonNullIds) {
     ? workspace.prs.map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
         ...pr,
         syncedAt: parseDate(pr.syncedAt),
+        terminalObservedAt: parseDate(pr.terminalObservedAt),
         detachedAt: parseDate(pr.detachedAt),
         ciFailedAt: parseDate(pr.ciFailedAt),
         ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),

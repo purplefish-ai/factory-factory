@@ -241,6 +241,7 @@ export async function collectDispatchBatch(input: {
     for (const message of snapshot.slice(1)) {
       if (
         !input.isCurrent() ||
+        sessionDomainService.isMessageAdmissionPending(message) ||
         isCommand(message) ||
         input.notifications.isMailSignalQuarantined(message.id)
       ) {

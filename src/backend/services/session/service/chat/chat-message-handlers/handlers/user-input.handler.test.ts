@@ -26,6 +26,21 @@ describe('createUserInputHandler', () => {
     vi.clearAllMocks();
   });
 
+  it('reopens on direct accepted input but not input without a running session', async () => {
+    const humanMessageAccepted = vi.fn().mockResolvedValue(undefined);
+    const deps = createDeps({ isSessionRunning: true });
+    await createUserInputHandler({ ...deps, humanMessageAccepted })(context, {
+      type: 'user_input',
+      text: 'continue',
+    });
+    expect(humanMessageAccepted).toHaveBeenCalledWith('session-1', expect.any(Date));
+    await createUserInputHandler({ ...createDeps(), humanMessageAccepted })(context, {
+      type: 'user_input',
+      text: 'continue',
+    });
+    expect(humanMessageAccepted).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores empty or whitespace-only content', async () => {
     const deps = createDeps();
     const handler = createUserInputHandler(deps);

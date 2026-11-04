@@ -54,10 +54,10 @@ function validateQueueMessageInput(
 }
 
 export function createQueueMessageHandler(
-  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
+  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery' | 'humanMessageAccepted'> & {
     domain: Pick<
       SessionExecutionCommandServices['domain'],
-      'enqueue' | 'emitDelta' | 'rejectMessage'
+      'enqueue' | 'emitDelta' | 'rejectMessage' | 'removeQueuedMessage' | 'holdMessageForAdmission'
     >;
     tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   }
@@ -81,11 +81,27 @@ export function createQueueMessageHandler(
     const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
+    const acceptedAt = new Date();
+    const releaseAdmission = deps.domain.holdMessageForAdmission(queuedMsg);
     const result = deps.domain.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
+      releaseAdmission();
       deps.domain.rejectMessage(sessionId, messageId, result.error);
       return { replies: [] };
+    }
+
+    try {
+      await deps.humanMessageAccepted?.(sessionId, acceptedAt);
+    } catch (error) {
+      deps.domain.removeQueuedMessage(sessionId, messageId, { expectedMessage: queuedMsg });
+      deps.domain.rejectMessage(sessionId, messageId, 'Could not reopen workspace. Try again.');
+      logger.warn('Failed to persist workspace follow-up', { sessionId, error });
+      releaseAdmission();
+      await deps.tryDispatchNextMessage(sessionId);
+      return { replies: [] };
+    } finally {
+      releaseAdmission();
     }
 
     deps.domain.emitDelta(

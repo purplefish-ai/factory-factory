@@ -55,3 +55,25 @@ it('disables monitoring without hiding GitHub failures', () => {
     ratchetState: 'IDLE',
   });
 });
+
+it('keeps dismissed PRs as history without completing follow-up work', () => {
+  const historical = pr({ state: 'MERGED', completionDismissed: true });
+  expect(deriveWorkspacePRSummary([historical], true)).toMatchObject({
+    totalCount: 1,
+    openCount: 0,
+    hasNonterminal: false,
+    state: 'NONE',
+    ratchetState: 'IDLE',
+  });
+  expect(
+    deriveWorkspacePRSummary([historical, pr({ state: 'CLOSED', completionDismissed: true })], true)
+      .state
+  ).toBe('NONE');
+  expect(deriveWorkspacePRSummary([historical, pr({ state: 'MERGED' })], true).state).toBe(
+    'MERGED'
+  );
+  expect(deriveWorkspacePRSummary([historical, pr({})], true).state).toBe('OPEN');
+  expect(
+    deriveWorkspacePRSummary([pr({ state: 'OPEN', completionDismissed: true })], true).state
+  ).toBe('OPEN');
+});

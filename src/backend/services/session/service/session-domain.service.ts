@@ -49,6 +49,18 @@ const RECENT_REJECTION_TTL_MS = 60_000;
 const MAX_RECENT_REJECTIONS = 100;
 
 export class SessionDomainService extends EventEmitter {
+  private readonly pendingAdmissions = new WeakSet<QueuedMessage>();
+
+  holdMessageForAdmission(message: QueuedMessage): () => void {
+    this.pendingAdmissions.add(message);
+    return () => {
+      this.pendingAdmissions.delete(message);
+    };
+  }
+
+  isMessageAdmissionPending(message: QueuedMessage): boolean {
+    return this.pendingAdmissions.has(message);
+  }
   private readonly registry = new SessionStoreRegistry();
   // Successful rollover identities fence delayed DB reads even after an inactive
   // transcript store is evicted. These contain no transcript data.
@@ -316,11 +328,16 @@ export class SessionDomainService extends EventEmitter {
 
   peekNextMessage(sessionId: string): QueuedMessage | undefined {
     const store = this.registry.getOrCreate(sessionId);
-    return peekNext(store);
+    const message = peekNext(store);
+    return message && !this.pendingAdmissions.has(message) ? message : undefined;
   }
 
   dequeueNext(sessionId: string, options?: { publish?: boolean }): QueuedMessage | undefined {
     const store = this.registry.getOrCreateActive(sessionId);
+    const head = store.queue[0];
+    if (head && this.pendingAdmissions.has(head)) {
+      return undefined;
+    }
     const next = dequeueNext(store);
     if (next && options?.publish !== false) {
       this.publisher.forwardQueue(store);
@@ -683,7 +700,11 @@ export class SessionDomainService extends EventEmitter {
 
   takeQueuedMessages(sessionId: string, messages: readonly QueuedMessage[]): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
-    if (messages.some((message) => !store.queue.includes(message))) {
+    if (
+      messages.some(
+        (message) => !store.queue.includes(message) || this.pendingAdmissions.has(message)
+      )
+    ) {
       return false;
     }
     const selected = new Set(messages);
@@ -698,7 +719,9 @@ export class SessionDomainService extends EventEmitter {
       !store ||
       messages.length === 0 ||
       new Set(messages).size !== messages.length ||
-      messages.some((message, index) => store.queue[index] !== message)
+      messages.some(
+        (message, index) => store.queue[index] !== message || this.pendingAdmissions.has(message)
+      )
     ) {
       return false;
     }

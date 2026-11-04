@@ -527,6 +527,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     launchWorkspace: vi.fn(),
     updateProjectSettings: vi.fn(),
     renameWorkspace: vi.fn(),
+    acceptWorkspaceFollowUp: vi.fn().mockResolvedValue(undefined),
     cryptoService,
     slackConnectionService,
     agentProposalService,

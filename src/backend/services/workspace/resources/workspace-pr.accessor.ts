@@ -124,10 +124,13 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
     ciStatus: pr.ciStatus,
     hasMergeConflict: pr.hasMergeConflict,
     syncedAt: pr.syncedAt?.toISOString() ?? null,
+    completionDismissed: pr.completionDismissed,
   };
 }
 
 const reattachmentFields = {
+  completionDismissed: false,
+  terminalObservedAt: null,
   detachedAt: null,
   state: 'NONE',
   number: null,
@@ -183,7 +186,39 @@ function findEquivalentPR(rows: PRUrlRow[], url: string): PRUrlRow | null {
 }
 
 export type WorkspacePRRecord = WorkspacePR;
+
+function completionDismissalUpdate(row: WorkspacePR, observation: PRObservation) {
+  if (observation.prState !== 'MERGED' && observation.prState !== 'CLOSED') {
+    return { completionDismissed: false, terminalObservedAt: null };
+  }
+  return row.state !== 'MERGED' && row.state !== 'CLOSED'
+    ? { terminalObservedAt: new Date(observation.observedAt) }
+    : {};
+}
+
 class WorkspacePRAccessor {
+  /** User follow-ups retire only terminal facts already observed at admission. */
+  dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.workspacePR.updateMany({
+        where: {
+          workspaceId,
+          detachedAt: null,
+          completionDismissed: false,
+          state: { in: ['MERGED', 'CLOSED'] },
+          OR: [{ terminalObservedAt: null }, { terminalObservedAt: { lte: acceptedAt } }],
+          workspace: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+        },
+        data: { completionDismissed: true },
+      });
+      return result.count > 0
+        ? tx.workspacePR.findMany({
+            where: { workspaceId, detachedAt: null },
+            orderBy: { id: 'asc' },
+          })
+        : null;
+    });
+  }
   /** Detached associations also retain results until the workspace cascade. */
   listForDeletion(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePR.findMany({
@@ -270,6 +305,7 @@ class WorkspacePRAccessor {
           headRefName: observation.headBranch,
           baseRefName: observation.baseBranch,
           state: observation.prState,
+          ...completionDismissalUpdate(row, observation),
           ciStatus: observation.ciStatus,
           reviewState: observation.reviewState,
           hasMergeConflict: observation.hasMergeConflict,

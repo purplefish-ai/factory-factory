@@ -14,6 +14,8 @@ export const WorkspacePullRequestSchema = z.object({
   reviewState: z.string().nullable(),
   ciStatus: z.nativeEnum(CIStatus),
   hasMergeConflict: z.boolean(),
+  /** Historical terminal PRs remain visible but no longer complete follow-up work. */
+  completionDismissed: z.boolean().optional(),
   syncedAt: z.string().nullable(),
 });
 export type WorkspacePullRequest = z.infer<typeof WorkspacePullRequestSchema>;

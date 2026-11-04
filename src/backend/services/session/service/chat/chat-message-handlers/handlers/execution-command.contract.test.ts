@@ -34,6 +34,8 @@ it('acknowledges queued input on the session channel before dispatch without wai
   const calls: string[] = [];
   const guard = () => true;
   const domain = {
+    holdMessageForAdmission: vi.fn(() => vi.fn()),
+    removeQueuedMessage: vi.fn(),
     enqueue: vi.fn(() => {
       calls.push('enqueue');
       return { position: 2 };

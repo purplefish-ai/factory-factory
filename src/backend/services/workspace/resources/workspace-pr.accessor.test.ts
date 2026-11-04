@@ -20,6 +20,8 @@ import { flattenWorkspacePR, WORKSPACE_PR_DEFAULTS } from './workspace-pr.access
 
 /** A persisted row with every column populated, for flatten round-trips. */
 const fullRow = {
+  completionDismissed: false,
+  terminalObservedAt: null,
   id: 'pr1',
   title: null,
   headRefName: null,

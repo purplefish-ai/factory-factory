@@ -20,7 +20,7 @@ export type WorkspacePRSummary = z.infer<typeof WorkspacePRSummarySchema>;
 /** Facts shared by persisted associations and serialized workspace projections. */
 export type WorkspacePRSummaryInput = Pick<
   WorkspacePullRequest,
-  'state' | 'ciStatus' | 'hasMergeConflict' | 'reviewState'
+  'state' | 'ciStatus' | 'hasMergeConflict' | 'reviewState' | 'completionDismissed'
 >;
 
 /** An attached NONE association is still awaiting its first GitHub observation. */
@@ -53,11 +53,12 @@ export function deriveWorkspacePRSummary<T extends WorkspacePRSummaryInput>(
   ratchetEnabled: boolean
 ): WorkspacePRSummary {
   const active = prs.filter((pr) => pr.state !== 'MERGED' && pr.state !== 'CLOSED');
+  const completion = prs.filter((pr) => !pr.completionDismissed);
   const state = active.length
     ? PRState.OPEN
-    : prs.length > 0 && prs.every((pr) => pr.state === 'MERGED')
+    : completion.length > 0 && completion.every((pr) => pr.state === 'MERGED')
       ? PRState.MERGED
-      : prs.length
+      : completion.length
         ? PRState.CLOSED
         : PRState.NONE;
   const ciStatus = summarizeCI(active);

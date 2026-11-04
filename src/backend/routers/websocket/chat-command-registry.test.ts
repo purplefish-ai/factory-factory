@@ -19,6 +19,7 @@ describe('socket-free command registry', () => {
       ...createChatRouterServices(sessionCommandFactories),
       execution: {
         domain: {
+          holdMessageForAdmission: vi.fn(() => vi.fn()),
           markError: vi.fn(),
           rejectMessage: vi.fn(),
           enqueue: vi.fn(),
@@ -101,6 +102,7 @@ it('routes execution commands using injected application capabilities and typed 
     userResume: vi.fn().mockResolvedValue(undefined),
   };
   const domain = {
+    holdMessageForAdmission: vi.fn(() => vi.fn()),
     markError: vi.fn(),
     rejectMessage: vi.fn(),
     enqueue: vi.fn(() => ({ position: 0 })),
@@ -112,6 +114,7 @@ it('routes execution commands using injected application capabilities and typed 
     stopSession: vi.fn().mockResolvedValue(undefined),
   };
   const clearPendingRequest = vi.fn();
+  const humanMessageAccepted = vi.fn().mockResolvedValue(undefined);
   const resetDispatchState = vi.fn();
   const tryDispatchNextMessage = vi.fn().mockResolvedValue(undefined);
   const setManualDispatchResume = vi.fn();
@@ -119,7 +122,7 @@ it('routes execution commands using injected application capabilities and typed 
   const getOrCreateSessionClient = vi.fn().mockResolvedValue(undefined);
   const registry = createChatCommandRegistry({
     ...createChatRouterServices(sessionCommandFactories),
-    execution: { backgroundDelivery, domain, lifecycle, clearPendingRequest },
+    execution: { backgroundDelivery, domain, lifecycle, clearPendingRequest, humanMessageAccepted },
     runtime: { isSessionRunning: () => true },
     prompt: { sendSessionMessage },
     startup: { getSessionClient: vi.fn(), getOrCreateSessionClient },
@@ -161,6 +164,8 @@ it('routes execution commands using injected application capabilities and typed 
     expect.objectContaining({ model: 'requested' })
   );
   expect(sendSessionMessage).toHaveBeenCalledWith('injected-execution', 'direct');
+  expect(humanMessageAccepted).toHaveBeenCalledTimes(2);
+  expect(humanMessageAccepted).toHaveBeenCalledWith('injected-execution', expect.any(Date));
   expect(domain.enqueue).toHaveBeenCalledWith(
     'injected-execution',
     expect.objectContaining({ id: 'queued', text: 'human' })

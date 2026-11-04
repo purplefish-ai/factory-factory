@@ -16,6 +16,8 @@ const makePR = (
   id: string,
   url = `https://github.com/org/repo/pull/${id === 'a' ? 42 : 43}`
 ): PR => ({
+  completionDismissed: false,
+  terminalObservedAt: null,
   id,
   url,
   workspaceId: 'w',

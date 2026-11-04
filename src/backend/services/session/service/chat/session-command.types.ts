@@ -76,9 +76,15 @@ export interface SessionCommandConfigService extends SessionModelCommandService 
 
 /** Execution capabilities; leaf commands neither own the runtime graph nor its transports. */
 export interface SessionExecutionCommandServices {
+  humanMessageAccepted?(sessionId: string, acceptedAt: Date): Promise<void>;
   domain: Pick<
     SessionDomainService,
-    'markError' | 'rejectMessage' | 'enqueue' | 'emitDelta' | 'removeQueuedMessage'
+    | 'markError'
+    | 'rejectMessage'
+    | 'enqueue'
+    | 'emitDelta'
+    | 'removeQueuedMessage'
+    | 'holdMessageForAdmission'
   >;
   lifecycle: Pick<SessionLifecycleService, 'getSessionOptions' | 'stopSession'>;
   backgroundDelivery: Pick<SessionBackgroundDeliveryService, 'captureResumeGuard' | 'userResume'>;

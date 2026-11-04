@@ -16,10 +16,11 @@ export function createUserInputHandler(deps: {
   acpRuntimeManager: SessionCommandRuntimeManager;
   sessionService: SessionCommandPromptService;
   backgroundDelivery: SessionExecutionCommandServices['backgroundDelivery'];
+  humanMessageAccepted?: SessionExecutionCommandServices['humanMessageAccepted'];
 }): SessionCommandHandler<UserInputMessage> {
   const { acpRuntimeManager, sessionService } = deps;
 
-  return ({ sessionId }, message) => {
+  return async ({ sessionId }, message) => {
     const rawContent = message.content || message.text;
     if (!rawContent) {
       return { replies: [] };
@@ -35,6 +36,9 @@ export function createUserInputHandler(deps: {
 
     if (acpRuntimeManager.isSessionRunning(sessionId)) {
       const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
+      if (deps.humanMessageAccepted) {
+        await deps.humanMessageAccepted(sessionId, new Date());
+      }
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
         logger.error('Failed to send message to provider', { sessionId, error });
       });

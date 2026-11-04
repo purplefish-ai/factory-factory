@@ -25,6 +25,7 @@ export function exportPRBackupState(
         ...pr,
         dedicatedSession: pr.dedicatedSession ? { sessionId: pr.dedicatedSession.sessionId } : null,
         syncedAt: iso(pr.syncedAt),
+        terminalObservedAt: iso(pr.terminalObservedAt),
         detachedAt: iso(pr.detachedAt),
         ciFailedAt: iso(pr.ciFailedAt),
         ciLastNotifiedAt: iso(pr.ciLastNotifiedAt),

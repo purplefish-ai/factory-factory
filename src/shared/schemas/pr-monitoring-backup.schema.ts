@@ -71,6 +71,8 @@ export const prAssociationBackupSchema = z.strictObject({
   reviewState: z.string().nullable(),
   ciStatus: z.enum(['UNKNOWN', 'PENDING', 'SUCCESS', 'FAILURE']),
   hasMergeConflict: z.boolean(),
+  completionDismissed: z.boolean().default(false),
+  terminalObservedAt: date.nullable().default(null),
   syncedAt: date.nullable(),
   detachedAt: date.nullable(),
   revision: z.number().int().nonnegative(),
