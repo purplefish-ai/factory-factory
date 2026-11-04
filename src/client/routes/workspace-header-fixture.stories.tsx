@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
 import { Button } from '@/components/ui/button';
@@ -164,5 +165,40 @@ export const InstalledPwaToolsDrawer: Story = {
         canvasElement.ownerDocument.defaultView!.innerHeight
       );
     });
+  },
+};
+
+export const PendingActions: Story = {
+  args: { pendingActions: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('button', { name: 'Archiving workspace…' })
+    ).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Opening in VS Code…' })).toBeDisabled();
+    await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
+    await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
+  },
+};
+export const PendingActionsDark: Story = { ...PendingActions, globals: { theme: 'dark' } };
+
+function ChangingPendingActions() {
+  const [pendingActions, setPendingActions] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setPendingActions(true)}>Preview pending actions</Button>
+      <WorkspaceHeaderFixture pendingActions={pendingActions} />
+    </>
+  );
+}
+
+export const PendingActionsAfterUpdate: Story = {
+  render: () => <ChangingPendingActions />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: /Stop dev server/ });
+    await userEvent.click(canvas.getByRole('button', { name: 'Preview pending actions' }));
+    await userEvent.click(canvas.getByRole('button', { name: /Stop dev server/ }));
+    await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
   },
 };

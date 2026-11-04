@@ -32,3 +32,5 @@ export { useGroupedChatMessages } from './use-grouped-chat-messages';
 export { useSessionCollectionCommands } from './use-session-collection-commands';
 export type { Todo, TodoState } from './use-todo-tracker';
 export { useTodoTracker } from './use-todo-tracker';
+
+export { useTranscriptSend } from './use-transcript-send';

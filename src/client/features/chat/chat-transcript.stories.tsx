@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { type ComponentProps, useState } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   createAssistantMessage,
@@ -9,6 +10,7 @@ import {
 import { ChatInput } from './chat-input/chat-input';
 import { ChatTranscript } from './chat-transcript';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
+import { useTranscriptSend } from './use-transcript-send';
 
 const meta: Meta<typeof ChatTranscript> = {
   title: 'Chat/Transcript/ChatTranscript',
@@ -378,12 +380,17 @@ export const ShortReadingTranscript: Story = {
 /** Exercise composer growth and clearing next to a scrollable transcript. */
 function ComposerScrollPreview(args: ComponentProps<typeof ChatTranscript>) {
   const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState(args.messages);
+  const { sendMessage, transcriptScroll } = useTranscriptSend((text) => {
+    setMessages((previous) => [...previous, createUserMessage(text, previous.length)]);
+    setDraft('');
+  }, args.scroll);
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 min-h-0">
-        <ChatTranscript {...args} />
+        <ChatTranscript {...args} messages={messages} scroll={transcriptScroll} />
       </div>
-      <ChatInput onSend={() => undefined} value={draft} onChange={setDraft} />
+      <ChatInput onSend={sendMessage} value={draft} onChange={setDraft} />
     </div>
   );
 }
@@ -396,4 +403,27 @@ export const ComposerResizing: Story = {
       createUserMessage(`Message ${index}. ${'Scrollable transcript content. '.repeat(6)}`)
     ),
   },
+};
+
+export const SendWhileReading: Story = {
+  ...ComposerResizing,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const viewport = canvas.getByTestId('transcript-viewport');
+    const gap = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+    await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new Event('scroll'));
+    await canvas.findByRole('button', { name: 'Scroll to bottom' });
+    await userEvent.type(canvas.getByRole('textbox'), 'Continue from here{Enter}');
+    await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
+    await expect(
+      canvas.queryByRole('button', { name: 'Scroll to bottom' })
+    ).not.toBeInTheDocument();
+  },
+};
+
+export const SendWhileReadingOnPhone: Story = {
+  ...SendWhileReading,
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };

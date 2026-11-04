@@ -1,5 +1,6 @@
 import { CalendarIcon } from '@phosphor-icons/react/dist/csr/Calendar';
 import type { ReactNode } from 'react';
+import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { describeAgentSchedule } from './agent-schedule';
@@ -72,10 +73,30 @@ export function AgentDetail({
         <p className="break-words text-sm">{describeAgentSchedule(agent)}</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
           <span>
-            Last run: {agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : 'No runs yet'}
+            Last run:{' '}
+            {agent.lastRunAt ? (
+              <time
+                dateTime={toDateTimeIso(agent.lastRunAt)}
+                title={formatDateTime(agent.lastRunAt, { precision: 'second' })}
+              >
+                {formatDateTime(agent.lastRunAt)}
+              </time>
+            ) : (
+              'No runs yet'
+            )}
           </span>
           <span>
-            Next run: {agent.isEnabled ? new Date(agent.nextRunAt).toLocaleString() : 'Paused'}
+            Next run:{' '}
+            {agent.isEnabled ? (
+              <time
+                dateTime={toDateTimeIso(agent.nextRunAt)}
+                title={formatDateTime(agent.nextRunAt, { precision: 'second' })}
+              >
+                {formatDateTime(agent.nextRunAt)}
+              </time>
+            ) : (
+              'Paused'
+            )}
           </span>
         </div>
       </section>

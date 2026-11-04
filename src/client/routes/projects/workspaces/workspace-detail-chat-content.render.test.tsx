@@ -27,6 +27,11 @@ const timeline = vi.hoisted(() => ({
 
 // The real memoized transcript, with render probes on its instance and rows.
 vi.mock('@/client/features/chat', async () => ({
+  useTranscriptSend: (
+    await vi.importActual<typeof import('@/client/features/chat/use-transcript-send')>(
+      '@/client/features/chat/use-transcript-send'
+    )
+  ).useTranscriptSend,
   AgentErrorStrip: (
     await vi.importActual<typeof import('@/client/features/chat/agent-error-strip')>(
       '@/client/features/chat/agent-error-strip'

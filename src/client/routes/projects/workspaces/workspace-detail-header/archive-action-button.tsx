@@ -1,8 +1,8 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceHeaderWorkspace } from './types';
@@ -35,11 +35,11 @@ export function ArchiveActionButton({
         )}
       >
         {archivePending ? (
-          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+          <Spinner aria-hidden="true" className="h-4 w-4" />
         ) : (
           <ArchiveIcon className="h-4 w-4" />
         )}
-        {archivePending ? 'Archiving...' : 'Archive workspace'}
+        {archivePending ? 'Archiving…' : 'Archive workspace'}
       </DropdownMenuItem>
     );
   }
@@ -56,15 +56,16 @@ export function ArchiveActionButton({
           )}
           onClick={onArchiveRequest}
           disabled={archivePending}
+          aria-label={archivePending ? 'Archiving workspace…' : 'Archive workspace'}
         >
           {archivePending ? (
-            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+            <Spinner aria-hidden="true" className="h-4 w-4" />
           ) : (
             <ArchiveIcon className="h-4 w-4" />
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
+      <TooltipContent>{archivePending ? 'Archiving…' : 'Archive'}</TooltipContent>
     </Tooltip>
   );
 }

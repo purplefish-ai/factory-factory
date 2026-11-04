@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
-import { expect, fn, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { trpc } from '@/client/lib/trpc';
 import { VoiceModeToggle } from './voice-mode-toggle';
 
@@ -12,7 +12,7 @@ const meta: Meta<typeof VoiceModeToggle> = {
   component: VoiceModeToggle,
   args: { onFinalTranscript: fn() },
   decorators: [
-    (Story) => {
+    (Story, context) => {
       const [queryClient] = useState(
         () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
       );
@@ -22,6 +22,9 @@ const meta: Meta<typeof VoiceModeToggle> = {
             () =>
               ({ op }) =>
                 observable((observer) => {
+                  if (op.path === 'voice.mintGrantToken' && context.parameters.pendingGrant) {
+                    return;
+                  }
                   if (op.path !== 'voice.getConfig') {
                     observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
                     return;
@@ -60,7 +63,7 @@ export const SessionClosed: Story = {
   args: { sessionId: null },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('button', { name: 'Voice Off' })).toBeDisabled();
+    await expect(await canvas.findByRole('button', { name: 'Voice off' })).toBeDisabled();
   },
   parameters: {
     docs: {
@@ -71,3 +74,14 @@ export const SessionClosed: Story = {
     },
   },
 };
+
+export const Connecting: Story = {
+  args: { sessionId: 'connecting-story' },
+  parameters: { pendingGrant: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Voice off' }));
+    await expect(await canvas.findByRole('button', { name: 'Connecting…' })).toBeEnabled();
+  },
+};
+export const ConnectingDark: Story = { ...Connecting, globals: { theme: 'dark' } };

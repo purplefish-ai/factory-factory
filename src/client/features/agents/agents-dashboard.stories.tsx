@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistory } from './agent-run-history';
@@ -211,7 +212,17 @@ const meta = {
 } satisfies Meta<typeof DashboardStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Populated: Story = {};
+export const Populated: Story = {
+  play: async ({ canvasElement }) => {
+    const times = canvasElement.querySelectorAll('time');
+    await expect(times.length).toBeGreaterThan(2);
+    for (const time of times) {
+      await expect(time).toHaveTextContent('2026');
+      await expect(time).toHaveAttribute('datetime');
+    }
+    await expect(within(canvasElement).getByText('Run history')).toBeVisible();
+  },
+};
 export const Empty: Story = { args: { state: 'empty' } };
 export const EmptyDark: Story = { args: { state: 'empty' }, globals: { theme: 'dark' } };
 export const Loading: Story = { args: { state: 'loading' } };
@@ -239,3 +250,5 @@ export const UnavailableNativePreview: Story = { args: { state: 'event-preview-u
 export const SavedConflict: Story = { args: { state: 'event-conflict' } };
 export const ConstrainedEventEdit: Story = { args: { state: 'event-edit', contentWidth: 458 } };
 export const ConstrainedEventDetail: Story = { args: { state: 'event', contentWidth: 640 } };
+
+export const PopulatedDark: Story = { ...Populated, globals: { theme: 'dark' } };

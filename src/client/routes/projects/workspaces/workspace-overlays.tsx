@@ -2,11 +2,11 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 import { InitOutputPanel } from './init-output-panel';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
@@ -82,8 +82,8 @@ export function ScriptFailedBanner({
           >
             {retryInit.isPending ? (
               <>
-                <SpinnerGapIcon className="h-3 w-3 mr-1 animate-spin" />
-                Retrying...
+                <Spinner aria-hidden="true" className="h-3 w-3 mr-1" />
+                Retrying…
               </>
             ) : (
               <>
@@ -134,10 +134,8 @@ export function ScriptFailedBanner({
 export function ArchivingOverlay() {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md">
-      <div className="flex items-center gap-3 p-8">
-        {/* Simple spinner */}
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
-        {/* Grayed out text */}
+      <div role="status" className="flex items-center gap-3 p-8">
+        <Spinner aria-hidden="true" className="size-5 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">Archiving…</p>
       </div>
     </div>
