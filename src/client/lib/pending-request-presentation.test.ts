@@ -7,6 +7,7 @@ describe('pending request presentation', () => {
     (type) => {
       const presentation = getPendingRequestPresentation(type);
       expect(presentation).toMatchObject({
+        description: 'Waiting for your input to continue',
         label: 'Needs input',
         waitingText: 'Waiting for your input',
       });
