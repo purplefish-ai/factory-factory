@@ -20,8 +20,12 @@ const response = {
 function RefreshControls({
   projectId,
   releaseRetry,
+  failNext,
+  holdNext,
 }: {
   projectId: string;
+  failNext: () => void;
+  holdNext: () => void;
   releaseRetry: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -30,10 +34,14 @@ function RefreshControls({
       <button
         type="button"
         onClick={() => {
+          failNext();
           void utils.github.listIssuesForProject.invalidate({ projectId });
         }}
       >
         Fail background refresh
+      </button>
+      <button type="button" onClick={holdNext}>
+        Hold next retry
       </button>
       <button type="button" onClick={releaseRetry}>
         Complete retry
@@ -52,17 +60,21 @@ export function IssueRefreshRecoveryFixture({
   children: ReactNode;
   handlers?: StoryTrpcHandlers;
 }) {
-  const state = useRef<{ requests: number; release?: () => void }>({ requests: 0 });
+  const state = useRef<{ failNext: boolean; holdNext: boolean; release?: () => void }>({
+    failNext: false,
+    holdNext: false,
+  });
   return (
     <StoryTrpcProvider
       handlers={{
         ...handlers,
         'github.listIssuesForProject': () => {
-          state.current.requests += 1;
-          if (state.current.requests === 2) {
+          if (state.current.failNext) {
+            state.current.failNext = false;
             throw new Error('Network offline');
           }
-          if (state.current.requests === 3) {
+          if (state.current.holdNext) {
+            state.current.holdNext = false;
             return new Promise((resolve) => {
               state.current.release = () => resolve(response);
             });
@@ -71,7 +83,16 @@ export function IssueRefreshRecoveryFixture({
         },
       }}
     >
-      <RefreshControls projectId={projectId} releaseRetry={() => state.current.release?.()} />
+      <RefreshControls
+        projectId={projectId}
+        failNext={() => {
+          state.current.failNext = true;
+        }}
+        holdNext={() => {
+          state.current.holdNext = true;
+        }}
+        releaseRetry={() => state.current.release?.()}
+      />
       {children}
     </StoryTrpcProvider>
   );
@@ -83,6 +104,7 @@ export async function exerciseIssueRefreshRecovery(canvasElement: HTMLElement) {
   await userEvent.click(canvas.getByRole('button', { name: 'Fail background refresh' }));
   await expect(await canvas.findByText('Network offline')).toBeVisible();
   await expect(canvas.getByText('Retained issue')).toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: 'Hold next retry' }));
   await userEvent.click(canvas.getByRole('button', { name: /^Retry$/ }));
   await expect(await canvas.findByRole('button', { name: 'Retrying…' })).toBeDisabled();
   await expect(canvas.getByText('Retained issue')).toBeVisible();
